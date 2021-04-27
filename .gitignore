@@ -127,3 +127,33 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+
+# MSY ignore files
+logs/*
+*.crt
+*.key
+qstools/series/meta/*.json
+py/dev/
+py/Dev/
+py/
+
+*/.idea/
+.idea/
+
+.DS_Store
+data/tmp/
+sql/tmp/
+
+# Ignore version file
+qstools/version.py
+
+# Ignore config files: do not commit
+config*.yml
+
+#ignore ftr file
+*.ftr
+
+# Coverage files
+coverage/
+coverage.xml

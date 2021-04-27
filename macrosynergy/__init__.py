@@ -1,0 +1,1 @@
+"""Macrosynergy Quant Research Package"""
