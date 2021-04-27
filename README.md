@@ -6,36 +6,34 @@ Macrosynergy research package.
 
 Contains following elements...
 
-
-The Quantemental System repository holds
-* the Python package [`qstools`](https://github.com/macrosynergy/qstools/tree/master/qstools) for running the system, 
-* the folder [`sql/`](https://github.com/macrosynergy/qstools/tree/master/sql) containing the scripts for generating the MySQL database,
-* the folder [`docs/`](https://github.com/macrosynergy/qstools/tree/master/docs) storing the documentation of the system, and 
-* the folder [`tests/`](https://github.com/macrosynergy/qstools/tree/master/tests) containing the unit  and integration tests of the system.
+* management
+* signal
+* panel
+* visual
+* pnl
 
 ## Requirements
 The system requires a working SQL database, with certain specifications for the schema as outlined in the [`sql/`](https://github.com/macrosynergy/qstools/tree/master/sql) folder of this repository. To clone the repository a working installation of git needs to have been installed. The program is tested in Python 3.7 and 3.8, and we recommend having upgraded pip to the latest version using
 ```shell script
 python -m pip install --upgrade pip
 ```
-Following this the package requirements are specified in the file  [`requirements.txt`](https://github.com/macrosynergy/qstools/tree/master/requirements.txt), and should be installed using 
+Following this the package requirements are specified in the file  [`requirements.txt`](https://github.com/macrosynergy/macrosynergy/tree/master/requirements.txt), and should be installed using 
 the command
 ```shell script
 python -m pip install --upgrade -r requirements.txt
 ```
 
-To make the documentation we need the [Sphinx package](https://www.sphinx-doc.org/), and  similarly for the testing framework we require the [pytest](https://docs.pytest.org/) and [flake8](https://flake8.pycqa.org/en/latest/) to have been installed:
+To make the documentation we need the [Sphinx package](https://www.sphinx-doc.org/),
+ and  similarly for the testing framework we require the [pytest](https://docs.pytest.org/) and [flake8](https://flake8.pycqa.org/en/latest/) to have been installed:
 ```shell script
 python -m pip install --upgrade sphinx pytest flake8
 ```
 
-Further for a Windows platform if the `MacrobondInterface` is to be used, it requires the  [Macrobond](https://www.macrobond.com/) Windows application to have been  installed, so that the COM API is available in the win32com environment. Once available, this will be changed, so that we use the platform independent data-feed from Macrobond instead.
-
 ## Installation
-To install `qstools`, first clone the GitHub repository, (optionally) checkout a specific branch,  install the requirements file, and lastly install the proprietary package:
+To install `macrosynergy`, first clone the GitHub repository, (optionally) checkout a specific branch,  install the requirements file, and lastly install the proprietary package:
 ```shell script
 git clone https://<username>:<password>@github.com/macrosynergy/macrosynergy
-cd qstools/
+cd macrosynergy/
 git checkout <branchname>
 python -m pip install --upgrade -r requirements.txt
 python -m pip install --upgrade ./
@@ -45,7 +43,7 @@ The above also includes an optional step of checking out a branch different from
 in step 3: `git checkout <branchname>`. 
 
 ## Documentation
-In the folder [docs/](https://github/macrosynergy/macrosynergy/tree/master/docs/) we have the documentation files created using [Sphinx](https://www.sphinx-doc.org/). To render the documentation we must use the following command (from within the `qstools/` folder):
+In the folder [docs/](https://github/macrosynergy/macrosynergy/tree/master/docs/) we have the documentation files created using [Sphinx](https://www.sphinx-doc.org/). To render the documentation we must use the following command (from within the `macrosynergy/` folder):
 ```shell script
 cd docs/
 make html
@@ -68,7 +66,7 @@ If reference API documentation for a new submodules is to be added, we can use t
 cd docs/
 sphinx-apidoc -e -E -o ref/ ../macrosynergy/ --implicit-namespaces
 ```
-where `sphinx-apidoc -o ref/ ../qstools` updates the reference documentation of the [`qstools`](qstools/) package,
+where `sphinx-apidoc -o ref/ ../macrosynergy` updates the reference documentation of the [`macrosynergy`](macrosynergy/) package,
 subpackage and modules.
 
 Python's docstring conventions are described in [PEP 257 -- Docstring Conventions](https://www.python.org/dev/peps/pep-0257/) 
@@ -85,7 +83,7 @@ To check for any syntax errors in the code, we use `flake8` with the commands of
 flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 ```
-Further all unit and integration tests are stored in the folder [`tests/`](https://github.com/macrosynergy/qstools/tree/master/tests/), and can be called using `pytest` by the command
+Further all unit and integration tests are stored in the folder [`tests/`](https://github.com/macrosynergy/macrosynergy/tree/master/tests/), and can be called using `pytest` by the command
 ```shell script
 pytest tests/
 ```
