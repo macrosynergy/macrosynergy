@@ -1,0 +1,6 @@
+[report]
+exclude_lines=
+    if __name__ == .__main__.:
+    if 0:
+    if False:
+omit = tests/*,setup.py,*/__init__.py
