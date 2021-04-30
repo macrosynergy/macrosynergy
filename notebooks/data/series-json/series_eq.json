@@ -1,0 +1,26 @@
+[
+  {
+    "category": "EQXR",
+    "cross_section": "USD",
+    "frequency": "d",
+    "method": "calculate_eqxr",
+    "ref_data": [
+      [
+        "DS",
+        "CFPC.01::PS"
+      ],
+      [
+        "DS",
+        "CFPC.02::PS"
+      ],
+      [
+        "DS",
+        "CFPCS01::CMONTH"
+      ],
+      [
+        "DS",
+        "U:VACS"
+      ]
+    ]
+  }
+]

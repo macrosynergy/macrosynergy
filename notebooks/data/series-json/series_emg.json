@@ -1,0 +1,134 @@
+[
+  {
+    "category": "CONS",
+    "cross_section": "USD",
+    "doc": "USA Private Consumption",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "DS",
+        "USPERCOND"
+      ]
+    ]
+  },
+  {
+    "category": "HSTARTS",
+    "cross_section": "USD",
+    "doc": "USA Housing Starts",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "DS",
+        "USHOUSE.O"
+      ]
+    ]
+  },
+  {
+    "category": "CCSURV",
+    "cross_section": "GBP",
+    "doc": "UK, Consumer Confidence Survey",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "gbsurv0515"
+      ]
+    ]
+  },
+  {
+    "category": "RSV",
+    "cross_section": "GBP",
+    "doc": "UK, Retail Trade excl. automotive fuel",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "gbtrad04531"
+      ]
+    ]
+  },
+  {
+    "category": "UNEMPL",
+    "cross_section": "GBP",
+    "doc": "UK, Unemployment claimant count",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "gblama03311"
+      ]
+    ]
+  },
+  {
+    "category": "MGDP",
+    "cross_section": "GBP",
+    "doc": "UK, Monthly GDP estimate",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "gbnaac37051"
+      ]
+    ]
+  },
+  {
+    "category": "CONSTR",
+    "cross_section": "EUR",
+    "doc": "Europe, Construction",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "eucons0001"
+      ]
+    ]
+  },
+  {
+    "category": "ESI",
+    "cross_section": "EUR",
+    "doc": "Euro Area, Economic Surveys, DG ECFIN Economic Sentiment Indicator",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "euecfin1110"
+      ]
+    ]
+  },
+  {
+    "category": "RSV",
+    "cross_section": "EUR",
+    "doc": "Euro Area 19, retail trade total turnover, constant prices",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "eutrad0031"
+      ]
+    ]
+  },
+  {
+    "category": "ACTIND",
+    "cross_section": "JPY",
+    "doc": "Japan, Cabinet Office, Economy Watcher Survey, current conditions diffusion index",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "jpsurv0037"
+      ]
+    ]
+  },
+  {
+    "category": "RSV",
+    "cross_section": "JPY",
+    "doc": "Japan, Retail Trade Index, Seasonally Adjusted",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "jptrad0031"
+      ]
+    ]
+  }
+]

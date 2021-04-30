@@ -1,0 +1,750 @@
+[
+  {
+    "category_code": "FX",
+    "cross_section": "CAD",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,CAD,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,CAD,01M)"
+      ],
+      [
+        "MB",
+        "cad"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "CHF",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,CHF,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,CHF,01M)"
+      ],
+      [
+        "MB",
+        "chf"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "GBP",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,GBP,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,GBP,01M)"
+      ],
+      [
+        "MB",
+        "gbp"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "EUR",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,EUR,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,EUR,01M)"
+      ],
+      [
+        "MB",
+        "eur"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "NZD",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,NZD,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,NZD,01M)"
+      ],
+      [
+        "MB",
+        "nzd"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "AUD",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,AUD,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,AUD,01M)"
+      ],
+      [
+        "MB",
+        "aud"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "SEK",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,SEK,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,SEK,01M)"
+      ],
+      [
+        "MB",
+        "sek"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "NOK",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,NOK,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,NOK,01M)"
+      ],
+      [
+        "MB",
+        "nok"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "JPY",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,JPY,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,JPY,01M)"
+      ],
+      [
+        "MB",
+        "jpy"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "ISK",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,ISK,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,ISK,01M)"
+      ],
+      [
+        "MB",
+        "isk"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "DKK",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,DKK,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,DKK,01M)"
+      ],
+      [
+        "MB",
+        "dkk"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "CZK",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,CZK,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,CZK,01M)"
+      ],
+      [
+        "MB",
+        "czk"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "RUB",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,RUB,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,RUB,01M)"
+      ],
+      [
+        "MB",
+        "rub"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "RON",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,RON,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,RON,01M)"
+      ],
+      [
+        "MB",
+        "ron"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "TRY",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,TRY,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,TRY,01M)"
+      ],
+      [
+        "MB",
+        "try"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "ZAR",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,ZAR,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,ZAR,01M)"
+      ],
+      [
+        "MB",
+        "zar"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "ILS",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,ILS,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,ILS,01M)"
+      ],
+      [
+        "MB",
+        "ils"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "HUF",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,HUF,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,HUF,01M)"
+      ],
+      [
+        "MB",
+        "huf"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "PLN",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,PLN,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,PLN,01M)"
+      ],
+      [
+        "MB",
+        "pln"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "PHP",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,PHP,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,PHP,01M)"
+      ],
+      [
+        "MB",
+        "php"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "SGD",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,SGD,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,SGD,01M)"
+      ],
+      [
+        "MB",
+        "sgd"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "THB",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,THB,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,THB,01M)"
+      ],
+      [
+        "MB",
+        "thb"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "HKD",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,HKD,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,HKD,01M)"
+      ],
+      [
+        "MB",
+        "hkd"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "ARS",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,ARS,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,ARS,01M)"
+      ],
+      [
+        "MB",
+        "ars"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "BRL",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,BRL,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,BRL,01M)"
+      ],
+      [
+        "MB",
+        "brl"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "CLP",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,CLP,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,CLP,01M)"
+      ],
+      [
+        "MB",
+        "clp"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "COP",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,COP,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,COP,01M)"
+      ],
+      [
+        "MB",
+        "cop"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "PEN",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,PEN,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,PEN,01M)"
+      ],
+      [
+        "MB",
+        "pen"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "MXN",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,MXN,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,MXN,01M)"
+      ],
+      [
+        "MB",
+        "mxn"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "MYR",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,MYO,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,MYO,01M)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,MYR,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,MYR,01M)"
+      ],
+      [
+        "MB",
+        "myr"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "TWD",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,TWF,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,TWF,01M)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,TWD,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,TWD,01M)"
+      ],
+      [
+        "MB",
+        "twd"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "INR",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,INO,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,INO,01M)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,INR,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,INR,01M)"
+      ],
+      [
+        "MB",
+        "inr"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "IDR",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,IDO,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,IDO,01M)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,IDF,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,IDF,01M)"
+      ],
+      [
+        "MB",
+        "idr"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "KRW",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,KRF,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,KRF,01M)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,KRW,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,KRW,01M)"
+      ],
+      [
+        "MB",
+        "krw"
+      ]
+    ]
+  },
+  {
+    "category_code": "FX",
+    "cross_section": "CNY",
+    "frequency": "d",
+    "method": "MethodFX",
+    "ref_data": [
+      [
+        "JPMDQ",
+        "DB(CFX,CNH,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,CNH,01M)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,CNY,)"
+      ],
+      [
+        "JPMDQ",
+        "DB(CFX,CNY,01M)"
+      ],
+      [
+        "MB",
+        "cny"
+      ]
+    ]
+  }
+]

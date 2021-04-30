@@ -1,0 +1,666 @@
+[
+  {
+    "category_code": "RGDP",
+    "cross_section": "ARS",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "arnaac0022"
+      ],
+      [
+        "DS",
+        "AGGDP...C"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "AUD",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "aunaac0143"
+      ],
+      [
+        "OECD",
+        "AUS::101"
+      ],
+      [
+        "DS",
+        "AUGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "BRL",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "brnaac0016"
+      ],
+      [
+        "OECD",
+        "BRA::101"
+      ],
+      [
+        "DS",
+        "BRGDP...C"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "CAD",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "canaac0030"
+      ],
+      [
+        "OECD",
+        "CAN::101"
+      ],
+      [
+        "DS",
+        "CNGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "CHF",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "chnaac0324"
+      ],
+      [
+        "OECD",
+        "CHE::101"
+      ],
+      [
+        "DS",
+        "SWGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "CLP",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "clnaac3002"
+      ],
+      [
+        "OECD",
+        "CHL::101"
+      ],
+      [
+        "DS",
+        "CLGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "CNY",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "cnnaac0995"
+      ],
+      [
+        "DS",
+        "CHGDP...C"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "CZK",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "cznaac0058"
+      ],
+      [
+        "OECD",
+        "CZE::101"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "DEM",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "denaac0152"
+      ],
+      [
+        "OECD",
+        "DEU::101"
+      ],
+      [
+        "DS",
+        "BDGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "DKK",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "OECD",
+        "DNK::101"
+      ],
+      [
+        "DS",
+        "DKGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "ESP",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "esnaac0097"
+      ],
+      [
+        "OECD",
+        "ESP::101"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "EUR",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "eunaac2903"
+      ],
+      [
+        "OECD",
+        "EA19::101"
+      ],
+      [
+        "DS",
+        "EKGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "FRF",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "frnaac0284"
+      ],
+      [
+        "OECD",
+        "FRA::101"
+      ],
+      [
+        "DS",
+        "FRGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "GBP",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "gbnaac00072"
+      ],
+      [
+        "OECD",
+        "GBR::101"
+      ],
+      [
+        "DS",
+        "UKGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "HUF",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "hunaac0063"
+      ],
+      [
+        "OECD",
+        "HUN::101"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "IDR",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "idnaac0247"
+      ],
+      [
+        "OECD",
+        "IDN::101"
+      ],
+      [
+        "DS",
+        "IDGDP...C"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "ILS",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "ilnaac0001"
+      ],
+      [
+        "OECD",
+        "ISR::101"
+      ],
+      [
+        "DS",
+        "ISGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "ISK",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "OECD",
+        "ISL::101"
+      ],
+      [
+        "DS",
+        "ICGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "ITL",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "itnaac0466"
+      ],
+      [
+        "OECD",
+        "ITA::101"
+      ],
+      [
+        "DS",
+        "ITGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "JPY",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "jpnaac0004"
+      ],
+      [
+        "OECD",
+        "JPN::101"
+      ],
+      [
+        "DS",
+        "JPGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "KRW",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "krnaac0145"
+      ],
+      [
+        "OECD",
+        "KOR::101"
+      ],
+      [
+        "DS",
+        "KOGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "MXN",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "mxnaac7236"
+      ],
+      [
+        "OECD",
+        "MEX::101"
+      ],
+      [
+        "DS",
+        "MXGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "NLG",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "nlnaac1067"
+      ],
+      [
+        "OECD",
+        "NLD::101"
+      ],
+      [
+        "DS",
+        "NLGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "NOK",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "nonaac0183"
+      ],
+      [
+        "OECD",
+        "NOR::101"
+      ],
+      [
+        "DS",
+        "NWGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "NZD",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "nznaac0074"
+      ],
+      [
+        "OECD",
+        "NZL::101"
+      ],
+      [
+        "DS",
+        "NZGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "PEN",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "penaac0090"
+      ],
+      [
+        "DS",
+        "PEGDP...C"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "PHP",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "phnaac0004"
+      ],
+      [
+        "DS",
+        "PHGDP...C"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "RON",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "ronaac0012"
+      ],
+      [
+        "DS",
+        "RMGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "RUB",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "runaac0277"
+      ],
+      [
+        "OECD",
+        "RUS::101"
+      ],
+      [
+        "DS",
+        "RSGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "SEK",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "senaac0067"
+      ],
+      [
+        "OECD",
+        "SWE::101"
+      ],
+      [
+        "DS",
+        "SDGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "SGD",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "sgnaac0351"
+      ],
+      [
+        "DS",
+        "SPGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "THB",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "thnaac0168"
+      ],
+      [
+        "DS",
+        "THGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "TRY",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "trnaac0628"
+      ],
+      [
+        "OECD",
+        "TUR::101"
+      ],
+      [
+        "DS",
+        "TKGDP...C"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "TWD",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "twnaac0945"
+      ],
+      [
+        "DS",
+        "TWGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "USD",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "usnaac0169"
+      ],
+      [
+        "DS",
+        "USGDP...D"
+      ]
+    ]
+  },
+  {
+    "category_code": "RGDP",
+    "cross_section": "ZAR",
+    "frequency": "q",
+    "method": "MethodRealGDP",
+    "ref_data": [
+      [
+        "MB",
+        "zanaac0004"
+      ],
+      [
+        "OECD",
+        "ZAF::101"
+      ],
+      [
+        "DS",
+        "SAGDP...D"
+      ]
+    ]
+  }
+]

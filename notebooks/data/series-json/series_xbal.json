@@ -1,0 +1,1531 @@
+[
+  {
+    "category_code": "MTB",
+    "cross_section": "AUD",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "autrad0006"
+      ]
+    ],
+    "ref_series": [
+      [
+        "AUD",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "CAD",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "catrad0503"
+      ]
+    ],
+    "ref_series": [
+      [
+        "CAD",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "CHF",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "chtrad0432"
+      ]
+    ],
+    "ref_series": [
+      [
+        "CHF",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "EUR",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "eutrad1383"
+      ]
+    ],
+    "ref_series": [
+      [
+        "EUR",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "GBP",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "gbtrad04171"
+      ]
+    ],
+    "ref_series": [
+      [
+        "GBP",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "JPY",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "jptrad0006"
+      ]
+    ],
+    "ref_series": [
+      [
+        "JPY",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "NOK",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "notrad0010"
+      ]
+    ],
+    "ref_series": [
+      [
+        "NOK",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "NZD",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "nztrad0003"
+      ]
+    ],
+    "ref_series": [
+      [
+        "NZD",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "SEK",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "setrad0002"
+      ]
+    ],
+    "ref_series": [
+      [
+        "SEK",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "USD",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "ustrad1875"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "CZK",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "cztrad1494"
+      ]
+    ],
+    "ref_series": [
+      [
+        "CZK",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "PLN",
+    "frequency": "m",
+    "kwargs": {
+      "fx_start_year": 1993
+    },
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "pltrad0102"
+      ]
+    ],
+    "ref_series": [
+      [
+        "PLN",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "ZAR",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "zatrad0202"
+      ]
+    ],
+    "ref_series": [
+      [
+        "ZAR",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "MYR",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "mytrad0003"
+      ]
+    ],
+    "ref_series": [
+      [
+        "MYR",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "SGD",
+    "frequency": "m",
+    "kwargs": {
+      "fx_start_year": 1981
+    },
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "sgtrad0179"
+      ]
+    ],
+    "ref_series": [
+      [
+        "SGD",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "TWD",
+    "frequency": "m",
+    "kwargs": {
+      "fx_start_year": 1982
+    },
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "twtrad0301"
+      ]
+    ],
+    "ref_series": [
+      [
+        "TWD",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "HUF",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "hutrad0020"
+      ]
+    ],
+    "ref_series": [
+      [
+        "EUR",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "ARS",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "artrad5021"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "BRL",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "brtrad1245"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "CLP",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "cltrad3138"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "COP",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "cotrad1003"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "MXN",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "mxtrad7293"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "PEN",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "petrad2104"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "RUB",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "rutrad0164"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "TRY",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "trtrad0103"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "IDR",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "idtrad0090"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "INR",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "intrad0050"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "KRW",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "krtrad0501"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "PHP",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "phtrad0001"
+      ]
+    ]
+  },
+  {
+    "category_code": "MTB",
+    "cross_section": "THB",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "thtrad0555"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "AUD",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "aubopa0001"
+      ]
+    ],
+    "ref_series": [
+      [
+        "AUD",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "CAD",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "cabopa0366"
+      ]
+    ],
+    "ref_series": [
+      [
+        "CAD",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "CHF",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "chbopa0001"
+      ]
+    ],
+    "ref_series": [
+      [
+        "CHF",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "NOK",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "nobopa0049"
+      ]
+    ],
+    "ref_series": [
+      [
+        "NOK",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "NZD",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "nzbopa0438"
+      ]
+    ],
+    "ref_series": [
+      [
+        "NZD",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "SEK",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "sebopa0014"
+      ]
+    ],
+    "ref_series": [
+      [
+        "SEK",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "USD",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "usbopa0724"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "CLP",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "clbopa3000"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "COP",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "cobopa1000"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "PEN",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "pebopa2000"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "HUF",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "hubopa0170"
+      ]
+    ],
+    "ref_series": [
+      [
+        "EUR",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "RUB",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "rubopa0001"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "ZAR",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "zabopa0007"
+      ]
+    ],
+    "ref_series": [
+      [
+        "ZAR",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "CNY",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "cnbopa1001"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "IDR",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "idbopa0001"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "INR",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "inbopa0500"
+      ]
+    ],
+    "ref_series": [
+      [
+        "INR",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "MYR",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "mybopa0032"
+      ]
+    ],
+    "ref_series": [
+      [
+        "MYR",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "SGD",
+    "frequency": "m",
+    "kwargs": {
+      "fx_start_year": 1981
+    },
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "sgbopa0001"
+      ]
+    ],
+    "ref_series": [
+      [
+        "SGD",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "TWD",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "twbopa0001"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "EUR",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "eubopa0116"
+      ]
+    ],
+    "ref_series": [
+      [
+        "EUR",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "GBP",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "gbbopa00011"
+      ]
+    ],
+    "ref_series": [
+      [
+        "GBP",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "JPY",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "jpbopa0001"
+      ]
+    ],
+    "ref_series": [
+      [
+        "JPY",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "BRL",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "brbopa1000"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "PLN",
+    "frequency": "m",
+    "kwargs": {
+      "fx_start_year": 1993
+    },
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "plbopa0185"
+      ]
+    ],
+    "ref_series": [
+      [
+        "PLN",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "RON",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "robopa0345"
+      ]
+    ],
+    "ref_series": [
+      [
+        "EUR",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "TRY",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "trbopa0001"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "KRW",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "krbopa0001"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "PHP",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "phbopa0001"
+      ]
+    ]
+  },
+  {
+    "category_code": "CAB",
+    "cross_section": "THB",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "thbopa0005"
+      ]
+    ],
+    "ref_series": [
+      [
+        "THB",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "AUD",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "aubopa0026"
+      ]
+    ],
+    "ref_series": [
+      [
+        "AUD",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "GBP",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "gbbopa00932"
+      ]
+    ],
+    "ref_series": [
+      [
+        "GBP",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "MXN",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "mxbopa7049_bpm5"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "PEN",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "pebopa2019"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "ILS",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "ilbopa0086"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "ZAR",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "zabopa0130"
+      ]
+    ],
+    "ref_series": [
+      [
+        "ZAR",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "CNY",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "cnbopa1027"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "IDR",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "idbopa0033"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "INR",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "inbopa1037"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "MYR",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "mybopa0041"
+      ]
+    ],
+    "ref_series": [
+      [
+        "MYR",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "THB",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "thbopa0094"
+      ]
+    ],
+    "ref_series": [
+      [
+        "THB",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "NOK",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "nobopa0285"
+      ],
+      [
+        "MB",
+        "nobopa0137"
+      ]
+    ],
+    "ref_series": [
+      [
+        "NOK",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "NZD",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "nzbopa0354"
+      ],
+      [
+        "MB",
+        "nzbopa0414"
+      ]
+    ],
+    "ref_series": [
+      [
+        "NZD",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "USD",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "usbopa0679"
+      ],
+      [
+        "MB",
+        "usbopa0674"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "CAD",
+    "frequency": "m",
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "cabopa0671"
+      ],
+      [
+        "MB",
+        "cabopa0654"
+      ]
+    ],
+    "ref_series": [
+      [
+        "CAD",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "EUR",
+    "frequency": "m",
+    "kwargs": {
+      "multiply": -1
+    },
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "ecb_00213229"
+      ]
+    ],
+    "ref_series": [
+      [
+        "EUR",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "JPY",
+    "frequency": "m",
+    "kwargs": {
+      "multiply": -1
+    },
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "jpbopa0180"
+      ]
+    ],
+    "ref_series": [
+      [
+        "JPY",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "BRL",
+    "frequency": "m",
+    "kwargs": {
+      "multiply": -1
+    },
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "brbopa1127"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "RON",
+    "frequency": "m",
+    "kwargs": {
+      "multiply": -1
+    },
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "robopa0137"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "TRY",
+    "frequency": "m",
+    "kwargs": {
+      "multiply": -1
+    },
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "trbopa0047"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "KRW",
+    "frequency": "m",
+    "kwargs": {
+      "multiply": -1
+    },
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "krbopa0124"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "SGD",
+    "frequency": "m",
+    "kwargs": {
+      "fx_start_year": 1981,
+      "multiply": -1
+    },
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "sgbopa0039"
+      ]
+    ],
+    "ref_series": [
+      [
+        "SGD",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "TWD",
+    "frequency": "m",
+    "kwargs": {
+      "multiply": -1
+    },
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "twbopa0131"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "RUB",
+    "frequency": "m",
+    "kwargs": {
+      "multiply": -1
+    },
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "rubopa0030"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "CZK",
+    "frequency": "m",
+    "kwargs": {
+      "multiply": -1
+    },
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "czbopa0733"
+      ]
+    ],
+    "ref_series": [
+      [
+        "CZK",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "HUF",
+    "frequency": "m",
+    "kwargs": {
+      "multiply": -1
+    },
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "hubopa1475"
+      ]
+    ],
+    "ref_series": [
+      [
+        "EUR",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "CLP",
+    "frequency": "m",
+    "kwargs": {
+      "multiply": -1
+    },
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "clbopa3026"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "COP",
+    "frequency": "m",
+    "kwargs": {
+      "multiply": -1
+    },
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "cobopa1093"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "CHF",
+    "frequency": "m",
+    "kwargs": {
+      "multiply": -1
+    },
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "chbopa0031"
+      ]
+    ],
+    "ref_series": [
+      [
+        "CHF",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NFDI",
+    "cross_section": "SEK",
+    "frequency": "m",
+    "kwargs": {
+      "multiply": -1
+    },
+    "method": "MethodExternalBalances",
+    "ref_data": [
+      [
+        "MB",
+        "sebopa0391"
+      ]
+    ],
+    "ref_series": [
+      [
+        "SEK",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  }
+]

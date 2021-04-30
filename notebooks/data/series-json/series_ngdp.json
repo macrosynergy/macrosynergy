@@ -1,0 +1,711 @@
+[
+  {
+    "category_code": "NGDP",
+    "cross_section": "AUD",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "aunaac0393"
+      ]
+    ],
+    "ref_series": [
+      [
+        "AUD",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "CAD",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": true
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "canaac0061"
+      ]
+    ],
+    "ref_series": [
+      [
+        "CAD",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "CHF",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "chnaac0286"
+      ]
+    ],
+    "ref_series": [
+      [
+        "CHF",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "EUR",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "eunaac0019"
+      ]
+    ],
+    "ref_series": [
+      [
+        "EUR",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "GBP",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "gbnaac00052"
+      ]
+    ],
+    "ref_series": [
+      [
+        "GBP",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "JPY",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": true
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "jpnaac0002"
+      ]
+    ],
+    "ref_series": [
+      [
+        "JPY",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "NOK",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "nonaac0146"
+      ]
+    ],
+    "ref_series": [
+      [
+        "NOK",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "NZD",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "nznaac0091"
+      ]
+    ],
+    "ref_series": [
+      [
+        "NZD",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "SEK",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "senaac1278"
+      ]
+    ],
+    "ref_series": [
+      [
+        "SEK",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "USD",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": true
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "usnaac0057"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "ARS",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": true
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "arnaac0052"
+      ]
+    ],
+    "ref_series": [
+      [
+        "ARS",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "BRL",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "brnaac1065"
+      ]
+    ],
+    "ref_series": [
+      [
+        "BRL",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "CLP",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "clnaac3000"
+      ]
+    ],
+    "ref_series": [
+      [
+        "CLP",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "COP",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "conaac1051"
+      ]
+    ],
+    "ref_series": [
+      [
+        "COP",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "MXN",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": true
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "mxnaac7237"
+      ]
+    ],
+    "ref_series": [
+      [
+        "MXN",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "PEN",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false,
+      "fx_start_year": 1988
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "penaac0101"
+      ]
+    ],
+    "ref_series": [
+      [
+        "PEN",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "CZK",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "cznaac0001"
+      ]
+    ],
+    "ref_series": [
+      [
+        "CZK",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "HUF",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "hunaac0013"
+      ]
+    ],
+    "ref_series": [
+      [
+        "HUF",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "ILS",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "ilnaac0002"
+      ]
+    ],
+    "ref_series": [
+      [
+        "ILS",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "PLN",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false,
+      "fx_start_year": 1993
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "plnaac0001"
+      ]
+    ],
+    "ref_series": [
+      [
+        "PLN",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "RON",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "ronaac0029"
+      ]
+    ],
+    "ref_series": [
+      [
+        "RON",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "TRY",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "trnaac0405"
+      ]
+    ],
+    "ref_series": [
+      [
+        "TRY",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "ZAR",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "zanaac0001"
+      ]
+    ],
+    "ref_series": [
+      [
+        "ZAR",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "CNY",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "cnnaac0985"
+      ]
+    ],
+    "ref_series": [
+      [
+        "CNY",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "IDR",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "idnaac2701"
+      ]
+    ],
+    "ref_series": [
+      [
+        "IDR",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "KRW",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "krnaac0216"
+      ]
+    ],
+    "ref_series": [
+      [
+        "KRW",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "MYR",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "mynaac0001"
+      ]
+    ],
+    "ref_series": [
+      [
+        "MYR",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "PHP",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "phnaac1001"
+      ]
+    ],
+    "ref_series": [
+      [
+        "PHP",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "SGD",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false,
+      "fx_start_year": 1981
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "sgnaac0001"
+      ]
+    ],
+    "ref_series": [
+      [
+        "SGD",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "THB",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "thnaac0126"
+      ]
+    ],
+    "ref_series": [
+      [
+        "THB",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  },
+  {
+    "category_code": "NGDP",
+    "cross_section": "TWD",
+    "frequency": "q",
+    "kwargs": {
+      "annual_rate": false,
+      "fx_start_year": 1982
+    },
+    "method": "MethodNGDP",
+    "ref_data": [
+      [
+        "MB",
+        "twnaac0501"
+      ]
+    ],
+    "ref_series": [
+      [
+        "TWD",
+        "FXSPUSD",
+        "NSA",
+        "d"
+      ]
+    ]
+  }
+]

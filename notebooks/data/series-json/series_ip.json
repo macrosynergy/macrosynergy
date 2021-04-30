@@ -1,0 +1,446 @@
+[
+  {
+    "category": "IP",
+    "cross_section": "AUD",
+    "doc": "Australian Industrial Production, SA, volume, Quarterly data, publication lag 6 months",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "auprod0017"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "CAD",
+    "doc": "Canadian Industrial Production, SA, AR, Constant Prices, publication 2 months",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "caprod0033"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "CHF",
+    "doc": "Swiss Industrial Production, Calendar Adjusted, Quarterly, publication lag 5 months, Non-Seasonally Adjusted",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "chprod0047"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "EUR",
+    "doc": "European Industrial Production, Calendar Adjusted, SA, volume, publication lag 2 months",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "euprod0001"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "NOK",
+    "doc": "Norway Industrial Production, SA, Constant Prices, publication lag 2 months",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "noprod0001"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "NZD",
+    "doc": "New Zealand, Industrial Production, SA, Constant Prices, Quarterly, publication lag 6months",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "nzprod0159"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "GBP",
+    "doc": "UK, Industrial Production, SA, Constant Prices, publication lag 2 months",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "gbprod00571"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "JPY",
+    "doc": "Japan, Industrial Production, SA, Constant Prices, publication lag 1 month",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "jpprod0590"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "SEK",
+    "doc": "Sweden, Industrial Production, Calendar Adjusted, SA, Constant Prices, publication lag 2 month",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "seprod0095"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "USD",
+    "doc": "USA, Industrial Production, SA, volume (check), publication lag 1 month",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "usprod1022"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "ARS",
+    "doc": "Argentina, Industrial Production, NSA, Constant Prices, lag +1",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "arprod0001"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "BRL",
+    "doc": "Brazil, Industrial Production, Calendar Adjusted, SA, volume? publication lag 2months",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "brprod1331"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "CLP",
+    "doc": "Chile, Industrial Production, alternative, SA, Manufacturing - Lag: UNKNOWN!!",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "clprod0003"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "COP",
+    "doc": "Colombia, Industrial Production, NSA?, Constant Prices",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "coprod2999"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "MXN",
+    "doc": "Mexico, Industrial Production, SA, volume? lag+2",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "mxprod7183"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "PEN",
+    "doc": "Peru, Industrial Production, NSA, volume? lag+2",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "peprod0003"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "HUF",
+    "doc": "Hungary, Industrial Production, Calendar adjusted, SA, volume? lag+3",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "huprod0062"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "ILS",
+    "doc": "Israel, Industrial Production, SA, Constant Prices, lag+2",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "ilprod0005"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "PLN",
+    "doc": "Poland, Industrial Production, NSA?, Constant Prices, lag+1",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "plprod0066"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "RON",
+    "doc": "Romania, Industrial Production, Calendar Adjusted, SA, volume? lag+2",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "roprod0001"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "RUB",
+    "doc": "Russia, Industrial Production, NSA? Volume? lag+1",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "ruprod0043"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "TRY",
+    "doc": "Turkey, Industrial Production, NSA? Volume? lag+2",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "trprod0001"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "ZAR",
+    "doc": "South Africa, Industrial Production, SA, volume? lag+2",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "zaprod0357"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "CNY",
+    "doc": "China, Industrial Production, NSA, Y/Y Percent, invalid ticker, lag+1",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "cnprod1001"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "IDR",
+    "doc": "Indonesia, Industrial Production, NSA? volume? lag+2",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "idprod0001"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "INR",
+    "doc": "India, Industrial Production, NSA, volume? 2012 - current, lag+2",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "inprod0180"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "KRW",
+    "doc": "South Korea, Industrial Production, SA, volume? lag+1",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "krprod0002"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "MYR",
+    "doc": "Malaysia, Industrial Production, NSA, volume? lag+2",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "myprod0001"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "PHP",
+    "doc": "Philippines, Industrial Production, NSA, Constant Prices, lag+2",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "phprod0080"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "SGD",
+    "doc": "Singapore, Industrial Production, SA, volume? lag+1",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "sgprod0002"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "THB",
+    "doc": "Thailand, Industrial Production, NSA, volume? lag+1",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "thprod0180"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "TWD",
+    "doc": "Taiwan, Industrial Production, SA, volume? lag+1",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "twprod0002"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "DEM",
+    "doc": "Germany, Industrial Production, SA, Constant Prices, lag+1",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "deprod1404"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "ESP",
+    "doc": "Spain, Industrial Production, SA, volume? lag+2",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "esprod0420"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "FRF",
+    "doc": "France, Industrial Production, Calendar Adjusted, SA, volume? lag+2",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "frprod0228"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "ITL",
+    "doc": "Italy, Industrial Production, SA, volume? lag+2",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "itprod0496"
+      ]
+    ]
+  },
+  {
+    "category": "IP",
+    "cross_section": "NLG",
+    "doc": "Netherlands, Industrial Production, SA, volume? lag+2",
+    "frequency": "m",
+    "ref_data": [
+      [
+        "MB",
+        "nlprod0525"
+      ]
+    ]
+  }
+]
