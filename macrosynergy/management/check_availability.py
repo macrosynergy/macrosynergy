@@ -5,6 +5,22 @@ import seaborn as sns
 from typing import List, Union, Tuple
 
 
+def missing_in_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None):
+    """Print cross sections and extended categories that are missing or redundant in the dataframe
+
+    :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
+        'cid', 'xcats', 'real_date'.
+    :param <List[str]> xcats: extended categories to be checked on. Default is all in the dataframe.
+    :param <List[str]> cids: cross sections to be checked on. Default is all in the dataframe.
+
+    """
+    print('Missing xcats across df: ', set(xcats) - set(df['xcat'].unique()))  # any xcats missing
+    xcats_used = sorted(list(set(xcats).intersection(set(df['xcat'].unique()))))
+    for xcat in xcats_used:
+        cids_xcat = df.loc[df['xcat'] == xcat, 'cid'].unique()
+        print(f'Missing cids for {xcat}: ', set(cids) - set(cids_xcat))  # any cross section missing?
+
+
 def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
               start: str = None, out_all: bool = False):
     """
@@ -123,7 +139,6 @@ def check_availability(df: pd.DataFrame, xcats: List[str] = None,  cids: List[st
     :param <Tuple[float]> end_size: tuple of floats with width/length of end dates heatmap. Default is None.
 
     """
-
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start)
     dfs = check_startyears(dfx)
     visual_paneldates(dfs)
@@ -148,8 +163,10 @@ if __name__ == "__main__":
     dfd['real_date'] = pd.to_datetime(dfd['real_date'])
 
     ratios = ['BXBGDPRATIO_NSA_12MMA', 'CABGDPRATIO_NSA_12MMA', 'MTBGDPRATIO_NSA_12MMA']
+    ratios_plus = ratios + ['WALLY']
 
-    check_availability(df=dfd, xcats=ratios, cids=cids_dm)
+    missing_in_df(dfd, xcats=ratios_plus, cids=cids)
+    check_availability(dfd, xcats=ratios, cids=cids_dm)
 
     dfd_x = reduce_df(dfd, xcats=ratios, cids=cids_em, start='2010-01-01', out_all=False)
     df_sy = check_startyears(dfd_x)
