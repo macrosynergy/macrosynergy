@@ -109,7 +109,7 @@ def visual_paneldates(df: pd.DataFrame, size: Tuple[float] = None):
         df = df.apply(pd.to_datetime)
         maxdate = df.max().max()
         df = (maxdate - df).apply(lambda x: x.dt.days)
-        header = f"Missing days prior to latest in data set ({maxdate})"
+        header = f"Missing days prior to ({maxdate})"
 
     else:
 
@@ -121,7 +121,7 @@ def visual_paneldates(df: pd.DataFrame, size: Tuple[float] = None):
     sns.heatmap(df.T, cmap='Reds', center=df.stack().mean(), annot=True, fmt='.0f', linewidth=1, cbar=False)
     plt.xlabel('')
     plt.ylabel('')
-    plt.title(header, fontsize=20)
+    plt.title(header, fontsize=18)
     plt.show()
 
 
