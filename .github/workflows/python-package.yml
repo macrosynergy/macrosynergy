@@ -5,14 +5,14 @@ name: Python package Ubuntu
 
 on:
   push:
-    branches: [ master, test ]
+    branches: [ main, dev, test, prod ]
   pull_request:
-    branches: [ master, test ]
+    branches: [ main, dev, test, prod ]
 
 jobs:
   build:
 
-    runs-on: [ubuntu-latest, windows-latest]  # Alternative: windows-latest
+    runs-on: ubuntu-latest  # Alternative: windows-latest
     strategy:
       matrix:
         python-version: [3.7, 3.8]  # For multiple: [3.7, 3.8]

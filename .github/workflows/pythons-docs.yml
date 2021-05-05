@@ -5,9 +5,9 @@ name: Python - documentation check
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main, dev, test, prod ]
   pull_request:
-    branches: [ master ]
+    branches: [ main, dev, test, prod ]
 
 jobs:
   build:
