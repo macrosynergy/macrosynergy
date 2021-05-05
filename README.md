@@ -13,12 +13,13 @@ Contains following elements...
 * pnl
 
 ## Requirements
-The system requires a working SQL database, with certain specifications for the schema as outlined in the [`sql/`](https://github.com/macrosynergy/qstools/tree/master/sql) folder of this repository. To clone the repository a working installation of git needs to have been installed. The program is tested in Python 3.7 and 3.8, and we recommend having upgraded pip to the latest version using
+To clone the repository a working installation of git needs to have been installed.
+The program is tested in Python 3.7 and 3.8, and we recommend having upgraded pip to the latest version using
 ```shell script
 python -m pip install --upgrade pip
 ```
-Following this the package requirements are specified in the file  [`requirements.txt`](https://github.com/macrosynergy/macrosynergy/tree/master/requirements.txt), and should be installed using 
-the command
+Following this the package requirements are specified in the file [`requirements.txt`](https://github.com/macrosynergy/macrosynergy/tree/master/requirements.txt),
+ and should be installed using the command
 ```shell script
 python -m pip install --upgrade -r requirements.txt
 ```
