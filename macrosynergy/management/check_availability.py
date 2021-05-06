@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import List, Union, Tuple
 
+from macrosynergy.management.simulate_quantamental_data import make_qdf
+
 
 def missing_in_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None):
     """Print cross sections and extended categories that are missing or redundant in the dataframe
@@ -148,32 +150,28 @@ def check_availability(df: pd.DataFrame, xcats: List[str] = None,  cids: List[st
 
 if __name__ == "__main__":
 
-    cids_dmca = ['AUD', 'CAD', 'CHF', 'EUR', 'GBP', 'JPY', 'NOK', 'NZD', 'SEK', 'USD']  # DM currency areas
-    cids_dmec = ['DEM', 'ESP', 'FRF', 'ITL', 'NLG']  # DM euro area countries
-    cids_latm = ['ARS', 'BRL', 'COP', 'CLP', 'MXN', 'PEN']  # Latam countries
-    cids_emea = ['HUF', 'ILS', 'PLN', 'RON', 'RUB', 'TRY', 'ZAR']  # EMEA countries
-    cids_emas = ['CNY', 'HKD', 'IDR', 'INR', 'KRW', 'MYR', 'PHP', 'SGD', 'THB', 'TWD']  # EM Asia countries
-    cids_dm = cids_dmca + cids_dmec
-    cids_em = cids_latm + cids_emea + cids_emas
-    cids = sorted(cids_dm + cids_em)
+    cids = ['AUD', 'CAD', 'GBP']
+    xcats = ['XR', 'CRY']
+    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
+    df_cids.loc['AUD', ] = ['2010-01-01', '2020-12-31', 0.5, 2]
+    df_cids.loc['CAD', ] = ['2011-01-01', '2020-11-30', 0, 1]
+    df_cids.loc['GBP', ] = ['2012-01-01', '2020-11-30', -0.2, 0.5]
 
-    path_to_feather = "..//..//notebooks//data//feathers//"
-    dfd = pd.read_feather(f'{path_to_feather}dfd_xbr_qmtl.ftr')
-    dfd[['cid', 'xcat']] = dfd['ticker'].str.split('_', 1, expand=True)
-    dfd['real_date'] = pd.to_datetime(dfd['real_date'])
+    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef'])
+    df_xcats.loc['XR', ] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
+    df_xcats.loc['CRY', ] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
 
-    ratios = ['BXBGDPRATIO_NSA_12MMA', 'CABGDPRATIO_NSA_12MMA', 'MTBGDPRATIO_NSA_12MMA']
-    ratios_plus = ratios + ['WALLY']
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    missing_in_df(dfd, xcats=ratios_plus, cids=cids)
-    check_availability(dfd, xcats=ratios, cids=cids_dm)
+    xxcats = xcats+['TREND']
+    xxcids = cids+['USD']
+    missing_in_df(dfd, xcats=xxcats, cids=xxcids)
 
-    dfd_x = reduce_df(dfd, xcats=ratios, cids=cids_em, start='2010-01-01', out_all=False)
-    df_sy = check_startyears(dfd_x)
+    dfd_x = reduce_df(dfd, xcats=xcats, cids=cids, start='2012-01-01')
+
+    df_sy = check_startyears(dfd)
     print(df_sy)
     visual_paneldates(df_sy)
-    df_ed = check_enddates(dfd_x)
+    df_ed = check_enddates(dfd)
     print(df_ed)
     visual_paneldates(df_ed)
-
-    dfd_x, xcats, xcids = reduce_df(dfd, xcats=ratios, cids=cids_em, start=None, out_all=True)

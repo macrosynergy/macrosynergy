@@ -34,7 +34,7 @@ def cor_coef(df, ticker_x, ticker_y):
     return dfd_xy.corr().iloc[0, 1]
 
 
-class Test_AR(unittest.TestCase):
+class Test_All(unittest.TestCase):
 
     def test_simulate_ar(self):
 
