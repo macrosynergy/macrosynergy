@@ -24,7 +24,7 @@ def missing_in_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = 
 
 
 def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
-              start: str = None, out_all: bool = False):
+              start: str = None, end: str = None, out_all: bool = False):
     """
     Filter dataframe by xcats and cids and notify about missing xcats and cids
 
@@ -32,15 +32,17 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
         'cid', 'xcats', 'real_date'.
     :param <List[str]> xcats: extended categories to be checked on. Default is all in the dataframe.
     :param <List[str]> cids: cross sections to be checked on. Default is all in the dataframe.
-    :param <str> start: string representing earliest considered date. Default is None.
+    :param <str> start: string representing earliest date. Default is None.
+    :param <str> end: string representing the latest date. Default is None.
     :param <bool> out_all: if True the function returns reduced dataframe and selected/available xcats and cids.
         Default is False, i.e. only the dataframe is returned
 
-    :return <pd.Dataframe> df: reduced dataframe
+    :return <pd.Dataframe>: reduced dataframe
         or (for out_all True) dataframe and avalaible and selected xcats and cids
     """
 
     dfx = df[df['real_date'] >= pd.to_datetime(start)] if start is not None else df
+    dfx = dfx[dfx['real_date'] <= pd.to_datetime(end)] if end is not None else df
 
     xcats_in_df = dfx['xcat'].unique()
     if xcats is None:
@@ -111,7 +113,7 @@ def visual_paneldates(df: pd.DataFrame, size: Tuple[float] = None):
         df = df.apply(pd.to_datetime)
         maxdate = df.max().max()
         df = (maxdate - df).apply(lambda x: x.dt.days)
-        header = f"Missing days prior to ({maxdate})"
+        header = f"Missing days prior to {maxdate.strftime('%Y-%m-%d')}"
 
     else:
 
@@ -143,9 +145,9 @@ def check_availability(df: pd.DataFrame, xcats: List[str] = None,  cids: List[st
     """
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start)
     dfs = check_startyears(dfx)
-    visual_paneldates(dfs)
+    visual_paneldates(dfs, size=start_size)
     dfe = check_enddates(dfx)
-    visual_paneldates(dfe)
+    visual_paneldates(dfe, size=end_size)
 
 
 if __name__ == "__main__":
@@ -167,11 +169,12 @@ if __name__ == "__main__":
     xxcids = cids+['USD']
     missing_in_df(dfd, xcats=xxcats, cids=xxcids)
 
-    dfd_x = reduce_df(dfd, xcats=xcats, cids=cids, start='2012-01-01')
+    dfd_x = reduce_df(dfd, xcats=xcats, cids=cids, start='2012-01-01', end='2018-01-31')
 
-    df_sy = check_startyears(dfd)
+    df_sy = check_startyears(dfd_x)
     print(df_sy)
     visual_paneldates(df_sy)
-    df_ed = check_enddates(dfd)
+    df_ed = check_enddates(dfd_x)
     print(df_ed)
     visual_paneldates(df_ed)
+    df_ed.info()
