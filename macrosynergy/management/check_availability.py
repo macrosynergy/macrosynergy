@@ -59,6 +59,8 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
     if cids is None:
         cids = sorted(cids_in_df)
     else:
+        if not isinstance(cids, list):
+           cids = [cids]
         missing = sorted(set(cids) - set(cids_in_df))
         if len(missing) > 0:
             print(f'Missing cross sections: {missing}')
@@ -169,6 +171,7 @@ if __name__ == "__main__":
     xxcids = cids+['USD']
     missing_in_df(dfd, xcats=xxcats, cids=xxcids)
 
+    dfd_x1 = reduce_df(dfd, xcats=xcats, cids=cids[0], start='2012-01-01', end='2018-01-31')
     dfd_x = reduce_df(dfd, xcats=xcats, cids=cids, start='2012-01-01', end='2018-01-31')
 
     df_sy = check_startyears(dfd_x)
