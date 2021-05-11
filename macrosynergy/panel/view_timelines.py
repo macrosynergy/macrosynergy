@@ -10,10 +10,28 @@ from macrosynergy.management.check_availability import reduce_df
 
 def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
                    start: str = '2000-01-01', end: str = None, val: str = 'value', cumsum: bool = False,
-                   title: str = None,
+                   title: str = None, title_adj=0.95,
                    ncol: int = 3, same_y: bool = True, size: Tuple[float] = (12, 7), aspect: float = 1.7):
 
-    """Display facet grid of time lines of one or more categories"""
+    """Display facet grid of time lines of one or more categories
+
+    :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
+        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+    :param <List[str]> xcats: extended categories to be checked on. Default is all in the dataframe.
+    :param <List[str]> cids: cross sections to be checked on. Default is all in the dataframe.
+        If this contains only one cross section a single chart is created rather than a facet grid.
+    :param <str> start: earliest date in ISO format. Default is None and earliest date in df is used.
+    :param <str> end: latest date in ISO format. Default is None and latest date in df is used.
+    :param <str> val: name of column that contains the values of interest. Default is 'value'.
+    :param <bool> cumsum: chart the cumulative sum of the value. Default is False.
+    :param <str> title: chart heading. Default is no title.
+    :param <float> title_adj: parameter that positions title relative to the facet. Default is 0.95.
+    :param <int> ncol: number of columns in facet. Default is 3.
+    :param <bool> same_y: if True (default) all axis plots in the facet share the same y axis.
+    :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default is (12, 7).
+    :param <float> aspect: width-height ratio for plots in facet.
+
+    """
 
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
 
@@ -37,8 +55,8 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
         fg.set_titles(col_template='{col_name}')
         fg.add_legend()
         if title is not None:
-            fg.fig.subplots_adjust(top=0.9)
-            fg.fig.suptitle(title)
+            fg.fig.subplots_adjust(top=title_adj)
+            fg.fig.suptitle(title, fontsize=20)
     plt.show()
 
 
