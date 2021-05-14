@@ -12,7 +12,23 @@ def correl_matrix(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = 
                    start: str = '2000-01-01', end: str = None, val: str = 'value',
                    title: str = None, size: Tuple[float] = (14, 8), max_color: float=None):
 
-    """Display correlation matrix either across xcats (if more than one xcat_) or cids"""
+    """Display correlation matrix either across xcats (if more than one xcat_) or cids
+
+    :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
+        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+    :param <List[str]> xcats: extended categories to be correlated. Default is all in the dataframe.
+        If xcats contains only one category the correlation coefficients across sections are displayed.
+        If xcats contains more than one category the correlation coefficients across categories are displayed.
+    :param <List[str]> cids: cross sections to be correlated. Default is all in the dataframe.
+    :param <str> start: earliest date in ISO format. Default is None and earliest date in df is used.
+    :param <str> end: latest date in ISO format. Default is None and latest date in df is used.
+    :param <str> val: name of column that contains the values of interest. Default is 'value'.
+    :param <str> title: chart heading. If none is given, a default title is used.
+    :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default is (14, 8).
+    :param <float> max_color: maximum values of positive/negative correlation coefficients for color scale
+        Default is none. If a value is given it applies symmetrically to positive and negative values.
+
+    """
 
     xcats = xcats if isinstance(xcats, list) else [xcats]
     min_color = None if max_color is None else -max_color  # define minimum of color scale
@@ -65,7 +81,7 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     correl_matrix(dfd, xcats=xcats, cids=cids, max_color=0.2)
-    correl_matrix(dfd, xcats=xcats[0], cids=cids)
+    correl_matrix(dfd, xcats=xcats[0], cids=cids, title='Correlation')
 
     correl_matrix(dfd, xcats=xcats, cids=cids)
 
