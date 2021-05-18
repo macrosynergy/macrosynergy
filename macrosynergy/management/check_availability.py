@@ -42,7 +42,7 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
     """
 
     dfx = df[df['real_date'] >= pd.to_datetime(start)] if start is not None else df
-    dfx = dfx[dfx['real_date'] <= pd.to_datetime(end)] if end is not None else df
+    dfx = dfx[dfx['real_date'] <= pd.to_datetime(end)] if end is not None else dfx
 
     xcats_in_df = dfx['xcat'].unique()
     if xcats is None:
