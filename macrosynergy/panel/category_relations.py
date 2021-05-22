@@ -1,7 +1,3 @@
-# change index in output dfc of categories_df to pretty format, as currently used in CategoryRelations.reg_scatter
-# allow long custom periods: define year intervals and give them names, index by cross-section and interval
-# optional multi-year parameter
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -14,8 +10,7 @@ from macrosynergy.management.check_availability import reduce_df
 
 
 def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None, val: str = 'value',
-                  start: str = None, end: str = None,
-                  years: int = None,
+                  start: str = None, end: str = None, blacklist: dict = None, years: int = None,
                   freq: str = 'M', lag: int = 0, xcat_aggs: List[str] = ('mean', 'mean')):
 
     """Create custom two-categories dataframe suitable for analysis
@@ -26,6 +21,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None, va
     :param <List[str]> cids: cross sections to be checked on. Default is all in the dataframe.
     :param <str> start: earliest date in ISO format. Default is None and earliest date in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df is used.
+    :param <dict> blacklist: cross sections with date ranges that should be excluded from the data frame.
     :param <int> years: Number of years over which data are aggregate. Supersedes freq and does not allow lags,
         Default is None, meaning no multi-year aggregation.
     :param <str> val: name of column that contains the values of interest. Default is 'value'.
@@ -41,7 +37,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None, va
     assert freq in ['D', 'W', 'M', 'Q', 'A']
     assert not (years is not None) & (lag != 0), 'Lags cannot be applied to year groups'
 
-    df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
+    df, xcats, cids = reduce_df(df, xcats, cids, start, end, blacklist, out_all=True)
 
     col_names = ['cid', 'xcat', 'real_date', val]
     dfc = pd.DataFrame(columns=col_names)
@@ -89,6 +85,7 @@ class CategoryRelations:
     :param <List[str]> cids: cross sections to be checked on. Default is all in the data frame.
     :param <str> start: earliest date in ISO format. Default is None and earliest date in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df is used.
+    :param <dict> blacklist: cross sections with date ranges that should be excluded from the data frame.
     :param <int> years: Number of years over which data are aggregate. Supersedes freq and does not allow lags,
         Default is None, meaning no multi-year aggregation.
     :param <str> val: name of column that contains the values of interest. Default is 'value'.
@@ -102,7 +99,7 @@ class CategoryRelations:
     """
 
     def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None, val: str = 'value',
-                 start: str = None, end: str = None, years=None,
+                 start: str = None, end: str = None, blacklist: dict = None, years=None,
                  freq: str = 'M', lag: int = 0, xcat_aggs: List[str] = ('mean', 'mean')):
 
         """Constructs all attributes for the category relationship to be analyzed"""
@@ -118,8 +115,8 @@ class CategoryRelations:
         assert self.freq in ['D', 'W', 'M', 'Q', 'A']
         assert {'cid', 'xcat', 'real_date', val}.issubset(set(df.columns))
 
-        self.df = categories_df(df, xcats, cids, val, start=start, end=end, freq=freq, years=years,
-                                lag=lag, xcat_aggs=xcat_aggs)
+        self.df = categories_df(df, xcats, cids, val, start=start, end=end, freq=freq, blacklist = blacklist,
+                                years=years, lag=lag, xcat_aggs=xcat_aggs)
 
     def reg_scatter(self, title: str = None, labels: bool = False,
                     size: Tuple[float] = (12, 8), xlab: str = None, ylab: str = None,
@@ -208,6 +205,9 @@ if __name__ == "__main__":
                            start='1999-01-01', years=10)
     cr.reg_scatter(labels=True)
 
+    black = {'AUD': ['2000-01-01', '2003-12-31'], 'NZD': ['2018-01-01', '2100-01-01']}
+    dfc = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
+                        start='2000-01-01', blacklist=black)
     cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='Q', lag=1, xcat_aggs=['mean', 'mean'],
                            start='2000-01-01')
     cr.reg_scatter(labels=True)

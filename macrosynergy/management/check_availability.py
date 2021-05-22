@@ -24,7 +24,7 @@ def missing_in_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = 
 
 
 def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
-              start: str = None, end: str = None, out_all: bool = False):
+              start: str = None, end: str = None, blacklist: dict = None, out_all: bool = False):
     """
     Filter dataframe by xcats and cids and notify about missing xcats and cids
 
@@ -34,6 +34,7 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
     :param <List[str]> cids: cross sections to be checked on. Default is all in the dataframe.
     :param <str> start: string representing earliest date. Default is None.
     :param <str> end: string representing the latest date. Default is None.
+    :param <dict> blacklist: cross sections with date ranges that should be excluded from the data frame.
     :param <bool> out_all: if True the function returns reduced dataframe and selected/available xcats and cids.
         Default is False, i.e. only the dataframe is returned
 
@@ -43,6 +44,13 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
 
     dfx = df[df['real_date'] >= pd.to_datetime(start)] if start is not None else df
     dfx = dfx[dfx['real_date'] <= pd.to_datetime(end)] if end is not None else dfx
+
+    if blacklist is not None:
+        for key, value in blacklist.items():
+            filt1 = dfx['cid'] == key
+            filt2 = dfx['real_date'] >= pd.to_datetime(value[0])
+            filt3 = dfx['real_date'] <= pd.to_datetime(value[1])
+            dfx = dfx[~(filt1 & filt2 & filt3)]
 
     xcats_in_df = dfx['xcat'].unique()
     if xcats is None:
@@ -171,13 +179,16 @@ if __name__ == "__main__":
     xxcids = cids+['USD']
     missing_in_df(dfd, xcats=xxcats, cids=xxcids)
 
-    dfd_x1 = reduce_df(dfd, xcats=xcats, cids=cids[0], start='2012-01-01', end='2018-01-31')
-    dfd_x = reduce_df(dfd, xcats=xcats, cids=cids, start='2012-01-01', end='2018-01-31')
+    # dfd_x1 = reduce_df(dfd, xcats=xcats, cids=cids[0], start='2012-01-01', end='2018-01-31')
+    # dfd_x = reduce_df(dfd, xcats=xcats, cids=cids, start='2012-01-01', end='2018-01-31')
 
-    df_sy = check_startyears(dfd_x)
+    black = {'CAD': ['2010-01-01', '2013-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
+    dfd_xb = reduce_df(dfd, xcats=xcats, cids=cids, blacklist=black)
+
+    df_sy = check_startyears(dfd_xb)
     print(df_sy)
     visual_paneldates(df_sy)
-    df_ed = check_enddates(dfd_x)
+    df_ed = check_enddates(dfd_xb)
     print(df_ed)
     visual_paneldates(df_ed)
     df_ed.info()
