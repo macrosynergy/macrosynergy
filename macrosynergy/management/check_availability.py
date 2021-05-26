@@ -92,7 +92,7 @@ def check_startyears(df: pd.DataFrame):
     df_starts = df[['cid', 'xcat', 'real_date']].groupby(['cid', 'xcat']).min()
     df_starts['real_date'] = pd.DatetimeIndex(df_starts.loc[:, 'real_date']).year
 
-    return df_starts.unstack().loc[:, 'real_date'].astype(int)
+    return df_starts.unstack().loc[:, 'real_date'].astype(int, errors='ignore')
 
 
 def check_enddates(df: pd.DataFrame):
