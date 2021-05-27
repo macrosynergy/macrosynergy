@@ -36,7 +36,7 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
 
     if cumsum:
-        df[val] = df[['cid', 'xcat', val]].groupby(['cid', 'xcat']).cumsum()
+        df[val] = df.sort_values(['cid', 'xcat', "real_date"])[['cid', 'xcat', val]].groupby(['cid', 'xcat']).cumsum()
 
     sns.set(rc={'figure.figsize': size}, style='darkgrid')
     if len(cids) == 1:

@@ -47,7 +47,7 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
 
     if blacklist is not None:
         for key, value in blacklist.items():
-            filt1 = dfx['cid'] == key
+            filt1 = dfx['cid'] == key[:3]
             filt2 = dfx['real_date'] >= pd.to_datetime(value[0])
             filt3 = dfx['real_date'] <= pd.to_datetime(value[1])
             dfx = dfx[~(filt1 & filt2 & filt3)]

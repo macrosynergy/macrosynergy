@@ -115,7 +115,7 @@ class CategoryRelations:
         assert self.freq in ['D', 'W', 'M', 'Q', 'A']
         assert {'cid', 'xcat', 'real_date', val}.issubset(set(df.columns))
 
-        self.df = categories_df(df, xcats, cids, val, start=start, end=end, freq=freq, blacklist = blacklist,
+        self.df = categories_df(df, xcats, cids, val, start=start, end=end, freq=freq, blacklist=blacklist,
                                 years=years, lag=lag, xcat_aggs=xcat_aggs)
 
     def reg_scatter(self, title: str = None, labels: bool = False,
@@ -200,7 +200,6 @@ if __name__ == "__main__":
 
     dfc = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
                         start='2000-01-01', years=5)
-
     cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
                            start='1999-01-01', years=10)
     cr.reg_scatter(labels=True)
@@ -208,8 +207,12 @@ if __name__ == "__main__":
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'NZD': ['2018-01-01', '2100-01-01']}
     dfc = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
                         start='2000-01-01', blacklist=black)
-    cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='Q', lag=1, xcat_aggs=['mean', 'mean'],
-                           start='2000-01-01')
+
+    black = {'AUD_1': ['2000-01-01', '2009-12-31'], 'AUD_2': ['2018-01-01', '2100-01-01']}
+    dfc = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
+                        start='2000-01-01', blacklist=black, years=10)
+    cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M', xcat_aggs=['mean', 'mean'],
+                           start='2000-01-01', years=10, blacklist=black)
     cr.reg_scatter(labels=True)
     cr.ols_table()
 
