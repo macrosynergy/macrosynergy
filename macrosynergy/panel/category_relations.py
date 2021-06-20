@@ -6,73 +6,7 @@ import statsmodels.api as sm
 from typing import List, Union, Tuple
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.check_availability import reduce_df
-
-
-def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None, val: str = 'value',
-                  start: str = None, end: str = None, blacklist: dict = None, years: int = None,
-                  freq: str = 'M', lag: int = 0, xcat_aggs: List[str] = ('mean', 'mean')):
-
-    """Create custom two-categories dataframe suitable for analysis
-
-    :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
-        'cid', 'xcats', 'real_date' and at least one column with values of interest.
-    :param <List[str]> xcats: Exactly two extended categories to be checked on.
-    :param <List[str]> cids: cross sections to be checked on. Default is all in the dataframe.
-    :param <str> start: earliest date in ISO format. Default is None and earliest date in df is used.
-    :param <str> end: latest date in ISO format. Default is None and latest date in df is used.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from the data frame.
-    :param <int> years: Number of years over which data are aggregate. Supersedes freq and does not allow lags,
-        Default is None, meaning no multi-year aggregation.
-    :param <str> val: name of column that contains the values of interest. Default is 'value'.
-    :param <str> freq: letter denoting frequency at which the series are to be sampled.
-        This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
-    :param <int> lag: Lag (delay of arrival) of second category in periods as set by freq. Default is 0.
-    :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for both.
-
-    :return custom dataframe with columns for the two categories indexed by cross sections and periods.
-
-    """
-
-    assert freq in ['D', 'W', 'M', 'Q', 'A']
-    assert not (years is not None) & (lag != 0), 'Lags cannot be applied to year groups'
-
-    df, xcats, cids = reduce_df(df, xcats, cids, start, end, blacklist, out_all=True)
-
-    col_names = ['cid', 'xcat', 'real_date', val]
-    dfc = pd.DataFrame(columns=col_names)
-
-    if years is None:
-        for i in range(2):
-            dfw = df[df['xcat'] == xcats[i]].pivot(index='real_date', columns='cid', values=val)
-            dfw = dfw.resample(freq).agg(xcat_aggs[i]).shift(lag).reset_index()
-            dfx = pd.melt(dfw, id_vars=['real_date'], value_vars=cids, value_name=val)
-            dfx['xcat'] = xcats[i]
-            dfc = dfc.append(dfx[col_names])
-    else:
-
-        s_year = pd.to_datetime(start).year
-        e_year = df['real_date'].max().year + 1
-
-        s_years = range(s_year, e_year, years)
-        year_groups = {}
-        for y in s_years:
-            ey = y + years - 1 if (y + years - 1) <= e_year else 'now'
-            y_key = f'{y} - {ey}'
-            y_value = [i for i in range(y, y + years)]
-            year_groups[y_key] = y_value
-
-        def translate(year):
-            return np.array(list(year_groups.keys()))[[year in l for l in list(year_groups.values())]][0]
-
-        df['custom_date'] = df['real_date'].dt.year.apply(translate)
-        for i in range(2):
-            dfx = df[df['xcat'] == xcats[i]]
-            dfx = dfx.groupby(['xcat', 'cid', 'custom_date']).agg(xcat_aggs[i]).reset_index()
-            dfx = dfx.rename(columns={"custom_date": "real_date"})
-            dfc = dfc.append(dfx[col_names])
-
-    return dfc.pivot(index=('cid', 'real_date'), columns='xcat', values=val).dropna()
+from macrosynergy.management.shape_dfs import categories_df
 
 
 class CategoryRelations:
@@ -92,15 +26,14 @@ class CategoryRelations:
     :param <str> freq: letter denoting frequency at which the series are to be sampled.
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
     :param <int> lag: Lag (delay of arrival) of second category in periods as set by freq. Default is 0.
+    :param <int> fwin: Forward moving average window of first category. Default is 1, i.e no average.
     :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for both.
-
-    :return custom data frame with columns for the two categories indexed by cross sections and periods.
 
     """
 
     def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None, val: str = 'value',
                  start: str = None, end: str = None, blacklist: dict = None, years=None,
-                 freq: str = 'M', lag: int = 0, xcat_aggs: List[str] = ('mean', 'mean')):
+                 freq: str = 'M', lag: int = 0, fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean')):
 
         """Constructs all attributes for the category relationship to be analyzed"""
 
@@ -116,7 +49,7 @@ class CategoryRelations:
         assert {'cid', 'xcat', 'real_date', val}.issubset(set(df.columns))
 
         self.df = categories_df(df, xcats, cids, val, start=start, end=end, freq=freq, blacklist=blacklist,
-                                years=years, lag=lag, xcat_aggs=xcat_aggs)
+                                years=years, lag=lag, fwin=fwin, xcat_aggs=xcat_aggs)
 
     def reg_scatter(self, title: str = None, labels: bool = False,
                     size: Tuple[float] = (12, 8), xlab: str = None, ylab: str = None,
@@ -204,13 +137,7 @@ if __name__ == "__main__":
                            start='1999-01-01', years=10)
     cr.reg_scatter(labels=True)
 
-    black = {'AUD': ['2000-01-01', '2003-12-31'], 'NZD': ['2018-01-01', '2100-01-01']}
-    dfc = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
-                        start='2000-01-01', blacklist=black)
-
-    black = {'AUD_1': ['2000-01-01', '2009-12-31'], 'AUD_2': ['2018-01-01', '2100-01-01']}
-    dfc = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
-                        start='2000-01-01', blacklist=black, years=10)
+    black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
     cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M', xcat_aggs=['mean', 'mean'],
                            start='2000-01-01', years=10, blacklist=black)
     cr.reg_scatter(labels=True)

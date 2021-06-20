@@ -55,7 +55,7 @@ def view_grades(df: pd.DataFrame, xcat: str,  cids: List[str] = None,
 
 if __name__ == "__main__":
 
-    cids = ['AUD', 'CAD', 'GBP', 'NZD']
+    cids = ['NZD', 'AUD', 'CAD', 'GBP']
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
     df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
     df_cids.loc['AUD',] = ['2000-01-01', '2020-12-31', 0.1, 1]
@@ -75,6 +75,6 @@ if __name__ == "__main__":
     dfd.loc[dfd['real_date'] >= pd.to_datetime('2015-01-01'), 'grading'] = '2.1'
     dfd.loc[dfd['real_date'] >= pd.to_datetime('2016-01-01'), 'grading'] = '1'
 
-    view_grades(dfd, 'CRY', cids=cids[:3], start='2012-01-01')
+    view_grades(dfd, 'CRY', cids=cids, start='2012-01-01')
 
     dfd.info()

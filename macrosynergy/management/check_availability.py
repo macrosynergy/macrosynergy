@@ -5,6 +5,7 @@ import seaborn as sns
 from typing import List, Union, Tuple
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.shape_dfs import reduce_df
 
 
 def missing_in_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None):
@@ -21,64 +22,6 @@ def missing_in_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = 
     for xcat in xcats_used:
         cids_xcat = df.loc[df['xcat'] == xcat, 'cid'].unique()
         print(f'Missing cids for {xcat}: ', set(cids) - set(cids_xcat))  # any cross section missing?
-
-
-def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
-              start: str = None, end: str = None, blacklist: dict = None, out_all: bool = False):
-    """
-    Filter dataframe by xcats and cids and notify about missing xcats and cids
-
-    :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
-        'cid', 'xcats', 'real_date'.
-    :param <List[str]> xcats: extended categories to be checked on. Default is all in the dataframe.
-    :param <List[str]> cids: cross sections to be checked on. Default is all in the dataframe.
-    :param <str> start: string representing earliest date. Default is None.
-    :param <str> end: string representing the latest date. Default is None.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from the data frame.
-    :param <bool> out_all: if True the function returns reduced dataframe and selected/available xcats and cids.
-        Default is False, i.e. only the dataframe is returned
-
-    :return <pd.Dataframe>: reduced dataframe
-        or (for out_all True) dataframe and avalaible and selected xcats and cids
-    """
-
-    dfx = df[df['real_date'] >= pd.to_datetime(start)] if start is not None else df
-    dfx = dfx[dfx['real_date'] <= pd.to_datetime(end)] if end is not None else dfx
-
-    if blacklist is not None:
-        for key, value in blacklist.items():
-            filt1 = dfx['cid'] == key[:3]
-            filt2 = dfx['real_date'] >= pd.to_datetime(value[0])
-            filt3 = dfx['real_date'] <= pd.to_datetime(value[1])
-            dfx = dfx[~(filt1 & filt2 & filt3)]
-
-    xcats_in_df = dfx['xcat'].unique()
-    if xcats is None:
-        xcats = sorted(xcats_in_df)
-    else:
-        missing = sorted(set(xcats) - set(xcats_in_df))
-        if len(missing) > 0:
-            print(f'Missing cross sections: {missing}')
-        xcats = sorted(list(set(xcats).intersection(set(xcats_in_df))))
-
-    dfx = dfx[dfx['xcat'].isin(xcats)]
-
-    cids_in_df = dfx['cid'].unique()
-    if cids is None:
-        cids = sorted(cids_in_df)
-    else:
-        if not isinstance(cids, list):
-           cids = [cids]
-        missing = sorted(set(cids) - set(cids_in_df))
-        if len(missing) > 0:
-            print(f'Missing cross sections: {missing}')
-        cids = sorted(list(set(cids).intersection(set(cids_in_df))))
-        dfx = dfx[dfx['cid'].isin(cids)]
-
-    if out_all:
-        return dfx, xcats, cids
-    else:
-        return dfx
 
 
 def check_startyears(df: pd.DataFrame):
@@ -179,16 +122,10 @@ if __name__ == "__main__":
     xxcids = cids+['USD']
     missing_in_df(dfd, xcats=xxcats, cids=xxcids)
 
-    # dfd_x1 = reduce_df(dfd, xcats=xcats, cids=cids[0], start='2012-01-01', end='2018-01-31')
-    # dfd_x = reduce_df(dfd, xcats=xcats, cids=cids, start='2012-01-01', end='2018-01-31')
-
-    black = {'CAD': ['2010-01-01', '2013-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
-    dfd_xb = reduce_df(dfd, xcats=xcats, cids=cids, blacklist=black)
-
-    df_sy = check_startyears(dfd_xb)
+    df_sy = check_startyears(dfd)
     print(df_sy)
     visual_paneldates(df_sy)
-    df_ed = check_enddates(dfd_xb)
+    df_ed = check_enddates(dfd)
     print(df_ed)
     visual_paneldates(df_ed)
     df_ed.info()

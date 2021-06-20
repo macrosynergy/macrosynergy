@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.check_availability import reduce_df, check_startyears, check_enddates
+from macrosynergy.management.check_availability import check_startyears, check_enddates
 
 cids = ['AUD', 'CAD', 'GBP']
 xcats = ['CRY', 'XR']
@@ -23,13 +23,6 @@ df_ed = check_enddates(dfd)
 
 
 class Test_All(unittest.TestCase):
-
-    def test_reduce_df(self):
-
-        dfd_x = reduce_df(dfd, xcats=['CRY'], cids=cids[0:2], start='2013-01-01')
-        self.assertTrue(all(dfd_x['cid'].unique() == np.array(['AUD', 'CAD'])))
-        self.assertTrue(all(dfd_x['xcat'].unique() == np.array(['CRY'])))
-        self.assertTrue(dfd_x['real_date'].min() == pd.to_datetime('2013-01-01'))
 
     def test_check_startyears(self):
 
