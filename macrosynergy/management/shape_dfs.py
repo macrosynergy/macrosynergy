@@ -161,8 +161,6 @@ if __name__ == "__main__":
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
 
     dfd_xb = reduce_df(dfd, xcats=xcats, cids=cids, blacklist=black)
-    dfc = categories_df(dfd, xcats=['XR', 'CRY'], cids=cids, freq='M', lag=0, fwin=3, xcat_aggs=['mean', 'mean'],
-                        start='2000-01-01')
 
     dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
                          start='2000-01-01', blacklist=black)

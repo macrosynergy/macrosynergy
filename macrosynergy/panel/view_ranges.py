@@ -46,7 +46,7 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
         ylab = ""
 
     if sort_cids_by == 'mean':
-        dfx = df[df['xcat']==xcats[0]].groupby(['cid'])[val].mean()
+        dfx = df[df['xcat'] == xcats[0]].groupby(['cid'])[val].mean()
         order = dfx.sort_values(ascending=False).index
     elif sort_cids_by == 'std':
         dfx = df[df['xcat']==xcats[0]].groupby(['cid'])[val].std()
@@ -88,7 +88,8 @@ if __name__ == "__main__":
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
+    view_ranges(dfd, xcats=['XR', 'CRY'], kind='bar', sort_cids_by='mean')
     view_ranges(dfd, xcats=['XR'], cids=cids, kind='box', sort_cids_by='std')
     view_ranges(dfd, xcats=['XR'], cids=cids, kind='box', start='2012-01-01', end='2018-01-01', sort_cids_by='std')
 
-    view_ranges(dfd, xcats=['CRY', 'XR'], kind='bar', sort_cids_by='mean')
+

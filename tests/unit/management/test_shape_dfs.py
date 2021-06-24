@@ -39,6 +39,12 @@ class Test_All(unittest.TestCase):
         black_range_1 = pd.date_range(start='2011-01-01', end='2012-12-31')
         self.assertTrue(not any(item in black_range_1 for item in dfd_aud['real_date']))
 
+        black = {'CAD': ['2014-01-01', '2014-12-31']}
+        dfd_x = reduce_df(dfd, xcats=['XR'], cids=cids, blacklist=black)
+        dfd_cad = dfd_x[dfd_x['cid'] == 'CAD']
+        black_range_2 = pd.date_range(start='2014-01-01', end='2014-12-31')
+        self.assertTrue(not any(item in black_range_2 for item in dfd_cad['real_date']))
+
     def test_categories_df_conversion(self):
 
         dfc = categories_df(dfd, xcats=['XR', 'CRY'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'last'])
@@ -73,8 +79,7 @@ class Test_All(unittest.TestCase):
     def test_categories_df_black(self):
 
         black = {'CAD': ['2014-01-01', '2014-12-31']}
-        dfc = categories_df(dfd, xcats=['XR', 'CRY'], cids=cids, freq='W', xcat_aggs=['mean', 'last'], blacklist=black)
-        # Todo: 3 CAD 2014 values in dfc
+        dfc = categories_df(dfd, xcats=['XR', 'CRY'], cids=cids, freq='M', xcat_aggs=['mean', 'last'], blacklist=black)
         dfc_cad = dfc[np.array(dfc.reset_index(level=0)['cid']) == 'CAD']
         black_range_1 = pd.date_range(start='2014-01-01', end='2014-12-31')
         self.assertTrue(len([item for item in dfc_cad.reset_index()['real_date'] if item in black_range_1]) == 0)
