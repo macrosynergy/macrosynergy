@@ -1,9 +1,3 @@
-# shows various relation metrics between signals and (subsequent returns)
-# rows are cross sections or year + average/panel/pos_ratio
-# columns are metrics: obs/ pearson, spearman, probability/ signal_pr, return_pr/ accuracy, sensitivity, specificity,
-# balanced accuracy
-# give choice of frequency (d, m)
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -189,6 +183,3 @@ if __name__ == "__main__":
     srr.accuracy_bars(type='years')
     df_cs_stats = srr.cross_section_table()
     df_ys_stats = srr.yearly_table()
-
-
-    print(srr)
