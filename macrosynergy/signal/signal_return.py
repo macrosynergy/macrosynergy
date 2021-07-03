@@ -13,7 +13,7 @@ from macrosynergy.management.shape_dfs import categories_df
 
 class SignalReturnRelations:
 
-    """Class for analyzing and visualizing relations between a signal and return indicator
+    """Class for analyzing and visualizing relations between a signal and subsequent return
 
     :param <pd.Dataframe> df: standardized data frame with the following necessary columns:
         'cid', 'xcats', 'real_date' and 'value.
@@ -100,8 +100,8 @@ class SignalReturnRelations:
         """Bars of overall and balanced accuracy
 
         :param <str> type: type of segment over which bars are drawn. Must be 'cross_section' (default) or 'years'
-        :param <str> title: chart header. Default will be applied if none is chosen,
-        :param <Tuple[float]> size: 2-tuple of width and height of plot.  Default will be applied if none is chosen,
+        :param <str> title: chart header. Default will be applied if none is chosen.
+        :param <Tuple[float]> size: 2-tuple of width and height of plot.  Default will be applied if none is chosen.
 
         """
 
@@ -130,7 +130,13 @@ class SignalReturnRelations:
         plt.show()
 
     def correlation_bars(self, type: str = 'cross_section', title: str = None, size: Tuple[float] = None):
-        """Correlation coefficients and significance"""
+        """Correlation coefficients and significance
+
+        :param <str> type: type of segment over which bars are drawn. Must be 'cross_section' (default) or 'years'
+        :param <str> title: chart header. Default will be applied if none is chosen.
+        :param <Tuple[float]> size: 2-tuple of width and height of plot.  Default will be applied if none is chosen.
+
+        """
 
         df_xs = self.df_cs if type == 'cross_section' else self.df_ys
         dfx = df_xs[~df_xs.index.isin(['PosRatio', 'Mean'])]
@@ -183,3 +189,5 @@ if __name__ == "__main__":
     srr.accuracy_bars(type='years')
     df_cs_stats = srr.cross_section_table()
     df_ys_stats = srr.yearly_table()
+    print(df_cs_stats)
+    print(df_ys_stats)
