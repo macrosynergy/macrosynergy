@@ -29,7 +29,7 @@ class SignalReturnRelations:
 
     """
     def __init__(self, df: pd.DataFrame, ret: str, sig: str, cids: List[str] = None,
-                 start: str = None, end: str = None, fwin: int = 1, blacklist: dict = None, years=None,
+                 start: str = None, end: str = None, fwin: int = 1, blacklist: dict = None,
                  freq: str = 'M'):
 
         self.df = categories_df(df, [ret, sig], cids, 'value', start=start, end=end, freq=freq, blacklist=blacklist,
@@ -96,12 +96,14 @@ class SignalReturnRelations:
         """Returns dataframe with information on the signal-return relation across years and the panel."""
         return self.df_ys.round(decimals=3)
 
-    def accuracy_bars(self, type: str = 'cross_section', title: str = None, size: Tuple[float] = None):
+    def accuracy_bars(self, type: str = 'cross_section', title: str = None, size: Tuple[float] = None,
+                      legend_pos: str = 'best'):
         """Bars of overall and balanced accuracy
 
         :param <str> type: type of segment over which bars are drawn. Must be 'cross_section' (default) or 'years'
         :param <str> title: chart header. Default will be applied if none is chosen.
         :param <Tuple[float]> size: 2-tuple of width and height of plot.  Default will be applied if none is chosen.
+        :param <str> legend_pos: position of legend box. Default is 'best'. See matplotlib.pyplot.legend.
 
         """
 
@@ -126,15 +128,17 @@ class SignalReturnRelations:
         plt.axhline(y=0.5, color='black', linestyle='-', linewidth=0.5)
         plt.ylim(np.round(np.max(dfx.loc[:, ['accuracy', 'bal_accuracy']].min().min()-0.03, 0), 2))
         plt.title(title)
-        plt.legend()
+        plt.legend(loc=legend_pos)
         plt.show()
 
-    def correlation_bars(self, type: str = 'cross_section', title: str = None, size: Tuple[float] = None):
+    def correlation_bars(self, type: str = 'cross_section', title: str = None, size: Tuple[float] = None,
+                         legend_pos: str = 'best'):
         """Correlation coefficients and significance
 
         :param <str> type: type of segment over which bars are drawn. Must be 'cross_section' (default) or 'years'
         :param <str> title: chart header. Default will be applied if none is chosen.
         :param <Tuple[float]> size: 2-tuple of width and height of plot.  Default will be applied if none is chosen.
+        :param <str> legend_pos: position of legend box. Default is 'best'. See matplotlib.pyplot.legend.
 
         """
 
@@ -162,7 +166,7 @@ class SignalReturnRelations:
         plt.axhline(y=0.95, color='orange', linestyle='--', linewidth=0.5, label='95% probability')
         plt.axhline(y=0.99, color='red', linestyle='--', linewidth=0.5, label='99% probability')
         plt.title(title)
-        plt.legend()
+        plt.legend(loc=legend_pos)
         plt.show()
 
 
@@ -182,11 +186,13 @@ if __name__ == "__main__":
     df_xcats.loc['GROWTH',] = ['2001-01-01', '2020-10-30', 1, 2, 0.9, 1]
     df_xcats.loc['INFL',] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
+    black = {'AUD': ['2006-01-01', '2015-12-31'], 'GBP': ['2012-01-01', '2100-01-01']}
+
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    srr = SignalReturnRelations(dfd, sig='CRY', ret='XR')
-    srr.correlation_bars(type='years')
-    srr.accuracy_bars(type='years')
+    srr = SignalReturnRelations(dfd, sig='CRY', ret='XR', freq='D', blacklist=black)
+    srr.correlation_bars(type='cross_section')
+    srr.accuracy_bars(type='cross_section')
     df_cs_stats = srr.cross_section_table()
     df_ys_stats = srr.yearly_table()
     print(df_cs_stats)
