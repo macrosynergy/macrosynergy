@@ -69,9 +69,9 @@ class SignalReturnRelations:
                 df_cs = df
 
             ret_signs, sig_signs = np.sign(df_cs[self.ret]), np.sign(df_cs[self.sig])
-            df_out.loc[cs, 'accuracy'] = skm.accuracy_score(ret_signs, sig_signs)
-            df_out.loc[cs, 'bal_accuracy'] = skm.balanced_accuracy_score(ret_signs, sig_signs)
-            df_out.loc[cs, 'f1_score'] = skm.f1_score(ret_signs, sig_signs, average='weighted')
+            df_out.loc[cs, 'accuracy'] = skm.accuracy_score(sig_signs, ret_signs)
+            df_out.loc[cs, 'bal_accuracy'] = skm.balanced_accuracy_score(sig_signs, ret_signs)
+            df_out.loc[cs, 'f1_score'] = skm.f1_score(sig_signs, ret_signs, average='weighted')
 
             ret_vals, sig_vals = df_cs[self.ret], df_cs[self.sig]
             df_out.loc[cs, ['kendall', 'kendall_pval']] = stats.kendalltau(ret_vals, sig_vals)
