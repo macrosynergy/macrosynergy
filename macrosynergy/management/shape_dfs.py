@@ -157,15 +157,15 @@ if __name__ == "__main__":
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    # dfd_x1 = reduce_df(dfd, xcats=xcats, cids=cids[0], start='2012-01-01', end='2018-01-31')
-    # dfd_x = reduce_df(dfd, xcats=xcats, cids=cids, start='2012-01-01', end='2018-01-31')
-    #
+    dfd_x1 = reduce_df(dfd, xcats=xcats, cids=cids[0], start='2012-01-01', end='2018-01-31')
+    dfd_x = reduce_df(dfd, xcats=xcats, cids=cids, start='2012-01-01', end='2018-01-31')
+
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
 
-    # dfd_xb = reduce_df(dfd, xcats=xcats, cids=cids, blacklist=black)
-    #
-    # dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
-    #                      start='2000-01-01', blacklist=black)
+    dfd_xb = reduce_df(dfd, xcats=xcats, cids=cids, blacklist=black)
+
+    dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
+                         start='2000-01-01', blacklist=black)
     dfc2 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, fwin=3, xcat_aggs=['mean', 'mean'],
                          start='2000-01-01', blacklist=black)
 
