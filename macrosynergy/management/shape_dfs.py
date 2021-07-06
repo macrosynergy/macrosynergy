@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from typing import List, Union, Tuple
+import random
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
@@ -106,7 +107,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None, va
             dfw = df[df['xcat'] == xcats[i]].pivot(index='real_date', columns='cid', values=val)
             dfw = dfw.resample(freq).agg(xcat_aggs[i])  # frequency conversion
             if (i == 0) & (fwin > 1):
-                dfw = dfw.shift(1-fwin).rolling(window=fwin).mean()
+                dfw = dfw.rolling(window=fwin).mean().shift(1-fwin)
             if (i == 1) & (lag > 0):
                 dfw = dfw.shift(lag)  # lag second category for late arrival
             dfx = pd.melt(dfw.reset_index(), id_vars=['real_date'], value_vars=cids, value_name=val)
@@ -153,17 +154,18 @@ if __name__ == "__main__":
     df_xcats.loc['GROWTH',] = ['2001-01-01', '2020-10-30', 1, 2, 0.9, 1]
     df_xcats.loc['INFL',] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
+    random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    dfd_x1 = reduce_df(dfd, xcats=xcats, cids=cids[0], start='2012-01-01', end='2018-01-31')
-    dfd_x = reduce_df(dfd, xcats=xcats, cids=cids, start='2012-01-01', end='2018-01-31')
-
+    # dfd_x1 = reduce_df(dfd, xcats=xcats, cids=cids[0], start='2012-01-01', end='2018-01-31')
+    # dfd_x = reduce_df(dfd, xcats=xcats, cids=cids, start='2012-01-01', end='2018-01-31')
+    #
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
 
-    dfd_xb = reduce_df(dfd, xcats=xcats, cids=cids, blacklist=black)
-
-    dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
-                         start='2000-01-01', blacklist=black)
+    # dfd_xb = reduce_df(dfd, xcats=xcats, cids=cids, blacklist=black)
+    #
+    # dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
+    #                      start='2000-01-01', blacklist=black)
     dfc2 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, fwin=3, xcat_aggs=['mean', 'mean'],
                          start='2000-01-01', blacklist=black)
 

@@ -1,4 +1,5 @@
 import unittest
+import random
 import numpy as np
 import pandas as pd
 
@@ -17,6 +18,7 @@ df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add', 
 df_xcats.loc['CRY',] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
 df_xcats.loc['XR',] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
 
+random.seed(2)
 dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
 
