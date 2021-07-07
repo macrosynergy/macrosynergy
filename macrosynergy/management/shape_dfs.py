@@ -43,7 +43,7 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
         missing = sorted(set(xcats) - set(xcats_in_df))
         if len(missing) > 0:
             print(f'Missing cross sections: {missing}')
-        xcats = list(set(xcats).intersection(set(xcats_in_df)))
+            xcats.remove(missing)
 
     dfx = dfx[dfx['xcat'].isin(xcats)]
 
