@@ -19,10 +19,11 @@ df_xcats.loc['CRY',] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
 df_xcats.loc['XR',] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
 
 random.seed(1)
+np.random.seed(0)
 dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
 
-class Test_All(unittest.TestCase):
+class TestAll(unittest.TestCase):
 
     def test_reduce_df_general(self):
 
