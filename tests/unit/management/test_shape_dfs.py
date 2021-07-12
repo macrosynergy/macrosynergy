@@ -24,13 +24,19 @@ dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
 class Test_All(unittest.TestCase):
 
-    def test_reduce_df(self):
+    def test_reduce_df_general(self):
 
         dfd_x = reduce_df(dfd, xcats=['CRY'], cids=cids[0:2], start='2013-01-01', end='2019-01-01')
         self.assertTrue(all(dfd_x['cid'].unique() == np.array(['AUD', 'CAD'])))
         self.assertTrue(all(dfd_x['xcat'].unique() == np.array(['CRY'])))
         self.assertTrue(dfd_x['real_date'].min() == pd.to_datetime('2013-01-01'))
         self.assertTrue(dfd_x['real_date'].max() == pd.to_datetime('2019-01-01'))
+
+    def test_reduce_df_intersect(self):
+        filt1 = ~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))
+        dfdx = dfd[filt1]  # simulate missing cross sections
+        dfd_x1, xctx, cidx = reduce_df(dfdx, xcats=['XR', 'CRY'], cids=cids, intersect=True, out_all=True)
+        self.assertTrue(cidx == ['CAD', 'GBP'])
 
     def test_reduce_df_black(self):
 
