@@ -12,7 +12,7 @@ def correl_matrix(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = 
                    start: str = '2000-01-01', end: str = None, val: str = 'value',
                    title: str = None, size: Tuple[float] = (14, 8), max_color: float=None):
 
-    """Display correlation matrix either across xcats (if more than one xcat_) or cids
+    """Display correlation matrix either across xcats (if more than one xcat) or cids
 
     :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.

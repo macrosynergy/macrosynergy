@@ -24,7 +24,7 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
         Default is False, i.e. only the dataframe is returned
     :param <bool> intersect: if True only retains cids that are available for all xcats. Default is False.
 
-    :return <pd.Dataframe>: reduced dataframe
+    :return <pd.Dataframe>: reduced dataframe that also removes duplicates
         or (for out_all True) dataframe and avalaible and selected xcats and cids
     """
 
@@ -69,9 +69,9 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
         dfx = dfx[dfx['cid'].isin(cids)]
 
     if out_all:
-        return dfx, xcats, cids
+        return dfx.drop_duplicates(), xcats, cids
     else:
-        return dfx
+        return dfx.drop_duplicates()
 
 
 def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None, val: str = 'value',
@@ -99,7 +99,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None, va
         Note: this parameter is used mainly for target returns as dependent variables.
     :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for both.
 
-    :return custom data frame with columns for the two categories indexed by cross sections and periods.
+
 
     """
 

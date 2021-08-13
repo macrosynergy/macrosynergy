@@ -69,6 +69,7 @@ class CategoryRelations:
 
         """
 
+        sns.set_theme(style='whitegrid')
         fig, ax = plt.subplots(figsize=size)  # set up figure
         sns.regplot(data=self.df, x=self.xcats[0], y=self.xcats[1],
                     ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
@@ -142,5 +143,35 @@ if __name__ == "__main__":
                            start='2000-01-01', years=10, blacklist=black)
     cr.reg_scatter(labels=True)
     cr.ols_table()
+
+    cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M', xcat_aggs=['mean', 'mean'],
+                           start='2000-01-01', years=None, blacklist=black)
+    cr.reg_scatter(labels=False)
+
+    # special checkup
+
+    # cids_dmca = ['AUD', 'CAD', 'CHF', 'EUR', 'GBP', 'JPY', 'NOK', 'NZD', 'SEK', 'USD']  # DM currency areas
+    # cids_dmec = ['DEM', 'ESP', 'FRF', 'ITL', 'NLG']  # DM euro area countries
+    # cids_latm = ['ARS', 'BRL', 'COP', 'CLP', 'MXN', 'PEN']  # Latam countries
+    # cids_emea = ['HUF', 'ILS', 'PLN', 'RON', 'RUB', 'TRY', 'ZAR']  # EMEA countries
+    # cids_emas = ['CNY', 'HKD', 'IDR', 'INR', 'KRW', 'MYR', 'PHP', 'SGD', 'THB', 'TWD']  # EM Asia countries
+    # cids_dm = cids_dmca + cids_dmec
+    # cids_em = cids_latm + cids_emea + cids_emas
+    # cids = sorted(cids_dm + cids_em)
+    #
+    # path_to_feather = "C://Users//Ralph//OneDrive//Documents//Technology//notebooks//data//feathers//"
+    # dfd_fxrcr = pd.read_feather(f'{path_to_feather}dfd_fx_xrcr.ftr')
+    # dfd_macro = pd.read_feather(f'{path_to_feather}dfd_fxmacro.ftr')
+    #
+    # dfd = dfd_macro.append(dfd_fxrcr[dfd_macro.columns]).reset_index(drop=True)
+    # dfd[['cid', 'cat']] = dfd['ticker'].str.split('_', 1, expand=True)  # split string column
+    # dfd['real_date'] = pd.to_datetime(dfd['real_date'])
+    # dfd.rename(mapper={'cat': 'xcat'}, axis=1, inplace=True)
+    # dfd.info()
+    #
+    # cr = CategoryRelations(dfd, xcats=['FXCRR_NSA', 'FXXRBETAvGDRB_NSA'], cids=cids, freq='M', lag=0,
+    #                            xcat_aggs=['mean', 'mean'],
+    #                            start='2000-01-01', years=None)
+    # cr.reg_scatter(title='Carry and beta', labels=False, xlab='Carry, % ar', ylab='beta')
 
     dfc.info()
