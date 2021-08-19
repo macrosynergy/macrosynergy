@@ -105,7 +105,7 @@ class CategoryRelations:
             ax.set_ylabel(ylab)
         plt.show()
 
-    def jointplot(self, kind, fit_reg: bool = True, title: str = None, height: float=6,
+    def jointplot(self, kind, fit_reg: bool = True, title: str = None, height: float = 6,
                   xlab: str = None, ylab: str = None):
 
         """Display jointplot of chosen type, based on seaborn.jointplot(). The plot will always be square.
@@ -121,24 +121,28 @@ class CategoryRelations:
         """
         assert kind in ['scatter', 'kde', 'hist', 'hex']
 
-        sns.set_theme(style='darkgrid')
+        if kind == 'hex':
+            sns.set_theme(style='white')
+        else:
+            sns.set_theme(style='whitegrid')
+
         fg = sns.jointplot(data=self.df,  x=self.xcats[0], y=self.xcats[1],
                            kind=kind, height=height, color='steelblue')
         if fit_reg:
-            fg.plot_joint(sns.regplot, scatter=False, ci=0.95, color='black')  # overlay regression line
+            fg.plot_joint(sns.regplot, scatter=False, ci=0.95, color='black',
+                          line_kws={'lw':1, 'linestyle': '--'})  # overlay regression line
+
+        xlab = xlab if xlab is not None else ''
+        ylab = ylab if ylab is not None else ''
+        fg.set_axis_labels(xlab, ylab)
 
         if title is None and (self.years is None):
             dates = self.df.index.get_level_values('real_date').to_series().dt.strftime('%Y-%m-%d')
             title = f'{self.xcats[0]} and {self.xcats[1]} from {dates.min()} to {dates.max()}'
         elif title is None:
             title = f'{self.xcats[0]} and {self.xcats[1]}'
-
         fg.fig.suptitle(title, y=1.02)  # facet grid way of setting title
 
-        xlab = xlab if xlab is not None else ''
-        ylab = ylab if ylab is not None else ''
-        plt.xlabel(xlab)
-        plt.ylabel(ylab)
         plt.show()
 
     def ols_table(self):
@@ -174,7 +178,7 @@ if __name__ == "__main__":
     #                        start='1999-01-01', years=10)
     # cr.reg_scatter(labels=True)
     #
-    # black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
+    black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
     # cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M', xcat_aggs=['mean', 'mean'],
     #                        start='2000-01-01', years=10, blacklist=black)
     # cr.reg_scatter(labels=True)
@@ -182,7 +186,7 @@ if __name__ == "__main__":
 
     cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M', xcat_aggs=['mean', 'mean'],
                            start='2000-01-01', years=None, blacklist=black)
-    cr.jointplot(kind='scatter')
+    cr.jointplot(kind='hex', xlab='growth', ylab='inflation')
     cr.reg_scatter(labels=False)
 
     # special checkup
