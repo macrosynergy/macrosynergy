@@ -105,6 +105,42 @@ class CategoryRelations:
             ax.set_ylabel(ylab)
         plt.show()
 
+    def jointplot(self, kind, fit_reg: bool = True, title: str = None, height: float=6,
+                  xlab: str = None, ylab: str = None):
+
+        """Display jointplot of chosen type, based on seaborn.jointplot(). The plot will always be square.
+
+        :param <str> kind: determines type of relational plot inside the joint plot.
+            This must be one of one of 'scatter', 'kde', 'hist', or 'hex'.
+        :param <bool> fit_reg: if True (default) adds a regression line.
+        :param <str> title: title of plot. If None (default) an informative title is applied.
+        :param <float> height: height and implicit size of figure. Default is 6.
+        :param <str> xlab: x-axis label. Default is no label.
+        :param <str> ylab: y-axis label. Default is no label.
+
+        """
+        assert kind in ['scatter', 'kde', 'hist', 'hex']
+
+        sns.set_theme(style='darkgrid')
+        fg = sns.jointplot(data=self.df,  x=self.xcats[0], y=self.xcats[1],
+                           kind=kind, height=height, color='steelblue')
+        if fit_reg:
+            fg.plot_joint(sns.regplot, scatter=False, ci=0.95, color='black')  # overlay regression line
+
+        if title is None and (self.years is None):
+            dates = self.df.index.get_level_values('real_date').to_series().dt.strftime('%Y-%m-%d')
+            title = f'{self.xcats[0]} and {self.xcats[1]} from {dates.min()} to {dates.max()}'
+        elif title is None:
+            title = f'{self.xcats[0]} and {self.xcats[1]}'
+
+        fg.fig.suptitle(title, y=1.02)  # facet grid way of setting title
+
+        xlab = xlab if xlab is not None else ''
+        ylab = ylab if ylab is not None else ''
+        plt.xlabel(xlab)
+        plt.ylabel(ylab)
+        plt.show()
+
     def ols_table(self):
         """Print statsmodel OLS table of pooled regression"""
 
@@ -132,20 +168,21 @@ if __name__ == "__main__":
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    dfc = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
-                        start='2000-01-01', years=5)
-    cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
-                           start='1999-01-01', years=10)
-    cr.reg_scatter(labels=True)
-
-    black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
-    cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M', xcat_aggs=['mean', 'mean'],
-                           start='2000-01-01', years=10, blacklist=black)
-    cr.reg_scatter(labels=True)
-    cr.ols_table()
+    # dfc = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
+    #                     start='2000-01-01', years=5)
+    # cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
+    #                        start='1999-01-01', years=10)
+    # cr.reg_scatter(labels=True)
+    #
+    # black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
+    # cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M', xcat_aggs=['mean', 'mean'],
+    #                        start='2000-01-01', years=10, blacklist=black)
+    # cr.reg_scatter(labels=True)
+    # cr.ols_table()
 
     cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M', xcat_aggs=['mean', 'mean'],
                            start='2000-01-01', years=None, blacklist=black)
+    cr.jointplot(kind='scatter')
     cr.reg_scatter(labels=False)
 
     # special checkup

@@ -116,7 +116,7 @@ if __name__ == "__main__":
     filter_xcat = dfd['xcat'].isin(['CRY', 'GROWTH'])
     dfd.loc[filter_date & filter_xcat, 'grading'] = '2.1'
     filter_xcat = dfd['xcat'] == 'XR'
-    dfd.loc[filter_xcat, 'grading'] = '1'
+    dfd.loc[filter_xcat, 'grading'] = 1
 
     view_grades(dfd, 'CRY', cids=cids, start='2012-01-01')
     heatmap_grades(dfd, xcats=['CRY', 'GROWTH', 'INFL'], cids=cids)
