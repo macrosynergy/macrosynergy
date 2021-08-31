@@ -72,13 +72,13 @@ class TestAll(unittest.TestCase):
         filt2 = (dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR')
         x1 = round(float(np.mean(dfd[filt1 & filt2].set_index('real_date').resample('M').mean())), 10)
         x2 = round(float(dfc.loc[('AUD', '2013-10-31'), 'XR']), 10)
-        self.assertTrue(x1 == x2)  # check correct application of 1st series forward (average) window
+        self.assertAlmostEqual(x1, x2)  # check correct application of 1st series forward (average) window
 
         filt1 = (dfd['real_date'].dt.year == 2011) & (dfd['real_date'].dt.month == 10)
         filt2 = (dfd['cid'] == 'AUD') & (dfd['xcat'] == 'CRY')
         x1 = dfd[filt1 & filt2]['value'].iloc[-1]
         x2 = float(dfc.loc[('AUD', '2011-11-30'), 'CRY'])
-        self.assertTrue(x1 == x2)  # check correct application of 2nd series lag
+        self.assertAlmostEqual(x1, x2)  # check correct application of 2nd series lag
 
     def test_categories_df_black(self):
         black = {'CAD': ['2014-01-01', '2014-12-31']}
