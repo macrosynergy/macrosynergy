@@ -4,13 +4,12 @@
 
 Macrosynergy research package.
 
-Contains following elements...
+The package has 4 main modules:
 
-* management
-* signal
-* panel
-* visual
-* pnl
+[1] management: simulates, analyzes and reshapes standard quantamental dataframes
+[2] panel: analyses and visualizes panels of quantamental data
+[3] signal: transforms quantamental indicators into trading signals and does navive analyses
+[4] pnl: constructs portfolios based on signals, applies risk management and analyses realistic PnLs 
 
 ## Requirements
 To clone the repository a working installation of git needs to have been installed.
