@@ -7,14 +7,20 @@ from macrosynergy.management.check_availability import check_startyears, check_e
 
 cids = ['AUD', 'CAD', 'GBP']
 xcats = ['CRY', 'XR']
-df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
-df_cids.loc['AUD',] = ['2010-01-01', '2020-12-31', 0.5, 2]
-df_cids.loc['CAD',] = ['2011-01-01', '2020-11-30', 0, 1]
-df_cids.loc['GBP',] = ['2012-01-01', '2020-11-30', -0.2, 0.5]
+df_cids = pd.DataFrame(
+    index=cids,
+    columns=['earliest', 'latest', 'mean_add', 'sd_mult']
+)
+df_cids.loc['AUD', :] = ['2010-01-01', '2020-12-31', 0.5, 2]
+df_cids.loc['CAD', :] = ['2011-01-01', '2020-11-30', 0, 1]
+df_cids.loc['GBP', :] = ['2012-01-01', '2020-11-30', -0.2, 0.5]
 
-df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef'])
-df_xcats.loc['CRY',] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
-df_xcats.loc['XR',] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
+df_xcats = pd.DataFrame(
+    index=xcats,
+    columns=['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef']
+)
+df_xcats.loc['CRY', :] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
+df_xcats.loc['XR', :] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
 
 dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
@@ -22,8 +28,7 @@ df_sy = check_startyears(dfd)
 df_ed = check_enddates(dfd)
 
 
-class Test_All(unittest.TestCase):
-
+class TestAll(unittest.TestCase):
     def test_check_startyears(self):
 
         df_sy = check_startyears(dfd)
@@ -36,7 +41,6 @@ class Test_All(unittest.TestCase):
         self.assertTrue((df_sy.astype(int)).equals(df_exp.astype(int)))
 
     def test_check_enddates(self):
-
         df_ed = check_enddates(dfd)
         df_exp = pd.DataFrame(data=np.zeros((3, 2)), index=cids, columns=xcats)
         for cid in cids:
@@ -48,5 +52,4 @@ class Test_All(unittest.TestCase):
 
 
 if __name__ == '__main__':
-
     unittest.main()

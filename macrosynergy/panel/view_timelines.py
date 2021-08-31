@@ -10,7 +10,7 @@ from macrosynergy.management.check_availability import reduce_df
 
 def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
                    start: str = '2000-01-01', end: str = None, val: str = 'value', cumsum: bool = False,
-                   title: str = None, title_adj=0.95,
+                   title: str = None, title_adj: float = 0.95, intersect: bool = False,
                    ncol: int = 3, same_y: bool = True, size: Tuple[float] = (12, 7), aspect: float = 1.7):
 
     """Display facet grid of time lines of one or more categories
@@ -26,6 +26,7 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
     :param <bool> cumsum: chart the cumulative sum of the value. Default is False.
     :param <str> title: chart heading. Default is no title.
     :param <float> title_adj: parameter that positions title relative to the facet. Default is 0.95.
+    :param <bool> intersect: if True only retains cids that are available for all xcats. Default is False.
     :param <int> ncol: number of columns in facet. Default is 3.
     :param <bool> same_y: if True (default) all axis plots in the facet share the same y axis.
     :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default is (12, 7).
@@ -33,7 +34,7 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
 
     """
 
-    df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
+    df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True, intersect=intersect)
 
     if cumsum:
         df[val] = df.sort_values(['cid', 'xcat', "real_date"])[['cid', 'xcat', val]].groupby(['cid', 'xcat']).cumsum()
@@ -50,7 +51,7 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
             plt.title(title)
     else:
         fg = sns.FacetGrid(data=df, col='cid', col_wrap=ncol, sharey=same_y, aspect=aspect, col_order=cids)
-        fg.map_dataframe(sns.lineplot, x='real_date', y=val, hue='xcat', ci=None)
+        fg.map_dataframe(sns.lineplot, x='real_date', y=val, hue='xcat', hue_order=xcats, ci=None)
         fg.map(plt.axhline, y=0, c=".5")
         fg.set_titles(col_template='{col_name}')
         fg.add_legend()
@@ -72,14 +73,19 @@ if __name__ == "__main__":
 
     df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef'])
     df_xcats.loc['XR', ] = ['2010-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
-    df_xcats.loc['CRY', ] = ['2011-01-01', '2020-10-30', 1, 2, 0.95, 0.5]
+    df_xcats.loc['CRY', ] = ['2012-01-01', '2020-10-30', 1, 2, 0.95, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
+    dfdx = dfd[~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))]
+    view_timelines(dfdx, xcats=['XR', 'CRY'], cids=cids, ncol=2, title='Carry and return')
+
     view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids[0], ncol=1, title='AUD return and carry')
     view_timelines(dfd, xcats=['CRY'], cids=cids, ncol=2, title='Carry')
-    view_timelines(dfd, xcats=['CRY', 'XR'], cids=cids, ncol=2, title='Carry and return')
+    view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids, ncol=2, title='Carry and return')
     view_timelines(dfd, xcats=['XR'], cids=cids, ncol=2, cumsum=True, same_y=False, aspect=2)
+
+
 
 
     dfd.info()

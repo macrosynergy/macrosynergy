@@ -18,6 +18,7 @@ def missing_in_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = 
 
     """
     print('Missing xcats across df: ', set(xcats) - set(df['xcat'].unique()))  # any xcats missing
+    cids = df['cid'].unique() if cids is None else cids
     xcats_used = sorted(list(set(xcats).intersection(set(df['xcat'].unique()))))
     for xcat in xcats_used:
         cids_xcat = df.loc[df['xcat'] == xcat, 'cid'].unique()
@@ -75,7 +76,7 @@ def visual_paneldates(df: pd.DataFrame, size: Tuple[float] = None):
     if size is None:
         size = (max(df.shape[0] / 2, 15), max(1, df.shape[1]/ 2))
     sns.set(rc={'figure.figsize': size})
-    sns.heatmap(df.T, cmap='Reds', center=df.stack().mean(), annot=True, fmt='.0f', linewidth=1, cbar=False)
+    sns.heatmap(df.T, cmap='YlOrBr', center=df.stack().mean(), annot=True, fmt='.0f', linewidth=1, cbar=False)
     plt.xlabel('')
     plt.ylabel('')
     plt.title(header, fontsize=18)
@@ -120,6 +121,7 @@ if __name__ == "__main__":
 
     xxcats = xcats+['TREND']
     xxcids = cids+['USD']
+    missing_in_df(dfd, xcats=xxcats)
     missing_in_df(dfd, xcats=xxcats, cids=xxcids)
 
     df_sy = check_startyears(dfd)

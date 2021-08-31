@@ -7,7 +7,8 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 
 def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
-              start: str = None, end: str = None, blacklist: dict = None, out_all: bool = False):
+              start: str = None, end: str = None, blacklist: dict = None, out_all: bool = False,
+              intersect: bool = False):
     """
     Filter dataframe by xcats and cids and notify about missing xcats and cids
 
@@ -21,8 +22,9 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
         If one cross section has several blacklist periods append numbers to the cross section code.
     :param <bool> out_all: if True the function returns reduced dataframe and selected/available xcats and cids.
         Default is False, i.e. only the dataframe is returned
+    :param <bool> intersect: if True only retains cids that are available for all xcats. Default is False.
 
-    :return <pd.Dataframe>: reduced dataframe
+    :return <pd.Dataframe>: reduced dataframe that also removes duplicates
         or (for out_all True) dataframe and avalaible and selected xcats and cids
     """
 
@@ -47,7 +49,14 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
 
     dfx = dfx[dfx['xcat'].isin(xcats)]
 
-    cids_in_df = dfx['cid'].unique()
+    if intersect:
+        df_uns = dfx.groupby('xcat')['cid'].unique()
+        cids_in_df = list(df_uns[0])
+        for i in range(1, len(df_uns)):
+            cids_in_df = [cid for cid in df_uns[i] if cid in cids_in_df]
+    else:
+        cids_in_df = dfx['cid'].unique()
+
     if cids is None:
         cids = sorted(cids_in_df)
     else:
@@ -60,9 +69,9 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
         dfx = dfx[dfx['cid'].isin(cids)]
 
     if out_all:
-        return dfx, xcats, cids
+        return dfx.drop_duplicates(), xcats, cids
     else:
-        return dfx
+        return dfx.drop_duplicates()
 
 
 def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None, val: str = 'value',
@@ -90,7 +99,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None, va
         Note: this parameter is used mainly for target returns as dependent variables.
     :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for both.
 
-    :return custom data frame with columns for the two categories indexed by cross sections and periods.
+
 
     """
 
@@ -172,5 +181,10 @@ if __name__ == "__main__":
     black = {'AUD_1': ['2000-01-01', '2009-12-31'], 'AUD_2': ['2018-01-01', '2100-01-01']}
     dfc3 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
                          start='2000-01-01', blacklist=black, years=10)
+
+    filt1 = ~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))
+    filt2 = ~((dfd['cid'] == 'NZD') & (dfd['xcat'] == 'INFL'))
+    dfdx = dfd[filt1 & filt2] # simulate missing cross sections
+    dfd_x1, xctx, cidx = reduce_df(dfdx, xcats=['XR', 'CRY', 'INFL'], cids=cids, intersect=True, out_all=True)
 
     dfd_xb.tail()
