@@ -3,7 +3,7 @@ import random
 import numpy as np
 import pandas as pd
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from tests.simulate import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df, categories_df
 
 

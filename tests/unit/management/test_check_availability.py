@@ -1,9 +1,8 @@
 import unittest
 import numpy as np
 import pandas as pd
-
-from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.check_availability import check_startyears, check_enddates
+from tests.simulate import make_qdf
 
 cids = ['AUD', 'CAD', 'GBP']
 xcats = ['CRY', 'XR']
