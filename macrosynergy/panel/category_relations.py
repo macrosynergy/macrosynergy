@@ -215,4 +215,4 @@ if __name__ == "__main__":
     #                            start='2000-01-01', years=None)
     # cr.reg_scatter(title='Carry and beta', labels=False, xlab='Carry, % ar', ylab='beta')
 
-    dfc.info()
+    # dfc.info()
