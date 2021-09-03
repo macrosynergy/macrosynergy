@@ -32,7 +32,7 @@ Operating System :: MacOS
 
 MAJOR = 0
 MINOR = 0
-MICRO = 1
+MICRO = 3
 ISRELEASED = False
 VERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
 
@@ -143,6 +143,8 @@ def setup_package():
         maintainer="Macrosynergy",
         maintainer_email="info@macrosynergy.com",
         description=DOCLINES[0],
+        license="MIT License",
+        long_description_content_type="text/x-rst",
         long_description="\n".join(DOCLINES[2:]),
         url="https://www.macrosynergy.com",
         author_email='info@macrosynergy.com',
@@ -155,7 +157,7 @@ def setup_package():
         classifiers=[_f for _f in CLASSIFIERS.split('\n') if _f],
         platforms=["Windows", "Linux", "Mac OS-X"],
         test_suite='pytest',
-        python_requires='>=3.7',
+        python_requires='>=3.6',
         install_requires=REQUIREMENTS.split("\n"),
         include_package_data=True,
         packages=find_packages(),

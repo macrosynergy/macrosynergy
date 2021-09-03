@@ -4,13 +4,12 @@
 
 Macrosynergy research package.
 
-Contains following elements...
+The package has 4 main modules:
 
-* management
-* signal
-* panel
-* visual
-* pnl
+[1] management: simulates, analyzes and reshapes standard quantamental dataframes
+[2] panel: analyses and visualizes panels of quantamental data
+[3] signal: transforms quantamental indicators into trading signals and does navive analyses
+[4] pnl: constructs portfolios based on signals, applies risk management and analyses realistic PnLs 
 
 ## Requirements
 To clone the repository a working installation of git needs to have been installed.
@@ -109,4 +108,40 @@ coverage xml
 Use the `xml` to get the percent covered of the lines in testing.
 Similar the coverage html report from `coverage html` can be found in the 
 folder `htmlcov` and more precisely the file `htmlcov\index.html`.
+
+### Publishing to Pypi
+
+The only dependency that has to be installed is `twine`. Make sure it's installed and you can run `twine` from a terminal. To install `pip install twine` should work.
+
+First, you have to make sure that the package is marked for release, otherwise pypi will reject it. To do so, set the variable `ISRELEASED` to true in `setup.py`:
+
+```py
+ISRELEASED = True
+```
+
+Then execute the build command in a shell (make sure to clean up the `dist/` directory beforehand):
+
+```bash
+python setup.py sdist bdist_wheel
+```
+
+Make sure that `macrosynergy-<VERSION>-py3-none-any.whl` and `macrosynergy-<VERSION>.tar.gz` are present in the `dist/` directory!
+
+Now, to validate that the package is ready to be pushed, run:
+
+```bash
+twine check dist/*
+```
+
+The warning message `warning: \`long\_description\` missing.` can be ignored. If the package passed then simply upload:
+
+```bash
+twine upload dist/*
+```
+
+This command will ask for your pypi username and password. For access to upload the uploader's pypi account has to be added at `pypi.org` for the project by an owner.
+
+To validate that the new package has been uploaded, visit `https://pypi.org/project/macrosynergy/` and update the package with a pip install!
+
+After the upload, please bump the version and set ISRELEASE back to False in `setup.py` and push the changes, so that the next release will have a new version number.
 
