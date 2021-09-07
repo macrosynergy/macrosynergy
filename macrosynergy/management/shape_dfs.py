@@ -2,32 +2,39 @@ import numpy as np
 import pandas as pd
 from typing import List, Union, Tuple
 import random
+import time
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from simulate_quantamental_data import make_qdf_
 
+def data_frame(df_fields, m_fields, str_):
+    
+    if m_fields is None:
+        m_fields = sorted(df_fields)
+        
+    if str_ == 'cids' and isinstance(m_fields, str):
+        m_fields = [m_fields]
 
-def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
-              start: str = None, end: str = None, blacklist: dict = None, out_all: bool = False,
-              intersect: bool = False):
-    """
-    Filter dataframe by xcats and cids and notify about missing xcats and cids
+    missing = list(set(m_fields) - set(df_fields))
 
-    :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
-        'cid', 'xcats', 'real_date'.
-    :param <List[str]> xcats: extended categories to be checked on. Default is all in the dataframe.
-    :param <List[str]> cids: cross sections to be checked on. Default is all in the dataframe.
-    :param <str> start: string representing earliest date. Default is None.
-    :param <str> end: string representing the latest date. Default is None.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from the data frame.
-        If one cross section has several blacklist periods append numbers to the cross section code.
-    :param <bool> out_all: if True the function returns reduced dataframe and selected/available xcats and cids.
-        Default is False, i.e. only the dataframe is returned
-    :param <bool> intersect: if True only retains cids that are available for all xcats. Default is False.
+    if missing and str_ == 'xcats':
+        print(f"Missing cross sections: {missing}.")
+        xcats = [e for e in m_fields if e not in missing]
+        return xcats
+    
+    elif missing:
+        print(f"Missing cross sections: {missing}.")
+        cids = list(set(m_fields).intersection(set(df_fields)))
+        return sorted(cids)
 
-    :return <pd.Dataframe>: reduced dataframe that also removes duplicates
-        or (for out_all True) dataframe and avalaible and selected xcats and cids
-    """
+    return m_fields
+        
 
+## Truncating the time period assessed over, and the macroeconomic indicators.
+def reduce_df(df: pd.DataFrame, xcats_in_df: List[str] = None, cids_in_df: List[str] = None, cids_cats: dict = None,
+              xcats: List[str] = None, cids: List[str] = None, start: str = None, end: str = None,
+              blacklist: dict = None, out_all: bool = False, intersect: bool = False):
+
+    
     dfx = df[df['real_date'] >= pd.to_datetime(start)] if start is not None else df
     dfx = dfx[dfx['real_date'] <= pd.to_datetime(end)] if end is not None else dfx
 
@@ -37,154 +44,143 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
             filt2 = dfx['real_date'] >= pd.to_datetime(value[0])
             filt3 = dfx['real_date'] <= pd.to_datetime(value[1])
             dfx = dfx[~(filt1 & filt2 & filt3)]
-
-    xcats_in_df = dfx['xcat'].unique()
-    if xcats is None:
-        xcats = sorted(xcats_in_df)
-    else:
-        missing = sorted(set(xcats) - set(xcats_in_df))
-        if len(missing) > 0:
-            print(f'Missing cross sections: {missing}')
-            xcats.remove(missing)
-
+    
+    xcats = data_frame(xcats_in_df, xcats, 'xcats')
     dfx = dfx[dfx['xcat'].isin(xcats)]
 
     if intersect:
+        
         df_uns = dfx.groupby('xcat')['cid'].unique()
         cids_in_df = list(df_uns[0])
         for i in range(1, len(df_uns)):
             cids_in_df = [cid for cid in df_uns[i] if cid in cids_in_df]
+    
+    cids = data_frame(cids_in_df, cids, 'cids')
+    dfx = dfx[dfx['cid'].isin(cids)]
+
+    ## Would there ever be any duplicates ?
+    if out_all: return dfx, xcats, cids
     else:
-        cids_in_df = dfx['cid'].unique()
+        return dfx
 
-    if cids is None:
-        cids = sorted(cids_in_df)
-    else:
-        if not isinstance(cids, list):
-           cids = [cids]
-        missing = sorted(set(cids) - set(cids_in_df))
-        if len(missing) > 0:
-            print(f'Missing cross sections: {missing}')
-        cids = sorted(list(set(cids).intersection(set(cids_in_df))))
-        dfx = dfx[dfx['cid'].isin(cids)]
+def dict_year(s_year, e_year, years):
 
-    if out_all:
-        return dfx.drop_duplicates(), xcats, cids
-    else:
-        return dfx.drop_duplicates()
+    s_years = range(s_year, e_year, years) ## Intervals controlled by the number of years.
+    dict_ = {}
+        
+    for y in s_years:
 
+        ey = (y + years - 1)
+        ey = ey if (ey) <= e_year else "end_date"
+        y_key = f"{y} - {ey}"
+        if ey == "end_date": years = (e_year - y)
+        y_value = list(range(y, y + years))
+        dict_[y_key] = y_value
 
-def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None, val: str = 'value',
-                  start: str = None, end: str = None, blacklist: dict = None, years: int = None,
-                  freq: str = 'M', lag: int = 0, fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean')):
-
-    """Create custom two-categories dataframe with appropriate frequency and lags suitable for analysis
-
-    :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
-        'cid', 'xcats', 'real_date' and at least one column with values of interest.
-    :param <List[str]> xcats: exactly two extended categories whose relationship is to be analyzed.
-    :param <List[str]> cids: cross sections to be included. Default is all in the dataframe.
-    :param <str> start: earliest date in ISO format. Default is None, i.e. earliest date in data frame is used.
-    :param <str> end: latest date in ISO format. Default is None, i.e. latest date in data frame is used.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from the data frame.
-        If one cross section has several blacklist periods append numbers to the cross section code.
-    :param <int> years: Number of years over which data are aggregated. Supersedes freq and does not allow lags,
-        Default is None, i.e. no multi-year aggregation.
-    :param <str> val: name of column that contains the values of interest. Default is 'value'.
-    :param <str> freq: letter denoting frequency at which the series are to be sampled.
-        This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
-    :param <int> lag: Lag (delay of arrival) of second category in periods as set by freq. Default is 0.
-        Note: for analyses with dependent and explanatory categories, the second takes the role of the explanatory.
-    :param <int> fwin: Forward moving average window of first category. Default is 1, i.e no average.
-        Note: this parameter is used mainly for target returns as dependent variables.
-    :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for both.
+    return dict_
 
 
-
-    """
+## Create two custom category dataframes with appropriate frequency and lags suitable for analysis.
+## The subroutine will receive a dataframe that has been reduced to the two respective macroeconomic indicators whose relationship is to be analysed over the respective countries.
+def categories_df(df, xcats, fields_cats = [], fields_cids = [], cids_cats = {}, cids = [], val = 'value',
+                  start = None, end = None, blacklist = None, years = None, freq = 'M', lag = 0,
+                  fwin = 1, xcat_aggs = ('mean', 'mean')):
 
     assert freq in ['D', 'W', 'M', 'Q', 'A']
-    assert not (years is not None) & (lag != 0), 'Lags cannot be applied to year groups'
 
-    df, xcats, cids = reduce_df(df, xcats, cids, start, end, blacklist, out_all=True)
-
+    df, xcats, cids = reduce_df(df, fields_cats, fields_cids, cids_cats, xcats, cids , start, end, blacklist, out_all = True)
+    
     col_names = ['cid', 'xcat', 'real_date', val]
-    dfc = pd.DataFrame(columns=col_names)
+    dfc = pd.DataFrame(columns = col_names)
 
+    ## Scope for improvement.
     if years is None:
+        
         for i in range(2):
-            dfw = df[df['xcat'] == xcats[i]].pivot(index='real_date', columns='cid', values=val)
-            dfw = dfw.resample(freq).agg(xcat_aggs[i])  # frequency conversion
+            ## Isolate the two dataframes for the respective fields.
+            dfw = df[df['xcat'] == xcats[i]].pivot(index = 'real_date', columns = 'cid', values = val)
+            ## Convenience method for frequency conversion and resampling of time series, and subsequently compute the mean over the period.
+            ## Average return over the month. The data generating process is an AR(1).
+            dfw = dfw.resample(freq).agg(xcat_aggs[i])
+
+            ## Forward Moving Average Window of first category.
+            ## Size of the Moving Window. This is the number of observations used for calculating the statistic.
             if (i == 0) & (fwin > 1):
-                dfw = dfw.rolling(window=fwin).mean().shift(1-fwin)
-            if (i == 1) & (lag > 0):
-                dfw = dfw.shift(lag)  # lag second category for late arrival
-            dfx = pd.melt(dfw.reset_index(), id_vars=['real_date'], value_vars=cids, value_name=val)
+                dfw = dfw.rolling(window = fwin).mean().shift(1 - fwin)
+                
+            elif (i == 1) & (lag > 0):
+                ## Shift the timeseries forward by a period(s) - dependent on the lag variable.
+                dfw = dfw.shift(lag)
+
+            ## Two dataframes will be produced for each economic indicator.
+            ## Reset the index of the DataFrame to the default one instead. Each row will be "identified" by the date, and unpivot on the countries.
+            dfx = pd.melt(dfw.reset_index(), id_vars = ['real_date'], value_vars = cids, value_name = val)
             dfx['xcat'] = xcats[i]
             dfc = dfc.append(dfx[col_names])
+
     else:
-        s_year = pd.to_datetime(start).year
+        
+        s_year = pd.to_datetime(start).year ## Conversion to a datetime object.
         e_year = df['real_date'].max().year + 1
+        year_groups = dict_year(s_year, e_year, years)
 
-        s_years = range(s_year, e_year, years)
-        year_groups = {}
-        for y in s_years:
-            ey = y + years - 1 if (y + years - 1) <= e_year else 'now'
-            y_key = f'{y} - {ey}'
-            y_value = [i for i in range(y, y + years)]
-            year_groups[y_key] = y_value
-
-        def translate(year):
-            return np.array(list(year_groups.keys()))[[year in l for l in list(year_groups.values())]][0]
-
+        keys_ = np.array(list(year_groups.keys()))
+        
+        def translate(row):
+            for k, v in year_groups.items():
+                if row in v:
+                    break
+            return k
         df['custom_date'] = df['real_date'].dt.year.apply(translate)
+
         for i in range(2):
             dfx = df[df['xcat'] == xcats[i]]
+            ## Calculate the average return series across the prescribed intervals for every country ID. 
             dfx = dfx.groupby(['xcat', 'cid', 'custom_date']).agg(xcat_aggs[i]).reset_index()
-            dfx = dfx.rename(columns={"custom_date": "real_date"})
+            dfx = dfx.rename(columns = {"custom_date": "real_date"})
             dfc = dfc.append(dfx[col_names])
-
-    return dfc.pivot(index=('cid', 'real_date'), columns='xcat', values=val).dropna()[xcats]
+    
+    return dfc.pivot(index=('cid', 'real_date'), columns = 'xcat', values = val).dropna()[xcats]
 
 
 if __name__ == "__main__":
 
     cids = ['NZD', 'AUD', 'GBP', 'CAD']
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
-    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
-    df_cids.loc['AUD',] = ['2000-01-01', '2020-12-31', 0.1, 1]
-    df_cids.loc['CAD',] = ['2001-01-01', '2020-11-30', 0, 1]
-    df_cids.loc['GBP',] = ['2002-01-01', '2020-11-30', 0, 2]
-    df_cids.loc['NZD',] = ['2002-01-01', '2020-09-30', -0.1, 2]
+    df_cids = pd.DataFrame(index = cids, columns = ['earliest', 'latest', 'mean_add', 'sd_mult'])
+    df_cids.loc['AUD'] = ['2000-01-01', '2020-12-31', 0.1, 1]
+    df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
+    df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
+    df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
 
     df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef'])
-    df_xcats.loc['XR',] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
-    df_xcats.loc['CRY',] = ['2000-01-01', '2020-10-30', 1, 2, 0.95, 1]
-    df_xcats.loc['GROWTH',] = ['2001-01-01', '2020-10-30', 1, 2, 0.9, 1]
-    df_xcats.loc['INFL',] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
+    df_xcats.loc['XR'] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
+    df_xcats.loc['CRY'] = ['2000-01-01', '2020-10-30', 1, 2, 0.95, 1]
+    df_xcats.loc['GROWTH'] = ['2001-01-01', '2020-10-30', 1, 2, 0.9, 1]
+    df_xcats.loc['INFL'] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
     random.seed(2)
-    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    dfd_x1 = reduce_df(dfd, xcats=xcats, cids=cids[0], start='2012-01-01', end='2018-01-31')
-    dfd_x = reduce_df(dfd, xcats=xcats, cids=cids, start='2012-01-01', end='2018-01-31')
+    ## Returns a collection of Autoregressive Series for each country ID on the outlined macroeconomic indicators.
+
+    start = time.time()
+    final_df, fields_cats, fields_cids, df_year, df_missing, cids_cats = make_qdf_(df_cids, df_xcats, back_ar = 0.75)
+    
+    dfc1 = categories_df(final_df, ['GROWTH', 'CRY'], fields_cats, fields_cids, cids_cats, cids, 'value',
+                         start = '2000-01-01', years = 5, freq = 'M', lag = 0, xcat_aggs = (['mean'] * 2))
+    print(f"Time Elapsed, test_file: {time.time() - start}.")
+    
 
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
 
-    dfd_xb = reduce_df(dfd, xcats=xcats, cids=cids, blacklist=black)
 
-    dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
-                         start='2000-01-01', blacklist=black)
-    dfc2 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, fwin=3, xcat_aggs=['mean', 'mean'],
-                         start='2000-01-01', blacklist=black)
+    dfc2 = categories_df(final_df, ['GROWTH', 'CRY'], fields_cats, fields_cids, cids_cats, cids, 'value',
+                         start = '2000-01-01', freq = 'M', lag = 0, fwin = 3, xcat_aggs = ['mean', 'mean'],
+                         blacklist = black)
 
     black = {'AUD_1': ['2000-01-01', '2009-12-31'], 'AUD_2': ['2018-01-01', '2100-01-01']}
-    dfc3 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
-                         start='2000-01-01', blacklist=black, years=10)
 
-    filt1 = ~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))
-    filt2 = ~((dfd['cid'] == 'NZD') & (dfd['xcat'] == 'INFL'))
-    dfdx = dfd[filt1 & filt2] # simulate missing cross sections
-    dfd_x1, xctx, cidx = reduce_df(dfdx, xcats=['XR', 'CRY', 'INFL'], cids=cids, intersect=True, out_all=True)
+    filt1 = ~((final_df['cid'] == 'AUD') & (final_df['xcat'] == 'XR'))
+    filt2 = ~((final_df['cid'] == 'NZD') & (final_df['xcat'] == 'INFL'))
+    dfdx = final_df[filt1 & filt2] 
 
-    dfd_xb.tail()
