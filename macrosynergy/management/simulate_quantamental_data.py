@@ -158,9 +158,16 @@ def make_qdf_(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0)
     final_df = pd.concat(frames, ignore_index = True)
     
     df_year = stack_df(start_dates, 'startyears')
+    
+    df_end = pd.DataFrame.from_dict(end_dates)
+    df_end = df_end.transpose()
+    df_end = df_end.reindex(sorted(df_end.columns), axis = 1)
+    df_end.index.name = 'cid'
+    df_end.columns.name = 'xcat'
+    
     df_missing = stack_df(end_dates, 'enddates')
 
-    return final_df, fields_cats, fields_cids, df_year, df_missing, cids_cats
+    return final_df, fields_cats, fields_cids, df_year, df_end, df_missing, cids_cats
                 
 
 def MAIN():
@@ -189,7 +196,7 @@ def MAIN():
     
     ## Numpy Array.
     start = time.time()
-    dfd, fields_cats, fields_cids, df_year, df_missing, cids_cats = make_qdf_(df_cids, df_xcats, back_ar = 0.75)
+    dfd, fields_cats, fields_cids, df_year, df_end, df_missing, cids_cats = make_qdf_(df_cids, df_xcats, back_ar = 0.75)
     print(f"Time Elapsed, test_file: {time.time() - start}.")
 
 if __name__ == "__main__":

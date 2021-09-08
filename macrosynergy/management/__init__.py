@@ -1,8 +1,8 @@
 from .shape_dfs import reduce_df, categories_df
-from .check_availability import check_availability, visual_paneldates, check_enddates, check_startyears\
-    , missing_in_df
+from .check_availability import check_availability, visual_paneldates\
+    , missing_in_df, check_startyears, check_enddates
 from .simulate_vintage_data import VintageData
-from .simulate_quantamental_data import make_qdf
+from .simulate_quantamental_data import make_qdf_
 
-__all__ = ['check_availability', 'visual_paneldates', 'check_enddates', 'check_startyears',
-           'reduce_df', 'missing_in_df', 'VintageData', 'make_qdf']
+__all__ = ['check_availability', 'visual_paneldates', 'check_startyears',
+           'check_enddates', 'reduce_df', 'missing_in_df', 'VintageData', 'make_qdf_']

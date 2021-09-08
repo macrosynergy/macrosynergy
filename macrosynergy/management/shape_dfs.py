@@ -3,8 +3,7 @@ import pandas as pd
 from typing import List, Union, Tuple
 import random
 import time
-
-from simulate_quantamental_data import make_qdf_
+from .simulate_quantamental_data import make_qdf_
 
 def data_frame(df_fields, m_fields, str_):
     
@@ -164,7 +163,7 @@ if __name__ == "__main__":
     ## Returns a collection of Autoregressive Series for each country ID on the outlined macroeconomic indicators.
 
     start = time.time()
-    final_df, fields_cats, fields_cids, df_year, df_missing, cids_cats = make_qdf_(df_cids, df_xcats, back_ar = 0.75)
+    final_df, fields_cats, fields_cids, df_year, df_end, df_missing, cids_cats = make_qdf_(df_cids, df_xcats, back_ar = 0.75)
     
     dfc1 = categories_df(final_df, ['GROWTH', 'CRY'], fields_cats, fields_cids, cids_cats, cids, 'value',
                          start = '2000-01-01', years = 5, freq = 'M', lag = 0, xcat_aggs = (['mean'] * 2))

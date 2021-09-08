@@ -4,9 +4,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import List, Union, Tuple
 import time
-
-from simulate_quantamental_data import make_qdf_
-from shape_dfs import reduce_df
+from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.management.simulate_quantamental_data import make_qdf_
 
 
 def check_availability(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None, start: str = None,
@@ -14,11 +13,11 @@ def check_availability(df: pd.DataFrame, xcats: List[str] = None,  cids: List[st
     """
     Wrapper for visualizing start and end dates of a filtered dataframe.
     """
-    dfx = reduce_df(df, xcats=xcats, cids=cids, start=start)
+    dfx = reduce_df(df, xcats = xcats, cids = cids, start = start)
     dfs = check_startyears(dfx)
-    visual_paneldates(dfs, size=start_size)
+    visual_paneldates(dfs, size = start_size)
     dfe = check_enddates(dfx)
-    visual_paneldates(dfe, size=end_size)
+    visual_paneldates(dfe, size = end_size)
 
 ## The Python runtime does not enforce function and variable type annotations.
 def missing_in_df(fields, fields_, xcats: List[str] = None,  cids: List[str] = None):
@@ -35,7 +34,14 @@ def missing_in_df(fields, fields_, xcats: List[str] = None,  cids: List[str] = N
         cids_xcat = cids_set
         
         print(f"Missing cids for {xcat}: {cids_set - cids_xcat}.")
-    
+
+def check_startyears(df: pd.DataFrame):
+
+    return df
+
+def check_enddates(df: pd.DataFrame):
+
+    return df
 
 def visual_paneldates(df: pd.DataFrame, size: Tuple[float] = None):
     """
@@ -82,8 +88,12 @@ if __name__ == "__main__":
     df_xcats.loc['CRY'] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
     ## Establishing the dataframe.
 
-    final_df, fields_cats, fields_cids, df_year, df_missing, cids_cats = make_qdf_(df_cids, df_xcats, back_ar = 0.75)
+    dfd, fields_cats, fields_cids, df_year, df_end, df_missing, cids_cats = make_qdf_(df_cids, df_xcats, back_ar = 0.75)
 
+    df = check_startyears(df_year)
+
+    df_ = check_enddates(df_end)
+    
     xxcats = xcats + ['TREND']
     xxcids = cids + ['USD']
 
@@ -92,4 +102,3 @@ if __name__ == "__main__":
     visual_paneldates(df_year)
     
     visual_paneldates(df_missing)
-    ## df_ed.info()
