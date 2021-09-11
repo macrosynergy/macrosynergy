@@ -89,7 +89,7 @@ class CategoryRelations:
             cpl = [np.round(coeff, 3), np.round(1-pval, 3)]
             fields = ["Correlation\n coefficient", "Probability\n of significance"]
             data_table = plt.table(cellText=[cpl], colLabels=fields,
-                                   cellLoc='center', loc=coef_box)
+                                   cellLoc='center'   , loc=coef_box)
             data_table.scale(0.4, 2.5)
             data_table.set_fontsize(12)
 
@@ -198,5 +198,6 @@ if __name__ == "__main__":
     cr.reg_scatter(labels=False, coef_box='lower right')
     cr = CategoryRelations(dfd, xcats = ['GROWTH', 'INFL'], cids = cids, freq = 'M', xcat_aggs = ['mean', 'mean'],
                            start = '2000-01-01', years = 3, blacklist = black)
+
     cr.reg_scatter(labels=False, coef_box='lower right')
     cr.jointplot(kind='hex', xlab='growth', ylab='inflation')
