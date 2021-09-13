@@ -105,7 +105,6 @@ def check_availability(df: pd.DataFrame, xcats: List[str] = None,  cids: List[st
 
 
 if __name__ == "__main__":
-
     cids = ['AUD', 'CAD', 'GBP']
     xcats = ['XR', 'CRY']
     df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add', 'sd_mult'])

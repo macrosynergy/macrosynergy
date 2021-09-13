@@ -2,7 +2,7 @@ import unittest
 import random
 import numpy as np
 import pandas as pd
-from macrosynergy.management.simulate_quantamental_data import make_qdf, simulate_ar
+from tests.simulate import make_qdf, simulate_ar
 
 cids = ['AUD', 'CAD', 'GBP']
 xcats = ['XR', 'CRY']

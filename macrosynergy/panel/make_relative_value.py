@@ -41,6 +41,9 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
     assert rel_meth in ['subtract', 'divide'], f'rel_meth must be "subtract" or "divide", not {rel_meth}'
 
+    if not isinstance(xcats, list):
+       xcats = list(xcats)
+
     if cids is None:
         cids = list(df['cid'].unique())
 
@@ -79,7 +82,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         df_new = df_new.sort_values(['cid', 'real_date'])[col_names]
         df_out = df_out.append(df_new)
 
-    return df_out
+    return df_out.reset_index(drop=True)
 
 
 if __name__ == "__main__":
