@@ -54,6 +54,7 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
         fg.map_dataframe(sns.lineplot, x='real_date', y=val, hue='xcat', hue_order=xcats, ci=None)
         fg.map(plt.axhline, y=0, c=".5")
         fg.set_titles(col_template='{col_name}')
+        fg.set_axis_labels('', '')
         fg.add_legend()
         if title is not None:
             fg.fig.subplots_adjust(top=title_adj)
