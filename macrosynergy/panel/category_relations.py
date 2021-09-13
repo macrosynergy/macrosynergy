@@ -57,7 +57,7 @@ class CategoryRelations:
         print(self.df)
 
     def reg_scatter(self, title: str = None, labels: bool = False,
-                    size: Tuple[float] = (12, 8), xlab: str = None, ylab: str = None,
+                    size: Tuple[float] = (12, 8), xlab: str = None, ylab: str = None, coef_box: str = None,
                     fit_reg: bool = True, reg_ci: int = 95, reg_order: int = 1, reg_robust: bool = False):
 
         """Display scatterplot and regression line
@@ -71,48 +71,27 @@ class CategoryRelations:
         :param <int> reg_ci: size of the confidence interval for the regression estimate. Default is 95. Can be None.
         :param <int> reg_order: order of the regression equation. Default is 1 (linear).
         :param <bool> reg_robust: if this will de-weight outliers, which is computationally expensive. Default is False.
+        :param: <str> coef_box: gives location of box of correlation coefficient and probability.
+            If None (default), no box is shown. Options are standard, i.e. 'upper left', 'lower right' and so forth.
 
         """
 
-        sns.set_theme(style = "white")
+        sns.set_theme(style="whitegrid")
         fig, ax = plt.subplots(figsize=size)  # set up figure
         sns.regplot(data=self.df, x=self.xcats[0], y=self.xcats[1],
-                    ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg = fit_reg,
-                    scatter_kws={'s': 30, 'alpha': 0.5, 'color': 'lightgray'}, line_kws = {'lw': 1})
+                    ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
+                    scatter_kws={'s': 30, 'alpha': 0.5, 'color': 'lightgray'}, line_kws={'lw': 1})
 
-        regr = linear_model.LinearRegression()
-        X = self.df['GROWTH'].to_numpy()
-        y = self.df['INFL'].to_numpy()
-        X = X[:, np.newaxis]
-        y = y[:, np.newaxis]
-        regr.fit(X, y)
-
-        
-        params = np.array(regr.coef_[0])
-        predictions = regr.predict(X)
-
-        newX = pd.DataFrame({"Constant": np.ones(len(X))}).join(pd.DataFrame(X))
-        MSE = (sum((y - predictions) ** 2)) / (len(newX) - len(newX.columns))
-
-        var_b = MSE * (np.linalg.inv(np.dot(newX.T, newX)).diagonal())
-        sd_b = np.sqrt(var_b)
-        ts_b = (params / sd_b)
-
-        sd_b = np.round(sd_b, 3)
-        ts_b = np.round(ts_b, 3)
-
-
-        X2 = sm.add_constant(X)
-        est = sm.OLS(y, X2)
-        est2 = est.fit()
-        
-        p_values = est2.pvalues
-        p_values = np.round(p_values, 5)
-        probability = np.array([(1 - p_values[1])])
-
-        df_prob = pd.DataFrame()
-        df_prob["Coefficients"], df_prob["P-Values"] = [params, probability]
-        data = list(df_prob.loc[0, :].to_numpy())
+        if coef_box is not None:
+            x = self.df[self.xcats[0]].to_numpy()
+            y = self.df[self.xcats[1]].to_numpy()
+            coeff, pval = stats.pearsonr(x, y)
+            cpl = [np.round(coeff, 3), np.round(1-pval, 3)]
+            fields = ["Correlation\n coefficient", "Probability\n of significance"]
+            data_table = plt.table(cellText=[cpl], colLabels=fields,
+                                   cellLoc='center'   , loc=coef_box)
+            data_table.scale(0.4, 2.5)
+            data_table.set_fontsize(12)
 
         if labels:
             assert self.freq in ['A', 'Q', 'M'], 'Labels are only possible for monthly or lower frequencies'
@@ -142,16 +121,6 @@ class CategoryRelations:
             ax.set_xlabel(xlab)
         if ylab is not None:
             ax.set_ylabel(ylab)
-
-
-        index_labels = df_prob.index.tolist()
-        fields = ["Correlation Coefficient", "Probability of Significance"]
-        
-        data_table = plt.table(cellText = [data], colLabels = fields,
-                               cellLoc = 'center', loc = 'upper left')
-
-        data_table.scale(0.4, 2.5)
-        data_table.set_fontsize(12)
             
         plt.show()
 
@@ -226,5 +195,9 @@ if __name__ == "__main__":
 
     cr = CategoryRelations(dfd, xcats = ['GROWTH', 'INFL'], cids = cids, freq = 'M', xcat_aggs = ['mean', 'mean'],
                            start = '2000-01-01', years = None, blacklist = black)
-    ## cr.jointplot(kind = 'hex', xlab = 'growth', ylab = 'inflation')
-    cr.reg_scatter(labels = False)
+    cr.reg_scatter(labels=False, coef_box='lower right')
+    cr = CategoryRelations(dfd, xcats = ['GROWTH', 'INFL'], cids = cids, freq = 'M', xcat_aggs = ['mean', 'mean'],
+                           start = '2000-01-01', years = 3, blacklist = black)
+
+    cr.reg_scatter(labels=False, coef_box='lower right')
+    cr.jointplot(kind='hex', xlab='growth', ylab='inflation')
