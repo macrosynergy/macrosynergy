@@ -12,9 +12,9 @@ class VintageData:
     """Creates standardized dataframe of single-ticker vintages
     """
 
-    def __init__(self, ticker, cutoff = '2020-12-31', release_lags = [15, 30], n_firsts = 24,
-                 shortest = 36, freq = 'M', start_value = 0, trend_ar = 5, sd_ar = math.sqrt(12),
-                 seasonal = None, added_dates = 12):
+    def __init__(self, ticker, cutoff = '2020-12-31', release_lags = [15, 30],
+                 n_firsts = 24, shortest = 36, freq = 'M', start_value = 0, trend_ar = 5,
+                 sd_ar = math.sqrt(12), seasonal = None, added_dates = 12):
         
         self.ticker = ticker
         ## Last possible release date.
@@ -30,6 +30,7 @@ class VintageData:
         self.freq_int = dict(zip(['Q', 'M', 'W'], [4, 12, 52]))
         self.af = self.freq_int[freq]
 
+        ## Expected first value of the random series. If stationary, the expectation would be zero.
         self.start_value = start_value
         ## Annualised trend. Default is 5% linear drift per year: deterministic trend.
         self.trend_ar = trend_ar
@@ -50,6 +51,15 @@ class VintageData:
             return rel_date - dt.timedelta(days = 1)
         return rel_date + dt.timedelta(days = 1)
 
+    def seasonal_adj(self, obs_dates, seas_factors, values):
+        if self.freq == 'W':
+            week = (obs_dates.isocalendar().week - 1).to_numpy().astype(dtype = np.uint8)
+            seasonal = seas_factors[week]
+            return values * (1 + (seasonal / 100))
+
+        month = (12 / self.freq_int[self.freq])
+        return values * (1 + seas_factors[(obs_dates.month // month) - 1] / 100)
+
     def make_grade1(self):
 
         ref_date = self.cutoff - dt.timedelta(self.release_lags[0])
@@ -59,28 +69,43 @@ class VintageData:
         ## For instance, the twelve months prior to the end date, and will return a List of datetime objects.
         eop_dates = pd.date_range(end = ref_date, periods = self.n_firsts, freq = self.freq)
         eop_list = eop_dates.date
-        
+
         vin_lengths = list(range(self.shortest, self.shortest + self.n_firsts))
-        v_first = vin_lengths[0]
+        v_first = vin_lengths[0] ## 12.
         
         df_gr1 = pd.DataFrame(columns = ['release_date', 'observation_date', 'value'])
 
+        ## The first date will be determined by: eop_dates[0] - (v_first * M).
         obs_dates = pd.date_range(end = eop_dates[0], periods = v_first, freq = self.freq)
 
+        ## Determine the number of seasonal adjustments required: the number of time-periods.
         list_ = np.linspace(0, (self.af - 1), self.af)
         linear_scale = list_ - np.mean(list_)
                     
         seas_factors = (self.seasonal / np.std(linear_scale))
         seas_factors *= linear_scale
 
+        ## Incrementing the terminal date.
         for i, eop_date in enumerate(eop_list):
-
+            
             v = vin_lengths[i]
             if i > 0:
                 ## Vintage Length.
                 length = vin_lengths[i - 1]
                 date = pd.Timestamp(eop_date)
                 obs_dates = obs_dates.insert(loc = length, item = date)
+
+            data = np.linspace(0, (v - 1), v)
+            if self.start_value > 0:
+                ## The rational number is comprised of: annual trend divided by the respective frequency to understand the expected trend over the period.
+                ## Multiply by the time period to understand the deterministic movement after the aforementioned time period.
+                data = ((data * (self.trend_ar / self.af)) / 100)
+                data = (1 + data)
+                ## Trajectory from the starting value.
+                trend = self.start_value * data
+            else:
+                data = (data * (self.trend_ar / self.af))
+                trend = self.start_value + data
                 
             for rl in self.release_lags:
                 
@@ -90,30 +115,13 @@ class VintageData:
                     rel_date = self.week_day(rel_date, day)
 
                 self.dates.add(rel_date)
-                data = np.linspace(0, (v - 1), v)
-                if self.start_value > 0:
-                    
-                    data = ((data * (self.trend_ar / self.af)) / 100)
-                    data = (1 + data)
-                    trend = self.start_value * data 
-                else:
-                    data = (data * (self.trend_ar / self.af))
-                    trend = self.start_value + data
 
-                
+                ## Stochastic component. Annualised standard deviation proportional to the time-period.
                 values = trend + np.random.normal(0, self.sd_ar / math.sqrt(self.af), v)
                 if self.seasonal is not None:
-                    
-                    if self.freq == 'M':
-                        values = values * (1 + seas_factors[obs_dates.month - 1] / 100)
-                    if self.freq == 'Q':
-                        values = values * (1 + seas_factors[((obs_dates.month / 3) - 1).astype(np.int64)] / 100)
-                    if self.freq == 'W':
-                        values = values * (1 + seas_factors[np.clip(pd.Int64Index(obs_dates.isocalendar().week) - 1,
-                                                                    a_min = 0, a_max = 51)] / 100)
-
-                df_rel = pd.DataFrame({'release_date': rel_date, 'observation_date': obs_dates.date,
-                                       'value': values})
+                    values = self.seasonal_adj(obs_dates, seas_factors, values)
+                        
+                df_rel = pd.DataFrame({'release_date': rel_date, 'observation_date': obs_dates.date, 'value': values})
                 df_gr1 = df_gr1.append(df_rel)
 
         df_gr1["grading"] = "1"
@@ -194,16 +202,15 @@ class VintageData:
 if __name__ == "__main__":
 
     vins_m = VintageData('USD_INDX_SA', cutoff = "2019-06-30", release_lags = [3, 20, 25],  n_firsts = 12,
-                         shortest = 12, sd_ar = 5, trend_ar = 20, seasonal = 10, added_dates = 6)
-    
-    ## dfm1 = vins_m.make_grade1()
+                         freq = 'W', shortest = 12, sd_ar = 5, trend_ar = 20, seasonal = 10, added_dates = 6)
+
     start = time.time()
-    dfmg = vins_m.make_graded(grading = [3, 2.1, 1], upgrades = [12, 24])
+    dfm1 = vins_m.make_grade1()
     print(f"Time Elapsed, test_file: {time.time() - start}.")
+    
+    dfmg = vins_m.make_graded(grading = [3, 2.1, 1], upgrades = [12, 24])
     ## dfm1.groupby('release_date').agg(['mean', 'count'])
     start = time.time()
-    dfm2 = vins_m.make_grade2()
-    print(f"Time Elapsed, test_file: {time.time() - start}.")
 
     ## vins_q = VintageData('USD_INDX_SA', release_lags=[3, 20, 25], number_firsts=2, shortest=8, freq='Q',
                          ## seasonal = 10, added_dates = 4)
