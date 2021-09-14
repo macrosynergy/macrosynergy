@@ -7,6 +7,7 @@ from typing import List, Union, Tuple
 from sklearn import datasets, linear_model
 from scipy import stats
 import statsmodels.api as sm
+import time
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import categories_df
@@ -15,7 +16,6 @@ from macrosynergy.management.shape_dfs import categories_df
 class CategoryRelations:
 
     """Class for analyzing and visualizing two categories across a panel
-
     :param <pd.Dataframe> df: standardized data frame with the following necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: Exactly two extended categories to be checked on.
@@ -31,37 +31,45 @@ class CategoryRelations:
     :param <int> lag: Lag (delay of arrival) of second category in periods as set by freq. Default is 0.
     :param <int> fwin: Forward moving average window of first category. Default is 1, i.e no average.
     :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for both.
-
     """
 
     def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None, val: str = 'value',
-                 start: str = None, end: str = None, blacklist: dict = None, years=None,
+                 start: str = None, end: str = None, blacklist: dict = None, years = None,
                  freq: str = 'M', lag: int = 0, fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean')):
 
         """Constructs all attributes for the category relationship to be analyzed"""
 
         self.xcats = xcats
-        self.cids = cids
-        self.val = val
+        self.cids = cids 
+        self.val = val 
         self.freq = freq
         self.lag = lag
-        self.years = years
-        self.aggs = xcat_aggs
+        self.years = years 
+        self.aggs = xcat_aggs 
 
         assert self.freq in ['D', 'W', 'M', 'Q', 'A']
         assert {'cid', 'xcat', 'real_date', val}.issubset(set(df.columns))
+        assert len(xcats) == 2, "Expects two fields."
 
-        self.df = categories_df(df, xcats, cids, val, start=start, end=end, freq=freq, blacklist=blacklist,
-                                years=years, lag=lag, fwin=fwin, xcat_aggs=xcat_aggs)
+        self.df = categories_df(df, xcats, cids, val, start = start, end = end, freq = freq, blacklist = blacklist,
+                                years = years, lag = lag, fwin = fwin, xcat_aggs = xcat_aggs)
 
-        print(self.df)
+    def corr_probability(self, coef_box):
+        x = self.df[self.xcats[0]].to_numpy()
+        y = self.df[self.xcats[1]].to_numpy()
+        coeff, pval = stats.pearsonr(x, y)
+        cpl = [np.round(coeff, 3), np.round(1 - pval, 3)]
+        fields = ["Correlation\n coefficient", "Probability\n of significance"]
+        data_table = plt.table(cellText = [cpl], colLabels = fields,
+                               cellLoc = 'center', loc = coef_box)
+        return data_table
+        
 
-    def reg_scatter(self, title: str = None, labels: bool = False,
-                    size: Tuple[float] = (12, 8), xlab: str = None, ylab: str = None,
-                    fit_reg: bool = True, reg_ci: int = 95, reg_order: int = 1, reg_robust: bool = False):
+    def reg_scatter(self, title: str = None, labels: bool = False, size: Tuple[float] = (12, 8),
+                    xlab: str = None, ylab: str = None, coef_box: str = None, fit_reg: bool = True,
+                    reg_ci: int = 95, reg_order: int = 1, reg_robust: bool = False, box_fill: bool = False):
 
         """Display scatterplot and regression line
-
         :param <str> title: title of plot. If None (default) an informative title is applied.
         :param <bool> labels: assign a cross-section/period label to each dot. Default is False.
         :param <Tuple[float]> size: width and height of the figure
@@ -71,7 +79,8 @@ class CategoryRelations:
         :param <int> reg_ci: size of the confidence interval for the regression estimate. Default is 95. Can be None.
         :param <int> reg_order: order of the regression equation. Default is 1 (linear).
         :param <bool> reg_robust: if this will de-weight outliers, which is computationally expensive. Default is False.
-
+        :param: <str> coef_box: gives location of box of correlation coefficient and probability.
+            If None (default), no box is shown. Options are standard, i.e. 'upper left', 'lower right' and so forth.
         """
 
         sns.set_theme(style = "white")
@@ -113,6 +122,20 @@ class CategoryRelations:
         df_prob = pd.DataFrame()
         df_prob["Coefficients"], df_prob["P-Values"] = [params, probability]
         data = list(df_prob.loc[0, :].to_numpy())
+        
+        sns.set_theme(style = "whitegrid")
+        if box_fill:
+            sns.set_theme(style = "white")
+        fig, ax = plt.subplots(figsize = size)
+        sns.regplot(data = self.df, x = self.xcats[0], y = self.xcats[1],
+                    ci = reg_ci, order = reg_order, robust = reg_robust, fit_reg = fit_reg,
+                    scatter_kws = {'s': 30, 'alpha': 0.5, 'color': 'lightgray'}, line_kws = {'lw': 1})
+
+        if coef_box is not None:
+            data_table = self.corr_probability(coef_box)
+            
+            data_table.scale(0.4, 2.5)
+            data_table.set_fontsize(12)
 
         if labels:
             assert self.freq in ['A', 'Q', 'M'], 'Labels are only possible for monthly or lower frequencies'
@@ -156,7 +179,7 @@ class CategoryRelations:
         plt.show()
 
     def jointplot(self, kind, fit_reg: bool = True, title: str = None, height: float = 6,
-                  xlab: str = None, ylab: str = None):
+                  xlab: str = None, ylab: str = None, coef_box: str = None, box_fill: bool = False):
 
         """Display jointplot of chosen type, based on seaborn.jointplot(). The plot will always be square.
 
@@ -170,17 +193,25 @@ class CategoryRelations:
 
         """
         assert kind in ['scatter', 'kde', 'hist', 'hex']
+        if fit_reg and coef_box is None:
+            raise AssertionError("Requires a spatial position.")
 
-        if kind == 'hex':
-            sns.set_theme(style='white')
-        else:
-            sns.set_theme(style='whitegrid')
+        sns.set_theme(style = 'whitegrid')
+        if kind == 'hex' or box_fill:
+            sns.set_theme(style = 'white')
 
-        fg = sns.jointplot(data=self.df,  x=self.xcats[0], y=self.xcats[1],
-                           kind=kind, height=height, color='steelblue')
-        if fit_reg:
-            fg.plot_joint(sns.regplot, scatter=False, ci=0.95, color='black',
-                          line_kws={'lw':1, 'linestyle': '--'})  # overlay regression line
+        fg = sns.jointplot(data = self.df,  x = self.xcats[0], y = self.xcats[1],
+                           kind = kind, height = 5, ratio = 3, color = 'steelblue')
+        
+        if fit_reg and coef_box is not None:
+            fg.plot_joint(sns.regplot, scatter = False, ci = 0.95, color = 'black',
+                          line_kws = {'lw': 1, 'linestyle': '--'})
+
+            data_table = self.corr_probability(coef_box)
+            
+            data_table.scale(1.5, 2)
+            data_table.set_fontsize(14)
+            
 
         xlab = xlab if xlab is not None else ''
         ylab = ylab if ylab is not None else ''
@@ -191,7 +222,8 @@ class CategoryRelations:
             title = f'{self.xcats[0]} and {self.xcats[1]} from {dates.min()} to {dates.max()}'
         elif title is None:
             title = f'{self.xcats[0]} and {self.xcats[1]}'
-        fg.fig.suptitle(title, y=1.02)  # facet grid way of setting title
+
+        fg.fig.suptitle(title, y = 1.02)
 
         plt.show()
 
@@ -208,23 +240,34 @@ if __name__ == "__main__":
 
     cids = ['AUD', 'CAD', 'GBP', 'NZD']
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
-    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
+    df_cids = pd.DataFrame(index = cids, columns = ['earliest', 'latest', 'mean_add', 'sd_mult'])
     df_cids.loc['AUD'] = ['2000-01-01', '2020-12-31', 0.1, 1]
     df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
     df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
     df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
 
-    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef'])
+    df_xcats = pd.DataFrame(index = xcats, columns = ['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef'])
     df_xcats.loc['XR'] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
     df_xcats.loc['CRY'] = ['2000-01-01', '2020-10-30', 1, 2, 0.95, 1]
     df_xcats.loc['GROWTH'] = ['2001-01-01', '2020-10-30', 1, 2, 0.9, 1]
     df_xcats.loc['INFL'] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
+    start = time.time()
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    print(f"Time Elapsed, test_file: {time.time() - start}.")
 
+    
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
 
+    start = time.time()
     cr = CategoryRelations(dfd, xcats = ['GROWTH', 'INFL'], cids = cids, freq = 'M', xcat_aggs = ['mean', 'mean'],
                            start = '2000-01-01', years = None, blacklist = black)
-    ## cr.jointplot(kind = 'hex', xlab = 'growth', ylab = 'inflation')
-    cr.reg_scatter(labels = False)
+    print(f"Time Elapsed, test_file: {time.time() - start}.")
+    
+    ## cr.reg_scatter(labels = False, coef_box = 'lower right', box_fill = True)
+    cr = CategoryRelations(dfd, xcats = ['GROWTH', 'INFL'], cids = cids, freq = 'M', xcat_aggs = ['mean', 'mean'],
+                           start = '2000-01-01', years = 3, blacklist = black)
+
+    cr.reg_scatter(labels = False, coef_box = 'lower right')
+    cr.jointplot(kind = 'hist', xlab = 'growth', ylab = 'inflation', coef_box = 'left')
+
