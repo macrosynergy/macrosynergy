@@ -3,9 +3,14 @@ import os
 import sys
 import subprocess
 import warnings
+from pathlib import Path
 
 
 DOCLINES = (__doc__ or '').split("\n")
+
+path = Path(__file__).parent
+with open(os.path.join(path, "README.md"), "r") as f:
+    readme = f.read()
 
 if sys.version_info[:2] < (3, 6):
     raise RuntimeError("Python version >= 3.6 required.")
@@ -14,7 +19,6 @@ if sys.version_info[:2] < (3, 6):
 CLASSIFIERS = """\
 Intended Audience :: Science/Research
 Intended Audience :: Developers
-Programming Language :: C
 Programming Language :: Python
 Programming Language :: Python :: 3
 Programming Language :: Python :: 3.6
@@ -32,7 +36,7 @@ Operating System :: MacOS
 
 MAJOR = 0
 MINOR = 0
-MICRO = 3
+MICRO = 4
 ISRELEASED = False
 VERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
 
@@ -144,8 +148,8 @@ def setup_package():
         maintainer_email="info@macrosynergy.com",
         description=DOCLINES[0],
         license="MIT License",
-        long_description_content_type="text/x-rst",
-        long_description="\n".join(DOCLINES[2:]),
+        long_description_content_type="text/markdown",
+        long_description=readme,
         url="https://www.macrosynergy.com",
         author_email='info@macrosynergy.com',
         author='Macrosynergy Ltd',
