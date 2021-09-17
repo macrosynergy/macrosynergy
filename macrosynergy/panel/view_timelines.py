@@ -11,8 +11,9 @@ from macrosynergy.management.check_availability import reduce_df
 def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
                    start: str = '2000-01-01', end: str = None, val: str = 'value', cumsum: bool = False,
                    title: str = None, title_adj: float = 0.95, intersect: bool = False,
-                   xcat_labels: List[str] = None, label_adj: float = 0.1,
-                   ncol: int = 3, same_y: bool = True, size: Tuple[float] = (12, 7), aspect: float = 1.7):
+                   xcat_labels: List[str] = None, label_adj: float = 0.05,
+                   ncol: int = 3, same_y: bool = True, all_xticks: bool = False,
+                   size: Tuple[float] = (12, 7), aspect: float = 1.7):
 
     """Display facet grid of time lines of one or more categories
 
@@ -32,6 +33,7 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
     :param <bool> intersect: if True only retains cids that are available for all xcats. Default is False.
     :param <int> ncol: number of columns in facet. Default is 3.
     :param <bool> same_y: if True (default) all axis plots in the facet share the same y axis.
+    :param <bool> all_xticks:  if True add x-axis tick labels to all axes in grid. Default is False.
     :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default is (12, 7).
     :param <float> aspect: width-height ratio for plots in facet.
 
@@ -71,6 +73,10 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
             fg.fig.legend(handles=handles, labels=labels, loc='lower center', ncol=3)  # add legend to bottom of figure
             fg.fig.subplots_adjust(bottom=label_adj, top=title_adj)  # lift bottom so it does not conflict with legend
 
+    if all_xticks:  # add x-axis tick labels to all axes in grid
+        for ax in fg.axes.flatten():
+            ax.tick_params(labelbottom=True)
+
     plt.show()
 
 
@@ -92,13 +98,13 @@ if __name__ == "__main__":
 
     dfdx = dfd[~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))]
     view_timelines(dfdx, xcats=['XR', 'CRY'], cids=cids, ncol=2, xcat_labels=['Return', 'Carry'],
-                   title='Carry and return')
+                   title='Carry and return', title_adj=0.9, label_adj=0.1)
 
     view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids[0], ncol=1, title='AUD return and carry')
     view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids[0], ncol=1, xcat_labels=['Return', 'Carry'],
                    title='AUD return and carry')
     view_timelines(dfd, xcats=['CRY'], cids=cids, ncol=2, title='Carry')
-    view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids, ncol=2, title='Return and carry')
+    view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids, ncol=2, title='Return and carry', all_xticks=True)
     view_timelines(dfd, xcats=['XR'], cids=cids, ncol=2, cumsum=True, same_y=False, aspect=2)
 
 
