@@ -10,8 +10,8 @@ from macrosynergy.management.check_availability import reduce_df
 
 def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
                    start: str = '2000-01-01', end: str = None, val: str = 'value', cumsum: bool = False,
-                   title: str = None, title_adj: float = 0.9, intersect: bool = False,
-                   xcat_labels: List[str] = None,
+                   title: str = None, title_adj: float = 0.95, intersect: bool = False,
+                   xcat_labels: List[str] = None, label_adj: float = 0.1,
                    ncol: int = 3, same_y: bool = True, size: Tuple[float] = (12, 7), aspect: float = 1.7):
 
     """Display facet grid of time lines of one or more categories
@@ -26,9 +26,10 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
     :param <str> val: name of column that contains the values of interest. Default is 'value'.
     :param <bool> cumsum: chart the cumulative sum of the value. Default is False.
     :param <str> title: chart heading. Default is no title.
-    :param <float> title_adj: parameter that positions title relative to the facet. Default is 0.9.
-    :param <bool> intersect: if True only retains cids that are available for all xcats. Default is False.
+    :param <float> title_adj: parameter that sets top of figure to accommodate title. Default is 0.95.
     :param <List[str]> xcat_labels: labels to be used for xcats if not identical to extended categories.
+    :param <float> label_adj: parameter that sets bottom of figure to fit the label. Default is 0.05.
+    :param <bool> intersect: if True only retains cids that are available for all xcats. Default is False.
     :param <int> ncol: number of columns in facet. Default is 3.
     :param <bool> same_y: if True (default) all axis plots in the facet share the same y axis.
     :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default is (12, 7).
@@ -68,7 +69,7 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
             else:
                 labels = xcat_labels
             fg.fig.legend(handles=handles, labels=labels, loc='lower center', ncol=3)  # add legend to bottom of figure
-            fg.fig.subplots_adjust(bottom=0.15, top=title_adj)  # lift bottom so it does not conflict with legend
+            fg.fig.subplots_adjust(bottom=label_adj, top=title_adj)  # lift bottom so it does not conflict with legend
 
     plt.show()
 
