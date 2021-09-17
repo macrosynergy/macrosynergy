@@ -33,25 +33,26 @@ class CategoryRelations:
     """
 
     def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None, val: str = 'value',
-                 start: str = None, end: str = None, blacklist: dict = None, years=None,
+                 start: str = None, end: str = None, blacklist: dict = None, years = None,
                  freq: str = 'M', lag: int = 0, fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean')):
 
         """Constructs all attributes for the category relationship to be analyzed"""
 
         self.xcats = xcats
-        self.cids = cids
-        self.val = val
+        self.cids = cids 
+        self.val = val 
         self.freq = freq
         self.lag = lag
-        self.years = years
-        self.aggs = xcat_aggs
+        self.years = years 
+        self.aggs = xcat_aggs 
 
         assert self.freq in ['D', 'W', 'M', 'Q', 'A']
         assert {'cid', 'xcat', 'real_date', val}.issubset(set(df.columns))
         assert len(xcats) == 2, "Expects two fields."
 
-        self.df = categories_df(df, xcats, cids, val, start=start, end=end, freq=freq, blacklist=blacklist,
-                                years=years, lag=lag, fwin=fwin, xcat_aggs=xcat_aggs)
+        self.df = categories_df(df, xcats, cids, val, start = start, end = end, freq = freq, blacklist = blacklist,
+                                years = years, lag = lag, fwin = fwin, xcat_aggs = xcat_aggs)
+
 
     def corr_probability(self, coef_box):
         x = self.df[self.xcats[0]].to_numpy()
@@ -59,13 +60,15 @@ class CategoryRelations:
         coeff, pval = stats.pearsonr(x, y)
         cpl = [np.round(coeff, 3), np.round(1 - pval, 3)]
         fields = ["Correlation\n coefficient", "Probability\n of significance"]
-        data_table = plt.table(cellText=[cpl], colLabels=fields,
-                               cellLoc='center', loc=coef_box)
+        data_table = plt.table(cellText = [cpl], colLabels = fields,
+                               cellLoc = 'center', loc = coef_box)
+        
         return data_table
+        
 
     def reg_scatter(self, title: str = None, labels: bool = False, size: Tuple[float] = (12, 8),
                     xlab: str = None, ylab: str = None, coef_box: str = None, fit_reg: bool = True,
-                    reg_ci: int = 95, reg_order: int = 1, reg_robust: bool = False, box_fill: bool = False):
+                    reg_ci: int = 95, reg_order: int = 1, reg_robust: bool = False):
 
         """Display scatterplot and regression line
         :param <str> title: title of plot. If None (default) an informative title is applied.
@@ -80,18 +83,16 @@ class CategoryRelations:
         :param: <str> coef_box: gives location of box of correlation coefficient and probability.
             If None (default), no box is shown. Options are standard, i.e. 'upper left', 'lower right' and so forth.
         """
-
-        sns.set_theme(style="whitegrid")
-        if box_fill:
-            sns.set_theme(style="white")
-        fig, ax = plt.subplots(figsize=size)
-        sns.regplot(data=self.df, x=self.xcats[0], y=self.xcats[1],
-                    ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
-                    scatter_kws={'s': 30, 'alpha': 0.5, 'color': 'lightgray'}, line_kws={'lw': 1})
+        
+        sns.set_theme(style = "whitegrid")
+        fig, ax = plt.subplots(figsize = size)
+        sns.regplot(data = self.df, x = self.xcats[0], y = self.xcats[1],
+                    ci = reg_ci, order = reg_order, robust = reg_robust, fit_reg = fit_reg,
+                    scatter_kws = {'s': 30, 'alpha': 0.5, 'color': 'lightgray'}, line_kws = {'lw': 1})
 
         if coef_box is not None:
             data_table = self.corr_probability(coef_box)
-
+            
             data_table.scale(0.4, 2.5)
             data_table.set_fontsize(12)
 
@@ -118,16 +119,16 @@ class CategoryRelations:
         elif title is None:
             title = f'{self.xcats[0]} and {self.xcats[1]}'
 
-        ax.set_title(title, fontsize=14)
+        ax.set_title(title, fontsize = 14)
         if xlab is not None:
             ax.set_xlabel(xlab)
         if ylab is not None:
             ax.set_ylabel(ylab)
-
+            
         plt.show()
 
-    def jointplot(self, kind, fit_reg: bool = True, title: str = None, height: float = 6,
-                  xlab: str = None, ylab: str = None, coef_box: str = None, box_fill: bool = False):
+    def jointplot(self, kind, fit_reg: bool = True, title: str = None,
+                  height: float = 6, xlab: str = None, ylab: str = None):
 
         """Display jointplot of chosen type, based on seaborn.jointplot(). The plot will always be square.
 
@@ -141,24 +142,18 @@ class CategoryRelations:
 
         """
         assert kind in ['scatter', 'kde', 'hist', 'hex']
-        if fit_reg and coef_box is None:
-            raise AssertionError("Requires a spatial position.")
 
-        sns.set_theme(style='whitegrid')
-        if kind == 'hex' or box_fill:
-            sns.set_theme(style='white')
+        sns.set_theme(style = 'whitegrid')
+        if kind == 'hex':
+            sns.set_theme(style = 'white')
 
-        fg = sns.jointplot(data=self.df, x=self.xcats[0], y=self.xcats[1],
-                           kind=kind, height=5, ratio=3, color='steelblue')
-
-        if fit_reg and coef_box is not None:
-            fg.plot_joint(sns.regplot, scatter=False, ci=0.95, color='black',
-                          line_kws={'lw': 1, 'linestyle': '--'})
-
-            data_table = self.corr_probability(coef_box)
-
-            data_table.scale(1.5, 2)
-            data_table.set_fontsize(14)
+        fg = sns.jointplot(data = self.df,  x = self.xcats[0], y = self.xcats[1],
+                           kind = kind, height = 5, ratio = 3, color = 'steelblue')
+        
+        if fit_reg:
+            fg.plot_joint(sns.regplot, scatter = False, ci = 0.95, color = 'black',
+                          line_kws = {'lw': 1, 'linestyle': '--'})
+            
 
         xlab = xlab if xlab is not None else ''
         ylab = ylab if ylab is not None else ''
@@ -170,7 +165,7 @@ class CategoryRelations:
         elif title is None:
             title = f'{self.xcats[0]} and {self.xcats[1]}'
 
-        fg.fig.suptitle(title, y=1.02)
+        fg.fig.suptitle(title, y = 1.02)
 
         plt.show()
 
@@ -184,15 +179,16 @@ class CategoryRelations:
 
 
 if __name__ == "__main__":
+
     cids = ['AUD', 'CAD', 'GBP', 'NZD']
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
-    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
+    df_cids = pd.DataFrame(index = cids, columns = ['earliest', 'latest', 'mean_add', 'sd_mult'])
     df_cids.loc['AUD'] = ['2000-01-01', '2020-12-31', 0.1, 1]
     df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
     df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
     df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
 
-    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef'])
+    df_xcats = pd.DataFrame(index = xcats, columns = ['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef'])
     df_xcats.loc['XR'] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
     df_xcats.loc['CRY'] = ['2000-01-01', '2020-10-30', 1, 2, 0.95, 1]
     df_xcats.loc['GROWTH'] = ['2001-01-01', '2020-10-30', 1, 2, 0.9, 1]
@@ -202,16 +198,17 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     print(f"Time Elapsed, test_file: {time.time() - start}.")
 
+    
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
 
     start = time.time()
-    cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M', xcat_aggs=['mean', 'mean'],
-                           start='2000-01-01', years=None, blacklist=black)
+    cr = CategoryRelations(dfd, xcats = ['GROWTH', 'INFL'], cids = cids, freq = 'M', xcat_aggs = ['mean', 'mean'],
+                           start = '2000-01-01', years = None, blacklist = black)
     print(f"Time Elapsed, test_file: {time.time() - start}.")
-
+    
     ## cr.reg_scatter(labels = False, coef_box = 'lower right', box_fill = True)
-    cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M', xcat_aggs=['mean', 'mean'],
-                           start='2000-01-01', years=3, blacklist=black)
+    cr = CategoryRelations(dfd, xcats = ['GROWTH', 'INFL'], cids = cids, freq = 'M', xcat_aggs = ['mean', 'mean'],
+                           start = '2000-01-01', years = 3, blacklist = black)
 
-    cr.reg_scatter(labels=False, coef_box='lower right')
-    cr.jointplot(kind='hist', xlab='growth', ylab='inflation', coef_box='left')
+    cr.reg_scatter(labels = False, coef_box = 'lower right')
+    ## cr.jointplot(kind = 'hist', xlab = 'growth', ylab = 'inflation')
