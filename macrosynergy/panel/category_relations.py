@@ -144,7 +144,7 @@ class CategoryRelations:
         assert kind in ['scatter', 'kde', 'hist', 'hex']
 
         sns.set_theme(style = 'whitegrid')
-        if kind == 'hex' or box_fill:
+        if kind == 'hex':
             sns.set_theme(style = 'white')
 
         fg = sns.jointplot(data = self.df,  x = self.xcats[0], y = self.xcats[1],
