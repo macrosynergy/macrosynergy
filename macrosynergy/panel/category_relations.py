@@ -54,8 +54,14 @@ class CategoryRelations:
                                 years = years, lag = lag, fwin = fwin, xcat_aggs = xcat_aggs)
 
 
+    @staticmethod
+    def table_modifications(table, col):
+        cells = [key for key in table._cells if key[1] == col]
+        for cell in cells:
+            table._cells[cell].set_color('white')
 
-    def corr_probability(self, coef_box):
+
+    def corr_probability(self, coef_box, colour):
         x = self.df[self.xcats[0]].to_numpy()
         y = self.df[self.xcats[1]].to_numpy()
         coeff, pval = stats.pearsonr(x, y)
@@ -63,12 +69,18 @@ class CategoryRelations:
         fields = ["Correlation\n coefficient", "Probability\n of significance"]
         data_table = plt.table(cellText = [cpl], colLabels = fields,
                                cellLoc = 'center', loc = coef_box)
+
+        if colour:
+            self.table_modifications(data_table, col = 0)
+            self.table_modifications(data_table, col = 1)
+        
         return data_table
         
 
     def reg_scatter(self, title: str = None, labels: bool = False, size: Tuple[float] = (12, 8),
                     xlab: str = None, ylab: str = None, coef_box: str = None, fit_reg: bool = True,
-                    reg_ci: int = 95, reg_order: int = 1, reg_robust: bool = False, box_fill: bool = False):
+                    reg_ci: int = 95, reg_order: int = 1, reg_robust: bool = False, box_fill: bool = False,
+                    colour: bool = False):
 
         """Display scatterplot and regression line
         :param <str> title: title of plot. If None (default) an informative title is applied.
@@ -81,6 +93,8 @@ class CategoryRelations:
         :param <int> reg_order: order of the regression equation. Default is 1 (linear).
         :param <bool> reg_robust: if this will de-weight outliers, which is computationally expensive. Default is False.
         :param: <str> coef_box: gives location of box of correlation coefficient and probability.
+        :param: box_fill: bool = False: sets the background of the entire graph to a white background if preferred. 
+        :param: colour: bool = False: if True sets the information box to a white background to prevent a clash with the data if the graph is heavily populated.
             If None (default), no box is shown. Options are standard, i.e. 'upper left', 'lower right' and so forth.
         """
         
@@ -93,7 +107,7 @@ class CategoryRelations:
                     scatter_kws = {'s': 30, 'alpha': 0.5, 'color': 'lightgray'}, line_kws = {'lw': 1})
 
         if coef_box is not None:
-            data_table = self.corr_probability(coef_box)
+            data_table = self.corr_probability(coef_box, colour)
             
             data_table.scale(0.4, 2.5)
             data_table.set_fontsize(12)
@@ -212,5 +226,5 @@ if __name__ == "__main__":
     cr = CategoryRelations(dfd, xcats = ['GROWTH', 'INFL'], cids = cids, freq = 'M', xcat_aggs = ['mean', 'mean'],
                            start = '2000-01-01', years = 3, blacklist = black)
 
-    cr.reg_scatter(labels = False, coef_box = 'lower right')
-    cr.jointplot(kind = 'hist', xlab = 'growth', ylab = 'inflation')
+    cr.reg_scatter(labels = False, coef_box = 'lower right', colour = True)
+    ## cr.jointplot(kind = 'hist', xlab = 'growth', ylab = 'inflation')
