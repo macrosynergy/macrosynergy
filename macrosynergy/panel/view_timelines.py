@@ -8,11 +8,11 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.check_availability import reduce_df
 
 
-def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
-                   start: str = '2000-01-01', end: str = None, val: str = 'value', cumsum: bool = False,
-                   title: str = None, title_adj: float = 0.95, intersect: bool = False,
-                   xcat_labels: List[str] = None, label_adj: float = 0.05,
+def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None, intersect: bool = False,
+                   val: str = 'value', cumsum: bool = False, start: str = '2000-01-01', end: str = None,
                    ncol: int = 3, same_y: bool = True, all_xticks: bool = False,
+                   title: str = None, title_adj: float = 0.95,
+                   xcat_labels: List[str] = None, label_adj: float = 0.05,
                    size: Tuple[float] = (12, 7), aspect: float = 1.7):
 
     """Display facet grid of time lines of one or more categories
@@ -22,18 +22,18 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
     :param <List[str]> xcats: extended categories to be checked on. Default is all in the dataframe.
     :param <List[str]> cids: cross sections to be checked on. Default is all in the dataframe.
         If this contains only one cross section a single chart is created rather than a facet grid.
-    :param <str> start: earliest date in ISO format. Default is None and earliest date in df is used.
-    :param <str> end: latest date in ISO format. Default is None and latest date in df is used.
+    :param <bool> intersect: if True only retains cids that are available for all xcats. Default is False.
     :param <str> val: name of column that contains the values of interest. Default is 'value'.
     :param <bool> cumsum: chart the cumulative sum of the value. Default is False.
+    :param <str> start: earliest date in ISO format. Default is None and earliest date in df is used.
+    :param <str> end: latest date in ISO format. Default is None and latest date in df is used.
+    :param <int> ncol: number of columns in facet. Default is 3.
+    :param <bool> same_y: if True (default) all axis plots in the facet share the same y axis.
+    :param <bool> all_xticks:  if True add x-axis tick labels to all axes in grid. Default is False.
     :param <str> title: chart heading. Default is no title.
     :param <float> title_adj: parameter that sets top of figure to accommodate title. Default is 0.95.
     :param <List[str]> xcat_labels: labels to be used for xcats if not identical to extended categories.
     :param <float> label_adj: parameter that sets bottom of figure to fit the label. Default is 0.05.
-    :param <bool> intersect: if True only retains cids that are available for all xcats. Default is False.
-    :param <int> ncol: number of columns in facet. Default is 3.
-    :param <bool> same_y: if True (default) all axis plots in the facet share the same y axis.
-    :param <bool> all_xticks:  if True add x-axis tick labels to all axes in grid. Default is False.
     :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default is (12, 7).
     :param <float> aspect: width-height ratio for plots in facet.
 
@@ -75,7 +75,7 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
 
     if all_xticks:  # add x-axis tick labels to all axes in grid
         for ax in fg.axes.flatten():
-            ax.tick_params(labelbottom=True)
+            ax.tick_params(labelbottom=True, pad=0)
 
     plt.show()
 
@@ -95,11 +95,10 @@ if __name__ == "__main__":
     df_xcats.loc['CRY', ] = ['2012-01-01', '2020-10-30', 1, 2, 0.95, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-
     dfdx = dfd[~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))]
+
     view_timelines(dfdx, xcats=['XR', 'CRY'], cids=cids, ncol=2, xcat_labels=['Return', 'Carry'],
                    title='Carry and return', title_adj=0.9, label_adj=0.1)
-
     view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids[0], ncol=1, title='AUD return and carry')
     view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids[0], ncol=1, xcat_labels=['Return', 'Carry'],
                    title='AUD return and carry')

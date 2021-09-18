@@ -64,7 +64,6 @@ class CategoryRelations:
                                cellLoc = 'center', loc = coef_box)
         
         return data_table
-        
 
     def reg_scatter(self, title: str = None, labels: bool = False, size: Tuple[float] = (12, 8),
                     xlab: str = None, ylab: str = None, coef_box: str = None, fit_reg: bool = True,
@@ -80,19 +79,18 @@ class CategoryRelations:
         :param <int> reg_ci: size of the confidence interval for the regression estimate. Default is 95. Can be None.
         :param <int> reg_order: order of the regression equation. Default is 1 (linear).
         :param <bool> reg_robust: if this will de-weight outliers, which is computationally expensive. Default is False.
-        :param: <str> coef_box: gives location of box of correlation coefficient and probability.
+        :param <str> coef_box: gives location of box of correlation coefficient and probability.
             If None (default), no box is shown. Options are standard, i.e. 'upper left', 'lower right' and so forth.
         """
         
-        sns.set_theme(style = "whitegrid")
+        sns.set_theme(style="whitegrid")
         fig, ax = plt.subplots(figsize = size)
-        sns.regplot(data = self.df, x = self.xcats[0], y = self.xcats[1],
-                    ci = reg_ci, order = reg_order, robust = reg_robust, fit_reg = fit_reg,
-                    scatter_kws = {'s': 30, 'alpha': 0.5, 'color': 'lightgray'}, line_kws = {'lw': 1})
+        sns.regplot(data=self.df, x=self.xcats[0], y=self.xcats[1],
+                    ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
+                    scatter_kws={'s': 30, 'alpha': 0.5, 'color': 'lightgray'}, line_kws={'lw': 1})
 
         if coef_box is not None:
             data_table = self.corr_probability(coef_box)
-            
             data_table.scale(0.4, 2.5)
             data_table.set_fontsize(12)
 
@@ -147,13 +145,12 @@ class CategoryRelations:
         if kind == 'hex':
             sns.set_theme(style = 'white')
 
-        fg = sns.jointplot(data = self.df,  x = self.xcats[0], y = self.xcats[1],
-                           kind = kind, height = 5, ratio = 3, color = 'steelblue')
+        fg = sns.jointplot(data=self.df,  x=self.xcats[0], y=self.xcats[1],
+                           kind=kind, height=height, color='steelblue')
         
         if fit_reg:
-            fg.plot_joint(sns.regplot, scatter = False, ci = 0.95, color = 'black',
-                          line_kws = {'lw': 1, 'linestyle': '--'})
-            
+            fg.plot_joint(sns.regplot, scatter=False, ci=0.95, color='black',
+                          line_kws={'lw': 1, 'linestyle': '--'})
 
         xlab = xlab if xlab is not None else ''
         ylab = ylab if ylab is not None else ''
@@ -194,21 +191,15 @@ if __name__ == "__main__":
     df_xcats.loc['GROWTH'] = ['2001-01-01', '2020-10-30', 1, 2, 0.9, 1]
     df_xcats.loc['INFL'] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
-    start = time.time()
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-    print(f"Time Elapsed, test_file: {time.time() - start}.")
-
-    
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
 
-    start = time.time()
-    cr = CategoryRelations(dfd, xcats = ['GROWTH', 'INFL'], cids = cids, freq = 'M', xcat_aggs = ['mean', 'mean'],
-                           start = '2000-01-01', years = None, blacklist = black)
-    print(f"Time Elapsed, test_file: {time.time() - start}.")
-    
-    ## cr.reg_scatter(labels = False, coef_box = 'lower right', box_fill = True)
-    cr = CategoryRelations(dfd, xcats = ['GROWTH', 'INFL'], cids = cids, freq = 'M', xcat_aggs = ['mean', 'mean'],
-                           start = '2000-01-01', years = 3, blacklist = black)
+    cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M', xcat_aggs=['mean', 'mean'], lag=1,
+                           start='2000-01-01', years=None, blacklist=black)
+    cr.reg_scatter(labels=False, coef_box='upper left')
 
-    cr.reg_scatter(labels = False, coef_box = 'lower right')
-    ## cr.jointplot(kind = 'hist', xlab = 'growth', ylab = 'inflation')
+    cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M', xcat_aggs=['mean', 'mean'],
+                           start='2000-01-01', years=3, blacklist=black)
+    cr.reg_scatter(labels=False, coef_box='lower right',
+                   title='Growth and inflation', xlab='Growth', ylab='Inflation')
+    cr.jointplot(kind='hist', xlab='growth', ylab='inflation', height=5)
