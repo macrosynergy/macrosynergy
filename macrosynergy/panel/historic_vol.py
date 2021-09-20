@@ -4,13 +4,16 @@ import numpy as np
 import pandas as pd
 from collections import defaultdict, deque
 from typing import List, Union, Tuple
-import matplotlib.pyplot as plt
 from random import choice
-## from Test_File import make_qdf_, simulate_ar
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 
 def remove_zeros(df: pd.DataFrame):
+    '''
+    Will determine if any of the return series have zero values: non-trading days.
+    If so, the returns will be removed and the filtered dataframe returned.
+    '''
+    
     values = df['value'].to_numpy()
     bool_ = values == 0.0 
     if any(bool_):
@@ -21,26 +24,44 @@ def remove_zeros(df: pd.DataFrame):
     return df
 
 def slide(arr, w, s = 1):
+    '''
+    Slide Tricks.
+    :param <ndarray float> arr: Entire return series.
+    :param <int> w: window.
+    :param <int> s: controls the frequency of the returned windows.
+    '''
 
     return np.lib.stride_tricks.as_strided(arr,
                                            shape = ((len(arr) - w) + 1, w),
                                            strides = arr.strides * 2)[::s]
 
-## hft -> 21. tx = days.
-def expo_weights(tx: int, hft: int = 21, cutoff = 0.01):
-    
+
+def expo_weights(tx: int, hft: int = 21):
+    '''
+    :param <int> tx: Number of days the return series is defined over.
+    :param <hft> hft: Half_Life.
+    Returns the weights in a Numpy Array.
+    '''
     decf = 2 ** (-1 / hft)
     weights = (1 - decf) * np.array([decf ** (tx - ii - 1) for ii in range(tx)])
 
     return weights
 
-def weight_series(weights, n_days):
+def weight_series(weights, n_days, cutoff):
+    '''
+    Modify the weights to comply with the restrictions placed on the EMA's weights: cutoff, half_life etc.
+    :param <List int> weights: Generated weights, for the entire series, from the above subroutine.
+    :param <int> n_days: Number of days currently "realised".
+    :param <int> cutoff: Only consider weights larger than the cutoff. Applicable days, set the weight to zero.
 
+    Isolate the number of weights applicable to the current day count, "n_days", and verify if any are below the cutoff. If so,
+    set to zero. Return the weights having adjusted for the cutoff in a Numpy Array.
+    '''
     w_series = np.zeros(n_days)
     
     weights = weights[-n_days:]
-    if weights[0] < 0.01:
-        weights = weights[weights >= 0.01]
+    if weights[0] < cutoff:
+        weights = weights[weights >= cutoff]
 
     active_w = len(weights)
     
@@ -51,12 +72,22 @@ def weight_series(weights, n_days):
 
 
 def rolling_std_stride(lists, n):
+    '''
+    :param <Python List> lists: List consisting of four two-dimensional Arrays (dates & return series).
+    :param <n> int n: The second parameter, "n" represents the window size for the Moving Average.
+    
+    Utilise Numpy's Slide Tricks to create the moving windows without requiring additional memory. The memory head
+    will "slide" across as the window evolves through the realised series, and return each window of data in a Matrix form.
+    Therefore, compute the Moving Average by using Numpy's axis feature, and subsequently return a Moving Average STD for the entire
+    return series.
+    The first section of dates, delimited by the size of the window, will be marked by zero values.
 
+    Will return a List consisting of len(xcat) number of EMAs held in a Numpy Array.
+    '''
     def compute(arr):
         
         arr = arr[:, 1]
         arr = slide(arr, n)
-        ## The original Array will be of type Object because it was previously hosting datetime objects.
         arr = arr.astype(dtype = float)
         std_arr = np.std(arr, axis = 1)
         std_arr = std_arr * np.sqrt(256)
@@ -66,24 +97,38 @@ def rolling_std_stride(lists, n):
     return list(map(compute, lists))
 
 def rolling_ema(lists, half_life, cutoff):
+    '''
+    :param <Python List> lists: List consisting of four two-dimensional Arrays (dates & return series).
+    :param <int> half_life: Halflife - default 21 days accounts for 50% of the weighting.
+    :param <float> cutoff: Cutoff - default 0.01 - weights below 0.01 will be set to zero to be discounted in the exponential weighting.
+
+    Will return a List consisting of len(xcat) number of EMAs held in a Numpy Array.
+    '''
 
     def compute(arr):
-        
-        arr = arr[:, 1] ## Return series.
+        '''
+        :param <Numpy ndarray> arr: Description above.
+        Apply the weighted average from (half_life * 2) onwards to enforce the 50% weighting logic. In this example, the EMA will only become active
+        from the 42 day onwards and represents the local variable "n".
+        Iterate through the return series, from the 42 day onwards, load each return into a dynamically resizing List, and compute the weighted average standard
+        deviation for that specific timestamp.
+        Will return an Array containing the EMA defined over each timestamp received excluding the first (half_time * two) number of days.
+        The aforementioned first set of days, without an EMA, will be defined with a zero value.
+        '''
+
+        arr = arr[:, 1]
         time = len(arr)
         rolling_std = np.zeros(time, dtype = float)
 
         n = half_life * 2
-        ## Tracking data from the incision onwards. Instantiate the Deque.
-        ## Expanding iteratively until the cutoff becomes active.
         window = list(arr[:(n - 1)])
-        w_series = expo_weights(time, half_life, cutoff)
+        w_series = expo_weights(time, half_life)
         
+        l_window = len(window)
         for i, _ in enumerate(arr[n:]):
             window.append(_)
-            ## The length of the window grows in accordance with the expansion of the return series. Will be truncated by the "cutoff" parameter.
-            n_days = len(window)
-            w_series = weight_series(w_series, n_days)
+            l_window += 1
+            w_series = weight_series(w_series, l_window, cutoff)
             win_arr = np.array(window)
             win_mean = np.mean(win_arr)
             scale = np.multiply(w_series, ((win_arr - win_mean) ** 2))
@@ -108,10 +153,21 @@ def mult(xcats, list_):
     return list(map(func, xcats, list_))
 
 
-## The parameter, "window", is only applicable for the Moving Average which has a fixed window, and the weighting on the return series, inside the window, is applied uniformally.
 def smoothing_func(dfd: pd.DataFrame, cids: List[str] = None, xcats: List[str] = None,
                    xcat: str = None, lback_period: int = None, half_life: int = 21,
                    cutoff: int = 0.01, lback_meth: str = 'MA'):
+    '''
+    *Parameters described below. Identical Signature.
+    
+    The function will populate a dictionary, cid_xcat, where the keys are the countries the data is defined over, cids,
+    and each key will host a List of the return series for each economic field, xcats, with the associated dates: two-dimensional Array
+    where the first column is the timestamps and the second column the realised return.
+    Once the dictionary has been populated, iterate through each (key / value) pair and, depending on the "lback_meth", compute the MA or EMA for each
+    economic field using the above functions.
+    Once each MA or EMA has been returned, held inside a List, iterate through the dictionary, cid_stride, and reconstruct the
+    dataframe received with the additional column consisting of the "lback_meth" for all countries over each economic field.
+    The returned dataframe will be the same dimensions as the recieved input but the Moving Average calculation will displace the realised return series.
+    '''
 
     assert lback_period > 0
     assert xcat is not None
@@ -159,7 +215,7 @@ def historic_vol(dfd: pd.DataFrame, cids: List[str] = None, xcats: List[str] = N
                  cutoff: int = 0.01, lback_meth: str = 'MA', zeros: bool = True):
 
     """
-    Estimate historic annualized standard deviations of asset returns
+    Estimate historic annualized standard deviations of asset returns. Driver Function. Controls the functionality.
 
     :param <pd.Dataframe> df: standardized data frame with the following necessary columns:
     'cid', 'xcats', 'real_date' and 'value.
@@ -184,10 +240,8 @@ def historic_vol(dfd: pd.DataFrame, cids: List[str] = None, xcats: List[str] = N
     if zeros:
         dfd = remove_zeros(dfd)
 
-    start = time.time()
     rolling_df = smoothing_func(dfd, cids, xcats, xcat, lback_period, half_life,
                                 cutoff, lback_meth)
-    print(f"Time Elapsed: {time.time() - start}.")
 
     xcat_filter = (rolling_df['xcat'] == xcat).to_numpy()
     df_xcat = rolling_df[xcat_filter]
@@ -220,9 +274,6 @@ if __name__ == "__main__":
 
     ## dfd, fields_cats, fields_cids, df_year, df_end, df_missing, cids_cats = make_qdf_(df_cids, df_xcats, back_ar = 0.75)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-
-    ## weights = expo_weights(1200, 11, cutoff = 0.01)
-
 
     df = historic_vol(dfd, cids, xcats, lback_period = 42, half_life = 21, cutoff = 0.01, lback_meth = 'MA', xcat = choice(xcats))    
     print(df)
