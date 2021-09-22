@@ -6,13 +6,17 @@ from collections import defaultdict, deque
 from typing import List, Union, Tuple
 from random import choice
 from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.shape_dfs import reduce_df
 
 
-def remove_zeros(df: pd.DataFrame):
-    '''
-    Will determine if any of the return series have zero values: non-trading days.
-    If so, the returns will be removed and the filtered dataframe returned.
-    '''
+def filter_zeros(df: pd.DataFrame):
+    """
+   Filters out rows of dataframe where the 'value' column contains exact zeroes
+
+    :param <pd.DataFrame> df: Dataframe with a column called 'value' that contains numerical values.
+
+    :return Dataframe that removes all timestand/rows for which value is zero.
+    """
     
     values = df['value'].to_numpy()
     bool_ = values == 0.0 
@@ -23,12 +27,16 @@ def remove_zeros(df: pd.DataFrame):
 
     return df
 
-def slide(arr, w, s = 1):
+
+def slide(arr, w, s=1):
     '''
-    Slide Tricks.
+    Receives one-dimensional array and returns a sliding window.
+
     :param <ndarray float> arr: Entire return series.
     :param <int> w: window.
     :param <int> s: controls the frequency of the returned windows.
+
+    :return multidimensional array hosting each window
     '''
 
     return np.lib.stride_tricks.as_strided(arr,
@@ -38,24 +46,31 @@ def slide(arr, w, s = 1):
 
 def expo_weights(tx: int, hft: int = 21):
     '''
+    Produces numpy array of weights for exponential moving averaging
+
     :param <int> tx: Number of days the return series is defined over.
     :param <hft> hft: Half_Life.
-    Returns the weights in a Numpy Array.
+
+    :return numpry array of weights of exponential window.
     '''
     decf = 2 ** (-1 / hft)
     weights = (1 - decf) * np.array([decf ** (tx - ii - 1) for ii in range(tx)])
 
     return weights
 
+
 def weight_series(weights, n_days, cutoff):
     '''
-    Modify the weights to comply with the restrictions placed on the EMA's weights: cutoff, half_life etc.
+    Returns truncated array of weights according to available series and cutoff.
+
     :param <List int> weights: Generated weights, for the entire series, from the above subroutine.
     :param <int> n_days: Number of days currently "realised".
     :param <int> cutoff: Only consider weights larger than the cutoff. Applicable days, set the weight to zero.
 
     Isolate the number of weights applicable to the current day count, "n_days", and verify if any are below the cutoff. If so,
     set to zero. Return the weights having adjusted for the cutoff in a Numpy Array.
+
+    :return array of truncated weight series.
     '''
     w_series = np.zeros(n_days)
     
@@ -71,8 +86,10 @@ def weight_series(weights, n_days, cutoff):
     return w_series
 
 
-def rolling_std_stride(lists, n):
+def rolling_std_stride(lists, n):  # maybe rolling_std
     '''
+    Returns list of arrays of simple moving averages of various xcats
+
     :param <Python List> lists: List consisting of four two-dimensional Arrays (dates & return series).
     :param <n> int n: The second parameter, "n" represents the window size for the Moving Average.
     
@@ -82,7 +99,7 @@ def rolling_std_stride(lists, n):
     return series.
     The first section of dates, delimited by the size of the window, will be marked by zero values.
 
-    Will return a List consisting of len(xcat) number of EMAs held in a Numpy Array.
+    :return List of array of MAs held in a Numpy Array.
     '''
     def compute(arr):
         
@@ -98,11 +115,13 @@ def rolling_std_stride(lists, n):
 
 def rolling_ema(lists, half_life, cutoff):
     '''
+    Calculates exponential moving averages of return series
+
     :param <Python List> lists: List consisting of four two-dimensional Arrays (dates & return series).
     :param <int> half_life: Halflife - default 21 days accounts for 50% of the weighting.
     :param <float> cutoff: Cutoff - default 0.01 - weights below 0.01 will be set to zero to be discounted in the exponential weighting.
 
-    Will return a List consisting of len(xcat) number of EMAs held in a Numpy Array.
+    :return a List consisting of len(xcat) number of EMAs in numpry arrays.
     '''
 
     def compute(arr):
@@ -146,6 +165,7 @@ def merge(arr):
     return arr[:, 0]
 
 def func(str_, int_):
+
     return [str_] * int_
 
 def mult(xcats, list_):
@@ -157,6 +177,8 @@ def smoothing_func(dfd: pd.DataFrame, cids: List[str] = None, xcats: List[str] =
                    xcat: str = None, lback_period: int = None, half_life: int = 21,
                    cutoff: int = 0.01, lback_meth: str = 'MA'):
     '''
+    Applies rolling standard deviations to a data frame.
+
     *Parameters described below. Identical Signature.
     
     The function will populate a dictionary, cid_xcat, where the keys are the countries the data is defined over, cids,
@@ -210,12 +232,14 @@ def smoothing_func(dfd: pd.DataFrame, cids: List[str] = None, xcats: List[str] =
     return final_df
 
 
-def historic_vol(dfd: pd.DataFrame, cids: List[str] = None, xcats: List[str] = None,
-                 xcat: str = None, lback_period: int = None, half_life: int = 21,
-                 cutoff: int = 0.01, lback_meth: str = 'MA', zeros: bool = True):
+def historic_vol(df: pd.DataFrame, cids: List[str] = None, xcat: str = None,
+                 start: str = '2000-01-01', end: str = None, blacklist: dict = None,
+                 lback_meth: str = 'xma', lback_periods: int = 21, half_life: int = 21,
+                 cutoff: float = 0.01, remove_zeros: bool = True,
+                 postfix: str = 'ASD'):
 
     """
-    Estimate historic annualized standard deviations of asset returns. Driver Function. Controls the functionality.
+    Estimates historic annualized standard deviations of asset returns.
 
     :param <pd.Dataframe> df: standardized data frame with the following necessary columns:
     'cid', 'xcats', 'real_date' and 'value.
@@ -224,6 +248,8 @@ def historic_vol(dfd: pd.DataFrame, cids: List[str] = None, xcats: List[str] = N
         default is all available for the category.
     :param <str> start: earliest date in ISO format. Default is None and earliest date in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df is used.
+    :param <dict> blacklist: cross sections with date ranges that should be excluded from the data frame.
+        If one cross section has several blacklist periods append numbers to the cross section code.
     :param <str> lback_meth: Lookback method to calculate the volatility, Default is "xma" (exponential moving average).
         Alternative is "ma", simple moving average.
     :param <int>  lback_periods: Number of lookback periods over which volatility is calculated. Default is 21.
@@ -237,8 +263,43 @@ def historic_vol(dfd: pd.DataFrame, cids: List[str] = None, xcats: List[str] = N
     :return <pd.Dataframe>: standardized dataframe with the estimated annualized standard deviations
     """
 
-    if zeros:
-        dfd = remove_zeros(dfd)
+    # list the asserts
+
+    df, xcat, cids = reduce_df(df, [xcat], cids, start, end, blacklist, out_all=True)
+
+    # pivot the dataframe to time x countries for values
+    # apply two rolling aggregations: [1] annualized standard deviation and [2] exponentinal standard deviation
+    # both aggregation functions are custom and exclude the zeroes at this stage.
+    # melt back to standardized dataframe and return
+
+
+    cid_xcat = {}
+    cid_stride = {}
+
+    for cid in cids:
+        df_temp = df[df['cid'] == cid]
+        data = df_temp[['real_date', 'value']].to_numpy()
+        cid_xcat[cid] = list(data)
+
+    for cid in cids:
+        if lback_meth == 'MA':
+            cid_stride[cid] = rolling_std_stride(cid_xcat[cid], lback_period)
+        else:
+            cid_stride[cid] = rolling_ema(cid_xcat[cid], half_life, cutoff)
+
+    qdf_cols = ['cid', 'xcat', 'real_date', lback_meth]
+    df_lists = []
+    for cid in cids:
+        df_out = pd.DataFrame(columns=qdf_cols)
+        df_out['xcat'] = np.concatenate(mult(xcats, xcat[cid]))
+        list_ = tuple(map(merge, cid_xcat[cid]))
+        df_out['real_date'] = np.concatenate(list_)
+        df_out[lback_meth] = np.concatenate(cid_stride[cid])
+        df_out['cid'] = cid
+        df_lists.append(df_out)
+
+    final_df = pd.concat(df_lists, ignore_index=True)
+
 
     rolling_df = smoothing_func(dfd, cids, xcats, xcat, lback_period, half_life,
                                 cutoff, lback_meth)
@@ -246,7 +307,7 @@ def historic_vol(dfd: pd.DataFrame, cids: List[str] = None, xcats: List[str] = N
     xcat_filter = (rolling_df['xcat'] == xcat).to_numpy()
     df_xcat = rolling_df[xcat_filter]
 
-    return df_xcat.reset_index(drop = True)
+    return df_xcat.reset_index(drop=True)
     
 
 if __name__ == "__main__":
@@ -272,8 +333,10 @@ if __name__ == "__main__":
     df_xcats.loc['GROWTH'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
     df_xcats.loc['INFL'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
-    ## dfd, fields_cats, fields_cids, df_year, df_end, df_missing, cids_cats = make_qdf_(df_cids, df_xcats, back_ar = 0.75)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    df = historic_vol(dfd, cids, xcats, lback_period = 42, half_life = 21, cutoff = 0.01, lback_meth = 'MA', xcat = choice(xcats))    
+    zero_filter = (dfd['cid'] == 'AUD') & (dfd['real_date'] == '2010-01-13')
+    dfd.loc[zero_filter, 'value'] = 0  # simulate exact zero
+
+    df = historic_vol(dfd, cids, xcat='XR', lback_meth='ma', lback_periods=42, cutoff=0.01)
     print(df)
