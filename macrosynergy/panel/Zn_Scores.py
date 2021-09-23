@@ -1,13 +1,11 @@
 import numpy as np
 import pandas as pd
 from typing import List, Union, Tuple
-from random import choice, randrange
 import time
 from collections import defaultdict
-from Test_File import make_qdf_
 from itertools import islice
 from bisect import insort
-
+from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 ## Converts panel of indicators to a panel of zn-scores (z-scores around a neutral level), in-sample or out-of-sample.
 
@@ -15,26 +13,6 @@ from bisect import insort
 ## Alternative is "cross_section" and "weighted". The latter means a weighted average of standard deviations and central points between panel and cross section.
 ## zn_cs_weight: weight of cross section in weighted zn-score calculation. Only relevant is "weighted" option has been chosen for zn_ref.
 ## abs_max: maximum absolute value allows for zn-score. Default is None, i.e. no limitation. postfix: string appended to category name for output; default is "ZN".
-
-def z_scores(lists, neutral):
-
-    def compute(arr):
-
-        arr = arr[:, 1]
-        if len(arr) < 252:
-            raise AssertionError("Number of time-periods must be greater than 252")
-        
-        neutral = func = "np." + neutral + "(arr)"
-        if neutral == 'zeros': ## Stationary series whereby the mean is equal to zero.
-            func = "np." + neutral + "(len(arr))"
-
-        comp = eval(func, globals(), locals())
-        s_std = np.std(arr)
-
-        z_score = (arr - comp) / s_std
-        return np.column_stack((arr, z_score))
-
-    return list(map(compute, lists))
 
 class RollingMedian(object):
     '''Slow running-median with O(n) updates, because of List's unavoidable shifting, where n is the window size.'''
@@ -359,9 +337,10 @@ if __name__ == "__main__":
     
     ## Numpy Array.
     start = time.time()
-    dfd, fields_cats, fields_cids, df_year, df_end, df_missing, cids_cats = make_qdf_(df_cids, df_xcats, back_ar = 0.75)
+    print("Using Ralph's make_qdf() function.")
+    dfd = make_qdf(df_cids, df_xcats, back_ar = 0.75)
     print(f"Time Elapsed: {time.time() - start}.")
 
     ## df = zn_score(dfd, cids = fields_cids, xcats = fields_cats, oos = True, neutral = 'median')
 
-    df = zn_score(dfd, cids = fields_cids, xcats = fields_cats, oos = False, cross = True, neutral = 'median')
+    df = zn_score(dfd, cids = cids, xcats = xcats, oos = False, cross = True, neutral = 'median')
