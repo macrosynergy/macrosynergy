@@ -45,6 +45,17 @@ def swap(bench_row_, row_, index_b, index_e):
     row_[index_e] = bench_row_[index_b]
     return row_
 
+## Same purpose as the above subroutine but with the additional feature of correcting the order.
+## Achieve the correct order 
+def swap_shift(bench_row_, row_, index_b, index_e, window):
+
+    row_[index_e] = bench_row_[index_b]
+    value = row_[index_e]
+    output = np.concatenate((np.array([value]), row_[:index_e]))
+    output = np.concatenate((output, row_[(window - index_b):]))
+    
+    return output
+    
 
 ## The algorithm is still under trial. Will confirm once complete.
 def zero_shift(arr_window, window):
@@ -66,8 +77,7 @@ def zero_shift(arr_window, window):
             if (index + 1) > arr_window.shape[0]:
                 break
             row = arr_copy[index]
-            
-            row_ = swap(bench_row, row, index_b, index_e)
+            row_ = swap_shift(bench_row, row, index_b, index_e, window)
             arr_window[index] = row_
             index_b += 1
             index_e -= 1
@@ -77,7 +87,8 @@ def zero_shift(arr_window, window):
 
 def MAIN():
 
-    data = [3, 4, 8, 11, 9, 3, 0, 4, 2]
+    data = [3, 4, 8, 11, 9, 3, 0, 4, 2, 0, 9, 2, 1]
+    print(data)
     data = np.array(data)
     data = data.astype(dtype = np.float32)
 
