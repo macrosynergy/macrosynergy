@@ -6,6 +6,8 @@ from collections import defaultdict, deque
 from typing import List, Union, Tuple
 from random import choice
 from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.shape_dfs import reduce_df
+
 
 
 def pandas_exponential(arr, half_life, cutoff):
@@ -108,6 +110,7 @@ def driver(dfd: pd.DataFrame, cids: List[str] = None, xcat: str = None, lback_me
         
     return final_df
 
+
 def historic_vol(dfd: pd.DataFrame, cids: List[str] = None, xcats: List[str] = None,
                  xcat: str = None, lback_period: int = 21, lback_meth: str = 'MA',
                  half_life: int = 21, remove_zeros: bool = True, cutoff: int = 0.01):
@@ -150,7 +153,6 @@ def historic_vol(dfd: pd.DataFrame, cids: List[str] = None, xcats: List[str] = N
     return rolling_df.reset_index(drop = True)
 
 
-
 if __name__ == "__main__":
 
     
@@ -180,4 +182,3 @@ if __name__ == "__main__":
     start = time.time()
     df = historic_vol(dfd, cids, xcats, xcat = 'INFL', lback_period = 42, lback_meth = 'MA', half_life = 21, remove_zeros = False, cutoff = 0.01)
     print(f"Time Elapsed: {time.time() - start}.")
-    print(df)
