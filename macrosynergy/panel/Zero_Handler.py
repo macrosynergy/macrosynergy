@@ -3,7 +3,8 @@ import time
 import numpy as np
 from random import choice, randrange
 
-## If there is a zero return, ascribed to holiday etc, the prevailing Standard Deviation should remain constant. The zero value would result in a spurious output. 
+## If there is a zero return, ascribed to holiday etc, the prevailing Standard Deviation should remain constant. The zero value would result in a spurious output.
+## Ignore the below subroutine.
 def constant_std(arr, arr_std):
     condition = np.where(arr == 0.0)[0]
     non_condition = np.where(arr != 0.0)[0]
@@ -64,40 +65,39 @@ def zero_shift(arr_window, window):
     zero_ret = np.where(final_col == 0.0)[0]
     prev_ind = (zero_ret - 1)
     arr_copy = arr_window.copy()
-    arr_window = arr_window.copy()
 
     ## Unavoidable polynomial algorithm but the internal operations are minimal, so the performance is not comprised too greatly.
+    ## The interior loop's computational performance will be O(Window): the iterator is determined by the window size with the internal operations taking constant time, as the speed of slicing does not change with the size of the Array.
     for i, elem in enumerate(prev_ind):
 
-        bench_row = arr_window[elem]
+        bench_row = arr_copy[elem]
         start = zero_ret[i]
         index_b = 0
         index_e = -1
         for index in range(start, start + window):
             if (index + 1) > arr_window.shape[0]:
                 break
-            row = arr_copy[index]
-            row_ = swap_shift(bench_row, row, index_b, index_e, window)
-            arr_window[index] = row_
+            o_row = arr_copy[index]
+            _row = swap_shift(bench_row, o_row, index_b, index_e, window)
+            arr_copy[index] = _row
             index_b += 1
             index_e -= 1
 
-    return arr_window
+    return arr_copy
     
 
 def MAIN():
 
-    data = [3, 4, 8, 11, 9, 3, 0, 4, 2, 0, 9, 2, 1]
+    data = [3, 4, 8, 11, 9, 3, 0, 4, 2, 0, 0, 9, 2, 1, 9, 4, 6, 0, 2, 1, 6, 3]
     print(data)
     data = np.array(data)
     data = data.astype(dtype = np.float32)
 
-    window = 4
+    window = 5
     arr_window = slide(data, window)
     print(arr_window)
-    arr_window = zero_shift(arr_window, window)
-    print(arr_window)
-    
+    arr_output = zero_shift(arr_window, window)
+    print(arr_output)
 
 if __name__ == "__main__":
     MAIN()
