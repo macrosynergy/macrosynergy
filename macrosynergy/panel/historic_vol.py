@@ -9,221 +9,100 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 
 
-def filter_zeros(df: pd.DataFrame):
+
+def pandas_exponential(arr, half_life, cutoff):
     """
-   Filters out rows of dataframe where the 'value' column contains exact zeroes
+    Compute annualised rolling Exponential Moving Average per cross section.
+    Receives a cross-section of return data for the specific xcat.
+    
+    :param <ndarray[timestamp, float] arr>: Two-dimensional Array consisting of timestamps and the realised return for the date.
+    :param <int> half_life: Half-life - number of days 50% of the weighting is applied to.
+    :param <float> cutoff: share of past observation weights in the exponential moving average that are disregarded.
 
-    :param <pd.DataFrame> df: Dataframe with a column called 'value' that contains numerical values.
-
-    :return Dataframe that removes all timestand/rows for which value is zero.
+    Annualised EMA for the specific Cross-Section.
     """
-    
-    values = df['value'].to_numpy()
-    bool_ = values == 0.0 
-    if any(bool_):
-        print("Entered.")
-        bool_ = ~bool_
-        df = df[bool_]
-
-    return df
-
-
-def slide(arr, w, s=1):
-    '''
-    Receives one-dimensional array and returns a sliding window.
-
-    :param <ndarray float> arr: Entire return series.
-    :param <int> w: window.
-    :param <int> s: controls the frequency of the returned windows.
-
-    :return multidimensional array hosting each window
-    '''
-
-    return np.lib.stride_tricks.as_strided(arr,
-                                           shape = ((len(arr) - w) + 1, w),
-                                           strides = arr.strides * 2)[::s]
-
-
-def expo_weights(tx: int, hft: int = 21):
-    '''
-    Produces numpy array of weights for exponential moving averaging
-
-    :param <int> tx: Number of days the return series is defined over.
-    :param <hft> hft: Half_Life.
-
-    :return numpry array of weights of exponential window.
-    '''
-    decf = 2 ** (-1 / hft)
-    weights = (1 - decf) * np.array([decf ** (tx - ii - 1) for ii in range(tx)])
-
-    return weights
-
-
-def weight_series(weights, n_days, cutoff):
-    '''
-    Returns truncated array of weights according to available series and cutoff.
-
-    :param <List int> weights: Generated weights, for the entire series, from the above subroutine.
-    :param <int> n_days: Number of days currently "realised".
-    :param <int> cutoff: Only consider weights larger than the cutoff. Applicable days, set the weight to zero.
-
-    Isolate the number of weights applicable to the current day count, "n_days", and verify if any are below the cutoff. If so,
-    set to zero. Return the weights having adjusted for the cutoff in a Numpy Array.
-
-    :return array of truncated weight series.
-    '''
-    w_series = np.zeros(n_days)
-    
-    weights = weights[-n_days:]
-    if weights[0] < cutoff:
-        weights = weights[weights >= cutoff]
-
-    active_w = len(weights)
-    
-    weights = weights / weights.sum(axis = 0)
-    w_series[-active_w:] = weights
-    
-    return w_series
-
-
-def rolling_std_stride(lists, n):  # maybe rolling_std
-    '''
-    Returns list of arrays of simple moving averages of various xcats
-
-    :param <Python List> lists: List consisting of four two-dimensional Arrays (dates & return series).
-    :param <n> int n: The second parameter, "n" represents the window size for the Moving Average.
-    
-    Utilise Numpy's Slide Tricks to create the moving windows without requiring additional memory. The memory head
-    will "slide" across as the window evolves through the realised series, and return each window of data in a Matrix form.
-    Therefore, compute the Moving Average by using Numpy's axis feature, and subsequently return a Moving Average STD for the entire
-    return series.
-    The first section of dates, delimited by the size of the window, will be marked by zero values.
-
-    :return List of array of MAs held in a Numpy Array.
-    '''
-    def compute(arr):
         
-        arr = arr[:, 1]
-        arr = slide(arr, n)
-        arr = arr.astype(dtype = float)
-        std_arr = np.std(arr, axis = 1)
-        std_arr = std_arr * np.sqrt(256)
-        std_arr = np.append(np.zeros(n - 1) + np.nan, std_arr)
-        return std_arr
-        
-    return list(map(compute, lists))
+    arr = arr[:, 1]
+    s = pd.Series(arr)
+    df_ewm = s.ewm(halflife = half_life, min_periods = half_life * 2).std()
 
-def rolling_ema(lists, half_life, cutoff):
-    '''
-    Calculates exponential moving averages of return series
+    df_ewm = df_ewm * np.sqrt(256)
+    return df_ewm
 
-    :param <Python List> lists: List consisting of four two-dimensional Arrays (dates & return series).
-    :param <int> half_life: Halflife - default 21 days accounts for 50% of the weighting.
-    :param <float> cutoff: Cutoff - default 0.01 - weights below 0.01 will be set to zero to be discounted in the exponential weighting.
-
-    :return a List consisting of len(xcat) number of EMAs in numpry arrays.
-    '''
-
-    def compute(arr):
-        '''
-        :param <Numpy ndarray> arr: Description above.
-        Apply the weighted average from (half_life * 2) onwards to enforce the 50% weighting logic. In this example, the EMA will only become active
-        from the 42 day onwards and represents the local variable "n".
-        Iterate through the return series, from the 42 day onwards, load each return into a dynamically resizing List, and compute the weighted average standard
-        deviation for that specific timestamp.
-        Will return an Array containing the EMA defined over each timestamp received excluding the first (half_time * two) number of days.
-        The aforementioned first set of days, without an EMA, will be defined with a zero value.
-        '''
-
-        arr = arr[:, 1]
-        time = len(arr)
-        rolling_std = np.zeros(time, dtype = float)
-
-        n = half_life * 2
-        window = list(arr[:(n - 1)])
-        w_series = expo_weights(time, half_life)
-        
-        l_window = len(window)
-        for i, _ in enumerate(arr[n:]):
-            window.append(_)
-            l_window += 1
-            w_series = weight_series(w_series, l_window, cutoff)
-            win_arr = np.array(window)
-            win_mean = np.mean(win_arr)
-            scale = np.multiply(w_series, ((win_arr - win_mean) ** 2))
-            numerator = np.sum(scale)
-            std = np.sqrt(numerator)
-            
-            rolling_std[(n + i)] = std * np.sqrt(256) ## Annualise.
-        
-        return rolling_std
+def pandas_ma(arr, n):
+    """
+    Compute annualised rolling Moving Average per cross section.
+    Receives a cross-section of return data for the specific xcat.
     
-    return list(map(compute, lists))
+    :param <ndarray[timestamp, float] arr>: Two-dimensional Array consisting of timestamps and the realised return for the date.
+    :param <int> n: Window for the Moving Average.
 
-def merge(arr):
+    Annualised STD for the specific Cross-Section.
+    """
 
-    return arr[:, 0]
+    arr = arr[:, 1]
+    s = pd.Series(arr)
+    df_std = s.rolling(n).std()
+    df_std = df_std * np.sqrt(256)
+
+    return df_std
 
 def func(str_, int_):
-
+    """
+    Used for broadcasting. Determine the number of timestamps per cross section.
+    """
     return [str_] * int_
 
 def mult(xcats, list_):
 
     return list(map(func, xcats, list_))
 
+def driver(dfd: pd.DataFrame, cids: List[str] = None, xcat: str = None, lback_meth: str = 'MA',
+           lback_period: int = 21, half_life: int = 21, cutoff: int = 0.01):
 
-def smoothing_func(dfd: pd.DataFrame, cids: List[str] = None, xcats: List[str] = None,
-                   xcat: str = None, lback_period: int = None, half_life: int = 21,
-                   cutoff: int = 0.01, lback_meth: str = 'MA'):
-    '''
-    Applies rolling standard deviations to a data frame.
+    """
+    Estimate historic annualized standard deviations of asset returns. Driver Function. Controls the functionality.
 
-    *Parameters described below. Identical Signature.
-    
-    The function will populate a dictionary, cid_xcat, where the keys are the countries the data is defined over, cids,
-    and each key will host a List of the return series for each economic field, xcats, with the associated dates: two-dimensional Array
-    where the first column is the timestamps and the second column the realised return.
-    Once the dictionary has been populated, iterate through each (key / value) pair and, depending on the "lback_meth", compute the MA or EMA for each
-    economic field using the above functions.
-    Once each MA or EMA has been returned, held inside a List, iterate through the dictionary, cid_stride, and reconstruct the
-    dataframe received with the additional column consisting of the "lback_meth" for all countries over each economic field.
-    The returned dataframe will be the same dimensions as the recieved input but the Moving Average calculation will displace the realised return series.
-    '''
+    :param <pd.Dataframe> df: standardized data frame with the following necessary columns: Reduced dataframe on the specific xcat.
+    :param <List[str]> cids: cross sections for which volatility is calculated;
+    :param <str> xcat:  extended category denoting the return series for which volatility should be calculated.
+    :param <str> lback_meth: Lookback method to calculate the volatility, Default is "MA". Alternative is "EMA", Exponential Moving Average.
+    :param <int>  lback_period: Number of lookback periods over which volatility is calculated. Default is 21.
+    :param <int> half_life: Refers to the half-time for "xma" and full lookback period for "MA".
+    :param <float> cutoff: share of past observation weights in the exponential moving average that are disregarded. This prevents NaNs in distant history from propagating. Default is 0.01
+    :param <str> postfix: string appended to category name for output; default is "ASD".
+
+    :return <pd.Dataframe>: standardized dataframe with the estimated annualized standard deviations of the chosen xcat.
+    'cid', 'xcat', 'real_date' and 'RollingSTD'.
+    """
 
     assert lback_period > 0
     assert xcat is not None
 
     cid_xcat = {}
-    cid_stride = {}
     xcat = defaultdict(list)
+    cid_pandas = {}
 
     for cid in cids:
-        df_temp = dfd[dfd['cid'] == cid]
-
-        def indicators(cat):
-            df_ = df_temp[df_temp['xcat'] == cat]
-            data = df_[['real_date', 'value']].to_numpy()
-            xcat[cid].append(len(data[:, 0]))
-            
-            return data
-
-        cid_xcat[cid] = list(map(indicators, xcats))
+        df_ = dfd[dfd['cid'] == cid]
+        data = df_[['real_date', 'value']].to_numpy()
+        xcat[cid].append(len(data[:, 0]))
+        cid_xcat[cid] = data
 
     for cid in cids:
         if lback_meth == 'MA':
-            cid_stride[cid] = rolling_std_stride(cid_xcat[cid], lback_period)
+            cid_pandas[cid] = pandas_ma(cid_xcat[cid], lback_period)
         else:
-            cid_stride[cid] = rolling_ema(cid_xcat[cid], half_life, cutoff)
-
+            cid_pandas[cid] = pandas_exponential(cid_xcat[cid], half_life, cutoff)
+            
+    
     qdf_cols = ['cid', 'xcat', 'real_date', lback_meth]
     df_lists = []
     for cid in cids:
         df_out = pd.DataFrame(columns = qdf_cols)
         df_out['xcat'] = np.concatenate(mult(xcats, xcat[cid]))
-        list_ = tuple(map(merge, cid_xcat[cid]))
-        df_out['real_date'] = np.concatenate(list_)
-        df_out[lback_meth] = np.concatenate(cid_stride[cid])
+        df_out['real_date'] = cid_xcat[cid][:, 0]
+        df_out[lback_meth] = cid_pandas[cid]
         df_out['cid'] = cid
         df_lists.append(df_out)
 
@@ -232,83 +111,47 @@ def smoothing_func(dfd: pd.DataFrame, cids: List[str] = None, xcats: List[str] =
     return final_df
 
 
-def historic_vol(df: pd.DataFrame, cids: List[str] = None, xcat: str = None,
-                 start: str = '2000-01-01', end: str = None, blacklist: dict = None,
-                 lback_meth: str = 'xma', lback_periods: int = 21, half_life: int = 21,
-                 cutoff: float = 0.01, remove_zeros: bool = True,
-                 postfix: str = 'ASD'):
+def historic_vol(dfd: pd.DataFrame, cids: List[str] = None, xcats: List[str] = None,
+                 xcat: str = None, lback_period: int = 21, lback_meth: str = 'MA',
+                 half_life: int = 21, remove_zeros: bool = True, cutoff: int = 0.01):
 
     """
-    Estimates historic annualized standard deviations of asset returns.
+    Estimate historic annualized standard deviations of asset returns. User Function. Controls the functionality.
 
     :param <pd.Dataframe> df: standardized data frame with the following necessary columns:
-    'cid', 'xcats', 'real_date' and 'value.
+    'cid', 'xcats', 'real_date' and 'value. Will contain all of the data across all macroeconomic fields.
     :param <str> xcat:  extended category denoting the return series for which volatility should be calculated.
     :param <List[str]> cids: cross sections for which volatility is calculated;
         default is all available for the category.
+    :param <List[str]> xcats: possible categories in which volatility is computed.
     :param <str> start: earliest date in ISO format. Default is None and earliest date in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df is used.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from the data frame.
-        If one cross section has several blacklist periods append numbers to the cross section code.
-    :param <str> lback_meth: Lookback method to calculate the volatility, Default is "xma" (exponential moving average).
-        Alternative is "ma", simple moving average.
-    :param <int>  lback_periods: Number of lookback periods over which volatility is calculated. Default is 21.
-        Refers to half-time for "xma" and full lookback period for "ma".
-    :param <bool> remove_zeros: if True (default) any returns that are exact zeroes will not be included in the
-        lookback window and prior non-zero values are added to the window instead.
-    :param <float> cutoff: share of past observation weights in the exponential moving average that is disregarded.
-        This prevents NaNs in distant history from propagating. Default is 0.01
+    :param <int>  lback_period: Number of lookback periods over which volatility is calculated. Default is 21.
+    :param <str> lback_meth: Lookback method to calculate the volatility, Default is "MA". Alternative is "EMA", Exponential Moving Average.
+    :param <int> half_life: Refers to the half-time for "xma" and full lookback period for "MA".
+    :param <bool> remove_zeros: if True (default) any returns that are exact zeros will not be included in the lookback window and prior non-zero values are added to the window instead.
+    :param <float> cutoff: share of past observation weights in the exponential moving average that are disregarded. This prevents NaNs in distant history from propagating. Default is 0.01
     :param <str> postfix: string appended to category name for output; default is "ASD".
 
-    :return <pd.Dataframe>: standardized dataframe with the estimated annualized standard deviations
+    :return <pd.Dataframe>: standardized dataframe with the estimated annualized standard deviations of the chosen xcat.
+    'cid', 'xcat', 'real_date' and 'RollingSTD'.
     """
 
-    # list the asserts
+    assert xcat in xcats
 
-    df, xcat, cids = reduce_df(df, [xcat], cids, start, end, blacklist, out_all=True)
-
-    # pivot the dataframe to time x countries for values
-    # apply two rolling aggregations: [1] annualized standard deviation and [2] exponentinal standard deviation
-    # both aggregation functions are custom and exclude the zeroes at this stage.
-    # melt back to standardized dataframe and return
-
-
-    cid_xcat = {}
-    cid_stride = {}
-
-    for cid in cids:
-        df_temp = df[df['cid'] == cid]
-        data = df_temp[['real_date', 'value']].to_numpy()
-        cid_xcat[cid] = list(data)
-
-    for cid in cids:
-        if lback_meth == 'MA':
-            cid_stride[cid] = rolling_std_stride(cid_xcat[cid], lback_period)
-        else:
-            cid_stride[cid] = rolling_ema(cid_xcat[cid], half_life, cutoff)
-
-    qdf_cols = ['cid', 'xcat', 'real_date', lback_meth]
-    df_lists = []
-    for cid in cids:
-        df_out = pd.DataFrame(columns=qdf_cols)
-        df_out['xcat'] = np.concatenate(mult(xcats, xcat[cid]))
-        list_ = tuple(map(merge, cid_xcat[cid]))
-        df_out['real_date'] = np.concatenate(list_)
-        df_out[lback_meth] = np.concatenate(cid_stride[cid])
-        df_out['cid'] = cid
-        df_lists.append(df_out)
-
-    final_df = pd.concat(df_lists, ignore_index=True)
-
-
-    rolling_df = smoothing_func(dfd, cids, xcats, xcat, lback_period, half_life,
-                                cutoff, lback_meth)
-
-    xcat_filter = (rolling_df['xcat'] == xcat).to_numpy()
-    df_xcat = rolling_df[xcat_filter]
-
-    return df_xcat.reset_index(drop=True)
+    xcat_filter = (dfd['xcat'] == xcat).to_numpy()
+    df_xcat = dfd[xcat_filter]
+    df_xcat.reset_index(drop = True)
     
+    if remove_zeros:
+        dfd = remove_zeros(df_xcat)
+
+    rolling_df = driver(dfd = df_xcat, cids = cids, xcat = xcat, lback_meth = lback_meth,
+                        lback_period = lback_period, half_life = half_life, cutoff = cutoff)
+
+
+    return rolling_df.reset_index(drop = True)
+
 
 if __name__ == "__main__":
 
@@ -333,10 +176,9 @@ if __name__ == "__main__":
     df_xcats.loc['GROWTH'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
     df_xcats.loc['INFL'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
-    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    ## dfd, fields_cats, fields_cids, df_year, df_end, df_missing, cids_cats = make_qdf_(df_cids, df_xcats, back_ar = 0.75)
+    dfd = make_qdf(df_cids, df_xcats, back_ar = 0.75)
 
-    zero_filter = (dfd['cid'] == 'AUD') & (dfd['real_date'] == '2010-01-13')
-    dfd.loc[zero_filter, 'value'] = 0  # simulate exact zero
-
-    df = historic_vol(dfd, cids, xcat='XR', lback_meth='ma', lback_periods=42, cutoff=0.01)
-    print(df)
+    start = time.time()
+    df = historic_vol(dfd, cids, xcats, xcat = 'INFL', lback_period = 42, lback_meth = 'MA', half_life = 21, remove_zeros = False, cutoff = 0.01)
+    print(f"Time Elapsed: {time.time() - start}.")
