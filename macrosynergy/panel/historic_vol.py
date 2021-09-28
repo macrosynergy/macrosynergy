@@ -23,7 +23,6 @@ def expo_weights(lback_periods: int = 21, half_life: int = 11):
     
     return weights
 
-
 def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                  lback_periods: int = 21, lback_meth: str = 'ma', half_life=11,
                  start: str = None, end: str = None, blacklist: dict = None,
@@ -45,6 +44,7 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     :param <str> end: latest date in ISO format. Default is None and latest date in df is used.
     :param <dict> blacklist: cross sections with date ranges that should be excluded from the data frame.
         If one cross section has several blacklist periods append numbers to the cross section code.
+    :param <int> half_life: Refers to the half-time for "xma" and full lookback period for "ma".
     :param <bool> remove_zeros: if True (default) any returns that are exact zeros will not be included in the lookback
         window and prior non-zero values are added to the window instead.
     :param <str> postfix: string appended to category name for output; default is "ASD".
@@ -52,6 +52,7 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     :return <pd.Dataframe>: standardized dataframe with the estimated annualized standard deviations of the chosen xcat.
     'cid', 'xcat', 'real_date' and 'value'.
     """
+
 
     assert lback_periods > half_life, "Half life must be shorter than lookback period."
     assert lback_meth in ['xma', 'ma'], "Incorrect request."
@@ -70,6 +71,17 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         else:
             dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods, ).apply(lambda x: np.mean(np.abs(x)))
 
+    dfw = df.pivot(index='real_date', columns='cid', values='value')
+    if lback_meth == 'xma':
+        dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods, win_type='exponential').std()
+        # Todo: change to use solution 2 of
+        #  https://stackoverflow.com/questions/57518576/how-to-use-df-rollingwindow-min-periods-win-type-exponential-sum
+        #  such that the half-life information is used.
+    else:
+        if remove_zeros:
+            dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).apply(lambda x: np.mean(np.abs(x)[x != 0]))
+        else:
+            dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).apply(lambda x: np.mean(np.abs(x)))
 
     df_out = dfwa.unstack().reset_index().rename(mapper={0: 'value'}, axis=1)
     df_out['xcat'] = xcat + postfix
@@ -99,7 +111,6 @@ if __name__ == "__main__":
     df_xcats.loc['CRY'] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
     df_xcats.loc['GROWTH'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
     df_xcats.loc['INFL'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
-
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     df = historic_vol(dfd, cids=cids, xcat='XR', lback_periods=42, lback_meth='xma', half_life=21,
