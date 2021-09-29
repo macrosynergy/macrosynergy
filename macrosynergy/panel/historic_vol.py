@@ -1,4 +1,3 @@
-
 import time
 import numpy as np
 import pandas as pd
@@ -7,6 +6,57 @@ from typing import List, Union, Tuple
 from random import choice
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
+
+
+def expo_weights(lback_periods: int = 21, half_life: int = 11):
+    """
+    Compute the weights for the Exponential Moving Average over the Lookback Period.
+    50% of the weight allocation will be applied to the number of days delimited by the half_life.
+    
+    :param <int>  lback_periods: Number of lookback periods over which volatility is calculated. Default is 21.
+    :param <int> half_life: Refers to the half-time for "xma" and full lookback period for "ma". Default is 11.
+
+    :return <np.ndarray>: An Array of weights determined by the length of the Lookback Period.
+    """
+    decf = 2 ** (-1 / half_life)
+    weights = (1 - decf) * np.array([decf ** (lback_periods - ii - 1) for ii in range(lback_periods)])
+    
+    return weights
+
+
+def expo_std(x: np.ndarray, w: np.ndarray, remove_zeros: bool = True):
+    """
+    Estimate standard deviation of returns based on exponentially weighted absolute values
+
+    :param <np.ndarray> x: array of returns
+    :param <np.ndarray> w: array of exponential weights (same length as x)
+    :param <bool> remove_zeros: removes zeroes as invalid entries and shortens the effective window
+
+    :return <float>: exponentially weighted mean absolute value (as proxy of return standard deviation)
+
+    """
+    assert len(x) == len(w), "weights and window must have same length"
+    if remove_zeros:
+        x = x[x != 0]
+        w = w[x != 0] / sum(w[x != 0])
+    mabs = np.sum(np.multiply(w, np.abs(x)))
+    return mabs
+
+
+def flat_std(x: np.ndarray, remove_zeros: bool = True):
+    """
+    Estimate standard deviation of returns based on exponentially weighted absolute values
+
+    :param <np.ndarray> x: array of returns
+    :param <bool> remove_zeros: removes zeroes as invalid entries and shortens the effective window
+
+    :return <float>: flat weighted mean absolute value (as proxy of return standard deviation)
+
+    """
+    if remove_zeros:
+        x = x[x != 0]
+    mabs = np.mean(np.abs(x))
+    return mabs
 
 
 def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
@@ -23,8 +73,9 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     :param <List[str]> cids: cross sections for which volatility is calculated;
         default is all available for the category.
     :param <int>  lback_periods: Number of lookback periods over which volatility is calculated. Default is 21.
-    :param <str> lback_meth: Lookback method to calculate the volatility, Default is "MA". Alternative is "EMA",
-        Exponential Moving Average.
+    :param <str> lback_meth: Lookback method to calculate the volatility, Default is "ma". Alternative is "ema",
+        Exponential Moving Average. Expects to receive either the aforementioned strings.
+    :param <int> half_life: Refers to the half-time for "xma" and full lookback period for "ma". Default is 11.   
     :param <str> start: earliest date in ISO format. Default is None and earliest date in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df is used.
     :param <dict> blacklist: cross sections with date ranges that should be excluded from the data frame.
@@ -38,22 +89,17 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     'cid', 'xcat', 'real_date' and 'value'.
     """
 
-    assert lback_periods > half_life, "Half life must be shorter than lookback period"
-    # Todo: other key asserts
+    assert lback_periods > half_life, "Half life must be shorter than lookback period."
+    assert lback_meth in ['xma', 'ma'], "Incorrect request."
 
     df = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end, blacklist=blacklist)
-
     dfw = df.pivot(index='real_date', columns='cid', values='value')
+    
     if lback_meth == 'xma':
-        dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods, win_type='exponential').std()
-        # Todo: change to use solution 2 of
-        #  https://stackoverflow.com/questions/57518576/how-to-use-df-rollingwindow-min-periods-win-type-exponential-sum
-        #  such that the half-life information is used.
+        weights = expo_weights(lback_periods, half_life)
+        dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(expo_std, w=weights, remove_zeros=remove_zeros)
     else:
-        if remove_zeros:
-            dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).apply(lambda x: np.mean(np.abs(x)[x != 0]))
-        else:
-            dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).apply(lambda x: np.mean(np.abs(x)))
+        dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(flat_std, remove_zeros=remove_zeros)
 
     df_out = dfwa.unstack().reset_index().rename(mapper={0: 'value'}, axis=1)
     df_out['xcat'] = xcat + postfix
@@ -63,14 +109,12 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
 if __name__ == "__main__":
 
-    
-    ## Country IDs.
+
     cids = ['AUD', 'CAD', 'GBP', 'USD']
-    
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
 
     
-    df_cids = pd.DataFrame(index = cids, columns = ['earliest', 'latest', 'mean_add', 'sd_mult'])
+    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
 
     df_cids.loc['AUD'] = ['2010-01-01', '2020-12-31', 0.5, 2]
     df_cids.loc['CAD'] = ['2011-01-01', '2020-11-30', 0, 1]
@@ -78,16 +122,13 @@ if __name__ == "__main__":
     df_cids.loc['USD'] = ['2013-01-01', '2020-09-30', -0.2, 0.5]
     df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
 
-    df_xcats = pd.DataFrame(index = xcats, columns = ['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef'])
+    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef'])
     df_xcats.loc['XR'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
     df_xcats.loc['CRY'] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
     df_xcats.loc['GROWTH'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
     df_xcats.loc['INFL'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    dfd = make_qdf(df_cids, df_xcats, back_ar = 0.75)
-
-    start = time.time()
-    df = historic_vol(dfd, cids=cids, xcat='XR', lback_periods=42, lback_meth='MA', half_life=21,
+    df = historic_vol(dfd, cids=cids, xcat='XR', lback_periods=42, lback_meth='ma', remove_zeros=True)
+    df = historic_vol(dfd, cids=cids, xcat='XR', lback_periods=42, lback_meth='xma', half_life=21,
                       remove_zeros=True)
-
-    print(f"Time Elapsed: {time.time() - start}.")
