@@ -23,6 +23,42 @@ def expo_weights(lback_periods: int = 21, half_life: int = 11):
     
     return weights
 
+
+def expo_std(x: np.ndarray, w: np.ndarray, remove_zeros: bool = True):
+    """
+    Estimate standard deviation of returns based on exponentially weighted absolute values
+
+    :param <np.ndarray> x: array of returns
+    :param <np.ndarray> w: array of exponential weights (same length as x)
+    :param <bool> remove_zeros: removes zeroes as invalid entries and shortens the effective window
+
+    :return <float>: exponentially weighted mean absolute value (as proxy of return standard deviation)
+
+    """
+    assert len(x) == len(w), "weights and window must have same length"
+    if remove_zeros:
+        x = x[x != 0]
+        w = w[x != 0] / sum(w[x != 0])
+    mabs = np.sum(np.multiply(w, np.abs(x)))
+    return mabs
+
+
+def flat_std(x: np.ndarray, remove_zeros: bool = True):
+    """
+    Estimate standard deviation of returns based on exponentially weighted absolute values
+
+    :param <np.ndarray> x: array of returns
+    :param <bool> remove_zeros: removes zeroes as invalid entries and shortens the effective window
+
+    :return <float>: flat weighted mean absolute value (as proxy of return standard deviation)
+
+    """
+    if remove_zeros:
+        x = x[x != 0]
+    mabs = np.mean(np.abs(x))
+    return mabs
+
+
 def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                  lback_periods: int = 21, lback_meth: str = 'ma', half_life=11,
                  start: str = None, end: str = None, blacklist: dict = None,
@@ -53,35 +89,17 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     'cid', 'xcat', 'real_date' and 'value'.
     """
 
-
     assert lback_periods > half_life, "Half life must be shorter than lookback period."
     assert lback_meth in ['xma', 'ma'], "Incorrect request."
 
     df = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end, blacklist=blacklist)
-
     dfw = df.pivot(index='real_date', columns='cid', values='value')
     
     if lback_meth == 'xma':
         weights = expo_weights(lback_periods, half_life)
-        dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).apply(lambda x: np.sqrt(np.sum(np.multiply(weights,(np.mean(x) - x) ** 2))))
-        
+        dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(expo_std, w=weights, remove_zeros=remove_zeros)
     else:
-        if remove_zeros:
-            dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).apply(lambda x: np.mean(np.abs(x)[x != 0]))
-        else:
-            dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods, ).apply(lambda x: np.mean(np.abs(x)))
-
-    dfw = df.pivot(index='real_date', columns='cid', values='value')
-    if lback_meth == 'xma':
-        dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods, win_type='exponential').std()
-        # Todo: change to use solution 2 of
-        #  https://stackoverflow.com/questions/57518576/how-to-use-df-rollingwindow-min-periods-win-type-exponential-sum
-        #  such that the half-life information is used.
-    else:
-        if remove_zeros:
-            dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).apply(lambda x: np.mean(np.abs(x)[x != 0]))
-        else:
-            dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).apply(lambda x: np.mean(np.abs(x)))
+        dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(flat_std, remove_zeros=remove_zeros)
 
     df_out = dfwa.unstack().reset_index().rename(mapper={0: 'value'}, axis=1)
     df_out['xcat'] = xcat + postfix
@@ -91,10 +109,8 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
 if __name__ == "__main__":
 
-    
-    ## Country IDs.
+
     cids = ['AUD', 'CAD', 'GBP', 'USD']
-    
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
 
     
@@ -113,7 +129,6 @@ if __name__ == "__main__":
     df_xcats.loc['INFL'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
+    df = historic_vol(dfd, cids=cids, xcat='XR', lback_periods=42, lback_meth='ma', remove_zeros=True)
     df = historic_vol(dfd, cids=cids, xcat='XR', lback_periods=42, lback_meth='xma', half_life=21,
-                      remove_zeros=False)
-
-    print(df)
+                      remove_zeros=True)
