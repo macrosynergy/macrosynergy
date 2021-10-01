@@ -38,7 +38,7 @@ def expo_std(x: np.ndarray, w: np.ndarray, remove_zeros: bool = True):
     assert len(x) == len(w), "weights and window must have same length"
     if remove_zeros:
         x = x[x != 0]
-        w = w[x != 0] / sum(w[x != 0])
+        w = w[0:len(x)] / sum(w[0:len(x)]) # shorten the exponential weight array
     mabs = np.sum(np.multiply(w, np.abs(x)))
     return mabs
 
