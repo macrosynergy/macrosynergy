@@ -37,14 +37,12 @@ def expo_std(x: np.ndarray, w: np.ndarray, remove_zeros: bool = True):
     """
     assert len(x) == len(w), "weights and window must have same length"
     if remove_zeros:
-
         x_updated = x[x != 0.0]
         w = w[x != 0.0]
         w = (w / sum(w))
         mabs = np.sum(np.multiply(w, np.abs(x_updated))) 
     else:
-        mabs = np.sum(np.multiply(w, np.abs(x)))
-        
+        mabs = np.sum(np.multiply(w, np.ab
     return mabs
 
 
