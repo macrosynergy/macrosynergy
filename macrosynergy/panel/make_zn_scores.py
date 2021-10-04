@@ -38,7 +38,6 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None, start: s
     if thresh is not None:
         assert thresh > 1, "The 'thresh' parameter must be larger than 1"
     assert 0 <= pan_weight <= 1, "The 'pan_weight' parameter must be between 0 and 1"
-    # Todo: complete asserts
 
     df = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end)
     dfw = df.pivot(index='real_date', columns='cid', values='value')
@@ -67,23 +66,44 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None, start: s
         dfw_zns_pan = dfw * 0
 
     if pan_weight < 1:
+        cross_sections = df.columns
+        no_dates = df.shape[0]
+        arr_neutral = np.zeros((no_dates, len(cross_sections)))
 
-        if neutral == 'mean':
-            pass  # Todo: df or array of neutral values as column specific means
-        elif neutral == 'median':
-            pass  # Todo: df or array of neutral values as column specific medians
-        else:
-            pass  # Todo: df or array of zeores
+        for i, cross in enumerate(cross_sections):
+            column = df.iloc[:, i] ## Pandas Series, as opposed to a DataFrame.
 
-        # Todo: df of excess values, as above
-        # Todo: df or array of standard deviations around neutral value, as above
-        # Todo: df of cross-section specific zn-scores: dfw_zns_css
+            # Todo: df or array of neutral values as column specific means.
+            # Todo: df or array of neutral values as column specific medians.
+            # Todo: df or array of zeores.
+            if neutral == "mean":
+                if sequential:
+                    arr_neutral[:, i] = np.array([column[0:(j + 1)].mean() for j in range(no_dates)])
+                else:
+                    arr_neutral[:, i] = np.repeat(column.mean(), no_dates)
+            elif neutral == "median":
+                if sequential:
+                    arr_neutral[:, i] = np.array([column[0:(j + 1)].median() for j in range(no_dates)])
+                else:
+                    arr_neutral[:, i] = np.repeat(column.median(), no_dates)
+            else:
+                continue
+        # Todo: df of excess values.
+        dfx = dfw.sub(ar_neutral, axis = 'rows')
 
+        # Todo: df or array of standard deviations around neutral value.
+        ar_sds = np.zeros((no_dates, len(cross_sections)))
+        for i, cross in enumerate(cross_sections):
+            column = dfx.iloc[:, i]
+            ar_sds[:, i] = np.array([column[0:(j + 1)].abs().mean() for j in range(no_dates)])
+
+        # Todo: df of cross-section specific zn-scores.
+        dfw_zns_css = dfx.div(ar_sds, axis = 'rows')
     else:
 
         dfw_zns_css = dfw * 0
 
-    dfw_zns = dfw_zns_pan * pan_weight # + dfw_zns_css * (1 - pan_weight))
+    dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
     dfw_zns[0:min_obs] = np.nan  # disallow zn scores for early sample with less observations than required
     if thresh is not None:
         dfw_zns.clip(lower=-thresh, upper=thresh, inplace=True)  # winsorization based on threshold
