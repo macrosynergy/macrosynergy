@@ -66,12 +66,12 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None, start: s
         dfw_zns_pan = dfw * 0
 
     if pan_weight < 1:
-        cross_sections = df.columns
-        no_dates = df.shape[0]
+        cross_sections = dfw.columns
+        no_dates = dfw.shape[0]
         arr_neutral = np.zeros((no_dates, len(cross_sections)))
 
         for i, cross in enumerate(cross_sections):
-            column = df.iloc[:, i] ## Pandas Series, as opposed to a DataFrame.
+            column = dfw.iloc[:, i] ## Pandas Series, as opposed to a DataFrame.
 
             # Todo: df or array of neutral values as column specific means.
             # Todo: df or array of neutral values as column specific medians.
@@ -87,9 +87,12 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None, start: s
                 else:
                     arr_neutral[:, i] = np.repeat(column.median(), no_dates)
             else:
-                continue
+                pass
+
+        
         # Todo: df of excess values.
-        dfx = dfw.sub(ar_neutral, axis = 'rows')
+        print(arr_neutral)
+        dfx = dfw.sub(arr_neutral, axis = 'rows')
 
         # Todo: df or array of standard deviations around neutral value.
         ar_sds = np.zeros((no_dates, len(cross_sections)))
@@ -136,7 +139,7 @@ if __name__ == "__main__":
     print("Uses Ralph's make_qdf() function.")
     dfd = make_qdf(df_cids, df_xcats, back_ar = 0.75)
 
-    df = make_zn_scores(dfd, xcat='CRY', cids=cids, neutral='mean')
-    df = make_zn_scores(dfd, xcat='CRY', cids=cids, neutral='median', sequential=False)
-    df = make_zn_scores(dfd, xcat='CRY', cids=cids, neutral='zero')
+    df = make_zn_scores(dfd, xcat='CRY', sequential=True, cids=cids, neutral='mean', pan_weight=0.5)
+    df = make_zn_scores(dfd, xcat='CRY', cids=cids, neutral='median', sequential=False, pan_weight = 0.3)
+    df = make_zn_scores(dfd, xcat='CRY', cids=cids, neutral='zero', pan_weight = 0.01)
 
