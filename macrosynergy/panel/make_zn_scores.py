@@ -42,7 +42,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None, start: s
     df = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end)
     dfw = df.pivot(index='real_date', columns='cid', values='value')
 
-    if pan_weight > 0:
+    if pan_weight > 0:  # if panel weights are needed
 
         if neutral == 'mean':  # array of panel means
             if sequential:  # sequential estimation of neutral level
@@ -61,53 +61,45 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None, start: s
         ar_sds = np.array([dfx.iloc[0:(i + 1), :].stack().abs().mean() for i in range(dfx.shape[0])])
         dfw_zns_pan = dfx.div(ar_sds, axis='rows')
 
-    else:
+    else:  # if panel weights are not needed
 
         dfw_zns_pan = dfw * 0
 
-    if pan_weight < 1:
+    if pan_weight < 1:  # if cross-section-specific scores are needed
+
         cross_sections = dfw.columns
         no_dates = dfw.shape[0]
-        arr_neutral = np.zeros((no_dates, len(cross_sections)))
+        ar_neutral = np.zeros((no_dates, len(cross_sections)))
 
-        for i, cross in enumerate(cross_sections):
-            column = dfw.iloc[:, i] ## Pandas Series, as opposed to a DataFrame.
-
-            # Todo: df or array of neutral values as column specific means.
-            # Todo: df or array of neutral values as column specific medians.
-            # Todo: df or array of zeores.
+        for i in range(len(cross_sections)):  # produce cross-section specific means
+            column = dfw.iloc[:, i]
             if neutral == "mean":
                 if sequential:
-                    arr_neutral[:, i] = np.array([column[0:(j + 1)].mean() for j in range(no_dates)])
+                    ar_neutral[:, i] = np.array([column[0:(j + 1)].mean() for j in range(no_dates)])
                 else:
-                    arr_neutral[:, i] = np.repeat(column.mean(), no_dates)
+                    ar_neutral[:, i] = np.repeat(column.mean(), no_dates)
             elif neutral == "median":
                 if sequential:
-                    arr_neutral[:, i] = np.array([column[0:(j + 1)].median() for j in range(no_dates)])
+                    ar_neutral[:, i] = np.array([column[0:(j + 1)].median() for j in range(no_dates)])
                 else:
-                    arr_neutral[:, i] = np.repeat(column.median(), no_dates)
-            else:
-                pass
+                    ar_neutral[:, i] = np.repeat(column.median(), no_dates)
 
-        
-        # Todo: df of excess values.
-        print(arr_neutral)
-        dfx = dfw.sub(arr_neutral, axis = 'rows')
+        dfx = dfw.sub(ar_neutral, axis='rows')
 
-        # Todo: df or array of standard deviations around neutral value.
         ar_sds = np.zeros((no_dates, len(cross_sections)))
-        for i, cross in enumerate(cross_sections):
+        for i in range(len(cross_sections)):  # produce cross-section specifics deviations around neutral value
             column = dfx.iloc[:, i]
             ar_sds[:, i] = np.array([column[0:(j + 1)].abs().mean() for j in range(no_dates)])
 
-        # Todo: df of cross-section specific zn-scores.
-        dfw_zns_css = dfx.div(ar_sds, axis = 'rows')
-    else:
+        dfw_zns_css = dfx.div(ar_sds, axis='rows')
+
+    else:  # if cross-section-specific scores are not needed
 
         dfw_zns_css = dfw * 0
 
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
     dfw_zns[0:min_obs] = np.nan  # disallow zn scores for early sample with less observations than required
+    # Todo: min_obs must apply per cross-section. NaNs do not count.
     if thresh is not None:
         dfw_zns.clip(lower=-thresh, upper=thresh, inplace=True)  # winsorization based on threshold
 
@@ -140,6 +132,6 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar = 0.75)
 
     df = make_zn_scores(dfd, xcat='CRY', sequential=True, cids=cids, neutral='mean', pan_weight=0.5)
-    df = make_zn_scores(dfd, xcat='CRY', cids=cids, neutral='median', sequential=False, pan_weight = 0.3)
-    df = make_zn_scores(dfd, xcat='CRY', cids=cids, neutral='zero', pan_weight = 0.01)
+    df = make_zn_scores(dfd, xcat='CRY', cids=cids, neutral='median', sequential=False, pan_weight=0.3)
+    df = make_zn_scores(dfd, xcat='CRY', cids=cids, neutral='zero', pan_weight=0.01)
 
