@@ -272,7 +272,7 @@ class DataQueryInterface(object):
 
         results = self._fetch(endpoint="/services/heartbeat", select='info')
 
-        assert isinstance(results, dict)
+        assert isinstance(results, dict), f"Response from DQ: {results}"
 
         if int(results["code"]) != 200:
             msg = f"Message: {results['message']:s}," \
