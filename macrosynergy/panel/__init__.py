@@ -1,10 +1,12 @@
-from .view_ranges import view_ranges
-from .view_timelines import view_timelines
-from .view_correlations import correl_matrix
 from .category_relations import CategoryRelations
+from .historic_vol import historic_vol
+from .make_relative_value import make_relative_value
+from .view_correlations import correl_matrix
 from .view_grades import view_grades
 from .view_grades import heatmap_grades
-from .make_relative_value import make_relative_value
+from .view_ranges import view_ranges
+from .view_timelines import view_timelines
 
-__all__ = ['view_ranges', 'view_timelines', "correl_matrix", 'CategoryRelations', 'view_grades',
-           'heatmap_grades', 'make_relative_value']
+
+__all__ = ['CategoryRelations', 'historic_vol', 'make_relative_value', 'correl_matrix', 'view_grades',
+           'heatmap_grades', 'view_ranges', 'view_timelines']
