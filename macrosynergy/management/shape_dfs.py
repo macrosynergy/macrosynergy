@@ -74,6 +74,46 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
         return dfx.drop_duplicates()
 
 
+def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str = None, end: str = None,
+                        blacklist: dict = None):
+    """
+    Filter dataframe by xcats and cids and notify about missing xcats and cids
+
+    :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
+        'cid', 'xcats', 'real_date'.
+    :param <List[str]> ticks: tickers (combinations of cross sections and base categories)
+    :param <str> start: string representing earliest date. Default is None.
+    :param <str> end: string representing the latest date. Default is None.
+    :param <dict> blacklist: cross sections with date ranges that should be excluded from the data frame.
+        If one cross section has several blacklist periods append numbers to the cross section code.
+
+    :return <pd.Dataframe>: reduced dataframe that also removes duplicates
+    """
+
+    dfx = df[df['real_date'] >= pd.to_datetime(start)] if start is not None else df
+    dfx = dfx[dfx['real_date'] <= pd.to_datetime(end)] if end is not None else dfx
+
+    if blacklist is not None:  # blacklisting by cross-section
+        for key, value in blacklist.items():
+            filt1 = dfx['cid'] == key[:3]
+            filt2 = dfx['real_date'] >= pd.to_datetime(value[0])
+            filt3 = dfx['real_date'] <= pd.to_datetime(value[1])
+            dfx = dfx[~(filt1 & filt2 & filt3)]
+
+    dfx['tick'] = df['cid'] + '_' + df['xcat']
+    ticks_in_df = dfx['tick'].unique()
+    if ticks is None:
+        ticks = sorted(ticks_in_df)
+    else:
+        missing = sorted(set(ticks) - set(ticks_in_df))
+        if len(missing) > 0:
+            print(f'Missing tickers: {missing}')
+            ticks.remove(missing)
+
+    dfx = dfx[dfx['tick'].isin(ticks)]
+    return dfx.drop_duplicates()
+
+
 def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None, val: str = 'value',
                   start: str = None, end: str = None, blacklist: dict = None, years: int = None,
                   freq: str = 'M', lag: int = 0, fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean')):
@@ -99,8 +139,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None, va
         Note: this parameter is used mainly for target returns as dependent variables.
     :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for both.
 
-
-
+    :return <pd.Dataframe>: custom data frame with two category columns
     """
 
     assert freq in ['D', 'W', 'M', 'Q', 'A']
@@ -163,22 +202,22 @@ if __name__ == "__main__":
     df_xcats.loc['GROWTH',] = ['2001-01-01', '2020-10-30', 1, 2, 0.9, 1]
     df_xcats.loc['INFL',] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
+    black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
+
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     dfd_x1 = reduce_df(dfd, xcats=xcats, cids=cids[0], start='2012-01-01', end='2018-01-31')
-    dfd_x = reduce_df(dfd, xcats=xcats, cids=cids, start='2012-01-01', end='2018-01-31')
+    dfd_x2 = reduce_df(dfd, xcats=xcats, cids=cids, start='2012-01-01', end='2018-01-31')
+    dfd_x3 = reduce_df(dfd, xcats=xcats, cids=cids, blacklist=black)
 
-    black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
-
-    dfd_xb = reduce_df(dfd, xcats=xcats, cids=cids, blacklist=black)
+    tickers = [cid + "_XR" for cid in cids]
+    dfd_xt = reduce_df_by_ticker(dfd, ticks=tickers, blacklist=black)
 
     dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
                          start='2000-01-01', blacklist=black)
     dfc2 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, fwin=3, xcat_aggs=['mean', 'mean'],
                          start='2000-01-01', blacklist=black)
-
-    black = {'AUD_1': ['2000-01-01', '2009-12-31'], 'AUD_2': ['2018-01-01', '2100-01-01']}
     dfc3 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0, xcat_aggs=['mean', 'mean'],
                          start='2000-01-01', blacklist=black, years=10)
 
@@ -186,5 +225,3 @@ if __name__ == "__main__":
     filt2 = ~((dfd['cid'] == 'NZD') & (dfd['xcat'] == 'INFL'))
     dfdx = dfd[filt1 & filt2] # simulate missing cross sections
     dfd_x1, xctx, cidx = reduce_df(dfdx, xcats=['XR', 'CRY', 'INFL'], cids=cids, intersect=True, out_all=True)
-
-    dfd_xb.tail()
