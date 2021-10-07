@@ -43,14 +43,16 @@ class TestAll(unittest.TestCase):
         
         columns = ['Series_1', 'Series_2']
         df = pd.DataFrame(data = arr_data, columns = columns)
-        
+
+        ## Validate the np.repeat() operation is working correctly, using the above DataFrame, if the sequential parameter equals False.
+        ## Test that only a single unique value is returned, sample median, and test the value equals the expected median, 6.0.
         neutral = "median"
         sequential = False
         ar_neutral = pn_neutral(df, neutral, sequential)
 
         self.assertIsInstance(ar_neutral, np.ndarray)
         item_list = list(set(ar_neutral))
-        ## Validate the np.repeat() operation is working correctly.
+
         self.assertTrue(len(item_list) == 1)
         med_val = arr[len(arr) // 2]
         item = item_list.pop()
