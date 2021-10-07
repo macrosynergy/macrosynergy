@@ -110,7 +110,7 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
             print(f'Missing tickers: {missing}')
             ticks.remove(missing)
 
-    dfx = dfx[dfx['tick'].isin(ticks)]
+    dfx = dfx[dfx['tick'].isin(ticks)].drop('tick', axis=1)
     return dfx.drop_duplicates()
 
 
@@ -223,5 +223,5 @@ if __name__ == "__main__":
 
     filt1 = ~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))
     filt2 = ~((dfd['cid'] == 'NZD') & (dfd['xcat'] == 'INFL'))
-    dfdx = dfd[filt1 & filt2] # simulate missing cross sections
+    dfdx = dfd[filt1 & filt2]  # simulate missing cross sections
     dfd_x1, xctx, cidx = reduce_df(dfdx, xcats=['XR', 'CRY', 'INFL'], cids=cids, intersect=True, out_all=True)
