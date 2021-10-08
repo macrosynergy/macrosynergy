@@ -137,7 +137,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None, start: s
 
     df = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end)
     dfw = df.pivot(index='real_date', columns='cid', values='value')
-    
+
     no_dates = dfw.shape[0]
     cross_sections = dfw.columns
     
@@ -148,7 +148,6 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None, start: s
         dfx = dfw.sub(ar_neutral, axis='rows')  # df of excess values (minus neutrals)
         ar_sds = np.array([dfx.iloc[0:(i + 1), :].stack().abs().mean() for i in range(dfx.shape[0])])
         dfw_zns_pan = dfx.div(ar_sds, axis='rows')
-
     else:
         dfw_zns_pan = dfw * 0
 
@@ -158,17 +157,14 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None, start: s
         dfx = dfw.sub(arr_neutral, axis = 'rows')
 
         ar_sds = np.zeros((no_dates, len(cross_sections)))
-        for i, cross in enumerate(cross_sections):
+        for i in range(len(cross_sections)):  # produce cross-section specifics deviations around neutral value
             column = dfx.iloc[:, i]
             ar_sds[:, i] = np.array([column[0:(j + 1)].abs().mean() for j in range(no_dates)])
-
         dfw_zns_css = dfx.div(ar_sds, axis = 'rows')
     else:
-
         dfw_zns_css = dfw * 0
 
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
-
     dfw_zns = nan_insert(dfw_zns, min_obs)
     if thresh is not None:
         dfw_zns.clip(lower=-thresh, upper=thresh, inplace=True)
@@ -204,3 +200,4 @@ if __name__ == "__main__":
     df = make_zn_scores(dfd, xcat='CRY', sequential=True, cids=cids, neutral='mean', pan_weight=0.5)
     df = make_zn_scores(dfd, xcat='CRY', cids=cids, neutral='median', sequential=False, pan_weight = 0.3)
     df = make_zn_scores(dfd, xcat='CRY', cids=cids, neutral='zero', pan_weight = 0.01)
+
