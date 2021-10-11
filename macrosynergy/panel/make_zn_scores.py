@@ -4,102 +4,100 @@ from typing import List, Union, Tuple
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 
-def pn_neutral(dfw: pd.DataFrame, neutral: str = 'zero', sequential: bool = False):
+
+def pan_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = False):
 
     """
-    Panel computation. Compute the neutral statistic using the return series across all the cross-sections held in the DataFrame.
-    The neutral statistic produced will subsequently be applied to all the individual returns for that timestamp, if sequential equals
-    True, or the aggregated sample statistic will be applied to all the return values where the sample is inclusive of all timestamps & cross-
-    sections. If sequential equals True, the neutral statistic will use the current timestamp's data and all the preceding rows.
+    Compute neutral values of return series based on a panel, i.e. all cross-sections in the dataFrame.
 
-    :param <pd.Dataframe> dfw: original DataFrame with the pivot function applied on the cross-sections. The DataFrame's columns
-     will naturally consist of each cross-section's return series.
+    :param <pd.Dataframe> df: "wide" dataframe with time index and cross section columns of returns.
     :param <str> neutral: method to determine neutral level. Default is 'zero'. Alternatives are 'mean' and "median".
     :param <bool> sequential: if True (default) score parameters (neutral level and standard deviations) are estimated
-     sequentially with concurrently available information only.
+     sequentially with cumulative concurrently available information only. If False one neutral value will be calculated
+     for the whole panel.
 
-    :return <np.ndarray> arr_neutral: row-wise neutral statistic. A single value produced per row. Therefore, a one-dimensional Array will be
-    returned with matching length as the DataFrame.
+    :return <np.ndarray> arr_neutral: row-wise neutral statistic. A single value produced per row.
+    Therefore, a one-dimensional array will be returned whose length is matching the dataframe df.
     """
 
     if neutral == 'mean':
         if sequential:
-            ar_neutral = np.array([dfw.iloc[0:(i + 1), :].stack().mean() for i in range(dfw.shape[0])])
+            ar_neutral = np.array([df.iloc[0:(i + 1), :].stack().mean() for i in range(df.shape[0])])
         else:  
-            ar_neutral = np.repeat(dfw.stack().mean(), dfw.shape[0])
+            ar_neutral = np.repeat(df.stack().mean(), df.shape[0])
     elif neutral == 'median':  
         if sequential:
-            ar_neutral = np.array([dfw.iloc[0:(i + 1), :].stack().median() for i in range(dfw.shape[0])])
+            ar_neutral = np.array([df.iloc[0:(i + 1), :].stack().median() for i in range(df.shape[0])])
         else:  
-            ar_neutral = np.repeat(dfw.stack().median(), dfw.shape[0])
+            ar_neutral = np.repeat(df.stack().median(), df.shape[0])
     else:
-        ar_neutral = np.zeros(dfw.shape[0])
+        ar_neutral = np.zeros(df.shape[0])
 
     return ar_neutral
 
-def cross_neutral(dfw: pd.DataFrame, neutral: str = 'zero', sequential: bool = False):
-    """
-    Depending on the sequential parameter, the function will compute either a rolling neutral statistic or a sample neutral statistic which
-    is used to normalise the return series. Each neutral statistic will be computed using exclusively the cross-section's individual return
-    series. Therefore, manually complete a column-wise iteration through the DataFrame and isolate each return series.
 
-    :param <pd.Dataframe> dfw: original DataFrame with the pivot function applied on the cross-sections. The DataFrame's columns
+def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = False):
+    """
+    Compute neutral values of return series individually for all cross sections.
+
+    :param <pd.Dataframe> df: original DataFrame with the pivot function applied on the cross-sections. The DataFrame's columns
      will naturally consist of each cross-section's return series.
     :param <str> neutral: method to determine neutral level. Default is 'zero'. Alternatives are 'mean' and "median".
     :param <bool> sequential: if True (default) score parameters (neutral level and standard deviations) are estimated
-     sequentially with concurrently available information only.
+     sequentially with cumulative concurrently available information only. If False one neutral value will be calculated
+     for the whole panel.
 
     :return <np.ndarray> arr_neutral: column-wise neutral statistic. Same dimensions as the received DataFrame.
     """   
-    cross_sections = dfw.columns
-    no_dates = dfw.shape[0]
-    arr_neutral = np.zeros((no_dates, len(cross_sections)))
+    cross_sections = df.columns
+    no_dates = df.shape[0]
+    arr_neutral = np.zeros((no_dates, len(cross_sections)))  # default is zeros only
 
-    for i, cross in enumerate(cross_sections):
-        column = dfw.iloc[:, i] ## Pandas Series, as opposed to a DataFrame.
+    if neutral != 'zero':
 
-        if neutral == "mean":
-            if sequential:
-                arr_neutral[:, i] = np.array([column[0:(j + 1)].mean() for j in range(no_dates)])
-            else:
-                arr_neutral[:, i] = np.repeat(column.mean(), no_dates)
-        elif neutral == "median":
-            if sequential:
-                arr_neutral[:, i] = np.array([column[0:(j + 1)].median() for j in range(no_dates)])
-            else:
-                arr_neutral[:, i] = np.repeat(column.median(), no_dates)
-        else:
-            continue
+        for i, cross in enumerate(cross_sections):
+            column = df.iloc[:, i]
+
+            if neutral == "mean":
+                if sequential:
+                    arr_neutral[:, i] = np.array([column[0:(j + 1)].mean() for j in range(no_dates)])
+                else:
+                    arr_neutral[:, i] = np.repeat(column.mean(), no_dates)
+            else:  # median
+                if sequential:
+                    arr_neutral[:, i] = np.array([column[0:(j + 1)].median() for j in range(no_dates)])
+                else:
+                    arr_neutral[:, i] = np.repeat(column.median(), no_dates)
         
     return arr_neutral
 
-def nan_insert(dfw_zns: pd.DataFrame, min_obs: int = 252):
-    """
-    The purpose of the function nan_insert() is to adjust for cross-sections whose first realised return is after the start date passed
-    into the below subroutine. The application of the minimum number of observations must adjust to the cross-section's first realised return.
-    Therefore, determine each start date and apply the minimum observation criteria from each cross-section's actual start date.
 
-    :param <pd.Dataframe> dfw_zns: original DataFrame with the pivot function applied on the cross-sections. The DataFrame's columns
+def nan_insert(df: pd.DataFrame, min_obs: int = 252):
+
+    """
+    Adjust cross-sections individually for the minimum number of observations required by inserting NaN.
+
+    :param <pd.Dataframe> df: original DataFrame with the pivot function applied on the cross-sections. The DataFrame's columns
      will naturally consist of each cross-section's return series.
     :param <int> min_obs:  the minimum number of observations required to calculate zn_scores. Default is 252.
 
-    :return <pd.Dataframe> dfw_zns: returns the same DataFrame received but with the insertion of NaN values.
+    :return <pd.Dataframe> df: returns the same DataFrame received but with the insertion of NaN values.
     """
     
     active_dates = {}
-    columns_ = dfw_zns.columns
-    index_dates = list(dfw_zns.index)
+    columns_ = df.columns
+    index_dates = list(df.index)
     
     for i, col in enumerate(columns_):
-        s = dfw_zns.iloc[:, i]
+        s = df.iloc[:, i]
         date = s.first_valid_index()
-        active_dates[col] = index_dates.index(date)
+        active_dates[col] = index_dates.index(date)  # dictionary of indices of first non-NA value
 
     for k, v in active_dates.items():
-        dfw_zns[k][v: (v + min_obs)] = np.nan
+        df[k][v: (v + min_obs)] = np.nan
 
-    ## Returning the DataFrame is not strictly necessary given it's defined in the parent scope but required for the Unit Testing.
-    return dfw_zns
+    return df  # not necessary given df is defined in the parent scope but required for the Unit Testing.
+
 
 def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None, start: str = None, end: str = None,
                    sequential: bool = False, min_obs: int = 252, neutral: str = 'zero', thresh: float = None,
@@ -143,7 +141,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None, start: s
     
     if pan_weight > 0:
 
-        ar_neutral = pn_neutral(dfw, neutral, sequential)
+        ar_neutral = pan_neutral(dfw, neutral, sequential)
 
         dfx = dfw.sub(ar_neutral, axis='rows')  # df of excess values (minus neutrals)
         ar_sds = np.array([dfx.iloc[0:(i + 1), :].stack().abs().mean() for i in range(dfx.shape[0])])
@@ -156,16 +154,16 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None, start: s
         arr_neutral = cross_neutral(dfw, neutral, sequential)
         dfx = dfw.sub(arr_neutral, axis = 'rows')
 
-        ar_sds = np.zeros((no_dates, len(cross_sections)))
-        for i in range(len(cross_sections)):  # produce cross-section specifics deviations around neutral value
+        ar_sds = np.empty((no_dates, len(cross_sections)))
+        for i in range(len(cross_sections)):  # produce cross-section specific deviations around neutral value
             column = dfx.iloc[:, i]
             ar_sds[:, i] = np.array([column[0:(j + 1)].abs().mean() for j in range(no_dates)])
-        dfw_zns_css = dfx.div(ar_sds, axis = 'rows')
+        dfw_zns_css = dfx.div(ar_sds, axis='rows')
     else:
         dfw_zns_css = dfw * 0
 
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
-    dfw_zns = nan_insert(dfw_zns, min_obs)
+    dfw_zns = nan_insert(dfw_zns, min_obs).dropna(axis=0)
     if thresh is not None:
         dfw_zns.clip(lower=-thresh, upper=thresh, inplace=True)
 
@@ -199,5 +197,5 @@ if __name__ == "__main__":
 
     df = make_zn_scores(dfd, xcat='CRY', sequential=True, cids=cids, neutral='mean', pan_weight=0.5)
     df = make_zn_scores(dfd, xcat='CRY', cids=cids, neutral='median', sequential=False, pan_weight = 0.3)
-    df = make_zn_scores(dfd, xcat='CRY', cids=cids, neutral='zero', pan_weight = 0.01)
+    df = make_zn_scores(dfd, xcat='CRY', cids=cids, neutral='zero', pan_weight=0.01)
 
