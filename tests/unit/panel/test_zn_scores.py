@@ -8,7 +8,7 @@ from collections import defaultdict
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
-from macrosynergy.panel.make_zn_scores import pn_neutral, cross_neutral, make_zn_scores, nan_insert
+from macrosynergy.panel.make_zn_scores import pan_neutral, cross_neutral, make_zn_scores, nan_insert
 
 
 cids = ['AUD', 'CAD', 'GBP']
@@ -19,97 +19,51 @@ df_cids.loc['CAD', :] = ['2011-01-01', '2020-11-30', 0, 1]
 df_cids.loc['GBP', :] = ['2012-01-01', '2020-11-30', -0.2, 0.5]
 
 df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef'])
-df_xcats.loc['CRY', :] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
-df_xcats.loc['XR', :] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
+df_xcats.loc['CRY', :] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
+df_xcats.loc['XR', :] = ['2011-01-01', '2020-12-31', 0, 1, 0, 0.3]
 
-dfd = make_qdf(df_cids, df_xcats, back_ar = 0.75)
+dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)  # standard df for tests
+# Todo: Use this as basis of all tests that require standard dataframe
+dfw = dfd[dfd['xcat']=='CRY'].pivot(index='real_date', columns='cid', values='value')
+# Todo: Use this as basis of all tests that require a wide dataframe
 
-seed()
+
 class TestAll(unittest.TestCase):
 
-    def test_pen_neutral(self):
+    def test_pan_neutral(self):
 
-        ## Assess the dimensions of the returned Array. Should return a one-dimensional Array whose length matches the number of rows in the DataFrame.
-        xcat = 'XR'
-        df = reduce_df(dfd, xcats = [xcat], cids = cids)
-        df_pivot = df.pivot(index='real_date', columns='cid', values='value')
-        ar_neutral = pn_neutral(df_pivot, 'mean', True)
-        self.assertTrue(df_pivot.shape[0] == len(ar_neutral))
-        
-        arr = np.linspace(1, 11, 11)
-        arr = arr.astype(dtype = np.float32)
-        arr_rev = arr[::-1]
-        arr_data = np.column_stack((arr, arr_rev))
-        
-        columns = ['Series_1', 'Series_2']
-        df = pd.DataFrame(data = arr_data, columns = columns)
+        ar_neutral = pan_neutral(dfw, neutral='mean', sequential=True)
+        self.assertIsInstance(ar_neutral, np.ndarray)  # check type of output
+        self.assertTrue(dfw.shape[0] == len(ar_neutral))  # test length of neutral array
 
-        ## Validate the np.repeat() operation is working correctly, using the above DataFrame, if the sequential parameter equals False.
-        ## Test that only a single unique value is returned, sample median, and test the value equals the expected median, 6.0.
-        neutral = "median"
-        sequential = False
-        ar_neutral = pn_neutral(df, neutral, sequential)
+        ar_neutral = pan_neutral(dfw, neutral='mean', sequential=False)
+        self.assertEqual(ar_neutral[0], dfw.stack().mean())  # check first value equal to panel mean
+        self.assertEqual(ar_neutral[dfw.shape[0]-1], dfw.stack().mean())  # check also last value equal to panel mean
 
-        self.assertIsInstance(ar_neutral, np.ndarray)
-        item_list = list(set(ar_neutral))
+        ar_neutral = pan_neutral(dfw, neutral='mean', sequential=True)
+        self.assertEqual(ar_neutral[999], dfw.iloc[0:1000, :].stack().mean())
 
-        self.assertTrue(len(item_list) == 1)
-        med_val = arr[len(arr) // 2]
-        item = item_list.pop()
-        
-        self.assertEqual(item, 6.0)
+        # Todo: same for median
 
-        ## Assess the median algorithm, and the stacking mechanism. 
-        size = 45
-        value = (size // 2) + 1
-        arr = np.linspace(1, size, size)
-        arr = arr.astype(dtype = np.float32)
-        arr_rev = arr[::-1]
-        arr_data = np.column_stack((arr, arr_rev))
-
-        df = pd.DataFrame(data = arr_data, columns = columns)
-        
-        ar_neutral = pn_neutral(df, neutral, sequential = True)
-        ar_val = np.repeat(value, repeats = size)
-        
-        self.assertTrue(np.all(ar_neutral == ar_val))
-
-        ## Assess the mean algorithm.
-        size = randint(1, 115)
-        arr = np.linspace(1, size, size, dtype = np.float32)
-        
-        arr_rev = arr[::-1]
-        arr_data = np.column_stack((arr, arr_rev))
-        
-        np.random.shuffle(arr_data)
-        df = pd.DataFrame(data = arr_data, columns = columns)
-        min_ = np.min(arr_data)
-        max_ = np.max(arr_data)
-        val = float((min_ + max_) / 2)
-
-        ar_neutral = pn_neutral(df, 'mean', sequential = False)
-        data_unq = list(groupby(ar_neutral))
-        data_unq = data_unq.pop()[0]
-
-        self.assertEqual(data_unq, val)
 
     def test_cross_neutral(self):
 
-        ## Assess the dimensions of the Array. Irrespective of the two parameters, "neutral" & "sequential", the dimensions of the output Array should match the received DataFrame. 
+        # Todo: same as above
+
         arr = np.linspace(1, 100, 100, dtype = np.float32)
         arr = arr.reshape((20, 5))
         columns = arr.shape[1]
         columns = ['Series_' + str(i + 1) for i in range(columns)]
-        df = pd.DataFrame(data = arr, columns = columns)
+        df = pd.DataFrame(data=arr, columns=columns)
 
         neutral = choice(['mean', 'median', 'zero'])
         sequential = choice([True, False])
 
         arr_neutral = cross_neutral(df, neutral, sequential)
-        self.assertIsInstance(arr_neutral, np.ndarray)
+        self.assertIsInstance(arr_neutral, np.ndarray)  # check correct type
 
         df_shape = df.shape
-        self.assertEqual(df_shape, arr_neutral.shape)
+        self.assertEqual(df_shape, arr_neutral.shape)  # check correct dimensions
 
         ## Test the Cross_Sectional median algorithm's functionality with a contrived data set.
         ## Generate a two dimensional Array consisting of an iterative sequence, F(x) = (x + 1), where the input is the first column's index, and the adjacent column will host the sequence in reverse.
@@ -123,13 +77,13 @@ class TestAll(unittest.TestCase):
         col_1 = np.array(col_1)
         col_2 = np.array(col_2)
         data = np.column_stack((col_1, col_2))
-        data = data.astype(dtype = np.float16)
+        data = data.astype(dtype=np.float16)
 
         no_columns = data.shape[1]
         col_names = ['Series_' + str(i + 1) for i in range(no_columns)]
         
-        df = pd.DataFrame(data = data, columns = col_names)
-        arr_neut = cross_neutral(df, 'median', sequential = True)
+        df = pd.DataFrame(data=data, columns=col_names)  # df of reverse symmetric integers
+        arr_neut = cross_neutral(df, 'median', sequential=True)
         col_dif = np.subtract(arr_neut[:, 1], arr_neut[:, 0])
 
         input_ = np.array(input_, dtype = np.float16)
@@ -137,23 +91,23 @@ class TestAll(unittest.TestCase):
 
         self.assertTrue(np.all(col_dif == input_rev))
 
-        ## Test the column-wise Mean (using the entire realised return series).
-        ## Again, construct a two-dimensional Array where the second column is computed by multiplying the elements in the first column by a factor of ten.
-        col1 = np.linspace(1, 21, 21, dtype = np.float16)
+        col1 = np.linspace(1, 21, 21, dtype=np.float16)
         shuffle(col_1)
         col2 = col1 * 10
         stack_col = np.column_stack((col1, col2))
-        df = pd.DataFrame(data = stack_col, columns = ['Series_1', 'Series_2'])
+        df = pd.DataFrame(data = stack_col, columns=['Series_1', 'Series_2'])
         
-        arr_neutral = cross_neutral(df, neutral = 'mean', sequential = False)
+        arr_neutral = cross_neutral(df, neutral='mean', sequential=False)
         self.assertTrue(np.all(arr_neutral[:, 0] == 11.0))
         self.assertTrue(np.all(arr_neutral[:, 0] == arr_neutral[:, 1] / 10))
 
     def test_nan_insert(self):
-        ## Testing the Minimum Observations.
-        arr_d = np.zeros((40, 4), dtype = object)
+
+        # Todo: short code testing first non-NA with or without min_obs across columns: Series.first_valid_index()
+
+        arr_d = np.zeros((40, 4), dtype=object)
         
-        data = np.linspace(1, 40, 40, dtype = np.float32)
+        data = np.linspace(1, 40, 40, dtype=np.float32)
         shuffle(data)
         data = data.reshape((8, 5))
         data[0:3, 2] = np.nan
@@ -165,14 +119,14 @@ class TestAll(unittest.TestCase):
         arr_d[:, 0] = np.array(sorted(extend_cids * 8))
 
         arr_d[:, 1] = np.repeat('XR', 40)
-        dates = pd.date_range(start = "2020-01-01", periods = 8, freq = 'd')
+        dates = pd.date_range(start="2020-01-01", periods=8, freq='d')
         arr_d[:, 2] = np.array(list(dates) * 5)
         contrived_df = pd.DataFrame(data = arr_d, columns = ['cid', 'xcat', 'real_date', 'value'])
-        dfw = contrived_df.pivot(index = 'real_date', columns = 'cid', values = 'value')
+        dfw = contrived_df.pivot(index = 'real_date', columns = 'cid', values = 'value')  # example dataframe
+
         min_obs = 3
-        dfw_zns = nan_insert(dfw, min_obs)
-        
-        ## Numpy comparison.
+        dfw_zns = nan_insert(dfw, min_obs)  # test dataframe
+
         df_copy = dfw.copy()
         nan_arr = np.isnan(data)
         indices = np.where(nan_arr == False)
@@ -188,27 +142,25 @@ class TestAll(unittest.TestCase):
         self.assertTrue(np.all(test))
         
 
-    ## Unable to test the dimensions of the DataFrame input being equal to the output due to the use of pd.unstack(): retains previously added NaNs during the pivot.
     def test_zn_scores(self):
+
+        # Todo: focus on checking correct values by calling function with dfd and focusing on a few values
+        # Todo: Also test that pan_weight and thresh are producing correct results.
 
         ## Using the globally defined DataFrame.
         with self.assertRaises(AssertionError):
-            df = make_zn_scores(dfd, 'XR', cids, start = None, end = None, sequential = False, neutral = 'std', thresh = 1.5,
-                                postfix = 'ZN')
+            df = make_zn_scores(dfd, 'XR', cids, sequential=False, neutral='std',
+                                thresh=1.5, postfix='ZN')  # test catching neutral value error
         with self.assertRaises(AssertionError):
-            df = make_zn_scores(dfd, 'XR', cids, start = None, end = None, sequential = False, neutral = 'std', thresh = 0.5,
-                                pan_weight = 1.0, postfix = 'ZN')
+            df = make_zn_scores(dfd, 'XR', cids, sequential=False, neutral='std', thresh=0.5,
+                                pan_weight=1.0, postfix='ZN')  # test catching non-valid thresh value
 
         with self.assertRaises(AssertionError):
-            df = make_zn_scores(dfd, 'XR', cids, start = None, end = None, sequential = False, neutral = 'std', thresh = 1.5,
-                                pan_weight = 1.2, postfix = 'ZN')
+            df = make_zn_scores(dfd, 'XR', cids, sequential=False, pan_weight=1.2)  # test catching panel weight
 
-
-        
-            
         ## Test the Zn_Score, with a Panel Weighting of one, using the Mean for the neutral parameter.
         val = randint(1, 39)
-        data = np.linspace(-val, val, (val * 2) + 1, dtype = np.float16)
+        data = np.linspace(-val, val, (val * 2) + 1, dtype=np.float16)
         mean = sum(data) / len(data)
         col1 = data[-val:]
         col2 = data[:val]
@@ -245,7 +197,7 @@ class TestAll(unittest.TestCase):
 
         check_val = np.concatenate((rational[:, 0], rational[:, 1]))
         zn_score_algo = df['value'].to_numpy()
-        self.assertTrue(np.all(check_val == zn_score_algo))
+        self.assertTrue(np.all(check_val == zn_score_algo))  # test for correct values
         
 
 if __name__ == '__main__':
