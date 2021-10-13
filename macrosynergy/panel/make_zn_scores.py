@@ -96,7 +96,7 @@ def nan_insert(df: pd.DataFrame, min_obs: int = 252):
     for k, v in active_dates.items():
         df[k][v: (v + min_obs)] = np.nan
 
-    return df  # not necessary given df is defined in the parent scope but required for the Unit Testing.
+    return df
 
 
 def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None, start: str = None, end: str = None,
@@ -138,7 +138,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None, start: s
 
     no_dates = dfw.shape[0]
     cross_sections = dfw.columns
-    
+
     if pan_weight > 0:
 
         ar_neutral = pan_neutral(dfw, neutral, sequential)
@@ -163,7 +163,9 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None, start: s
         dfw_zns_css = dfw * 0
 
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
-    dfw_zns = nan_insert(dfw_zns, min_obs).dropna(axis=0)
+    dfw_zns = nan_insert(dfw_zns, min_obs)
+    dfw_zns = dfw_zns.dropna(axis=0, how='all')
+    
     if thresh is not None:
         dfw_zns.clip(lower=-thresh, upper=thresh, inplace=True)
 
@@ -194,8 +196,6 @@ if __name__ == "__main__":
     
     print("Uses Ralph's make_qdf() function.")
     dfd = make_qdf(df_cids, df_xcats, back_ar = 0.75)
-
-    df = make_zn_scores(dfd, xcat='CRY', sequential=True, cids=cids, neutral='mean', pan_weight=0.5)
-    df = make_zn_scores(dfd, xcat='CRY', cids=cids, neutral='median', sequential=False, pan_weight = 0.3)
-    df = make_zn_scores(dfd, xcat='CRY', cids=cids, neutral='zero', pan_weight=0.01)
-
+    
+    df_output = make_zn_scores(dfd, xcat='CRY', sequential=True, cids=cids, neutral='mean', pan_weight=0.65)
+    df_pivot = df_output.pivot(index='real_date', columns='cid', values='value')

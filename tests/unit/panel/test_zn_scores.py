@@ -5,6 +5,7 @@ import pandas as pd
 from itertools import groupby
 from random import randint, choice, shuffle, seed
 from collections import defaultdict
+import warnings
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
@@ -15,7 +16,7 @@ cids = ['AUD', 'CAD', 'GBP']
 xcats = ['CRY', 'XR']
 df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
 df_cids.loc['AUD', :] = ['2010-01-01', '2020-12-31', 0.5, 2]
-df_cids.loc['CAD', :] = ['2011-01-01', '2020-11-30', 0, 1]
+df_cids.loc['CAD', :] = ['2010-01-01', '2020-11-30', 0, 1]
 df_cids.loc['GBP', :] = ['2012-01-01', '2020-11-30', -0.2, 0.5]
 
 df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef'])
@@ -23,11 +24,10 @@ df_xcats.loc['CRY', :] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
 df_xcats.loc['XR', :] = ['2011-01-01', '2020-12-31', 0, 1, 0, 0.3]
 
 dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)  # standard df for tests
-# Todo: Use this as basis of all tests that require standard dataframe
-dfw = dfd[dfd['xcat']=='CRY'].pivot(index='real_date', columns='cid', values='value')
-# Todo: Use this as basis of all tests that require a wide dataframe
+dfd = dfd[dfd['xcat']=='CRY']
+dfw = dfd.pivot(index='real_date', columns='cid', values='value')
 
-
+warnings.filterwarnings("ignore")
 class TestAll(unittest.TestCase):
 
     def test_pan_neutral(self):
@@ -44,90 +44,70 @@ class TestAll(unittest.TestCase):
         self.assertEqual(ar_neutral[999], dfw.iloc[0:1000, :].stack().mean())
 
         # Todo: same for median
+        ar_neutral = pan_neutral(dfw, neutral='median', sequential=False)
+        self.assertEqual(ar_neutral[0], dfw.stack().median())  # check first value equal to panel median
+        self.assertEqual(ar_neutral[dfw.shape[0]-1], dfw.stack().median())  # check also last value equal to panel median
 
+        ar_neutral = pan_neutral(dfw, neutral='median', sequential=True)
+        self.assertEqual(ar_neutral[999], dfw.iloc[0:1000, :].stack().median())
+
+    @staticmethod
+    def handle_nan(arr):
+        arr = np.nan_to_num(arr)
+        arr = arr[arr != 0.0]
+        return arr
 
     def test_cross_neutral(self):
 
-        # Todo: same as above
-
-        arr = np.linspace(1, 100, 100, dtype = np.float32)
-        arr = arr.reshape((20, 5))
-        columns = arr.shape[1]
-        columns = ['Series_' + str(i + 1) for i in range(columns)]
-        df = pd.DataFrame(data=arr, columns=columns)
-
-        neutral = choice(['mean', 'median', 'zero'])
-        sequential = choice([True, False])
-
-        arr_neutral = cross_neutral(df, neutral, sequential)
+        arr_neutral = cross_neutral(dfw, 'mean', True)
         self.assertIsInstance(arr_neutral, np.ndarray)  # check correct type
 
-        df_shape = df.shape
+        df_shape = dfw.shape
         self.assertEqual(df_shape, arr_neutral.shape)  # check correct dimensions
 
-        ## Test the Cross_Sectional median algorithm's functionality with a contrived data set.
-        ## Generate a two dimensional Array consisting of an iterative sequence, F(x) = (x + 1), where the input is the first column's index, and the adjacent column will host the sequence in reverse.
-        ## If the Cross-Sectional Rolling Median algorithm is correct, the difference between the two columns will be the input into the aforementioned function in reserve.
-        size = randint(1, 115)
-        
-        input_ = list(range(0, size, 1))
-        col_1 = list(map(lambda x: x + 1, input_))
-        col_2 = list(reversed(col_1))
-        
-        col_1 = np.array(col_1)
-        col_2 = np.array(col_2)
-        data = np.column_stack((col_1, col_2))
-        data = data.astype(dtype=np.float16)
+        epsilon = 0.0000001
+        # Check the cross sectional feature: computation occurs over individual columns.
+        ar_neutral = cross_neutral(dfw, neutral='mean', sequential=False)
+        for i, cross in enumerate(cids):
+            column = dfw[[cross]]
+            column = column.to_numpy()
+            column = np.squeeze(column, axis = 1)
+            column = self.handle_nan(column)
+            
+            mean = np.sum(column) / len(column)
 
-        no_columns = data.shape[1]
-        col_names = ['Series_' + str(i + 1) for i in range(no_columns)]
-        
-        df = pd.DataFrame(data=data, columns=col_names)  # df of reverse symmetric integers
-        arr_neut = cross_neutral(df, 'median', sequential=True)
-        col_dif = np.subtract(arr_neut[:, 1], arr_neut[:, 0])
+            dif = np.abs(ar_neutral[:, i] - mean)
+            self.assertTrue(np.all(dif < epsilon))
 
-        input_ = np.array(input_, dtype = np.float16)
-        input_rev = input_[::-1] ## Reverse the input using slicing.
+        # Check the rolling feature on cross-sectional computation.
+        ar_neutral = cross_neutral(dfw, neutral='mean', sequential=True)
+        for i, cross in enumerate(cids):
+            
+            column = dfw[[cross]]
+            rol_mean = column.expanding(min_periods = 1).mean()
+            rol_mean = self.handle_nan(rol_mean[cross].to_numpy())
 
-        self.assertTrue(np.all(col_dif == input_rev))
+            dif = self.handle_nan(ar_neutral[:, i]) - rol_mean
+            self.assertTrue(np.all(dif < epsilon))
 
-        col1 = np.linspace(1, 21, 21, dtype=np.float16)
-        shuffle(col_1)
-        col2 = col1 * 10
-        stack_col = np.column_stack((col1, col2))
-        df = pd.DataFrame(data = stack_col, columns=['Series_1', 'Series_2'])
-        
-        arr_neutral = cross_neutral(df, neutral='mean', sequential=False)
-        self.assertTrue(np.all(arr_neutral[:, 0] == 11.0))
-        self.assertTrue(np.all(arr_neutral[:, 0] == arr_neutral[:, 1] / 10))
+
+        ar_neutral = cross_neutral(dfw, neutral='median', sequential=True)
+        for i, cross in enumerate(cids):
+            column = dfw[[cross]]
+            rol_median = column.expanding(min_periods = 1).median()
+            rol_median = self.handle_nan(rol_median[cross].to_numpy())
+            
+            self.assertTrue(np.all(self.handle_nan(ar_neutral[:, i]) == rol_median))
+
 
     def test_nan_insert(self):
 
-        # Todo: short code testing first non-NA with or without min_obs across columns: Series.first_valid_index()
-
-        arr_d = np.zeros((40, 4), dtype=object)
-        
-        data = np.linspace(1, 40, 40, dtype=np.float32)
-        shuffle(data)
-        data = data.reshape((8, 5))
-        data[0:3, 2] = np.nan
-        data[0, 0] = np.nan
-        data[0:4, 4] = np.nan
-        
-        arr_d[:, 3] = np.ravel(data, order = 'F')
-        extend_cids = ['AUD', 'CAD', 'FRA', 'GBP', 'USD']
-        arr_d[:, 0] = np.array(sorted(extend_cids * 8))
-
-        arr_d[:, 1] = np.repeat('XR', 40)
-        dates = pd.date_range(start="2020-01-01", periods=8, freq='d')
-        arr_d[:, 2] = np.array(list(dates) * 5)
-        contrived_df = pd.DataFrame(data = arr_d, columns = ['cid', 'xcat', 'real_date', 'value'])
-        dfw = contrived_df.pivot(index = 'real_date', columns = 'cid', values = 'value')  # example dataframe
-
+        # Todo: short code testing first non-NA with or without min_obs across columns: Series.first_valid_index().
         min_obs = 3
-        dfw_zns = nan_insert(dfw, min_obs)  # test dataframe
+        dfw_zns = nan_insert(dfw, min_obs)  # Test DataFrame.
 
-        df_copy = dfw.copy()
+        # Determine where the indices of the first active value.
+        data = dfw.to_numpy()
         nan_arr = np.isnan(data)
         indices = np.where(nan_arr == False)
         indices_d = tuple(zip(indices[1], indices[0]))
@@ -135,17 +115,22 @@ class TestAll(unittest.TestCase):
         for tup in indices_d:
             indices_dict[tup[0]].append(tup[1])
 
+        active_indices = {}
         for k, v in indices_dict.items():
-            df_copy.iloc[:, k][v[0]:(v[0] + min_obs)] = np.nan
+            active_indices[k] = v[0] + min_obs
 
-        test = (df_copy.fillna(0) == dfw_zns.fillna(0)).to_numpy()
-        self.assertTrue(np.all(test))
-        
+        for k, v in active_indices.items():
+            col = dfw_zns.iloc[:, k]
+            first_val = col.first_valid_index()
+            self.assertTrue(v, first_val)
+            
 
     def test_zn_scores(self):
 
-        # Todo: focus on checking correct values by calling function with dfd and focusing on a few values
-        # Todo: Also test that pan_weight and thresh are producing correct results.
+        epsilon = 0.0000001
+        dfd = make_qdf(df_cids, df_xcats, back_ar=0.75) 
+        dfd = dfd[dfd['xcat']=='CRY']
+        dfw = dfd.pivot(index='real_date', columns='cid', values='value')
 
         ## Using the globally defined DataFrame.
         with self.assertRaises(AssertionError):
@@ -158,48 +143,58 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(AssertionError):
             df = make_zn_scores(dfd, 'XR', cids, sequential=False, pan_weight=1.2)  # test catching panel weight
 
-        ## Test the Zn_Score, with a Panel Weighting of one, using the Mean for the neutral parameter.
-        val = randint(1, 39)
-        data = np.linspace(-val, val, (val * 2) + 1, dtype=np.float16)
-        mean = sum(data) / len(data)
-        col1 = data[-val:]
-        col2 = data[:val]
-        col2 = col2[::-1] ## Reverse the data series to reflect the linear, negative correlation.
-        data = np.concatenate((col1, col2))
-        ## The two series are uniformally distributed around the panel mean.
-        ## Therefore, the evolving standard deviation will grow at a constant rate, 0.5 increment, to reflect the negative linear correlation between the two return series.
-
-        data_col = np.column_stack((col1, col2))
-
-        arr_d = np.zeros((len(data), 4), dtype = object)
-        arr_d[:, 3] = data
-
-        aud = np.repeat('AUD', len(col1))
-        cad = np.repeat('CAD', len(col1))
-        arr_d[:, 0] = np.concatenate((aud, cad))
-        dates = pd.date_range(start = "2020-01-01", periods = len(data) / 2, freq = 'd')
-        arr_d[:, 2] = np.array(list(dates) * 2)
-        arr_d[:, 1] = np.repeat('XR', len(data))
-
-        ## The panel mean will equal zero.
-        ## The Standard Deviation Array will be a one-dimensional Array given the statistic is computed across all cross-sections.
-        end = (len(col1) / 2) + 0.5
-        std = np.linspace(1, end, len(col1)) ## f(x) = y.
-        std = std[:, np.newaxis]
+        # Testing on Panel = 1.0 (default value)
+        df_panel = make_zn_scores(dfd, 'CRY', cids, sequential=True, min_obs=0, neutral='mean',
+                                   thresh=None, postfix='ZN')
+        df_panel = df_panel.pivot(index='real_date', columns='cid', values='value')
         
-        rational = np.divide((data_col - mean), std)
+        ar_neutral = pan_neutral(dfw, 'mean', True)
+        dfx = dfw.sub(ar_neutral, axis='rows')
+        ar_sds = np.array([dfx.iloc[0:(i + 1), :].stack().abs().mean() for i in range(dfx.shape[0])])
+        dfw_zns_pan = dfx.div(ar_sds, axis='rows')
+        dfw_zns_pan = dfw_zns_pan.dropna(axis = 0, how='all')
 
-        cids_ = ['AUD', 'CAD']
-        contrived_df = pd.DataFrame(data = arr_d, columns = ['cid', 'xcat', 'real_date', 'value'])
-
-        df = make_zn_scores(contrived_df, 'XR', cids_, sequential = False, min_obs = 0, neutral = 'mean',
-                            pan_weight = 1.0)
-
-        check_val = np.concatenate((rational[:, 0], rational[:, 1]))
-        zn_score_algo = df['value'].to_numpy()
-        self.assertTrue(np.all(check_val == zn_score_algo))  # test for correct values
+        zn_scores = df_panel.to_numpy()
+        arr_zns_pan = dfw_zns_pan.to_numpy()
+        dif = zn_scores - arr_zns_pan
+        dif = np.nan_to_num(dif, nan = 0.0)
         
+        self.assertTrue(np.all(dif < epsilon))
 
+        # Test weighting function.
+        panel_df = make_zn_scores(dfd, 'CRY', cids, start="2010-01-04", sequential=True, min_obs=252,
+                                  neutral='mean', thresh=None, pan_weight=1.0, postfix='ZN')
+        df_cross = make_zn_scores(dfd, 'CRY', cids, start="2010-01-04", sequential=True, min_obs=252,
+                                  neutral='mean', thresh=None, pan_weight=0.0, postfix='ZN')
+
+        df_average = make_zn_scores(dfd, 'CRY', cids, start="2010-01-04", sequential=True, min_obs=252,
+                                    neutral='mean', thresh=None, pan_weight=0.5, postfix='ZN')
+
+        panel_df = panel_df.pivot(index='real_date', columns='cid', values='value')
+        df_cross = df_cross.pivot(index='real_date', columns='cid', values='value')
+        df_average = df_average.pivot(index='real_date', columns='cid', values='value')
+        
+        panel_df = panel_df.drop(panel_df.index[[0]]) # Drop the first row in the panel data to adjust for the first row in the cross-sectional dataframe being removed.       
+        df_check = (panel_df + df_cross) / 2
+        check_arr = df_check.to_numpy()
+        average_arr = df_average.to_numpy()
+
+        dif = check_arr - average_arr
+        dif = np.nan_to_num(dif, nan = 0.0)
+        self.assertTrue(np.all(dif < epsilon))
+
+        threshold = 2.35
+        df_thresh = make_zn_scores(dfd, 'CRY', cids, start="2010-01-01", sequential=True, min_obs=252,
+                                    neutral='mean', thresh=threshold, pan_weight=0.65, postfix='ZN')
+
+        df_thresh = df_thresh.pivot(index='real_date', columns='cid', values='value')
+        thresh_arr = df_thresh.to_numpy()
+        values = thresh_arr.ravel() # Compress multidimensional array into a one-dimensional array.
+        
+        check = np.where(values > threshold)[0] # Unpack the Array from the tuple.
+
+        self.assertTrue(check.size == 0)
+        
 if __name__ == '__main__':
 
     unittest.main()
