@@ -9,7 +9,7 @@ import warnings
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
-from make_zn_scores import pan_neutral, cross_neutral, make_zn_scores, nan_insert
+from macrosynergy.panel.make_zn_scores import pan_neutral, cross_neutral, make_zn_scores, nan_insert
 
 
 cids = ['AUD', 'CAD', 'GBP']
