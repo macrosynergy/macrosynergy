@@ -28,6 +28,8 @@ dfd = dfd[dfd['xcat']=='CRY']
 dfw = dfd.pivot(index='real_date', columns='cid', values='value')
 
 warnings.filterwarnings("ignore")
+
+
 class TestAll(unittest.TestCase):
 
     def test_pan_neutral(self):
@@ -43,13 +45,12 @@ class TestAll(unittest.TestCase):
         ar_neutral = pan_neutral(dfw, neutral='mean', sequential=True)
         self.assertEqual(ar_neutral[999], dfw.iloc[0:1000, :].stack().mean())
 
-        # Todo: same for median
         ar_neutral = pan_neutral(dfw, neutral='median', sequential=False)
         self.assertEqual(ar_neutral[0], dfw.stack().median())  # check first value equal to panel median
-        self.assertEqual(ar_neutral[dfw.shape[0]-1], dfw.stack().median())  # check also last value equal to panel median
+        self.assertEqual(ar_neutral[dfw.shape[0]-1], dfw.stack().median())  # check last value equal to panel median
 
         ar_neutral = pan_neutral(dfw, neutral='median', sequential=True)
-        self.assertEqual(ar_neutral[999], dfw.iloc[0:1000, :].stack().median())
+        self.assertEqual(ar_neutral[999], dfw.iloc[0:1000, :].stack().median())  # check equality of block
 
     @staticmethod
     def handle_nan(arr):
@@ -66,38 +67,36 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df_shape, arr_neutral.shape)  # check correct dimensions
 
         epsilon = 0.0000001
-        # Check the cross sectional feature: computation occurs over individual columns.
-        ar_neutral = cross_neutral(dfw, neutral='mean', sequential=False)
+
+        ar_mean = cross_neutral(dfw, neutral='mean', sequential=False)
+        ar_median = cross_neutral(dfw, neutral='median', sequential=False)
         for i, cross in enumerate(cids):
-            column = dfw[[cross]]
-            column = column.to_numpy()
-            column = np.squeeze(column, axis = 1)
+            column = dfw[[cross]].to_numpy()
+            column = np.squeeze(column, axis=1)
             column = self.handle_nan(column)
             
             mean = np.sum(column) / len(column)
+            dif = np.abs(ar_mean[:, i] - mean)
+            self.assertTrue(np.all(dif < epsilon))  # test if function mean is correct
 
-            dif = np.abs(ar_neutral[:, i] - mean)
-            self.assertTrue(np.all(dif < epsilon))
+            median = np.median(column)
+            dif = np.abs(ar_median[:, i] - median)
+            self.assertTrue(np.all(dif < epsilon))  # test if function median is correct
 
-        # Check the rolling feature on cross-sectional computation.
-        ar_neutral = cross_neutral(dfw, neutral='mean', sequential=True)
+        ar_mean = cross_neutral(dfw, neutral='mean', sequential=True)
+        ar_median = cross_neutral(dfw, neutral='median', sequential=True)
         for i, cross in enumerate(cids):
             
             column = dfw[[cross]]
-            rol_mean = column.expanding(min_periods = 1).mean()
-            rol_mean = self.handle_nan(rol_mean[cross].to_numpy())
 
-            dif = self.handle_nan(ar_neutral[:, i]) - rol_mean
-            self.assertTrue(np.all(dif < epsilon))
+            cum_mean = column.expanding(min_periods=1).mean()
+            cum_mean = self.handle_nan(cum_mean[cross].to_numpy())
+            dif = self.handle_nan(ar_mean[:, i]) - cum_mean
+            self.assertTrue(np.all(dif < epsilon))  # check correct cumulative means
 
-
-        ar_neutral = cross_neutral(dfw, neutral='median', sequential=True)
-        for i, cross in enumerate(cids):
-            column = dfw[[cross]]
-            rol_median = column.expanding(min_periods = 1).median()
-            rol_median = self.handle_nan(rol_median[cross].to_numpy())
-            
-            self.assertTrue(np.all(self.handle_nan(ar_neutral[:, i]) == rol_median))
+            cum_median = column.expanding(min_periods=1).median()
+            cum_median = self.handle_nan(cum_median[cross].to_numpy())
+            self.assertTrue(np.all(self.handle_nan(ar_median[:, i]) == cum_median))  # check correct cumulative median
 
 
     def test_nan_insert(self):
@@ -132,7 +131,6 @@ class TestAll(unittest.TestCase):
         dfd = dfd[dfd['xcat']=='CRY']
         dfw = dfd.pivot(index='real_date', columns='cid', values='value')
 
-        ## Using the globally defined DataFrame.
         with self.assertRaises(AssertionError):
             df = make_zn_scores(dfd, 'XR', cids, sequential=False, neutral='std',
                                 thresh=1.5, postfix='ZN')  # test catching neutral value error
@@ -174,7 +172,7 @@ class TestAll(unittest.TestCase):
         df_cross = df_cross.pivot(index='real_date', columns='cid', values='value')
         df_average = df_average.pivot(index='real_date', columns='cid', values='value')
         
-        panel_df = panel_df.drop(panel_df.index[[0]]) # Drop the first row in the panel data to adjust for the first row in the cross-sectional dataframe being removed.       
+        panel_df = panel_df.drop(panel_df.index[[0]])  # drop the first row in the panel data
         df_check = (panel_df + df_cross) / 2
         check_arr = df_check.to_numpy()
         average_arr = df_average.to_numpy()
@@ -185,15 +183,16 @@ class TestAll(unittest.TestCase):
 
         threshold = 2.35
         df_thresh = make_zn_scores(dfd, 'CRY', cids, start="2010-01-01", sequential=True, min_obs=252,
-                                    neutral='mean', thresh=threshold, pan_weight=0.65, postfix='ZN')
+                                   neutral='mean', thresh=threshold, pan_weight=0.65, postfix='ZN')
 
         df_thresh = df_thresh.pivot(index='real_date', columns='cid', values='value')
         thresh_arr = df_thresh.to_numpy()
-        values = thresh_arr.ravel() # Compress multidimensional array into a one-dimensional array.
-        
-        check = np.where(values > threshold)[0] # Unpack the Array from the tuple.
+        values = thresh_arr.ravel()  # compress multidimensional array into a one-dimensional array.
 
-        self.assertTrue(check.size == 0)
+        check = sum(values[~np.isnan(values)] > threshold)
+
+        self.assertTrue(check == 0)
+
         
 if __name__ == '__main__':
 
