@@ -54,9 +54,9 @@ def basket_perf(df: pd.DataFrame, contracts: List[str],
         act_cross = act_cross[:, np.newaxis]
 
         ## Equally weighted across the cross-sectional returns.
-        rational_ret = np.divide(ret_arr, active_cross)
-        rational_cry = np.divide(cry_arr, active_cross)
-        weighted_ret = np.nan_to_num(rational)
+        rational_ret = np.divide(ret_arr, act_cross)
+        rational_cry = np.divide(cry_arr, act_cross)
+        weighted_ret = np.nan_to_num(rational_ret)
         weighted_cry = np.nan_to_num(rational_cry)
         
         dfw_ret[weight_meth] = np.sum(weighted_ret, axis = 1)
@@ -92,7 +92,7 @@ def basket_perf(df: pd.DataFrame, contracts: List[str],
             weights = expo_weights(lback_periods, half_life)
             dfwa = np.sqrt(252) * dfw_ret.rolling(window =
                                               lback_periods).agg(expo_std,
-                                                                 w = weights, remove_zeros = remove_zeros)
+                                                                 w = weights, remove_zeros = True)
         rolling_arr = dfwa.to_numpy()
         inv_arr = 1 / rolling_arr
         inv_arr = np.nan_to_num(inv_arr, copy = False)
