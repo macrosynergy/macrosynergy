@@ -246,8 +246,6 @@ def MAIN():
     
     weight_matrix = max_weight(rational, days, 0.3)
     print(weight_matrix)
-
-    performance_test()
     
 
 if __name__ == "__main__":
