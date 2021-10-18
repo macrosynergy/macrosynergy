@@ -6,57 +6,8 @@ import random
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.panel.historic_vol import expo_weights, expo_std, flat_std
 from macrosynergy.management.shape_dfs import reduce_df, reduce_df_by_ticker
+from macrosynergy.management.converge_row import ConvergeRow
 
-
-class converge_row(object):
-
-    def __init__(self, row, m_weight, active_cross, r_length):
-        self.row = row
-        self.maximum = self.max_row()
-        self.m_weight = m_weight
-        self.active_cross = active_cross
-        
-        self.m_index = self.max_index()
-        self.margin = 0.001 
-        
-    def distribute(self):
-
-        while True:
-
-            excess = self.max_row() - self.m_weight
-
-            excess_cross = self.excess_count()
-            indexing = self.index_row()
-            
-            if excess_cross.size == 1:
-                self.row[self.m_index] -= excess
-                
-            elif excess_cross.size > 1:
-                for index in excess_cross:
-                    indexing[index] = self.m_weight
-                    
-                self.row = np.array(list(indexing.values()))
-                excess = 1.0 - np.nansum(self.row)
-            else:
-                break
-
-            amount = excess / self.active_cross
-            self.row += amount
-            
-
-    def max_row(self):
-        return np.nanmax(self.row)
-
-    def excess_count(self):
-        row_copy = self.row.copy()
-
-        return np.where((row_copy - self.m_weight) > 0.001)[0]
-
-    def max_index(self):
-        return np.where(self.row == self.maximum)[0][0]
-
-    def index_row(self):
-        return dict(zip(range(self.row.size), self.row))
 
 def delete_rows(ret_arr, w_matrix, active_cross):
     
@@ -76,7 +27,7 @@ def delete_rows(ret_arr, w_matrix, active_cross):
         else:
             ret_arr = np.delete(ret_arr, tuple(nan_rows), axis = 0)
             w_matrix = np.delete(w_matrix, tuple(nan_rows), axis = 0)
-            active_cross = np.delete(days, tuple(nan_rows))
+            active_cross = np.delete(active_cross, tuple(nan_rows))
 
     return ret_arr, w_matrix, active_cross
 
@@ -96,18 +47,23 @@ def max_weight_func(ret_arr, w_matrix, active_cross, max_weight):
             row = row * uniform[i]
             w_matrix[i, :] = row
         else:
-            inst = converge_row(row, max_weight, active_cross[i], row.size)
+            inst = ConvergeRow(row, max_weight, active_cross[i], row.size)
             inst.distribute()
             w_matrix[i, :] = inst.row
 
     return ret_arr, w_matrix
 
-def normalise_w(ret_arr, w_matrix):
-    bool_arr = np.isnan(ret_arr)
+def boolean_array(arr):
+    
+    bool_arr = np.isnan(arr)
     bool_arr = ~bool_arr
     bool_arr = bool_arr.astype(dtype = np.uint8)
+    return bool_arr
 
-    w_matrix = np.multiply(bool_arr, normalise)
+def normalise_w(ret_arr, w_matrix):
+    bool_arr = boolean_array(ret_arr)
+
+    w_matrix = np.multiply(bool_arr, w_matrix)
 
     normalise_m = np.sum(w_matrix, axis = 1)
     normalise_m = normalise_m[:, np.newaxis]
@@ -123,9 +79,7 @@ def active_cross_sections(arr):
 
 def matrix_transpose(arr, transpose):
 
-    bool_arr = np.isnan(arr)
-    bool_arr = ~bool_arr
-    bool_arr = bool_arr.astype(dtype = np.int)
+    bool_arr = boolean_array(arr)
     
     w_matrix = np.multiply(bool_arr, transpose)
     w_matrix[w_matrix == 0.0] = np.nan    
@@ -196,6 +150,7 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = 'XR_NS
             w_matrix = np.divide(inv_arr, sum_arr)
     
     elif weight_meth == 'values' or weight_meth == 'inv_values':
+        normalise = np.array(weights) / sum(weights)
         w_matrix = normalise_w(ret_arr, normalise)
 
     ret_arr, w_matrix, act_cross = delete_rows(ret_arr, w_matrix, act_cross)
@@ -244,8 +199,8 @@ if __name__ == "__main__":
 
     contracts = ['AUD_FX', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
 
-    dfd_1 = basket_perf(dfd, contracts, ret='XR', cry='CRY',
-                        weight_meth='invsd', lback_meth='ma', lback_periods=21,
-                        weights=None, weight_xcat=None, max_weight=0.3,
-                        return_weights=True)
+    dfd_1 = basket_performance(dfd, contracts, ret='XR', cry='CRY',
+                               weight_meth='invsd', lback_meth='ma', lback_periods=21,
+                               weights=None, weight_xcat=None, max_weight=0.3,
+                               return_weights=True)
 
