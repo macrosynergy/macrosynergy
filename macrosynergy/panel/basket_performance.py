@@ -9,7 +9,7 @@ from macrosynergy.management.shape_dfs import reduce_df_by_ticker
 from macrosynergy.panel.converge_row import ConvergeRow
 
 
-def assemble_df(dfx, list_):
+def assemble_df(dfx: pd.DataFrame, list_: List[str]):
     """
     Will receive a standardised DataFrame and filter on the list received, and subsequently
     pivot on the cross-sections.
@@ -27,7 +27,7 @@ def assemble_df(dfx, list_):
     return dfw_pivot
 
 
-def active_cross_sections(arr):
+def active_cross_sections(arr: np.ndarray):
     """
     Function will receive an Array and determine the number of active cross-sections per
     timestamp.
@@ -43,7 +43,7 @@ def active_cross_sections(arr):
     return act_cross.astype(dtype=np.float32)
 
 
-def boolean_array(arr):
+def boolean_array(arr: np.ndarray):
     """
     Function will receive an Array and return its Boolean counterpart reflecting which
     cross-sections have realised returns for each timestamp.
@@ -60,7 +60,7 @@ def boolean_array(arr):
     return bool_arr
 
 
-def matrix_transpose(arr, transpose):
+def matrix_transpose(arr: np.ndarray, transpose: np.ndarray):
     """
     Function will receive two Arrays. The first Array will be used to determine the
     active cross-sections per timestamp. And the second Array is multiplied by the
@@ -83,7 +83,7 @@ def matrix_transpose(arr, transpose):
     return w_matrix
 
 
-def normalise_w(ret_arr, w_matrix):
+def normalise_w(ret_arr: np.ndarray, w_matrix: np.ndarray):
     """
     Function will receive two Arrays. The first Array will be used to determine the active
     cross-sections per timestamp using the Return Series. And the second Array will be a
@@ -107,7 +107,7 @@ def normalise_w(ret_arr, w_matrix):
     return w_matrix
 
 
-def delete_rows(ret_arr, w_matrix, active_cross):
+def delete_rows(ret_arr: np.ndarray, w_matrix: np.ndarray, active_cross: np.ndarray):
     """
     Function designed to remove any rows which do not host any returns. For instance, on
     a universal holiday or after the application of the inverse standard deviation weighting
@@ -143,7 +143,7 @@ def delete_rows(ret_arr, w_matrix, active_cross):
     return ret_arr, w_matrix, active_cross
 
 
-def max_weight_func(w_matrix, active_cross, max_weight):
+def max_weight_func(w_matrix: np.ndarray, active_cross: np.ndarray, max_weight: np.ndarray):
     """
     Function designed to determine if all weights computed are within the maximum weight
     allowed per cross-section. If the maximum weight is less than the expected weight,
@@ -177,6 +177,118 @@ def max_weight_func(w_matrix, active_cross, max_weight):
             w_matrix[i, :] = inst.row
 
     return w_matrix
+
+
+def equal_weight(ret_arr: np.ndarray, act_cross: np.ndarray):
+    """
+    Function will receive two Arrays: one consisting of the multi-dimensional return
+    series and the other a one-dimensional Array outlining the number of active cross-
+    sections per timestamp: use the second Array to delimit the weight distribution for
+    each timestamp.
+
+    :param <np.ndarray> ret_arr: Return series matrix. Multidimensional.
+    :param <np.ndarray> act_cross: Array of the number of active cross-sections for
+                                      each timestamp.
+
+    :return <np.ndarray>: Will return the generated weight Array, and the active cross-
+                          sections.
+    """
+    act_cross[act_cross == 0.0] = np.nan
+    uniform = 1 / act_cross
+    uniform = uniform[:, np.newaxis]
+
+    w_matrix = matrix_transpose(ret_arr, uniform)
+    act_cross = np.nan_to_num(act_cross)
+
+    return w_matrix, act_cross
+
+
+def fixed_weight(ret_arr: np.ndarray, weights: np.ndarray):
+    """
+    The fixed weight method will receive a matrix of values, same dimensions as the
+    DataFrame, and use the values for weights. For instance, GDP figures.
+    The values will be normalised and account for NaNs to obtain the formal weight
+    matrix.
+
+    :param <np.ndarray> ret_arr: Return series matrix. Multidimensional.
+    :param <np.ndarray> weights: Multidimensional Array of values.
+
+    :return <np.ndarray>: Will return the generated weight Array
+    """
+    normalise = np.divide(weights, np.sum(weights, axis=1))
+    w_matrix = normalise_w(ret_arr, normalise)
+
+    return w_matrix
+
+
+def inverse_weight(dfw_ret: pd.DataFrame, ret_arr: np.ndarray, lback_meth: str = 'xma',
+                   lback_periods: int = 21, remove_zeros: bool = True):
+    """
+    The weights will be computed by taking the inverse of the rolling standard deviation
+    of each return series. The rolling standard deviation will be calculated either
+    using the standard Moving Average or the Exponential Moving Average.
+    Both Moving Average's will require a window to be populated with returns before a
+    weight can be computed, and subsequently the preceding timestamps will be set to NaN
+    until the window has been filled. Therefore, modify the original Return Matrix and
+    the active cross-section Array to reflect the additional NaN values.
+
+    :param <pd.DataFrame> dfw_ret: DataFrame pivot on the cross-sections.
+    :param <np.ndarray> ret_arr: Return series matrix. Multidimensional.
+    :param <str> lback_meth: Lookback method for "invsd" weighting method.
+                             Default is "xma".
+    :param <int> lback_periods: Lookback periods. Default is 21.  Refers to half-time for
+                                "xma" and full lookback period for "ma".
+    :param <Bool> remove_zeros: Removes the zeros. Default is set to True.
+
+
+    :return <np.ndarray>: Will return the generated weight Array, the updated Return
+                          Matrix,and the active cross-sections.
+    """
+    
+    if lback_meth == 'ma':
+        dfwa = dfw_ret.rolling(window=lback_periods).agg(flat_std, remove_zeros)
+        dfwa *= np.sqrt(252)
+        
+    else:
+        half_life = lback_periods
+        lback_periods *= 2
+        weights = expo_weights(lback_periods, half_life)
+        dfwa = dfw_ret.rolling(window=lback_periods).agg(expo_std, w=weights,
+                                                         remove_zeros=remove_zeros)
+        dfwa *= np.sqrt(252)
+
+    roll_arr = dfwa.to_numpy()
+    ret_arr = matrix_transpose(roll_arr, ret_arr)
+
+    act_cross = active_cross_sections(roll_arr)
+
+    inv_arr = 1 / roll_arr
+    inv_arr = np.nan_to_num(inv_arr, copy=False)
+    sum_arr = np.sum(inv_arr, axis=1)
+    sum_arr[sum_arr == 0.0] = np.nan
+    inv_arr[inv_arr == 0.0] = np.nan
+
+    sum_arr = sum_arr[:, np.newaxis]
+    w_matrix = np.divide(inv_arr, sum_arr)
+
+    return w_matrix, ret_arr, act_cross
+
+
+def values_weight(ret_arr: np.ndarray, weights: np.ndarray):
+    """
+    The values weight method will receive a matrix of values produced by another category
+    and the values held in the matrix will be used as the weights. The weight matrix
+    should contain floating point values.
+
+    :param <np.ndarray> ret_arr: Return series matrix. Multidimensional.
+    :param <np.ndarray> weights: Multidimensional Array of exogenously computed weights.
+
+    :return <np.ndarray>: Will return the generated weight Array
+    """
+    w_matrix = normalise_w(ret_arr, weights)
+
+    return w_matrix
+
 
 def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = 'XR_NSA',
                        cry: str = 'CRY_NSA', start: str = None, end: str = None,
@@ -260,45 +372,20 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = 'XR_NS
     act_cross = active_cross_sections(ret_arr)
 
     if weight_meth == 'equal':
-        act_cross[act_cross == 0.0] = np.nan
-        uniform = 1 / act_cross
-        uniform = uniform[:, np.newaxis]
-
-        w_matrix = matrix_transpose(ret_arr, uniform)
-        act_cross = np.nan_to_num(act_cross)
+        w_matrix, act_cross = equal_weight(ret_arr, act_cross)
 
     elif weight_meth == 'fixed':
-        normalise = np.array(weights) / sum(weights)
-        w_matrix = normalise_w(ret_arr, normalise)
+        w_matrix = fixed_weight(ret_arr, weights)
 
     elif weight_meth == 'invsd':
-        if lback_meth == 'ma':
-            dfwa = dfw_ret.rolling(window=lback_periods).agg(flat_std, remove_zeros)
-        else:
-            half_life = lback_periods
-            lback_periods *= 2
-            weights = expo_weights(lback_periods, half_life)
-            dfwa = np.sqrt(252) * dfw_ret.rolling(window=lback_periods).agg(expo_std,
-                                                                        w=weights,
-                                                                        remove_zeros=
-                                                                            remove_zeros)
-        rolling_arr = dfwa.to_numpy()
-        ret_arr = matrix_transpose(rolling_arr, ret_arr)
-
-        act_cross = active_cross_sections(rolling_arr)
-
-        inv_arr = 1 / rolling_arr
-        inv_arr = np.nan_to_num(inv_arr, copy=False)
-        sum_arr = np.sum(inv_arr, axis=1)
-        sum_arr[sum_arr == 0.0] = np.nan
-        inv_arr[inv_arr == 0.0] = np.nan
-
-        sum_arr = sum_arr[:, np.newaxis]
-        w_matrix = np.divide(inv_arr, sum_arr)
+        w_matrix, ret_arr, act_cross = inverse_weight(dfw_ret, ret_arr, lback_meth,
+                                       lback_periods, remove_zeros)
 
     elif weight_meth == 'values' or weight_meth == 'inv_values':
-        normalise = np.array(weights) / sum(weights)
-        w_matrix = normalise_w(ret_arr, normalise)
+        w_matrix = values_weight(ret_arr, weights)
+
+    else:
+        raise NotImplementedError(f"Weight method unknown {weight_meth}")
 
     ret_arr, w_matrix, act_cross = delete_rows(ret_arr, w_matrix, act_cross)
     if max_weight > 0.0:
@@ -355,6 +442,7 @@ if __name__ == "__main__":
                                weight_meth='invsd', lback_meth='xma', lback_periods=21,
                                weights=None, weight_xcat=None, max_weight=0.3,
                                return_weights=True)
+    print(dfd_2)
 
     dfd_3 = basket_performance(dfd, contracts, ret='XR', cry='CRY', weight_meth='equal',
                                weights=None, weight_xcat=None, max_weight=0.3,
