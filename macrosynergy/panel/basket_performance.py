@@ -62,9 +62,10 @@ def boolean_array(arr):
 
 def matrix_transpose(arr, transpose):
     """
-    Function will receive two Arrays. The first Array will be used to determine the active
-    cross-sections per timestamp. And the second Array is multiplied by the Boolean Array
-    to transpose the value to specific indices and broadcast to the right dimensions.
+    Function will receive two Arrays. The first Array will be used to determine the
+    active cross-sections per timestamp. And the second Array is multiplied by the
+    Boolean Array to transpose the value to specific indices and broadcast to the right
+    dimensions.
     Will return the weighted matrix.
 
     :param <np.ndarray>  arr: Multidimensional Array of returns.
@@ -115,7 +116,8 @@ def delete_rows(ret_arr, w_matrix, active_cross):
 
     :param <np.ndarray>  ret_arr: Array of returns. Multidimensional.
     :param <np.ndarray> w_matrix: Corresponding weight matrix. Multidimensional.
-    :param <np.ndarray> active_cross: Array of the number of active cross-sections for each timestamp.
+    :param <np.ndarray> active_cross: Array of the number of active cross-sections for
+                                      each timestamp.
 
     :return <np.ndarray>: Will return the three modified Arrays.
     """
@@ -141,7 +143,7 @@ def delete_rows(ret_arr, w_matrix, active_cross):
     return ret_arr, w_matrix, active_cross
 
 
-def max_weight_func(ret_arr, w_matrix, active_cross, max_weight):
+def max_weight_func(w_matrix, active_cross, max_weight):
     """
     Function designed to determine if all weights computed are within the maximum weight
     allowed per cross-section. If the maximum weight is less than the expected weight,
@@ -150,10 +152,10 @@ def max_weight_func(ret_arr, w_matrix, active_cross, max_weight):
     Otherwise, call the ConvergeRow Class to ensure all weights "converge" to a value
     within the upper-bound. Allow for a margin of error set to 0.001.
 
-    :param <np.ndarray>  ret_arr: Array of returns. Multidimensional.
     :param <np.ndarray> w_matrix: Corresponding weight matrix. Multidimensional.
-    :param <np.ndarray> active_cross: Array of the number of active cross-sections for each timestamp.
-    :param <float> max_weight: Upper-bound on the weight permitted for each cross-section.
+    :param <np.ndarray> active_cross: Array of the number of active cross-sections for
+                                      each timestamp.
+    :param <float> max_weight: Upper-bound on the weight allowed for each cross-section.
 
     :return <np.ndarray>: Will return the modified weight Array.
     """
@@ -197,8 +199,8 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = 'XR_NS
     :param <str> start: String representing earliest date. Default is None.
     :param <str> end: String representing the latest date. Default is None.
     :param <dict> blacklist: Cross-sections with date ranges that should be excluded from
-                             the DataFrame. If one cross-section has several blacklist periods,
-                             append numbers to the cross-section code.
+                             the DataFrame. If one cross-section has several blacklist
+                             periods, append numbers to the cross-section code.
     :param <str> weight_meth: Method for weighting constituent returns and carry.
                               Default is "equal": all constituents have the same weight.
                               Alternatives are:
@@ -206,9 +208,10 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = 'XR_NS
                               "invsd": inverse of past return standard deviations.
                               "values": proportionate to a panel of values of another
                                         exogenous category.
-                              "inv_values": inversely proportionate to a panel of exogenous
-                                            values supplied separately).
-    :param <str> lback_meth: Lookback method for "invsd" weighting method. Default is "xma".
+                              "inv_values": inversely proportionate to a panel of
+                                            exogenous values supplied separately).
+    :param <str> lback_meth: Lookback method for "invsd" weighting method.
+                             Default is "xma".
     :param <int> lback_periods: Lookback periods. Default is 21.  Refers to half-time for
                                 "xma" and full lookback period for "ma".
     :param <Bool> remove_zeros: Removes the zeros. Default is set to True.
@@ -230,7 +233,6 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = 'XR_NS
                             in standard form:
                             'cid', 'xcat', 'real_date' and 'value'.
     """
-
 
     if weights:
         assert len(set(df['cid'])) == len(weights)
@@ -278,7 +280,8 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = 'XR_NS
             weights = expo_weights(lback_periods, half_life)
             dfwa = np.sqrt(252) * dfw_ret.rolling(window=lback_periods).agg(expo_std,
                                                                         w=weights,
-                                                                        remove_zeros=remove_zeros)
+                                                                        remove_zeros=
+                                                                            remove_zeros)
         rolling_arr = dfwa.to_numpy()
         ret_arr = matrix_transpose(rolling_arr, ret_arr)
 
