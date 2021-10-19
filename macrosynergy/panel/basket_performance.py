@@ -32,7 +32,7 @@ def active_cross_sections(arr):
     Function will receive an Array and determine the number of active cross-sections per
     timestamp.
 
-    :param <np.ndarray>  arr: Multidimensional Array of return series or weights.
+    :param <np.ndarray> arr: Multidimensional Array of return series or weights.
 
     :return <np.ndarray>: One-dimensional Array outlining the number of cross-sections.
     """
@@ -48,7 +48,7 @@ def boolean_array(arr):
     Function will receive an Array and return its Boolean counterpart reflecting which
     cross-sections have realised returns for each timestamp.
 
-    :param <np.ndarray>  arr: Multidimensional Array of returns.
+    :param <np.ndarray> arr: Multidimensional Array of returns.
 
     :return <np.ndarray>: Boolean Array of the same dimensions as the received Array.
     """
@@ -68,8 +68,8 @@ def matrix_transpose(arr, transpose):
     dimensions.
     Will return the weighted matrix.
 
-    :param <np.ndarray>  arr: Multidimensional Array of returns.
-    :param <np.ndarray>  transpose: Counterpart holding desired information.
+    :param <np.ndarray> arr: Multidimensional Array of returns.
+    :param <np.ndarray> transpose: Counterpart holding desired information.
 
     :return <np.ndarray>: Will return the weight matrix of the same dimensions as the
                           first parameter.
@@ -92,8 +92,8 @@ def normalise_w(ret_arr, w_matrix):
     will have a weight. Therefore, use the return matrix to determine the valid indices,
     and subsequently normalise such that the weights sum to one.
 
-    :param <np.ndarray>  ret_arr: Multidimensional Array of returns.
-    :param <np.ndarray>  w_matrix: Counterpart holding desired information.
+    :param <np.ndarray> ret_arr: Multidimensional Array of returns.
+    :param <np.ndarray> w_matrix: Counterpart holding desired information.
 
     :return <np.ndarray>: Returns the weight matrix adjusting for NaNs and normalising.
     """
@@ -114,7 +114,7 @@ def delete_rows(ret_arr, w_matrix, active_cross):
     method which requires the window to be populated before computing a weight. Therefore,
     all the preceding rows will hold NaN values.
 
-    :param <np.ndarray>  ret_arr: Array of returns. Multidimensional.
+    :param <np.ndarray> ret_arr: Array of returns. Multidimensional.
     :param <np.ndarray> w_matrix: Corresponding weight matrix. Multidimensional.
     :param <np.ndarray> active_cross: Array of the number of active cross-sections for
                                       each timestamp.
