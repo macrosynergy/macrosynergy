@@ -180,8 +180,8 @@ def max_weight_func(w_matrix, active_cross, max_weight):
 
 def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = 'XR_NSA',
                        cry: str = 'CRY_NSA', start: str = None, end: str = None,
-                       blacklist: dict = None, weight_meth: str = 'equal', lback_meth: str = 'xma',
-                       lback_periods: int = 21, remove_zeros: bool = True,
+                       blacklist: dict = None, weight_meth: str = 'equal', lback_meth:
+                       str = 'xma', lback_periods: int = 21, remove_zeros: bool = True,
                        weights: List[float] = None, weight_xcat: str = None,
                        max_weight: float = 1.0, basket_tik: str = 'GLB_ALL',
                        return_weights: bool = False):
@@ -302,14 +302,14 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = 'XR_NS
 
     ret_arr, w_matrix, act_cross = delete_rows(ret_arr, w_matrix, act_cross)
     if max_weight > 0.0:
-        w_matrix = max_weight_func(ret_arr, w_matrix, act_cross, max_weight)
+        w_matrix = max_weight_func(w_matrix, act_cross, max_weight)
 
     weighted_ret = np.multiply(ret_arr, w_matrix)
     b_performance = np.nansum(weighted_ret, axis = 1)
 
     data = np.column_stack((ret_arr, b_performance))
     columns = list(dfw_ret.columns)
-    columns.extend(['b_performance_' + weight_meth])
+    columns.extend(['B_Performance_' + weight_meth])
     if return_weights:
 
         col_w = [cross + '_weight' for cross in dfw_ret.columns]
@@ -350,3 +350,13 @@ if __name__ == "__main__":
                                weight_meth='invsd', lback_meth='ma', lback_periods=21,
                                weights=None, weight_xcat=None, max_weight=0.3,
                                return_weights=True)
+
+    dfd_2 = basket_performance(dfd, contracts, ret='XR', cry='CRY',
+                               weight_meth='invsd', lback_meth='xma', lback_periods=21,
+                               weights=None, weight_xcat=None, max_weight=0.3,
+                               return_weights=True)
+
+    dfd_3 = basket_performance(dfd, contracts, ret='XR', cry='CRY', weight_meth='equal',
+                               weights=None, weight_xcat=None, max_weight=0.3,
+                               return_weights=False)
+    print(dfd_3)
