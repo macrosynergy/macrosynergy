@@ -6,7 +6,7 @@ import random
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.panel.historic_vol import expo_weights, expo_std, flat_std
 from macrosynergy.management.shape_dfs import reduce_df, reduce_df_by_ticker
-from macrosynergy.management.converge_row import ConvergeRow
+from macrosynergy.panel.converge_row import ConvergeRow
 
 
 def delete_rows(ret_arr, w_matrix, active_cross):
@@ -25,8 +25,8 @@ def delete_rows(ret_arr, w_matrix, active_cross):
             w_matrix = w_matrix[(end + 1):, :]
             active_cross = active_cross[(end + 1):]
         else:
-            ret_arr = np.delete(ret_arr, tuple(nan_rows), axis = 0)
-            w_matrix = np.delete(w_matrix, tuple(nan_rows), axis = 0)
+            ret_arr = np.delete(ret_arr, tuple(nan_rows), axis=0)
+            w_matrix = np.delete(w_matrix, tuple(nan_rows), axis=0)
             active_cross = np.delete(active_cross, tuple(nan_rows))
 
     return ret_arr, w_matrix, active_cross
@@ -38,7 +38,7 @@ def max_weight_func(ret_arr, w_matrix, active_cross, max_weight):
     fixed_indices = np.where(uniform > max_weight)[0]
 
     rows = w_matrix.shape[0]
-    bool_arr = np.zeros(rows, dtype = bool)
+    bool_arr = np.zeros(rows, dtype=bool)
     bool_arr[fixed_indices] = True
 
     for i, row in enumerate(w_matrix):
@@ -53,29 +53,33 @@ def max_weight_func(ret_arr, w_matrix, active_cross, max_weight):
 
     return ret_arr, w_matrix
 
+
 def boolean_array(arr):
     
     bool_arr = np.isnan(arr)
     bool_arr = ~bool_arr
-    bool_arr = bool_arr.astype(dtype = np.uint8)
+    bool_arr = bool_arr.astype(dtype=np.uint8)
     return bool_arr
+
 
 def normalise_w(ret_arr, w_matrix):
     bool_arr = boolean_array(ret_arr)
 
     w_matrix = np.multiply(bool_arr, w_matrix)
 
-    normalise_m = np.sum(w_matrix, axis = 1)
+    normalise_m = np.sum(w_matrix, axis=1)
     normalise_m = normalise_m[:, np.newaxis]
     w_matrix = np.divide(w_matrix, normalise_m)
 
     return w_matrix
 
+
 def active_cross_sections(arr):
-    nan_val = np.sum(np.isnan(arr), axis = 1)
+    nan_val = np.sum(np.isnan(arr), axis=1)
     act_cross = arr.shape[1] - nan_val
     
-    return act_cross.astype(dtype = np.float32)
+    return act_cross.astype(dtype=np.float32)
+
 
 def matrix_transpose(arr, transpose):
 
@@ -86,38 +90,46 @@ def matrix_transpose(arr, transpose):
 
     return w_matrix
 
+
+def assemble_df(dfx, list_):
+    
+    dfx_ret_cry = dfx[dfx['tick'].isin(list_)]
+    
+    dfw_pivot = dfx_ret_cry.pivot(index='real_date',
+                                  columns='cid', values='value')
+
+    return dfw_pivot
+
+
 def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = 'XR_NSA',
                        cry: str = 'CRY_NSA', start: str = None, end: str = None,
                        blacklist: dict = None, weight_meth: str = 'equal', lback_meth: str = 'xma',
-                       lback_periods: int = 21, weights: List[float] = None, weight_xcat: str = None,
-                       max_weight: float = 1.0, basket_tik: str = 'GLB_ALL', return_weights: bool = False):
+                       lback_periods: int = 21, half_life: int = 11, remove_zeros: bool = True,
+                       weights: List[float] = None, weight_xcat: str = None, max_weight: float = 1.0,
+                       basket_tik: str = 'GLB_ALL', return_weights: bool = False):
 
     if weights:
         assert len(set(df['cid'])) == len(weights)
     
     ticks_ret = [c + '_' + ret for c in contracts]
+    ticks_cry = []
     if cry is not None:
        ticks_cry = [c + '_' + cry for c in contracts]
-    else: ticks_cry = []
+       cry_flag = True
+    
     tickers = ticks_ret + ticks_cry
 
     dfx = reduce_df_by_ticker(df, start=start, end=end,
                               ticks=tickers, blacklist=black)
 
     dfx['tick'] = dfx['cid'] + '_' + dfx['xcat']
-     
-    dfx_ret = dfx[dfx['tick'].isin(ticks_ret)]
-
-    dfw_ret = dfx_ret.pivot(index='real_date', columns='cid', values='value')
+    dfw_ret = assemble_df(dfx, ticks_ret)
     
-    if cry is not None:
-        dfx_cry = dfx[dfx['tick'].isin(ticks_cry)]
-        dfw_cry = dfx_cry.pivot(index='real_date', columns='cid', values='value')
-        cry_flag = True
+    if cry_flag:
+        dfw_cry = assemble_df(dfx, ticks_cry)
 
     ret_arr = dfw_ret.to_numpy()
     cry_arr = dfw_cry.to_numpy()
-
     act_cross = active_cross_sections(ret_arr)
     
     if weight_meth == 'equal':
@@ -134,21 +146,26 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = 'XR_NS
 
     elif weight_meth == 'invsd':
         if lback_meth == 'ma':
-            dfwa = dfw_ret.rolling(window = lback_periods).agg(flat_std, True)
-            rolling_arr = dfwa.to_numpy()
-            ret_arr = matrix_transpose(rolling_arr, ret_arr)
+            dfwa = dfw_ret.rolling(window=lback_periods).agg(flat_std, remove_zeros)
+        else:
+            weights = expo_weights(lback_periods, half_life)
+            dfwa = np.sqrt(252) * dfw_ret.rolling(window=lback_periods).agg(expo_std,
+                                                                        w=weights,
+                                                                        remove_zeros=remove_zeros)
+        rolling_arr = dfwa.to_numpy()
+        ret_arr = matrix_transpose(rolling_arr, ret_arr)
             
-            act_cross = active_cross_sections(rolling_arr)
+        act_cross = active_cross_sections(rolling_arr)
 
-            inv_arr = 1 / rolling_arr
-            inv_arr = np.nan_to_num(inv_arr, copy = False)
-            sum_arr = np.sum(inv_arr, axis = 1)
-            sum_arr[sum_arr == 0.0] = np.nan
-            inv_arr[inv_arr == 0.0] = np.nan
+        inv_arr = 1 / rolling_arr
+        inv_arr = np.nan_to_num(inv_arr, copy=False)
+        sum_arr = np.sum(inv_arr, axis=1)
+        sum_arr[sum_arr == 0.0] = np.nan
+        inv_arr[inv_arr == 0.0] = np.nan
 
-            sum_arr = sum_arr[:, np.newaxis]
-            w_matrix = np.divide(inv_arr, sum_arr)
-    
+        sum_arr = sum_arr[:, np.newaxis]
+        w_matrix = np.divide(inv_arr, sum_arr)
+            
     elif weight_meth == 'values' or weight_meth == 'inv_values':
         normalise = np.array(weights) / sum(weights)
         w_matrix = normalise_w(ret_arr, normalise)
@@ -169,7 +186,7 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = 'XR_NS
         columns.extend(col_w)
         data = np.column_stack((data, w_matrix))
 
-    dfw_ret = pd.DataFrame(data = data, columns = columns)
+    dfw_ret = pd.DataFrame(data=data, columns=columns)
 
     return dfw_ret
 
@@ -203,4 +220,3 @@ if __name__ == "__main__":
                                weight_meth='invsd', lback_meth='ma', lback_periods=21,
                                weights=None, weight_xcat=None, max_weight=0.3,
                                return_weights=True)
-
