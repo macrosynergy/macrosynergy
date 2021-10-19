@@ -1,4 +1,8 @@
+"""Convergence of rows for max weight"""
 import numpy as np
+import warnings
+MAX_COUNT = 1000
+
 
 class ConvergeRow(object):
     """
@@ -11,7 +15,7 @@ class ConvergeRow(object):
     the ratio between the remaining weights.
     """
 
-    def __init__(self, row, m_weight, active_cross, r_length):
+    def __init__(self, row, max_weight):
         """
         Class's Constructor.
 
@@ -22,14 +26,20 @@ class ConvergeRow(object):
 
         """
         self.row = row
-        self.r_length = r_length
         self.maximum = self.max_row()
-        self.m_weight = m_weight
-        self.active_cross = active_cross
+        self.max_weight = max_weight
         
         self.m_index = self.max_index()
         self.margin = 0.001 
-        
+
+    @classmethod
+    def max_weight(cls, row, max_weight):
+        cr = ConvergeRow(
+            row=row, max_weight=max_weight
+        )
+        cr.distribute()
+        return cr, cr.row
+
     def distribute(self):
         """
         Initiates an indefinite While Loop until the weights converge below the
@@ -39,10 +49,15 @@ class ConvergeRow(object):
         iteration.
 
         """
-
+        count = 0
         while True:
+            if count > MAX_COUNT:
+                self.row *= np.nan
+                warnings.warn("No convergence for row")
+                break
+            count += 1
 
-            excess = self.max_row() - self.m_weight
+            excess = self.max_row() - self.max_weight
 
             excess_cross = self.excess_count()
             indexing = self.index_row()
@@ -52,16 +67,15 @@ class ConvergeRow(object):
                 
             elif excess_cross.size > 1:
                 for index in excess_cross:
-                    indexing[index] = self.m_weight
+                    indexing[index] = self.max_weight
                     
                 self.row = np.array(list(indexing.values()))
                 excess = 1.0 - np.nansum(self.row)
             else:
                 break
 
-            amount = excess / self.active_cross
+            amount = excess / sum(self.row > 0)
             self.row += amount
-            
 
     def max_row(self):
         """
@@ -80,7 +94,7 @@ class ConvergeRow(object):
 
         row_copy = self.row.copy()
 
-        return np.where((row_copy - self.m_weight) > 0.001)[0]
+        return np.where((row_copy - self.max_weight) > 0.001)[0]
 
     def max_index(self):
         """
