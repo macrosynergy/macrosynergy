@@ -20,24 +20,26 @@ class ConvergeRow(object):
         Class's Constructor.
 
         :param <np.ndarray> row: Array of weights.
-        :param <Float> m_weight: Maximum weight.
-        :param <int> active_cross: Number of active cross-sections held on the row.
-        :param <int> r_length: Length of the respective row.
+        :param <Float> max_weight: Maximum weight.
 
         """
         self.row = row
+        self.r_length = row.size
         self.maximum = self.max_row()
         self.max_weight = max_weight
-        
+        self.act_cross = np.sum(self.row > 0)
+        self.uniform = 1 / self.act_cross
+        self.flag = self.uniform < self.max_weight
         self.m_index = self.max_index()
-        self.margin = 0.001 
+        self.margin = 0.001
 
     @classmethod
-    def max_weight(cls, row, max_weight):
-        cr = ConvergeRow(
-            row=row, max_weight=max_weight
-        )
-        cr.distribute()
+    def application(cls, row, max_weight):
+        cr = ConvergeRow(row=row, max_weight=max_weight)
+        if cr.flag:
+            cr.distribute()
+        else:
+            cr.fixed_val()
         return cr, cr.row
 
     def distribute(self):
@@ -51,11 +53,11 @@ class ConvergeRow(object):
         """
         count = 0
         while True:
+            count += 1
             if count > MAX_COUNT:
                 self.row *= np.nan
-                warnings.warn("No convergence for row")
+                warnings.warn("Unable to converge.")
                 break
-            count += 1
 
             excess = self.max_row() - self.max_weight
 
@@ -74,8 +76,17 @@ class ConvergeRow(object):
             else:
                 break
 
-            amount = excess / sum(self.row > 0)
+            amount = excess / self.act_cross
             self.row += amount
+
+    def fixed_val(self):
+        """
+        If the expected weight is greater than the maximum weight, set the Array of
+        weights equal to the expected weight for the active cross-sections.
+
+        """
+        row = np.ceil(self.row)
+        self.row = row * self.uniform
 
     def max_row(self):
         """
