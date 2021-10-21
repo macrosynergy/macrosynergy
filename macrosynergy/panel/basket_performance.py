@@ -6,15 +6,13 @@ from ..management.shape_dfs import reduce_df_by_ticker
 from ..panel.converge_row import ConvergeRow
 
 
-def check_weights(weight: np.ndarray):
+def check_weights(weight: pd.DataFrame):
     check = weight.sum(axis=1)
     c = ~((abs(check - 1) < 1e-6) | (abs(check) < 1e-6))
     assert not any(c), f"weights must sum to one (or zero), not: {check[c]}"
 
 
-def max_weight_func(
-    weights: pd.DataFrame, max_weight: float
-):
+def max_weight_func(weights: pd.DataFrame, max_weight: float):
     """max weight function
 
     Function designed to determine if all weights computed are within the maximum weight
@@ -27,16 +25,18 @@ def max_weight_func(
     :param <pd.DataFrame> weights: Corresponding weight matrix. Multidimensional.
     :param <float> max_weight: Upper-bound on the weight allowed for each cross-section.
 
-    :return <np.ndarray>: Will return the modified weight Array.
+    :return <pd.DataFrame>: Will return the modified weight DataFrame.
     """
 
-    raise NotImplementedError("Not yet implemented completely")
+    weights = weights.fillna(0.0)
+    w_matrix = weights.to_numpy()
 
-    mask = (weights > max_weight).any(axis=1)
-    for nrow in np.where(mask)[0]:
-        inst, row = ConvergeRow.max_weight(weights.iloc[nrow, :], max_weight)
-        weights.iloc[nrow, :] = row
+    for i, row in enumerate(w_matrix):
+        inst, row = ConvergeRow.application(row, max_weight)
+        weights.iloc[i, :] = row
 
+    cols = weights.columns
+    weights[cols] = weights[cols].replace({'0': np.nan, 0: np.nan})
     return weights
 
 
@@ -54,12 +54,11 @@ def equal_weight(df_ret: pd.DataFrame) -> pd.DataFrame:
     """
 
     act_cross = (~df_ret.isnull())
-    weight = act_cross.multiply(
-        np.kron(
-            (1 / act_cross.sum(axis=1)).values[:, np.newaxis],
-            np.ones((1, df_ret.shape[1]))
-        )
-    )
+    uniform = (1 / act_cross.sum(axis=1)).values
+    uniform = uniform[:, np.newaxis]
+    broadcast = np.repeat(uniform, df_ret.shape[1], axis=1)
+
+    weight = act_cross.multiply(broadcast)
     check_weights(weight=weight)
 
     return weight
@@ -78,12 +77,10 @@ def fixed_weight(df_ret: pd.DataFrame, weights: Union[np.ndarray, list]):
     :return <pd.DataFrame>: Will return the generated weight Array
     """
 
-    weight = (~df_ret.isnull()).multiply(
-        np.kron(
-            np.ones((df_ret.shape[0], 1)),
-            weights[np.newaxis, :]
-        )
-    )
+    act_cross = (~df_ret.isnull())
+
+    kronecker = np.kron(np.ones((df_ret.shape[0], 1)), weights[np.newaxis, :])
+    weight = act_cross.multiply(kronecker)
 
     weight = weight / weight.sum(axis=1)
 
@@ -96,8 +93,7 @@ def inverse_weight(
     dfw_ret: pd.DataFrame,
     lback_meth: str = "xma",
     lback_periods: int = 21,
-    remove_zeros: bool = True,
-):
+    remove_zeros: bool = True):
     """
     The weights will be computed by taking the inverse of the rolling standard deviation
     of each return series. The rolling standard deviation will be calculated either
@@ -108,16 +104,13 @@ def inverse_weight(
     the active cross-section Array to reflect the additional NaN values.
 
     :param <pd.DataFrame> dfw_ret: DataFrame pivot on the cross-sections.
-    :param <np.ndarray> ret_arr: Return series matrix. Multidimensional.
     :param <str> lback_meth: Lookback method for "invsd" weighting method.
                              Default is "xma".
     :param <int> lback_periods: Lookback periods. Default is 21.  Refers to half-time for
                                 "xma" and full lookback period for "ma".
     :param <Bool> remove_zeros: Removes the zeros. Default is set to True.
 
-
-    :return <np.ndarray>: Will return the generated weight Array, the updated Return
-                          Matrix,and the active cross-sections.
+    :return <pd.DataFrame>: Will return the generated weight DataFrame.
     """
 
     if lback_meth == "ma":
@@ -129,8 +122,7 @@ def inverse_weight(
         half_life = lback_periods
         weights = expo_weights(lback_periods * 2, half_life)
         dfwa = dfw_ret.rolling(window=lback_periods * 2).agg(
-            expo_std, w=weights, remove_zeros=remove_zeros
-        ) * np.sqrt(252)
+               expo_std, w=weights, remove_zeros=remove_zeros) * np.sqrt(252)
 
     w = 1 / dfwa
     weight = w / w.sum(axis=1).values[:, np.newaxis]
@@ -291,11 +283,8 @@ def basket_performance(
     select = ["ticker", "real_date", "value"]
     dfxr = (dfw_ret.fillna(0).multiply(w_matrix)).sum(axis=1) / w_matrix.sum(axis=1)
     dfxr.index.name = "real_date"
-    store = [
-        dfxr.to_frame("value")
-        .reset_index()
-        .assign(ticker=basket_tik + "_" + ret)[select]
-    ]
+    store = [dfxr.to_frame("value").reset_index()
+                 .assign(ticker=basket_tik + "_" + ret)[select]]
     if cry_flag:
         dfcry = (dfw_cry.fillna(0).multiply(w_matrix)).sum(axis=1) / w_matrix.sum(axis=1)
         dfcry.index.name = "real_date"
