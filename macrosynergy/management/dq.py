@@ -201,6 +201,7 @@ class DataQueryInterface(object):
         # TODO count/checksum of items...
         results = []
         count = 0
+
         while True:
             count += 1
             # TODO move to separate function...
@@ -494,7 +495,7 @@ class DataQueryInterface(object):
 
         return results
 
-    def get_ts_expression(self, expression, **kwargs):
+    def get_ts_expression(self, expression, df_flag, **kwargs):
         """
 
         start_date: str = None, end_date: str = None,
@@ -507,6 +508,7 @@ class DataQueryInterface(object):
 
         :param expression:
         :param **kwargs: dictionary of additional arguments
+        :param df_flag: boolean parameter outlining whether to return a dataframe or not.
         :return: JSON dictionary object with result of query
 
         >>> dq = DataQueryInterface(username="<USER>", password="<PASSWORD>")
@@ -526,7 +528,60 @@ class DataQueryInterface(object):
         results = self._fetch_ts(endpoint="/expressions/time-series",
                                  params=params, **kwargs)
 
-        return results
+        ## Each "ticker" passed will be held in a separate dictionary.
+        results_dict = self.isolate_timeseries(results)
+
+        if df_flag:
+            return self.dataframe_wrapper(results)
+        else:
+            return results_dict
+
+    @staticmethod
+    def isolate_timeseries(list_):
+
+        output_dict = {}
+        size = len(list_)
+        for i in range(size):
+            try:
+                r = list_.pop()
+            except Exception():
+                break
+            else:
+                dictionary = r['attributes'][0]
+                ticker = dictionary['expression']
+                print(dictionary)
+                time_series = dictionary['time-series']
+                ts_arr = np.array(time_series)
+                output_dict[ticker] = ts_arr
+
+        return output_dict
+
+    @staticmethod
+    def dataframe_wrapper(results):
+
+        r = results
+        dict_ = r.pop()
+        attributes_dict = dict_['attributes'].pop()
+
+        time_series = attributes_dict['time-series']
+        time_series = np.array(time_series)
+        ticker = attributes_dict['expression'].split(',')[1]
+        ticker = ticker.split('_')
+        cid = ticker[0]
+        xcat = ticker[1] + '_' + ticker[2]
+
+        cid_broad = np.repeat(cid, repeats=time_series.shape[0])
+        xcat_broad = np.repeat(xcat, repeats=time_series.shape[0])
+
+        data = np.column_stack((cid_broad, xcat_broad, time_series))
+        columns = ['cid', 'xcat', 'real_date', 'value']
+        df = pd.DataFrame(data=data, columns=columns)
+
+        df['real_date'] = pd.to_datetime(df['real_date'], yearfirst=True)
+        df = df[df['real_date'].dt.dayofweek < 5]
+        df = df.fillna(value=np.nan)
+
+        return df
 
     def get_ts_group(self, group_id, attributes_id: str,
                      filter_id: str = None,
