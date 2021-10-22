@@ -2,3 +2,4 @@ seaborn
 matplotlib
 pandas
 statsmodels
+sklearn

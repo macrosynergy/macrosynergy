@@ -122,5 +122,3 @@ if __name__ == "__main__":
     dfd_3 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=None,
                                 blacklist=None,  basket=['AUD'],
                                 rel_meth='subtract', rel_xcats=None, postfix='RV')
-
-    pass
