@@ -7,13 +7,13 @@ and private key to verify the request.
 """
 import requests
 import base64
-from typing import Optional, Union, List, Tuple
+from typing import Optional, Union
 import json
 import pandas as pd
 import numpy as np
 import os
 import logging
-import functools
+from math import ceil
 
 BASE_URL = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 
@@ -495,7 +495,7 @@ class DataQueryInterface(object):
 
         return results
 
-    def get_ts_expression(self, expression, df_flag, **kwargs):
+    def get_ts_expression(self, expression, **kwargs):
         """
 
         start_date: str = None, end_date: str = None,
@@ -514,19 +514,31 @@ class DataQueryInterface(object):
         >>> dq = DataQueryInterface(username="<USER>", password="<PASSWORD>")
         >>> results = dq.get_ts_expression(expression="DB(CFX, AUD, )")
 
-
         """
 
-        params = {"expressions": expression}
+        no_tickers = len(expression)
+        iterations = ceil(no_tickers / 20)
+        remainder = no_tickers % 20
 
-        # TODO "data" in kwargs.keys()
-        if "data" in kwargs.keys():
-            assert kwargs["data"] == "ALL"
-            params["data"] = kwargs.pop("data")
+        results = []
+        expression_copy = expression.copy()
+        for i in range(iterations):
+            if i < (iterations - 1):
+                expression = expression_copy[i * 20: (i * 20) + 20]
+            else:
+                expression = expression_copy[-remainder:]
 
-        # TODO if next not null, select="instruments",
-        results = self._fetch_ts(endpoint="/expressions/time-series",
-                                 params=params, **kwargs)
+            params = {"expressions": expression}
+
+            # TODO "data" in kwargs.keys()
+            if "data" in kwargs.keys():
+                assert kwargs["data"] == "ALL"
+                params["data"] = kwargs.pop("data")
+
+            # TODO if next not null, select="instruments",
+            output = self._fetch_ts(endpoint="/expressions/time-series",
+                                    params=params, **kwargs)
+            results.extend(output)
 
         ## Each "ticker" passed will be held in a separate dictionary.
         results_dict = self.isolate_timeseries(results)
