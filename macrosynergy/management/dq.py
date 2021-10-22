@@ -530,11 +530,9 @@ class DataQueryInterface(object):
 
         ## Each "ticker" passed will be held in a separate dictionary.
         results_dict = self.isolate_timeseries(results)
+        results_dict = self.valid_ticker(results_dict)
 
-        if df_flag:
-            return self.dataframe_wrapper(results)
-        else:
-            return results_dict
+        return self.dataframe_wrapper(results_dict)
 
     @staticmethod
     def isolate_timeseries(list_):
@@ -549,7 +547,6 @@ class DataQueryInterface(object):
             else:
                 dictionary = r['attributes'][0]
                 ticker = dictionary['expression']
-                print(dictionary)
                 time_series = dictionary['time-series']
                 ts_arr = np.array(time_series)
                 output_dict[ticker] = ts_arr
@@ -557,31 +554,53 @@ class DataQueryInterface(object):
         return output_dict
 
     @staticmethod
-    def dataframe_wrapper(results):
+    def dataframe_wrapper(_dict):
 
-        r = results
-        dict_ = r.pop()
-        attributes_dict = dict_['attributes'].pop()
+        tickers_no = len(_dict.keys())
+        length = list(_dict.values())[0].shape[0]
+        arr = np.empty(shape = (length * tickers_no, 4), dtype = object)
 
-        time_series = attributes_dict['time-series']
-        time_series = np.array(time_series)
-        ticker = attributes_dict['expression'].split(',')[1]
-        ticker = ticker.split('_')
-        cid = ticker[0]
-        xcat = ticker[1] + '_' + ticker[2]
+        i = 0
+        for k, v in _dict.items():
 
-        cid_broad = np.repeat(cid, repeats=time_series.shape[0])
-        xcat_broad = np.repeat(xcat, repeats=time_series.shape[0])
+            ticker = k.split(',')
+            ticker = ticker[1].split('_')
+            cid = ticker[0]
+            xcat = '_'.join(ticker[1:])
+            cid_broad = np.repeat(cid, repeats = v.shape[0])
+            xcat_broad = np.repeat(xcat, repeats = v.shape[0])
+            data = np.column_stack((cid_broad, xcat_broad, v))
 
-        data = np.column_stack((cid_broad, xcat_broad, time_series))
+            row = i * v.shape[0]
+            arr[row:row + v.shape[0], :] = data
+            i += 1
+
         columns = ['cid', 'xcat', 'real_date', 'value']
-        df = pd.DataFrame(data=data, columns=columns)
+        df = pd.DataFrame(data = arr, columns = columns)
 
-        df['real_date'] = pd.to_datetime(df['real_date'], yearfirst=True)
+        df['real_date'] = pd.to_datetime(df['real_date'], yearfirst = True)
         df = df[df['real_date'].dt.dayofweek < 5]
-        df = df.fillna(value=np.nan)
+        df = df.fillna(value = np.nan)
 
         return df
+
+    @staticmethod
+    def valid_ticker(_dict):
+
+        dict_copy = _dict.copy()
+        for k, v in _dict.items():
+            returns = list(v[:, 1])
+            returns = [elem if isinstance(elem, float) else 0.0 for elem in returns]
+            returns = np.array(returns)
+            condition = np.sum(returns)
+            if condition == 0.0:
+                print(f"The ticker, {k}, does not produce a return series.")
+                dict_copy.pop(k)
+            else:
+                continue
+
+        return dict_copy
+
 
     def get_ts_group(self, group_id, attributes_id: str,
                      filter_id: str = None,
