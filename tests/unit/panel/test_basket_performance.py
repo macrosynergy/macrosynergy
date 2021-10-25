@@ -3,6 +3,8 @@ import unittest
 import numpy as np
 import pandas as pd
 import random
+import sys
+
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.panel.basket_performance import *
 from macrosynergy.management.shape_dfs import reduce_df_by_ticker
@@ -14,14 +16,16 @@ class TestAll(unittest.TestCase):
         cids = ['AUD', 'GBP', 'NZD', 'USD']
         xcats = ['FX_XR', 'FX_CRY', 'EQ_XR', 'EQ_CRY']
 
-        df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
+        df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
+                                                    'sd_mult'])
 
         df_cids.loc['AUD'] = ['2010-12-01', '2020-12-31', 0, 1]
         df_cids.loc['GBP'] = ['2011-01-01', '2020-11-30', 0, 2]
         df_cids.loc['NZD'] = ['2012-01-01', '2020-11-30', 0, 3]
         df_cids.loc['USD'] = ['2013-01-01', '2020-09-30', 0, 4]
     
-        df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef'])
+        df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
+                                                      'sd_mult', 'ar_coef', 'back_coef'])
         df_xcats.loc['FX_XR'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.2]
         df_xcats.loc['FX_CRY'] = ['2011-01-01', '2020-10-30', 1, 1, 0.9, 0.5]
         df_xcats.loc['EQ_XR'] = ['2011-01-01', '2020-10-30', 0.5, 2, 0, 0.2]
@@ -29,7 +33,8 @@ class TestAll(unittest.TestCase):
 
         random.seed(2)
         self.dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-        self.black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
+        self.black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01',
+                                                                   '2100-01-01']}
 
         self.contracts = ['AUD_FX', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
         ret = 'XR'
@@ -42,11 +47,12 @@ class TestAll(unittest.TestCase):
 
         dfx["ticker"] = dfx["cid"] + "_" + dfx["xcat"]
         self.dfw_ret = dfx[dfx["ticker"].isin(ticks_ret)].pivot(index="real_date",
-                                                                columns="cid", values="value")
+                                                                columns="cid", values=
+                                                                "value")
 
         self.dfw_cry = dfx[dfx["ticker"].isin(ticks_cry)].pivot(index="real_date",
-                                                                columns="cid", values="value")        
-
+                                                                columns="cid", values=
+                                                                "value")
 
     @staticmethod
     def construct_df():
@@ -61,12 +67,12 @@ class TestAll(unittest.TestCase):
         weights[-2:, -1] = np.nan
         weights[:3, -1] = np.nan
 
-        sum_ = np.nansum(weights, axis = 1)
+        sum_ = np.nansum(weights, axis=1)
         sum_ = sum_[:, np.newaxis]
         
         weights = np.divide(weights, sum_)
         cols = ['col_' + str(i + 1) for i in range(weights.shape[1])]
-        pseudo_df = pd.DataFrame(data = weights, columns = cols)
+        pseudo_df = pd.DataFrame(data=weights, columns=cols)
 
         return pseudo_df
 
@@ -75,9 +81,9 @@ class TestAll(unittest.TestCase):
 
         df_index = np.array(df.index)
         weights_bool = ~df.isnull()
-        weights_bool = weights_bool.astype(dtype = np.uint8)
+        weights_bool = weights_bool.astype(dtype=np.uint8)
         
-        act_cross = weights_bool.sum(axis = 1)
+        act_cross = weights_bool.sum(axis=1)
 
         nan_rows = np.where(act_cross == 0)[0]
         nan_size = nan_rows.size
@@ -93,10 +99,10 @@ class TestAll(unittest.TestCase):
                 w_matrix = w_matrix[(end + 1):, :]
                 df_index = df_index[(end + 1):]
             else:
-                w_matrix = np.delete(w_matrix, tuple(nan_rows), axis = 0)
-                df_index = np.delete(df_index, tuple(nan_rows), axis = 0)
+                w_matrix = np.delete(w_matrix, tuple(nan_rows), axis=0)
+                df_index = np.delete(df_index, tuple(nan_rows), axis=0)
 
-        df = pd.DataFrame(data = w_matrix, columns = list(df.columns), index = df_index)
+        df = pd.DataFrame(data=w_matrix, columns=list(df.columns), index=df_index)
         
         return df
 
@@ -104,12 +110,12 @@ class TestAll(unittest.TestCase):
     def weight_check(df, max_weight):
 
         weights_bool = ~df.isnull()
-        weights_bool = weights_bool.astype(dtype = np.uint8)
+        weights_bool = weights_bool.astype(dtype=np.uint8)
         
-        act_cross = weights_bool.sum(axis = 1)
+        act_cross = weights_bool.sum(axis=1)
         uniform = 1 / act_cross
 
-        weights_uni = weights_bool.multiply(uniform, axis = 0)
+        weights_uni = weights_bool.multiply(uniform, axis=0)
         uni_bool = uniform > max_weight
         weights_uni[weights_uni == 0.0] = np.nan
         
@@ -118,11 +124,11 @@ class TestAll(unittest.TestCase):
     def test_check_weights(self):
         
         weights = self.construct_df()
-        ## Weight allocation exceeds 1.0: verify that the function catches the constructed error.
+        # Weight allocation exceeds 1.0: verify that the function catches
+        # the constructed error.
         weights.iloc[0, :] += 0.5
         with self.assertRaises(AssertionError):
             check_weights(weights)
-            
 
     def test_max_weight(self):
 
@@ -147,7 +153,8 @@ class TestAll(unittest.TestCase):
         self.dataframe_construction()
         dfw_ret = self.dfw_ret
 
-        ## After the application of the inverse standard deviation weighting method, the preceding rows up until the window has been populated will become obsolete.
+        # After the application of the inverse standard deviation weighting method,
+        # the preceding rows up until the window has been populated will become obsolete.
         ## Therefore, the rows should be removed.
         weights = inverse_weight(dfw_ret, "xma")
         weights = self.remove_rows(weights)
@@ -165,16 +172,16 @@ class TestAll(unittest.TestCase):
             if uni_bool[i]:
                 self.assertTrue(np.all(row == weights_uni[i, :]))
             else:
-                self.assertTrue(np.all(row < max_weight + 0.001))            
+                self.assertTrue(np.all(row < max_weight + 0.001))
 
     def test_equal_weight(self):
 
         self.dataframe_construction()
         dfw_ret = self.dfw_ret
         dfw_bool = (~dfw_ret.isnull())
-        dfw_bool = dfw_bool.astype(dtype = np.uint8)
+        dfw_bool = dfw_bool.astype(dtype=np.uint8)
         bool_arr = dfw_bool.to_numpy()
-        act_cross = dfw_bool.sum(axis = 1).to_numpy()
+        act_cross = dfw_bool.sum(axis=1).to_numpy()
         equal = 1 / act_cross
 
         weights = equal_weight(dfw_ret)
@@ -196,7 +203,39 @@ class TestAll(unittest.TestCase):
 
             test = bool_arr[i, :] * equal[i]
             self.assertTrue(np.all(row == test))
-            
+
+    def test_equal_weight(self):
+
+        # Pass in GDP figures of the respective cross-sections as weights.
+        # ['AUD', 'GBP', 'NZD', 'USD']
+        gdp_figures = [17, 41, 9, 215]
+
+        self.dataframe_construction()
+        dfw_ret = self.dfw_ret
+
+        weights = fixed_weight(dfw_ret, gdp_figures)
+        self.assertEqual(dfw_ret.shape, weights.shape)
+        weights_arr = weights.to_numpy()
+
+        check = np.ones(shape=weights_arr.shape[0], dtype=np.float32)
+        check = np.abs(check - np.sum(weights_arr, axis=1))
+
+        self.assertTrue(np.all(check < 0.00001))
+
+        cols = weights.columns
+        weights[cols] = weights[cols].replace({'0': np.nan, 0.0: np.nan})
+        weights_full = weights.dropna(axis=0, how='any')
+
+        weights_full = weights_full.reset_index(drop=True)
+        ratio_sum = sum(gdp_figures)
+        ratio = [round(elem / ratio_sum, 5) for elem in gdp_figures]
+
+        rows = weights_full.shape[0]
+        for i in range(rows):
+            row = list(weights_full.iloc[i, :].to_numpy())
+            row = [round(elem, 5) for elem in row]
+            self.assertEqual(row, ratio)
+
     def test_inverse_weight(self):
 
         self.dataframe_construction()
@@ -204,30 +243,38 @@ class TestAll(unittest.TestCase):
 
         weights = inverse_weight(dfw_ret, "ma")
         weights = self.remove_rows(weights)
-        weights_arr = weights.to_numpy()
 
-        ## Validate that the inverse weighting mechanism has been applied correctly.
+        sum_ = np.sum(weights, axis = 1)
+        self.assertTrue(np.all(np.abs(sum_ - np.ones(sum_.size)) < 0.000001))
+        weights_arr = np.nan_to_num(weights.to_numpy())
+
+        # Validate that the inverse weighting mechanism has been applied correctly.
         dfwa = dfw_ret.rolling(window=21).agg(flat_std, True)
         dfwa = self.remove_rows(dfwa)
         
         dfwa *= np.sqrt(252)
-        rolling_std = dfwa.to_numpy()
+        rolling_std = np.nan_to_num(dfwa.to_numpy())
 
-        assert rolling_std.shape == weights_arr.shape
+        self.assertEqual(rolling_std.shape, weights_arr.shape)
+
+        max_float = sys.float_info.max
+        rolling_std[rolling_std == 0.0] = max_float
         for i, row in enumerate(rolling_std):
 
             dict_ = dict(zip(row, range(row.size)))
             sorted_r = sorted(row)
             s_indices = [dict_[elem] for elem in sorted_r]
 
-            row_weight = weights[i, :]
+            row_weight = weights_arr[i, :]
             reverse_order = []
             for index in s_indices:
                 reverse_order.append(row_weight[index])
 
-            self.assertTrue(reverse_order == sorted(row_weight, reverse = True))
-            
+            self.assertTrue(reverse_order == sorted(row_weight, reverse=True))
+
+    def test_b_performance(self):
         
+
 if __name__ == "__main__":
 
     unittest.main()
