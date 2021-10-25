@@ -64,7 +64,7 @@ def equal_weight(df_ret: pd.DataFrame) -> pd.DataFrame:
     return weight
 
 
-def fixed_weight(df_ret: pd.DataFrame, weights: Union[np.ndarray, list]):
+def fixed_weight(df_ret: pd.DataFrame, weights: List[float]):
     """
     The fixed weight method will receive a matrix of values, same dimensions as the
     DataFrame, and use the values for weights. For instance, GDP figures.
@@ -72,17 +72,21 @@ def fixed_weight(df_ret: pd.DataFrame, weights: Union[np.ndarray, list]):
     matrix.
 
     :param <pd.DataFrame> df_ret: Return series matrix. Multidimensional.
-    :param <np.ndarray> weights: Multidimensional Array of values.
+    :param <List[float]> weights: List of floats determining weight allocation.
+                                  Example GDP.
 
     :return <pd.DataFrame>: Will return the generated weight Array
     """
 
     act_cross = (~df_ret.isnull())
 
-    kronecker = np.kron(np.ones((df_ret.shape[0], 1)), weights[np.newaxis, :])
-    weight = act_cross.multiply(kronecker)
+    weights = np.array(weights, dtype = np.float32)
+    rows = act_cross.shape[0]
+    broadcast = np.tile(weights, (rows, 1))
 
-    weight = weight / weight.sum(axis=1)
+    weight = act_cross.multiply(broadcast)
+    weight_arr = weight.to_numpy()
+    weight[weight.columns] = weight_arr / np.sum(weight_arr, axis = 1)[:, np.newaxis]
 
     check_weights(weight)
 
@@ -239,40 +243,34 @@ def basket_performance(
     )
 
     dfx["ticker"] = dfx["cid"] + "_" + dfx["xcat"]
-    dfw_ret = dfx[dfx["ticker"].isin(ticks_ret)].pivot(
-        index="real_date", columns="cid", values="value"
-    )
+    dfw_ret = dfx[dfx["ticker"].isin(ticks_ret)].pivot(index="real_date", columns="cid",
+                                                       values="value")
 
     if cry_flag:
-        dfw_cry = dfx[dfx["ticker"].isin(ticks_cry)].pivot(
-            index="real_date", columns="cid", values="value"
-        )
+        dfw_cry = dfx[dfx["ticker"].isin(ticks_cry)].pivot(index="real_date",
+                                                           columns="cid", values="value")
 
     ret_arr = dfw_ret.to_numpy()
     act_cross = (~dfw_ret.isnull()).sum(axis=1)
 
     if weight_meth == "equal":
         w_matrix = equal_weight(df_ret=dfw_ret)
+
     elif weight_meth == "fixed":
-        # TODO how do you know we have the right ordering
         assert dfw_ret.shape[1] == len(weights)
         w_matrix = fixed_weight(df_ret=ret_arr, weights=weights)
+
     elif weight_meth == "invsd":
-        w_matrix = inverse_weight(
-            dfw_ret=dfw_ret,
-            lback_meth=lback_meth,
-            lback_periods=lback_periods,
-            remove_zeros=remove_zeros
-        )
+
+        w_matrix = inverse_weight(dfw_ret=dfw_ret, lback_meth=lback_meth, lback_periods
+                                  =lback_periods, remove_zeros=remove_zeros)
     elif weight_meth == "values" or weight_meth == "inv_values":
-        # TODO how do you know we have the right ordering
+
         assert dfw_ret.shape[1] == len(weights)
         # w_matrix = values_weight()
         raise NotImplementedError(
             "Not yet implemented - need to extract the panel of weights from the input"
-            " DataFrame"
-        )
-
+            " DataFrame")
     else:
         raise NotImplementedError(f"Weight method unknown {weight_meth}")
 
@@ -284,16 +282,12 @@ def basket_performance(
     dfxr = (dfw_ret.fillna(0).multiply(w_matrix)).sum(axis=1) / w_matrix.sum(axis=1)
     dfxr.index.name = "real_date"
     store = [dfxr.to_frame("value").reset_index()
-                 .assign(ticker=basket_tik + "_" + ret)[select]]
+             .assign(ticker=basket_tik + "_" + ret)[select]]
     if cry_flag:
         dfcry = (dfw_cry.fillna(0).multiply(w_matrix)).sum(axis=1) / w_matrix.sum(axis=1)
         dfcry.index.name = "real_date"
-
-        store.append(
-            dfcry.to_frame("value")
-            .reset_index()
-            .assign(ticker=basket_tik + "_" + cry)[select]
-        )
+        store.append(dfcry.to_frame("value").reset_index().assign(ticker=basket_tik +
+                                                                  "_" + cry)[select])
 
     if return_weights:
         w_matrix.index.name = "real_date"
