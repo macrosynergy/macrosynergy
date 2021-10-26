@@ -277,12 +277,28 @@ class TestAll(unittest.TestCase):
         self.dataframe_construction()
         dfd = self.dfd
 
+        # Testing the assertion error on the return field.
         with self.assertRaises(AssertionError):
             df_return = basket_performance(dfd, contracts=['AUD_FX', 'NZD_FX'],
                                            ret=["XR_NSA"], cry="CRY_NSA",
                                            weight_meth="equal", weight_xcat=None,
-                                           max_weight=3.0, basket_tik="GLB_ALL",
+                                           max_weight=0.3, basket_tik="GLB_ALL",
                                            return_weights=False)
+        # Testing the assertion error on the contracts field: List required..
+        with self.assertRaises(AssertionError):
+            df_return = basket_performance(dfd, contracts='AUD_FX',
+                                           ret="XR_NSA", cry="CRY_NSA",
+                                           weight_meth="equal", weight_xcat=None,
+                                           max_weight=0.45, basket_tik="GLB_ALL",
+                                           return_weights=False)
+        # Testing the assertion error on max_weight field: 0 < max_weight <= 1.
+        with self.assertRaises(AssertionError):
+            df_return = basket_performance(dfd, contracts=['AUD_FX', 'NZD_FX'],
+                                           ret="XR_NSA", cry="CRY_NSA",
+                                           weight_meth="equal", weight_xcat=None,
+                                           max_weight=1.2, basket_tik="GLB_ALL",
+                                           return_weights=False)
+
 
 if __name__ == "__main__":
 
