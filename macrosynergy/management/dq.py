@@ -592,7 +592,8 @@ class DataQueryInterface(object):
 
         df['real_date'] = pd.to_datetime(df['real_date'], yearfirst = True)
         df = df[df['real_date'].dt.dayofweek < 5]
-        df = df.fillna(value = np.nan)
+        df = df.fillna(value=np.nan)
+        df = df.reset_index(drop=True)
 
         return df
 
