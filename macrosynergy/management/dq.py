@@ -7,13 +7,13 @@ and private key to verify the request.
 """
 import requests
 import base64
-from typing import Optional, Union, List, Tuple
+from typing import Optional, Union
 import json
 import pandas as pd
 import numpy as np
 import os
 import logging
-import functools
+from math import ceil
 
 BASE_URL = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 
@@ -201,6 +201,7 @@ class DataQueryInterface(object):
         # TODO count/checksum of items...
         results = []
         count = 0
+
         while True:
             count += 1
             # TODO move to separate function...
@@ -507,26 +508,112 @@ class DataQueryInterface(object):
 
         :param expression:
         :param **kwargs: dictionary of additional arguments
+        :param df_flag: boolean parameter outlining whether to return a dataframe or not.
         :return: JSON dictionary object with result of query
 
         >>> dq = DataQueryInterface(username="<USER>", password="<PASSWORD>")
         >>> results = dq.get_ts_expression(expression="DB(CFX, AUD, )")
 
-
         """
 
-        params = {"expressions": expression}
+        no_tickers = len(expression)
+        iterations = ceil(no_tickers / 20)
+        remainder = no_tickers % 20
 
-        # TODO "data" in kwargs.keys()
-        if "data" in kwargs.keys():
-            assert kwargs["data"] == "ALL"
-            params["data"] = kwargs.pop("data")
+        results = []
+        expression_copy = expression.copy()
+        for i in range(iterations):
+            if i < (iterations - 1):
+                expression = expression_copy[i * 20: (i * 20) + 20]
+            else:
+                expression = expression_copy[-remainder:]
 
-        # TODO if next not null, select="instruments",
-        results = self._fetch_ts(endpoint="/expressions/time-series",
-                                 params=params, **kwargs)
+            params = {"expressions": expression}
 
-        return results
+            # TODO "data" in kwargs.keys()
+            if "data" in kwargs.keys():
+                assert kwargs["data"] == "ALL"
+                params["data"] = kwargs.pop("data")
+
+            # TODO if next not null, select="instruments",
+            output = self._fetch_ts(endpoint="/expressions/time-series",
+                                    params=params, **kwargs)
+            results.extend(output)
+
+        ## Each "ticker" passed will be held in a separate dictionary.
+        results_dict = self.isolate_timeseries(results)
+        results_dict = self.valid_ticker(results_dict)
+
+        return self.dataframe_wrapper(results_dict)
+
+    @staticmethod
+    def isolate_timeseries(list_):
+
+        output_dict = {}
+        size = len(list_)
+        for i in range(size):
+            try:
+                r = list_.pop()
+            except Exception():
+                break
+            else:
+                dictionary = r['attributes'][0]
+                ticker = dictionary['expression']
+                time_series = dictionary['time-series']
+                ts_arr = np.array(time_series)
+                output_dict[ticker] = ts_arr
+
+        return output_dict
+
+    @staticmethod
+    def dataframe_wrapper(_dict):
+
+        tickers_no = len(_dict.keys())
+        length = list(_dict.values())[0].shape[0]
+        arr = np.empty(shape = (length * tickers_no, 4), dtype = object)
+
+        i = 0
+        for k, v in _dict.items():
+
+            ticker = k.split(',')
+            ticker = ticker[1].split('_')
+            cid = ticker[0]
+            xcat = '_'.join(ticker[1:])
+            cid_broad = np.repeat(cid, repeats = v.shape[0])
+            xcat_broad = np.repeat(xcat, repeats = v.shape[0])
+            data = np.column_stack((cid_broad, xcat_broad, v))
+
+            row = i * v.shape[0]
+            arr[row:row + v.shape[0], :] = data
+            i += 1
+
+        columns = ['cid', 'xcat', 'real_date', 'value']
+        df = pd.DataFrame(data = arr, columns = columns)
+
+        df['real_date'] = pd.to_datetime(df['real_date'], yearfirst = True)
+        df = df[df['real_date'].dt.dayofweek < 5]
+        df = df.fillna(value=np.nan)
+        df = df.reset_index(drop=True)
+
+        return df
+
+    @staticmethod
+    def valid_ticker(_dict):
+
+        dict_copy = _dict.copy()
+        for k, v in _dict.items():
+            returns = list(v[:, 1])
+            returns = [elem if isinstance(elem, float) else 0.0 for elem in returns]
+            returns = np.array(returns)
+            condition = np.sum(returns)
+            if condition == 0.0:
+                print(f"The ticker, {k}, does not produce a return series.")
+                dict_copy.pop(k)
+            else:
+                continue
+
+        return dict_copy
+
 
     def get_ts_group(self, group_id, attributes_id: str,
                      filter_id: str = None,
