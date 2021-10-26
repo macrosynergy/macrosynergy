@@ -273,7 +273,16 @@ class TestAll(unittest.TestCase):
             self.assertTrue(reverse_order == sorted(row_weight, reverse=True))
 
     def test_b_performance(self):
-        
+
+        self.dataframe_construction()
+        dfd = self.dfd
+
+        with self.assertRaises(AssertionError):
+            df_return = basket_performance(dfd, contracts=['AUD_FX', 'NZD_FX'],
+                                           ret=["XR_NSA"], cry="CRY_NSA",
+                                           weight_meth="equal", weight_xcat=None,
+                                           max_weight=3.0, basket_tik="GLB_ALL",
+                                           return_weights=False)
 
 if __name__ == "__main__":
 

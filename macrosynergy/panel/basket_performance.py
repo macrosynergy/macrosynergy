@@ -1,9 +1,11 @@
 import numpy as np
 import pandas as pd
+import random
 from typing import List, Union
 from ..panel.historic_vol import expo_weights, expo_std, flat_std
 from ..management.shape_dfs import reduce_df_by_ticker
 from ..panel.converge_row import ConvergeRow
+from ..management.simulate_quantamental_data import make_qdf
 
 
 def check_weights(weight: pd.DataFrame):
@@ -152,27 +154,15 @@ def values_weight(weights: pd.DataFrame):
     return weights
 
 
-def basket_performance(
-    df: pd.DataFrame,
-    contracts: List[str],
-    ret: str = "XR_NSA",
-    cry: str = "CRY_NSA",
-    start: str = None,
-    end: str = None,
-    blacklist: dict = None,
-    weight_meth: str = "equal",
-    lback_meth: str = "xma",
-    lback_periods: int = 21,
-    remove_zeros: bool = True,
-    weights: List[float] = None,
-    weight_xcat: str = None,
-    max_weight: float = 1.0,
-    basket_tik: str = "GLB_ALL",
-    return_weights: bool = False,
-):
+def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NSA",
+                       cry: str = "CRY_NSA", start: str = None, end: str = None,
+                       blacklist: dict = None, weight_meth: str = "equal",
+                       lback_meth: str = "xma", lback_periods: int = 21,
+                       remove_zeros: bool = True, weights: List[float] = None,
+                       weight_xcat: str = None, max_weight: float = 1.0,
+                       basket_tik: str = "GLB_ALL", return_weights: bool = False):
 
     """Basket performance
-
     Computes approximate return and carry series for a basket of underlying contracts.
 
     :param <pd.Dataframe> df: Standardized DataFrame with the following columns:
@@ -238,9 +228,8 @@ def basket_performance(
         ticks_cry = []
     tickers = ticks_ret + ticks_cry
 
-    dfx = reduce_df_by_ticker(
-        df, start=start, end=end, ticks=tickers, blacklist=blacklist
-    )
+    dfx = reduce_df_by_ticker(df, start=start, end=end, ticks=tickers,
+                              blacklist=blacklist)
 
     dfx["ticker"] = dfx["cid"] + "_" + dfx["xcat"]
     dfw_ret = dfx[dfx["ticker"].isin(ticks_ret)].pivot(index="real_date", columns="cid",
@@ -302,3 +291,27 @@ def basket_performance(
     data = pd.concat(store, axis=0, ignore_index=True)
 
     return data
+
+
+if __name__ == "__main__":
+    cids = ['AUD', 'GBP', 'NZD', 'USD']
+    xcats = ['FX_XR', 'FX_CRY', 'EQ_XR', 'EQ_CRY']
+
+    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
+                                                'sd_mult'])
+
+    df_cids.loc['AUD'] = ['2010-12-01', '2020-12-31', 0, 1]
+    df_cids.loc['GBP'] = ['2011-01-01', '2020-11-30', 0, 2]
+    df_cids.loc['NZD'] = ['2012-01-01', '2020-11-30', 0, 3]
+    df_cids.loc['USD'] = ['2013-01-01', '2020-09-30', 0, 4]
+
+    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
+                                                  'sd_mult', 'ar_coef', 'back_coef'])
+    df_xcats.loc['FX_XR'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.2]
+    df_xcats.loc['FX_CRY'] = ['2011-01-01', '2020-10-30', 1, 1, 0.9, 0.5]
+    df_xcats.loc['EQ_XR'] = ['2011-01-01', '2020-10-30', 0.5, 2, 0, 0.2]
+    df_xcats.loc['EQ_CRY'] = ['2013-01-01', '2020-10-30', 1, 1, 0.9, 0.5]
+
+    random.seed(2)
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
