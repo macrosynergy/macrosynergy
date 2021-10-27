@@ -544,7 +544,15 @@ class DataQueryInterface(object):
         results_dict = self.isolate_timeseries(results)
         results_dict = self.valid_ticker(results_dict)
 
-        return self.dataframe_wrapper(results_dict)
+        results_copy = results_dict.copy()
+        try:
+            results_copy.popitem()
+        except Exception as err:
+            print(err)
+            print("None of the tickers are available in the Database.")
+            return
+        else:
+            return self.dataframe_wrapper(results_dict)
 
     @staticmethod
     def isolate_timeseries(list_):
@@ -564,6 +572,23 @@ class DataQueryInterface(object):
                 output_dict[ticker] = ts_arr
 
         return output_dict
+
+    @staticmethod
+    def valid_ticker(_dict):
+
+        dict_copy = _dict.copy()
+        for k, v in _dict.items():
+            returns = list(v[:, 1])
+            returns = [elem if isinstance(elem, float) else 0.0 for elem in returns]
+            returns = np.array(returns)
+            condition = np.sum(returns)
+            if condition == 0.0:
+                print(f"The ticker, {k}, does not exist in the Database.")
+                dict_copy.pop(k)
+            else:
+                continue
+
+        return dict_copy
 
     @staticmethod
     def dataframe_wrapper(_dict):
@@ -596,24 +621,6 @@ class DataQueryInterface(object):
         df = df.reset_index(drop=True)
 
         return df
-
-    @staticmethod
-    def valid_ticker(_dict):
-
-        dict_copy = _dict.copy()
-        for k, v in _dict.items():
-            returns = list(v[:, 1])
-            returns = [elem if isinstance(elem, float) else 0.0 for elem in returns]
-            returns = np.array(returns)
-            condition = np.sum(returns)
-            if condition == 0.0:
-                print(f"The ticker, {k}, does not produce a return series.")
-                dict_copy.pop(k)
-            else:
-                continue
-
-        return dict_copy
-
 
     def get_ts_group(self, group_id, attributes_id: str,
                      filter_id: str = None,
