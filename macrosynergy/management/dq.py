@@ -31,7 +31,7 @@ class DataQueryInterface(object):
 
     ©JP Morgan
 
-    DAtaQuery Data Universet
+    DataQuery Data Universet
     * Fixed Income
     * Securitzed Products
     * Credit Products
