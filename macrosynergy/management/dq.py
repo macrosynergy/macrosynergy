@@ -14,6 +14,8 @@ import numpy as np
 import os
 import logging
 from math import ceil
+from collections import defaultdict
+from itertools import groupby
 
 BASE_URL = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 
@@ -540,8 +542,10 @@ class DataQueryInterface(object):
                                     params=params, **kwargs)
             results.extend(output)
 
-        ## Each "ticker" passed will be held in a separate dictionary.
-        results_dict = self.isolate_timeseries(results)
+        # (O(n) + O(nlog(n)) operation.
+        no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression]))
+        # Each "ticker" passed will be held in a separate dictionary.
+        results_dict, metric_order = self.isolate_timeseries(results)
         results_dict = self.valid_ticker(results_dict)
 
         results_copy = results_dict.copy()
@@ -552,12 +556,13 @@ class DataQueryInterface(object):
             print("None of the tickers are available in the Database.")
             return
         else:
-            return self.dataframe_wrapper(results_dict)
+            return self.dataframe_wrapper(results_dict, no_metrics, metric_order)
 
     @staticmethod
     def isolate_timeseries(list_):
 
-        output_dict = {}
+        output_dict = defaultdict(list)
+        metric_order = []
         size = len(list_)
         for i in range(size):
             try:
@@ -567,11 +572,23 @@ class DataQueryInterface(object):
             else:
                 dictionary = r['attributes'][0]
                 ticker = dictionary['expression']
+                ticker = ticker.split(',')
+
+                metric_order.append(ticker[-1][:-1])
+                ticker_split = ','.join(ticker[:-1])
+
                 time_series = dictionary['time-series']
                 ts_arr = np.array(time_series)
-                output_dict[ticker] = ts_arr
+                if ticker_split not in output_dict:
+                    output_dict[ticker_split].append(ts_arr)
+                else:
+                    output_dict[ticker_split].append(ts_arr[:, 1])
 
-        return output_dict
+        modified_dict = {}
+        for k, v in output_dict.items():
+            modified_dict[k] = np.column_stack(tuple(v))
+
+        return modified_dict, metric_order
 
     @staticmethod
     def valid_ticker(_dict):
@@ -591,29 +608,40 @@ class DataQueryInterface(object):
         return dict_copy
 
     @staticmethod
-    def dataframe_wrapper(_dict):
+    def dataframe_wrapper(_dict, no_metrics, metric_order):
 
         tickers_no = len(_dict.keys())
         length = list(_dict.values())[0].shape[0]
-        arr = np.empty(shape = (length * tickers_no, 4), dtype = object)
+
+        arr = np.empty(shape=(length * tickers_no, 3 + no_metrics), dtype=object)
 
         i = 0
         for k, v in _dict.items():
 
             ticker = k.split(',')
             ticker = ticker[1].split('_')
+
             cid = ticker[0]
             xcat = '_'.join(ticker[1:])
-            cid_broad = np.repeat(cid, repeats = v.shape[0])
-            xcat_broad = np.repeat(xcat, repeats = v.shape[0])
+
+            cid_broad = np.repeat(cid, repeats=v.shape[0])
+            xcat_broad = np.repeat(xcat, repeats=v.shape[0])
             data = np.column_stack((cid_broad, xcat_broad, v))
 
             row = i * v.shape[0]
             arr[row:row + v.shape[0], :] = data
             i += 1
 
-        columns = ['cid', 'xcat', 'real_date', 'value']
-        df = pd.DataFrame(data = arr, columns = columns)
+        print(arr.shape)
+        print(metric_order)
+        unique_metrics = list(groupby(metric_order))
+        unique_metrics = list(map(lambda tup: tup[0], unique_metrics))
+        print(unique_metrics)
+        columns = ['cid', 'xcat', 'real_date']
+        columns.extend(unique_metrics)
+        print(columns)
+
+        df = pd.DataFrame(data=arr, columns=columns)
 
         df['real_date'] = pd.to_datetime(df['real_date'], yearfirst = True)
         df = df[df['real_date'].dt.dayofweek < 5]
