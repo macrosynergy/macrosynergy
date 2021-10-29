@@ -15,7 +15,7 @@ import os
 import logging
 from math import ceil
 from collections import defaultdict
-from itertools import groupby
+import warnings
 
 BASE_URL = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 
@@ -497,7 +497,7 @@ class DataQueryInterface(object):
 
         return results
 
-    def get_ts_expression(self, expression, **kwargs):
+    def get_ts_expression(self, expression, original_metrics, **kwargs):
         """
 
         start_date: str = None, end_date: str = None,
@@ -542,10 +542,11 @@ class DataQueryInterface(object):
                                     params=params, **kwargs)
             results.extend(output)
 
+        print(results)
         # (O(n) + O(nlog(n)) operation.
         no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression]))
-        # Each "ticker" passed will be held in a separate dictionary.
-        results_dict, metric_order = self.isolate_timeseries(results)
+
+        results_dict, metrics = self.isolate_timeseries(results)
         results_dict = self.valid_ticker(results_dict)
 
         results_copy = results_dict.copy()
@@ -556,51 +557,73 @@ class DataQueryInterface(object):
             print("None of the tickers are available in the Database.")
             return
         else:
-            return self.dataframe_wrapper(results_dict, no_metrics, metric_order)
+            return self.dataframe_wrapper(results_dict, no_metrics, metrics,
+                                          original_metrics)
 
     @staticmethod
     def isolate_timeseries(list_):
 
-        output_dict = defaultdict(list)
-        metric_order = []
+        output_dict = defaultdict(dict)
+        metrics = set()
         size = len(list_)
+
         for i in range(size):
             try:
                 r = list_.pop()
-            except Exception():
+            except IndexError:
                 break
             else:
                 dictionary = r['attributes'][0]
                 ticker = dictionary['expression']
                 ticker = ticker.split(',')
+                metric = ticker[-1][:-1]
 
-                metric_order.append(ticker[-1][:-1])
+                metrics.add(metric)
                 ticker_split = ','.join(ticker[:-1])
 
                 time_series = dictionary['time-series']
                 ts_arr = np.array(time_series)
+
                 if ticker_split not in output_dict:
-                    output_dict[ticker_split].append(ts_arr)
+                    output_dict[ticker_split]['real_date'] = ts_arr[:, 0]
+                    output_dict[ticker_split][metric] = ts_arr[:, 1]
                 else:
-                    output_dict[ticker_split].append(ts_arr[:, 1])
+                    output_dict[ticker_split][metric] = ts_arr[:, 1]
 
+        no_rows = ts_arr[:, 1].size
         modified_dict = {}
-        for k, v in output_dict.items():
-            modified_dict[k] = np.column_stack(tuple(v))
+        d_frame_order = ['real_date'] + list(metrics)
 
-        return modified_dict, metric_order
+        for k, v in output_dict.items():
+            arr = np.empty(shape=(no_rows, len(d_frame_order)), dtype=object)
+            for i, metric in enumerate(d_frame_order):
+                arr[:, i] = v[metric]
+
+            modified_dict[k] = arr
+
+        return modified_dict, list(metrics)
 
     @staticmethod
-    def valid_ticker(_dict):
+    def column_check(v, col):
+        returns = list(v[:, col])
+        condition = all([isinstance(elem, type(None)) for elem in returns])
+
+        return condition
+
+    def valid_ticker(self, _dict):
 
         dict_copy = _dict.copy()
         for k, v in _dict.items():
-            returns = list(v[:, 1])
-            returns = [elem if isinstance(elem, float) else 0.0 for elem in returns]
-            returns = np.array(returns)
-            condition = np.sum(returns)
-            if condition == 0.0:
-                print(f"The ticker, {k}, does not exist in the Database.")
+            no_cols = v.shape[1]
+
+            condition = self.column_check(v, 1)
+            if condition:
+                for i in range(2, no_cols):
+                    condition = self.column_check(v, 1)
+                    if not condition:
+                        warnings.warn("Error has occurred in the DataBase.")
+
+                warnings.warn(f"The ticker, {k}, does not exist in the Database.")
                 dict_copy.pop(k)
             else:
                 continue
@@ -608,7 +631,7 @@ class DataQueryInterface(object):
         return dict_copy
 
     @staticmethod
-    def dataframe_wrapper(_dict, no_metrics, metric_order):
+    def dataframe_wrapper(_dict, no_metrics, metrics, original_metrics):
 
         tickers_no = len(_dict.keys())
         length = list(_dict.values())[0].shape[0]
@@ -632,14 +655,10 @@ class DataQueryInterface(object):
             arr[row:row + v.shape[0], :] = data
             i += 1
 
-        print(arr.shape)
-        print(metric_order)
-        unique_metrics = list(groupby(metric_order))
-        unique_metrics = list(map(lambda tup: tup[0], unique_metrics))
-        print(unique_metrics)
         columns = ['cid', 'xcat', 'real_date']
-        columns.extend(unique_metrics)
-        print(columns)
+        cols_output = columns + original_metrics
+
+        columns.extend(metrics)
 
         df = pd.DataFrame(data=arr, columns=columns)
 
@@ -648,7 +667,7 @@ class DataQueryInterface(object):
         df = df.fillna(value=np.nan)
         df = df.reset_index(drop=True)
 
-        return df
+        return df[cols_output]
 
     def get_ts_group(self, group_id, attributes_id: str,
                      filter_id: str = None,
