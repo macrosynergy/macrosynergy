@@ -29,18 +29,35 @@ class ConvergeRow(object):
         self.max_weight = max_weight
         self.act_cross = np.sum(self.row > 0)
         self.uniform = 1 / self.act_cross
-        self.flag = self.uniform < self.max_weight
+        self.flag = self.uniform <= self.max_weight
         self.m_index = self.max_index()
-        self.margin = 0.001
+        self.margin = 0.001  # Todo: set as function parameter
+        self.max_loops = 25  # Todo: set as function parameter
 
     @classmethod
     def application(cls, row, max_weight):
+
         cr = ConvergeRow(row=row, max_weight=max_weight)
         if cr.flag:
-            cr.distribute()
+            cr.distribute_simple()  # if cap is above equal weight re-distribute sequentially
         else:
-            cr.fixed_val()
-        return cr, cr.row
+            cr.row = (cr.row > 0) / np.sum(cr.row > 0)  # Todo: check if valid equal weights and ditch fixed_val
+        return cr, cr.row   # Todo: check if cr output is redundant
+
+    def distribute_simple(self):
+
+        count = 0
+        close_enough = False
+        ar_weights = self.row.copy()  # array with NaNs
+        while (count <= self.max_loops) & (not close_enough):
+            count += 1
+            excesses = ar_weights - self.max_weight
+            excesses[excesses <= 0] = 0
+            ar_weights = ar_weights - excesses + np.mean(excesses)  # Todo: make sure mean respects NaNs
+            if np.max(ar_weights) <= (self.max_weight + self.margin):
+                close_enough = True
+
+        self.row = ar_weights
 
     def distribute(self):
         """
@@ -54,38 +71,36 @@ class ConvergeRow(object):
         count = 0
         while True:
             count += 1
-            if count > MAX_COUNT:
+            if count > MAX_COUNT:  # #  Tod: Why is MAXCOUNT not defined in class
                 self.row *= np.nan
-                warnings.warn("Unable to converge.")
+                warnings.warn("Unable to converge.")  #  Todo: collect non converging indices and print as single warning
                 break
 
-            excess = self.max_row() - self.max_weight
+            excess = self.max_row() - self.max_weight  # excess of largest number in row
 
-            excess_cross = self.excess_count()
-            indexing = self.index_row()
+            excess_cross = self.excess_count()  # number of cross sections that excess threshold
+            indexing = self.index_row()  # complete dictionary with keys as indices of and values as weights
             
             if excess_cross.size == 1:
-                self.row[self.m_index] -= excess
+                self.row[self.m_index] -= excess  # only index of single excess value is reduced
                 
             elif excess_cross.size > 1:
-                for index in excess_cross:
-                    indexing[index] = self.max_weight
+                for index in excess_cross:  # loop through indices of excessive values
+                    indexing[index] = self.max_weight  # replace excessive weights with cap
                     
-                self.row = np.array(list(indexing.values()))
-                excess = 1.0 - np.nansum(self.row)
+                self.row = np.array(list(indexing.values()))  # replace row values with capped/unchanged values
+                excess = 1.0 - np.nansum(self.row)  # total excess that has been taken off
             else:
                 break
 
             amount = excess / self.act_cross
-            self.row += amount
+            self.row += amount  # Todo: check that only NaNs not zeroes
 
     def fixed_val(self):
         """
-        If the expected weight is greater than the maximum weight, set the Array of
-        weights equal to the expected weight for the active cross-sections.
-
+        Convert array to equal weights for all non-NA values.
         """
-        row = np.ceil(self.row)
+        row = np.ceil(self.row)  # converts all bon-zero values to one
         self.row = row * self.uniform
 
     def max_row(self):
@@ -125,3 +140,10 @@ class ConvergeRow(object):
         Returns a dictionary.
         """
         return dict(zip(range(self.r_length), self.row))
+
+
+if __name__ == "__main__":
+
+    row = np.array([0.5, 0.2, 0.2, 0.1, 0])
+    max = 0.3
+    ConvergeRow.application(row, max_weight=max)
