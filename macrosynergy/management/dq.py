@@ -14,6 +14,8 @@ import numpy as np
 import os
 import logging
 from math import ceil
+from collections import defaultdict
+import warnings
 
 BASE_URL = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 
@@ -495,21 +497,24 @@ class DataQueryInterface(object):
 
         return results
 
-    def get_ts_expression(self, expression, **kwargs):
+    def get_ts_expression(self, expression, original_metrics, **kwargs):
         """
 
         start_date: str = None, end_date: str = None,
                           calendar: str = "CAL_ALLDAYS",
-                           frequency: str = "FREQ_DAY",
+                          frequency: str = "FREQ_DAY",
                           conversion: str = "CONV_LASTBUS_ABS",
-                           nan_treatment: str = "NA_NOTHING"):
+                          nan_treatment: str = "NA_NOTHING"):
 
         Get timeseries (ts) using expression from old DataQuery notation.
+        Will manipulate all the cross-sections
 
-        :param expression:
+        :param expression: Categories & respective cross-sections requested.
+        :param original_metrics: List of required metrics:
+                                 the returned DataFrame will reflect the received List.
         :param **kwargs: dictionary of additional arguments
-        :param df_flag: boolean parameter outlining whether to return a dataframe or not.
-        :return: JSON dictionary object with result of query
+
+        :return: pd.DataFrame: ['cid', 'xcat', 'real_date'] + [original_metrics]
 
         >>> dq = DataQueryInterface(username="<USER>", password="<PASSWORD>")
         >>> results = dq.get_ts_expression(expression="DB(CFX, AUD, )")
@@ -540,55 +545,159 @@ class DataQueryInterface(object):
                                     params=params, **kwargs)
             results.extend(output)
 
-        ## Each "ticker" passed will be held in a separate dictionary.
-        results_dict = self.isolate_timeseries(results)
+        print(results)
+        # (O(n) + O(nlog(n)) operation.
+        no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression]))
+
+        results_dict = self.isolate_timeseries(results, original_metrics)
         results_dict = self.valid_ticker(results_dict)
 
-        return self.dataframe_wrapper(results_dict)
+        results_copy = results_dict.copy()
+        try:
+            results_copy.popitem()
+        except Exception as err:
+            print(err)
+            print("None of the tickers are available in the Database.")
+            return
+        else:
+            return self.dataframe_wrapper(results_dict, no_metrics,
+                                          original_metrics)
 
     @staticmethod
-    def isolate_timeseries(list_):
+    def isolate_timeseries(list_, metrics):
+        """
+        Isolates the metrics, across all categories & cross-sections, held in the List,
+        and concatenates the time-series, column-wise, into a single structure, and
+        subsequently stores that structure in a dictionary where the dictionary's
+        keys will be each Ticker.
 
-        output_dict = {}
+        :param: List returned from DataQuery.
+
+        :return: dictionary.
+        """
+        output_dict = defaultdict(dict)
         size = len(list_)
+
         for i in range(size):
             try:
                 r = list_.pop()
-            except Exception():
+            except IndexError:
                 break
             else:
                 dictionary = r['attributes'][0]
-                ticker = dictionary['expression']
-                time_series = dictionary['time-series']
-                ts_arr = np.array(time_series)
-                output_dict[ticker] = ts_arr
+                ticker = dictionary['expression'].split(',')
+                metric = ticker[-1][:-1]
 
-        return output_dict
+                ticker_split = ','.join(ticker[:-1])
+                ts_arr = np.array(dictionary['time-series'])
+
+                if ticker_split not in output_dict:
+                    output_dict[ticker_split]['real_date'] = ts_arr[:, 0]
+                    output_dict[ticker_split][metric] = ts_arr[:, 1]
+                else:
+                    output_dict[ticker_split][metric] = ts_arr[:, 1]
+
+        no_rows = ts_arr[:, 1].size
+        modified_dict = {}
+        d_frame_order = ['real_date'] + metrics
+
+        for k, v in output_dict.items():
+            arr = np.empty(shape=(no_rows, len(d_frame_order)), dtype=object)
+            for i, metric in enumerate(d_frame_order):
+                arr[:, i] = v[metric]
+
+            modified_dict[k] = arr
+
+        return modified_dict
 
     @staticmethod
-    def dataframe_wrapper(_dict):
+    def column_check(v, col):
+        """
+        Checking the values of the returned TimeSeries.
+
+        :param <np.array> v:
+        :param <Integer> col: used to isolate the column being checked.
+
+        :return Boolean.
+        """
+        returns = list(v[:, col])
+        condition = all([isinstance(elem, type(None)) for elem in returns])
+
+        return condition
+
+    def valid_ticker(self, _dict):
+        """
+        Iterates through each Ticker and determines whether the Ticker is held in the
+        DataBase or not. The validation mechanism will isolate each column, in all the
+        Tickers held in the dictionary, where the columns reflect the metrics passed,
+        and validates that each value is not a NoneType Object. If all values are
+        NoneType Objects, the Ticker is not valid, and it will be popped from the
+        dictionary.
+
+        :param: Dictionary.
+
+        :return: Dictionary.
+        """
+
+        dict_copy = _dict.copy()
+        for k, v in _dict.items():
+            no_cols = v.shape[1]
+
+            condition = self.column_check(v, 1)
+            if condition:
+                for i in range(2, no_cols):
+                    condition = self.column_check(v, 1)
+                    if not condition:
+                        warnings.warn("Error has occurred in the DataBase.")
+
+                print(f"The ticker, {k}, does not exist in the Database.")
+                dict_copy.pop(k)
+            else:
+                continue
+
+        return dict_copy
+
+    @staticmethod
+    def dataframe_wrapper(_dict, no_metrics, original_metrics):
+        """
+        Receives a Dictionary containing every Ticker and the respective time-series data
+        held inside an Array. Will iterate through the dictionary and stack each Array
+        into a single DataFrame retaining the order both row-wise, in terms of cross-
+        sections, and column-wise, in terms of the metrics.
+
+        :param <Dictionary> _dict:
+        :param <Integer> no_metrics: Number of metrics requested.
+        :param <List[str]> original_metrics: Order of the metrics passed.
+
+        :return: pd.DataFrame: ['cid', 'xcat', 'real_date'] + [original_metrics]
+        """
 
         tickers_no = len(_dict.keys())
         length = list(_dict.values())[0].shape[0]
-        arr = np.empty(shape = (length * tickers_no, 4), dtype = object)
+
+        arr = np.empty(shape=(length * tickers_no, 3 + no_metrics), dtype=object)
 
         i = 0
         for k, v in _dict.items():
 
             ticker = k.split(',')
             ticker = ticker[1].split('_')
+
             cid = ticker[0]
             xcat = '_'.join(ticker[1:])
-            cid_broad = np.repeat(cid, repeats = v.shape[0])
-            xcat_broad = np.repeat(xcat, repeats = v.shape[0])
+
+            cid_broad = np.repeat(cid, repeats=v.shape[0])
+            xcat_broad = np.repeat(xcat, repeats=v.shape[0])
             data = np.column_stack((cid_broad, xcat_broad, v))
 
             row = i * v.shape[0]
             arr[row:row + v.shape[0], :] = data
             i += 1
 
-        columns = ['cid', 'xcat', 'real_date', 'value']
-        df = pd.DataFrame(data = arr, columns = columns)
+        columns = ['cid', 'xcat', 'real_date']
+        cols_output = columns + original_metrics
+
+        df = pd.DataFrame(data=arr, columns=cols_output)
 
         df['real_date'] = pd.to_datetime(df['real_date'], yearfirst = True)
         df = df[df['real_date'].dt.dayofweek < 5]
@@ -596,24 +705,6 @@ class DataQueryInterface(object):
         df = df.reset_index(drop=True)
 
         return df
-
-    @staticmethod
-    def valid_ticker(_dict):
-
-        dict_copy = _dict.copy()
-        for k, v in _dict.items():
-            returns = list(v[:, 1])
-            returns = [elem if isinstance(elem, float) else 0.0 for elem in returns]
-            returns = np.array(returns)
-            condition = np.sum(returns)
-            if condition == 0.0:
-                print(f"The ticker, {k}, does not produce a return series.")
-                dict_copy.pop(k)
-            else:
-                continue
-
-        return dict_copy
-
 
     def get_ts_group(self, group_id, attributes_id: str,
                      filter_id: str = None,
