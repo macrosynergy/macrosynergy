@@ -172,16 +172,12 @@ def max_weight_func(weights: pd.DataFrame, max_weight: float):
     within the upper-bound. Allow for a margin of error set to 0.001.
     """
 
-    weights = weights.fillna(0.0)
     w_matrix = weights.to_numpy()
 
     for i, row in enumerate(w_matrix):
-        inst, row = ConvergeRow.application(row, max_weight)
-        # Todo: replace by simple function made from application+distribute_simple in converge row
+        row = ConvergeRow.application(row, max_weight)
         weights.iloc[i, :] = row
 
-    cols = weights.columns
-    weights[cols] = weights[cols].replace({'0': np.nan, 0: np.nan})
     return weights
 
 
