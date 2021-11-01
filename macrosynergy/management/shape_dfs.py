@@ -82,8 +82,8 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
     :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
         'cid', 'xcats', 'real_date'.
     :param <List[str]> ticks: tickers (combinations of cross sections and base categories)
-    :param <str> start: string representing earliest date. Default is None.
-    :param <str> end: string representing the latest date. Default is None.
+    :param <str> start: string in ISO 8601 representing earliest date. Default is None.
+    :param <str> end: string ISO 8601 representing the latest date. Default is None.
     :param <dict> blacklist: cross sections with date ranges that should be excluded from the data frame.
         If one cross section has several blacklist periods append numbers to the cross section code.
 
@@ -124,8 +124,8 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None, va
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: exactly two extended categories whose relationship is to be analyzed.
     :param <List[str]> cids: cross sections to be included. Default is all in the dataframe.
-    :param <str> start: earliest date in ISO format. Default is None, i.e. earliest date in data frame is used.
-    :param <str> end: latest date in ISO format. Default is None, i.e. latest date in data frame is used.
+    :param <str> start: earliest date in ISO 8601 format. Default is None, i.e. earliest date in data frame is used.
+    :param <str> end: latest date in ISO 8601 format. Default is None, i.e. latest date in data frame is used.
     :param <dict> blacklist: cross sections with date ranges that should be excluded from the data frame.
         If one cross section has several blacklist periods append numbers to the cross section code.
     :param <int> years: Number of years over which data are aggregated. Supersedes freq and does not allow lags,

@@ -10,16 +10,18 @@ from macrosynergy.management.shape_dfs import reduce_df
 
 def expo_weights(lback_periods: int = 21, half_life: int = 11):
     """
-    Compute the weights for the Exponential Moving Average over the Lookback Period.
-    50% of the weight allocation will be applied to the number of days delimited by the half_life.
+    Calculates exponetial series weights for finite horizon, normalized to 1.
     
     :param <int>  lback_periods: Number of lookback periods over which volatility is calculated. Default is 21.
     :param <int> half_life: Refers to the half-time for "xma" and full lookback period for "ma". Default is 11.
 
     :return <np.ndarray>: An Array of weights determined by the length of the Lookback Period.
+
+    Note: 50% of the weight allocation will be applied to the number of days delimited by the half_life.
     """
     decf = 2 ** (-1 / half_life)
     weights = (1 - decf) * np.array([decf ** (lback_periods - ii - 1) for ii in range(lback_periods)])
+    weights = weights/sum(weights)
     
     return weights
 
@@ -29,7 +31,7 @@ def expo_std(x: np.ndarray, w: np.ndarray, remove_zeros: bool = True):
     Estimate standard deviation of returns based on exponentially weighted absolute values
 
     :param <np.ndarray> x: array of returns
-    :param <np.ndarray> w: array of exponential weights (same length as x)
+    :param <np.ndarray> w: array of exponential weights (same length as x); will be normalized to 1.
     :param <bool> remove_zeros: removes zeroes as invalid entries and shortens the effective window
 
     :return <float>: exponentially weighted mean absolute value (as proxy of return standard deviation)
@@ -38,7 +40,8 @@ def expo_std(x: np.ndarray, w: np.ndarray, remove_zeros: bool = True):
     assert len(x) == len(w), "weights and window must have same length"
     if remove_zeros:
         x = x[x != 0]
-        w = w[0:len(x)] / sum(w[0:len(x)]) # shorten the exponential weight array
+        w = w[0:len(x)] / sum(w[0:len(x)])  # Todo: seems redundant; consider removing
+    w = w / sum(w)  # weights are normalized
     mabs = np.sum(np.multiply(w, np.abs(x)))
     return mabs
 
@@ -128,6 +131,8 @@ if __name__ == "__main__":
     df_xcats.loc['GROWTH'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
     df_xcats.loc['INFL'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+
+    weights = expo_weights(lback_periods=21, half_life=11)
 
     df = historic_vol(dfd, cids=cids, xcat='XR', lback_periods=42, lback_meth='ma', remove_zeros=True)
     df = historic_vol(dfd, cids=cids, xcat='XR', lback_periods=42, lback_meth='xma', half_life=21,
