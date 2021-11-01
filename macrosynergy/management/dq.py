@@ -650,7 +650,7 @@ class DataQueryInterface(object):
                     if not condition:
                         warnings.warn("Error has occurred in the DataBase.")
 
-                warnings.warn(f"The ticker, {k}, does not exist in the Database.")
+                print(f"The ticker, {k}, does not exist in the Database.")
                 dict_copy.pop(k)
             else:
                 continue
