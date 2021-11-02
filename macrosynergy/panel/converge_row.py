@@ -6,11 +6,7 @@ class ConvergeRow(object):
     """
     Class designed to receive a row of weights, where at least one weight in the
     aforementioned row exceeds the permitted upper-bound, and subsequently redistributes
-    the excess evenly across all cross-sections. The reason for the even distribution is
-    to retain the weighting proportions received: the weights are not arbitrary but
-    instead determined according to a specific method. Therefore, the Class will simply
-    aim to dilute the influence any cross-section above the maximum amount but retain
-    the ratio between the remaining weights.
+    the excess evenly across all cross-sections.
     """
 
     def __init__(self, row, max_weight):
