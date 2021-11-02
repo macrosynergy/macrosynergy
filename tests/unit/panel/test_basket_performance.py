@@ -122,7 +122,8 @@ class TestAll(unittest.TestCase):
             if uni_bool[i]:
                 self.assertTrue(np.all(row == weights_uni[i, :]))
             else:
-                self.assertTrue(np.all(row < max_weight + 0.001))
+                # Accounts for floating point precession.
+                self.assertTrue(np.all((row - (max_weight + 0.001)) < 0.00001))
 
         # Test on a meaningful DataFrame.
         self.dataframe_construction()
@@ -148,7 +149,7 @@ class TestAll(unittest.TestCase):
             if uni_bool[i]:
                 self.assertTrue(np.all(row == weights_uni[i, :]))
             else:
-                self.assertTrue(np.all(row < max_weight + 0.001))
+                self.assertTrue(np.all((row - (max_weight + 0.001)) < 0.00001))
 
     def test_equal_weight(self):
 
