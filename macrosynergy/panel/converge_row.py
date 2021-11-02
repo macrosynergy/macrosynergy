@@ -55,7 +55,7 @@ class ConvergeRow(object):
 
         while (count <= self.max_loops) and (not close_enough):
             count += 1
-            excesses = ar_weights - self.max_weight
+            excesses = ar_weights - (self.max_weight + self.margin)
             excesses[excesses <= 0] = 0
             ar_weights = (ar_weights - excesses) + np.nanmean(excesses)
 
