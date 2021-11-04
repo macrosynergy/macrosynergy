@@ -9,19 +9,26 @@ class ConvergeRow(object):
     the excess evenly across all cross-sections.
     """
 
-    def __init__(self, row, max_weight):
+    def __init__(self, row, max_weight, margin=0.001, max_loops=25):
         """
         Class's Constructor.
 
         :param <np.ndarray> row: Array of weights.
         :param <Float> max_weight: Maximum weight.
-
+        :param <Float> margin: Margin of error allowed in the convergence to within the
+                                upper-bound, "max_weight".
+        :param <Integer> max_loops: Controls the accuracy: in theory, the greater the
+                                    number of loops allowed, the more accurate the
+                                    convergence. However, will only become significant if
+                                    a tight margin is imposed: the "looser" the margin,
+                                    the less likely the maximum number of loops permitted
+                                    will be exceeded.
         """
         self.row = row
         self.max_weight = max_weight
         self.flag = (1 / np.sum(self.row > 0)) <= self.max_weight
-        self.margin = 0.001
-        self.max_loops = 25
+        self.margin = margin
+        self.max_loops = max_loops
 
     @classmethod
     def application(cls, row, max_weight):
