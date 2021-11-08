@@ -267,7 +267,7 @@ class TestAll(unittest.TestCase):
                                            weight_meth="values",
                                            weight_xcat=[0.21, 0.19, 0.27, 0.33],
                                            max_weight=0.3, basket_tik="GLB_ALL",
-                                           return_weights=True)
+                                           return_weights=False)
 
         weights = values_weight(dfw_ret, w_df, weight_meth="values")
         self.assertTrue(weights.shape == dfw_ret.shape)
