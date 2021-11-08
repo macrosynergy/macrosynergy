@@ -16,7 +16,7 @@ def view_grades(df: pd.DataFrame, xcat: str,  cids: List[str] = None,
     """Displays stacked bars of grade composition for category
 
     :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
-        'cid', 'xcat', 'real_date' and grade, typically 'grading'.
+        'cid', 'xcat', 'real_date' and 'grading'.
     :param <str> xcat: extended categorys to be checked on.
     :param <List[str]> cids: cross sections to be checked on. Default is all in the dataframe.
     :param <str> start: earliest date in ISO format. Default is None and earliest date in df is used.
@@ -60,7 +60,7 @@ def heatmap_grades(df: pd.DataFrame, xcats:  List[str],  cids: List[str] = None,
     """Displays a heatmap of grading
 
     :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
-        'cid', 'xcat', 'real_date' and at least one column with values of interest.
+        'cid', 'xcat', 'real_date' and 'grading'.
     :param List[str] xcats: extended categorys to be checked on.
     :param <List[str]> cids: cross sections to be checked on. Default is all in the dataframe.
     :param <str> start: earliest date in ISO format. Default is None and earliest date in df is used.

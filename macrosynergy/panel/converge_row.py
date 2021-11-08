@@ -1,48 +1,48 @@
 """Convergence of rows for max weight"""
 import numpy as np
 import warnings
-MAX_COUNT = 1000
-
 
 class ConvergeRow(object):
     """
     Class designed to receive a row of weights, where at least one weight in the
     aforementioned row exceeds the permitted upper-bound, and subsequently redistributes
-    the excess evenly across all cross-sections. The reason for the even distribution is
-    to retain the weighting proportions received: the weights are not arbitrary but
-    instead determined according to a specific method. Therefore, the Class will simply
-    aim to dilute the influence any cross-section above the maximum amount but retain
-    the ratio between the remaining weights.
+    the excess evenly across all cross-sections.
     """
 
-    def __init__(self, row, max_weight):
+    def __init__(self, row, max_weight, margin=0.001, max_loops=25):
         """
         Class's Constructor.
 
         :param <np.ndarray> row: Array of weights.
         :param <Float> max_weight: Maximum weight.
-
+        :param <Float> margin: Margin of error allowed in the convergence to within the
+                                upper-bound, "max_weight".
+        :param <Integer> max_loops: Controls the accuracy: in theory, the greater the
+                                    number of loops allowed, the more accurate the
+                                    convergence. However, will only become significant if
+                                    a tight margin is imposed: the "looser" the margin,
+                                    the less likely the maximum number of loops permitted
+                                    will be exceeded.
         """
         self.row = row
-        self.r_length = row.size
-        self.maximum = self.max_row()
         self.max_weight = max_weight
-        self.act_cross = np.sum(self.row > 0)
-        self.uniform = 1 / self.act_cross
-        self.flag = self.uniform < self.max_weight
-        self.m_index = self.max_index()
-        self.margin = 0.001
+        self.flag = (1 / np.sum(self.row > 0)) <= self.max_weight
+        self.margin = margin
+        self.max_loops = max_loops
 
     @classmethod
     def application(cls, row, max_weight):
+
         cr = ConvergeRow(row=row, max_weight=max_weight)
         if cr.flag:
-            cr.distribute()
+            cr.distribute_simple()
         else:
-            cr.fixed_val()
-        return cr, cr.row
+            cr.row = (cr.row > 0) / np.sum(cr.row > 0)
+            cr.row[cr.row == 0.0] = np.nan
 
-    def distribute(self):
+        return cr.row
+
+    def distribute_simple(self):
         """
         Initiates an indefinite While Loop until the weights converge below the
         (max_weight + margin). Will evenly redistribute the excess weight across all
@@ -51,77 +51,18 @@ class ConvergeRow(object):
         iteration.
 
         """
+
         count = 0
-        while True:
+        close_enough = False
+        ar_weights = self.row.copy()
+
+        while (count <= self.max_loops) and (not close_enough):
             count += 1
-            if count > MAX_COUNT:
-                self.row *= np.nan
-                warnings.warn("Unable to converge.")
-                break
+            excesses = ar_weights - (self.max_weight + self.margin)
+            excesses[excesses <= 0] = 0
+            ar_weights = (ar_weights - excesses) + np.nanmean(excesses)
 
-            excess = self.max_row() - self.max_weight
+            if np.max(ar_weights) <= (self.max_weight + self.margin):
+                close_enough = True
 
-            excess_cross = self.excess_count()
-            indexing = self.index_row()
-            
-            if excess_cross.size == 1:
-                self.row[self.m_index] -= excess
-                
-            elif excess_cross.size > 1:
-                for index in excess_cross:
-                    indexing[index] = self.max_weight
-                    
-                self.row = np.array(list(indexing.values()))
-                excess = 1.0 - np.nansum(self.row)
-            else:
-                break
-
-            amount = excess / self.act_cross
-            self.row += amount
-
-    def fixed_val(self):
-        """
-        If the expected weight is greater than the maximum weight, set the Array of
-        weights equal to the expected weight for the active cross-sections.
-
-        """
-        row = np.ceil(self.row)
-        self.row = row * self.uniform
-
-    def max_row(self):
-        """
-        Determines the maximum weight in the row. Will return the weight value.
-
-        """
-        return np.nanmax(self.row)
-
-    def excess_count(self):
-        """
-        Calculates the number of weights that exceed the threshold. This can change
-        through each iteration, so the calculation occurs dynamically.
-
-        Will return an Array of the indices that satifsy the condition.
-        """
-
-        row_copy = self.row.copy()
-
-        return np.where((row_copy - self.max_weight) > 0.001)[0]
-
-    def max_index(self):
-        """
-        Will return the index of the maximum value. Integer.
-
-        """
-        return np.where(self.row == self.maximum)[0][0]
-
-    def index_row(self):
-        """
-        Function used to design a dictionary where the keys are indices of the row, and
-        the values are the weights of the row. Dictionaries are supported by a data
-        structure called a Hashmap and are subsequently computationally very efficient
-        assuming an effective Hash Function has been designed. Potentially O(1) look-up
-        time if collisions are avoided.
-
-        Returns a dictionary.
-        """
-        return dict(zip(range(self.r_length), self.row))
+        self.row = ar_weights

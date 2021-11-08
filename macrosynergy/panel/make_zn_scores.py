@@ -107,7 +107,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None, start: s
     Computes z-scores for a panel around a neutral level ("zn scores").
     
     :param <pd.Dataframe> df: standardized data frame with the following necessary columns:
-        'cid', 'xcats', 'real_date' and 'value.
+        'cid', 'xcat', 'real_date' and 'value.
     :param <str> xcat:  extended category for which the zn_score is calculated.
     :param <List[str]> cids: cross sections for which zn_scores are calculated; default is all available for category.
     :param <str> start: earliest date in ISO format. Default is None and earliest date in df is used.
@@ -116,7 +116,8 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None, start: s
         sequentially with concurrently available information only.
     :param <int> min_obs: the minimum number of observations required to calculate zn_scores. Default is 252.
     :param <str> neutral: method to determine neutral level. Default is 'zero'. Alternatives are 'mean' and "median".
-    :param <float> thresh: threshold value beyond which scores are winsorized, i.e. contained at that threshold.
+    :param <float> thresh: threshold value beyond which scores are winsori
+    zed, i.e. contained at that threshold.
         The threshold is therefore the maximum absolute score value that the function is allowed to produce.
         The minimum threshold is 1 standard deviation
     :param <float> pan_weight: weight of panel (versus individual cross section) for calculating the z-score
