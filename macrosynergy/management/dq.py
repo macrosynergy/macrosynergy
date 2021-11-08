@@ -667,7 +667,8 @@ class DataQueryInterface(object):
 
         :param <Dictionary> _dict:
         :param <Integer> no_metrics: Number of metrics requested.
-        :param <List[str]> original_metrics: Order of the metrics passed.
+        :param <List[str]> original_metrics: Order of the metrics passed. Dictates order
+                                             of columns in the output DataFrame.
 
         :return: pd.DataFrame: ['cid', 'xcat', 'real_date'] + [original_metrics]
         """
