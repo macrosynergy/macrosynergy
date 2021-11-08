@@ -224,6 +224,10 @@ class TestAll(unittest.TestCase):
         dfd_test = self.dfd
 
         # Construct an additional dataframe on a different category to delimit weights.
+        # Comparable to the design of basket_performance.py file which isolates a
+        # category, from the dataframe produced by make_qdf(), and uses the now truncated
+        # dataframe to form the weights. Will achieve the matching dimensions through a
+        # pivot operation.
         cids_ = ['AUD', 'GBP', 'NZD', 'USD']
         xcats_ = ['GROWTH']
 
@@ -247,18 +251,16 @@ class TestAll(unittest.TestCase):
                                                                '2100-01-01']}
         dfx = reduce_df(dfd_, blacklist=black_)
         w_df = dfx.pivot(index="real_date", columns="cid", values="value")
-        w_matrix = w_df.to_numpy()
 
-        # Test the assert statement on matching dimensions.
-        w_test = w_matrix[:-1, :]
+        # Test the assert statement on the received weight category.
         with self.assertRaises(AssertionError):
             df_return = basket_performance(dfd_test, contracts=self.contracts, ret="XR",
                                            cry=None, blacklist=self.black,
-                                           weight_meth="values", exo_values=w_test,
+                                           weight_meth="values", weight_xcat='WGT_CAT',
                                            max_weight=0.3, basket_tik="GLB_ALL",
                                            return_weights=True)
 
-        # Test the assertion of a Numpy Array.
+        # Test the assertion of a String.
         with self.assertRaises(AssertionError):
             df_return = basket_performance(dfd_test, contracts=self.contracts, ret="XR",
                                            cry=None, blacklist=self.black,
@@ -267,9 +269,9 @@ class TestAll(unittest.TestCase):
                                            max_weight=0.3, basket_tik="GLB_ALL",
                                            return_weights=True)
 
-        weights = values_weight(dfw_ret, w_matrix, weight_meth="values")
+        weights = values_weight(dfw_ret, w_df, weight_meth="values")
         self.assertTrue(weights.shape == dfw_ret.shape)
-        weights_inv = values_weight(dfw_ret, w_matrix, weight_meth="inv_values")
+        weights_inv = values_weight(dfw_ret, w_df, weight_meth="inv_values")
         self.assertTrue(weights_inv.shape == dfw_ret.shape)
 
         # Check weights have been allocated to the live cross-sections on each timestamp.
