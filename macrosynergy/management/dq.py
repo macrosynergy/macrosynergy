@@ -844,13 +844,21 @@ class DataQueryInterface(object):
 
         # B. Collect all tickers and metrics to be downloaded
 
-        dl = {'tickers': tickers, 'xcats': xcats, 'cids': cids, 'metrics': metrics}
-        for key, value in dl.items():
-            if isinstance(value, str):
-                exec(f"{key} = [{key}]")  # make sure all choices are iterables
-
-        if tickers is None:
+        if isinstance(tickers, str):
+            tickers = [tickers]
+        elif tickers is None:
             tickers = []
+
+        assert isinstance(tickers, list)
+
+        if isinstance(xcats, str):
+            xcats = [xcats]
+
+        if isinstance(cids, str):
+            cids = [cids]
+
+        if isinstance(metrics, str):
+            metrics = [metrics]
 
         if xcats is not None:
             assert isinstance(xcats, (list, tuple))
