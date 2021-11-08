@@ -102,24 +102,25 @@ def inverse_weight(dfw_ret: pd.DataFrame, lback_meth: str = "xma",
     return df_wgts
 
 
-def values_weight(dfw_ret: pd.DataFrame, exo_values: pd.DataFrame, weight_meth: str):
+def values_weight(dfw_ret: pd.DataFrame, exo_weights: pd.DataFrame, weight_meth: str):
     """
     The values weight method will receive a matrix of values produced by another category
     and the values held in the matrix will be used as the weights. The weight matrix
     should contain floating point values.
 
     :param <pd.DataFrame> dfw_ret: Pivoted dataframe.
-    :param <pd.DataFrame> exo_values: DataFrame of exogenously computed weights. Matching
+    :param <pd.DataFrame> exo_weights: DataFrame of exogenously computed weights. Matching
                                       dimensions.
     :param <str> weight_meth: Determines where to use the values or take the
                                     inverse to determine the weights.
 
     :return <pd.DataFrame>: Will return the generated weight Array.
     """
-    exo_values[exo_values < 0] = 0.0
+    exo_weights[exo_weights < 0] = 0.0
+    exo_array = exo_weights.to_numpy()
 
     df_bool = ~dfw_ret.isnull()
-    weights_df = df_bool.multiply(exo_values)
+    weights_df = df_bool.multiply(exo_array)
 
     if weight_meth != "values":
         weights_df = 1 / weights_df
@@ -282,13 +283,15 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
         # original dataframe.
         c_weights = [c + '_WGT' for c in contracts]
         exo_weights = exo_weights[c_weights]
-        # Align the indices.
-        dfw_ret = dfw_ret.reindex(sorted(df.columns), axis=1)
-        exo_weights = exo_weights.reindex(sorted(df.columns), axis=1)
+        # Align the indices through alphabetical ordering.
+        dfw_ret = dfw_ret.reindex(sorted(dfw_ret.columns), axis=1)
+        exo_weights = exo_weights.reindex(sorted(exo_weights.columns), axis=1)
 
         assert dfw_ret.shape == exo_weights.shape, "Weight dataframe must be defined " \
                                                    "over the same time-period."
         w_matrix = values_weight(dfw_ret, exo_weights, weight_meth)
+        print(dfw_ret)
+        print(w_matrix)
 
     else:
         raise NotImplementedError(f"Weight method unknown {weight_meth}")
