@@ -235,15 +235,11 @@ class DataQueryInterface(object):
                 # TODO check select == 'info'?
                 return response["info"]
 
-            if "error" in response.keys():
-                msg = f"error message in response {response['error']}"
-                msg += f" for endpoint {self.last_url:s}"
-                logging.error(msg)
-                raise ValueError(response["error"]["message"])
+            if "error" in response.keys() or "errors" in response.keys():
+                logging.error(f"Error in response %s for url %s", response, self.last_url)
+                raise ValueError(f"Error in response from DQ: {response}")
 
-            msg = f"count: {count:d}, items: {response['items']:d},"
-            msg += f" page-size: {response['page-size']:d}"
-            logging.debug(msg)
+            logging.debug(f"count: %d, items: %d, page-size: %d", count, response["items"], response["page-size"])
 
             # TODO parse response...
             assert select in response.keys()
@@ -761,3 +757,113 @@ class DataQueryInterface(object):
                                  **kwargs)
 
         return results
+
+    def dq_tickers(
+            self, tickers: list, metrics: list = ['value'], start_date: str='2000-01-01'
+    ):
+        """
+        Returns standardized dataframe of specified base tickers and metric
+
+
+        :param <List[str]> tickers: JPMaQS ticker of form <cid>_<xcat>.
+        :param <List[str]> metrics: must choose one or more from 'value', 'eop_lag',
+            'mop_lag', or 'grade'. Default is ['value'].
+        :param <str> start_date: first date in ISO 8601 string format.
+
+        :return <pd.Dataframe> standardized dataframe with columns 'cid', 'xcats',
+            'real_date' and chosen metrics.
+        """
+
+        unique_tix = list(set(tickers))
+        unique_tix.sort()
+        dq_tix = []
+        store = []
+        for metric in metrics:
+            dq_tix = dq_tix + ["DB(JPMAQS," + tick + f",{metric})" for tick in
+                               unique_tix]
+
+            print("Connected: ", self.check_connection())
+
+            df = self.get_ts_expression(
+                expression=dq_tix,
+                original_metrics=metrics,
+                start_date=start_date
+            )
+
+            if isinstance(df, pd.DataFrame):
+                df = df.sort_values(['cid', 'xcat', 'real_date']).reset_index(drop=True)
+                store.append(df)
+
+        # TODO get all...
+        if len(store) > 0:
+            df = pd.concat(store, axis=0)
+            return df
+
+    def dq_download(
+            self,
+            tickers=None,
+            xcats=None,
+            cids=None,
+            metrics=['value'],
+            start_date='2000-01-01'
+    ):
+        """
+        Returns standardized dataframe of specified base tickers and metrics
+
+        :param <List[str]> tickers: JPMaQS ticker of form <cid>_<xcat>. Can be combined
+            with selection of categories.
+        :param <List[str]> xcats: JPMaQS category codes. Downloaded for all standard
+            cross sections identifiers available
+        (if cids are not specified) or those selected (if cids are specified).
+        Standard cross sections here include major developed and emerging currency
+            markets. See JPMaQS documentation.
+        :param <List[str]> cids: JPMaQS cross-section identifiers, typically based  on
+            currency code. See JPMaQS documentation.
+        :param <str> metrics: must choose one or more from 'value', 'eop_lag', 'mop_lag',
+            or 'grade'. Default is ['value'].
+        # Todo: allow multiple metrics to be downloaded
+        :param <str> start_date: first date in ISO 8601 string format.
+        :param <str> path: relative path from notebook to credential files.
+
+        :return <pd.Dataframe> standardized dataframe with columns 'cid', 'xcats', 'real_date' and chosen metrics.
+        """
+
+        # A. Collect all standard cross sections.
+
+        if (cids is None) & (xcats is not None):
+            cids_dmca = ['AUD', 'CAD', 'CHF', 'EUR', 'GBP', 'JPY', 'NOK', 'NZD', 'SEK',
+                         'USD']  # DM currency areas
+            cids_dmec = ['DEM', 'ESP', 'FRF', 'ITL', 'NLG']  # DM euro area countries
+            cids_latm = ['BRL', 'COP', 'CLP', 'MXN', 'PEN']  # Latam countries
+            cids_emea = ['HUF', 'ILS', 'PLN', 'RON', 'RUB', 'TRY', 'ZAR']  # EMEA countries
+            cids_emas = ['CNY', 'IDR', 'INR', 'KRW', 'MYR', 'PHP', 'SGD', 'THB',
+                         'TWD']  # EM Asia countries
+            cids_dm = cids_dmca + cids_dmec
+            cids_em = cids_latm + cids_emea + cids_emas
+            cids = sorted(cids_dm + cids_em)  # standard default
+
+        # B. Collect all tickers and metrics to be downloaded
+
+        dl = {'tickers': tickers, 'xcats': xcats, 'cids': cids, 'metrics': metrics}
+        for key, value in dl.items():
+            if isinstance(value, str):
+                exec(f"{key} = [{key}]")  # make sure all choices are iterables
+
+        if tickers is None:
+            tickers = []
+
+        if xcats is not None:
+            assert isinstance(xcats, (list, tuple))
+            add_tix = [cid + '_' + xcat for xcat in xcats for cid in cids]
+            tickers = tickers + add_tix
+
+        df = pd.DataFrame(columns=['cid', 'xcat', 'real_date', 'value'])
+        df_add = self.dq_tickers(tickers, metrics=metrics, start_date=start_date)
+        if df_add is None:
+            print(f"No data for {tickers}")
+            return
+
+        df.append(df_add)
+
+        return df
+
