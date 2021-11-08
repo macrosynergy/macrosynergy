@@ -117,11 +117,15 @@ def values_weight(dfw_ret: pd.DataFrame, exo_weights: pd.DataFrame, weight_meth:
     :return <pd.DataFrame>: Will return the generated weight Array.
     """
     exo_weights[exo_weights < 0] = 0.0
+
     exo_array = exo_weights.to_numpy()
 
     df_bool = ~dfw_ret.isnull()
-    weights_df = df_bool.multiply(exo_array)
 
+    weights_df = df_bool.multiply(exo_array)
+    cols = weights_df.columns
+    # Will treat NaNs and negative values the same: converts to NaN.
+    weights_df[cols] = weights_df[cols].replace({'0': np.nan, 0: np.nan})
     if weight_meth != "values":
         weights_df = 1 / weights_df
 
@@ -251,10 +255,15 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
 
         assert isinstance(weights, list), \
             "Method 'fixed' requires a list of weights to be assigned to 'weights'."
-        assert all([str(w).isnumeric() for w in weights]), \
-            "All weight list elements must be numeric."
         assert dfw_ret.shape[1] == len(weights), \
-            "List of weights must be equal to number of available cross sections."
+            "List of weights must be equal to number of contracts."
+        for w in weights:
+            try:
+                int(w)
+            except ValueError:
+                print(f"List, {weights}, must be all numerical values.")
+                raise
+
         w_matrix = fixed_weight(df_ret=dfw_ret, weights=weights)
 
     elif weight_meth == "invsd":
@@ -290,8 +299,6 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
         assert dfw_ret.shape == exo_weights.shape, "Weight dataframe must be defined " \
                                                    "over the same time-period."
         w_matrix = values_weight(dfw_ret, exo_weights, weight_meth)
-        print(dfw_ret)
-        print(w_matrix)
 
     else:
         raise NotImplementedError(f"Weight method unknown {weight_meth}")
@@ -331,23 +338,6 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
     # Concatenate along the date index and subsequently drop to restore natural index.
     df = pd.concat(store, axis=0, ignore_index=True)
     return df
-
-def testing():
-
-    dfd_2 = basket_performance(dfd, contracts, ret='XR', cry=None,
-                                weight_meth='fixed', weights=gdp_figures,
-                                weight_xcat=None, max_weight=0.35, return_weights=True)
-
-    dfd_3 = basket_performance(dfd, contracts, ret='XR', cry=None,
-                               weight_meth='invsd', weights=None,
-                               lback_meth="xma", lback_periods=21,
-                               weight_xcat=None, max_weight=0.4, return_weights=True)
-
-    print(dfd_3)
-    dfd_4 = basket_performance(dfd, contracts, ret='XR', cry=None,
-                               weight_meth='equal', weight_xcat=None, max_weight=0.41,
-                               return_weights=False)
-    print(dfd_4)
 
 
 if __name__ == "__main__":
@@ -392,9 +382,20 @@ if __name__ == "__main__":
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
     contracts = ['AUD_FX', 'AUD_EQ', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
 
-    gdp_figures = [17.0, 41.0, 9.0, 215.0]
+    gdp_figures = [17.0, 17.0, 41.0, 9.0, 250]
     dfd_1 = basket_performance(dfd, contracts, ret='XR', cry=None, weight_meth='values',
                                weights=gdp_figures, weight_xcat=['FX_WGT', 'EQ_WGT'],
                                max_weight=0.35, return_weights=False)
 
+    dfd_2 = basket_performance(dfd, contracts, ret='XR', cry=None,
+                               weight_meth='fixed', weights=gdp_figures,
+                               weight_xcat=None, max_weight=0.35, return_weights=True)
 
+    dfd_3 = basket_performance(dfd, contracts, ret='XR', cry=None,
+                               weight_meth='invsd', weights=None,
+                               lback_meth="xma", lback_periods=21,
+                               weight_xcat=None, max_weight=0.4, return_weights=True)
+
+    dfd_4 = basket_performance(dfd, contracts, ret='XR', cry=None,
+                               weight_meth='equal', weight_xcat=None, max_weight=0.41,
+                               return_weights=False)
