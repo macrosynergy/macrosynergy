@@ -639,7 +639,7 @@ class DataQueryInterface(object):
         for k, v in _dict.items():
             no_cols = v.shape[1]
 
-            condition = self.column_check(v, 1)
+            condition = self.column_check(v, i)
             if condition:
                 for i in range(2, no_cols):
                     condition = self.column_check(v, 1)
