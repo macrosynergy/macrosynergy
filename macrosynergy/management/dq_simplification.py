@@ -1,6 +1,5 @@
 import requests
 import base64
-from typing import Optional, Union
 import json
 import pandas as pd
 import numpy as np
@@ -18,18 +17,16 @@ class DataQueryInterface(object):
                                            "utf-8")).decode('ascii')
         self.headers = {"Authorization": f"Basic {self.auth:s}"}
         self.base_url = "https://platform.jpmorgan.com/research/dataquery/api/v2"
-        self.key = key
-        self.crt = crt
+        self.cert = (crt, key)
 
     def _fetch(self, endpoint: str = "/groups", select: str = "groups",
-               params: dict = None) -> Optional[Union[list, dict]]:
+               params: dict = None):
         url = self.base_url + endpoint
         results = []
 
-        with requests.get(url=url, cert=(self.crt, self.key),
-                          headers=self.headers, params=params) as r:
+        with requests.get(url=url, cert=self.cert, headers=self.headers, params=params) \
+                as r:
             self.last_response = r.text
-
         response = json.loads(self.last_response)
 
         assert select in response.keys()
@@ -50,26 +47,26 @@ class DataQueryInterface(object):
 
         return results
 
-    def get_ts_expression(self, expression, original_metrics, **kwargs):
+    def get_tickers(self, tickers, original_metrics, **kwargs):
 
-        no_tickers = len(expression)
+        no_tickers = len(tickers)
         iterations = ceil(no_tickers / 20)
         remainder = no_tickers % 20
 
         results = []
-        expression_copy = expression.copy()
+        tickers_copy = tickers.copy()
         for i in range(iterations):
             if i < (iterations - 1):
-                expression = expression_copy[i * 20: (i * 20) + 20]
+                tickers = tickers_copy[i * 20: (i * 20) + 20]
             else:
-                expression = expression_copy[-remainder:]
+                tickers = tickers_copy[-remainder:]
 
-            params = {"expressions": expression}
+            params = {"expressions": tickers}
             output = self._fetch_ts(endpoint="/expressions/time-series",
                                     params=params, **kwargs)
             results.extend(output)
 
-        no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression_copy]))
+        no_metrics = len(set([tick.split(',')[-1][:-1] for tick in tickers_copy]))
         print(f"Number of metrics: {no_metrics}.")
 
         results_dict = self.isolate_timeseries(results, original_metrics)
