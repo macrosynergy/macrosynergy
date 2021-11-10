@@ -6,7 +6,7 @@ import numpy as np
 from math import ceil
 from collections import defaultdict
 
-
+URL = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 class DataQueryInterface(object):
 
     def __init__(self, username: str, password: str,
@@ -16,34 +16,29 @@ class DataQueryInterface(object):
         self.auth = base64.b64encode(bytes(f'{username:s}:{password:s}',
                                            "utf-8")).decode('ascii')
         self.headers = {"Authorization": f"Basic {self.auth:s}"}
-        self.base_url = "https://platform.jpmorgan.com/research/dataquery/api/v2"
+        self.base_url = URL
         self.cert = (crt, key)
 
-    def _fetch(self, endpoint: str = "/groups", select: str = "groups",
-               params: dict = None):
-        url = self.base_url + endpoint
-        results = []
-
-        with requests.get(url=url, cert=self.cert, headers=self.headers, params=params) \
-                as r:
-            self.last_response = r.text
-        response = json.loads(self.last_response)
-
-        assert select in response.keys()
-        results.extend(response[select])
-
-        return results
-
-    def _fetch_ts(self, endpoint: str, params: dict, start_date: str = None,
-                  end_date: str = None, calendar: str = "CAL_ALLDAYS",
-                  frequency: str = "FREQ_DAY"):
+    def _fetch_ts(self, params: dict, start_date: str = None, end_date: str = None,
+                  calendar: str = "CAL_ALLDAYS", frequency: str = "FREQ_DAY"):
 
         params["format"] = "JSON"
         params["start-date"] = start_date
         params["end-date"] = end_date
         params["calendar"] = calendar
         params["frequency"] = frequency
-        results = self._fetch(endpoint=endpoint, params=params, select="instruments")
+
+        endpoint = "/expressions/time-series"
+        url = self.base_url + endpoint
+        results = []
+
+        with requests.get(url=url, cert=self.cert, headers=self.headers,
+                          params=params) as r:
+            self.last_response = r.text
+        response = json.loads(self.last_response)
+
+        assert "instruments" in response.keys()
+        results.extend(response["instruments"])
 
         return results
 
@@ -62,8 +57,7 @@ class DataQueryInterface(object):
                 tickers = tickers_copy[-remainder:]
 
             params = {"expressions": tickers}
-            output = self._fetch_ts(endpoint="/expressions/time-series",
-                                    params=params, **kwargs)
+            output = self._fetch_ts(params=params, **kwargs)
             results.extend(output)
 
         no_metrics = len(set([tick.split(',')[-1][:-1] for tick in tickers_copy]))
