@@ -69,7 +69,8 @@ class DataQueryInterface(object):
                                     params=params, **kwargs)
             results.extend(output)
 
-        no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression]))
+        no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression_copy]))
+        print(f"Number of metrics: {no_metrics}.")
 
         results_dict = self.isolate_timeseries(results, original_metrics)
         results_dict = self.valid_ticker(results_dict)
@@ -146,6 +147,7 @@ class DataQueryInterface(object):
         length = list(_dict.values())[0].shape[0]
 
         arr = np.empty(shape=(length * tickers_no, 3 + no_metrics), dtype=object)
+        print(arr.shape)
 
         i = 0
         for k, v in _dict.items():
