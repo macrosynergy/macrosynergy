@@ -79,29 +79,30 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
     """
     Filter dataframe by xcats and cids and notify about missing xcats and cids
 
-    :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
-        'cid', 'xcats', 'real_date'.
-    :param <List[str]> ticks: tickers (combinations of cross sections and base categories)
+    :param <pd.Dataframe> df: standardized dataframe with the following columns:
+                              'cid', 'xcats', 'real_date'.
+    :param <List[str]> ticks: tickers (cross sections + base categories)
     :param <str> start: string in ISO 8601 representing earliest date. Default is None.
     :param <str> end: string ISO 8601 representing the latest date. Default is None.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from the data frame.
-        If one cross section has several blacklist periods append numbers to the cross section code.
+    :param <dict> blacklist: cross sections with date ranges that should be excluded from
+                             the dataframe. If one cross section has several blacklist
+                             periods append numbers to the cross section code.
 
     :return <pd.Dataframe>: reduced dataframe that also removes duplicates
     """
 
-    dfx = df[df['real_date'] >= pd.to_datetime(start)] if start is not None else df
-    dfx = dfx[dfx['real_date'] <= pd.to_datetime(end)] if end is not None else dfx
+    dfx = df[df["real_date"] >= pd.to_datetime(start)] if start is not None else df
+    dfx = dfx[dfx["real_date"] <= pd.to_datetime(end)] if end is not None else dfx
 
     if blacklist is not None:  # blacklisting by cross-section
         for key, value in blacklist.items():
-            filt1 = dfx['cid'] == key[:3]
-            filt2 = dfx['real_date'] >= pd.to_datetime(value[0])
-            filt3 = dfx['real_date'] <= pd.to_datetime(value[1])
+            filt1 = dfx["cid"] == key[:3]
+            filt2 = dfx["real_date"] >= pd.to_datetime(value[0])
+            filt3 = dfx["real_date"] <= pd.to_datetime(value[1])
             dfx = dfx[~(filt1 & filt2 & filt3)]
 
-    dfx['tick'] = df['cid'] + '_' + df['xcat']
-    ticks_in_df = dfx['tick'].unique()
+    dfx["ticker"] = df["cid"] + '_' + df["xcat"]
+    ticks_in_df = dfx["ticker"].unique()
     if ticks is None:
         ticks = sorted(ticks_in_df)
     else:
@@ -110,7 +111,7 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
             print(f'Missing tickers: {missing}')
             ticks.remove(missing)
 
-    dfx = dfx[dfx['tick'].isin(ticks)].drop('tick', axis=1)
+    dfx = dfx[dfx["ticker"].isin(ticks)]
     return dfx.drop_duplicates()
 
 

@@ -235,15 +235,11 @@ class DataQueryInterface(object):
                 # TODO check select == 'info'?
                 return response["info"]
 
-            if "error" in response.keys():
-                msg = f"error message in response {response['error']}"
-                msg += f" for endpoint {self.last_url:s}"
-                logging.error(msg)
-                raise ValueError(response["error"]["message"])
+            if "error" in response.keys() or "errors" in response.keys():
+                logging.error(f"Error in response %s for url %s", response, self.last_url)
+                raise ValueError(f"Error in response from DQ: {response}")
 
-            msg = f"count: {count:d}, items: {response['items']:d},"
-            msg += f" page-size: {response['page-size']:d}"
-            logging.debug(msg)
+            logging.debug(f"count: %d, items: %d, page-size: %d", count, response["items"], response["page-size"])
 
             # TODO parse response...
             assert select in response.keys()
@@ -545,9 +541,8 @@ class DataQueryInterface(object):
                                     params=params, **kwargs)
             results.extend(output)
 
-        print(results)
         # (O(n) + O(nlog(n)) operation.
-        no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression]))
+        no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression_copy]))
 
         results_dict = self.isolate_timeseries(results, original_metrics)
         results_dict = self.valid_ticker(results_dict)
@@ -646,7 +641,7 @@ class DataQueryInterface(object):
             condition = self.column_check(v, 1)
             if condition:
                 for i in range(2, no_cols):
-                    condition = self.column_check(v, 1)
+                    condition = self.column_check(v, i)
                     if not condition:
                         warnings.warn("Error has occurred in the DataBase.")
 
