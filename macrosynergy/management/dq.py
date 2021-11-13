@@ -516,6 +516,12 @@ class DataQueryInterface(object):
         >>> results = dq.get_ts_expression(expression="DB(CFX, AUD, )")
 
         """
+        unique_tix = list(set(expression))
+        unique_tix.sort()
+        dq_tix = []
+        for metric in original_metrics:
+            expression = dq_tix + ["DB(JPMAQS," + tick + f",{metric})" for tick in
+                                   unique_tix]
 
         no_tickers = len(expression)
         iterations = ceil(no_tickers / 20)
@@ -701,18 +707,15 @@ class DataQueryInterface(object):
 
         return df
 
-    def get_ts_group(self, group_id, attributes_id: str,
-                     filter_id: str = None,
-                     data: str = "REFERENCE_DATA",
-                     **kwargs):
+    def get_ts_group(self, group_id, attributes_id: str, filter_id: str = None,
+                     data: str = "REFERENCE_DATA", **kwargs):
         """Get Time series group
 
-
-         start_date: str = None, end_date: str = None,
-          calendar: str = "CAL_ALLDAYS",
-         frequency: str = "FREQ_DAY",
-          conversion: str = "CONV_LASTBUS_ABS",
-         nan_treatment: str = "NA_NOTHING"):
+         :param <str>: start_date = None, end_date: str = None,
+         :param <str>: calendar = "CAL_ALLDAYS",
+         :param <str>: frequency = "FREQ_DAY",
+         :param <str>: conversion = "CONV_LASTBUS_ABS",
+         :param <str>: nan_treatment = "NA_NOTHING"):
 
         time-series "group":
         [
@@ -725,14 +728,13 @@ class DataQueryInterface(object):
             ...
         ]
 
-
         :param group_id: string with group id, Catalog data group identifier.
-        :param attributes_id: Attribute identifiers in the form
-            attributes=x&attributes=y
+        :param attributes_id: Attribute identifiers in the form attributes = x &
+                              attributes=y
         :param filter_id: Narrow result scope using country
-            or currency filters.
+                          or currency filters.
         :param data: string, Retrieve REFERENCE_DATA (default)
-            or ALL (incl. price data).
+                     or ALL (incl. price data).
         :param kwargs: dictionary of optional extra arguments
 
         :return: JSON object
