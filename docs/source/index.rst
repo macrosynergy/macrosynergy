@@ -12,6 +12,7 @@ Welcome to macrosynergy's documentation!
    :maxdepth: 4
    :caption: Contents:
 
+   context
    API References <ref/modules>
 
 
