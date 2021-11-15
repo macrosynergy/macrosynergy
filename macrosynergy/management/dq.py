@@ -198,7 +198,7 @@ class DataQueryInterface(object):
 
         url = self.base_url + endpoint
         self.last_url = url
-        print(self.last_url)
+
         logging.debug(f"request from endpoint: {url:s}")
 
         # TODO count/checksum of items...
@@ -494,7 +494,7 @@ class DataQueryInterface(object):
 
         return results
 
-    def get_ts_expression(self, expression, original_metrics, **kwargs):
+    def get_ts_expression(self, expression, original_metrics, bool_, **kwargs):
         """
 
         start_date: str = None, end_date: str = None,
@@ -518,12 +518,11 @@ class DataQueryInterface(object):
 
         """
         unique_tix = list(set(expression))
-        unique_tix.sort()
         dq_tix = []
         for metric in original_metrics:
-            expression = dq_tix + ["DB(JPMAQS," + tick + f",{metric})" for tick in
-                                   unique_tix]
+            dq_tix += ["DB(JPMAQS," + tick + f",{metric})" for tick in unique_tix]
 
+        expression = dq_tix
         no_tickers = len(expression)
         iterations = ceil(no_tickers / 20)
         remainder = no_tickers % 20
@@ -551,7 +550,11 @@ class DataQueryInterface(object):
         # (O(n) + O(nlog(n)) operation.
         no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression_copy]))
 
-        results_dict = self.isolate_timeseries(results, original_metrics)
+        results_dict, output_dict = self.isolate_timeseries(results, original_metrics)
+        if bool_:
+            df_column_wise = self.df_column(output_dict, original_metrics)
+            return df_column_wise
+
         results_dict = self.valid_ticker(results_dict)
 
         results_copy = results_dict.copy()
@@ -610,7 +613,29 @@ class DataQueryInterface(object):
 
             modified_dict[k] = arr
 
-        return modified_dict
+        return modified_dict, output_dict
+
+    @staticmethod
+    def df_column(output_dict, original_metrics):
+
+        index = next(iter(output_dict.values()))['real_date']
+        no_rows = index.size
+        no_columns = len(output_dict.keys()) * len(original_metrics)
+        arr = np.empty(shape=(no_rows, no_columns), dtype=np.float32)
+
+        i = 0
+        columns = []
+        for metric in original_metrics:
+            for k, v in output_dict.items():
+
+                col_name = k + ',' + metric + ')'
+                columns.append(col_name)
+                arr[:, i] = v[metric]
+                i += 1
+
+        df = pd.DataFrame(data=arr, columns=columns)
+
+        return df
 
     @staticmethod
     def column_check(v, col):
