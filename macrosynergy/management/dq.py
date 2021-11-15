@@ -198,6 +198,7 @@ class DataQueryInterface(object):
 
         url = self.base_url + endpoint
         self.last_url = url
+        print(self.last_url)
         logging.debug(f"request from endpoint: {url:s}")
 
         # TODO count/checksum of items...
