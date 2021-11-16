@@ -494,7 +494,7 @@ class DataQueryInterface(object):
 
         return results
 
-    def get_ts_expression(self, expression, original_metrics, bool_, **kwargs):
+    def get_ts_expression(self, expression, original_metrics, bool_df, **kwargs):
         """
 
         start_date: str = None, end_date: str = None,
@@ -510,6 +510,7 @@ class DataQueryInterface(object):
         :param original_metrics: List of required metrics:
                                  the returned DataFrame will reflect the received List.
         :param **kwargs: dictionary of additional arguments
+        :param bool_df: temporary parameter for reconciliation with Athena.
 
         :return: pd.DataFrame: ['cid', 'xcat', 'real_date'] + [original_metrics]
 
@@ -551,7 +552,7 @@ class DataQueryInterface(object):
         no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression_copy]))
 
         results_dict, output_dict = self.isolate_timeseries(results, original_metrics)
-        if bool_:
+        if bool_df:
             df_column_wise = self.df_column(output_dict, original_metrics)
             return df_column_wise
 
@@ -726,7 +727,7 @@ class DataQueryInterface(object):
 
         df = pd.DataFrame(data=arr, columns=cols_output)
 
-        df['real_date'] = pd.to_datetime(df['real_date'], yearfirst = True)
+        df['real_date'] = pd.to_datetime(df['real_date'], yearfirst=True)
         df = df[df['real_date'].dt.dayofweek < 5]
         df = df.fillna(value=np.nan)
         df = df.reset_index(drop=True)
@@ -785,70 +786,52 @@ class DataQueryInterface(object):
 
         return results
 
-    def tickers(
-            self, tickers: list, metrics: list = ['value'], start_date: str='2000-01-01'
-    ):
+    def tickers(self, tickers: list, metrics: list = ['value'],
+                start_date: str='2000-01-01', bool_df=False):
         """
         Returns standardized dataframe of specified base tickers and metric
+
         :param <List[str]> tickers: JPMaQS ticker of form <cid>_<xcat>.
         :param <List[str]> metrics: must choose one or more from 'value', 'eop_lag',
-            'mop_lag', or 'grade'. Default is ['value'].
+                                    'mop_lag', or 'grade'. Default is ['value'].
         :param <str> start_date: first date in ISO 8601 string format.
+        :param <boolean> bool_df: temporary parameter (alignment with Athena).
+
         :return <pd.Dataframe> standardized dataframe with columns 'cid', 'xcats',
-            'real_date' and chosen metrics.
+                               'real_date' and chosen metrics.
         """
 
-        unique_tix = list(set(tickers))
-        unique_tix.sort()
-        dq_tix = []
-        store = []
-        for metric in metrics:
-            dq_tix = dq_tix + ["DB(JPMAQS," + tick + f",{metric})" for tick in
-                               unique_tix]
+        df = self.get_ts_expression(expression=tickers, original_metrics=metrics,
+                                    start_date=start_date, bool_df=bool_df)
 
-            print("Connected: ", self.check_connection())
+        if isinstance(df, pd.DataFrame):
+            df = df.sort_values(['cid', 'xcat', 'real_date']).reset_index(drop=True)
 
-            df = self.get_ts_expression(
-                expression=dq_tix,
-                original_metrics=metrics,
-                start_date=start_date,
-                bool_=False,
-            )
+        return df
 
-            if isinstance(df, pd.DataFrame):
-                df = df.sort_values(['cid', 'xcat', 'real_date']).reset_index(drop=True)
-                store.append(df)
-
-        # TODO get all...
-        if len(store) > 0:
-            df = pd.concat(store, axis=0)
-            return df
-
-    def download(
-            self,
-            tickers=None,
-            xcats=None,
-            cids=None,
-            metrics=['value'],
-            start_date='2000-01-01'
-    ):
+    def download(self, tickers=None, xcats=None, cids=None, metrics=['value'],
+                 start_date='2000-01-01'):
         """
         Returns standardized dataframe of specified base tickers and metrics
+
         :param <List[str]> tickers: JPMaQS ticker of form <cid>_<xcat>. Can be combined
-            with selection of categories.
+                                    with selection of categories.
+
         :param <List[str]> xcats: JPMaQS category codes. Downloaded for all standard
-            cross sections identifiers available
+                                  cross sections identifiers available
         (if cids are not specified) or those selected (if cids are specified).
         Standard cross sections here include major developed and emerging currency
-            markets. See JPMaQS documentation.
+        markets. See JPMaQS documentation.
         :param <List[str]> cids: JPMaQS cross-section identifiers, typically based  on
-            currency code. See JPMaQS documentation.
+                                 currency code. See JPMaQS documentation.
         :param <str> metrics: must choose one or more from 'value', 'eop_lag', 'mop_lag',
-            or 'grade'. Default is ['value'].
-        # Todo: allow multiple metrics to be downloaded
+                              or 'grade'. Default is ['value'].
+
         :param <str> start_date: first date in ISO 8601 string format.
         :param <str> path: relative path from notebook to credential files.
-        :return <pd.Dataframe> standardized dataframe with columns 'cid', 'xcats', 'real_date' and chosen metrics.
+
+        :return <pd.Dataframe> standardized dataframe with columns 'cid', 'xcats',
+                               'real_date' and chosen metrics.
         """
 
         # A. Collect all standard cross sections.
@@ -866,7 +849,6 @@ class DataQueryInterface(object):
             cids = sorted(cids_dm + cids_em)  # standard default
 
         # B. Collect all tickers and metrics to be downloaded
-
         if isinstance(tickers, str):
             tickers = [tickers]
         elif tickers is None:
@@ -888,12 +870,6 @@ class DataQueryInterface(object):
             add_tix = [cid + '_' + xcat for xcat in xcats for cid in cids]
             tickers = tickers + add_tix
 
-        df = pd.DataFrame(columns=['cid', 'xcat', 'real_date', 'value'])
-        df_add = self.tickers(tickers, metrics=metrics, start_date=start_date)
-        if df_add is None:
-            print(f"No data for {tickers}")
-            return
-
-        df.append(df_add)
+        df = self.tickers(tickers, metrics=metrics, start_date=start_date)
 
         return df
