@@ -811,7 +811,8 @@ class DataQueryInterface(object):
             df = self.get_ts_expression(
                 expression=dq_tix,
                 original_metrics=metrics,
-                start_date=start_date
+                start_date=start_date,
+                bool_=False,
             )
 
             if isinstance(df, pd.DataFrame):
