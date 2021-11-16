@@ -198,6 +198,7 @@ class DataQueryInterface(object):
 
         url = self.base_url + endpoint
         self.last_url = url
+
         logging.debug(f"request from endpoint: {url:s}")
 
         # TODO count/checksum of items...
@@ -493,7 +494,7 @@ class DataQueryInterface(object):
 
         return results
 
-    def get_ts_expression(self, expression, original_metrics, **kwargs):
+    def get_ts_expression(self, expression, original_metrics, bool_, **kwargs):
         """
 
         start_date: str = None, end_date: str = None,
@@ -516,7 +517,12 @@ class DataQueryInterface(object):
         >>> results = dq.get_ts_expression(expression="DB(CFX, AUD, )")
 
         """
+        unique_tix = list(set(expression))
+        dq_tix = []
+        for metric in original_metrics:
+            dq_tix += ["DB(JPMAQS," + tick + f",{metric})" for tick in unique_tix]
 
+        expression = dq_tix
         no_tickers = len(expression)
         iterations = ceil(no_tickers / 20)
         remainder = no_tickers % 20
@@ -541,11 +547,14 @@ class DataQueryInterface(object):
                                     params=params, **kwargs)
             results.extend(output)
 
-        print(results)
         # (O(n) + O(nlog(n)) operation.
-        no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression]))
+        no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression_copy]))
 
-        results_dict = self.isolate_timeseries(results, original_metrics)
+        results_dict, output_dict = self.isolate_timeseries(results, original_metrics)
+        if bool_:
+            df_column_wise = self.df_column(output_dict, original_metrics)
+            return df_column_wise
+
         results_dict = self.valid_ticker(results_dict)
 
         results_copy = results_dict.copy()
@@ -604,7 +613,29 @@ class DataQueryInterface(object):
 
             modified_dict[k] = arr
 
-        return modified_dict
+        return modified_dict, output_dict
+
+    @staticmethod
+    def df_column(output_dict, original_metrics):
+
+        index = next(iter(output_dict.values()))['real_date']
+        no_rows = index.size
+        no_columns = len(output_dict.keys()) * len(original_metrics)
+        arr = np.empty(shape=(no_rows, no_columns), dtype=np.float32)
+
+        i = 0
+        columns = []
+        for metric in original_metrics:
+            for k, v in output_dict.items():
+
+                col_name = k + ',' + metric + ')'
+                columns.append(col_name)
+                arr[:, i] = v[metric]
+                i += 1
+
+        df = pd.DataFrame(data=arr, columns=columns)
+
+        return df
 
     @staticmethod
     def column_check(v, col):
@@ -642,7 +673,7 @@ class DataQueryInterface(object):
             condition = self.column_check(v, 1)
             if condition:
                 for i in range(2, no_cols):
-                    condition = self.column_check(v, 1)
+                    condition = self.column_check(v, i)
                     if not condition:
                         warnings.warn("Error has occurred in the DataBase.")
 
@@ -702,18 +733,15 @@ class DataQueryInterface(object):
 
         return df
 
-    def get_ts_group(self, group_id, attributes_id: str,
-                     filter_id: str = None,
-                     data: str = "REFERENCE_DATA",
-                     **kwargs):
+    def get_ts_group(self, group_id, attributes_id: str, filter_id: str = None,
+                     data: str = "REFERENCE_DATA", **kwargs):
         """Get Time series group
 
-
-         start_date: str = None, end_date: str = None,
-          calendar: str = "CAL_ALLDAYS",
-         frequency: str = "FREQ_DAY",
-          conversion: str = "CONV_LASTBUS_ABS",
-         nan_treatment: str = "NA_NOTHING"):
+         :param <str>: start_date = None, end_date: str = None,
+         :param <str>: calendar = "CAL_ALLDAYS",
+         :param <str>: frequency = "FREQ_DAY",
+         :param <str>: conversion = "CONV_LASTBUS_ABS",
+         :param <str>: nan_treatment = "NA_NOTHING"):
 
         time-series "group":
         [
@@ -726,14 +754,13 @@ class DataQueryInterface(object):
             ...
         ]
 
-
         :param group_id: string with group id, Catalog data group identifier.
-        :param attributes_id: Attribute identifiers in the form
-            attributes=x&attributes=y
+        :param attributes_id: Attribute identifiers in the form attributes = x &
+                              attributes=y
         :param filter_id: Narrow result scope using country
-            or currency filters.
+                          or currency filters.
         :param data: string, Retrieve REFERENCE_DATA (default)
-            or ALL (incl. price data).
+                     or ALL (incl. price data).
         :param kwargs: dictionary of optional extra arguments
 
         :return: JSON object
@@ -757,121 +784,3 @@ class DataQueryInterface(object):
                                  **kwargs)
 
         return results
-
-    def dq_tickers(
-            self, tickers: list, metrics: list = ['value'], start_date: str='2000-01-01'
-    ):
-        """
-        Returns standardized dataframe of specified base tickers and metric
-
-
-        :param <List[str]> tickers: JPMaQS ticker of form <cid>_<xcat>.
-        :param <List[str]> metrics: must choose one or more from 'value', 'eop_lag',
-            'mop_lag', or 'grade'. Default is ['value'].
-        :param <str> start_date: first date in ISO 8601 string format.
-
-        :return <pd.Dataframe> standardized dataframe with columns 'cid', 'xcats',
-            'real_date' and chosen metrics.
-        """
-
-        unique_tix = list(set(tickers))
-        unique_tix.sort()
-        dq_tix = []
-        store = []
-        for metric in metrics:
-            dq_tix = dq_tix + ["DB(JPMAQS," + tick + f",{metric})" for tick in
-                               unique_tix]
-
-            print("Connected: ", self.check_connection())
-
-            df = self.get_ts_expression(
-                expression=dq_tix,
-                original_metrics=metrics,
-                start_date=start_date
-            )
-
-            if isinstance(df, pd.DataFrame):
-                df = df.sort_values(['cid', 'xcat', 'real_date']).reset_index(drop=True)
-                store.append(df)
-
-        # TODO get all...
-        if len(store) > 0:
-            df = pd.concat(store, axis=0)
-            return df
-
-    def dq_download(
-            self,
-            tickers=None,
-            xcats=None,
-            cids=None,
-            metrics=['value'],
-            start_date='2000-01-01'
-    ):
-        """
-        Returns standardized dataframe of specified base tickers and metrics
-
-        :param <List[str]> tickers: JPMaQS ticker of form <cid>_<xcat>. Can be combined
-            with selection of categories.
-        :param <List[str]> xcats: JPMaQS category codes. Downloaded for all standard
-            cross sections identifiers available
-        (if cids are not specified) or those selected (if cids are specified).
-        Standard cross sections here include major developed and emerging currency
-            markets. See JPMaQS documentation.
-        :param <List[str]> cids: JPMaQS cross-section identifiers, typically based  on
-            currency code. See JPMaQS documentation.
-        :param <str> metrics: must choose one or more from 'value', 'eop_lag', 'mop_lag',
-            or 'grade'. Default is ['value'].
-        # Todo: allow multiple metrics to be downloaded
-        :param <str> start_date: first date in ISO 8601 string format.
-        :param <str> path: relative path from notebook to credential files.
-
-        :return <pd.Dataframe> standardized dataframe with columns 'cid', 'xcats', 'real_date' and chosen metrics.
-        """
-
-        # A. Collect all standard cross sections.
-
-        if (cids is None) & (xcats is not None):
-            cids_dmca = ['AUD', 'CAD', 'CHF', 'EUR', 'GBP', 'JPY', 'NOK', 'NZD', 'SEK',
-                         'USD']  # DM currency areas
-            cids_dmec = ['DEM', 'ESP', 'FRF', 'ITL', 'NLG']  # DM euro area countries
-            cids_latm = ['BRL', 'COP', 'CLP', 'MXN', 'PEN']  # Latam countries
-            cids_emea = ['HUF', 'ILS', 'PLN', 'RON', 'RUB', 'TRY', 'ZAR']  # EMEA countries
-            cids_emas = ['CNY', 'IDR', 'INR', 'KRW', 'MYR', 'PHP', 'SGD', 'THB',
-                         'TWD']  # EM Asia countries
-            cids_dm = cids_dmca + cids_dmec
-            cids_em = cids_latm + cids_emea + cids_emas
-            cids = sorted(cids_dm + cids_em)  # standard default
-
-        # B. Collect all tickers and metrics to be downloaded
-
-        if isinstance(tickers, str):
-            tickers = [tickers]
-        elif tickers is None:
-            tickers = []
-
-        assert isinstance(tickers, list)
-
-        if isinstance(xcats, str):
-            xcats = [xcats]
-
-        if isinstance(cids, str):
-            cids = [cids]
-
-        if isinstance(metrics, str):
-            metrics = [metrics]
-
-        if xcats is not None:
-            assert isinstance(xcats, (list, tuple))
-            add_tix = [cid + '_' + xcat for xcat in xcats for cid in cids]
-            tickers = tickers + add_tix
-
-        df = pd.DataFrame(columns=['cid', 'xcat', 'real_date', 'value'])
-        df_add = self.dq_tickers(tickers, metrics=metrics, start_date=start_date)
-        if df_add is None:
-            print(f"No data for {tickers}")
-            return
-
-        df.append(df_add)
-
-        return df
-

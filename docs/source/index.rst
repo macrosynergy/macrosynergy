@@ -12,19 +12,11 @@ Welcome to macrosynergy's documentation!
    :maxdepth: 4
    :caption: Contents:
 
+   context
    API References <ref/modules>
 
 
-
 .. move search to api references (automatically)?
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Search:
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
 
 Indices and tables
 ==================
