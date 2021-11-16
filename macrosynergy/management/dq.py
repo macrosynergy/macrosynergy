@@ -518,6 +518,10 @@ class DataQueryInterface(object):
         >>> results = dq.get_ts_expression(expression="DB(CFX, AUD, )")
 
         """
+        for metric in original_metrics:
+            assert metric in ['value', 'eop_lag', 'mop_lag', 'grading'], \
+                f"Incorrect metric passed: {metric}."
+
         unique_tix = list(set(expression))
         dq_tix = []
         for metric in original_metrics:
@@ -793,7 +797,7 @@ class DataQueryInterface(object):
 
         :param <List[str]> tickers: JPMaQS ticker of form <cid>_<xcat>.
         :param <List[str]> metrics: must choose one or more from 'value', 'eop_lag',
-                                    'mop_lag', or 'grade'. Default is ['value'].
+                                    'mop_lag', or 'grading'. Default is ['value'].
         :param <str> start_date: first date in ISO 8601 string format.
         :param <boolean> bool_df: temporary parameter (alignment with Athena).
 
