@@ -494,7 +494,8 @@ class DataQueryInterface(object):
 
         return results
 
-    def get_ts_expression(self, expression, original_metrics, bool_df, **kwargs):
+    def get_ts_expression(self, expression, original_metrics, suppress_warning,
+                          bool_df, **kwargs):
         """
 
         start_date: str = None, end_date: str = None,
@@ -560,7 +561,7 @@ class DataQueryInterface(object):
             df_column_wise = self.df_column(output_dict, original_metrics)
             return df_column_wise
 
-        results_dict = self.valid_ticker(results_dict)
+        results_dict = self.valid_ticker(results_dict, suppress_warning)
 
         results_copy = results_dict.copy()
         try:
@@ -589,6 +590,7 @@ class DataQueryInterface(object):
         size = len(list_)
 
         for i in range(size):
+            flag = False
             try:
                 r = list_.pop()
             except IndexError:
@@ -600,14 +602,22 @@ class DataQueryInterface(object):
 
                 ticker_split = ','.join(ticker[:-1])
                 ts_arr = np.array(dictionary['time-series'])
+                if ts_arr.size == 1:
+                    print(f"Invalid expression, {ticker_split + ', '+ metric + ')'}, "
+                          f"passed into DataQuery.")
+                    flag = True
 
-                if ticker_split not in output_dict:
-                    output_dict[ticker_split]['real_date'] = ts_arr[:, 0]
-                    output_dict[ticker_split][metric] = ts_arr[:, 1]
-                else:
-                    output_dict[ticker_split][metric] = ts_arr[:, 1]
+                if not flag:
+                    if ticker_split not in output_dict:
+                        output_dict[ticker_split]['real_date'] = ts_arr[:, 0]
+                        output_dict[ticker_split][metric] = ts_arr[:, 1]
+                    else:
+                        output_dict[ticker_split][metric] = ts_arr[:, 1]
 
-        no_rows = ts_arr[:, 1].size
+        output_dict_c = output_dict.copy()
+        t_dict = next(iter(output_dict_c.values()))
+        no_rows = next(iter(t_dict.values())).size
+
         modified_dict = {}
         d_frame_order = ['real_date'] + metrics
 
@@ -657,7 +667,7 @@ class DataQueryInterface(object):
 
         return condition
 
-    def valid_ticker(self, _dict):
+    def valid_ticker(self, _dict, suppress_warning):
         """
         Iterates through each Ticker and determines whether the Ticker is held in the
         DataBase or not. The validation mechanism will isolate each column, in all the
@@ -682,7 +692,8 @@ class DataQueryInterface(object):
                     if not condition:
                         warnings.warn("Error has occurred in the DataBase.")
 
-                print(f"The ticker, {k}, does not exist in the Database.")
+                if suppress_warning:
+                    print(f"The ticker, {k}, does not exist in the Database.")
                 dict_copy.pop(k)
             else:
                 continue
@@ -791,7 +802,8 @@ class DataQueryInterface(object):
         return results
 
     def tickers(self, tickers: list, metrics: list = ['value'],
-                start_date: str='2000-01-01', bool_df=False):
+                start_date: str='2000-01-01', suppress_warning=False,
+                bool_df=False):
         """
         Returns standardized dataframe of specified base tickers and metric
 
@@ -800,13 +812,16 @@ class DataQueryInterface(object):
                                     'mop_lag', or 'grading'. Default is ['value'].
         :param <str> start_date: first date in ISO 8601 string format.
         :param <boolean> bool_df: temporary parameter (alignment with Athena).
+        :param <boolean> suppress_warning: used to suppress warning of any invalid
+                                           ticker received by DataQuery.
 
         :return <pd.Dataframe> standardized dataframe with columns 'cid', 'xcats',
                                'real_date' and chosen metrics.
         """
 
         df = self.get_ts_expression(expression=tickers, original_metrics=metrics,
-                                    start_date=start_date, bool_df=bool_df)
+                                    start_date=start_date, suppress_warning=suppress_warning,
+                                    bool_df=bool_df)
 
         if isinstance(df, pd.DataFrame):
             df = df.sort_values(['cid', 'xcat', 'real_date']).reset_index(drop=True)
@@ -814,7 +829,7 @@ class DataQueryInterface(object):
         return df
 
     def download(self, tickers=None, xcats=None, cids=None, metrics=['value'],
-                 start_date='2000-01-01'):
+                 start_date='2000-01-01', suppress_warning=False):
         """
         Returns standardized dataframe of specified base tickers and metrics
 
@@ -833,6 +848,8 @@ class DataQueryInterface(object):
 
         :param <str> start_date: first date in ISO 8601 string format.
         :param <str> path: relative path from notebook to credential files.
+        :param <boolean> suppress_warning: used to suppress warning of any invalid
+                                           ticker received by DataQuery.
 
         :return <pd.Dataframe> standardized dataframe with columns 'cid', 'xcats',
                                'real_date' and chosen metrics.
@@ -874,6 +891,7 @@ class DataQueryInterface(object):
             add_tix = [cid + '_' + xcat for xcat in xcats for cid in cids]
             tickers = tickers + add_tix
 
-        df = self.tickers(tickers, metrics=metrics, start_date=start_date)
+        df = self.tickers(tickers, metrics=metrics, suppress_warning=suppress_warning,
+                          start_date=start_date)
 
         return df
