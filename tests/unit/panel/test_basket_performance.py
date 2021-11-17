@@ -253,21 +253,21 @@ class TestAll(unittest.TestCase):
         w_df = dfx.pivot(index="real_date", columns="cid", values="value")
 
         # Test the assert statement on the received weight category.
-        with self.assertRaises(AssertionError):
-            df_return = basket_performance(dfd_test, contracts=self.contracts, ret="XR",
-                                           cry=None, blacklist=self.black,
-                                           weight_meth="values", weight_xcat='WGT_CAT',
-                                           max_weight=0.3, basket_tik="GLB_ALL",
-                                           return_weights=True)
+        # with self.assertRaises(AssertionError):
+            # df_return = basket_performance(dfd_test, contracts=self.contracts, ret="XR",
+            #                               cry=None, blacklist=self.black,
+            #                               weight_meth="values", weight_xcat='WGT_CAT',
+            #                               max_weight=0.3, basket_tik="GLB_ALL",
+            #                               return_weights=True)
 
         # Test the assertion of a String.
-        with self.assertRaises(AssertionError):
-            df_return = basket_performance(dfd_test, contracts=self.contracts, ret="XR",
-                                           cry=None, blacklist=self.black,
-                                           weight_meth="values",
-                                           weight_xcat=[0.21, 0.19, 0.27, 0.33],
-                                           max_weight=0.3, basket_tik="GLB_ALL",
-                                           return_weights=False)
+        # with self.assertRaises(AssertionError):
+            #    df_return = basket_performance(dfd_test, contracts=self.contracts, ret="XR",
+            #                               cry=None, blacklist=self.black,
+            #                               weight_meth="values",
+            #                               weight_xcat=[0.21, 0.19, 0.27, 0.33],
+            #                               max_weight=0.3, basket_tik="GLB_ALL",
+            #                               return_weights=False)
 
         # weights = values_weight(dfw_ret, w_df, weight_meth="values")
         # self.assertTrue(weights.shape == dfw_ret.shape)
