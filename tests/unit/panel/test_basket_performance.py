@@ -387,7 +387,7 @@ class TestAll(unittest.TestCase):
         # self.assertTrue(all([tick[-5:] == "_WGTS" for tick in weight_ticker]))
 
         # Test the concat function.
-        last_return_index = dfw_ret.shape[0]
+        # last_return_index = dfw_ret.shape[0]
         # date_column = df_return[['real_date']]
         # first_date = date_column.iloc[0].values
         # concat_date = date_column.iloc[last_return_index].values
