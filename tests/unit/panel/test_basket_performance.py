@@ -45,6 +45,7 @@ class TestAll(unittest.TestCase):
         ticks_ret = [c + "_" + ret for c in self.contracts]
         tickers = ticks_ret + ticks_cry
         dfx = reduce_df_by_ticker(self.dfd, blacklist=self.black, ticks=tickers)
+        self.dfx = dfx
 
         dfx["ticker"] = dfx["cid"] + "_" + dfx["xcat"]
         self.dfw_ret = dfx[dfx["ticker"].isin(ticks_ret)].pivot(index="real_date",
@@ -379,9 +380,10 @@ class TestAll(unittest.TestCase):
         # The below code would require changes is weight_meth = "invsd" given the
         # removal of rows applied.
         df_return = basket_performance(dfd, contracts=c, ret="XR", cry=None,
-                                       blacklist=self.black, weight_meth="equal",
+                                       blacklist=None, weight_meth="equal",
                                        max_weight=0.3, basket_tik="GLB_ALL",
                                        return_weights=True)
+
         # Test the Ticker name.
         ticker = np.squeeze(df_return[['ticker']].to_numpy(), axis=1)
         weight_ticker = ticker[dfw_ret.shape[0]:]
