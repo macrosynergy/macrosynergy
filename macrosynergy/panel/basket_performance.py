@@ -18,7 +18,7 @@ def equal_weight(df_ret: pd.DataFrame) -> pd.DataFrame:
     """
     Equal weight function: receives the pivoted return DataFrame and determine the number
     of non-NA cross-sections per timestamp, and subsequently distribute the weight evenly
-     across non-NA cross-sections.
+    across non-NA cross-sections.
 
     :param <pd.DataFrame> df_ret: data-frame with returns.
 
@@ -339,6 +339,13 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
 if __name__ == "__main__":
 
     cids = ['AUD', 'GBP', 'NZD', 'USD']
+
+    # The extended categories, ['FX_WGT', 'EQ_WGT'], are specifically designed to support
+    # the number of residual categories held in the datastream. This appears a contrived
+    # design feature which would not regularly occur or satisfy all user engagements.
+    # Further, what is the DataQuery representation of ['FX_WGT', 'EQ_WGT'] ? What does
+    # 'FX_WGT' correspond to or is it a symbol for an additional category ?
+
     xcats = ['FX_XR', 'FX_CRY', 'EQ_XR', 'EQ_CRY', 'FX_WGT', 'EQ_WGT']
     # Independent field. For instance, Growth.
     # However, in this design, the weight field will reflect the number of categories
