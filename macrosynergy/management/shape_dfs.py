@@ -74,8 +74,8 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
         return dfx.drop_duplicates()
 
 
-def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str = None, end: str = None,
-                        blacklist: dict = None):
+def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str = None,
+                        end: str = None, blacklist: dict = None):
     """
     Filter dataframe by xcats and cids and notify about missing xcats and cids
 
@@ -102,6 +102,7 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
             dfx = dfx[~(filt1 & filt2 & filt3)]
 
     dfx["ticker"] = df["cid"] + '_' + df["xcat"]
+
     ticks_in_df = dfx["ticker"].unique()
     if ticks is None:
         ticks = sorted(ticks_in_df)
@@ -112,6 +113,7 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
             ticks.remove(missing)
 
     dfx = dfx[dfx["ticker"].isin(ticks)]
+
     return dfx.drop_duplicates()
 
 
