@@ -132,6 +132,7 @@ def values_weight(dfw_ret: pd.DataFrame, dfw_wgt: pd.DataFrame, weight_meth: str
         weights_df = 1 / weights_df
 
     weights = weights_df.divide(weights_df.sum(axis=1), axis=0)
+
     check_weights(weights)
 
     return weights
@@ -230,19 +231,20 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
     assert 0.0 < max_weight <= 1.0
 
     # A. Extract relevant data
-    ticks_ret = [c + "_" + ret for c in contracts]  # Creates list of contract tickers.
+    # Creates list of contract tickers.
+    ticks_ret = [c + ret for c in contracts]
     tickers = ticks_ret.copy()  # Initiates general tickers list.
 
     cry_flag = cry is not None  # Boolean for carry being used.
     if cry_flag:
-        ticks_cry = [c + "_" + cry for c in contracts]  # Creates a List of contract
+        ticks_cry = [c + cry for c in contracts]  # Creates a List of contract
         # carries.
         tickers += ticks_cry  # Add to general ticker list.
 
     wgt_flag = (wgt is not None) and (weight_meth in ["values", "inv_values"])
     if wgt_flag:
         assert isinstance(wgt, str), f"Parameter, 'wgt', must be a string and not a " \
-                                      "{type(wgt)."
+                                      "{type(wgt)}."
         ticks_wgt = [c + "_" + wgt for c in contracts]
         # Todo: Assert that all ticks_wgt are available else stop with info of ALL
         #  that are missing.
@@ -347,6 +349,7 @@ if __name__ == "__main__":
     # 'FX_WGT' correspond to or is it a symbol for an additional category ?
 
     xcats = ['FX_XR', 'FX_CRY', 'EQ_XR', 'EQ_CRY', 'FX_WGT', 'EQ_WGT']
+
     # Independent field. For instance, Growth.
     # However, in this design, the weight field will reflect the number of categories
     # referenced in the returned dataframe but is 'FXWCAT' an available series in
@@ -380,6 +383,7 @@ if __name__ == "__main__":
 
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    print(dfd)
 
     # Todo: add value category with only positive values that can serve as weight
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
@@ -389,20 +393,20 @@ if __name__ == "__main__":
     dfd_1 = basket_performance(dfd, contracts, ret='XR', cry=None, weight_meth='values',
                                weights=gdp_figures, wgt='WGT',
                                max_weight=0.35, return_weights=False)
-    print(dfd_1)
+    # print(dfd_1)
 
     dfd_2 = basket_performance(dfd, contracts, ret='XR', cry=None,
                                weight_meth='fixed', weights=gdp_figures,
                                wgt=None, max_weight=0.35, return_weights=False)
-    print(dfd_2)
+    # print(dfd_2)
 
     dfd_3 = basket_performance(dfd, contracts, ret='XR', cry=None,
                                weight_meth='invsd', weights=None,
                                lback_meth="xma", lback_periods=21,
                                wgt=None, max_weight=0.4, return_weights=True)
-    print(dfd_3)
+    # print(dfd_3)
 
     dfd_4 = basket_performance(dfd, contracts, ret='XR', cry=None,
                                weight_meth='equal', wgt=None, max_weight=0.41,
                                return_weights=False)
-    print(dfd_4)
+    # print(dfd_4)
