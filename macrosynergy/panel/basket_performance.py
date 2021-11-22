@@ -172,7 +172,8 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
                        lback_meth: str = "xma", lback_periods: int = 21,
                        remove_zeros: bool = True, weights: List[float] = None,
                        wgt: str = None, max_weight: float = 1.0,
-                       basket_tik: str = "GLB_ALL", return_weights: bool = False):
+                       basket_tik: str = "GLB_ALL", return_weights: bool = False,
+                       data_query: bool = False):
 
     """Basket performance
     Returns approximate return and - optionally - carry series for a basket of underlying
@@ -220,6 +221,7 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
     be used for  return and (possibly) carry are calculated. Default is "GLB_ALL".
     :param <bool> return_weights: if True ddd cross-section weights to output dataframe
     with 'WGT' postfix. Default is False.
+    :param <bool> data_query: if True, the ticker format will match that of DataQuery.
 
     :return <pd.Dataframe>: standardized DataFrame with the basket return and (possibly)
     carry data in standard form, i.e. columns 'cid', 'xcats', 'real_date' and 'value'.
@@ -233,12 +235,15 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
     # A. Extract relevant data
 
     ticks_ret = [c + "_" + ret for c in contracts]  # Creates list of contract tickers.
+    if data_query:
+        ticks_ret = [c + ret for c in contracts]
     tickers = ticks_ret.copy()  # Initiates general tickers list.
 
     cry_flag = cry is not None  # Boolean for carry being used.
     if cry_flag:
-        ticks_cry = [c + "_" + cry for c in contracts]  # Creates a List of contract
-        # carries.
+        # Creates a List of contract carries
+        ticks_cry = [c + "_" + cry for c in contracts]
+        if data_query: ticks_cry = [c + cry for c in contracts]
         tickers += ticks_cry  # Add to general ticker list.
 
     wgt_flag = (wgt is not None) and (weight_meth in ["values", "inv_values"])
