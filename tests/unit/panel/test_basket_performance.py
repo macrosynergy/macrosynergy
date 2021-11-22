@@ -45,6 +45,7 @@ class TestAll(unittest.TestCase):
         ticks_ret = [c + "_" + ret for c in self.contracts]
         tickers = ticks_ret + ticks_cry
         dfx = reduce_df_by_ticker(self.dfd, blacklist=self.black, ticks=tickers)
+        self.dfx = dfx
 
         dfx["ticker"] = dfx["cid"] + "_" + dfx["xcat"]
         self.dfw_ret = dfx[dfx["ticker"].isin(ticks_ret)].pivot(index="real_date",
@@ -253,19 +254,12 @@ class TestAll(unittest.TestCase):
         w_df = dfx.pivot(index="real_date", columns="cid", values="value")
 
         # Test the assert statement on the received weight category.
-        with self.assertRaises(AssertionError):
-            df_return = basket_performance(dfd_test, contracts=self.contracts, ret="XR",
-                                           cry=None, blacklist=self.black,
-                                           weight_meth="values", weight_xcat='WGT_CAT',
-                                           max_weight=0.3, basket_tik="GLB_ALL",
-                                           return_weights=True)
-
         # Test the assertion of a String.
         with self.assertRaises(AssertionError):
             df_return = basket_performance(dfd_test, contracts=self.contracts, ret="XR",
                                            cry=None, blacklist=self.black,
                                            weight_meth="values",
-                                           weight_xcat=[0.21, 0.19, 0.27, 0.33],
+                                           wgt=[0.21, 0.19, 0.27, 0.33],
                                            max_weight=0.3, basket_tik="GLB_ALL",
                                            return_weights=False)
 
@@ -336,20 +330,20 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(AssertionError):
             df_return = basket_performance(dfd, contracts=['AUD_FX', 'NZD_FX'],
                                            ret=["XR"], cry="CRY",
-                                           weight_meth="equal", weight_xcat=None,
+                                           weight_meth="equal", wgt=None,
                                            max_weight=0.3, basket_tik="GLB_ALL",
                                            return_weights=False)
         # Testing the assertion error on the contracts field: List required.
         with self.assertRaises(AssertionError):
             df_return = basket_performance(dfd, contracts='AUD_FX',
                                            ret="XR", cry="CRY",
-                                           weight_meth="equal", weight_xcat=None,
+                                           weight_meth="equal", wgt=None,
                                            max_weight=0.45, basket_tik="GLB_ALL",
                                            return_weights=False)
         # Testing the assertion error on max_weight field: 0 < max_weight <= 1.
         with self.assertRaises(AssertionError):
             df_return = basket_performance(dfd, contracts=c, ret="XR", cry="CRY",
-                                           weight_meth="equal", weight_xcat=None,
+                                           weight_meth="equal", wgt=None,
                                            max_weight=1.2, basket_tik="GLB_ALL",
                                            return_weights=False)
         # Testing the weighting method "fixed".
@@ -357,7 +351,7 @@ class TestAll(unittest.TestCase):
             gdp_figures = [17.0, 41.0, 9.0, 215.0, 23.0]
             c = ['AUD_FX', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
             df_return = basket_performance(dfd, contracts=c, ret="XR", cry="CRY",
-                                           weight_meth="fixed", weight_xcat=None,
+                                           weight_meth="fixed", wgt=None,
                                            weights=gdp_figures, max_weight=0.4,
                                            basket_tik="GLB_ALL", return_weights=False)
 
@@ -371,15 +365,25 @@ class TestAll(unittest.TestCase):
         b_return = dfw_ret.multiply(weights).sum(axis=1).to_numpy()
         value = np.squeeze(df_return[['value']].to_numpy(), axis=1)
 
+        # Tests the dimensions. The returned dataframe should have the same number of
+        # rows given the basket return sums all contracts on each timestamp.
+        # Only applicable if the parameter "return_weights" is set to zero.
+        self.assertTrue(df_return.shape[0] == dfw_ret.shape[0])
+
+        # Validate the basket's ticker name is GLB_ALL + "ret" if the parameter
+        # "basket_tik" is not defined.
+        self.assertTrue(np.all(df_return["ticker"] == "GLB_ALL" + "_" + "XR"))
+
         # Accounts for floating point precision.
         self.assertTrue(np.all(np.abs(b_return - value) < 0.000001))
 
         # The below code would require changes is weight_meth = "invsd" given the
         # removal of rows applied.
         df_return = basket_performance(dfd, contracts=c, ret="XR", cry=None,
-                                       blacklist=self.black, weight_meth="equal",
+                                       blacklist=None, weight_meth="equal",
                                        max_weight=0.3, basket_tik="GLB_ALL",
                                        return_weights=True)
+
         # Test the Ticker name.
         ticker = np.squeeze(df_return[['ticker']].to_numpy(), axis=1)
         weight_ticker = ticker[dfw_ret.shape[0]:]

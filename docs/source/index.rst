@@ -19,16 +19,7 @@ The Macrosynergy Quant Research Package is built to ease of use to analyse macro
    API References <ref/modules>
 
 
-
 .. move search to api references (automatically)?
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Search:
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
 
 Indices and tables
 ==================

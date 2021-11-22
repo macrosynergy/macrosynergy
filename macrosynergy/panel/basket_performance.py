@@ -16,9 +16,8 @@ def check_weights(weight: pd.DataFrame):
 
 def equal_weight(df_ret: pd.DataFrame) -> pd.DataFrame:
     """
-    Equal weight function: receives the pivoted return DataFrame and determine the number
-    of non-NA cross-sections per timestamp, and subsequently distribute the weight evenly
-     across non-NA cross-sections.
+    Equal weight function: receives the pivoted return DataFrame and determine the number of non-NA cross-sections
+    per timestamp, and subsequently distribute the weight evenly across non-NA cross-sections.
 
     :param <pd.DataFrame> df_ret: data-frame with returns.
 
@@ -39,8 +38,7 @@ def equal_weight(df_ret: pd.DataFrame) -> pd.DataFrame:
 
 def fixed_weight(df_ret: pd.DataFrame, weights: List[float]):
     """
-    Calculates fixed weights based on a single list of values and a corresponding return
-    panel dataframe
+    Calculates fixed weights based on a single list of values and a corresponding return panel dataframe
 
     :param <pd.DataFrame> df_ret: Return series matrix. Multidimensional.
     :param <List[float]> weights: List of floats determining weight allocation.
@@ -70,18 +68,15 @@ def inverse_weight(dfw_ret: pd.DataFrame, lback_meth: str = "xma",
     Calculates weights inversely proportionate to recent return standard deviations
 
     :param <pd.DataFrame> dfw_ret: panel dataframe of returns.
-    :param <str> lback_meth: Lookback method for "invsd" weighting method. Default is
-                             "xma".
-    :param <int> lback_periods: Lookback periods. Default is 21.  Half-time for "xma" and
-                                full lookback period for "ma".
+    :param <str> lback_meth: Lookback method for "invsd" weighting method. Default is "xma".
+    :param <int> lback_periods: Lookback periods. Default is 21.  Half-time for "xma" and full lookback period for "ma".
     :param <Bool> remove_zeros: Removes the zeros. Default is set to True.
 
     :return <pd.DataFrame>: Dataframe of weights.
 
-    N.B:   The rolling standard deviation will be calculated either using the standard
-           moving average (ma) or the exponential moving average (xma). Both will require
-           returns before a first weight can be computed
-    Todo: this function will need to option to shorten the window and/or backfill.
+    N.B:  The rolling standard deviation will be calculated either using the standard  moving average (ma) or the
+          exponential moving average (xma). Both will require returns before a first weight can be computed
+    Todo: this function will need to option to shorten the lookback window and/or backfill.
     """
 
     if lback_meth == "ma":
@@ -102,30 +97,29 @@ def inverse_weight(dfw_ret: pd.DataFrame, lback_meth: str = "xma",
     return df_wgts
 
 
-def values_weight(dfw_ret: pd.DataFrame, exo_weights: pd.DataFrame, weight_meth: str):
+def values_weight(dfw_ret: pd.DataFrame, dfw_wgt: pd.DataFrame, weight_meth: str):
     """
-    The values weight method will receive a matrix of values produced by another category
-    and the values held in the matrix will be used as the weights. The weight matrix
-    should contain floating point values.
+    Returns weights based on an external weighting category.
 
-    :param <pd.DataFrame> dfw_ret: Pivoted dataframe.
-    :param <pd.DataFrame> exo_weights: DataFrame of exogenously computed weights. Matching
-                                      dimensions.
-    :param <str> weight_meth: Determines where to use the values or take the
-                                    inverse to determine the weights.
+    :param <pd.DataFrame> dfw_ret: Standard wide dataframe of returns across time and contracts.
+    :param <pd.DataFrame> dfw_wgt: Standard wide dataframe of weight category values across time and contracts.
+    :param <str> weight_meth: Weighting method. must be one of "values" or "inv_values".
 
-    :return <pd.DataFrame>: Will return the generated weight Array.
+    :return <pd.DataFrame>: Dataframe of weights.
     """
-    exo_weights[exo_weights < 0] = 0.0
 
-    exo_array = exo_weights.to_numpy()
+    negative_condition = np.any((dfw_wgt < 0).to_numpy())
+    if negative_condition:
+        dfw_wgt[dfw_wgt < 0] = 0.0
+        print("Negative values in the weight matrix set to zero.")
 
+    exo_array = dfw_wgt.to_numpy()
     df_bool = ~dfw_ret.isnull()
 
     weights_df = df_bool.multiply(exo_array)
     cols = weights_df.columns
-    # Will treat NaNs and negative values the same: converts to NaN.
-    weights_df[cols] = weights_df[cols].replace({'0': np.nan, 0: np.nan})
+
+    weights_df[cols] = weights_df[cols].replace({'0': np.nan, 0: np.nan})  # zeroes treated as NaNs
     if weight_meth != "values":
         weights_df = 1 / weights_df
 
@@ -134,22 +128,20 @@ def values_weight(dfw_ret: pd.DataFrame, exo_weights: pd.DataFrame, weight_meth:
 
     return weights
 
+
 def max_weight_func(weights: pd.DataFrame, max_weight: float):
     """
     Enforces maximum weight caps or - if impossible applies equal weight.
-    Checks if maximum weights are below equal weights and applies latter if True.
 
     :param <pd.DataFrame> weights: Corresponding weight matrix. Multidimensional.
     :param <float> max_weight: Upper-bound on the weight allowed for each cross-section.
 
     :return <pd.DataFrame>: Will return the modified weight DataFrame.
 
-    N.B.: If the maximum weight is less than the equal weight weight, this replaces the
-          computed weight with the equal weight. For instance,
-          [np.nan, 0.63, np.nan, np.nan, 0.27] becomes
-          [np.nan, 0.5, np.nan, np.nan, 0.5]. Otherwise, the function calls the
-          ConvergeRow Class to ensure all weights "converge" to a value within the
-          upper-bound. Allow for a margin of error set to 0.001.
+    N.B.: If the maximum weight is less than the equal weight weight, this replaces the computed weight with the
+        equal weight. For instance, [np.nan, 0.63, np.nan, np.nan, 0.27] becomes [np.nan, 0.5, np.nan, np.nan, 0.5].
+        Otherwise, the function calls the ConvergeRow Class to ensure all weights "converge" to a value within the
+        upper-bound. Allow for a margin of error set to 0.001.
     """
 
     w_matrix = weights.to_numpy()
@@ -161,144 +153,114 @@ def max_weight_func(weights: pd.DataFrame, max_weight: float):
     return weights
 
 
-def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NSA",
-                       cry: str = None, start: str = None, end: str = None,
-                       blacklist: dict = None, weight_meth: str = "equal",
-                       lback_meth: str = "xma", lback_periods: int = 21,
+def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NSA", cry: str = None,
+                       start: str = None, end: str = None, blacklist: dict = None,
+                       weight_meth: str = "equal", lback_meth: str = "xma", lback_periods: int = 21,
                        remove_zeros: bool = True, weights: List[float] = None,
-                       weight_xcat: List[str] = None, max_weight: float = 1.0,
+                       wgt: str = None, max_weight: float = 1.0,
                        basket_tik: str = "GLB_ALL", return_weights: bool = False):
 
     """Basket performance
-    Computes approximate return and carry series for a basket of underlying contracts.
+    Returns approximate return and - optionally - carry series for a basket of underlying contracts.
 
-    :param <pd.Dataframe> df: standardized DataFrame with following columns: 'cid',
-                              'xcats', 'real_date' and 'value'.
-    :param <List[str]> contracts: base tickers (combinations of cross sections and base
-                                  categories) denoting contracts that go into the basket.
+    :param <pd.Dataframe> df: standardized DataFrame with following columns: 'cid', 'xcats', 'real_date' and 'value'.
+    :param <List[str]> contracts: base tickers (combinations of cross sections and base categories) denoting contracts
+        that go into the basket.
     :param <str> ret: return category postfix; default is "XR_NSA".
     :param <str> cry: carry category postfix; default is None.
-    :param <str> start: earliest date in ISO 8601 format. Default is None, i.e. earliest
-                        date in data frame is used.
-    :param <str> end: latest date in ISO 8601 format. Default is None, i.e. latest date
-                      in data frame is used.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from
-                             the data frame. If one cross section has several blacklist
-                             periods append numbers to the cross section code.
-    :param <str> weight_meth: method used for weighting constituent returns and carry.
-                              Options are as follows:
-        [1] "equal": all constituents with non-NA returns have the same weight.
-                     This is the default.
-        [2] "fixed": weights are proportionate to a single list values provided separately.
-        [3] "invsd": weights are inverse of past return standard deviations.
-        [4] "values": weights are proportionate to a panel of values of another exogenous
-                      category.
-        [5] "inv_values": weights are inversely proportionate to of values of another
-                          exogenous category.
-    :param <str> lback_meth: lookback method for "invsd" weighting method.
-                             Default is "xma" (exponential MA).
-                             The alternative is simple moving average ("ma").
-    :param <int> lback_periods: lookback periods. Default is 21.  Half-time for "xma" and
-                                full lookback period for "ma".
-    :param <Bool> remove_zeros: removes the zeros. Default is set to True. Todo: explain!
-    :param <List[float]> weights: single list of weights corresponding to the base
-                                  tickers in the contracts argument.
-                                  This is only relevant for weight_meth = "fixed".
-    :param <str> weight_xcat: extended category name for "values" and "inv_values"
-                              methods. If the weighting method is either of the two
-                              aforementioned categories, isolate the return series on the
-                              received category(ies) and subsequently use the values as
-                              weights.
-    :param <float> max_weight: maximum weight permitted for a single cross section.
-                               Default is 1, i.e no restriction.
-    :param <str> basket_tik: name of basket base ticker for which return and (possibly)
-                             carry are calculated.
-        Default is "GLB_ALL".
-    :param <bool> return_weights: if True ddd cross-section weights to output dataframe
-                                  with 'WGT' postfix.
+    :param <str> start: earliest date in ISO 8601 format. Default is None, i.e. earliest date in data frame is used.
+    :param <str> end: latest date in ISO 8601 format. Default is None, i.e. latest date in data frame is used.
+    :param <dict> blacklist: cross sections with date ranges that should be excluded from the data frame.
+        If one cross section has several blacklist periods append numbers to the cross section code.
+    :param <str> weight_meth: method used for weighting constituent returns and carry. Options are as follows:
+        [1] "equal": all constituents with non-NA returns have the same weight. This is the default.
+        [2] "fixed": weights are proportionate to single list of values (corresponding to  contracts) provided
+            passed to argument `weights`.
+        [3] "invsd": weights based on inverse to standard deviations of recent returns.
+        [4] "values": weights proportionate to a panel of values of exogenous weight category.
+        [5] "inv_values": weights are inversely proportionate to of values of exogenous weight category.
+    :param <str> lback_meth: lookback method for "invsd" weighting method. Default is "xma" (exponential MA).
+        The alternative is simple moving average ("ma").
+    :param <int> lback_periods: lookback periods. Default is 21. Half-time for "xma" and full lookback period for "ma".
+    :param <bool> remove_zeros: removes the zeros. Default is set to True. Todo: explain!
+    :param <List[float]> weights: single list of weights corresponding to the base tickers in the contracts argument.
+        This is only relevant for weight_meth = "fixed".
+    :param <str> wgt: postfix used to identify exogenous weight category. Analogously to carry and return postfix this
+        should be added to base tickers to identify the values that denote contract weights.
+    :param <float> max_weight: maximum weight permitted for a single contract. Default is 1, i.e no restriction.
+        N.B.: The purpose of this restriction is to limit concentration within the basket.
+    :param <str> basket_tik: name of basket base ticker (analogous to contract name) to be used for  return and
+        (possibly) carry are calculated. Default is "GLB_ALL".
+    :param <bool> return_weights: if True ddd cross-section weights to output dataframe with 'WGT' postfix.
         Default is False.
-    :return <pd.Dataframe>: standardized DataFrame with the basket performance data in
-                            standard form, i.e. columns
-        are 'cid', 'xcat', 'real_date' and 'value'.
+
+    :return <pd.Dataframe>: standardized DataFrame with the basket return and (possibly) carry data in standard form,
+        i.e. columns 'cid', 'xcats', 'real_date' and 'value'.
     """
 
     assert isinstance(ret, str), "return category must be a <str>."
-    assert isinstance(contracts, list) and all(isinstance(c, str) for c in contracts)
+    assert isinstance(contracts, list) and all(isinstance(c, str) for c in contracts), "contracts must be string list."
     assert 0.0 < max_weight <= 1.0
 
     # A. Extract relevant data
-    ticks_ret = [c + "_" + ret for c in contracts]
-    tickers = ticks_ret
 
-    cry_flag = cry is not None
+    ticks_ret = [c + "_" + ret for c in contracts]  # Creates list of contract tickers.
+    tickers = ticks_ret.copy()  # Initiates general tickers list.
+
+    cry_flag = cry is not None  # Boolean for carry being used.
     if cry_flag:
-        ticks_cry = [c + "_" + cry for c in contracts]
-        tickers += ticks_cry
+        ticks_cry = [c + "_" + cry for c in contracts]  # Creates a List of contract
+        # carries.
+        tickers += ticks_cry  # Add to general ticker list.
 
-    dfx = reduce_df_by_ticker(df, start=start, end=end, ticks=tickers,
-                              blacklist=blacklist)
+    wgt_flag = (wgt is not None) and (weight_meth in ["values", "inv_values"])
+    if wgt_flag:
+        assert isinstance(wgt, str), f"Parameter, 'wgt', must be a string and not a " \
+                                      "{type(wgt)."
+        ticks_wgt = [c + "_" + wgt for c in contracts]
+        # Todo: Assert that all ticks_wgt are available else stop with info of ALL
+        #  that are missing.
+        tickers += ticks_wgt
+
+    dfx = reduce_df_by_ticker(df, start=start, end=end, ticks=tickers, blacklist=blacklist)  # extract relevant df
 
     # B. Pivot relevant data
-    # cross-section + category.
-    dfx_tickers = dfx[dfx["ticker"].isin(ticks_ret)]
-    dfw_ret = dfx_tickers.pivot(index="real_date", columns="ticker", values="value")
+
+    dfx_ticks_ret = dfx[dfx["ticker"].isin(ticks_ret)]
+    dfw_ret = dfx_ticks_ret.pivot(index="real_date", columns="ticker", values="value")
 
     if cry_flag:
-        dfw_cry = dfx[dfx["ticker"].isin(ticks_cry)].pivot(index="real_date",
-                                                           columns="ticker",
-                                                           values="value")
-    if weight_meth == "equal":
+        dfw_ticks_cry = dfx[dfx["ticker"].isin(ticks_cry)]
+        dfw_cry = dfw_ticks_cry.pivot(index="real_date", columns="ticker", values="value")
 
+    if weight_meth == "equal":
         w_matrix = equal_weight(df_ret=dfw_ret)
 
     elif weight_meth == "fixed":
-
-        assert isinstance(weights, list), \
-            "Method 'fixed' requires a list of weights to be assigned to 'weights'."
-        assert dfw_ret.shape[1] == len(weights), \
-            "List of weights must be equal to number of contracts."
+        assert isinstance(weights, list), "Method 'fixed' requires a list of weights to be assigned to 'weights'."
+        assert dfw_ret.shape[1] == len(weights), "List of weights must be equal to number of contracts."
         for w in weights:
             try:
                 int(w)
             except ValueError:
                 print(f"List, {weights}, must be all numerical values.")
                 raise
-
         w_matrix = fixed_weight(df_ret=dfw_ret, weights=weights)
 
     elif weight_meth == "invsd":
-
         w_matrix = inverse_weight(dfw_ret=dfw_ret, lback_meth=lback_meth,
                                   lback_periods=lback_periods, remove_zeros=remove_zeros)
 
-    elif weight_meth == "values" or weight_meth == "inv_values":
-        df_copy = df.copy()
-        assert isinstance(weight_xcat, list), "List of the weighting categories."
-        assert all([isinstance(elem, str) for elem in weight_xcat])
-        # An existing field in the original dataframe.
-        for w_xcat in weight_xcat:
-            assert w_xcat in set(df_copy['xcat'].to_numpy()), "Invalid weighting field:"\
-                                                              "{w_xcat}."
-        # Assert the weighting method is independent of the contracts received.
-        assert all([w_xcat.split('_')[1] != ret for w_xcat in weight_xcat])
+    elif wgt_flag:
+        dfw_ticks_wgt = dfx[dfx["ticker"].isin(ticks_wgt)]
+        dfw_wgt = dfw_ticks_wgt.pivot(index="real_date", columns="ticker",
+                                      values="value")
 
-        exo_values = reduce_df(df_copy, xcats=weight_xcat, start=start, end=end,
-                               blacklist=blacklist)
-
-        exo_weights = exo_values.pivot(index="real_date", columns="ticker",
-                                       values="value")
-        # The number of timestamps each weight return series is defined over is delimited
-        # by the cross-section's available data: the same for the other categories in the
-        # original dataframe.
-        c_weights = [c + '_WGT' for c in contracts]
-        exo_weights = exo_weights[c_weights]
-        # Align the indices through alphabetical ordering.
+        dfw_wgt = dfw_wgt.shift(1)  # lag values by one day, as they can only be used as next day's weight.
+        # Todo: replace negatives with zero and issue warning of replacement
         dfw_ret = dfw_ret.reindex(sorted(dfw_ret.columns), axis=1)
-        exo_weights = exo_weights.reindex(sorted(exo_weights.columns), axis=1)
-
-        assert dfw_ret.shape == exo_weights.shape, "Weight dataframe must be defined " \
-                                                   "over the same time-period."
-        w_matrix = values_weight(dfw_ret, exo_weights, weight_meth)
+        dfw_wgt = dfw_wgt.reindex(sorted(dfw_wgt.columns), axis=1)
+        w_matrix = values_weight(dfw_ret, dfw_wgt, weight_meth)
 
     else:
         raise NotImplementedError(f"Weight method unknown {weight_meth}")
@@ -324,8 +286,7 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
     if cry_flag:
         dfcry = (dfw_cry.multiply(w_matrix)).sum(axis=1)
         dfcry.index.name = "real_date"
-        store.append(dfcry.to_frame("value").reset_index().assign(ticker=basket_tik +
-                                                                  "_" + cry)[select])
+        store.append(dfcry.to_frame("value").reset_index().assign(ticker=basket_tik + "_" + cry)[select])
     if return_weights:
         w_matrix.index.name = "real_date"
         w_matrix.columns.name = "cid"
@@ -343,19 +304,10 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
 if __name__ == "__main__":
 
     cids = ['AUD', 'GBP', 'NZD', 'USD']
+
     xcats = ['FX_XR', 'FX_CRY', 'EQ_XR', 'EQ_CRY', 'FX_WGT', 'EQ_WGT']
-    # Independent field. For instance, Growth.
-    # However, in this design, the weight field will reflect the number of categories
-    # referenced in the returned dataframe but is 'FXWCAT' an available series in
-    # DataQuery ? And, if so, what does it actually equate to ? What is the difference
-    # between 'AUD_FX_WGT' & 'AUD_FX_XR' ? Is 'AUD_FX_WGT' the daily price series on FX ?
-    # And, if so, is that a valid weighting parameter ?
 
-    # To replace the above variable "xcats" or contracts below ?
-    # ['FXXR_NSA', 'FXCRY_NSA', 'EQXR_NSA', 'EQCRY_NSA'] #, 'FXWCAT_NSA', 'EQWCAT_NSA'])
-
-    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
-                                                'sd_mult'])
+    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
 
     df_cids.loc['AUD'] = ['2010-01-01', '2020-12-31', 0, 1]
     df_cids.loc['GBP'] = ['2011-01-01', '2020-11-30', 0, 2]
@@ -366,36 +318,27 @@ if __name__ == "__main__":
                                                   'sd_mult', 'ar_coef', 'back_coef'])
     df_xcats.loc['FX_XR'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.2]
     df_xcats.loc['FX_CRY'] = ['2011-01-01', '2020-10-30', 1, 1, 0.9, 0.5]
+    df_xcats.loc['FX_WGT'] = ['2010-01-01', '2020-12-31', 100, 1, 0.9, 0.5]
     df_xcats.loc['EQ_XR'] = ['2012-01-01', '2020-10-30', 0.5, 2, 0, 0.2]
     df_xcats.loc['EQ_CRY'] = ['2013-01-01', '2020-10-30', 1, 1, 0.9, 0.5]
-    # Span the length of the other categories: minimum start-date and maximum end-date.
-    # Another complication the user must be conscious about. This would be expected: the
-    # weighting method must be defined over the entire return series, for the other
-    # categories otherwise it would not represent a legitimate option.
-    df_xcats.loc['FX_WGT'] = ['2010-01-01', '2020-12-31', 100, 1, 0.9, 0.5]
     df_xcats.loc['EQ_WGT'] = ['2010-01-01', '2020-12-31', 100, 1, 0.9, 0.5]
 
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    # Todo: add val ue category with only positive values that can serve as weight
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
     contracts = ['AUD_FX', 'AUD_EQ', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
 
     gdp_figures = [17.0, 17.0, 41.0, 9.0, 250]
-    dfd_1 = basket_performance(dfd, contracts, ret='XR', cry=None, weight_meth='values',
-                               weights=gdp_figures, weight_xcat=['FX_WGT', 'EQ_WGT'],
+    dfd_1 = basket_performance(dfd, contracts, ret='XR', cry=None, weight_meth='values', weights=gdp_figures, wgt='WGT',
                                max_weight=0.35, return_weights=False)
 
-    dfd_2 = basket_performance(dfd, contracts, ret='XR', cry=None,
-                               weight_meth='fixed', weights=gdp_figures,
-                               weight_xcat=None, max_weight=0.35, return_weights=True)
+    dfd_2 = basket_performance(dfd, contracts, ret='XR', cry=None, weight_meth='fixed', weights=gdp_figures,
+                               wgt=None, max_weight=0.35, return_weights=False)
 
-    dfd_3 = basket_performance(dfd, contracts, ret='XR', cry=None,
-                               weight_meth='invsd', weights=None,
-                               lback_meth="xma", lback_periods=21,
-                               weight_xcat=None, max_weight=0.4, return_weights=True)
+    dfd_3 = basket_performance(dfd, contracts, ret='XR', cry=None, weight_meth='invsd', weights=None,
+                               lback_meth="xma", lback_periods=21)
 
-    dfd_4 = basket_performance(dfd, contracts, ret='XR', cry=None,
-                               weight_meth='equal', weight_xcat=None, max_weight=0.41,
+    dfd_4 = basket_performance(dfd, contracts, ret='XR', cry=None, weight_meth='equal', wgt=None, max_weight=0.41,
                                return_weights=False)
+
