@@ -53,8 +53,8 @@ class CategoryRelations:
         self.df = categories_df(df, xcats, cids, val, start = start, end = end, freq = freq, blacklist = blacklist,
                                 years = years, lag = lag, fwin = fwin, xcat_aggs = xcat_aggs)
 
-
     def corr_probability(self, coef_box):
+
         x = self.df[self.xcats[0]].to_numpy()
         y = self.df[self.xcats[1]].to_numpy()
         coeff, pval = stats.pearsonr(x, y)

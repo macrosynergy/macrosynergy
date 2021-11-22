@@ -34,10 +34,12 @@ release = VERSION if ISRELEASED else f"{VERSION:s}.dev"
 # ones.
 extensions = [
     'sphinx.ext.autodoc',
-    "sphinx.ext.intersphinx",
-    "sphinx.ext.todo",
-    "sphinx.ext.viewcode",
+    'sphinx.ext.intersphinx',
+    'sphinx.ext.todo',
+    'sphinx.ext.viewcode',
     'sphinx.ext.mathjax',
+    'sphinx.ext.autodoc',
+    'sphinx.ext.napoleon'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -81,7 +83,7 @@ todo_include_todos = True
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'alabaster'
+html_theme = 'sphinx_rtd_theme'
 # html_theme = 'sphinxdoc'
 
 # Add any paths that contain custom static files (such as style sheets) here,

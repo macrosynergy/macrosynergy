@@ -5,26 +5,21 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to macrosynergy's documentation!
-========================================
+Macrosynergy
+============
+
+The Macrosynergy Quant Research Package is built to ease of use to analyse macroeconomic trends and financial markets.
 
 .. toctree::
    :maxdepth: 4
    :caption: Contents:
 
+   context <man/context>
+   Getting start <man/howto>
    API References <ref/modules>
 
 
-
 .. move search to api references (automatically)?
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Search:
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
 
 Indices and tables
 ==================
