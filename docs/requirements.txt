@@ -4,3 +4,4 @@ pandas
 statsmodels
 sklearn
 numpy
+sphinx_book_theme
