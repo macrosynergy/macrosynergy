@@ -1,6 +1,17 @@
 macrosynergy.management package
 ===============================
 
+Submodules
+----------
+
+See the details of the individual subpackages:
+
+.. toctree::
+    :maxdepth: 4
+
+    management/dq
+
+
 Module contents
 ---------------
 
@@ -8,3 +19,4 @@ Module contents
    :members:
    :undoc-members:
    :show-inheritance:
+   :exclude-members: dq
