@@ -281,6 +281,8 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
 
     elif wgt_flag:
         ticks_in_df = list(set(df["ticker"].to_numpy()))
+        # Believe shape_dfs will catch the error if I've understood the task, and print
+        # the missing ticker.
         for w_ticker in ticks_wgt:
             assert w_ticker in ticks_in_df, "Weight Ticker, {w_ticker}, absent from " \
                                             "the dataframe. Unable to be used as an " \
