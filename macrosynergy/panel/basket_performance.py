@@ -71,11 +71,11 @@ def inverse_weight(dfw_ret: pd.DataFrame, lback_meth: str = "xma",
 
     :param <pd.DataFrame> dfw_ret: panel dataframe of returns.
     :param <str> lback_meth: Lookback method for "invsd" weighting method. Default is
-    "xma".
+        "xma".
     :param <int> lback_periods: Lookback periods. Default is 21.  Half-time for "xma"
-    and full lookback period for "ma".
+        and full lookback period for "ma".
     :param <Bool> remove_zeros: Any returns that are exact zeros will not be included in
-    the lookback window and prior non-zero values are added to the window instead.
+        the lookback window and prior non-zero values are added to the window instead.
 
     :return <pd.DataFrame>: Dataframe of weights.
 
@@ -109,9 +109,9 @@ def values_weight(dfw_ret: pd.DataFrame, dfw_wgt: pd.DataFrame, weight_meth: str
     Returns weights based on an external weighting category.
 
     :param <pd.DataFrame> dfw_ret: Standard wide dataframe of returns across time and
-    contracts.
+        contracts.
     :param <pd.DataFrame> dfw_wgt: Standard wide dataframe of weight category values
-    across time and contracts.
+        across time and contracts.
     :param <str> weight_meth: Weighting method. must be one of "values" or "inv_values".
 
     :return <pd.DataFrame>: Dataframe of weights.
