@@ -71,11 +71,11 @@ def inverse_weight(dfw_ret: pd.DataFrame, lback_meth: str = "xma",
 
     :param <pd.DataFrame> dfw_ret: panel dataframe of returns.
     :param <str> lback_meth: Lookback method for "invsd" weighting method. Default is
-    "xma".
+        "xma".
     :param <int> lback_periods: Lookback periods. Default is 21.  Half-time for "xma"
-    and full lookback period for "ma".
+        and full lookback period for "ma".
     :param <Bool> remove_zeros: Any returns that are exact zeros will not be included in
-    the lookback window and prior non-zero values are added to the window instead.
+        the lookback window and prior non-zero values are added to the window instead.
 
     :return <pd.DataFrame>: Dataframe of weights.
 
@@ -109,9 +109,9 @@ def values_weight(dfw_ret: pd.DataFrame, dfw_wgt: pd.DataFrame, weight_meth: str
     Returns weights based on an external weighting category.
 
     :param <pd.DataFrame> dfw_ret: Standard wide dataframe of returns across time and
-    contracts.
+        contracts.
     :param <pd.DataFrame> dfw_wgt: Standard wide dataframe of weight category values
-    across time and contracts.
+        across time and contracts.
     :param <str> weight_meth: Weighting method. must be one of "values" or "inv_values".
 
     :return <pd.DataFrame>: Dataframe of weights.
@@ -323,7 +323,9 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
     if return_weights:
         w_matrix.columns.name = "cid"
         w = w_matrix.stack().to_frame("value").reset_index()
-        w["ticker"] = w["cid"] + "_WGT"  #Todo: name should be contract+weight ('WGT')
+        contracts_ = list(map(lambda c: c[:-len(ret)] + "WGT", w["cid"].to_numpy()))
+        contracts_ = np.array(contracts_)
+        w["ticker"] = contracts_
         w = w.loc[w.value > 0, select]
         store.append(w)
 
@@ -364,18 +366,20 @@ if __name__ == "__main__":
 
     gdp_figures = [17.0, 17.0, 41.0, 9.0, 250]
     dfd_1 = basket_performance(dfd, contracts, ret='XR_NSA', cry='CRY_NSA',
-                               weight_meth='values',
-                               wgt='WBASE_NSA', max_weight=0.35, return_weights=True)
+                               weight_meth='values', wgt='WBASE_NSA', max_weight=0.35,
+                               return_weights=False)
 
     dfd_2 = basket_performance(dfd, contracts, ret='XR_NSA', cry=None,
-                               weight_meth='fixed',
-                               weights=gdp_figures,
+                               weight_meth='fixed', weights=gdp_figures,
                                wgt=None, max_weight=0.35, return_weights=False)
 
-    dfd_3 = basket_performance(dfd, contracts, ret='XR', cry=None, weight_meth='invsd',
-                               weights=None, lback_meth="xma", lback_periods=21)
+    dfd_3 = basket_performance(dfd, contracts, ret='XR_NSA', cry=None,
+                               weight_meth='invsd', weights=None, lback_meth="xma",
+                               lback_periods=21)
 
-    dfd_4 = basket_performance(dfd, contracts, ret='XR', cry=None, weight_meth='equal',
-                               wgt=None, max_weight=0.41, return_weights=True)
+    dfd_4 = basket_performance(dfd, contracts, ret='XR_NSA', cry=None,
+                               weight_meth='equal', wgt=None, max_weight=0.41,
+                               return_weights=True)
+    print(dfd_4)
 
 
