@@ -78,7 +78,7 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     :param <int>  lback_periods: Number of lookback periods over which volatility is calculated. Default is 21.
     :param <str> lback_meth: Lookback method to calculate the volatility, Default is "ma". Alternative is "ema",
         Exponential Moving Average. Expects to receive either the aforementioned strings.
-    :param <int> half_life: Refers to the half-time for "xma" and full lookback period for "ma". Default is 11.   
+    :param <int> half_life: Refers to the half-time for "xma". Default is 11.
     :param <str> start: earliest date in ISO format. Default is None and earliest date in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df is used.
     :param <dict> blacklist: cross sections with date ranges that should be excluded from the data frame.
