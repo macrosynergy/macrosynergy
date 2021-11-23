@@ -389,7 +389,7 @@ class TestAll(unittest.TestCase):
         ticker = np.squeeze(df_return[['ticker']].to_numpy(), axis=1)
         weight_ticker = ticker[dfw_ret.shape[0]:]
         self.assertEqual(len(set(weight_ticker)), dfw_ret.shape[1])
-        # self.assertTrue(all([tick[-5:] == "_WGT" for tick in weight_ticker]))
+        self.assertTrue(all([tick[-3:] == "WGT" for tick in weight_ticker]))
 
         # Test the concat function.
         last_return_index = dfw_ret.shape[0]
