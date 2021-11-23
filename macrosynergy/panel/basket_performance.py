@@ -323,7 +323,9 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
     if return_weights:
         w_matrix.columns.name = "cid"
         w = w_matrix.stack().to_frame("value").reset_index()
-        w["ticker"] = w["cid"] + "_WGT"  #Todo: name should be contract+weight ('WGT')
+        contracts_ = list(map(lambda c: c[:-len(ret)] + "WGT", w["cid"].to_numpy()))
+        contracts_ = np.array(contracts_)
+        w["ticker"] = contracts_
         w = w.loc[w.value > 0, select]
         store.append(w)
 
@@ -364,18 +366,20 @@ if __name__ == "__main__":
 
     gdp_figures = [17.0, 17.0, 41.0, 9.0, 250]
     dfd_1 = basket_performance(dfd, contracts, ret='XR_NSA', cry='CRY_NSA',
-                               weight_meth='values',
-                               wgt='WBASE_NSA', max_weight=0.35, return_weights=True)
+                               weight_meth='values', wgt='WBASE_NSA', max_weight=0.35,
+                               return_weights=False)
 
     dfd_2 = basket_performance(dfd, contracts, ret='XR_NSA', cry=None,
-                               weight_meth='fixed',
-                               weights=gdp_figures,
+                               weight_meth='fixed', weights=gdp_figures,
                                wgt=None, max_weight=0.35, return_weights=False)
 
-    dfd_3 = basket_performance(dfd, contracts, ret='XR', cry=None, weight_meth='invsd',
-                               weights=None, lback_meth="xma", lback_periods=21)
+    dfd_3 = basket_performance(dfd, contracts, ret='XR_NSA', cry=None,
+                               weight_meth='invsd', weights=None, lback_meth="xma",
+                               lback_periods=21)
 
-    dfd_4 = basket_performance(dfd, contracts, ret='XR', cry=None, weight_meth='equal',
-                               wgt=None, max_weight=0.41, return_weights=True)
+    dfd_4 = basket_performance(dfd, contracts, ret='XR_NSA', cry=None,
+                               weight_meth='equal', wgt=None, max_weight=0.41,
+                               return_weights=True)
+    print(dfd_4)
 
 
