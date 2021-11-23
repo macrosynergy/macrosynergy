@@ -1,4 +1,3 @@
-
 ===========================================================
 Welcome to Macrosynergy Quant Research Documentation!
 ===========================================================
@@ -45,8 +44,14 @@ are Ralph Sueppel, Lasse de la Porte Simonsen, and Curran Steeds.
    is (and will permanently remain) hosted on GitHub at:
    https://github.com/macrosynergy/macrosynergy
 
+The User Guide
+---------------
+
+This part of the documentation, which is mostly prose, begins with some background information about Requests,
+then focuses on broader instructions for getting the most out of ``macrosynergy`` Packege.
+
 Background
-----------
+-----------
 
 Macrosynergy was created in August 2009 by Robert Enserro and Nikos Makris.
 In January 2010, Macrosynergy launched its first investment fund, the Macrosynergy Trading Fund, a global macro fund that grew to peak assets under management of $950 million.
@@ -76,7 +81,6 @@ The following functions construct and return a standardised Pandas DataFrame.
     """ Historic Volatility
     Estimate historic annualized standard deviations of asset returns.
     """
-
 
 An example of the code in use (Python console notation):
 
