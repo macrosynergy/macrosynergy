@@ -1,23 +1,10 @@
-
 ===========================================================
 Welcome to Macrosynergy Quant Research Documentation!
 ===========================================================
 
 Version |version|
 
-A diagram [#footnote1]_ showing Macrosynergy's logo.
-
 .. figure:: MACROSYNERGY_Logo_Primary.png
-
-
-**A software package designed by the Macrosynergy Team to accompany JPMaQS: a novel source
-of macroeconomic data pioneered by Macrosynergy & JP Morgan.**
-
-.. note::
-
-   The package is primarily aimed at active asset managers, and Macrosynergy is not
-   liable for potential investment decisions.
-
 
 Context
 =======
@@ -27,6 +14,23 @@ Context
     **Tradable Economics**
 
     **Investor Value**
+
+.. module:: macrosynergy
+    :synopsis: Functions designed to aid trading strategies on macroeconomic data.
+
+.. moduleauthor:: Ralph Sueppel <rsueppel@macrosynergy.com>
+
+.. testsetup::
+
+    from macrosynergy import *
+
+**A software package designed by the Macrosynergy Team to accompany JPMaQS: a novel source
+of macroeconomic data pioneered by Macrosynergy & JP Morgan.**
+
+.. note::
+
+   The package and accompanying trading strategies primarily derive their value when
+   utilising JPMaQS.
 
 Outline
 -----------
@@ -40,8 +44,14 @@ are Ralph Sueppel, Lasse de la Porte Simonsen, and Curran Steeds.
    is (and will permanently remain) hosted on GitHub at:
    https://github.com/macrosynergy/macrosynergy
 
+The User Guide
+---------------
+
+This part of the documentation, which is mostly prose, begins with some background information about Requests,
+then focuses on broader instructions for getting the most out of ``macrosynergy`` Packege.
+
 Background
-----------
+-----------
 
 Macrosynergy was created in August 2009 by Robert Enserro and Nikos Makris.
 In January 2010, Macrosynergy launched its first investment fund, the Macrosynergy Trading Fund, a global macro fund that grew to peak assets under management of $950 million.
@@ -55,6 +65,22 @@ Today Ralph and Lasse Simonsen, who joined Macrosynergy in 2016, lead Macrosyner
 quantamental research and development effort, while Robert remains responsible for the company’s strategic
 business development and operations.
 
+.. _macrosynergy-functions:
+
+Example of Macrosynergy Functions
+---------------------------------
+The following functions construct and return a standardised Pandas DataFrame.
+
+..function:: basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NSA", cry: str = None, start: str = None, end: str = None, blacklist: dict = None, weight_meth: str = "equal", lback_meth: str = "xma", lback_periods: int = 21, remove_zeros: bool = True, weights: List[float] = None, wgt: str = None, max_weight: float = 1.0, basket_tik: str = "GLB_ALL", return_weights: bool = False)
+    """Basket Performance
+    Returns approximate return and - optionally - carry series for a basket of underlying
+    contracts.
+    """
+
+..function:: historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None, lback_periods: int = 21, lback_meth: str = 'ma', half_life=11, start: str = None, end: str = None, blacklist: dict = None, remove_zeros: bool = True, postfix='ASD')
+    """ Historic Volatility
+    Estimate historic annualized standard deviations of asset returns.
+    """
 
 An example of the code in use (Python console notation):
 
