@@ -79,7 +79,7 @@ def inverse_weight(dfw_ret: pd.DataFrame, lback_meth: str = "xma",
 
     :return <pd.DataFrame>: Dataframe of weights.
 
-    N.B:  The rolling standard deviation will be calculated either using the standard
+    N.B: The rolling standard deviation will be calculated either using the standard
     moving average (ma) or the exponential moving average (xma). Both will require
     returns before a first weight can be computed
     Todo "Later": this function will need to option to shorten the lookback window
