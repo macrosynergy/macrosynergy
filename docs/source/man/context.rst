@@ -1,10 +1,10 @@
+.. figure:: MACROSYNERGY_Logo_Primary.png
+
 ===========================================================
 Welcome to Macrosynergy Quant Research Documentation!
 ===========================================================
 
 Version |version|
-
-.. figure:: MACROSYNERGY_Logo_Primary.png
 
 Context
 =======
@@ -47,7 +47,7 @@ are Ralph Sueppel, Lasse de la Porte Simonsen, and Curran Steeds.
 The User Guide
 ---------------
 
-This part of the documentation, which is mostly prose, begins with some background information about Requests,
+This part of the documentation, which is mostly prose, begins with some background information about Macrosynergy,
 then focuses on broader instructions for getting the most out of ``macrosynergy`` Packege.
 
 Background
@@ -71,14 +71,13 @@ Example of Macrosynergy Functions
 ---------------------------------
 The following functions construct and return a standardised Pandas DataFrame.
 
-..function:: basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NSA", cry: str = None, start: str = None, end: str = None, blacklist: dict = None, weight_meth: str = "equal", lback_meth: str = "xma", lback_periods: int = 21, remove_zeros: bool = True, weights: List[float] = None, wgt: str = None, max_weight: float = 1.0, basket_tik: str = "GLB_ALL", return_weights: bool = False)
-    """Basket Performance
-    Returns approximate return and - optionally - carry series for a basket of underlying
-    contracts.
+.. function:: basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NSA", cry: str = None, start: str = None, end: str = None, blacklist: dict = None, weight_meth: str = "equal", lback_meth: str = "xma", lback_periods: int = 21, remove_zeros: bool = True, weights: List[float] = None, wgt: str = None, max_weight: float = 1.0, basket_tik: str = "GLB_ALL", return_weights: bool = False)
+    """ Basket Performance.
+    Returns approximate return and - optionally - carry series for a basket of underlying contracts.
     """
 
-..function:: historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None, lback_periods: int = 21, lback_meth: str = 'ma', half_life=11, start: str = None, end: str = None, blacklist: dict = None, remove_zeros: bool = True, postfix='ASD')
-    """ Historic Volatility
+.. function:: historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None, lback_periods: int = 21, lback_meth: str = 'ma', half_life=11, start: str = None, end: str = None, blacklist: dict = None, remove_zeros: bool = True, postfix='ASD')
+    """Historic Volatility.
     Estimate historic annualized standard deviations of asset returns.
     """
 
