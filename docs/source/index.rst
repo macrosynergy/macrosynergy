@@ -14,14 +14,14 @@ The Macrosynergy Quant Research Package is built to ease of use to analyse macro
    :maxdepth: 4
    :caption: Contents:
 
-   context <man/context>
-   Getting start <man/howto>
+   Context <man/context>
+   Getting Started <man/howto>
    API References <ref/modules>
 
 
 .. move search to api references (automatically)?
 
-Indices and tables
+Indices and Tables
 ==================
 
 * :ref:`genindex`
