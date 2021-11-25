@@ -34,9 +34,9 @@ class ConvergeRow(object):
     def application(cls, row, max_weight):
 
         cr = ConvergeRow(row=row, max_weight=max_weight)
-        if cr.flag:
+        if cr.flag:  # if enough non-nan values in row
             cr.distribute_simple()
-        else:
+        else:  # apply equal weights to all non-nan cases
             cr.row = (cr.row > 0) / np.sum(cr.row > 0)
             cr.row[cr.row == 0.0] = np.nan
 
