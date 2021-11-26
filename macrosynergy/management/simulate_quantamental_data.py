@@ -11,7 +11,8 @@ def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float =
 
     :param <int> nobs: number of observations.
     :param <float> mean: mean of values, default is zero.
-    :param <float> sd_mult: standard deviation multipliers of values, default is 1. This affects non-zero means.
+    :param <float> sd_mult: standard deviation multipliers of values, default is 1.
+        This affects non-zero means.
     :param <float> ar_coef: autoregression coefficient (between 0 and 1): default is 0.75.
 
     return <np.array>: autocorrelated data series.
@@ -28,23 +29,25 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
     """
     Make quantamental dataframe with basic columns: 'cid', 'xcat', 'real_date', 'value'
 
-    :param <pd.DataFrame> df_cids: dataframe with parameters by cid. Row indices are cross-sections. Columns are:
+    :param <pd.DataFrame> df_cids: dataframe with parameters by cid. Row indices are
+        cross-sections. Columns are:
         'earliest': string of earliest date (ISO) for which country values are available;
         'latest': string of latest date (ISO) for which country values are available;
         'mean_add': float of country-specific addition to any category's mean;
         'sd_mult': float of country-specific multiplier of an category's standard deviation.
-    :param <pd.DataFrame> df_xcats: dataframe with parameters by xcat. Row indices are cross-sections. Columns are:
+    :param <pd.DataFrame> df_xcats: dataframe with parameters by xcat. Row indices are
+        cross-sections. Columns are:
         'earliest': string of earliest date (ISO) for which category values are available;
         'latest': string of latest date (ISO) for which category values are available;
         'mean_add': float of category-specific addition;
         'sd_mult': float of country-specific multiplier of an category's standard deviation;
         'ar_coef': float between 0 and 1 denoting set autocorrelation of the category;
-        'back_coef': float, coefficient with which communal (mean 0, SD 1) background factor is added to categoy values.
-    :param <float> back_ar: float between 0 and 1 denoting set autocorrelation of the background factor.
-        Default is zero.
+        'back_coef': float, coefficient with which communal (mean 0, SD 1) background
+                     factor is added to categoy values.
+    :param <float> back_ar: float between 0 and 1 denoting set autocorrelation of the
+        background factor. Default is zero.
 
     :return <pd.DataFrame>: basic quantamental dataframe according to specifications.
-
     """
     qdf_cols = ['cid', 'xcat', 'real_date', 'value']
     df_out = pd.DataFrame(columns=qdf_cols)
@@ -64,8 +67,10 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
 
             df_add = pd.DataFrame(columns=qdf_cols)
 
-            sdate = pd.to_datetime(max(df_cids.loc[cid, 'earliest'], df_xcats.loc[xcat, 'earliest']))
-            edate = pd.to_datetime(min(df_cids.loc[cid, 'latest'], df_xcats.loc[xcat, 'latest']))
+            sdate = pd.to_datetime(max(df_cids.loc[cid, 'earliest'], df_xcats.loc[xcat,
+                                                                                  'earliest']))
+            edate = pd.to_datetime(min(df_cids.loc[cid, 'latest'], df_xcats.loc[xcat,
+                                                                                'latest']))
             all_days = pd.date_range(sdate, edate)
             work_days = all_days[all_days.weekday < 5]
 
@@ -76,12 +81,14 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
             ser_mean = df_cids.loc[cid, 'mean_add'] + df_xcats.loc[xcat, 'mean_add']
             ser_sd = df_cids.loc[cid, 'sd_mult'] * df_xcats.loc[xcat, 'sd_mult']
             ser_arc = df_xcats.loc[xcat, 'ar_coef']
-            df_add['value'] = simulate_ar(len(work_days), mean=ser_mean, sd_mult=ser_sd, ar_coef=ser_arc)
+            df_add['value'] = simulate_ar(len(work_days), mean=ser_mean, sd_mult=ser_sd,
+                                          ar_coef=ser_arc)
 
             back_coef = df_xcats.loc[xcat, 'back_coef']
             if back_coef != 0:  # add influence of communal background series
                 df_add['value'] = df_add['value'] + \
-                                  back_coef * df_back.loc[df_add['real_date'], 'value'].reset_index(drop=True)
+                                  back_coef * df_back.loc[df_add['real_date'],
+                                                          'value'].reset_index(drop=True)
 
             df_out = df_out.append(df_add)
 
