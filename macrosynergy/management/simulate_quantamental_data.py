@@ -1,10 +1,8 @@
 import numpy as np
 import pandas as pd
-from typing import List, Union, Tuple
 from statsmodels.tsa.arima_process import ArmaProcess
-import matplotlib.pyplot as plt
+from collections import defaultdict
 import datetime
-
 
 def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float = 0.75):
     """Create an autocorrelated dataseries as numpy array
@@ -18,7 +16,8 @@ def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float =
     return <np.array>: autocorrelated data series.
     """
 
-    ar_params = np.r_[1, -ar_coef]  # define relative parameters for creating an AR process
+    # define relative parameters for creating an AR process
+    ar_params = np.r_[1, -ar_coef]
     ar_proc = ArmaProcess(ar_params)  # define ARMA process
     ser = ar_proc.generate_sample(nobs)
     ser = ser + mean - np.mean(ser)
@@ -30,13 +29,14 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
     Make quantamental dataframe with basic columns: 'cid', 'xcat', 'real_date', 'value'
 
     :param <pd.DataFrame> df_cids: dataframe with parameters by cid. Row indices are
-        cross-sections. Columns are:
+    cross-sections. Columns are:
         'earliest': string of earliest date (ISO) for which country values are available;
         'latest': string of latest date (ISO) for which country values are available;
         'mean_add': float of country-specific addition to any category's mean;
-        'sd_mult': float of country-specific multiplier of an category's standard deviation.
+        'sd_mult': float of country-specific multiplier of an category's standard
+                   deviation.
     :param <pd.DataFrame> df_xcats: dataframe with parameters by xcat. Row indices are
-        cross-sections. Columns are:
+    cross-sections. Columns are:
         'earliest': string of earliest date (ISO) for which category values are available;
         'latest': string of latest date (ISO) for which category values are available;
         'mean_add': float of category-specific addition;
@@ -45,7 +45,7 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
         'back_coef': float, coefficient with which communal (mean 0, SD 1) background
                      factor is added to categoy values.
     :param <float> back_ar: float between 0 and 1 denoting set autocorrelation of the
-        background factor. Default is zero.
+    background factor. Default is zero.
 
     :return <pd.DataFrame>: basic quantamental dataframe according to specifications.
     """
@@ -94,6 +94,82 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
 
     return df_out.reset_index(drop=True)
 
+def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict):
+    """
+    Make quantamental dataframe with basic columns: 'cid', 'xcat', 'real_date', 'value'.
+    In this DataFrame the column, 'value', will consist of Binary Values denoting whether
+    the cross-section is active for the corresponding dates.
+
+    :param <pd.DataFrame> df_cids: dataframe with parameters by cid. Row indices are
+    cross-sections. Columns are:
+        'earliest': string of earliest date (ISO) for which country values are
+                    available;
+        'latest': string of latest date (ISO) for which country values are available;
+        'mean_add': float of country-specific addition to any category's mean;
+        'sd_mult': float of country-specific multiplier of an category's standard
+                   deviation.
+
+    :param <pd.DataFrame> df_xcats: dataframe with parameters by xcat. Row indices are
+    cross-sections. Columns are:
+        'earliest': string of earliest date (ISO) for which category values are
+                    available;
+        'latest': string of latest date (ISO) for which category values are available;
+        'mean_add': float of category-specific addition;
+        'sd_mult': float of country-specific multiplier of an category's standard deviation;
+        'ar_coef': float between 0 and 1 denoting set autocorrelation of the category;
+        'back_coef': float, coefficient with which communal (mean 0, SD 1) background
+                     factor is added to categoy values.
+    :param <dict> blackout: Dictionary defining the active time-periods for each cross-
+    cross-section.
+
+    :return <pd.DataFrame>: basic quantamental dataframe according to specifications with
+    binary values.
+    """
+
+    qdf_cols = ['cid', 'xcat', 'real_date', 'value']
+    df_out = pd.DataFrame(columns=qdf_cols)
+
+    dates_dict = defaultdict(list)
+    for k, v in blackout.items():
+        dates_dict[k[:3]].append(v)
+
+    for cid in df_cids.index:
+        for xcat in df_xcats.index:
+
+            df_add = pd.DataFrame(columns=qdf_cols)
+
+            sdate = pd.to_datetime(max(df_cids.loc[cid, 'earliest'],
+                                       df_xcats.loc[xcat, 'earliest']))
+            edate = pd.to_datetime(min(df_cids.loc[cid, 'latest'],
+                                       df_xcats.loc[xcat, 'latest']))
+
+            all_days = pd.date_range(sdate, edate)
+            work_days = all_days[all_days.weekday < 5]
+
+            df_add['real_date'] = work_days
+            df_add['cid'] = cid
+            df_add['xcat'] = xcat
+
+            arr = np.repeat(1, df_add.shape[0])
+
+            dates = df_add['real_date'].to_numpy()
+
+            list_tuple = dates_dict[cid]
+            for tup in list_tuple:
+                start = tup[0]
+                index_start = next(iter(np.where(dates == start)[0]))
+                count = 0
+                while start != tup[1]:
+                    count += 1
+                    start += datetime.timedelta(days=1)
+                arr[index_start:(index_start + count + 1)] = 0
+
+            df_add['value'] = arr
+
+            df_out = df_out.append(df_add)
+
+    return df_out.reset_index(drop=True)
+
 
 if __name__ == "__main__":
 
@@ -106,12 +182,13 @@ if __name__ == "__main__":
     df_cids.loc['CAD', ] = ['2011-01-01', '2020-11-30', 0, 1]
     df_cids.loc['GBP', ] = ['2011-01-01', '2020-11-30', -0.2, 0.5]
 
-    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef'])
+    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest',
+                                                  'mean_add', 'sd_mult', 'ar_coef',
+                                                  'back_coef'])
     df_xcats.loc['XR', ] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
     df_xcats.loc['CRY', ] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-
 
 
 
