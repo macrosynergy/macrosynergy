@@ -6,6 +6,8 @@ import random
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
+tuple_ = lambda dates, index_tr, length: (dates[index_tr], dates[index_tr + (length - 1)])
+
 def make_blacklist(df: pd.DataFrame, xcat: str, cids: List[str] = None,
                    start: str = None, end: str = None):
 
@@ -30,10 +32,11 @@ def make_blacklist(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         keys (i.e. TRY_1, TRY_2, etc.)
     """
 
-    assert all(list(map(lambda val: val == 1 or val == 0), df['value'].to_numpy()))
+    assert all(list(map(lambda val: val == 1 or val == 0, df['value'].to_numpy())))
 
-    df = reduce_df(df=df, xcats=[xcat], cids=cids, start=start, end=end)
-    df_pivot = df.pivot(index='real_date', columns='cid', values='value')
+    dfd = reduce_df(df=df, xcat=xcats, cids=cids, start=start, end=end)
+
+    df_pivot = dfd.pivot(index='real_date', columns='cid', values='value')
 
     dates = df_pivot.index
     cids_df = list(df_pivot.columns)
@@ -49,17 +52,25 @@ def make_blacklist(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         cut_off = next(iter(condition))
 
         column = column.to_numpy()[:(cut_off + 1)]
+        # To handle for the NaN values, the datatype will be floating point values.
+        column = column.astype(dtype=np.uint8)
 
-        # See Itertools documentation for further description. Will return a Generator
-        # Object.
         for k, v in groupby(column):
             v = list(v)  # Instantiate the iterable in memory.
             length = len(v)
 
             if not sum(v) ^ 0:
+                if count == 0:
+                    dates_dict[cid] = (dates[index_tr], dates[index_tr + (length - 1)])
+                elif count == 1:
+                    val = dates_dict.pop(cid)
+                    dates_dict[cid + '_1'] = val
+                    count += 1
+                    dates_dict[cid + '_' + str(count)] = tuple_(dates, index_tr, length)
+                else:
+                    dates_dict[cid + '_' + str(count)] = tuple_(dates, index_tr, length)
+
                 count += 1
-                dates_dict[cid + '_' + str(count)] = (
-                dates[index_tr], dates[index_tr + (length - 1)])
 
             index_tr += length
 
@@ -91,4 +102,3 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     print(dfd)
-
