@@ -34,9 +34,9 @@ def make_blacklist(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
     assert all(list(map(lambda val: val == 1 or val == 0, df['value'].to_numpy())))
 
-    dfd = reduce_df(df=df, xcat=xcats, cids=cids, start=start, end=end)
+    # dfd = reduce_df(df=df, xcats=xcat, cids=cids, start=start, end=end)
 
-    df_pivot = dfd.pivot(index='real_date', columns='cid', values='value')
+    df_pivot = df.pivot(index='real_date', columns='cid', values='value')
 
     dates = df_pivot.index
     cids_df = list(df_pivot.columns)
