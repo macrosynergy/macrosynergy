@@ -5,7 +5,7 @@ from collections import defaultdict
 import datetime
 
 def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float = 0.75):
-    """Create an autocorrelated dataseries as numpy array
+    """Create an autocorrelated dataseries as numpy array.
 
     :param <int> nobs: number of observations.
     :param <float> mean: mean of values, default is zero.
@@ -26,26 +26,26 @@ def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float =
 
 def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
     """
-    Make quantamental dataframe with basic columns: 'cid', 'xcat', 'real_date', 'value'
+    Make quantamental dataframe with basic columns: 'cid', 'xcat', 'real_date', 'value'.
 
     :param <pd.DataFrame> df_cids: dataframe with parameters by cid. Row indices are
-    cross-sections. Columns are:
-        'earliest': string of earliest date (ISO) for which country values are available;
-        'latest': string of latest date (ISO) for which country values are available;
-        'mean_add': float of country-specific addition to any category's mean;
-        'sd_mult': float of country-specific multiplier of an category's standard
-                   deviation.
+        cross-sections. Columns are:
+    'earliest': string of earliest date (ISO) for which country values are available;
+    'latest': string of latest date (ISO) for which country values are available;
+    'mean_add': float of country-specific addition to any category's mean;
+    'sd_mult': float of country-specific multiplier of an category's standard
+               deviation.
     :param <pd.DataFrame> df_xcats: dataframe with parameters by xcat. Row indices are
-    cross-sections. Columns are:
-        'earliest': string of earliest date (ISO) for which category values are available;
-        'latest': string of latest date (ISO) for which category values are available;
-        'mean_add': float of category-specific addition;
-        'sd_mult': float of country-specific multiplier of an category's standard deviation;
-        'ar_coef': float between 0 and 1 denoting set autocorrelation of the category;
-        'back_coef': float, coefficient with which communal (mean 0, SD 1) background
-                     factor is added to categoy values.
+        cross-sections. Columns are:
+    'earliest': string of earliest date (ISO) for which category values are available;
+    'latest': string of latest date (ISO) for which category values are available;
+    'mean_add': float of category-specific addition;
+    'sd_mult': float of country-specific multiplier of an category's standard deviation;
+    'ar_coef': float between 0 and 1 denoting set autocorrelation of the category;
+    'back_coef': float, coefficient with which communal (mean 0, SD 1) background
+                 factor is added to categoy values.
     :param <float> back_ar: float between 0 and 1 denoting set autocorrelation of the
-    background factor. Default is zero.
+        background factor. Default is zero.
 
     :return <pd.DataFrame>: basic quantamental dataframe according to specifications.
     """
@@ -101,26 +101,32 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
     the cross-section is active for the corresponding dates.
 
     :param <pd.DataFrame> df_cids: dataframe with parameters by cid. Row indices are
-    cross-sections. Columns are:
-        'earliest': string of earliest date (ISO) for which country values are
-                    available;
-        'latest': string of latest date (ISO) for which country values are available;
-        'mean_add': float of country-specific addition to any category's mean;
-        'sd_mult': float of country-specific multiplier of an category's standard
-                   deviation.
-
+        cross-sections. Columns are:
+    'earliest': string of earliest date (ISO) for which country values are
+                available;
+    'latest': string of latest date (ISO) for which country values are available;
+    'mean_add': float of country-specific addition to any category's mean;
+    'sd_mult': float of country-specific multiplier of an category's standard deviation.
     :param <pd.DataFrame> df_xcats: dataframe with parameters by xcat. Row indices are
-    cross-sections. Columns are:
-        'earliest': string of earliest date (ISO) for which category values are
-                    available;
-        'latest': string of latest date (ISO) for which category values are available;
-        'mean_add': float of category-specific addition;
-        'sd_mult': float of country-specific multiplier of an category's standard deviation;
-        'ar_coef': float between 0 and 1 denoting set autocorrelation of the category;
-        'back_coef': float, coefficient with which communal (mean 0, SD 1) background
-                     factor is added to categoy values.
-    :param <dict> blackout: Dictionary defining the active time-periods for each cross-
-    cross-section.
+        cross-sections. Columns are:
+    'earliest': string of earliest date (ISO) for which category values are
+                available;
+    'latest': string of latest date (ISO) for which category values are available;
+    'mean_add': float of category-specific addition;
+    'sd_mult': float of country-specific multiplier of an category's standard deviation;
+    'ar_coef': float between 0 and 1 denoting set autocorrelation of the category;
+    'back_coef': float, coefficient with which communal (mean 0, SD 1) background
+                 factor is added to categoy values.
+    :param <dict> blackout: Dictionary defining the blackout periods for each cross-
+        section. The expected form of the dictionary is:
+    {'AUD': (Timestamp('2000-01-13 00:00:00'), Timestamp('2000-01-13 00:00:00')),
+    'USD_1': (Timestamp('2000-01-03 00:00:00'), Timestamp('2000-01-05 00:00:00')),
+    'USD_2': (Timestamp('2000-01-09 00:00:00'), Timestamp('2000-01-10 00:00:00')),
+    'USD_3': (Timestamp('2000-01-12 00:00:00'), Timestamp('2000-01-12 00:00:00'))}
+    The values of the dictionary are tuples consisting of the start & end-date of the
+    respective blackout period. Each cross-section could have potentially more than one
+    blackout period on a single category, and subsequently each key will be indexed to
+    indicate the number of periods.
 
     :return <pd.DataFrame>: basic quantamental dataframe according to specifications with
     binary values.
@@ -133,6 +139,8 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
     for k, v in blackout.items():
         dates_dict[k[:3]].append(v)
 
+    # At the moment the blackout period is being applied uniformally to each category:
+    # each category will experience the same blackout periods.
     for cid in df_cids.index:
         for xcat in df_xcats.index:
 
@@ -189,8 +197,3 @@ if __name__ == "__main__":
     df_xcats.loc['CRY', ] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-
-
-
-
-
