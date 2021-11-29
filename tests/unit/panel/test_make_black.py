@@ -60,7 +60,7 @@ class TestAll(unittest.TestCase):
 
         category = np.repeat(xcat[0], timestamps)
         data = np.column_stack((cids_, category, np.array(dates_l), value))
-        cols = ['cid', 'xcats', 'real_date', 'value']
+        cols = ['cid', 'xcat', 'real_date', 'value']
 
         self.df = pd.DataFrame(data=data, columns=cols)
 
@@ -115,23 +115,23 @@ class TestAll(unittest.TestCase):
         dfd['value'] = np.arange(0, shape[0])
 
         with self.assertRaises(AssertionError):
-            make_blacklist(dfd, ['FXXR_NSA'], cids=cross_sections)
+            make_blacklist(dfd, ['FXXR_NSA'], cids=list(cross_sections))
 
         dfd['value'] = np.repeat(1, shape[0])
 
-        dict_ = make_blacklist(dfd, ['FXXR_NSA'], cids=cross_sections)
+        dict_ = make_blacklist(dfd, xcat=['FXXR_NSA'], cids=list(cross_sections))
         # Validate the dictionary is empty if every row in the 'value' column contains
         # a one.
         self.assertTrue(not bool(dict_))
 
-        ## Refresh the DataFrame for the next testing framework.
+        # Refresh the DataFrame for the next testing framework.
         self.dataframe_generator()
         dfd = self.df
 
         dfd['value'] = np.repeat(0, shape[0])
         # If the entire 'value' column is equated to zero, the number of keys in the
         # dictionary should equal the number of cross-sections in the dataframe.
-        dict_ = make_blacklist(dfd, ['FXXR_NSA'], cids=cross_sections)
+        dict_ = make_blacklist(dfd, ['FXXR_NSA'], cids=list(cross_sections))
 
         cross_sections = dfd['cid'].unique()
         cross_sections.sort()
@@ -159,7 +159,7 @@ class TestAll(unittest.TestCase):
         df_pivot = dfd.pivot(index='real_date', columns='cid', values='value')
         dates = df_pivot.index
 
-        dict_ = make_blacklist(dfd, ['FXXR_NSA'], cids=cross_sections)
+        dict_ = make_blacklist(dfd, ['FXXR_NSA'], cids=list(cross_sections))
         dict_tracker = self.dict_counter(dict_, cross_sections)
 
         # Test the number of keys in the dictionary per cross_section.
