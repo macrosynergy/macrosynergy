@@ -25,6 +25,31 @@ class Test_All(unittest.TestCase):
         random.seed(1)
         self.dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
+    def df_construct_black(self):
+        cids = ['AUD', 'CAD', 'GBP']
+        # The algorithm is designed to test on a singular category.
+        xcats = ['XR']
+        df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
+                                                    'sd_mult'])
+        df_cids.loc['AUD', :] = ['2010-01-01', '2020-12-31', 0.5, 2]
+        df_cids.loc['CAD', :] = ['2011-01-01', '2020-11-30', 0, 1]
+        df_cids.loc['GBP', :] = ['2011-01-01', '2020-11-30', -0.2, 0.5]
+
+        df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
+                                                      'sd_mult', 'ar_coef', 'back_coef'])
+
+        df_xcats.loc['XR', :] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
+
+        # Construct an arbitrary dictionary used to test the design of make_qdf_black()
+        # function.
+        self.blackout = {'AUD': ('2010-01-12', '2010-06-14'),
+                         'CAD_1': ('2011-01-04', '2011-01-23'),
+                         'CAD_2': ('2013-01-09', '2013-04-10'),
+                         'CAD_3': ('2015-01-12', '2015-03-12')}
+
+        random.seed(1)
+        self.black_dfd = make_qdf_black(df_cids, df_xcats, self.blackout)
+
     @staticmethod
     def ar1_coef(x):
         return np.corrcoef(np.array([x[:-1], x[1:]]))[0, 1]
@@ -89,6 +114,46 @@ class Test_All(unittest.TestCase):
 
         filt1 = (self.dfd['cid'] == 'GBP') & (self.dfd['xcat'] == 'CRY')
         self.assertGreater(self.ar1_coef(self.dfd.loc[filt1, 'value']), 0.25)
+
+    def test_make_qdf_black(self):
+        self.df_construct_black()
+
+        # Rudimentary Unit Test to confirm the correct expected start and end date of
+        # randomly chosen data series.
+        filt1 = (self.black_dfd['cid'] == 'AUD') & (self.black_dfd['xcat'] == 'XR')
+        self.assertEqual(np.min(self.black_dfd.loc[filt1, 'real_date']),
+                         pd.to_datetime('2010-01-01'))
+
+        filt1 = (self.black_dfd['cid'] == 'GBP') & (self.black_dfd['xcat'] == 'XR')
+        self.assertEqual(np.min(self.black_dfd.loc[filt1, 'real_date']),
+                         pd.to_datetime('2011-01-03'))
+
+        filt1 = (self.black_dfd['cid'] == 'AUD') & (self.black_dfd['xcat'] == 'XR')
+        self.assertEqual(np.max(self.black_dfd.loc[filt1, 'real_date']),
+                         pd.to_datetime('2020-12-31'))
+
+        filt1 = (self.black_dfd['cid'] == 'GBP') & (self.black_dfd['xcat'] == 'XR')
+        self.assertEqual(np.max(self.black_dfd.loc[filt1, 'real_date']),
+                         pd.to_datetime('2020-11-30'))
+
+        values = self.black_dfd['value'].to_numpy()
+        self.assertTrue(all(val == 0 or val == 1 for val in values))
+
+        aud_blackout = self.blackout['AUD']
+        start = aud_blackout[0]
+        end = aud_blackout[1]
+
+        # Validate the number of timestamps, for a particular cross-section, with a
+        # "value" equated to zero equals the expected number which can be precomputed.
+        # Only limitation is it is invariant to the actual timestamp and instead focuses
+        # the longevity of the blackout period being correct.
+        all_days = pd.date_range(start, end)
+        work_days = all_days[all_days.weekday < 5]
+
+        aud_df = self.black_dfd[self.black_dfd['cid'] == 'AUD']
+        black_aud_df = aud_df[aud_df['value'] == 0]
+
+        self.assertTrue(len(work_days) == black_aud_df.shape[0])
 
 
 if __name__ == '__main__':
