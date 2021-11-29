@@ -135,8 +135,10 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
     qdf_cols = ['cid', 'xcat', 'real_date', 'value']
     df_out = pd.DataFrame(columns=qdf_cols)
 
+    conversion = lambda t: (pd.Timestamp(t[0]), pd.Timestamp(t[1]))
     dates_dict = defaultdict(list)
     for k, v in blackout.items():
+        v = conversion(v)
         dates_dict[k[:3]].append(v)
 
     # At the moment the blackout period is being applied uniformally to each category:
@@ -164,12 +166,15 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
 
             list_tuple = dates_dict[cid]
             for tup in list_tuple:
+
                 start = tup[0]
                 index_start = next(iter(np.where(dates == start)[0]))
                 count = 0
                 while start != tup[1]:
-                    count += 1
+                    if start.weekday() < 5:
+                        count += 1
                     start += datetime.timedelta(days=1)
+
                 arr[index_start:(index_start + count + 1)] = 0
 
             df_add['value'] = arr
