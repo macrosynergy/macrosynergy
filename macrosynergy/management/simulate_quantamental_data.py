@@ -181,8 +181,6 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
                 # Naturally compare against the data-series' formal start & end date.
                 if start < dates[0] or end > dates[-1]:
                     print("Blackout period date not within data series range.")
-                    print(start)
-                    print(end)
                     break
                 # If the date falls on a weekend, change to the following Monday.
                 elif condition_start > 0:
