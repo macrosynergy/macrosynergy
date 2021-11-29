@@ -168,6 +168,14 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
             for tup in list_tuple:
 
                 start = tup[0]
+                end = tup[1]
+                if start < dates[0] or end > dates[0]:
+                    raise ValueError("Blackout period date not within data series range.")
+                elif start.weekday > 5 or end.weekday > 5:
+                    pass
+                else:
+                    continue
+
                 index_start = next(iter(np.where(dates == start)[0]))
                 count = 0
                 while start != tup[1]:
