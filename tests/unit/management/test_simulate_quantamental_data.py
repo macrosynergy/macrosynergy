@@ -2,6 +2,7 @@ import unittest
 import random
 import numpy as np
 import pandas as pd
+import os
 from macrosynergy.management.simulate_quantamental_data import *
 
 
@@ -29,23 +30,25 @@ class Test_All(unittest.TestCase):
         cids = ['AUD', 'CAD', 'GBP']
         # The algorithm is designed to test on a singular category.
         xcats = ['XR']
-        df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
-                                                    'sd_mult'])
-        df_cids.loc['AUD', :] = ['2010-01-01', '2020-12-31', 0.5, 2]
-        df_cids.loc['CAD', :] = ['2011-01-01', '2020-11-30', 0, 1]
-        df_cids.loc['GBP', :] = ['2011-01-01', '2020-11-30', -0.2, 0.5]
+        df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest'])
+        df_cids.loc['AUD', :] = ['2010-01-01', '2020-12-31']
+        df_cids.loc['CAD', :] = ['2011-01-01', '2021-11-25']
+        df_cids.loc['GBP', :] = ['2011-01-01', '2020-11-30']
 
-        df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
-                                                      'sd_mult', 'ar_coef', 'back_coef'])
+        df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest'])
 
-        df_xcats.loc['XR', :] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
+        df_xcats.loc['XR', :] = ['2010-01-01', '2021-11-25']
 
         # Construct an arbitrary dictionary used to test the design of make_qdf_black()
         # function.
+        # The last key's enddate is purposefully chosen to fall on the weekend, Saturday,
+        # to examine the logic concerning weekends: the expected output should be to
+        # shift the end-date to the next available trading day, Monday.
         self.blackout = {'AUD': ('2010-01-12', '2010-06-14'),
                          'CAD_1': ('2011-01-04', '2011-01-23'),
                          'CAD_2': ('2013-01-09', '2013-04-10'),
-                         'CAD_3': ('2015-01-12', '2015-03-12')}
+                         'CAD_3': ('2015-01-12', '2015-03-12'),
+                         'CAD_4': ('2021-11-01', '2021-11-20')}
 
         random.seed(1)
         self.black_dfd = make_qdf_black(df_cids, df_xcats, self.blackout)
@@ -136,9 +139,11 @@ class Test_All(unittest.TestCase):
         self.assertEqual(np.max(self.black_dfd.loc[filt1, 'real_date']),
                          pd.to_datetime('2020-11-30'))
 
+        # Test all values are Boolean values.
         values = self.black_dfd['value'].to_numpy()
         self.assertTrue(all(val == 0 or val == 1 for val in values))
 
+        # The field self.blackout is the dates dictionary of blackout periods.
         aud_blackout = self.blackout['AUD']
         start = aud_blackout[0]
         end = aud_blackout[1]
@@ -154,6 +159,25 @@ class Test_All(unittest.TestCase):
         black_aud_df = aud_df[aud_df['value'] == 0]
 
         self.assertTrue(len(work_days) == black_aud_df.shape[0])
+
+        dates_df = black_aud_df['real_date'].to_numpy()
+
+        self.assertTrue(pd.to_datetime(start) == dates_df[0])
+        self.assertTrue(pd.to_datetime(end) == dates_df[-1])
+
+        # Test the "weekend handler" on the date '2021-11-20' (Saturday). The expected
+        # end date of Canada's blackout period should be '2021-11-22'.
+        cad_blackout = self.blackout['CAD_4']
+        # In this test, only interested in the end-date.
+        end = cad_blackout[1]
+
+        # Isolate the relevant DataFrame.
+        cad_df = self.black_dfd[self.black_dfd['cid'] == 'CAD']
+        black_cad_df = cad_df[cad_df['value'] == 0]
+        dates_df = black_cad_df['real_date'].to_numpy()
+
+        # "weekend handler" will shift the date forwards.
+        self.assertTrue(pd.to_datetime('2021-11-22') == dates_df[-1])
 
 
 if __name__ == '__main__':

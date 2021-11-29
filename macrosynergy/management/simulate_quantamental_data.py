@@ -4,6 +4,7 @@ from statsmodels.tsa.arima_process import ArmaProcess
 from collections import defaultdict
 import datetime
 
+
 def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float = 0.75):
     """Create an autocorrelated dataseries as numpy array.
 
@@ -169,12 +170,25 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
 
                 start = tup[0]
                 end = tup[1]
-                if start < dates[0] or end > dates[0]:
-                    raise ValueError("Blackout period date not within data series range.")
-                elif start.weekday > 5 or end.weekday > 5:
-                    pass
-                else:
-                    continue
+
+                condition_start = start.weekday() - 4
+                condition_end = end.weekday() - 4
+
+                # Will skip the associated blackout period because of the received
+                # invalid date, if it is not within the respective data series' range,
+                # but will continue to populate the dataframe according to the other keys
+                # in the dictionary.
+                # Naturally compare against the data-series' formal start & end date.
+                if start < dates[0] or end > dates[-1]:
+                    print("Blackout period date not within data series range.")
+                    break
+                # If the date falls on a weekend, change to the following Monday.
+                elif condition_start > 0:
+                    while start.weekday() > 4:
+                        start += datetime.timedelta(days=1)
+                elif condition_end > 0:
+                    while end.weekday() > 4:
+                        end += datetime.timedelta(days=1)
 
                 index_start = next(iter(np.where(dates == start)[0]))
                 count = 0
