@@ -4,7 +4,7 @@ from typing import List
 from itertools import groupby
 import random
 from macrosynergy.management.shape_dfs import reduce_df
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate_quantamental_data import make_qdf_black
 
 tuple_ = lambda dates, index_tr, length: (dates[index_tr], dates[index_tr + (length - 1)])
 
@@ -34,27 +34,33 @@ def make_blacklist(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
     assert all(list(map(lambda val: val == 1 or val == 0, df['value'].to_numpy())))
 
-    # dfd = reduce_df(df=df, xcats=xcat, cids=cids, start=start, end=end)
+    dfd = reduce_df(df=df, xcats=xcat, cids=cids, start=start, end=end)
 
-    df_pivot = df.pivot(index='real_date', columns='cid', values='value')
+    df_pivot = dfd.pivot(index='real_date', columns='cid', values='value')
 
     dates = df_pivot.index
     cids_df = list(df_pivot.columns)
 
     dates_dict = {}
     for cid in cids_df:
-        index_tr = 0
         count = 0
 
         column = df_pivot[cid]
-        cut_off = column.last_valid_index()
-        condition = np.where(dates == cut_off)[0]
-        cut_off = next(iter(condition))
+        cut_off_start = column.first_valid_index()
+        cut_off_end = column.last_valid_index()
 
-        column = column.to_numpy()[:(cut_off + 1)]
+        condition_1 = np.where(dates == cut_off_start)[0]
+        condition_2 = np.where(dates == cut_off_end)[0]
+
+        cut_off_start = next(iter(condition_1))
+        cut_off_end = next(iter(condition_2))
+
+        column = column.to_numpy()[cut_off_start:(cut_off_end + 1)]
         # To handle for the NaN values, the datatype will be floating point values.
+
         column = column.astype(dtype=np.uint8)
 
+        index_tr = cut_off_start
         for k, v in groupby(column):
             v = list(v)  # Instantiate the iterable in memory.
             length = len(v)
@@ -79,26 +85,38 @@ def make_blacklist(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
 if __name__ == "__main__":
 
-    cids = ['AUD', 'GBP', 'NZD', 'USD']
+    cids = ['AUD', 'GBP', 'CAD', 'USD']
 
-    xcats = ['FXXR_NSA', 'FXCRY_NSA', 'EQXR_NSA', 'EQCRY_NSA']
+    xcats = ['FXXR_NSA']
 
-    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
-                                                'sd_mult'])
+    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest'])
 
-    df_cids.loc['AUD'] = ['2010-01-01', '2020-12-31', 0, 1]
-    df_cids.loc['GBP'] = ['2011-01-01', '2020-11-30', 0, 2]
-    df_cids.loc['NZD'] = ['2012-01-01', '2020-12-31', 0, 3]
-    df_cids.loc['USD'] = ['2013-01-01', '2020-12-31', 0, 4]
+    df_cids.loc['AUD'] = ['2010-01-01', '2020-12-31']
+    df_cids.loc['GBP'] = ['2011-01-01', '2020-11-30']
+    df_cids.loc['CAD'] = ['2011-01-01', '2021-11-30']
+    df_cids.loc['USD'] = ['2011-01-01', '2020-12-30']
 
-    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
-                                                  'sd_mult', 'ar_coef', 'back_coef'])
-    df_xcats.loc['FXXR_NSA'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.2]
-    df_xcats.loc['FXCRY_NSA'] = ['2011-01-01', '2020-10-30', 1, 1, 0.9, 0.5]
-    df_xcats.loc['EQXR_NSA'] = ['2012-01-01', '2020-10-30', 0.5, 2, 0, 0.2]
-    df_xcats.loc['EQCRY_NSA'] = ['2013-01-01', '2020-10-30', 1, 1, 0.9, 0.5]
+    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest'])
+    df_xcats.loc['FXXR_NSA'] = ['2010-01-01', '2021-11-30']
 
+    blackout = {'AUD': ('2010-01-12', '2010-06-14'),
+                'USD': ('2011-08-17', '2011-09-20'),
+                'CAD_1': ('2011-01-04', '2011-01-23'),
+                'CAD_2': ('2013-01-09', '2013-04-10'),
+                'CAD_3': ('2015-01-12', '2015-03-12'),
+                'CAD_4': ('2021-11-01', '2021-11-20')}
+
+    print(blackout)
     random.seed(2)
-    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    df = make_qdf_black(df_cids, df_xcats, blackout=blackout)
 
-    print(dfd)
+    dates_dict = make_blacklist(df, xcat=['FXXR_NSA'], cids=None,
+                                start=None, end=None)
+
+    # If the output, from the below printed dictionary, differs from the above defined
+    # dictionary, it should be by a date or two, as the construction of the dataframe,
+    # using make_qdf_black(), will account for the dates received, in the dictionary,
+    # being weekends. Therefore, if any of the dates, for the start or end of the
+    # blackout period are Saturday or Sunday, the date for will be shifted to the
+    # following Monday. Hence, a break in alignment from "blackout" to "dates_dict".
+    print(dates_dict)
