@@ -436,7 +436,6 @@ class DataQueryInterface(object):
                         calendar: str = "CAL_ALLDAYS",
                         frequency: str = "FREQ_DAY"):
 
-
         params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
                    "calendar": calendar, "frequency": frequency}
         params_.update(params)
@@ -446,7 +445,7 @@ class DataQueryInterface(object):
         with concurrent.futures.ThreadPoolExecutor() as executor:
             for i, elem in enumerate(tickers):
                 # The expression can either be a List of Tickers, or a singular ticker.
-                time.sleep(0.4)
+                time.sleep(0.75)
                 params_["expressions"] = elem
                 results = executor.submit(self._fetch_threading, endpoint, params_)
                 output.append(results)
