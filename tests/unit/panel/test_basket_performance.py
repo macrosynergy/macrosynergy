@@ -178,9 +178,19 @@ class TestAll(unittest.TestCase):
         self.assertTrue(weights_inv.shape == dfw_ret.shape)
 
         # Todo: check if weights correspond to original values
+        bool_df = ~dfw_ret.isnull()
+        bool_arr = bool_df.to_numpy()
 
-        # Check weights have been allocated to the live cross-sections on each timestamp.
-        # Unable to complete check because of how negative values are handled.
+        weights_df = w_df.multiply(bool_arr)
+        weights_arr = weights_df.to_numpy()
+        sum_row = np.nansum(weights_arr, axis=1)
+        sum_row = sum_row[:, np.newaxis]
+
+        weights_test = weights.to_numpy() * sum_row
+        for i in range(weights_test.shape[0]):
+            compare_1 = np.nan_to_num(weights_test[i, :])
+            compare_2 = np.nan_to_num(weights_arr[i, :])
+            assert (np.all(compare_1 - compare_2)) < 0.000001
 
     def test_max_weight(self):
 
