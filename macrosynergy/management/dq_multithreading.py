@@ -4,10 +4,13 @@ import json
 from math import ceil
 import yaml
 from typing import List
-import os
+import numpy as np
 import concurrent.futures
 import time
 import threading
+from collections import defaultdict
+import os
+import pandas as pd
 
 URL = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 class DataQueryInterface(object):
@@ -39,10 +42,11 @@ class DataQueryInterface(object):
                   "calendar": calendar, "frequency": frequency}
 
         output = []
+        final_output = []
         with concurrent.futures.ThreadPoolExecutor() as executor:
             for i, elem in enumerate(tickers):
                 # The expression can either be a List of Tickers, or a singular ticker.
-                time.sleep(0.3)
+                time.sleep(0.4)
                 params["expressions"] = elem
                 results = executor.submit(self._fetch_ts, params)
                 output.append(results)
@@ -53,9 +57,12 @@ class DataQueryInterface(object):
                 except ValueError:
                     print(f"Ticker unavailable: {elem}.")
                 else:
-                    output.extend(response["instruments"])
+                    if isinstance(response["instruments"], list):
+                        final_output.extend(response["instruments"])
+                    else:
+                        continue
 
-        return output
+        return final_output
 
     def get_tickers(self, tickers, original_metrics, **kwargs):
 
@@ -81,7 +88,112 @@ class DataQueryInterface(object):
             temporary = self._optimize(tickers=tickers, **kwargs)
             results.extend(temporary)
 
-        return results
+        no_metrics = len(set([tick.split(',')[-1][:-1] for tick in tickers_copy]))
+        print(f"Number of metrics: {no_metrics}.")
+
+        results_dict = self.isolate_timeseries(results, original_metrics)
+        results_dict = self.valid_ticker(results_dict)
+
+        results_copy = results_dict.copy()
+        try:
+            results_copy.popitem()
+        except Exception as err:
+            print(err)
+            print("None of the tickers are available in the Database.")
+            return
+        else:
+            return self.dataframe_wrapper(results_dict, no_metrics, original_metrics)
+
+    @staticmethod
+    def isolate_timeseries(list_, metrics):
+        output_dict = defaultdict(dict)
+        size = len(list_)
+
+        for i in range(size):
+            try:
+                r = list_.pop()
+            except IndexError:
+                break
+            else:
+                dictionary = r['attributes'][0]
+                ticker = dictionary['expression'].split(',')
+                metric = ticker[-1][:-1]
+
+                ticker_split = ','.join(ticker[:-1])
+                ts_arr = np.array(dictionary['time-series'])
+
+                if ticker_split not in output_dict:
+                    output_dict[ticker_split]['real_date'] = ts_arr[:, 0]
+                    output_dict[ticker_split][metric] = ts_arr[:, 1]
+                else:
+                    output_dict[ticker_split][metric] = ts_arr[:, 1]
+
+        no_rows = ts_arr[:, 1].size
+        modified_dict = {}
+        d_frame_order = ['real_date'] + metrics
+
+        for k, v in output_dict.items():
+            arr = np.empty(shape=(no_rows, len(d_frame_order)), dtype=object)
+            for i, metric in enumerate(d_frame_order):
+                arr[:, i] = v[metric]
+
+            modified_dict[k] = arr
+        return modified_dict
+
+    @staticmethod
+    def column_check(v, col):
+        returns = list(v[:, col])
+        condition = all([isinstance(elem, type(None)) for elem in returns])
+
+        return condition
+
+    def valid_ticker(self, _dict):
+        dict_copy = _dict.copy()
+        for k, v in _dict.items():
+
+            condition = self.column_check(v, 1)
+            if condition:
+                print(f"The ticker, {k}, does not exist in the Database.")
+                dict_copy.pop(k)
+            else:
+                continue
+
+        return dict_copy
+
+    @staticmethod
+    def dataframe_wrapper(_dict, no_metrics, original_metrics):
+        tickers_no = len(_dict.keys())
+        length = list(_dict.values())[0].shape[0]
+
+        arr = np.empty(shape=(length * tickers_no, 3 + no_metrics), dtype=object)
+        print(arr.shape)
+
+        i = 0
+        for k, v in _dict.items():
+            ticker = k.split(',')
+            ticker = ticker[1].split('_')
+
+            cid = ticker[0]
+            xcat = '_'.join(ticker[1:])
+
+            cid_broad = np.repeat(cid, repeats=v.shape[0])
+            xcat_broad = np.repeat(xcat, repeats=v.shape[0])
+            data = np.column_stack((cid_broad, xcat_broad, v))
+
+            row = i * v.shape[0]
+            arr[row:row + v.shape[0], :] = data
+            i += 1
+
+        columns = ['cid', 'xcat', 'real_date']
+        cols_output = columns + original_metrics
+
+        df = pd.DataFrame(data=arr, columns=cols_output)
+
+        df['real_date'] = pd.to_datetime(df['real_date'], yearfirst=True)
+        df = df[df['real_date'].dt.dayofweek < 5]
+
+        return df.fillna(value=np.nan).reset_index(drop=True)
+
 
 def dq_output(cids, xcats, metrics=['value'], start_date='2000-01-01'):
     os.chdir("/Users/kurransteeds/repos/macrosynergy/macrosynergy")
@@ -95,10 +207,10 @@ def dq_output(cids, xcats, metrics=['value'], start_date='2000-01-01'):
                             crt="../api_macrosynergy_com.crt",
                             key="../api_macrosynergy_com.key")
 
-    results = dq.get_tickers(tickers=tickers, original_metrics=metrics,
-                             start_date=start_date)
+    df_thread = dq.get_tickers(tickers=tickers, original_metrics=metrics,
+                               start_date=start_date)
 
-    return results
+    return df_thread
 
 
 if __name__ == "__main__":
@@ -118,9 +230,12 @@ if __name__ == "__main__":
 
     cids = cids_dmca + cids_dmec
 
+
     metrics = ['value']
     start = time.time()
-    results = dq_output(cids=cids, xcats=['FXXR_NSA'], metrics=metrics,
-                        start_date="2000-01-01")
+    df_thread = dq_output(cids=cids, xcats=['FXXR_NSA'], metrics=metrics,
+                          start_date="2000-01-01")
     end = time.time() - start
     print(f"Time taken: {end}.")
+
+    print(df_thread)
