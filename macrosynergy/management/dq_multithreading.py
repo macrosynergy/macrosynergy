@@ -30,6 +30,7 @@ class DataQueryInterface(object):
         endpoint = "/expressions/time-series"
         url = self.base_url + endpoint
 
+        print(threading.current_thread())
         with threading.Lock():
             with requests.get(url=url, cert=self.cert, headers=self.headers,
                               params=params) as r:
@@ -41,13 +42,24 @@ class DataQueryInterface(object):
         params = {"format": "JSON", "start-date": start_date, "end-date": end_date,
                   "calendar": calendar, "frequency": frequency}
 
-        output = []
+        no_tickers = len(tickers)
+        iterations = ceil(no_tickers / 20)
+        remainder = no_tickers % 20
+
+        tickers_copy = tickers.copy()
+
         final_output = []
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            for i, elem in enumerate(tickers):
+            output = []
+            for i in range(iterations):
+                if i < (iterations - 1):
+                    tickers = tickers_copy[i * 20: (i * 20) + 20]
+                else:
+                    tickers = tickers_copy[-remainder:]
+
                 # The expression can either be a List of Tickers, or a singular ticker.
-                time.sleep(0.4)
-                params["expressions"] = elem
+                params["expressions"] = tickers
+                time.sleep(0.5)
                 results = executor.submit(self._fetch_ts, params)
                 output.append(results)
 
@@ -55,13 +67,14 @@ class DataQueryInterface(object):
                 try:
                     response = json.loads(f.result())
                 except ValueError:
-                    print(f"Ticker unavailable: {elem}.")
+                    print(f"Server being hit too quickly with requests.")
                 else:
                     if isinstance(response["instruments"], list):
                         final_output.extend(response["instruments"])
                     else:
                         continue
 
+        print(f"Number of requests returned from the function: {len(final_output)}.")
         return final_output
 
     def get_tickers(self, tickers, original_metrics, **kwargs):
@@ -73,23 +86,7 @@ class DataQueryInterface(object):
 
         tickers = dq_tix
 
-        no_tickers = len(tickers)
-        iterations = ceil(no_tickers / 20)
-        remainder = no_tickers % 20
-
-        results = []
-        tickers_copy = tickers.copy()
-        for i in range(iterations):
-            if i < (iterations - 1):
-                tickers = tickers_copy[i * 20: (i * 20) + 20]
-            else:
-                tickers = tickers_copy[-remainder:]
-
-            temporary = self._optimize(tickers=tickers, **kwargs)
-            results.extend(temporary)
-
-        no_metrics = len(set([tick.split(',')[-1][:-1] for tick in tickers_copy]))
-        print(f"Number of metrics: {no_metrics}.")
+        results = self._optimize(tickers=tickers, **kwargs)
 
         results_dict = self.isolate_timeseries(results, original_metrics)
         results_dict = self.valid_ticker(results_dict)
@@ -102,7 +99,8 @@ class DataQueryInterface(object):
             print("None of the tickers are available in the Database.")
             return
         else:
-            return self.dataframe_wrapper(results_dict, no_metrics, original_metrics)
+            return self.dataframe_wrapper(results_dict, len(original_metrics),
+                                          original_metrics)
 
     @staticmethod
     def isolate_timeseries(list_, metrics):
@@ -228,8 +226,10 @@ if __name__ == "__main__":
                  'JPY', 'KRW', 'MYR',
                  'MXN', 'NZD', 'PEN', 'PHP', 'SGD', 'THB', 'TWD', 'ZAR']  # USD benchmark
 
-    cids = cids_dmca + cids_dmec
-
+    cids = cids_dmca + cids_dmec + cids_latm + cids_emea + cids_emas
+    cids = cids + cids_eufx + cids_g2fx + cids_usfx
+    cids = list(set(cids))
+    print(f"Number of cross-sections being passed: {len(cids)}.")
 
     metrics = ['value']
     start = time.time()
