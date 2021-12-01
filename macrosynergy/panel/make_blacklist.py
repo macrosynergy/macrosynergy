@@ -4,27 +4,31 @@ from typing import List
 from itertools import groupby
 import random
 from macrosynergy.management.shape_dfs import reduce_df
-from macrosynergy.management.simulate_quantamental_data import make_qdf_black
+from macrosynergy.management.simulate_quantamental_data import make_qdf_black, make_qdf
 
 tuple_ = lambda dates, index_tr, length: (dates[index_tr], dates[index_tr + (length - 1)])
 
+
 def make_blacklist(df: pd.DataFrame, xcat: str, cids: List[str] = None,
-                   start: str = None, end: str = None):
+                   start: str = None, end: str = None,
+                   nan_black: bool = False):
 
     """
     Converts binary category of standardized dataframe into a standardized dictionary
     that can serve as a blacklist for cross-sections in further analyses
 
     :param <pd.Dataframe> df: standardized DataFrame with following columns:
-        'cid', 'xcats', 'real_date' and 'value'.
-    :param <str> xcat: category with binary values, where 1 means blacklisted and 0 means
-        not blacklisted.
-    :param List<str> cids: list of cross-sections which are considered in the formation
+        'cid', 'xcat', 'real_date' and 'value'.
+    :param <str> xcat: category with binary values, where 1 means blacklisting and 0
+        means not blacklisting.
+    :param List<str> cids: list of cross-sections that are considered in the formation
         of the blacklist. Per default, all available cross sections are considered.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         for which the respective category is available is used.
     :param <str> end: latest date in ISO format. Default is None and latest date
         for which the respective category is available is used.
+    :param <bool> nan_black: if True NaNs are blacklisted (coverted to ones). Defaults is
+        False, i.e. NaNs are converted to zeroes.
 
     :return <dict>: standardized dictionary with cross-sections as keys and tuples of
         start and end dates of the blacklist periods in ISO formats as values.
@@ -32,17 +36,23 @@ def make_blacklist(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         keys (i.e. TRY_1, TRY_2, etc.)
     """
 
-    assert all(list(map(lambda val: val == 1 or val == 0, df['value'].to_numpy())))
-
-    dfd = reduce_df(df=df, xcats=xcat, cids=cids, start=start, end=end)
+    dfd = reduce_df(df=df, xcats=[xcat], cids=cids, start=start, end=end)
+    assert all(np.isin(dfd.value.dropna().unique(), [0, 1])), \
+        "blacklist values must all be 0/1"
 
     df_pivot = dfd.pivot(index='real_date', columns='cid', values='value')
-
     dates = df_pivot.index
     cids_df = list(df_pivot.columns)
 
+    if nan_black:  # replace NaNs
+        df_pivot.fillna(1)
+    else:
+        df_pivot.fillna(0)
+
     dates_dict = {}
+
     for cid in cids_df:
+        # Todo: remove indexing and blacklist as 1 (not 0)
         count = 0
 
         column = df_pivot[cid]
@@ -86,31 +96,34 @@ def make_blacklist(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 if __name__ == "__main__":
 
     cids = ['AUD', 'GBP', 'CAD', 'USD']
+    cols = ['earliest', 'latest', 'mean_add', 'sd_mult']
+    df_cid1 = pd.DataFrame(index=cids, columns=cols)
 
-    xcats = ['FXXR_NSA']
+    df_cid1.loc['AUD'] = ['2010-01-01', '2020-12-31', 0, 1]
+    df_cid1.loc['GBP'] = ['2011-01-01', '2020-11-30', 0, 1]
+    df_cid1.loc['CAD'] = ['2011-01-01', '2021-11-30', 0, 1]
+    df_cid1.loc['USD'] = ['2011-01-01', '2020-12-30', 0, 1]
 
-    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest'])
+    cols = ['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef']
+    df_xcat1 = pd.DataFrame(index=['FXXR_NSA', 'FXCRY_NSA'],  columns=cols)
+    df_xcat1.loc['FXXR_NSA'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
+    df_xcat1.loc['FXCRY_NSA'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
+    df1 = make_qdf(df_cid1, df_xcat1, back_ar=0.05)
 
-    df_cids.loc['AUD'] = ['2010-01-01', '2020-12-31']
-    df_cids.loc['GBP'] = ['2011-01-01', '2020-11-30']
-    df_cids.loc['CAD'] = ['2011-01-01', '2021-11-30']
-    df_cids.loc['USD'] = ['2011-01-01', '2020-12-30']
+    df_xcat2 = pd.DataFrame(index=['FXNONTRADE_NSA'],  columns=['earliest', 'latest'])
+    df_xcat2.loc['FXNONTRADE_NSA'] = ['2010-01-01', '2021-11-30']
+    black = {'AUD': ('2010-01-12', '2010-06-14'),
+             'USD': ('2011-08-17', '2011-09-20'),
+             'CAD_1': ('2011-01-04', '2011-01-23'),
+             'CAD_2': ('2013-01-09', '2013-04-10'),
+             'CAD_3': ('2015-01-12', '2015-03-12'),
+             'CAD_4': ('2021-11-01', '2021-11-20')}
 
-    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest'])
-    df_xcats.loc['FXXR_NSA'] = ['2010-01-01', '2021-11-30']
+    df2 = make_qdf_black(df_cid1, df_xcat2, blackout=black)
 
-    blackout = {'AUD': ('2010-01-12', '2010-06-14'),
-                'USD': ('2011-08-17', '2011-09-20'),
-                'CAD_1': ('2011-01-04', '2011-01-23'),
-                'CAD_2': ('2013-01-09', '2013-04-10'),
-                'CAD_3': ('2015-01-12', '2015-03-12'),
-                'CAD_4': ('2021-11-01', '2021-11-20')}
+    df = pd.concat([df1, df2]).reset_index()
 
-    print(blackout)
-    random.seed(2)
-    df = make_qdf_black(df_cids, df_xcats, blackout=blackout)
-
-    dates_dict = make_blacklist(df, xcat=['FXXR_NSA'], cids=None,
+    dates_dict = make_blacklist(df, xcat='FXNONTRADE_NSA', cids=None,
                                 start=None, end=None)
 
     # If the output, from the below printed dictionary, differs from the above defined

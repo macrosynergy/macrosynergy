@@ -185,5 +185,6 @@ class TestAll(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    print(os.getcwd())
-    unittest.main()
+    pass
+    # print(os.getcwd())
+    # unittest.main()
