@@ -28,10 +28,8 @@ class DataQueryInterface(object):
         url = self.base_url + endpoint
 
         with threading.Lock():
-            time.sleep(3.0)
             with requests.get(url=url, cert=self.cert, headers=self.headers,
                               params=params) as r:
-                print(r.text)
                 return r.text
 
     def _optimize(self, tickers: List[str], start_date: str = None, end_date: str = None,
@@ -42,8 +40,9 @@ class DataQueryInterface(object):
 
         output = []
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            for elem in tickers:
+            for i, elem in enumerate(tickers):
                 # The expression can either be a List of Tickers, or a singular ticker.
+                time.sleep(0.3)
                 params["expressions"] = elem
                 results = executor.submit(self._fetch_ts, params)
                 output.append(results)
@@ -54,7 +53,6 @@ class DataQueryInterface(object):
                 except ValueError:
                     print(f"Ticker unavailable: {elem}.")
                 else:
-                    print(response["instruments"])
                     output.extend(response["instruments"])
 
         return output
@@ -123,6 +121,6 @@ if __name__ == "__main__":
     metrics = ['value']
     start = time.time()
     results = dq_output(cids=cids, xcats=['FXXR_NSA'], metrics=metrics,
-                        start_date="2021-01-01")
+                        start_date="2000-01-01")
     end = time.time() - start
     print(f"Time taken: {end}.")
