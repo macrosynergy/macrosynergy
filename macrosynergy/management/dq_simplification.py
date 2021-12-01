@@ -5,6 +5,9 @@ import pandas as pd
 import numpy as np
 from math import ceil
 from collections import defaultdict
+import time
+import yaml
+import os
 
 URL = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 class DataQueryInterface(object):
@@ -43,6 +46,12 @@ class DataQueryInterface(object):
         return results
 
     def get_tickers(self, tickers, original_metrics, **kwargs):
+        unique_tix = list(set(tickers))
+        dq_tix = []
+        for metric in original_metrics:
+            dq_tix += ["DB(JPMAQS," + tick + f",{metric})" for tick in unique_tix]
+
+        tickers = dq_tix
 
         no_tickers = len(tickers)
         iterations = ceil(no_tickers / 20)
@@ -165,3 +174,48 @@ class DataQueryInterface(object):
         df = df[df['real_date'].dt.dayofweek < 5]
 
         return df.fillna(value=np.nan).reset_index(drop=True)
+
+
+def dq_output(cids, xcats, metrics=['value'], start_date='2000-01-01'):
+    os.chdir("/Users/kurransteeds/repos/macrosynergy/macrosynergy")
+
+    tickers = [cid + '_' + xcat for xcat in xcats for cid in cids]
+
+    with open("../config.yml", 'r') as f:
+        cf = yaml.load(f, Loader=yaml.FullLoader)
+
+    dq = DataQueryInterface(username=cf["dq"]["username"], password=cf["dq"]["password"],
+                            crt="../api_macrosynergy_com.crt",
+                            key="../api_macrosynergy_com.key")
+
+    df_single_thread = dq.get_tickers(tickers=tickers, original_metrics=metrics,
+                                      start_date=start_date)
+
+    return df_single_thread
+
+
+if __name__ == "__main__":
+    cids_dmca = ['AUD', 'CAD', 'CHF', 'EUR', 'GBP', 'JPY', 'NOK', 'NZD', 'SEK',
+                 'USD']  # DM currency areas
+    cids_dmec = ['DEM', 'ESP', 'FRF', 'ITL', 'NLG']  # DM euro area countries
+    cids_latm = ['ARS', 'BRL', 'COP', 'CLP', 'MXN', 'PEN']  # Latam countries
+    cids_emea = ['HUF', 'ILS', 'PLN', 'RON', 'RUB', 'TRY', 'ZAR']  # EMEA countries
+    cids_emas = ['CNY', 'HKD', 'IDR', 'INR', 'KRW', 'MYR', 'PHP', 'SGD', 'THB',
+                 'TWD']  # EM Asia countries
+
+    cids_eufx = ['CHF', 'HUF', 'NOK', 'PLN', 'RON', 'SEK']  # EUR benchmark
+    cids_g2fx = ['GBP', 'RUB', 'TRY']  # dual benchmark
+    cids_usfx = ['AUD', 'BRL', 'CAD', 'CLP', 'CNY', 'COP', 'EUR', 'IDR', 'ILS', 'INR',
+                 'JPY', 'KRW', 'MYR',
+                 'MXN', 'NZD', 'PEN', 'PHP', 'SGD', 'THB', 'TWD', 'ZAR']  # USD benchmark
+
+    cids = cids_dmca + cids_dmec
+
+    metrics = ['value']
+    start = time.time()
+    df_single_thread = dq_output(cids=cids, xcats=['FXXR_NSA'], metrics=metrics,
+                          start_date="2000-01-01")
+    end = time.time() - start
+    print(f"Time taken: {end}.")
+
+    print(df_single_thread)
