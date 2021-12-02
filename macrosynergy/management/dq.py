@@ -477,7 +477,7 @@ class DataQueryInterface(object):
                             continue
         else:
             for elem in tick_list_compr:
-                params["exprression"] = elem
+                params["expressions"] = elem
                 results = self._fetch(endpoint=endpoint, select="instruments",
                                       params=params)
                 final_output.extend(results)
