@@ -270,10 +270,9 @@ class DataQueryInterface(object):
 
         url = self.base_url + endpoint
 
-        with threading.Lock():
-            with requests.get(url=url, cert=(self.crt, self.key), headers=self.headers,
-                              params=params) as r:
-                return r.text
+        with requests.get(url=url, cert=(self.crt, self.key), headers=self.headers,
+                          params=params) as r:
+            return r.text
 
     def check_connection(self) -> bool:
         """Check connect (heartbeat) to DataQuery
