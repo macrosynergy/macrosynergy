@@ -100,7 +100,8 @@ class DataQueryInterface(object):
                  key: str = "api_macrosynergy_com.key",
                  base_url: str = BASE_URL,
                  date_all: bool = False,
-                 debug: bool = False):
+                 debug: bool = False,
+                 concurrent: bool = True):
 
         assert isinstance(username, str),\
             f"username must be a <str> and not {type(username)}: {username}"
@@ -133,6 +134,7 @@ class DataQueryInterface(object):
         self.status_code = None
         self.last_response = None
         self.date_all = date_all
+        self.concurrent = concurrent
 
         # assert self.check_connection()
 
@@ -433,45 +435,53 @@ class DataQueryInterface(object):
 
     def _optimize(self, endpoint: str, tickers: List[str], params: dict,
                   start_date: str = None, end_date: str = None,
-                  calendar: str = "CAL_ALLDAYS", frequency: str = "FREQ_DAY"):
+                  calendar: str = "CAL_ALLDAYS", frequency: str = "FREQ_DAY",
+                  conversion: str = "CONV_LASTBUS_ABS",
+                  nan_treatment: str = "NA_NOTHING"):
 
         params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
-                   "calendar": calendar, "frequency": frequency}
+                   "calendar": calendar, "frequency": frequency, "conversion":
+                   conversion, "nan_treatment": nan_treatment}
         params.update(params_)
 
         no_tickers = len(tickers)
         iterations = ceil(no_tickers / 20)
         remainder = no_tickers % 20
 
-        tickers_copy = tickers.copy()
+        tick_list_compr = []
+        for i in range(iterations):
+            if i < (iterations - 1):
+                tick_list_compr.append(tickers[i * 20: (i * 20) + 20])
+            else:
+                tick_list_compr.append(tickers[-remainder:])
 
         final_output = []
         output = []
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            for i in range(iterations):
-                if i < (iterations - 1):
-                    tickers = tickers_copy[i * 20: (i * 20) + 20]
-                else:
-                    tickers = tickers_copy[-remainder:]
+        if self.concurrent:
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                for elem in tick_list_compr:
+                    params["expressions"] = elem
+                    results = executor.submit(self._fetch_threading, endpoint, params)
+                    time.sleep(0.75)
+                    output.append(results)
 
-                # The expression can either be a List of Tickers, or a singular ticker.
-                params["expressions"] = tickers
-                results = executor.submit(self._fetch_threading, endpoint, params)
-                time.sleep(0.75)
-                output.append(results)
-
-            for f in concurrent.futures.as_completed(output):
-                try:
-                    response = json.loads(f.result())
-                except ValueError:
-                    print(f"Server being hit too quickly with requests.")
-                else:
-                    if isinstance(response["instruments"], list):
-                        final_output.extend(response["instruments"])
+                for f in concurrent.futures.as_completed(output):
+                    try:
+                        response = json.loads(f.result())
+                    except ValueError:
+                        print(f"Server being hit too quickly with requests.")
                     else:
-                        continue
+                        if isinstance(response["instruments"], list):
+                            final_output.extend(response["instruments"])
+                        else:
+                            continue
+        else:
+            for elem in tick_list_compr:
+                params["exprression"] = elem
+                results = self._fetch(endpoint=endpoint, select="instruments",
+                                      params=params)
+                final_output.extend(results)
 
-        print(f"Number of requests returned from the function: {len(final_output)}.")
         return final_output
 
 
