@@ -431,37 +431,49 @@ class DataQueryInterface(object):
 
         return results
 
-    def thread_optimize(self, endpoint: str, tickers: List[str], params: dict,
-                        start_date: str = None, end_date: str = None,
-                        calendar: str = "CAL_ALLDAYS",
-                        frequency: str = "FREQ_DAY"):
+    def _optimize(self, endpoint: str, tickers: List[str], params: dict,
+                  start_date: str = None, end_date: str = None,
+                  calendar: str = "CAL_ALLDAYS", frequency: str = "FREQ_DAY"):
 
         params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
                    "calendar": calendar, "frequency": frequency}
-        params_.update(params)
+        params.update(params_)
 
-        output = []
+        no_tickers = len(tickers)
+        iterations = ceil(no_tickers / 20)
+        remainder = no_tickers % 20
+
+        tickers_copy = tickers.copy()
+
         final_output = []
+        output = []
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            for i, elem in enumerate(tickers):
+            for i in range(iterations):
+                if i < (iterations - 1):
+                    tickers = tickers_copy[i * 20: (i * 20) + 20]
+                else:
+                    tickers = tickers_copy[-remainder:]
+
                 # The expression can either be a List of Tickers, or a singular ticker.
+                params["expressions"] = tickers
+                results = executor.submit(self._fetch_threading, endpoint, params)
                 time.sleep(0.75)
-                params_["expressions"] = elem
-                results = executor.submit(self._fetch_threading, endpoint, params_)
                 output.append(results)
 
             for f in concurrent.futures.as_completed(output):
                 try:
                     response = json.loads(f.result())
                 except ValueError:
-                    print(f"Ticker unavailable: {elem}.")
+                    print(f"Server being hit too quickly with requests.")
                 else:
                     if isinstance(response["instruments"], list):
                         final_output.extend(response["instruments"])
                     else:
                         continue
 
+        print(f"Number of requests returned from the function: {len(final_output)}.")
         return final_output
+
 
     @staticmethod
     def _parse_ts(results, reference_data: bool = True):
@@ -539,7 +551,7 @@ class DataQueryInterface(object):
         return results
 
     def get_ts_expression(self, expression, original_metrics, suppress_warning,
-                          bool_df, threading_bool, **kwargs):
+                          bool_df, **kwargs):
         """
 
         start_date: str = None, end_date: str = None,
@@ -556,7 +568,6 @@ class DataQueryInterface(object):
                                  the returned DataFrame will reflect the received List.
         :param **kwargs: dictionary of additional arguments
         :param bool_df: temporary parameter for reconciliation with Athena.
-        :param threading_bool: parameter controlling whether multiple threads are initiated.
 
         :return: pd.DataFrame: ['cid', 'xcat', 'real_date'] + [original_metrics]
 
@@ -574,35 +585,17 @@ class DataQueryInterface(object):
             dq_tix += ["DB(JPMAQS," + tick + f",{metric})" for tick in unique_tix]
 
         expression = dq_tix
-        no_tickers = len(expression)
-        iterations = ceil(no_tickers / 20)
-        remainder = no_tickers % 20
 
-        results = []
-        expression_copy = expression.copy()
-        for i in range(iterations):
-            if i < (iterations - 1):
-                expression = expression_copy[i * 20: (i * 20) + 20]
-            else:
-                expression = expression_copy[-remainder:]
+        params = {}
+        if "data" in kwargs.keys():
+            assert kwargs["data"] == "ALL"
+            params.update({"data":  kwargs.pop("data")})
 
-            params = {}
-            if "data" in kwargs.keys():
-                assert kwargs["data"] == "ALL"
-                params.update({"data":  kwargs.pop("data")})
-
-            if threading_bool:
-                output = self.thread_optimize(endpoint="/expressions/time-series",
-                                              tickers=expression, params=params,
-                                              **kwargs)
-            else:
-                params.update({"expressions": expression})
-                output = self._fetch_ts(endpoint="/expressions/time-series",
-                                        params=params, **kwargs)
-            results.extend(output)
+        results = self._optimize(endpoint="/expressions/time-series",
+                                 tickers=expression, params=params, **kwargs)
 
         # (O(n) + O(nlog(n)) operation.
-        no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression_copy]))
+        no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression]))
 
         results_dict, output_dict = self.isolate_timeseries(results, original_metrics)
         if bool_df:
@@ -851,7 +844,7 @@ class DataQueryInterface(object):
 
     def tickers(self, tickers: list, metrics: list = ['value'],
                 start_date: str='2000-01-01', suppress_warning=False,
-                bool_df=False, threading_bool=True):
+                bool_df=False):
         """
         Returns standardized dataframe of specified base tickers and metric
 
@@ -862,16 +855,15 @@ class DataQueryInterface(object):
         :param <boolean> bool_df: temporary parameter (alignment with Athena).
         :param <boolean> suppress_warning: used to suppress warning of any invalid
                                            ticker received by DataQuery.
-        :param <boolean> threading_bool: parameter controlling if accessing DataQuery occurs
-                                    concurrently.
 
         :return <pd.Dataframe> standardized dataframe with columns 'cid', 'xcats',
                                'real_date' and chosen metrics.
         """
 
         df = self.get_ts_expression(expression=tickers, original_metrics=metrics,
-                                    start_date=start_date, suppress_warning=suppress_warning,
-                                    bool_df=bool_df, threading_bool=threading_bool)
+                                    start_date=start_date,
+                                    suppress_warning=suppress_warning,
+                                    bool_df=bool_df)
 
         if isinstance(df, pd.DataFrame):
             df = df.sort_values(['cid', 'xcat', 'real_date']).reset_index(drop=True)
@@ -879,7 +871,7 @@ class DataQueryInterface(object):
         return df
 
     def download(self, tickers=None, xcats=None, cids=None, metrics=['value'],
-                 start_date='2000-01-01', suppress_warning=False, threading_bool=True):
+                 start_date='2000-01-01', suppress_warning=False):
         """
         Returns standardized dataframe of specified base tickers and metrics
 
@@ -900,8 +892,6 @@ class DataQueryInterface(object):
         :param <str> path: relative path from notebook to credential files.
         :param <boolean> suppress_warning: used to suppress warning of any invalid
                                            ticker received by DataQuery.
-        :param <boolean> threading_bool: parameter controlling if accessing DataQuery
-                                         occurs concurrently.
 
         :return <pd.Dataframe> standardized dataframe with columns 'cid', 'xcats',
                                'real_date' and chosen metrics.
@@ -944,6 +934,6 @@ class DataQueryInterface(object):
             tickers = tickers + add_tix
 
         df = self.tickers(tickers, metrics=metrics, suppress_warning=suppress_warning,
-                          start_date=start_date, threading_bool=threading_bool)
+                          start_date=start_date)
 
         return df
