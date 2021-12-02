@@ -30,10 +30,10 @@ class DataQueryInterface(object):
         endpoint = "/expressions/time-series"
         url = self.base_url + endpoint
 
-        print(threading.current_thread())
         with threading.Lock():
             with requests.get(url=url, cert=self.cert, headers=self.headers,
                               params=params) as r:
+
                 return r.text
 
     def _optimize(self, tickers: List[str], start_date: str = None, end_date: str = None,
@@ -49,8 +49,8 @@ class DataQueryInterface(object):
         tickers_copy = tickers.copy()
 
         final_output = []
+        output = []
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            output = []
             for i in range(iterations):
                 if i < (iterations - 1):
                     tickers = tickers_copy[i * 20: (i * 20) + 20]
@@ -59,8 +59,8 @@ class DataQueryInterface(object):
 
                 # The expression can either be a List of Tickers, or a singular ticker.
                 params["expressions"] = tickers
-                time.sleep(0.5)
                 results = executor.submit(self._fetch_ts, params)
+                time.sleep(1.0)
                 output.append(results)
 
             for f in concurrent.futures.as_completed(output):
@@ -234,7 +234,7 @@ if __name__ == "__main__":
     metrics = ['value']
     start = time.time()
     df_thread = dq_output(cids=cids, xcats=['FXXR_NSA'], metrics=metrics,
-                          start_date="2000-01-01")
+                                 start_date="2000-01-01")
     end = time.time() - start
     print(f"Time taken: {end}.")
 
