@@ -313,144 +313,6 @@ class DataQueryInterface(object):
 
         return int(results["code"]) == 200
 
-    def get_groups(self, keywords: Optional[str] = None):
-        """Get all the groups available in DataQuery.
-
-        :param <str> keywords: default None, string with keyword for
-            search to narrow down the groups, default is None.
-            If None then call endpoint '/groups' else if not None call
-            '/groups/search' with params of keywords.
-
-        :return: JSON dictionary object with result of query
-        :rtype: <str>
-
-        """
-        if keywords is not None:
-            assert isinstance(keywords, str)
-            results = self._fetch(endpoint="/groups/search",
-                                  params={"keywords": keywords})
-        else:
-            results = self._fetch()
-
-        if self.debug:
-            print("\nCheck data set:")
-            print("Max number of groups (item):",
-                  max(map(lambda x: x["item"], results)))
-            print("Premium content:",
-                  any(map(lambda x: x["premium"], results)))
-            print("Providers:",
-                  np.unique(list(map(lambda x: x["provider"], results))))
-            # TODO "FX" in group-id?
-            print("Group ID (FX):",
-                  list(filter(lambda y: y[:2] == "FX" or y[:3] == "CFX",
-                              map(lambda x: x["group-id"], results))))
-            print("Group ID (FX):",
-                  list(filter(lambda y: "FX" in y,
-                              map(lambda x: x["group-id"], results))))
-            print("Athena FX:",
-                  list(filter(lambda y:
-                              y["provider"] == "ATHENA FX", results)))
-            print(list(filter(lambda x:
-                              x["group-id"] == "FXO_SP", results)))
-
-        return results
-
-    def get_instruments(self, group_id: str, keywords: str = None):
-        """Get all instruments within a group.
-
-        :param group_id: string denoting the group-id
-            for which to get all instruments.
-        :param keywords: string with keywords for search.
-            Default is None with endpoint '/group/instruments',
-        but if not None call '/group/instruments/search'
-        :return: JSON dictionary object with result of query
-        """
-
-        if keywords is not None:
-            results = self._fetch(endpoint="/group/instruments/search",
-                                  select="instruments",
-                                  params={"group-id": group_id,
-                                          "keywords": keywords})
-        else:
-            results = self._fetch(endpoint="/group/instruments",
-                                  select="instruments",
-                                  params={"group-id": group_id})
-
-        return results
-
-    def get_filters(self, group_id: str):
-        """
-        Get all filters available for group id.
-
-        :param group_id: string with group id, example 'FXO_SP'
-         for FX spot prices from the options data base.
-        :return: JSON response object
-        """
-
-        results = self._fetch(endpoint="/group/filters",
-                              params={"group-id": group_id},
-                              select="filters")
-
-        return results
-
-    def get_attributes(self, group_id: str):
-        """
-        Get all attributes of a certain group id.
-
-        :param group_id: string with group id
-        :return: JSON dictionary object with result of query
-        """
-
-        results = self._fetch(endpoint="/group/attributes",
-                              select="instruments",
-                              params={"group-id": group_id})
-
-        return results
-
-    def _fetch_ts(self, endpoint: str, params: dict,
-                  start_date: str = None, end_date: str = None,
-                  calendar: str = "CAL_ALLDAYS",
-                  frequency: str = "FREQ_DAY",
-                  conversion: str = "CONV_LASTBUS_ABS",
-                  nan_treatment: str = "NA_NOTHING"):
-        """
-
-        :param endpoint:
-        :param params:
-        :param start_date: YYYYMMDD end-date for last data point
-            in time-series, or period in format TODAY-nX where X
-            in array['D', 'W', 'M', 'Y'].
-        :param end_date: YYYYMMDD end-date for last data point in time-series,
-            or period in format TODAY-nX
-        where X in array['D', 'W', 'M', 'Y'].
-        :param calendar:
-        :param frequency:
-        :param conversion:
-        :param nan_treatment:
-        :return:
-        """
-
-        params["format"] = "JSON"
-
-        if start_date is not None:
-            assert isinstance(start_date, str)
-            params["start-date"] = start_date
-
-        if end_date is not None:
-            assert isinstance(end_date, str)
-            params["end-date"] = end_date
-
-        params["calendar"] = calendar
-        params["frequency"] = frequency
-        params["conversion"] = conversion
-        params["nan-treatment"] = nan_treatment
-
-        results = self._fetch(endpoint=endpoint,
-                              params=params,
-                              select="instruments")
-
-        return results
-
     def _optimize(self, endpoint: str, tickers: List[str], params: dict,
                   start_date: str = None, end_date: str = None,
                   calendar: str = "CAL_ALLDAYS", frequency: str = "FREQ_DAY",
@@ -496,87 +358,10 @@ class DataQueryInterface(object):
         else:
             for elem in tick_list_compr:
                 params["expressions"] = elem
-                results = self._fetch(endpoint=endpoint, select="instruments",
-                                      params=params)
+                results = self._fetch_threading(endpoint=endpoint, params=params)
                 final_output.extend(results)
 
         return final_output
-
-
-    @staticmethod
-    def _parse_ts(results, reference_data: bool = True):
-        """
-
-        :param results: list of results from timeseries query
-        :param reference_data: boolean if True parse
-            reference data only else parse all
-        :return:
-        """
-        # TODO check structure
-
-        # Unpack values + parse_dates...
-        data = pd.concat(map(lambda y: pd.concat(map(
-            lambda x: pd.DataFrame(data=list(filter(lambda z: z[1] is not None,
-                                                    x["time-series"])),
-                                   columns=["date", "value"]
-                                   ).assign(**{key: x[key] for key in x.keys()
-                                               if key != "time-series"}),
-            y["attributes"]), axis=0,
-            ignore_index=True).assign(**{key: y[key] for key
-                                         in y.keys() if key != "attributes"}),
-                             results), axis=0, ignore_index=True)
-        data["date"] = pd.to_datetime(data["date"], format="%Y%m%d")
-        # PARSE dates
-
-        # FX addition
-        data["currency"] = data["instrument-name"].map(lambda x: x[:6])
-
-        maturity_divide = {"Y": 1, "M": 12, "W": 52, "D": 252}
-
-        data["maturity"] = data["instrument-name"].map(
-            lambda x: x.split(" | ")).map(
-            lambda y: int(y[1][:-1]) / maturity_divide[y[1][-1]]
-            if len(y) > 2 else 0)
-
-        data["type"] = data["instrument-name"].map(
-            lambda x: x.split(" | ")[-1])
-
-        return data
-
-    def get_ts_instrument(self, instrument_id: str, attributes_id,
-                          data: str = "REFERENCE_DATA", **kwargs):
-        """
-        start_date: str = None, end_date: str = None,
-                          calendar: str = "CAL_ALLDAYS",
-                          frequency: str = "FREQ_DAY",
-                          conversion: str = "CONV_LASTBUS_ABS",
-                          nan_treatment: str =  "NA_NOTHING"
-
-        Get timeseries (ts) of instruments, using instrument id
-        and attributes id.
-
-        :param instrument_id: string with instrument ID
-        :param attributes_id: string with attributes ID to be returned.
-        :param data: string, either 'REFERENCE_DATA' (default) or 'ALL'
-        :param kwargs: dictionary of additional
-            arguments to self._fetch_ts(...)
-        :return: JSON dictionary object with result of query
-        """
-
-        assert isinstance(instrument_id, str)
-
-        assert isinstance(attributes_id, str)
-
-        assert isinstance(data, str) and data in ("REFERENCE_DATA", "ALL")
-
-        params = {"instruments": instrument_id,
-                  "attributes": attributes_id,
-                  "data": data}
-
-        results = self._fetch_ts(endpoint="/instruments/time-series",
-                                 params=params, **kwargs)
-
-        return results
 
     def get_ts_expression(self, expression, original_metrics, suppress_warning,
                           bool_df, **kwargs):
@@ -598,9 +383,6 @@ class DataQueryInterface(object):
         :param bool_df: temporary parameter for reconciliation with Athena.
 
         :return: pd.DataFrame: ['cid', 'xcat', 'real_date'] + [original_metrics]
-
-        >>> dq = DataQueryInterface(username="<USER>", password="<PASSWORD>")
-        >>> results = dq.get_ts_expression(expression="DB(CFX, AUD, )")
 
         """
         for metric in original_metrics:
@@ -700,28 +482,6 @@ class DataQueryInterface(object):
         return modified_dict, output_dict
 
     @staticmethod
-    def df_column(output_dict, original_metrics):
-
-        index = next(iter(output_dict.values()))['real_date']
-        no_rows = index.size
-        no_columns = len(output_dict.keys()) * len(original_metrics)
-        arr = np.empty(shape=(no_rows, no_columns), dtype=np.float32)
-
-        i = 0
-        columns = []
-        for metric in original_metrics:
-            for k, v in output_dict.items():
-
-                col_name = k + ',' + metric + ')'
-                columns.append(col_name)
-                arr[:, i] = v[metric]
-                i += 1
-
-        df = pd.DataFrame(data=arr, columns=columns)
-
-        return df
-
-    @staticmethod
     def column_check(v, col):
         """
         Checking the values of the returned TimeSeries.
@@ -817,58 +577,6 @@ class DataQueryInterface(object):
         df = df.reset_index(drop=True)
 
         return df
-
-    def get_ts_group(self, group_id, attributes_id: str, filter_id: str = None,
-                     data: str = "REFERENCE_DATA", **kwargs):
-        """Get Time series group
-
-         :param <str>: start_date = None, end_date: str = None,
-         :param <str>: calendar = "CAL_ALLDAYS",
-         :param <str>: frequency = "FREQ_DAY",
-         :param <str>: conversion = "CONV_LASTBUS_ABS",
-         :param <str>: nan_treatment = "NA_NOTHING"):
-
-        time-series "group":
-        [
-            {
-                "item": ...,
-                "instrument-id": ...,
-                "instrument-name": ...,
-                "attributes": [{}, ...]
-            },
-            ...
-        ]
-
-        :param group_id: string with group id, Catalog data group identifier.
-        :param attributes_id: Attribute identifiers in the form attributes = x &
-                              attributes=y
-        :param filter_id: Narrow result scope using country
-                          or currency filters.
-        :param data: string, Retrieve REFERENCE_DATA (default)
-                     or ALL (incl. price data).
-        :param kwargs: dictionary of optional extra arguments
-
-        :return: JSON object
-        """
-
-        assert isinstance(group_id, str)
-
-        assert isinstance(attributes_id, str)
-
-        assert isinstance(data, str) and data in ["REFERENCE_DATA", "ALL"]
-
-        params = {
-            "group-id": group_id,
-            "attributes": attributes_id,
-            "data": data,
-            "filter": filter_id
-        }
-
-        results = self._fetch_ts(endpoint="/group/time-series",
-                                 params=params,
-                                 **kwargs)
-
-        return results
 
     def tickers(self, tickers: list, metrics: list = ['value'],
                 start_date: str='2000-01-01', suppress_warning=False,
