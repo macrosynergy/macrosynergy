@@ -60,7 +60,7 @@ class DataQueryInterface(object):
                 # The expression can either be a List of Tickers, or a singular ticker.
                 params["expressions"] = tickers
                 results = executor.submit(self._fetch_ts, params)
-                time.sleep(1.0)
+                time.sleep(0.75)
                 output.append(results)
 
             for f in concurrent.futures.as_completed(output):
