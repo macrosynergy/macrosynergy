@@ -269,10 +269,29 @@ class DataQueryInterface(object):
     def _fetch_threading(self, endpoint, params: dict):
 
         url = self.base_url + endpoint
+        select = "instruments"
 
-        with requests.get(url=url, cert=(self.crt, self.key), headers=self.headers,
-                          params=params) as r:
-            return r.text
+        results = []
+        while True:
+            with requests.get(url=url, cert=(self.crt, self.key), headers=self.headers,
+                              params=params) as r:
+                last_response = r.text
+
+            response = json.loads(last_response)
+            results.extend(response[select])
+
+            assert "next" in response['links'][1].keys(), \
+                f"'next' missing from links keys: " \
+                f" {response['links'][1].keys()}"
+
+            if response["links"][1]["next"] is None:
+                break
+
+            url = f"{self.base_url:s}{response['links'][1]['next']:s}"
+            params = {}
+
+        print(f"Current Thread: {threading.current_thread()}.")
+        return results
 
     def check_connection(self) -> bool:
         """Check connect (heartbeat) to DataQuery
@@ -466,12 +485,12 @@ class DataQueryInterface(object):
 
                 for f in concurrent.futures.as_completed(output):
                     try:
-                        response = json.loads(f.result())
+                        response = f.result()
                     except ValueError:
                         print(f"Server being hit too quickly with requests.")
                     else:
-                        if isinstance(response["instruments"], list):
-                            final_output.extend(response["instruments"])
+                        if isinstance(response, list):
+                            final_output.extend(response)
                         else:
                             continue
         else:
@@ -653,7 +672,7 @@ class DataQueryInterface(object):
                 ticker_split = ','.join(ticker[:-1])
                 ts_arr = np.array(dictionary['time-series'])
                 if ts_arr.size == 1:
-                    print(f"Invalid expression, {ticker_split + ', '+ metric + ')'}, "
+                    print(f"Invalid expression, {ticker_split + ','+ metric + ')'}, "
                           f"passed into DataQuery.")
                     flag = True
 
