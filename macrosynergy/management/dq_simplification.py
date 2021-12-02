@@ -210,11 +210,15 @@ if __name__ == "__main__":
                  'MXN', 'NZD', 'PEN', 'PHP', 'SGD', 'THB', 'TWD', 'ZAR']  # USD benchmark
 
     cids = cids_dmca + cids_dmec
+    cids = cids + cids_latm + cids_emea + cids_emas
+    cids = cids + cids_eufx + cids_g2fx + cids_usfx
 
+    cids = list(set(cids))
+    print(len(cids))
     metrics = ['value']
     start = time.time()
     df_single_thread = dq_output(cids=cids, xcats=['FXXR_NSA'], metrics=metrics,
-                          start_date="2000-01-01")
+                                 start_date="2000-01-01")
     end = time.time() - start
     print(f"Time taken: {end}.")
 
