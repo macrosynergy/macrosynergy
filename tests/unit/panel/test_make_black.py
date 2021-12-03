@@ -65,31 +65,31 @@ class TestAll(unittest.TestCase):
         self.df = pd.DataFrame(data=data, columns=cols)
 
     @staticmethod
-    def sequence_zeros(values):
+    def sequence_ones(values):
 
         copy_values = values.copy()
 
         values = iter(values)
         value = next(values)
-        count = 0
 
         i = 0
         while not value:
-            count = 1
+            count = 0
             try:
                 value = next(values)
             except StopIteration:
-                break
+                return count
             i += 1
 
+        count = 1
         for val in values:
             i += 1
-            if val:
+            if not val:
                 continue
             elif val != copy_values[(i - 1)]:
                 count += 1
 
-            elif not val:
+            elif val:
                 continue
 
         return count
@@ -115,23 +115,23 @@ class TestAll(unittest.TestCase):
         dfd['value'] = np.arange(0, shape[0])
 
         with self.assertRaises(AssertionError):
-            make_blacklist(dfd, ['FXXR_NSA'], cids=list(cross_sections))
+            make_blacklist(dfd, 'FXXR_NSA', cids=list(cross_sections))
 
-        dfd['value'] = np.repeat(1, shape[0])
+        dfd['value'] = np.repeat(0, shape[0])
 
-        dict_ = make_blacklist(dfd, xcat=['FXXR_NSA'], cids=list(cross_sections))
+        dict_ = make_blacklist(dfd, xcat='FXXR_NSA', cids=list(cross_sections))
         # Validate the dictionary is empty if every row in the 'value' column contains
-        # a one.
+        # a zero.
         self.assertTrue(not bool(dict_))
 
         # Refresh the DataFrame for the next testing framework.
         self.dataframe_generator()
         dfd = self.df
 
-        dfd['value'] = np.repeat(0, shape[0])
-        # If the entire 'value' column is equated to zero, the number of keys in the
+        dfd['value'] = np.repeat(1, shape[0])
+        # If the entire 'value' column is equated to one, the number of keys in the
         # dictionary should equal the number of cross-sections in the dataframe.
-        dict_ = make_blacklist(dfd, ['FXXR_NSA'], cids=list(cross_sections))
+        dict_ = make_blacklist(dfd, 'FXXR_NSA', cids=list(cross_sections))
 
         cross_sections = dfd['cid'].unique()
         cross_sections.sort()
@@ -159,14 +159,14 @@ class TestAll(unittest.TestCase):
         df_pivot = dfd.pivot(index='real_date', columns='cid', values='value')
         dates = df_pivot.index
 
-        dict_ = make_blacklist(dfd, ['FXXR_NSA'], cids=list(cross_sections))
+        dict_ = make_blacklist(dfd, 'FXXR_NSA', cids=list(cross_sections))
         dict_tracker = self.dict_counter(dict_, cross_sections)
 
         # Test the number of keys in the dictionary per cross_section.
         # The number of keys in the dictionary should correspond to the number of
-        # sequences of zero held in the cross-section's column (on the pivoted dataframe).
+        # sequences of one held in the cross-section's column (on the pivoted dataframe).
         # Unable to validate the dictionary's values, tuples of dates, are correct but if
-        # the number of keys match the number of sequences of zero, it minimises the
+        # the number of keys match the number of sequences of one, it minimises the
         # scope for potential error in the function.
         # The only aspect that would still be required to check is that the actual
         # "start_date" & "end_date", the two values in the tuple, are correct. But the
@@ -180,11 +180,11 @@ class TestAll(unittest.TestCase):
 
             values = column.tolist()[:(last_index + 1)]
 
-            count = self.sequence_zeros(values)
+            count = self.sequence_ones(values)
             self.assertTrue(count == dict_tracker[cid])
 
 
 if __name__ == '__main__':
-    pass
-    # print(os.getcwd())
-    # unittest.main()
+
+    print(os.getcwd())
+    unittest.main()
