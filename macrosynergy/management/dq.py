@@ -7,7 +7,7 @@ and private key to verify the request.
 """
 import requests
 import base64
-from typing import Optional, Union
+from typing import Optional, Union, List
 import json
 import pandas as pd
 import numpy as np
@@ -16,6 +16,9 @@ import logging
 from math import ceil
 from collections import defaultdict
 import warnings
+import threading
+import concurrent.futures
+import time
 
 BASE_URL = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 
@@ -97,7 +100,8 @@ class DataQueryInterface(object):
                  key: str = "api_macrosynergy_com.key",
                  base_url: str = BASE_URL,
                  date_all: bool = False,
-                 debug: bool = False):
+                 debug: bool = False,
+                 concurrent: bool = True):
 
         assert isinstance(username, str),\
             f"username must be a <str> and not {type(username)}: {username}"
@@ -130,6 +134,7 @@ class DataQueryInterface(object):
         self.status_code = None
         self.last_response = None
         self.date_all = date_all
+        self.concurrent = concurrent
 
         # assert self.check_connection()
 
@@ -261,6 +266,33 @@ class DataQueryInterface(object):
 
         return results
 
+    def _fetch_threading(self, endpoint, params: dict):
+
+        url = self.base_url + endpoint
+        select = "instruments"
+
+        results = []
+
+        while True:
+            with requests.get(url=url, cert=(self.crt, self.key), headers=self.headers,
+                              params=params) as r:
+                last_response = r.text
+
+            response = json.loads(last_response)
+            results.extend(response[select])
+
+            assert "next" in response['links'][1].keys(), \
+                f"'next' missing from links keys: " \
+                f" {response['links'][1].keys()}"
+
+            if response["links"][1]["next"] is None:
+                break
+
+            url = f"{self.base_url:s}{response['links'][1]['next']:s}"
+            params = {}
+
+        return results
+
     def check_connection(self) -> bool:
         """Check connect (heartbeat) to DataQuery
 
@@ -281,218 +313,54 @@ class DataQueryInterface(object):
 
         return int(results["code"]) == 200
 
-    def get_groups(self, keywords: Optional[str] = None):
-        """Get all the groups available in DataQuery.
+    def _request(self, endpoint: str, tickers: List[str], params: dict,
+                 start_date: str = None, end_date: str = None,
+                 calendar: str = "CAL_ALLDAYS", frequency: str = "FREQ_DAY",
+                 conversion: str = "CONV_LASTBUS_ABS",
+                 nan_treatment: str = "NA_NOTHING"):
 
-        :param <str> keywords: default None, string with keyword for
-            search to narrow down the groups, default is None.
-            If None then call endpoint '/groups' else if not None call
-            '/groups/search' with params of keywords.
+        params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
+                   "calendar": calendar, "frequency": frequency, "conversion":
+                   conversion, "nan_treatment": nan_treatment}
+        params.update(params_)
 
-        :return: JSON dictionary object with result of query
-        :rtype: <str>
+        no_tickers = len(tickers)
+        iterations = ceil(no_tickers / 20)
 
-        """
-        if keywords is not None:
-            assert isinstance(keywords, str)
-            results = self._fetch(endpoint="/groups/search",
-                                  params={"keywords": keywords})
+        tick_list_compr = [tickers[(i * 20): (i * 20) + 20] for i in range(iterations)]
+
+        no_batches = len(tick_list_compr)
+        exterior_iterations = ceil(no_batches / 10)
+
+        final_output = []
+        output = []
+        if self.concurrent:
+            for i in range(exterior_iterations):
+                if i > 0: time.sleep(0.3)
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    for elem in tick_list_compr[(i * 10):(i + 1) * 10]:
+                        params["expressions"] = elem
+                        results = executor.submit(self._fetch_threading, endpoint, params)
+                        time.sleep(0.75)
+                        output.append(results)
+
+                    for f in concurrent.futures.as_completed(output):
+                        try:
+                            response = f.result()
+                        except ValueError:
+                            raise ValueError("Server being hit too quickly with requests.")
+                        else:
+                            if isinstance(response, list):
+                                final_output.extend(response)
+                            else:
+                                continue
         else:
-            results = self._fetch()
+            for elem in tick_list_compr:
+                params["expressions"] = elem
+                results = self._fetch_threading(endpoint=endpoint, params=params)
+                final_output.extend(results)
 
-        if self.debug:
-            print("\nCheck data set:")
-            print("Max number of groups (item):",
-                  max(map(lambda x: x["item"], results)))
-            print("Premium content:",
-                  any(map(lambda x: x["premium"], results)))
-            print("Providers:",
-                  np.unique(list(map(lambda x: x["provider"], results))))
-            # TODO "FX" in group-id?
-            print("Group ID (FX):",
-                  list(filter(lambda y: y[:2] == "FX" or y[:3] == "CFX",
-                              map(lambda x: x["group-id"], results))))
-            print("Group ID (FX):",
-                  list(filter(lambda y: "FX" in y,
-                              map(lambda x: x["group-id"], results))))
-            print("Athena FX:",
-                  list(filter(lambda y:
-                              y["provider"] == "ATHENA FX", results)))
-            print(list(filter(lambda x:
-                              x["group-id"] == "FXO_SP", results)))
-
-        return results
-
-    def get_instruments(self, group_id: str, keywords: str = None):
-        """Get all instruments within a group.
-
-        :param group_id: string denoting the group-id
-            for which to get all instruments.
-        :param keywords: string with keywords for search.
-            Default is None with endpoint '/group/instruments',
-        but if not None call '/group/instruments/search'
-        :return: JSON dictionary object with result of query
-        """
-
-        if keywords is not None:
-            results = self._fetch(endpoint="/group/instruments/search",
-                                  select="instruments",
-                                  params={"group-id": group_id,
-                                          "keywords": keywords})
-        else:
-            results = self._fetch(endpoint="/group/instruments",
-                                  select="instruments",
-                                  params={"group-id": group_id})
-
-        return results
-
-    def get_filters(self, group_id: str):
-        """
-        Get all filters available for group id.
-
-        :param group_id: string with group id, example 'FXO_SP'
-         for FX spot prices from the options data base.
-        :return: JSON response object
-        """
-
-        results = self._fetch(endpoint="/group/filters",
-                              params={"group-id": group_id},
-                              select="filters")
-
-        return results
-
-    def get_attributes(self, group_id: str):
-        """
-        Get all attributes of a certain group id.
-
-        :param group_id: string with group id
-        :return: JSON dictionary object with result of query
-        """
-
-        results = self._fetch(endpoint="/group/attributes",
-                              select="instruments",
-                              params={"group-id": group_id})
-
-        return results
-
-    def _fetch_ts(self, endpoint: str, params: dict,
-                  start_date: str = None, end_date: str = None,
-                  calendar: str = "CAL_ALLDAYS",
-                  frequency: str = "FREQ_DAY",
-                  conversion: str = "CONV_LASTBUS_ABS",
-                  nan_treatment: str = "NA_NOTHING"):
-        """
-
-        :param endpoint:
-        :param params:
-        :param start_date: YYYYMMDD end-date for last data point
-            in time-series, or period in format TODAY-nX where X
-            in array['D', 'W', 'M', 'Y'].
-        :param end_date: YYYYMMDD end-date for last data point in time-series,
-            or period in format TODAY-nX
-        where X in array['D', 'W', 'M', 'Y'].
-        :param calendar:
-        :param frequency:
-        :param conversion:
-        :param nan_treatment:
-        :return:
-        """
-
-        params["format"] = "JSON"
-
-        if start_date is not None:
-            assert isinstance(start_date, str)
-            params["start-date"] = start_date
-
-        if end_date is not None:
-            assert isinstance(end_date, str)
-            params["end-date"] = end_date
-
-        params["calendar"] = calendar
-        params["frequency"] = frequency
-        params["conversion"] = conversion
-        params["nan-treatment"] = nan_treatment
-
-        results = self._fetch(endpoint=endpoint,
-                              params=params,
-                              select="instruments")
-
-        return results
-
-    @staticmethod
-    def _parse_ts(results, reference_data: bool = True):
-        """
-
-        :param results: list of results from timeseries query
-        :param reference_data: boolean if True parse
-            reference data only else parse all
-        :return:
-        """
-        # TODO check structure
-
-        # Unpack values + parse_dates...
-        data = pd.concat(map(lambda y: pd.concat(map(
-            lambda x: pd.DataFrame(data=list(filter(lambda z: z[1] is not None,
-                                                    x["time-series"])),
-                                   columns=["date", "value"]
-                                   ).assign(**{key: x[key] for key in x.keys()
-                                               if key != "time-series"}),
-            y["attributes"]), axis=0,
-            ignore_index=True).assign(**{key: y[key] for key
-                                         in y.keys() if key != "attributes"}),
-                             results), axis=0, ignore_index=True)
-        data["date"] = pd.to_datetime(data["date"], format="%Y%m%d")
-        # PARSE dates
-
-        # FX addition
-        data["currency"] = data["instrument-name"].map(lambda x: x[:6])
-
-        maturity_divide = {"Y": 1, "M": 12, "W": 52, "D": 252}
-
-        data["maturity"] = data["instrument-name"].map(
-            lambda x: x.split(" | ")).map(
-            lambda y: int(y[1][:-1]) / maturity_divide[y[1][-1]]
-            if len(y) > 2 else 0)
-
-        data["type"] = data["instrument-name"].map(
-            lambda x: x.split(" | ")[-1])
-
-        return data
-
-    def get_ts_instrument(self, instrument_id: str, attributes_id,
-                          data: str = "REFERENCE_DATA", **kwargs):
-        """
-        start_date: str = None, end_date: str = None,
-                          calendar: str = "CAL_ALLDAYS",
-                          frequency: str = "FREQ_DAY",
-                          conversion: str = "CONV_LASTBUS_ABS",
-                          nan_treatment: str =  "NA_NOTHING"
-
-        Get timeseries (ts) of instruments, using instrument id
-        and attributes id.
-
-        :param instrument_id: string with instrument ID
-        :param attributes_id: string with attributes ID to be returned.
-        :param data: string, either 'REFERENCE_DATA' (default) or 'ALL'
-        :param kwargs: dictionary of additional
-            arguments to self._fetch_ts(...)
-        :return: JSON dictionary object with result of query
-        """
-
-        assert isinstance(instrument_id, str)
-
-        assert isinstance(attributes_id, str)
-
-        assert isinstance(data, str) and data in ("REFERENCE_DATA", "ALL")
-
-        params = {"instruments": instrument_id,
-                  "attributes": attributes_id,
-                  "data": data}
-
-        results = self._fetch_ts(endpoint="/instruments/time-series",
-                                 params=params, **kwargs)
-
-        return results
+        return final_output
 
     def get_ts_expression(self, expression, original_metrics, suppress_warning,
                           bool_df, **kwargs):
@@ -515,9 +383,6 @@ class DataQueryInterface(object):
 
         :return: pd.DataFrame: ['cid', 'xcat', 'real_date'] + [original_metrics]
 
-        >>> dq = DataQueryInterface(username="<USER>", password="<PASSWORD>")
-        >>> results = dq.get_ts_expression(expression="DB(CFX, AUD, )")
-
         """
         for metric in original_metrics:
             assert metric in ['value', 'eop_lag', 'mop_lag', 'grading'], \
@@ -529,32 +394,17 @@ class DataQueryInterface(object):
             dq_tix += ["DB(JPMAQS," + tick + f",{metric})" for tick in unique_tix]
 
         expression = dq_tix
-        no_tickers = len(expression)
-        iterations = ceil(no_tickers / 20)
-        remainder = no_tickers % 20
 
-        results = []
-        expression_copy = expression.copy()
-        for i in range(iterations):
-            if i < (iterations - 1):
-                expression = expression_copy[i * 20: (i * 20) + 20]
-            else:
-                expression = expression_copy[-remainder:]
+        params = {}
+        if "data" in kwargs.keys():
+            assert kwargs["data"] == "ALL"
+            params.update({"data":  kwargs.pop("data")})
 
-            params = {"expressions": expression}
-
-            # TODO "data" in kwargs.keys()
-            if "data" in kwargs.keys():
-                assert kwargs["data"] == "ALL"
-                params["data"] = kwargs.pop("data")
-
-            # TODO if next not null, select="instruments",
-            output = self._fetch_ts(endpoint="/expressions/time-series",
-                                    params=params, **kwargs)
-            results.extend(output)
+        results = self._request(endpoint="/expressions/time-series",
+                                tickers=expression, params=params, **kwargs)
 
         # (O(n) + O(nlog(n)) operation.
-        no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression_copy]))
+        no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression]))
 
         results_dict, output_dict = self.isolate_timeseries(results, original_metrics)
         if bool_df:
@@ -603,7 +453,7 @@ class DataQueryInterface(object):
                 ticker_split = ','.join(ticker[:-1])
                 ts_arr = np.array(dictionary['time-series'])
                 if ts_arr.size == 1:
-                    print(f"Invalid expression, {ticker_split + ', '+ metric + ')'}, "
+                    print(f"Invalid expression, {ticker_split + ','+ metric + ')'}, "
                           f"passed into DataQuery.")
                     flag = True
 
@@ -629,28 +479,6 @@ class DataQueryInterface(object):
             modified_dict[k] = arr
 
         return modified_dict, output_dict
-
-    @staticmethod
-    def df_column(output_dict, original_metrics):
-
-        index = next(iter(output_dict.values()))['real_date']
-        no_rows = index.size
-        no_columns = len(output_dict.keys()) * len(original_metrics)
-        arr = np.empty(shape=(no_rows, no_columns), dtype=np.float32)
-
-        i = 0
-        columns = []
-        for metric in original_metrics:
-            for k, v in output_dict.items():
-
-                col_name = k + ',' + metric + ')'
-                columns.append(col_name)
-                arr[:, i] = v[metric]
-                i += 1
-
-        df = pd.DataFrame(data=arr, columns=columns)
-
-        return df
 
     @staticmethod
     def column_check(v, col):
@@ -749,58 +577,6 @@ class DataQueryInterface(object):
 
         return df
 
-    def get_ts_group(self, group_id, attributes_id: str, filter_id: str = None,
-                     data: str = "REFERENCE_DATA", **kwargs):
-        """Get Time series group
-
-         :param <str>: start_date = None, end_date: str = None,
-         :param <str>: calendar = "CAL_ALLDAYS",
-         :param <str>: frequency = "FREQ_DAY",
-         :param <str>: conversion = "CONV_LASTBUS_ABS",
-         :param <str>: nan_treatment = "NA_NOTHING"):
-
-        time-series "group":
-        [
-            {
-                "item": ...,
-                "instrument-id": ...,
-                "instrument-name": ...,
-                "attributes": [{}, ...]
-            },
-            ...
-        ]
-
-        :param group_id: string with group id, Catalog data group identifier.
-        :param attributes_id: Attribute identifiers in the form attributes = x &
-                              attributes=y
-        :param filter_id: Narrow result scope using country
-                          or currency filters.
-        :param data: string, Retrieve REFERENCE_DATA (default)
-                     or ALL (incl. price data).
-        :param kwargs: dictionary of optional extra arguments
-
-        :return: JSON object
-        """
-
-        assert isinstance(group_id, str)
-
-        assert isinstance(attributes_id, str)
-
-        assert isinstance(data, str) and data in ["REFERENCE_DATA", "ALL"]
-
-        params = {
-            "group-id": group_id,
-            "attributes": attributes_id,
-            "data": data,
-            "filter": filter_id
-        }
-
-        results = self._fetch_ts(endpoint="/group/time-series",
-                                 params=params,
-                                 **kwargs)
-
-        return results
-
     def tickers(self, tickers: list, metrics: list = ['value'],
                 start_date: str='2000-01-01', suppress_warning=False,
                 bool_df=False):
@@ -820,7 +596,8 @@ class DataQueryInterface(object):
         """
 
         df = self.get_ts_expression(expression=tickers, original_metrics=metrics,
-                                    start_date=start_date, suppress_warning=suppress_warning,
+                                    start_date=start_date,
+                                    suppress_warning=suppress_warning,
                                     bool_df=bool_df)
 
         if isinstance(df, pd.DataFrame):
