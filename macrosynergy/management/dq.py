@@ -291,8 +291,6 @@ class DataQueryInterface(object):
             url = f"{self.base_url:s}{response['links'][1]['next']:s}"
             params = {}
 
-        print(f"Current Thread: {threading.current_thread()}.")
-
         return results
 
     def check_connection(self) -> bool:
@@ -315,11 +313,11 @@ class DataQueryInterface(object):
 
         return int(results["code"]) == 200
 
-    def _optimize(self, endpoint: str, tickers: List[str], params: dict,
-                  start_date: str = None, end_date: str = None,
-                  calendar: str = "CAL_ALLDAYS", frequency: str = "FREQ_DAY",
-                  conversion: str = "CONV_LASTBUS_ABS",
-                  nan_treatment: str = "NA_NOTHING"):
+    def _request(self, endpoint: str, tickers: List[str], params: dict,
+                 start_date: str = None, end_date: str = None,
+                 calendar: str = "CAL_ALLDAYS", frequency: str = "FREQ_DAY",
+                 conversion: str = "CONV_LASTBUS_ABS",
+                 nan_treatment: str = "NA_NOTHING"):
 
         params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
                    "calendar": calendar, "frequency": frequency, "conversion":
@@ -339,7 +337,6 @@ class DataQueryInterface(object):
 
         no_batches = len(tick_list_compr)
         exterior_iterations = ceil(no_batches / 10)
-        print(f"Number of exterior iterations: {exterior_iterations}.")
 
         final_output = []
         output = []
@@ -357,7 +354,7 @@ class DataQueryInterface(object):
                         try:
                             response = f.result()
                         except ValueError:
-                            print(f"Server being hit too quickly with requests.")
+                            raise ValueError("Server being hit too quickly with requests.")
                         else:
                             if isinstance(response, list):
                                 final_output.extend(response)
@@ -409,8 +406,8 @@ class DataQueryInterface(object):
             assert kwargs["data"] == "ALL"
             params.update({"data":  kwargs.pop("data")})
 
-        results = self._optimize(endpoint="/expressions/time-series",
-                                 tickers=expression, params=params, **kwargs)
+        results = self._request(endpoint="/expressions/time-series",
+                                tickers=expression, params=params, **kwargs)
 
         # (O(n) + O(nlog(n)) operation.
         no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression]))
