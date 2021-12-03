@@ -326,14 +326,8 @@ class DataQueryInterface(object):
 
         no_tickers = len(tickers)
         iterations = ceil(no_tickers / 20)
-        remainder = no_tickers % 20
 
-        tick_list_compr = []
-        for i in range(iterations):
-            if i < (iterations - 1):
-                tick_list_compr.append(tickers[i * 20: (i * 20) + 20])
-            else:
-                tick_list_compr.append(tickers[-remainder:])
+        tick_list_compr = [tickers[(i * 20): (i * 20) + 20] for i in range(iterations)]
 
         no_batches = len(tick_list_compr)
         exterior_iterations = ceil(no_batches / 10)
