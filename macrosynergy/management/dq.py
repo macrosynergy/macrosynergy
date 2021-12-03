@@ -272,6 +272,7 @@ class DataQueryInterface(object):
         select = "instruments"
 
         results = []
+
         while True:
             with requests.get(url=url, cert=(self.crt, self.key), headers=self.headers,
                               params=params) as r:
@@ -291,6 +292,7 @@ class DataQueryInterface(object):
             params = {}
 
         print(f"Current Thread: {threading.current_thread()}.")
+
         return results
 
     def check_connection(self) -> bool:
@@ -335,26 +337,32 @@ class DataQueryInterface(object):
             else:
                 tick_list_compr.append(tickers[-remainder:])
 
+        no_batches = len(tick_list_compr)
+        exterior_iterations = ceil(no_batches / 10)
+        print(f"Number of exterior iterations: {exterior_iterations}.")
+
         final_output = []
         output = []
         if self.concurrent:
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                for elem in tick_list_compr:
-                    params["expressions"] = elem
-                    results = executor.submit(self._fetch_threading, endpoint, params)
-                    time.sleep(0.75)
-                    output.append(results)
+            for i in range(exterior_iterations):
+                if i > 0: time.sleep(0.3)
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    for elem in tick_list_compr[(i * 10):(i + 1) * 10]:
+                        params["expressions"] = elem
+                        results = executor.submit(self._fetch_threading, endpoint, params)
+                        time.sleep(0.75)
+                        output.append(results)
 
-                for f in concurrent.futures.as_completed(output):
-                    try:
-                        response = f.result()
-                    except ValueError:
-                        print(f"Server being hit too quickly with requests.")
-                    else:
-                        if isinstance(response, list):
-                            final_output.extend(response)
+                    for f in concurrent.futures.as_completed(output):
+                        try:
+                            response = f.result()
+                        except ValueError:
+                            print(f"Server being hit too quickly with requests.")
                         else:
-                            continue
+                            if isinstance(response, list):
+                                final_output.extend(response)
+                            else:
+                                continue
         else:
             for elem in tick_list_compr:
                 params["expressions"] = elem
