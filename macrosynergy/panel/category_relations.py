@@ -18,18 +18,26 @@ class CategoryRelations:
     :param <pd.Dataframe> df: standardized data frame with the following necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: Exactly two extended categories to be checked on.
-    :param <List[str]> cids: cross sections to be checked on. Default is all in the data frame.
-    :param <str> start: earliest date in ISO format. Default is None and earliest date in df is used.
-    :param <str> end: latest date in ISO format. Default is None and latest date in df is used.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from the data frame.
-    :param <int> years: Number of years over which data are aggregate. Supersedes freq and does not allow lags,
-        Default is None, meaning no multi-year aggregation.
-    :param <str> val: name of column that contains the values of interest. Default is 'value'.
+    :param <List[str]> cids: cross sections to be checked on. Default is all in the
+        dataframe.
+    :param <str> start: earliest date in ISO format. Default is None and earliest date
+        in df is used.
+    :param <str> end: latest date in ISO format. Default is None and latest date in df
+        is used.
+    :param <dict> blacklist: cross sections with date ranges that should be excluded from
+        the data frame.
+    :param <int> years: Number of years over which data are aggregate. Supersedes freq
+        and does not allow lags, Default is None, meaning no multi-year aggregation.
+    :param <str> val: name of column that contains the values of interest. Default is
+        'value'.
     :param <str> freq: letter denoting frequency at which the series are to be sampled.
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
-    :param <int> lag: Lag (delay of arrival) of second category in periods as set by freq. Default is 0.
-    :param <int> fwin: Forward moving average window of first category. Default is 1, i.e no average.
-    :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for both.
+    :param <int> lag: Lag (delay of arrival) of second category in periods as set by
+        freq. Default is 0.
+    :param <int> fwin: Forward moving average window of first category. Default is 1, i.e
+        no average.
+    :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for
+        both.
     """
 
     def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None, val: str = 'value',
@@ -50,8 +58,25 @@ class CategoryRelations:
         assert {'cid', 'xcat', 'real_date', val}.issubset(set(df.columns))
         assert len(xcats) == 2, "Expects two fields."
 
-        self.df = categories_df(df, xcats, cids, val, start = start, end = end, freq = freq, blacklist = blacklist,
-                                years = years, lag = lag, fwin = fwin, xcat_aggs = xcat_aggs)
+        shared_cids = self.intersection_cids(df)
+        self.df = categories_df(df, xcats, shared_cids, val, start=start,
+                                end=end, freq=freq, blacklist=blacklist, years=years,
+                                lag=lag, fwin=fwin, xcat_aggs=xcat_aggs)
+
+    def intersection_cids(self, df):
+        unique_cat = iter(set(df['xcat'].to_numpy()))
+        cat = next(unique_cat)
+
+        df_cat = df[df['xcat'] == cat]
+        cids_ = set(df_cat['cid'].to_numpy())
+
+        for res_cat in unique_cat:
+            df_temp = df[df['xcat'] == res_cat]
+            cross_sections = set(df_temp['cid'].to_numpy())
+            cids_ = cids_.intersection(list(df_temp['cid'].to_numpy()))
+            print(f"Missing cross-sections on {res_cat} are: {cids_ - cross_sections}.")
+
+        return list(cids_)
 
     def corr_probability(self, coef_box):
 
@@ -70,24 +95,30 @@ class CategoryRelations:
                     reg_ci: int = 95, reg_order: int = 1, reg_robust: bool = False):
 
         """Display scatterplot and regression line
-        :param <str> title: title of plot. If None (default) an informative title is applied.
-        :param <bool> labels: assign a cross-section/period label to each dot. Default is False.
+        :param <str> title: title of plot. If None (default) an informative title is
+            applied.
+        :param <bool> labels: assign a cross-section/period label to each dot.
+            Default is False.
         :param <Tuple[float]> size: width and height of the figure
         :param <str> xlab: x-axis label. Default is no label.
         :param <str> ylab: y-axis label. Default is no label.
         :param <bool> fit_reg: if True (default) adds a regression line.
-        :param <int> reg_ci: size of the confidence interval for the regression estimate. Default is 95. Can be None.
+        :param <int> reg_ci: size of the confidence interval for the regression estimate.
+            Default is 95. Can be None.
         :param <int> reg_order: order of the regression equation. Default is 1 (linear).
-        :param <bool> reg_robust: if this will de-weight outliers, which is computationally expensive. Default is False.
-        :param <str> coef_box: gives location of box of correlation coefficient and probability.
-            If None (default), no box is shown. Options are standard, i.e. 'upper left', 'lower right' and so forth.
+        :param <bool> reg_robust: if this will de-weight outliers, which is
+            computationally expensive. Default is False.
+        :param <str> coef_box: gives location of box of correlation coefficient and
+            probability. If None (default), no box is shown. Options are standard,
+            i.e. 'upper left', 'lower right' and so forth.
         """
         
         sns.set_theme(style="whitegrid")
         fig, ax = plt.subplots(figsize = size)
         sns.regplot(data=self.df, x=self.xcats[0], y=self.xcats[1],
                     ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
-                    scatter_kws={'s': 30, 'alpha': 0.5, 'color': 'lightgray'}, line_kws={'lw': 1})
+                    scatter_kws={'s': 30, 'alpha': 0.5, 'color': 'lightgray'},
+                    line_kws={'lw': 1})
 
         if coef_box is not None:
             data_table = self.corr_probability(coef_box)
@@ -128,7 +159,8 @@ class CategoryRelations:
     def jointplot(self, kind, fit_reg: bool = True, title: str = None,
                   height: float = 6, xlab: str = None, ylab: str = None):
 
-        """Display jointplot of chosen type, based on seaborn.jointplot(). The plot will always be square.
+        """Display jointplot of chosen type, based on seaborn.jointplot().
+           The plot will always be square.
 
         :param <str> kind: determines type of relational plot inside the joint plot.
             This must be one of one of 'scatter', 'kde', 'hist', or 'hex'.
