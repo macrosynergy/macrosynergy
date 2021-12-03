@@ -159,3 +159,5 @@ coverage/
 coverage.xml
 
 dev/
+
+macrosynergy/version.py
