@@ -45,37 +45,26 @@ def make_blacklist(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     cids_df = list(df_pivot.columns)
 
     if nan_black:  # replace NaNs
-        df_pivot.fillna(1)
+        df_pivot = df_pivot.fillna(1)
     else:
-        df_pivot.fillna(0)
+        df_pivot = df_pivot.fillna(0)
 
     dates_dict = {}
-
     for cid in cids_df:
-        # Todo: remove indexing and blacklist as 1 (not 0)
         count = 0
 
         column = df_pivot[cid]
-        cut_off_start = column.first_valid_index()
-        cut_off_end = column.last_valid_index()
-
-        condition_1 = np.where(dates == cut_off_start)[0]
-        condition_2 = np.where(dates == cut_off_end)[0]
-
-        cut_off_start = next(iter(condition_1))
-        cut_off_end = next(iter(condition_2))
-
-        column = column.to_numpy()[cut_off_start:(cut_off_end + 1)]
+        column = column.to_numpy()
         # To handle for the NaN values, the datatype will be floating point values.
 
         column = column.astype(dtype=np.uint8)
 
-        index_tr = cut_off_start
+        index_tr = 0
         for k, v in groupby(column):
             v = list(v)  # Instantiate the iterable in memory.
             length = len(v)
 
-            if not sum(v) ^ 0:
+            if v[0] == 1:
                 if count == 0:
                     dates_dict[cid] = (dates[index_tr], dates[index_tr + (length - 1)])
                 elif count == 1:
@@ -119,6 +108,7 @@ if __name__ == "__main__":
              'CAD_3': ('2015-01-12', '2015-03-12'),
              'CAD_4': ('2021-11-01', '2021-11-20')}
 
+    print(black)
     df2 = make_qdf_black(df_cid1, df_xcat2, blackout=black)
 
     df = pd.concat([df1, df2]).reset_index()
