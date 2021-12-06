@@ -6,7 +6,20 @@ import random
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf_black, make_qdf
 
-tuple_ = lambda dates, index_tr, length: (dates[index_tr], dates[index_tr + (length - 1)])
+
+def startend(dti, start, length):
+
+    """Return start and end dates of a sequence as tuple
+
+    :param <DateTimeIndex> dti: datetime series of working days
+    :param <int> start: index of start
+    :param <int> length: number of sequential days
+
+    :return tuple of start and end date
+    """
+
+    tup = (dti[start], dti[start + (length - 1)])
+    return tup
 
 
 def make_blacklist(df: pd.DataFrame, xcat: str, cids: List[str] = None,
@@ -52,33 +65,23 @@ def make_blacklist(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     dates_dict = {}
     for cid in cids_df:
         count = 0
-
-        column = df_pivot[cid]
-        column = column.to_numpy()
-        # To handle for the NaN values, the datatype will be floating point values.
-
-        column = column.astype(dtype=np.uint8)
-
-        index_tr = 0
-        for k, v in groupby(column):
-            v = list(v)  # Instantiate the iterable in memory.
+        column = df_pivot[cid].to_numpy()
+        si = 0
+        for k, v in groupby(column):  # iterator of consecutive keys and values
+            v = list(v)  # instantiate the iterable in memory.
             length = len(v)
-
-            if v[0] == 1:
+            if v[0] == 1:  # if blacklist period
                 if count == 0:
-                    dates_dict[cid] = (dates[index_tr], dates[index_tr + (length - 1)])
+                    dates_dict[cid] = startend(dates, si, length)
                 elif count == 1:
                     val = dates_dict.pop(cid)
-                    dates_dict[cid + '_1'] = val
+                    dates_dict[cid + '_1'] = val   # change key if more than 1 per cid
                     count += 1
-                    dates_dict[cid + '_' + str(count)] = tuple_(dates, index_tr, length)
+                    dates_dict[cid + '_' + str(count)] = startend(dates, si, length)
                 else:
-                    dates_dict[cid + '_' + str(count)] = tuple_(dates, index_tr, length)
-
+                    dates_dict[cid + '_' + str(count)] = startend(dates, si, length)
                 count += 1
-
-            index_tr += length
-
+            si += length
     return dates_dict
 
 
