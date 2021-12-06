@@ -314,15 +314,16 @@ class DataQueryInterface(object):
         return int(results["code"]) == 200
 
     def _request(self, endpoint: str, tickers: List[str], params: dict,
-                 start_date: str = None, end_date: str = None,
-                 calendar: str = "CAL_ALLDAYS", frequency: str = "FREQ_DAY",
-                 conversion: str = "CONV_LASTBUS_ABS",
+                 delay: int = 0.05, count: int = 0, start_date: str = None,
+                 end_date: str = None, calendar: str = "CAL_ALLDAYS",
+                 frequency: str = "FREQ_DAY", conversion: str = "CONV_LASTBUS_ABS",
                  nan_treatment: str = "NA_NOTHING"):
 
-        params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
-                   "calendar": calendar, "frequency": frequency, "conversion":
-                   conversion, "nan_treatment": nan_treatment}
-        params.update(params_)
+        if not count:
+            params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
+                       "calendar": calendar, "frequency": frequency, "conversion":
+                       conversion, "nan_treatment": nan_treatment}
+            params.update(params_)
 
         no_tickers = len(tickers)
         iterations = ceil(no_tickers / 20)
@@ -336,19 +337,27 @@ class DataQueryInterface(object):
         output = []
         if self.concurrent:
             for i in range(exterior_iterations):
-                if i > 0: time.sleep(0.3)
+                if i > 0:
+                    time.sleep(0.3)
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     for elem in tick_list_compr[(i * 10):(i + 1) * 10]:
                         params["expressions"] = elem
                         results = executor.submit(self._fetch_threading, endpoint, params)
-                        time.sleep(0.75)
+                        time.sleep(delay)
                         output.append(results)
 
                     for f in concurrent.futures.as_completed(output):
                         try:
                             response = f.result()
                         except ValueError:
-                            raise ValueError("Server being hit too quickly with requests.")
+                            print("Server being hit too quickly with requests.")
+                            count += 1
+                            delay *= 1.5
+                            params.pop("expressions")
+                            final_output = self._request(endpoint="/expressions/time-series",
+                                                         tickers=tickers, params=params,
+                                                         delay=delay, count=count)
+                            return final_output
                         else:
                             if isinstance(response, list):
                                 final_output.extend(response)
