@@ -135,6 +135,7 @@ class DataQueryInterface(object):
         self.last_response = None
         self.date_all = date_all
         self.concurrent = concurrent
+        self.threads_dict = {}
 
         # assert self.check_connection()
 
@@ -266,12 +267,15 @@ class DataQueryInterface(object):
 
         return results
 
-    def _fetch_threading(self, endpoint, params: dict):
+    def _fetch_threading(self, endpoint, counter, params: dict):
 
         url = self.base_url + endpoint
         select = "instruments"
 
         results = []
+        with threading.Lock():
+            k = str(threading.current_thread()) + str(counter)
+            self.threads_dict[k] = params["expressions"]
 
         while True:
             with requests.get(url=url, cert=(self.crt, self.key), headers=self.headers,
@@ -291,7 +295,7 @@ class DataQueryInterface(object):
             url = f"{self.base_url:s}{response['links'][1]['next']:s}"
             params = {}
 
-        return results
+        return results, k
 
     def check_connection(self) -> bool:
         """Check connect (heartbeat) to DataQuery
@@ -314,7 +318,7 @@ class DataQueryInterface(object):
         return int(results["code"]) == 200
 
     def _request(self, endpoint: str, tickers: List[str], params: dict,
-                 delay: int = 0.1, count: int = 0, start_date: str = None,
+                 delay: int = None, count: int = 0, start_date: str = None,
                  end_date: str = None, calendar: str = "CAL_ALLDAYS",
                  frequency: str = "FREQ_DAY", conversion: str = "CONV_LASTBUS_ABS",
                  nan_treatment: str = "NA_NOTHING"):
@@ -327,10 +331,7 @@ class DataQueryInterface(object):
             params.update(params_)
             delay = (no_tickers / 1000)
 
-        print(f"Current delay, {delay}.")
-        print(f"Number of tickers: {no_tickers}.")
         iterations = ceil(no_tickers / 20)
-
         tick_list_compr = [tickers[(i * 20): (i * 20) + 20] for i in range(iterations)]
 
         no_batches = len(tick_list_compr)
@@ -338,49 +339,46 @@ class DataQueryInterface(object):
 
         final_output = []
         output = []
+        thread_keys = []
+        thread_tr = 0
         if self.concurrent:
-            for i in range(exterior_iterations):
-                if i > 0:
-                    time.sleep(0.3)
-                # The point I was making is the use of the context manager means that
-                # all ten threads will have to finish before the next round of the same
-                # 10 threads will be engaged which means the time delay is only relevant
-                # every 200 tickers (at least that is my understanding). The time delay
-                # is not being incurred for every reuse of a thread. The limitation is
-                # with the Context Manager but your "if" condition, I don't think, solves
-                # that.
-                # The second For Loop has to conclude before the ten threads can be
-                # engaged again.
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    for elem in tick_list_compr[(i * 10):(i + 1) * 10]:
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                for elem in tick_list_compr:
+                    thread_tr += 1
+                    params["expressions"] = elem
+                    results = executor.submit(self._fetch_threading, endpoint,
+                                              thread_tr, params)
+                    time.sleep(delay)
+                    output.append(results)
 
-                        params["expressions"] = elem
-                        results = executor.submit(self._fetch_threading, endpoint, params)
+                for f in concurrent.futures.as_completed(output):
+                    try:
+                        response = f.result()
                         time.sleep(delay)
-                        output.append(results)
-
-                    for f in concurrent.futures.as_completed(output):
-                        try:
-                            response = f.result()
-                        except ValueError:
-                            print("Server being hit too quickly with requests.")
-                            count += 1
-                            delay *= (count + 1)
-                            params.pop("expressions")
-                            final_output = self._request(endpoint="/expressions/time-series",
-                                                         tickers=tickers, params=params,
-                                                         delay=delay, count=count)
-                            return final_output
+                    except ValueError:
+                        thread_keys.append(response[1])
+                        print("Server being hit too quickly with requests.")
+                        continue
+                    else:
+                        data = response[0]
+                        if isinstance(data, list):
+                            final_output.extend(data)
                         else:
-                            if isinstance(response, list):
-                                final_output.extend(response)
-                            else:
-                                continue
+                            continue
         else:
             for elem in tick_list_compr:
                 params["expressions"] = elem
                 results = self._fetch_threading(endpoint=endpoint, params=params)
                 final_output.extend(results)
+
+        if thread_keys:
+            count += 1
+            tickers = []
+            delay += 0.1
+            for k in thread_keys:
+                tickers += self.threads_dict[k]
+            return final_output + self._request(endpoint=endpoint, tickers=tickers,
+                                                params=params, delay=delay, count=count)
 
         return final_output
 
