@@ -326,6 +326,7 @@ class DataQueryInterface(object):
             params.update(params_)
 
         no_tickers = len(tickers)
+        delay = (no_tickers / 1000)
         iterations = ceil(no_tickers / 20)
 
         tick_list_compr = [tickers[(i * 20): (i * 20) + 20] for i in range(iterations)]
@@ -352,7 +353,7 @@ class DataQueryInterface(object):
                         except ValueError:
                             print("Server being hit too quickly with requests.")
                             count += 1
-                            delay *= 1.5
+                            delay += 0.2
                             params.pop("expressions")
                             final_output = self._request(endpoint="/expressions/time-series",
                                                          tickers=tickers, params=params,
