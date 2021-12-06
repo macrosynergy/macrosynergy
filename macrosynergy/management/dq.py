@@ -325,35 +325,32 @@ class DataQueryInterface(object):
         params.update(params_)
 
         no_tickers = len(tickers)
+        print(f"Number of tickers: {no_tickers}.")
         iterations = ceil(no_tickers / 20)
 
         tick_list_compr = [tickers[(i * 20): (i * 20) + 20] for i in range(iterations)]
 
-        no_batches = len(tick_list_compr)
-        exterior_iterations = ceil(no_batches / 10)
-
         final_output = []
         output = []
         if self.concurrent:
-            for i in range(exterior_iterations):
-                if i > 0: time.sleep(0.3)
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    for elem in tick_list_compr[(i * 10):(i + 1) * 10]:
-                        params["expressions"] = elem
-                        results = executor.submit(self._fetch_threading, endpoint, params)
-                        time.sleep(0.75)
-                        output.append(results)
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                for elem in tick_list_compr:
+                    params["expressions"] = elem
+                    results = executor.submit(self._fetch_threading, endpoint, params)
+                    time.sleep(0.5)
+                    output.append(results)
 
-                    for f in concurrent.futures.as_completed(output):
-                        try:
-                            response = f.result()
-                        except ValueError:
-                            raise ValueError("Server being hit too quickly with requests.")
+                for f in concurrent.futures.as_completed(output):
+                    try:
+                        response = f.result()
+                        time.sleep(0.5)
+                    except ValueError:
+                        raise ValueError("Server being hit too quickly with requests.")
+                    else:
+                        if isinstance(response, list):
+                            final_output.extend(response)
                         else:
-                            if isinstance(response, list):
-                                final_output.extend(response)
-                            else:
-                                continue
+                            continue
         else:
             for elem in tick_list_compr:
                 params["expressions"] = elem
