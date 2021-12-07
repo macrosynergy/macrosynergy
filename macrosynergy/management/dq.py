@@ -140,6 +140,7 @@ class DataQueryInterface(object):
         self.threads_dict = {}
         self.thread_handler = thread_handler
         self.thread_queue = Queue()
+        self.ticker_residual = []
 
     def __enter__(self):
         return self
@@ -280,28 +281,35 @@ class DataQueryInterface(object):
             self.threads_dict[k] = params["expressions"]
             self.thread_queue.put(k)
 
-        while True:
-            with requests.get(url=url, cert=(self.crt, self.key), headers=self.headers,
-                              params=params) as r:
-                last_response = r.text
+            while True:
+                with requests.get(url=url, cert=(self.crt, self.key), headers=self.headers,
+                                  params=params) as r:
+                    last_response = r.text
 
-            response = json.loads(last_response)
-            if not select in response.keys():
-                break
-            else:
-                results.extend(response[select])
+                response = json.loads(last_response)
+                dictionary = response[select][0]['attributes'][0]
 
-            assert "next" in response['links'][1].keys(), \
-                f"'next' missing from links keys: " \
-                f" {response['links'][1].keys()}"
+                if not isinstance(dictionary['time-series'], list):
+                    print(f"Associated tickers: {params['expressions']}.")
+                    print(f"Ticker: {dictionary['expression']}.")
+                    self.ticker_residual.append(dictionary['expression'])
 
-            if response["links"][1]["next"] is None:
-                break
+                if not select in response.keys():
+                    break
+                else:
+                    results.extend(response[select])
 
-            url = f"{self.base_url:s}{response['links'][1]['next']:s}"
-            params = {}
+                assert "next" in response['links'][1].keys(), \
+                    f"'next' missing from links keys: " \
+                    f" {response['links'][1].keys()}"
 
-        return results
+                if response["links"][1]["next"] is None:
+                    break
+
+                url = f"{self.base_url:s}{response['links'][1]['next']:s}"
+                params = {}
+
+            return results
 
     def check_connection(self) -> bool:
         """Check connect (heartbeat) to DataQuery
@@ -344,6 +352,9 @@ class DataQueryInterface(object):
         iterations = ceil(no_tickers / t)
         tick_list_compr = [tickers[(i * t): (i * t) + t] for i in range(iterations)]
 
+        print(f"Number of tickers {no_tickers}; {len(tick_list_compr)}.")
+        print(f"Count: {count}; {tick_list_compr}.")
+
         final_output = []
         output = []
         thread_keys = []
@@ -353,6 +364,7 @@ class DataQueryInterface(object):
                 for elem in tick_list_compr:
                     thread_tr += 1
                     params["expressions"] = elem
+                    # Copy the params dictionary.
                     results = executor.submit(self._fetch_threading, endpoint,
                                               thread_tr, params)
                     time.sleep(delay)
@@ -376,15 +388,26 @@ class DataQueryInterface(object):
                 results = self._fetch_threading(endpoint=endpoint, params=params)
                 final_output.extend(results)
 
-        if thread_keys:
+        if thread_keys or self.ticker_residual:
+            print("Entered.")
             count += 1
-            tickers = []
+            tickers = self.ticker_residual
             delay += 0.1
             for k in thread_keys:
                 tickers += self.threads_dict[k]
-            return final_output + self._request(endpoint=endpoint, tickers=tickers,
-                                                params=params, delay=delay, count=count)
+            self.ticker_residual = []
+            print(f"Final output: {len(final_output)}.")
+            print(f"Sample output: {final_output[:3]}")
+            recursive_output = final_output + self._request(endpoint=endpoint,
+                                                            tickers=list(set(tickers)),
+                                                            params=params, delay=delay,
+                                                            count=count)
+            print("Returning recursively.")
+            print(f"Length of recursive output: {len(recursive_output)}.")
+            return recursive_output
 
+
+        print("Returning non-recursively.")
         return final_output
 
     def get_ts_expression(self, expression, original_metrics, suppress_warning,
@@ -427,11 +450,13 @@ class DataQueryInterface(object):
 
         results = self._request(endpoint="/expressions/time-series",
                                 tickers=expression, params=params, **kwargs)
+        print(f"Length of results: {len(results)}.")
 
         # (O(n) + O(nlog(n)) operation.
         no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression]))
 
         results_dict, output_dict = self.isolate_timeseries(results, original_metrics)
+        print(f"Dictionary output: {len(results_dict.keys())}.")
         if bool_df:
             df_column_wise = self.df_column(output_dict, original_metrics)
             return df_column_wise
@@ -479,6 +504,7 @@ class DataQueryInterface(object):
                 ticker_split = ','.join(ticker[:-1])
                 ts_arr = np.array(dictionary['time-series'])
                 if ts_arr.size == 1:
+                    print(r)
                     count_error += 1
                     print(f"Invalid expression, {ticker_split + ','+ metric + ')'}, "
                           f"passed into DataQuery.")
@@ -488,9 +514,12 @@ class DataQueryInterface(object):
                     if ticker_split not in output_dict:
                         output_dict[ticker_split]['real_date'] = ts_arr[:, 0]
                         output_dict[ticker_split][metric] = ts_arr[:, 1]
-                    else:
+                    elif metric not in output_dict[ticker_split]:
                         output_dict[ticker_split][metric] = ts_arr[:, 1]
+                    else:
+                        print(f"Printing duplication: {ticker_split}.")
 
+        print(f"Error Count: {count_error}.")
         output_dict_c = output_dict.copy()
         t_dict = next(iter(output_dict_c.values()))
         no_rows = next(iter(t_dict.values())).size
@@ -536,23 +565,26 @@ class DataQueryInterface(object):
         :return: Dictionary.
         """
 
+        ticker_count = 0
         dict_copy = _dict.copy()
         for k, v in _dict.items():
             no_cols = v.shape[1]
 
             condition = self.column_check(v, 1)
             if condition:
+                ticker_count += 1
                 for i in range(2, no_cols):
                     condition = self.column_check(v, i)
                     if not condition:
                         warnings.warn("Error has occurred in the DataBase.")
 
                 if not suppress_warning:
-                    print(f"The ticker, {k}, does not exist in the Database.")
+                    print(f"The ticker, {k}), does not exist in the Database.")
                 dict_copy.pop(k)
             else:
                 continue
 
+        print(f"Number of tickers missing from the DB: {ticker_count}.")
         return dict_copy
 
     @staticmethod
