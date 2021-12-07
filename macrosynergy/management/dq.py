@@ -334,9 +334,6 @@ class DataQueryInterface(object):
         iterations = ceil(no_tickers / 20)
         tick_list_compr = [tickers[(i * 20): (i * 20) + 20] for i in range(iterations)]
 
-        no_batches = len(tick_list_compr)
-        exterior_iterations = ceil(no_batches / 10)
-
         final_output = []
         output = []
         thread_keys = []
