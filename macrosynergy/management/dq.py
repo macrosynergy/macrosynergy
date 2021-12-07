@@ -13,12 +13,13 @@ import pandas as pd
 import numpy as np
 import os
 import logging
-from math import ceil
+from math import ceil, log, floor
 from collections import defaultdict
 import warnings
 import threading
 import concurrent.futures
 import time
+from queue import Queue
 
 BASE_URL = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 
@@ -101,7 +102,8 @@ class DataQueryInterface(object):
                  base_url: str = BASE_URL,
                  date_all: bool = False,
                  debug: bool = False,
-                 concurrent: bool = True):
+                 concurrent: bool = True,
+                 thread_handler: int = 20):
 
         assert isinstance(username, str),\
             f"username must be a <str> and not {type(username)}: {username}"
@@ -136,8 +138,8 @@ class DataQueryInterface(object):
         self.date_all = date_all
         self.concurrent = concurrent
         self.threads_dict = {}
-
-        # assert self.check_connection()
+        self.thread_handler = thread_handler
+        self.thread_queue = Queue()
 
     def __enter__(self):
         return self
@@ -276,6 +278,7 @@ class DataQueryInterface(object):
         with threading.Lock():
             k = str(threading.current_thread()) + str(counter)
             self.threads_dict[k] = params["expressions"]
+            self.thread_queue.put(k)
 
         while True:
             with requests.get(url=url, cert=(self.crt, self.key), headers=self.headers,
@@ -283,7 +286,10 @@ class DataQueryInterface(object):
                 last_response = r.text
 
             response = json.loads(last_response)
-            results.extend(response[select])
+            if not select in response.keys():
+                break
+            else:
+                results.extend(response[select])
 
             assert "next" in response['links'][1].keys(), \
                 f"'next' missing from links keys: " \
@@ -295,7 +301,7 @@ class DataQueryInterface(object):
             url = f"{self.base_url:s}{response['links'][1]['next']:s}"
             params = {}
 
-        return results, k
+        return results
 
     def check_connection(self) -> bool:
         """Check connect (heartbeat) to DataQuery
@@ -329,10 +335,14 @@ class DataQueryInterface(object):
                        "calendar": calendar, "frequency": frequency, "conversion":
                        conversion, "nan_treatment": nan_treatment}
             params.update(params_)
-            delay = (no_tickers / 1000)
+            if not floor(no_tickers / 100):
+                delay = 0.1
+            else:
+                delay = 0.2
 
-        iterations = ceil(no_tickers / 20)
-        tick_list_compr = [tickers[(i * 20): (i * 20) + 20] for i in range(iterations)]
+        t = self.thread_handler
+        iterations = ceil(no_tickers / t)
+        tick_list_compr = [tickers[(i * t): (i * t) + t] for i in range(iterations)]
 
         final_output = []
         output = []
@@ -346,6 +356,7 @@ class DataQueryInterface(object):
                     results = executor.submit(self._fetch_threading, endpoint,
                                               thread_tr, params)
                     time.sleep(delay)
+                    results.__dict__['Thread_Key'] = self.thread_queue.get()
                     output.append(results)
 
                 for f in concurrent.futures.as_completed(output):
@@ -353,15 +364,12 @@ class DataQueryInterface(object):
                         response = f.result()
                         time.sleep(delay)
                     except ValueError:
-                        thread_keys.append(response[1])
+                        thread_keys.append(f.__dict__['Thread_Key'])
                         print("Server being hit too quickly with requests.")
-                        continue
                     else:
-                        data = response[0]
-                        if isinstance(data, list):
-                            final_output.extend(data)
-                        else:
-                            continue
+                        if isinstance(response, list):
+                            final_output.extend(response)
+
         else:
             for elem in tick_list_compr:
                 params["expressions"] = elem
@@ -456,6 +464,7 @@ class DataQueryInterface(object):
         output_dict = defaultdict(dict)
         size = len(list_)
 
+        count_error = 0
         for i in range(size):
             flag = False
             try:
@@ -470,6 +479,7 @@ class DataQueryInterface(object):
                 ticker_split = ','.join(ticker[:-1])
                 ts_arr = np.array(dictionary['time-series'])
                 if ts_arr.size == 1:
+                    count_error += 1
                     print(f"Invalid expression, {ticker_split + ','+ metric + ')'}, "
                           f"passed into DataQuery.")
                     flag = True
