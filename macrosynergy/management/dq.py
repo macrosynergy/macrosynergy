@@ -135,6 +135,7 @@ class DataQueryInterface(object):
         self.last_response = None
         self.date_all = date_all
         self.concurrent = concurrent
+        self.threads_dict = {}
 
         # assert self.check_connection()
 
@@ -266,12 +267,15 @@ class DataQueryInterface(object):
 
         return results
 
-    def _fetch_threading(self, endpoint, params: dict):
+    def _fetch_threading(self, endpoint, counter, params: dict):
 
         url = self.base_url + endpoint
         select = "instruments"
 
         results = []
+        with threading.Lock():
+            k = str(threading.current_thread()) + str(counter)
+            self.threads_dict[k] = params["expressions"]
 
         while True:
             with requests.get(url=url, cert=(self.crt, self.key), headers=self.headers,
@@ -291,7 +295,7 @@ class DataQueryInterface(object):
             url = f"{self.base_url:s}{response['links'][1]['next']:s}"
             params = {}
 
-        return results
+        return results, k
 
     def check_connection(self) -> bool:
         """Check connect (heartbeat) to DataQuery
@@ -314,51 +318,64 @@ class DataQueryInterface(object):
         return int(results["code"]) == 200
 
     def _request(self, endpoint: str, tickers: List[str], params: dict,
-                 start_date: str = None, end_date: str = None,
-                 calendar: str = "CAL_ALLDAYS", frequency: str = "FREQ_DAY",
-                 conversion: str = "CONV_LASTBUS_ABS",
+                 delay: int = None, count: int = 0, start_date: str = None,
+                 end_date: str = None, calendar: str = "CAL_ALLDAYS",
+                 frequency: str = "FREQ_DAY", conversion: str = "CONV_LASTBUS_ABS",
                  nan_treatment: str = "NA_NOTHING"):
 
-        params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
-                   "calendar": calendar, "frequency": frequency, "conversion":
-                   conversion, "nan_treatment": nan_treatment}
-        params.update(params_)
-
         no_tickers = len(tickers)
+        if not count:
+            params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
+                       "calendar": calendar, "frequency": frequency, "conversion":
+                       conversion, "nan_treatment": nan_treatment}
+            params.update(params_)
+            delay = (no_tickers / 1000)
+
         iterations = ceil(no_tickers / 20)
-
         tick_list_compr = [tickers[(i * 20): (i * 20) + 20] for i in range(iterations)]
-
-        no_batches = len(tick_list_compr)
-        exterior_iterations = ceil(no_batches / 10)
 
         final_output = []
         output = []
+        thread_keys = []
+        thread_tr = 0
         if self.concurrent:
-            for i in range(exterior_iterations):
-                if i > 0: time.sleep(0.3)
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    for elem in tick_list_compr[(i * 10):(i + 1) * 10]:
-                        params["expressions"] = elem
-                        results = executor.submit(self._fetch_threading, endpoint, params)
-                        time.sleep(0.75)
-                        output.append(results)
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                for elem in tick_list_compr:
+                    thread_tr += 1
+                    params["expressions"] = elem
+                    results = executor.submit(self._fetch_threading, endpoint,
+                                              thread_tr, params)
+                    time.sleep(delay)
+                    output.append(results)
 
-                    for f in concurrent.futures.as_completed(output):
-                        try:
-                            response = f.result()
-                        except ValueError:
-                            raise ValueError("Server being hit too quickly with requests.")
+                for f in concurrent.futures.as_completed(output):
+                    try:
+                        response = f.result()
+                        time.sleep(delay)
+                    except ValueError:
+                        thread_keys.append(response[1])
+                        print("Server being hit too quickly with requests.")
+                        continue
+                    else:
+                        data = response[0]
+                        if isinstance(data, list):
+                            final_output.extend(data)
                         else:
-                            if isinstance(response, list):
-                                final_output.extend(response)
-                            else:
-                                continue
+                            continue
         else:
             for elem in tick_list_compr:
                 params["expressions"] = elem
                 results = self._fetch_threading(endpoint=endpoint, params=params)
                 final_output.extend(results)
+
+        if thread_keys:
+            count += 1
+            tickers = []
+            delay += 0.1
+            for k in thread_keys:
+                tickers += self.threads_dict[k]
+            return final_output + self._request(endpoint=endpoint, tickers=tickers,
+                                                params=params, delay=delay, count=count)
 
         return final_output
 
