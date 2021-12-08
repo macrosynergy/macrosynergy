@@ -1,6 +1,9 @@
 import numpy as np
 import pandas as pd
 from typing import List, Union, Tuple
+from random import random
+from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.shape_dfs import reduce_df_by_ticker
 
 
 def naive_pnls(df: pd.DataFrame, contracts: List[str],
@@ -36,9 +39,54 @@ def naive_pnls(df: pd.DataFrame, contracts: List[str],
         in USD, using the columns 'cid', 'xcats', 'real_date' and 'value'.
 
     Note: A position signal is different from a position in two principal ways. First,
-        The position signal can only be implemented with some lag. Second, the actual
-        position of the strategy will be affected by other considerations, such as
-        risk management and assets under management.
+          The position signal can only be implemented with some lag. Second, the actual
+          position of the strategy will be affected by other considerations, such as
+          risk management and assets under management.
     """
 
-    pass
+    assert all([isinstance(psig, str) for psig in psigs])
+
+    psig_contracts = [c + psig for c in contracts for psig in psigs]
+
+    ticks_ret = [c + ret for c in contracts]
+    tickers = ticks_ret
+
+    dfx = reduce_df_by_ticker(df, start=start, end=end, ticks=tickers,
+                              blacklist=blacklist)
+
+
+if __name__ == "__main__":
+
+    cids = ['AUD', 'GBP', 'NZD', 'USD']
+
+    xcats = ['FXXR_NSA', 'FXCRY_NSA', 'EQXR_NSA', 'EQCRY_NSA',
+             'FXWBASE_NSA', 'EQWBASE_NSA']
+
+    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
+                                                'sd_mult'])
+
+    df_cids.loc['AUD'] = ['2010-01-01', '2020-12-31', 0, 1]
+    df_cids.loc['GBP'] = ['2011-01-01', '2020-11-30', 0, 2]
+    df_cids.loc['NZD'] = ['2012-01-01', '2020-12-31', 0, 3]
+    df_cids.loc['USD'] = ['2013-01-01', '2020-12-31', 0, 4]
+
+    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
+                                                  'sd_mult', 'ar_coef', 'back_coef'])
+    df_xcats.loc['FXXR_NSA'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.2]
+    df_xcats.loc['FXCRY_NSA'] = ['2011-01-01', '2020-10-30', 1, 1, 0.9, 0.5]
+    df_xcats.loc['FXWBASE_NSA'] = ['2010-01-01', '2020-12-31', 100, 1, 0.9, 0.5]
+    df_xcats.loc['EQXR_NSA'] = ['2012-01-01', '2020-10-30', 0.5, 2, 0, 0.2]
+    df_xcats.loc['EQCRY_NSA'] = ['2013-01-01', '2020-10-30', 1, 1, 0.9, 0.5]
+    df_xcats.loc['EQWBASE_NSA'] = ['2010-01-01', '2020-12-31', 100, 1, 0.9, 0.5]
+
+    random.seed(2)
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+
+    black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
+    contracts = ['AUD_FX', 'AUD_EQ', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
+
+    psigs = ['POS1', 'POS2']
+
+    naive_pnls(dfd, contracts=contracts, psigs=psigs, ret='XR_NSA',
+               lag=1, start=None, end=None, hindsight_vol=None,
+               contract_pnls=False)
