@@ -13,12 +13,14 @@ import pandas as pd
 import numpy as np
 import os
 import logging
-from math import ceil
+from math import ceil, log, floor
 from collections import defaultdict
 import warnings
 import threading
 import concurrent.futures
 import time
+from queue import Queue
+from itertools import chain
 
 BASE_URL = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 
@@ -101,7 +103,8 @@ class DataQueryInterface(object):
                  base_url: str = BASE_URL,
                  date_all: bool = False,
                  debug: bool = False,
-                 concurrent: bool = True):
+                 concurrent: bool = True,
+                 thread_handler: int = 20):
 
         assert isinstance(username, str),\
             f"username must be a <str> and not {type(username)}: {username}"
@@ -135,9 +138,9 @@ class DataQueryInterface(object):
         self.last_response = None
         self.date_all = date_all
         self.concurrent = concurrent
-        self.threads_dict = {}
-
-        # assert self.check_connection()
+        self.thread_handler = thread_handler
+        self.ticker_residual = []
+        self.ticker_warning = False
 
     def __enter__(self):
         return self
@@ -267,23 +270,28 @@ class DataQueryInterface(object):
 
         return results
 
-    def _fetch_threading(self, endpoint, counter, params: dict):
+    def _fetch_threading(self, endpoint, params: dict):
 
         url = self.base_url + endpoint
         select = "instruments"
 
         results = []
-        with threading.Lock():
-            k = str(threading.current_thread()) + str(counter)
-            self.threads_dict[k] = params["expressions"]
-
         while True:
             with requests.get(url=url, cert=(self.crt, self.key), headers=self.headers,
                               params=params) as r:
-                last_response = r.text
+                    last_response = r.text
 
             response = json.loads(last_response)
-            results.extend(response[select])
+            dictionary = response[select][0]['attributes'][0]
+
+            if not isinstance(dictionary['time-series'], list):
+                self.ticker_warning = True
+                self.ticker_residual.append(dictionary['expression'])
+
+            if not select in response.keys():
+                break
+            else:
+                results.extend(response[select])
 
             assert "next" in response['links'][1].keys(), \
                 f"'next' missing from links keys: " \
@@ -295,7 +303,7 @@ class DataQueryInterface(object):
             url = f"{self.base_url:s}{response['links'][1]['next']:s}"
             params = {}
 
-        return results, k
+        return results
 
     def check_connection(self) -> bool:
         """Check connect (heartbeat) to DataQuery
@@ -329,23 +337,33 @@ class DataQueryInterface(object):
                        "calendar": calendar, "frequency": frequency, "conversion":
                        conversion, "nan_treatment": nan_treatment}
             params.update(params_)
-            delay = (no_tickers / 1000)
+            if not floor(no_tickers / 100) and self.thread_handler > 1:
+                delay = 0.1
+            elif self.thread_handler == 1:
+                delay = 0.25
+            else:
+                delay = 0.2
 
-        iterations = ceil(no_tickers / 20)
-        tick_list_compr = [tickers[(i * 20): (i * 20) + 20] for i in range(iterations)]
+        t = self.thread_handler
+        iterations = ceil(no_tickers / t)
+        tick_list_compr = [tickers[(i * t): (i * t) + t] for i in range(iterations)]
+
+        unpack = list(chain(*tick_list_compr))
+        assert len(unpack) == len(set(unpack)), "List comprehension incorrect."
 
         final_output = []
         output = []
         thread_keys = []
-        thread_tr = 0
         if self.concurrent:
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 for elem in tick_list_compr:
-                    thread_tr += 1
-                    params["expressions"] = elem
+
+                    params_copy = params.copy()
+                    params_copy["expressions"] = elem
                     results = executor.submit(self._fetch_threading, endpoint,
-                                              thread_tr, params)
+                                              params_copy)
                     time.sleep(delay)
+                    results.__dict__[str(id(results))] = elem
                     output.append(results)
 
                 for f in concurrent.futures.as_completed(output):
@@ -353,34 +371,31 @@ class DataQueryInterface(object):
                         response = f.result()
                         time.sleep(delay)
                     except ValueError:
-                        thread_keys.append(response[1])
-                        print("Server being hit too quickly with requests.")
-                        continue
+                        thread_keys.append(f.__dict__[str(id(f))])
                     else:
-                        data = response[0]
-                        if isinstance(data, list):
-                            final_output.extend(data)
-                        else:
-                            continue
+                        if isinstance(response, list):
+                            final_output.extend(response)
+
         else:
             for elem in tick_list_compr:
                 params["expressions"] = elem
                 results = self._fetch_threading(endpoint=endpoint, params=params)
                 final_output.extend(results)
 
+        thread_keys = list(chain(*thread_keys))
         if thread_keys:
             count += 1
-            tickers = []
             delay += 0.1
-            for k in thread_keys:
-                tickers += self.threads_dict[k]
-            return final_output + self._request(endpoint=endpoint, tickers=tickers,
-                                                params=params, delay=delay, count=count)
+            recursive_output = final_output + self._request(endpoint=endpoint,
+                                                            tickers=list(set(thread_keys)),
+                                                            params=params, delay=delay,
+                                                            count=count)
+            return recursive_output
 
         return final_output
 
     def get_ts_expression(self, expression, original_metrics, suppress_warning,
-                          bool_df, **kwargs):
+                          **kwargs):
         """
 
         start_date: str = None, end_date: str = None,
@@ -396,7 +411,6 @@ class DataQueryInterface(object):
         :param original_metrics: List of required metrics:
                                  the returned DataFrame will reflect the received List.
         :param **kwargs: dictionary of additional arguments
-        :param bool_df: temporary parameter for reconciliation with Athena.
 
         :return: pd.DataFrame: ['cid', 'xcat', 'real_date'] + [original_metrics]
 
@@ -419,15 +433,16 @@ class DataQueryInterface(object):
 
         results = self._request(endpoint="/expressions/time-series",
                                 tickers=expression, params=params, **kwargs)
+        if self.ticker_warning:
+            results_ = self._request(endpoint="/expressions/time-series",
+                                     tickers=self.ticker_residual, params=params,
+                                     count=0, **kwargs)
+            results += results_
 
         # (O(n) + O(nlog(n)) operation.
         no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression]))
 
         results_dict, output_dict = self.isolate_timeseries(results, original_metrics)
-        if bool_df:
-            df_column_wise = self.df_column(output_dict, original_metrics)
-            return df_column_wise
-
         results_dict = self.valid_ticker(results_dict, suppress_warning)
 
         results_copy = results_dict.copy()
@@ -470,16 +485,18 @@ class DataQueryInterface(object):
                 ticker_split = ','.join(ticker[:-1])
                 ts_arr = np.array(dictionary['time-series'])
                 if ts_arr.size == 1:
-                    print(f"Invalid expression, {ticker_split + ','+ metric + ')'}, "
-                          f"passed into DataQuery.")
+                    # Requires a form of logging if condition satisfied.
                     flag = True
 
                 if not flag:
                     if ticker_split not in output_dict:
                         output_dict[ticker_split]['real_date'] = ts_arr[:, 0]
                         output_dict[ticker_split][metric] = ts_arr[:, 1]
-                    else:
+                    elif metric not in output_dict[ticker_split]:
                         output_dict[ticker_split][metric] = ts_arr[:, 1]
+                    else:
+                        # Again, requires a form of logging if condition satisfied.
+                        continue
 
         output_dict_c = output_dict.copy()
         t_dict = next(iter(output_dict_c.values()))
@@ -538,7 +555,7 @@ class DataQueryInterface(object):
                         warnings.warn("Error has occurred in the DataBase.")
 
                 if not suppress_warning:
-                    print(f"The ticker, {k}, does not exist in the Database.")
+                    print(f"The ticker, {k}), does not exist in the Database.")
                 dict_copy.pop(k)
             else:
                 continue
@@ -595,8 +612,7 @@ class DataQueryInterface(object):
         return df
 
     def tickers(self, tickers: list, metrics: list = ['value'],
-                start_date: str='2000-01-01', suppress_warning=False,
-                bool_df=False):
+                start_date: str='2000-01-01', suppress_warning=False):
         """
         Returns standardized dataframe of specified base tickers and metric
 
@@ -604,7 +620,6 @@ class DataQueryInterface(object):
         :param <List[str]> metrics: must choose one or more from 'value', 'eop_lag',
                                     'mop_lag', or 'grading'. Default is ['value'].
         :param <str> start_date: first date in ISO 8601 string format.
-        :param <boolean> bool_df: temporary parameter (alignment with Athena).
         :param <boolean> suppress_warning: used to suppress warning of any invalid
                                            ticker received by DataQuery.
 
@@ -614,8 +629,7 @@ class DataQueryInterface(object):
 
         df = self.get_ts_expression(expression=tickers, original_metrics=metrics,
                                     start_date=start_date,
-                                    suppress_warning=suppress_warning,
-                                    bool_df=bool_df)
+                                    suppress_warning=suppress_warning)
 
         if isinstance(df, pd.DataFrame):
             df = df.sort_values(['cid', 'xcat', 'real_date']).reset_index(drop=True)
