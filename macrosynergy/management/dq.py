@@ -20,6 +20,7 @@ import threading
 import concurrent.futures
 import time
 from queue import Queue
+from itertools import chain
 
 BASE_URL = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 
@@ -352,6 +353,9 @@ class DataQueryInterface(object):
         iterations = ceil(no_tickers / t)
         tick_list_compr = [tickers[(i * t): (i * t) + t] for i in range(iterations)]
 
+        unpack = list(chain(*tick_list_compr))
+        assert len(unpack) == len(set(unpack)), "List comprehension incorrect."
+
         print(f"Number of tickers {no_tickers}; {len(tick_list_compr)}.")
         print(f"Count: {count}; {tick_list_compr}.")
 
@@ -368,12 +372,14 @@ class DataQueryInterface(object):
                     results = executor.submit(self._fetch_threading, endpoint,
                                               thread_tr, params)
                     time.sleep(delay)
-                    results.__dict__['Thread_Key'] = self.thread_queue.get()
+                    queue_response = self.thread_queue.get()
+                    results.__dict__['Thread_Key'] = queue_response
                     output.append(results)
 
                 for f in concurrent.futures.as_completed(output):
                     try:
                         response = f.result()
+                        print(f"Threading dictionary: {response}.")
                         time.sleep(delay)
                     except ValueError:
                         thread_keys.append(f.__dict__['Thread_Key'])
@@ -388,6 +394,7 @@ class DataQueryInterface(object):
                 results = self._fetch_threading(endpoint=endpoint, params=params)
                 final_output.extend(results)
 
+        print(f"Output dictionary: {self.threads_dict}.")
         if thread_keys or self.ticker_residual:
             print("Entered.")
             count += 1
