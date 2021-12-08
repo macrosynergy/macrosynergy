@@ -15,7 +15,8 @@ from macrosynergy.management.shape_dfs import categories_df
 
 class CategoryRelations:
     """Class for analyzing and visualizing two categories across a panel
-    :param <pd.Dataframe> df: standardized data frame with the following necessary columns:
+
+    :param <pd.Dataframe> df: standardized data frame with following necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: Exactly two extended categories to be checked on.
     :param <List[str]> cids: cross sections to be checked on. Default is all in the
@@ -40,9 +41,10 @@ class CategoryRelations:
         both.
     """
 
-    def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None, val: str = 'value',
-                 start: str = None, end: str = None, blacklist: dict = None, years = None,
-                 freq: str = 'M', lag: int = 0, fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean')):
+    def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
+                 val: str = 'value', start: str = None, end: str = None,
+                 blacklist: dict = None, years = None, freq: str = 'M', lag: int = 0,
+                 fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean')):
 
         """Constructs all attributes for the category relationship to be analyzed"""
 
@@ -58,25 +60,26 @@ class CategoryRelations:
         assert {'cid', 'xcat', 'real_date', val}.issubset(set(df.columns))
         assert len(xcats) == 2, "Expects two fields."
 
-        shared_cids = self.intersection_cids(df)
+        shared_cids = self.intersection_cids(df)  # select cids available for both xcats
         self.df = categories_df(df, xcats, shared_cids, val, start=start,
                                 end=end, freq=freq, blacklist=blacklist, years=years,
                                 lag=lag, fwin=fwin, xcat_aggs=xcat_aggs)
 
     def intersection_cids(self, df):
-        unique_cat = iter(set(df['xcat'].to_numpy()))
-        cat = next(unique_cat)
+        """Returns list of common cids across categories"""
 
-        df_cat = df[df['xcat'] == cat]
-        cids_ = set(df_cat['cid'].to_numpy())
+        set_1 = set(df[df['xcat'] == self.xcats[0]]['cid'].unique())
+        set_2 = set(df[df['xcat'] == self.xcats[1]]['cid'].unique())
 
-        for res_cat in unique_cat:
-            df_temp = df[df['xcat'] == res_cat]
-            cross_sections = set(df_temp['cid'].to_numpy())
-            cids_ = cids_.intersection(list(df_temp['cid'].to_numpy()))
-            print(f"Missing cross-sections on {res_cat} are: {cids_ - cross_sections}.")
+        miss_1 = set(self.cids).difference(set_1)  # cids not available for 1st cat
+        miss_2 = set(self.cids).difference(set_2)  # cids not available for 2nd cat
 
-        return list(cids_)
+        if len(miss_1) > 0:
+            print(f"{self.xcats[0]} misses: {miss_1}.")
+        if len(miss_2) > 0:
+            print(f"{self.xcats[1]} misses: {miss_2}.")
+
+        return list(set_1.intersection(set_2))
 
     def corr_probability(self, coef_box):
 
@@ -85,16 +88,19 @@ class CategoryRelations:
         coeff, pval = stats.pearsonr(x, y)
         cpl = [np.round(coeff, 3), np.round(1 - pval, 3)]
         fields = ["Correlation\n coefficient", "Probability\n of significance"]
-        data_table = plt.table(cellText = [cpl], colLabels = fields,
-                               cellLoc = 'center', loc = coef_box)
+        data_table = plt.table(cellText=[cpl], colLabels=fields,
+                               cellLoc='center', loc=coef_box)
         
         return data_table
 
-    def reg_scatter(self, title: str = None, labels: bool = False, size: Tuple[float] = (12, 8),
-                    xlab: str = None, ylab: str = None, coef_box: str = None, fit_reg: bool = True,
+    def reg_scatter(self, title: str = None, labels: bool = False,
+                    size: Tuple[float] = (12, 8),
+                    xlab: str = None, ylab: str = None, coef_box: str = None,
+                    fit_reg: bool = True,
                     reg_ci: int = 95, reg_order: int = 1, reg_robust: bool = False):
 
         """Display scatterplot and regression line
+
         :param <str> title: title of plot. If None (default) an informative title is
             applied.
         :param <bool> labels: assign a cross-section/period label to each dot.
@@ -126,25 +132,30 @@ class CategoryRelations:
             data_table.set_fontsize(12)
 
         if labels:
-            assert self.freq in ['A', 'Q', 'M'], 'Labels are only possible for monthly or lower frequencies'
+            assert self.freq in ['A', 'Q', 'M'], \
+                'Labels only available for monthly or lower frequencies'
             df_labs = self.df.dropna().index.to_frame(index=False)
             if self.years is not None:
                 ser_labs = df_labs['cid'] + ' ' + df_labs['real_date']
             elif self.freq == 'A':
-                ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year.astype(str)
+                ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year.\
+                    astype(str)
             elif self.freq == 'Q':
-                ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year.astype(str) + 'Q' \
-                           + df_labs['real_date'].dt.quarter.astype(str)
+                ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year.\
+                    astype(str) + 'Q' + df_labs['real_date'].dt.quarter.astype(str)
             elif self.freq == 'M':
-                ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year.astype(str) + '-' \
-                           + df_labs['real_date'].dt.month.astype(str)
+                ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year.\
+                    astype(str) + '-' + df_labs['real_date'].dt.month.astype(str)
             for i in range(self.df.shape[0]):
-                plt.text(x=self.df[self.xcats[0]][i] + 0, y=self.df[self.xcats[1]][i] + 0, s=ser_labs[i],
+                plt.text(x=self.df[self.xcats[0]][i] + 0,
+                         y=self.df[self.xcats[1]][i] + 0, s=ser_labs[i],
                          fontdict=dict(color='black', size=8))
 
         if title is None and (self.years is None):
-            dates = self.df.index.get_level_values('real_date').to_series().dt.strftime('%Y-%m-%d')
-            title = f'{self.xcats[0]} and {self.xcats[1]} from {dates.min()} to {dates.max()}'
+            dates = self.df.index.get_level_values('real_date').to_series().\
+                dt.strftime('%Y-%m-%d')
+            title = f'{self.xcats[0]} and {self.xcats[1]} ' \
+                    f'from {dates.min()} to {dates.max()}'
         elif title is None:
             title = f'{self.xcats[0]} and {self.xcats[1]}'
 
@@ -165,7 +176,7 @@ class CategoryRelations:
         :param <str> kind: determines type of relational plot inside the joint plot.
             This must be one of one of 'scatter', 'kde', 'hist', or 'hex'.
         :param <bool> fit_reg: if True (default) adds a regression line.
-        :param <str> title: title of plot. If None (default) an informative title is applied.
+        :param <str> title: title. If None (default) informative title is applied.
         :param <float> height: height and implicit size of figure. Default is 6.
         :param <str> xlab: x-axis label. Default is no label.
         :param <str> ylab: y-axis label. Default is no label.
@@ -189,8 +200,10 @@ class CategoryRelations:
         fg.set_axis_labels(xlab, ylab)
 
         if title is None and (self.years is None):
-            dates = self.df.index.get_level_values('real_date').to_series().dt.strftime('%Y-%m-%d')
-            title = f'{self.xcats[0]} and {self.xcats[1]} from {dates.min()} to {dates.max()}'
+            dates = self.df.index.get_level_values('real_date').to_series().\
+                dt.strftime('%Y-%m-%d')
+            title = f'{self.xcats[0]} and {self.xcats[1]} ' \
+                    f'from {dates.min()} to {dates.max()}'
         elif title is None:
             title = f'{self.xcats[0]} and {self.xcats[1]}'
 
@@ -211,13 +224,15 @@ if __name__ == "__main__":
 
     cids = ['AUD', 'CAD', 'GBP', 'NZD']
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
-    df_cids = pd.DataFrame(index = cids, columns = ['earliest', 'latest', 'mean_add', 'sd_mult'])
+    df_cids = pd.DataFrame(index = cids,
+                           columns = ['earliest', 'latest', 'mean_add', 'sd_mult'])
     df_cids.loc['AUD'] = ['2000-01-01', '2020-12-31', 0.1, 1]
     df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
     df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
     df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
 
-    df_xcats = pd.DataFrame(index = xcats, columns = ['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef'])
+    cols = ['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef']
+    df_xcats = pd.DataFrame(index=xcats, columns=cols)
     df_xcats.loc['XR'] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
     df_xcats.loc['CRY'] = ['2000-01-01', '2020-10-30', 1, 2, 0.95, 1]
     df_xcats.loc['GROWTH'] = ['2001-01-01', '2020-10-30', 1, 2, 0.9, 1]
@@ -226,11 +241,17 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
 
-    cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M', xcat_aggs=['mean', 'mean'], lag=1,
+    filt1 = (dfd['xcat'] == 'GROWTH') & (dfd['cid'] == 'AUD')  # all AUD GROWTH locations
+    filt2 = (dfd['xcat'] == 'INFL') & (dfd['cid'] == 'NZD')  # all NZD INFL locations
+    dfdx = dfd[~(filt1 | filt2)]  # reduced dataframe
+
+    cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'], cids=cids, freq='M',
+                           xcat_aggs=['mean', 'mean'], lag=1,
                            start='2000-01-01', years=None, blacklist=black)
     cr.reg_scatter(labels=False, coef_box='upper left')
 
-    cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M', xcat_aggs=['mean', 'mean'],
+    cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M',
+                           xcat_aggs=['mean', 'mean'],
                            start='2000-01-01', years=3, blacklist=black)
     cr.reg_scatter(labels=False, coef_box='lower right',
                    title='Growth and inflation', xlab='Growth', ylab='Inflation')
