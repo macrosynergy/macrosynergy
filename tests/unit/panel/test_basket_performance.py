@@ -10,10 +10,12 @@ from macrosynergy.panel.basket_performance import *
 from macrosynergy.management.shape_dfs import reduce_df_by_ticker, reduce_df
 from macrosynergy.panel.historic_vol import flat_std
 
+
 class TestAll(unittest.TestCase):
 
-    # Construct a meaningful DataFrame, and subsequently store as fields on the instance.
-    def dataframe_construction(self):
+    # Construct a meaningful DataFrame, and subsequently store as fields on the instance
+
+    def dataframe_construction(self):  # Todo: create df as class variable
         cids = ['AUD', 'GBP', 'NZD', 'USD']
         xcats = ['FXXR_NSA', 'FXCRY_NSA', 'EQXR_NSA', 'EQCRY_NSA']
 
@@ -49,16 +51,17 @@ class TestAll(unittest.TestCase):
 
         dfx["ticker"] = dfx["cid"] + "_" + dfx["xcat"]
         self.dfw_ret = dfx[dfx["ticker"].isin(ticks_ret)].pivot(index="real_date",
-                                                                columns="cid", values=
-                                                                "value")
+                                                                columns="cid",
+                                                                values="value")
 
         self.dfw_cry = dfx[dfx["ticker"].isin(ticks_cry)].pivot(index="real_date",
-                                                                columns="cid", values=
-                                                                "value")
+                                                                columns="cid",
+                                                                values="value")
 
     # DataFrame used for more scrupulous, thorough testing.
+
     @staticmethod
-    def construct_df():
+    def construct_df():  # Todo: create df as class variable
         
         weights = [random.random() for i in range(65)]
         weights = np.array(weights)
@@ -81,6 +84,7 @@ class TestAll(unittest.TestCase):
 
     # Internal method used to return a dataframe with the uniform weights and a bool
     # array indicating which rows the procedure is necessary for.
+
     @staticmethod
     def weight_check(df, max_weight):
 
@@ -94,6 +98,8 @@ class TestAll(unittest.TestCase):
         
         return weights_uni, uni_bool
 
+    # Actual tests
+
     def test_check_weights(self):
         
         weights = self.construct_df()
@@ -105,7 +111,7 @@ class TestAll(unittest.TestCase):
 
     def test_equal_weight(self):
 
-        self.dataframe_construction()
+        self.dataframe_construction()  # Todo: repeats df construction, create variable
         dfw_ret = self.dfw_ret
         dfw_bool = (~dfw_ret.isnull())
         dfw_bool = dfw_bool.astype(dtype=np.uint8)
@@ -114,6 +120,9 @@ class TestAll(unittest.TestCase):
         equal = 1 / act_cross
 
         weights = equal_weight(dfw_ret)
+
+        # Todo: shorten drastically
+        # Todo: just replace 0 with NaN and check weights.nunique(axis=1, dropna=True) == 1 for all
         
         self.assertEqual(dfw_ret.shape, weights.shape)
         self.assertEqual(list(dfw_ret.index), list(weights.index))
@@ -143,17 +152,27 @@ class TestAll(unittest.TestCase):
         # ['AUD', 'GBP', 'NZD', 'USD']
         gdp = [17, 41, 9, 215]
 
-        self.dataframe_construction()
+        self.dataframe_construction()  # Todo: repeats df construction, create variable
         dfw_ret = self.dfw_ret
 
         weights = fixed_weight(dfw_ret, gdp)
+
+        # Todo: check if you agree with below test
+        for i in range(weights.shape[0]):
+            ar_row = weights.iloc[i, :].to_numpy()
+            ar_gdp = np.asarray(gdp)
+            x1 = np.sum(ar_gdp[ar_row > 0])  # sum non-zero base values
+            x2 = np.sum(ar_row * np.sum(ar_gdp[ar_row > 0]))  # sum weighted base values
+            self.assertTrue(x1 == x2)
+
+        # Todo: check if below is adding any information
+
         self.assertEqual(dfw_ret.shape, weights.shape)
         weights_arr = weights.to_numpy()
 
         check = np.ones(shape=weights_arr.shape[0], dtype=np.float32)
         # Check the weights sum to one.
         check = np.abs(check - np.sum(weights_arr, axis=1))
-
         self.assertTrue(np.all(check < 0.00001))
 
         # On rows where each cross-section is active, check the weight is proportional to
@@ -174,7 +193,7 @@ class TestAll(unittest.TestCase):
 
     def test_inverse_weight(self):
 
-        self.dataframe_construction()
+        self.dataframe_construction()   # Todo: repeats df construction, create variable
         dfw_ret = self.dfw_ret
 
         weights = inverse_weight(dfw_ret, "ma")
@@ -182,6 +201,7 @@ class TestAll(unittest.TestCase):
         weights = weights[fvi:]
         sum_ = np.sum(weights, axis=1)
 
+        # Check if weights add up to one
         self.assertTrue(np.all(np.abs(sum_ - np.ones(sum_.size)) < 0.000001))
         weights_arr = np.nan_to_num(weights.to_numpy())
 
@@ -189,10 +209,10 @@ class TestAll(unittest.TestCase):
         dfwa = dfw_ret.rolling(window=21).agg(flat_std, True)
         fvi = dfwa.first_valid_index()
         dfwa = dfwa[fvi:]
+        self.assertEqual(dfwa.shape, weights_arr.shape)
         
         dfwa *= np.sqrt(252)
         rolling_std = np.nan_to_num(dfwa.to_numpy())
-        self.assertEqual(rolling_std.shape, weights_arr.shape)
 
         # Used to account for NaNs (zeros) which disrupt the numerical ordering.
         max_float = sys.float_info.max
@@ -219,7 +239,7 @@ class TestAll(unittest.TestCase):
             self.assertTrue(reverse_order == sorted(row_weight, reverse=True))
 
     def test_values_weights(self):
-        self.dataframe_construction()
+        self.dataframe_construction()   # Todo: repeats df construction, create variable
         # Basket: each cross-section is defined over a different category.
         dfw_ret = self.dfw_ret
         dfd_test = self.dfd
@@ -269,6 +289,8 @@ class TestAll(unittest.TestCase):
         weights_inv = values_weight(dfw_ret, w_df, weight_meth="inv_values")
         self.assertTrue(weights_inv.shape == dfw_ret.shape)
 
+        # Todo: check if weights correspond to original values
+
         # Check weights have been allocated to the live cross-sections on each timestamp.
         # Unable to complete check because of how negative values are handled.
 
@@ -295,7 +317,7 @@ class TestAll(unittest.TestCase):
                 # Accounts for floating point precession.
                 self.assertTrue(np.all((row - (max_weight + 0.001)) < 0.00001))
 
-        # Test on a meaningful DataFrame.
+        # Test on large DataFrame.
         self.dataframe_construction()
         dfw_ret = self.dfw_ret
 
@@ -398,7 +420,7 @@ class TestAll(unittest.TestCase):
         concat_date = date_column.iloc[last_return_index].values
         self.assertEqual(first_date, concat_date)
 
-        # Test the application of max_weight() function.
+        # Test that all added weights are <= 1
         weight_column = df_return[['value']]
         weight_column = weight_column.iloc[last_return_index:].to_numpy()
         self.assertTrue(np.all(weight_column <= 1.0))

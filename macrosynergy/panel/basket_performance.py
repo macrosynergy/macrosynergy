@@ -157,9 +157,9 @@ def max_weight_func(weights: pd.DataFrame, max_weight: float):
           to 0.001.
     """
 
-    w_matrix = weights.to_numpy()
+    dfw_wgs = weights.to_numpy()
 
-    for i, row in enumerate(w_matrix):
+    for i, row in enumerate(dfw_wgs):
         row = ConvergeRow.application(row, max_weight)
         weights.iloc[i, :] = row
 
@@ -257,10 +257,13 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
 
     if cry_flag:
         dfw_ticks_cry = dfx[dfx["ticker"].isin(ticks_cry)]
-        dfw_cry = dfw_ticks_cry.pivot(index="real_date", columns="ticker", values="value")
+        dfw_cry = dfw_ticks_cry.pivot(index="real_date", columns="ticker",
+                                      values="value")
+
+    # C. Apply the appropriate weighting method
 
     if weight_meth == "equal":
-        w_matrix = equal_weight(df_ret=dfw_ret)
+        dfw_wgs = equal_weight(df_ret=dfw_ret)
 
     elif weight_meth == "fixed":
         assert isinstance(weights, list), "Method 'fixed' requires a list of weights " \
@@ -273,10 +276,10 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
             except ValueError:
                 print(f"List, {weights}, must be all numerical values.")
                 raise
-        w_matrix = fixed_weight(df_ret=dfw_ret, weights=weights)
+        dfw_wgs = fixed_weight(df_ret=dfw_ret, weights=weights)
 
     elif weight_meth == "invsd":
-        w_matrix = inverse_weight(dfw_ret=dfw_ret, lback_meth=lback_meth,
+        dfw_wgs = inverse_weight(dfw_ret=dfw_ret, lback_meth=lback_meth,
                                   lback_periods=lback_periods, remove_zeros=remove_zeros)
 
     elif wgt_flag:
@@ -292,37 +295,37 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
         dfw_wgt = dfw_wgt.shift(1)  # lag by one day to be used as weights
         dfw_ret = dfw_ret.reindex(sorted(dfw_ret.columns), axis=1)
         dfw_wgt = dfw_wgt.reindex(sorted(dfw_wgt.columns), axis=1)
-        w_matrix = values_weight(dfw_ret, dfw_wgt, weight_meth)
+        dfw_wgs = values_weight(dfw_ret, dfw_wgt, weight_meth)
 
     else:
         raise NotImplementedError(f"Weight method unknown {weight_meth}")
 
-    # Remove leading NA rows.
+    # D. Remove leading NA rows.
 
-    fvi = max(w_matrix.first_valid_index(), dfw_ret.first_valid_index())
-    w_matrix, dfw_ret = w_matrix[fvi:], dfw_ret[fvi:]
+    fvi = max(dfw_wgs.first_valid_index(), dfw_ret.first_valid_index())
+    dfw_wgs, dfw_ret = dfw_wgs[fvi:], dfw_ret[fvi:]
 
     # E. Impose cap on cross-section weight
 
     if max_weight < 1.0:
-        w_matrix = max_weight_func(weights=w_matrix, max_weight=max_weight)
+        dfw_wgs = max_weight_func(weights=dfw_wgs, max_weight=max_weight)
 
     # F. Calculate and store weighted average returns
 
     select = ["ticker", "real_date", "value"]
-    dfxr = (dfw_ret.multiply(w_matrix)).sum(axis=1)  # calculate weighted averages
+    dfxr = (dfw_ret.multiply(dfw_wgs)).sum(axis=1)  # calculate weighted averages
     dfxr = dfxr.to_frame("value").reset_index()
     dfxr = dfxr.assign(ticker=basket_tik + "_" + ret)[select]
     store = [dfxr]
 
     if cry_flag:
-        dfcry = (dfw_cry.multiply(w_matrix)).sum(axis=1)
+        dfcry = (dfw_cry.multiply(dfw_wgs)).sum(axis=1)
         dfcry = dfcry.to_frame("value").reset_index()
         dfcry = dfcry.assign(ticker=basket_tik + "_" + cry)[select]
         store.append(dfcry)
     if return_weights:
-        w_matrix.columns.name = "cid"
-        w = w_matrix.stack().to_frame("value").reset_index()
+        dfw_wgs.columns.name = "cid"
+        w = dfw_wgs.stack().to_frame("value").reset_index()
         contracts_ = list(map(lambda c: c[:-len(ret)] + "WGT", w["cid"].to_numpy()))
         contracts_ = np.array(contracts_)
         w["ticker"] = contracts_
