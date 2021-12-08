@@ -51,8 +51,7 @@ def naive_pnls(df: pd.DataFrame, contracts: List[str],
     ticks_ret = [c + ret for c in contracts]
     tickers = ticks_ret
 
-    dfx = reduce_df_by_ticker(df, start=start, end=end, ticks=tickers,
-                              blacklist=blacklist)
+    dfx = reduce_df_by_ticker(df, start=start, end=end, ticks=tickers)
 
 
 if __name__ == "__main__":
@@ -82,7 +81,7 @@ if __name__ == "__main__":
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
+    # black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
     contracts = ['AUD_FX', 'AUD_EQ', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
 
     psigs = ['POS1', 'POS2']
