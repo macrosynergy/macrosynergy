@@ -370,7 +370,6 @@ class DataQueryInterface(object):
                         time.sleep(delay)
                     except ValueError:
                         thread_keys.append(f.__dict__[str(id(f))])
-                        print("Server being hit too quickly with requests.")
                     else:
                         if isinstance(response, list):
                             final_output.extend(response)
