@@ -337,8 +337,10 @@ class DataQueryInterface(object):
                        "calendar": calendar, "frequency": frequency, "conversion":
                        conversion, "nan_treatment": nan_treatment}
             params.update(params_)
-            if not floor(no_tickers / 100):
+            if not floor(no_tickers / 100) and self.thread_handler > 1:
                 delay = 0.1
+            elif self.thread_handler == 1:
+                delay = 0.25
             else:
                 delay = 0.2
 
