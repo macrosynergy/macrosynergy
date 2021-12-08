@@ -138,10 +138,9 @@ class DataQueryInterface(object):
         self.last_response = None
         self.date_all = date_all
         self.concurrent = concurrent
-        self.threads_dict = {}
         self.thread_handler = thread_handler
-        self.thread_queue = Queue()
         self.ticker_residual = []
+        self.ticker_warning = False
 
     def __enter__(self):
         return self
@@ -277,40 +276,34 @@ class DataQueryInterface(object):
         select = "instruments"
 
         results = []
-        with threading.Lock():
-            k = str(threading.current_thread()) + str(counter)
-            self.threads_dict[k] = params["expressions"]
-            self.thread_queue.put(k)
-
-            while True:
-                with requests.get(url=url, cert=(self.crt, self.key), headers=self.headers,
-                                  params=params) as r:
+        while True:
+            with requests.get(url=url, cert=(self.crt, self.key), headers=self.headers,
+                              params=params) as r:
                     last_response = r.text
 
-                response = json.loads(last_response)
-                dictionary = response[select][0]['attributes'][0]
+            response = json.loads(last_response)
+            dictionary = response[select][0]['attributes'][0]
 
-                if not isinstance(dictionary['time-series'], list):
-                    print(f"Associated tickers: {params['expressions']}.")
-                    print(f"Ticker: {dictionary['expression']}.")
-                    self.ticker_residual.append(dictionary['expression'])
+            if not isinstance(dictionary['time-series'], list):
+                self.ticker_warning = True
+                self.ticker_residual.append(dictionary['expression'])
 
-                if not select in response.keys():
-                    break
-                else:
-                    results.extend(response[select])
+            if not select in response.keys():
+                break
+            else:
+                results.extend(response[select])
 
-                assert "next" in response['links'][1].keys(), \
-                    f"'next' missing from links keys: " \
-                    f" {response['links'][1].keys()}"
+            assert "next" in response['links'][1].keys(), \
+                f"'next' missing from links keys: " \
+                f" {response['links'][1].keys()}"
 
-                if response["links"][1]["next"] is None:
-                    break
+            if response["links"][1]["next"] is None:
+                break
 
-                url = f"{self.base_url:s}{response['links'][1]['next']:s}"
-                params = {}
+            url = f"{self.base_url:s}{response['links'][1]['next']:s}"
+            params = {}
 
-            return results
+        return results
 
     def check_connection(self) -> bool:
         """Check connect (heartbeat) to DataQuery
@@ -367,22 +360,21 @@ class DataQueryInterface(object):
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 for elem in tick_list_compr:
                     thread_tr += 1
-                    params["expressions"] = elem
-                    # Copy the params dictionary.
+                    params_copy = params.copy()
+                    params_copy["expressions"] = elem
+
                     results = executor.submit(self._fetch_threading, endpoint,
-                                              thread_tr, params)
+                                              thread_tr, params_copy)
                     time.sleep(delay)
-                    queue_response = self.thread_queue.get()
-                    results.__dict__['Thread_Key'] = queue_response
+                    results.__dict__[str(id(results))] = elem
                     output.append(results)
 
                 for f in concurrent.futures.as_completed(output):
                     try:
                         response = f.result()
-                        print(f"Threading dictionary: {response}.")
                         time.sleep(delay)
                     except ValueError:
-                        thread_keys.append(f.__dict__['Thread_Key'])
+                        thread_keys.append(f.__dict__[str(id(f))])
                         print("Server being hit too quickly with requests.")
                     else:
                         if isinstance(response, list):
@@ -394,25 +386,20 @@ class DataQueryInterface(object):
                 results = self._fetch_threading(endpoint=endpoint, params=params)
                 final_output.extend(results)
 
-        print(f"Output dictionary: {self.threads_dict}.")
-        if thread_keys or self.ticker_residual:
+        thread_keys = list(chain(*thread_keys))
+        print(f"List compression: {len(thread_keys)}.")
+        if thread_keys:
             print("Entered.")
             count += 1
-            tickers = self.ticker_residual
             delay += 0.1
-            for k in thread_keys:
-                tickers += self.threads_dict[k]
-            self.ticker_residual = []
             print(f"Final output: {len(final_output)}.")
-            print(f"Sample output: {final_output[:3]}")
             recursive_output = final_output + self._request(endpoint=endpoint,
-                                                            tickers=list(set(tickers)),
+                                                            tickers=list(set(thread_keys)),
                                                             params=params, delay=delay,
                                                             count=count)
             print("Returning recursively.")
             print(f"Length of recursive output: {len(recursive_output)}.")
             return recursive_output
-
 
         print("Returning non-recursively.")
         return final_output
@@ -457,6 +444,12 @@ class DataQueryInterface(object):
 
         results = self._request(endpoint="/expressions/time-series",
                                 tickers=expression, params=params, **kwargs)
+        if self.ticker_warning:
+            results_ = self._request(endpoint="/expressions/time-series",
+                                     tickers=self.ticker_residual, params=params,
+                                     **kwargs)
+            results += results_
+
         print(f"Length of results: {len(results)}.")
 
         # (O(n) + O(nlog(n)) operation.
