@@ -485,9 +485,7 @@ class DataQueryInterface(object):
                 ticker_split = ','.join(ticker[:-1])
                 ts_arr = np.array(dictionary['time-series'])
                 if ts_arr.size == 1:
-
-                    print(f"Invalid expression, {ticker_split + ','+ metric + ')'}, "
-                          f"passed into DataQuery.")
+                    # Requires a form of logging if condition satisfied.
                     flag = True
 
                 if not flag:
@@ -497,7 +495,8 @@ class DataQueryInterface(object):
                     elif metric not in output_dict[ticker_split]:
                         output_dict[ticker_split][metric] = ts_arr[:, 1]
                     else:
-                        print(f"Printing duplication: {ticker_split}.")
+                        # Again, requires a form of logging if condition satisfied.
+                        continue
 
         output_dict_c = output_dict.copy()
         t_dict = next(iter(output_dict_c.values()))
