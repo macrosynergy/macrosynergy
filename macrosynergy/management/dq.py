@@ -270,7 +270,7 @@ class DataQueryInterface(object):
 
         return results
 
-    def _fetch_threading(self, endpoint, counter, params: dict):
+    def _fetch_threading(self, endpoint, params: dict):
 
         url = self.base_url + endpoint
         select = "instruments"
@@ -349,22 +349,17 @@ class DataQueryInterface(object):
         unpack = list(chain(*tick_list_compr))
         assert len(unpack) == len(set(unpack)), "List comprehension incorrect."
 
-        print(f"Number of tickers {no_tickers}; {len(tick_list_compr)}.")
-        print(f"Count: {count}; {tick_list_compr}.")
-
         final_output = []
         output = []
         thread_keys = []
-        thread_tr = 0
         if self.concurrent:
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 for elem in tick_list_compr:
-                    thread_tr += 1
+
                     params_copy = params.copy()
                     params_copy["expressions"] = elem
-
                     results = executor.submit(self._fetch_threading, endpoint,
-                                              thread_tr, params_copy)
+                                              params_copy)
                     time.sleep(delay)
                     results.__dict__[str(id(results))] = elem
                     output.append(results)
@@ -387,25 +382,19 @@ class DataQueryInterface(object):
                 final_output.extend(results)
 
         thread_keys = list(chain(*thread_keys))
-        print(f"List compression: {len(thread_keys)}.")
         if thread_keys:
-            print("Entered.")
             count += 1
             delay += 0.1
-            print(f"Final output: {len(final_output)}.")
             recursive_output = final_output + self._request(endpoint=endpoint,
                                                             tickers=list(set(thread_keys)),
                                                             params=params, delay=delay,
                                                             count=count)
-            print("Returning recursively.")
-            print(f"Length of recursive output: {len(recursive_output)}.")
             return recursive_output
 
-        print("Returning non-recursively.")
         return final_output
 
     def get_ts_expression(self, expression, original_metrics, suppress_warning,
-                          bool_df, **kwargs):
+                          **kwargs):
         """
 
         start_date: str = None, end_date: str = None,
@@ -421,7 +410,6 @@ class DataQueryInterface(object):
         :param original_metrics: List of required metrics:
                                  the returned DataFrame will reflect the received List.
         :param **kwargs: dictionary of additional arguments
-        :param bool_df: temporary parameter for reconciliation with Athena.
 
         :return: pd.DataFrame: ['cid', 'xcat', 'real_date'] + [original_metrics]
 
@@ -450,17 +438,10 @@ class DataQueryInterface(object):
                                      count=0, **kwargs)
             results += results_
 
-        print(f"Length of results: {len(results)}.")
-
         # (O(n) + O(nlog(n)) operation.
         no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression]))
 
         results_dict, output_dict = self.isolate_timeseries(results, original_metrics)
-        print(f"Dictionary output: {len(results_dict.keys())}.")
-        if bool_df:
-            df_column_wise = self.df_column(output_dict, original_metrics)
-            return df_column_wise
-
         results_dict = self.valid_ticker(results_dict, suppress_warning)
 
         results_copy = results_dict.copy()
@@ -637,8 +618,7 @@ class DataQueryInterface(object):
         return df
 
     def tickers(self, tickers: list, metrics: list = ['value'],
-                start_date: str='2000-01-01', suppress_warning=False,
-                bool_df=False):
+                start_date: str='2000-01-01', suppress_warning=False):
         """
         Returns standardized dataframe of specified base tickers and metric
 
@@ -646,7 +626,6 @@ class DataQueryInterface(object):
         :param <List[str]> metrics: must choose one or more from 'value', 'eop_lag',
                                     'mop_lag', or 'grading'. Default is ['value'].
         :param <str> start_date: first date in ISO 8601 string format.
-        :param <boolean> bool_df: temporary parameter (alignment with Athena).
         :param <boolean> suppress_warning: used to suppress warning of any invalid
                                            ticker received by DataQuery.
 
@@ -656,8 +635,7 @@ class DataQueryInterface(object):
 
         df = self.get_ts_expression(expression=tickers, original_metrics=metrics,
                                     start_date=start_date,
-                                    suppress_warning=suppress_warning,
-                                    bool_df=bool_df)
+                                    suppress_warning=suppress_warning)
 
         if isinstance(df, pd.DataFrame):
             df = df.sort_values(['cid', 'xcat', 'real_date']).reset_index(drop=True)
