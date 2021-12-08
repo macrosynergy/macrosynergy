@@ -469,7 +469,6 @@ class DataQueryInterface(object):
         output_dict = defaultdict(dict)
         size = len(list_)
 
-        count_error = 0
         for i in range(size):
             flag = False
             try:
@@ -484,8 +483,7 @@ class DataQueryInterface(object):
                 ticker_split = ','.join(ticker[:-1])
                 ts_arr = np.array(dictionary['time-series'])
                 if ts_arr.size == 1:
-                    print(r)
-                    count_error += 1
+
                     print(f"Invalid expression, {ticker_split + ','+ metric + ')'}, "
                           f"passed into DataQuery.")
                     flag = True
@@ -499,7 +497,6 @@ class DataQueryInterface(object):
                     else:
                         print(f"Printing duplication: {ticker_split}.")
 
-        print(f"Error Count: {count_error}.")
         output_dict_c = output_dict.copy()
         t_dict = next(iter(output_dict_c.values()))
         no_rows = next(iter(t_dict.values())).size
@@ -545,14 +542,12 @@ class DataQueryInterface(object):
         :return: Dictionary.
         """
 
-        ticker_count = 0
         dict_copy = _dict.copy()
         for k, v in _dict.items():
             no_cols = v.shape[1]
 
             condition = self.column_check(v, 1)
             if condition:
-                ticker_count += 1
                 for i in range(2, no_cols):
                     condition = self.column_check(v, i)
                     if not condition:
@@ -564,7 +559,6 @@ class DataQueryInterface(object):
             else:
                 continue
 
-        print(f"Number of tickers missing from the DB: {ticker_count}.")
         return dict_copy
 
     @staticmethod
