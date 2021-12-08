@@ -447,7 +447,7 @@ class DataQueryInterface(object):
         if self.ticker_warning:
             results_ = self._request(endpoint="/expressions/time-series",
                                      tickers=self.ticker_residual, params=params,
-                                     **kwargs)
+                                     count=0, **kwargs)
             results += results_
 
         print(f"Length of results: {len(results)}.")
