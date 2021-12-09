@@ -11,26 +11,33 @@ from macrosynergy.management.shape_dfs import reduce_df
 
 class NaivePnL:
 
-    """Estimates and analyses naive illustrative PnLs with limited signal options and disregarding transaction costs
+    """Estimates and analyse naive illustrative PnLs with limited signal options and
+       disregarding transaction costs.
 
-    :param <pd.Dataframe> df: standardized data frame with the following necessary columns:
-        'cid', 'xcat', 'real_date' and 'value'.
+    :param <pd.Dataframe> df: standardized data frame with the following necessary
+        columns: 'cid', 'xcat', 'real_date' and 'value'.
     :param <str> ret: return category.
     :param <List[str]> sigs: signal categories.
-    :param <List[str]> cids: cross sections to be considered. Default is all in the data frame.
-    :param <str> start: earliest date in ISO format. Default is None and earliest date in df is used.
-    :param <str> end: latest date in ISO format. Default is None and latest date in df is used.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from the data frame.
+    :param <List[str]> cids: cross sections to be considered. Default is all in the
+        dataframe.
+    :param <str> start: earliest date in ISO format. Default is None and earliest date
+        in df is used.
+    :param <str> end: latest date in ISO format. Default is None and latest date in df is
+        used.
+    :param <dict> blacklist: cross sections with date ranges that should be excluded from
+        the dataframe.
 
     """
-    def __init__(self, df: pd.DataFrame, ret: str, sigs: List[str], cids: List[str] = None,
-                 start: str = None, end: str = None, blacklist: dict = None):
+    def __init__(self, df: pd.DataFrame, ret: str, sigs: List[str],
+                 cids: List[str] = None, start: str = None, end: str = None,
+                 blacklist: dict = None):
 
         self.ret = ret
         self.sigs = sigs
         xcats = [ret] + sigs
         cols = ['cid', 'xcat', 'real_date', 'value']
-        self.df, self.xcats, self.cids = reduce_df(df[cols], xcats, cids, start, end, blacklist, out_all=True)
+        self.df, self.xcats, self.cids = reduce_df(df[cols], xcats, cids, start, end,
+                                                   blacklist, out_all=True)
         self.df['real_date'] = pd.to_datetime(self.df['real_date'])
         self.pnl_names = []  # list for PnL names
         self.black = blacklist
@@ -39,19 +46,26 @@ class NaivePnL:
                  rebal_freq: str = 'daily', rebal_slip = 0, vol_scale: float = None):
         """Calculate daily PnL and add to the main dataframe of the class instance
 
-        :param <str> sig: name of signal that is the basis for positioning. The signal is assumed to be recorded at the
-            end of trading day.
-        :param <str> sig_op: signal transformation options; must be one of 'zn_score_pan', 'zn_score_cs', 'binary'.
-            Default 'zn_score_pan' transforms raw signals into z-scores around zero value based on the whole panel.
-            Option 'zn_score_cs' transforms signals to z-scores around zero based on cross-section alone.
-            Option 'binary' transforms signals into uniform long/shorts (1/-1) across all sections.
-        :param <str> pnl_name: name of the Pnl to be generated and stored (overwrites existing).
-            Default is none, i.e. a default name is given.
-        :param <str> rebal_freq: rebalancing frequency; must be one of 'daily' (default), 'weekly' or 'monthly'.
-        :param <str> rebal_slip: rebalancing slippage in days.  Default is 1, which means that it takes one day
-            to rebalance the position and that the new position produces PnL from the second day after the signal.
-        :param <bool> vol_scale: ex-post scaling of PnL to annualized volatility given. Default is none.
-            This is a convenience functionality, mainly for comparative visualization.
+        :param <str> sig: name of signal that is the basis for positioning. The signal is
+            assumed to be recorded at the end of trading day.
+        :param <str> sig_op: signal transformation options; must be one of 'zn_score_pan',
+            'zn_score_cs', 'binary'.
+            Default 'zn_score_pan' transforms raw signals into z-scores around zero value
+                based on the whole panel.
+            Option 'zn_score_cs' transforms signals to z-scores around zero based on
+                cross-section alone.
+            Option 'binary' transforms signals into uniform long/shorts (1/-1) across all
+                sections.
+        :param <str> pnl_name: name of the Pnl to be generated and stored
+            (overwrites existing). Default is none, i.e. a default name is given.
+        :param <str> rebal_freq: rebalancing frequency; must be one of 'daily' (default),
+            'weekly' or 'monthly'.
+        :param <str> rebal_slip: rebalancing slippage in days.  Default is 1, which means
+            that it takes one day to rebalance the position and that the new position
+            produces PnL from the second day after the signal.
+        :param <bool> vol_scale: ex-post scaling of PnL to annualized volatility given.
+            Default is none. This is a convenience functionality, mainly for comparative
+            visualization.
 
         """
 
