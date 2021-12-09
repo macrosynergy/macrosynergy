@@ -338,11 +338,11 @@ class DataQueryInterface(object):
                        conversion, "nan_treatment": nan_treatment}
             params.update(params_)
             if not floor(no_tickers / 100) and self.thread_handler > 1:
-                delay = 0.1
+                delay = 0.05
             elif self.thread_handler == 1:
                 delay = 0.25
             else:
-                delay = 0.2
+                delay = 0.1
 
         t = self.thread_handler
         iterations = ceil(no_tickers / t)
@@ -351,30 +351,37 @@ class DataQueryInterface(object):
         unpack = list(chain(*tick_list_compr))
         assert len(unpack) == len(set(unpack)), "List comprehension incorrect."
 
+        exterior_iterations = ceil(len(tick_list_compr) / 10)
+
         final_output = []
-        output = []
-        thread_keys = []
+        tickers_server = []
         if self.concurrent:
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                for elem in tick_list_compr:
+            for i in range(exterior_iterations):
 
-                    params_copy = params.copy()
-                    params_copy["expressions"] = elem
-                    results = executor.submit(self._fetch_threading, endpoint,
-                                              params_copy)
+                output = []
+                if i > 0:
                     time.sleep(delay)
-                    results.__dict__[str(id(results))] = elem
-                    output.append(results)
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    for elem in tick_list_compr[(i * 10): (i + 1) * 10]:
 
-                for f in concurrent.futures.as_completed(output):
-                    try:
-                        response = f.result()
+                        params_copy = params.copy()
+                        params_copy["expressions"] = elem
+                        results = executor.submit(self._fetch_threading, endpoint,
+                                                  params_copy)
                         time.sleep(delay)
-                    except ValueError:
-                        thread_keys.append(f.__dict__[str(id(f))])
-                    else:
-                        if isinstance(response, list):
-                            final_output.extend(response)
+                        results.__dict__[str(id(results))] = elem
+                        output.append(results)
+
+                    for f in concurrent.futures.as_completed(output):
+                        try:
+                            response = f.result()
+                        except ValueError:
+                            tickers_server.append(f.__dict__[str(id(f))])
+                        else:
+                            if isinstance(response, list):
+                                final_output.extend(response)
+                            else:
+                                continue
 
         else:
             for elem in tick_list_compr:
@@ -382,12 +389,12 @@ class DataQueryInterface(object):
                 results = self._fetch_threading(endpoint=endpoint, params=params)
                 final_output.extend(results)
 
-        thread_keys = list(chain(*thread_keys))
-        if thread_keys:
+        tickers_server = list(chain(*tickers_server))
+        if tickers_server:
             count += 1
             delay += 0.1
             recursive_output = final_output + self._request(endpoint=endpoint,
-                                                            tickers=list(set(thread_keys)),
+                                                            tickers=list(set(tickers_server)),
                                                             params=params, delay=delay,
                                                             count=count)
             return recursive_output
@@ -543,12 +550,14 @@ class DataQueryInterface(object):
         :return: Dictionary.
         """
 
+        ticker_missing = 0
         dict_copy = _dict.copy()
         for k, v in _dict.items():
             no_cols = v.shape[1]
 
             condition = self.column_check(v, 1)
             if condition:
+                ticker_missing += 1
                 for i in range(2, no_cols):
                     condition = self.column_check(v, i)
                     if not condition:
@@ -560,6 +569,7 @@ class DataQueryInterface(object):
             else:
                 continue
 
+        print(f"Number of missing tickers from the DataBase: {ticker_missing}.")
         return dict_copy
 
     @staticmethod
