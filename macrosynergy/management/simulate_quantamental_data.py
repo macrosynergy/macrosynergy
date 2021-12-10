@@ -161,7 +161,7 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
             df_add['cid'] = cid
             df_add['xcat'] = xcat
 
-            arr = np.repeat(1, df_add.shape[0])
+            arr = np.repeat(0, df_add.shape[0])
 
             dates = df_add['real_date'].to_numpy()
 
@@ -197,7 +197,7 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
                         count += 1
                     start += datetime.timedelta(days=1)
 
-                arr[index_start:(index_start + count + 1)] = 0
+                arr[index_start:(index_start + count + 1)] = 1
 
             df_add['value'] = arr
 
