@@ -18,12 +18,19 @@ def target_positions(df: pd.DataFrame, contracts: List[str],
 
     :param <pd.Dataframe> df: standardized DataFrame containing the following columns:
         'cid', 'xcats', 'real_date' and 'value'.
-    :param <List[str]> contracts: base tickers (combinations of cross sections and base
-        categories) for which target positions are to be generated.
-    :param <str> sig: category postfix that is appended to the contracts in order to
-        obtain the tickers that serve as signals.
-        For example: 'SIG' is appended to 'EUR_FX' to give the ticker 'EUR_FXSIG'.
-    :param <str> ret: return category postfix; default is "XR_NSA".
+    :param <List[str]> cids: cross sections of markets or currency areas in which
+        positios should be taken.
+    :param <str> xcat_sig: category that serves as signal across markets.
+    :param <List[str]>: ctypes: contract types that are traded across markets. They should
+        correspond to return tickers. Examples are 'FX' or 'EQ'.
+    :param <List[str]> baskets: cross section and contract types that denotes a basket
+        that is traded in accordance with all cross section signals, for example as a
+        benchmark for relative positions. A basket has the form 'cid'_'ctype', where
+        cid could be 'GLB' for a global basket.
+    :param <List[float]> sigrels: values that translate the single signal into contract
+        type and basket signals in the order defined by baskets + ctypes.
+    :param <str> xcat_ret: category denoting the cross section-specific returns,
+        which may be a combination of contracts.
         The returns are necessary for volatility target-based signals.
     :param <dict> blacklist: cross sectional date ranges that should have zero target
         positions.
