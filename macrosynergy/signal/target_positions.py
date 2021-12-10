@@ -5,9 +5,9 @@ from macrosynergy.panel.make_zn_scores import *
 from macrosynergy.management.shape_dfs import reduce_df_by_ticker
 
 
-def target_positions(df: pd.DataFrame, contracts: List[str],
-                     xcat: str, ret: str = 'XR_NSA', blacklist: dict = None,
-                     start: str = None, end: str = None,
+def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
+                     xcat: str, ctypes: List[str], ret: str = 'XR_NSA',
+                     blacklist: dict = None, start: str = None, end: str = None,
                      scale: str = 'prop', vtarg: float = 0.01,
                      lback_periods: int = 21, lback_meth: str = 'ma', half_life=11,
                      signame: str = 'POS'
@@ -19,7 +19,7 @@ def target_positions(df: pd.DataFrame, contracts: List[str],
     :param <pd.Dataframe> df: standardized DataFrame containing the following columns:
         'cid', 'xcats', 'real_date' and 'value'.
     :param <List[str]> cids: cross sections of markets or currency areas in which
-        positios should be taken.
+        positions should be taken.
     :param <str> xcat_sig: category that serves as signal across markets.
     :param <List[str]>: ctypes: contract types that are traded across markets. They should
         correspond to return tickers. Examples are 'FX' or 'EQ'.
@@ -75,13 +75,13 @@ def target_positions(df: pd.DataFrame, contracts: List[str],
     """
 
     # Todo: this function draws heavily on make_zn_scores and historic_vol
-    ticks_ret = [c + ret for c in contracts]
+    ticks_ret = [c + ret for c in cids]
 
     # :param <str> sig: category postfix that is appended to the contracts in order to
     #  obtain the tickers that serve as signals.
     #  For example: 'SIG' is appended to 'EUR_FX' to give the ticker 'EUR_FXSIG'.
     #  Is 'SIG' a contrived postfix ? What is the DQ equivalent ?
-    ticks_sig = [c + 'SIG' for c in contracts]
+    ticks_sig = [c + 'SIG' for c in cids]
 
     # 'EUR_FXSIG'.
     tickers = ticks_ret + ticks_sig
