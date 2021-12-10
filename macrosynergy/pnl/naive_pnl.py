@@ -15,18 +15,17 @@ class NaivePnL:
     disregarding transaction costs
 
     :param <pd.Dataframe> df: standardized data frame with the following necessary
-        columns:
-        'cid', 'xcat', 'real_date' and 'value'.
+        columns: 'cid', 'xcat', 'real_date' and 'value'.
     :param <str> ret: return category.
     :param <List[str]> sigs: signal categories.
     :param <List[str]> cids: cross sections to be considered. Default is all in the
-        data frame.
+        dataframe.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df
         is used.
     :param <dict> blacklist: cross sections with date ranges that should be excluded
-        from the data frame.
+        from the dataframe.
 
     """
     def __init__(self, df: pd.DataFrame, ret: str, sigs: List[str],
@@ -58,7 +57,7 @@ class NaivePnL:
             cross-section alone.
             Option 'binary' transforms signals into uniform long/shorts (1/-1) across all
             sections.
-        :param <str> pnl_name: name of the Pnl to be generated and stored.
+        :param <str> pnl_name: name of the PnL to be generated and stored.
             Default is none, i.e. a default name is given.
             Previously calculated PnLs in the class will be overwritten.
         :param <str> rebal_freq: rebalancing frequency for positions according to signal
@@ -68,8 +67,8 @@ class NaivePnL:
             produces PnL from the second day after the signal has been recorded.
         :param <bool> vol_scale: ex-post scaling of PnL to annualized volatility given.
             Default is none.
-            This is a convenience functionality, mainly for comparative visualization.
 
+            This is a convenience functionality, mainly for comparative visualization.
         """
 
         assert sig in self.sigs
@@ -87,6 +86,8 @@ class NaivePnL:
             dfw['psig'] = dfw[sig].groupby(level=0).apply(zn_score)
         elif sig_op == 'binary':
             dfw['psig'] = np.sign(dfw[sig])
+
+        # Signal for the following day explains the lag mechanism.
         dfw['psig'] = dfw['psig'].groupby(level=0).shift(1)  # lag explanatory 1 period
         dfw.reset_index(inplace=True)
 
@@ -127,8 +128,8 @@ class NaivePnL:
 
         self.df = self.df.append(df_pnl[self.df.columns]).reset_index(drop=True)
 
-    def plot_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'], start: str = None, end: str = None,
-                  figsize: Tuple = (10, 6)):
+    def plot_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
+                  start: str = None, end: str = None, figsize: Tuple = (10, 6)):
 
         """Plot line chart of cumulative PnLs, single PnL, multiple PnL types per
         cross section,  or mutiple cross sections per PnL type.
@@ -195,7 +196,7 @@ class NaivePnL:
         :param <str> end: latest date in ISO format. Default is None and latest date
             in df is used.
 
-        :return: standardized data frame with key PnL performance statistics
+        :return: standardized dataframe with key PnL performance statistics
         """
 
         if pnl_cats is None:
