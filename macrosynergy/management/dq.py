@@ -552,11 +552,14 @@ class DataQueryInterface(object):
 
         ticker_missing = 0
         dict_copy = _dict.copy()
+        ticker_storage = []
+
         for k, v in _dict.items():
             no_cols = v.shape[1]
 
             condition = self.column_check(v, 1)
             if condition:
+                ticker_storage.append(k)
                 ticker_missing += 1
                 for i in range(2, no_cols):
                     condition = self.column_check(v, i)
@@ -569,7 +572,16 @@ class DataQueryInterface(object):
             else:
                 continue
 
-        print(f"Number of missing tickers from the DataBase: {ticker_missing}.")
+        if self.debug:
+            print(f"Number of missing tickers from the DataBase: {ticker_missing}.")
+            df_ticker_missing = pd.DataFrame(data=ticker_storage,
+                                             columns=['Missing_Tickers'])
+
+            print(f"Shape of missing DataFrame: {df_ticker_missing.shape}.")
+            df_ticker_missing.to_csv("/Users/kurransteeds/Documents/pandas.txt",
+                                     header="Missing Tickers", index=None,
+                                     sep=' ', mode='a')
+
         return dict_copy
 
     @staticmethod
