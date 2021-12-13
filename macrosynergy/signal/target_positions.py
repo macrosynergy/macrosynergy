@@ -2,12 +2,13 @@ import numpy as np
 import pandas as pd
 from typing import List
 from macrosynergy.panel.make_zn_scores import *
-from macrosynergy.management.shape_dfs import reduce_df_by_ticker
+from macrosynergy.management.shape_dfs import reduce_df
 
 
 def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
-                     xcat: str, ctypes: List[str], ret: str = 'XR_NSA',
-                     blacklist: dict = None, start: str = None, end: str = None,
+                     baskets: List[str], ctypes: List[str], sigrels: List[float],
+                     xcat_ret: str = 'XR_NSA', blacklist: dict = None,
+                     start: str = None, end: str = None,
                      scale: str = 'prop', vtarg: float = 0.01,
                      lback_periods: int = 21, lback_meth: str = 'ma', half_life=11,
                      signame: str = 'POS'
@@ -21,7 +22,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
     :param <List[str]> cids: cross sections of markets or currency areas in which
         positions should be taken.
     :param <str> xcat_sig: category that serves as signal across markets.
-    :param <List[str]>: ctypes: contract types that are traded across markets. They should
+    :param <List[str]> ctypes: contract types that are traded across markets. They should
         correspond to return tickers. Examples are 'FX' or 'EQ'.
     :param <List[str]> baskets: cross section and contract types that denotes a basket
         that is traded in accordance with all cross section signals, for example as a
@@ -63,7 +64,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
     :param <str> lback_meth: Lookback method to calculate the volatility.
         Default is "ma". Alternative is "ema", exponential moving average.
     :param <int> half_life: Refers to the half-time for "xma". Default is 11.
-    :param <str> posname: postfix added to contract to denote signal name.
+    :param <str> signame: postfix added to contract to denote signal name.
 
     :return <pd.Dataframe>: standardized dataframe with daily contract position signals
         in USD, using the columns 'cid', 'xcats', 'real_date' and 'value'.
@@ -75,32 +76,61 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
     """
 
     # Todo: this function draws heavily on make_zn_scores and historic_vol
-    ticks_ret = [c + ret for c in cids]
+    ticks_vol_ret = [c + xcat_ret for c in cids]
 
     # :param <str> sig: category postfix that is appended to the contracts in order to
     #  obtain the tickers that serve as signals.
     #  For example: 'SIG' is appended to 'EUR_FX' to give the ticker 'EUR_FXSIG'.
     #  Is 'SIG' a contrived postfix ? What is the DQ equivalent ?
-    ticks_sig = [c + 'SIG' for c in cids]
-
-    # 'EUR_FXSIG'.
-    tickers = ticks_ret + ticks_sig
-    dfd = reduce_df_by_ticker(df, start=start, end=end, ticks=tickers,
-                              blacklist=blacklist)
+    ticks_sig = [c + ctype for c in cids for ctype in ctypes]
 
     # Requires understanding the neutral level to use. Building out some of the below
     # parameters into the main signature.
     if scale == 'prop':
-        # Rolling signal: zn-score computed for each of the cross-sections.
 
-        prop_sig = make_zn_scores(dfd, xcat='SIG', sequential=True, cids=cids,
+        # Rolling signal: zn-score computed for each of the cross-sections.
+        # The dimensionality of the returned dataframe will match the dataframe
+        # received.
+        prop_sig = make_zn_scores(df, xcat=xcat_sig, sequential=True, cids=cids,
                                   neutral='mean', pan_weight=0)
 
+        # value = prop_sig.stack().to_frame("value").reset_index()
+        # Isolate the value column.
+        value = prop_sig['value']
+
     # [2] Method 'dig' means 'digital' and sets the individual position to either USD1
-    #  Long or short, depending on the sign of the signal.
+    # Long or Short, depending on the sign of the signal.
     elif scale == 'dig':
-        # One for long, 0 for short.
-        value = (dfd['value'] > 0).astype(dtype=np.uint8)
+        # One for long, -1 for short.
+        # Reduce the DataFrame to the signal: singular xcat defined over the respective
+        # cross-sections.
+
+        # Other categories have to be defined over the same respective time-period as the
+        # signal category.
+
+        xcats_unique = list(df['xcats'].unique())
+        # Cross-sections must be the same for all categories: dependent on the signal
+        # category.
+        # Align the time-periods of the signal category and the other remaining
+        # categories which represent the positions.
+        # Aim to isolate the respective category. Pivot and utilise the corresponding
+        # signal to determine which position to take in the remaining categories.
+        df_scale = reduce_df(df=df, xcats=xcats_unique, cids=cids, start=start, end=end)
+
+        # Pivot on the cross-sections. Each category should be defined over the same
+        # set of cross-sections. Lift the signal metric and apply to that specific
+        # category for every cross-section.
+
+        df_scale_pivot = df_scale.pivot(index="real_date", columns="cids",
+                                        values="value")
+
+        long_short_df = df_scale_pivot[df_scale_pivot > 0].astype(dtype=np.uint8)
+
+        # Pivoted dataframe with the respective cross-sections and the corresponding
+        # signal per timestamp.
+        long_short_df = long_short_df.replace(to_replace=0, value=1)
+
+        dfsig = long_short_df.to_frame("value").reset_index()
 
     elif scale == 'vt':
         pass
