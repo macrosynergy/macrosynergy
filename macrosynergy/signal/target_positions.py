@@ -3,8 +3,11 @@ import pandas as pd
 from typing import List
 from macrosynergy.panel.make_zn_scores import *
 from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.panel.historic_vol import historic_vol
 
-
+# The standardised dataframe only consists of a single category: the signal category.
+# Depending on the values held in the category, signal generation, take proportionate
+# positions.
 def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
                      baskets: List[str], ctypes: List[str], sigrels: List[float],
                      xcat_ret: str = 'XR_NSA', blacklist: dict = None,
@@ -49,7 +52,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
             USD1 position in the contract.
         [2] Method 'dig' means 'digital' and sets the individual position to either USD1
             long or short, depending on the sign of the signal.
-        [2] Method 'vt' means vol-targeting and implies that the individual position
+        [3] Method 'vt' means vol-targeting and implies that the individual position
             is set such that it meets a specific vol target based on recent historic
             volatility. The target as annualized SD in USD in the argument `vtarg`.
             This method supports a form of simple risk parity.
@@ -75,14 +78,8 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
           risk management and assets under management.
     """
 
-    # Todo: this function draws heavily on make_zn_scores and historic_vol
-    ticks_vol_ret = [c + xcat_ret for c in cids]
-
-    # :param <str> sig: category postfix that is appended to the contracts in order to
-    #  obtain the tickers that serve as signals.
-    #  For example: 'SIG' is appended to 'EUR_FX' to give the ticker 'EUR_FXSIG'.
-    #  Is 'SIG' a contrived postfix ? What is the DQ equivalent ?
-    ticks_sig = [c + ctype for c in cids for ctype in ctypes]
+    assert xcat_sig in set(df['xcats'].unique()), "Signal category missing from the /" \
+                                                  "standardised dataframe."
 
     # Requires understanding the neutral level to use. Building out some of the below
     # parameters into the main signature.
@@ -91,12 +88,9 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
         # Rolling signal: zn-score computed for each of the cross-sections.
         # The dimensionality of the returned dataframe will match the dataframe
         # received.
-        prop_sig = make_zn_scores(df, xcat=xcat_sig, sequential=True, cids=cids,
-                                  neutral='mean', pan_weight=0)
-
-        # value = prop_sig.stack().to_frame("value").reset_index()
-        # Isolate the value column.
-        value = prop_sig['value']
+        # Standard Deviation column of zn-scores.
+        df_signal = make_zn_scores(df, xcat=xcat_sig, sequential=True, cids=cids,
+                                   neutral='mean', pan_weight=0)
 
     # [2] Method 'dig' means 'digital' and sets the individual position to either USD1
     # Long or Short, depending on the sign of the signal.
@@ -105,33 +99,35 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
         # Reduce the DataFrame to the signal: singular xcat defined over the respective
         # cross-sections.
 
-        # Other categories have to be defined over the same respective time-period as the
-        # signal category.
+        df_signal = reduce_df(df=df, xcats=xcat_sig, cids=cids, start=start, end=end,
+                              blacklist=blacklist)
+        df_signal['value'] = (df_signal['value'] > 0).astype(dtype=np.uint8)
 
-        xcats_unique = list(df['xcats'].unique())
-        # Cross-sections must be the same for all categories: dependent on the signal
-        # category.
-        # Align the time-periods of the signal category and the other remaining
-        # categories which represent the positions.
-        # Aim to isolate the respective category. Pivot and utilise the corresponding
-        # signal to determine which position to take in the remaining categories.
-        df_scale = reduce_df(df=df, xcats=xcats_unique, cids=cids, start=start, end=end)
-
-        # Pivot on the cross-sections. Each category should be defined over the same
-        # set of cross-sections. Lift the signal metric and apply to that specific
-        # category for every cross-section.
-
-        df_scale_pivot = df_scale.pivot(index="real_date", columns="cids",
-                                        values="value")
-
-        long_short_df = df_scale_pivot[df_scale_pivot > 0].astype(dtype=np.uint8)
-
-        # Pivoted dataframe with the respective cross-sections and the corresponding
-        # signal per timestamp.
-        long_short_df = long_short_df.replace(to_replace=0, value=1)
-
-        dfsig = long_short_df.to_frame("value").reset_index()
+        df_signal['value'] = df_signal['value'].replace(to_replace=0, value=1)
 
     elif scale == 'vt':
-        pass
+        assert isinstance(vtarg, float), "Volatility Target is a numerical value."
+
+        df_signal = df.copy()
+        # Returns of the signal category.
+        df_signal = df_signal.sort_values(by=['cid'])
+
+        # Evolving volatility.
+        df_vol = historic_vol(df_signal, xcat=xcat_sig, cids=cids,
+                              lback_periods=lback_periods, lback_meth=lback_meth,
+                              half_life=half_life, start=start, end=end,
+                              blacklist=blacklist, remove_zeros=True, postfix="vol")
+
+        # A 1 SD value translates into a USD1 position in the contract. The zn-score
+        # equates to a one-for-one dollar position.
+        # The equation means the previously computed position can be disregarded.
+
+        # Equation: position * vol_returns = target_vol
+        df_vol_order = df_vol.sort_values(by=['cid'])
+
+        position = vtarg / df_vol_order['value']
+
+        df_signal['value'] = position
+
+    return df_signal
 
