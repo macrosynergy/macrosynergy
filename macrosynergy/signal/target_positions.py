@@ -1,9 +1,11 @@
+
 import numpy as np
 import pandas as pd
 from typing import List
 from macrosynergy.panel.make_zn_scores import *
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.panel.historic_vol import historic_vol
+import random
 
 # The standardised dataframe only consists of a single category: the signal category.
 # Depending on the values held in the category, signal generation, take proportionate
@@ -89,6 +91,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
         # The dimensionality of the returned dataframe will match the dataframe
         # received.
         # Standard Deviation column of zn-scores.
+        # Zn-score acts as a one-for-one dollar conversion.
         df_signal = make_zn_scores(df, xcat=xcat_sig, sequential=True, cids=cids,
                                    neutral='mean', pan_weight=0)
 
@@ -103,7 +106,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
                               blacklist=blacklist)
         df_signal['value'] = (df_signal['value'] > 0).astype(dtype=np.uint8)
 
-        df_signal['value'] = df_signal['value'].replace(to_replace=0, value=1)
+        df_signal['value'] = df_signal['value'].replace(to_replace=0, value=-1)
 
     elif scale == 'vt':
         assert isinstance(vtarg, float), "Volatility Target is a numerical value."
@@ -118,16 +121,47 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
                               half_life=half_life, start=start, end=end,
                               blacklist=blacklist, remove_zeros=True, postfix="vol")
 
+        df_zn_score = make_zn_scores(df_signal, xcat=xcat_sig, sequential=True,
+                                     cids=cids, neutral='mean', pan_weight=0)
+
         # A 1 SD value translates into a USD1 position in the contract. The zn-score
         # equates to a one-for-one dollar position.
         # The equation means the previously computed position can be disregarded.
 
         # Equation: position * vol_returns = target_vol
-        df_vol_order = df_vol.sort_values(by=['cid'])
-
-        position = vtarg / df_vol_order['value']
+        # Adjust the position according to the volatility target.
+        position = (vtarg / df_vol['value']) * df_zn_score['value']
 
         df_signal['value'] = position
 
+    df_signal['ticker'] = df_signal['xcat'] + df_signal['cid']
+    df_signal['tickers'] += signame
+
     return df_signal
 
+
+if __name__ == "__main__":
+
+    cids = ['AUD', 'GBP', 'NZD', 'USD']
+
+    xcats = ['FXXR_NSA']
+
+    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
+                                                'sd_mult'])
+
+    df_cids.loc['AUD'] = ['2010-01-01', '2020-12-31', 0, 1]
+    df_cids.loc['GBP'] = ['2011-01-01', '2020-11-30', 0, 2]
+    df_cids.loc['NZD'] = ['2012-01-01', '2020-12-31', 0, 3]
+    df_cids.loc['USD'] = ['2013-01-01', '2020-12-31', 0, 4]
+
+    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
+                                                  'sd_mult', 'ar_coef', 'back_coef'])
+
+    df_xcats.loc['FXXR_NSA'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.2]
+
+    random.seed(2)
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+
+    black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
+
+    print(dfd.sort_values(by=['cid']))
