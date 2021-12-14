@@ -5,19 +5,19 @@ from typing import List
 from macrosynergy.panel.make_zn_scores import *
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.panel.historic_vol import historic_vol
+from macrosynergy.management.simulate_quantamental_data import make_qdf
 import random
 
 # The standardised dataframe only consists of a single category: the signal category.
 # Depending on the values held in the category, signal generation, take proportionate
 # positions.
-def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
-                     baskets: List[str], ctypes: List[str], sigrels: List[float],
-                     xcat_ret: str = 'XR_NSA', blacklist: dict = None,
+def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_sig: str,
+                     ctypes: List[str], sigrels: List[float], baskets: List[str] = None,
+                     ret: str = 'XR_NSA', blacklist: dict = None,
                      start: str = None, end: str = None,
                      scale: str = 'prop', vtarg: float = 0.01,
                      lback_periods: int = 21, lback_meth: str = 'ma', half_life=11,
-                     signame: str = 'POS'
-                     ):
+                     signame: str = 'POS'):
 
     """
     Converts signals into contract-specific target positions
@@ -26,6 +26,8 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
         'cid', 'xcats', 'real_date' and 'value'.
     :param <List[str]> cids: cross sections of markets or currency areas in which
         positions should be taken.
+    :param <List[str]> xcats: the categories the standardised dataframe is defined over.
+        Will require the (ctypes + ret) for volatility targeting.
     :param <str> xcat_sig: category that serves as signal across markets.
     :param <List[str]> ctypes: contract types that are traded across markets. They should
         correspond to return tickers. Examples are 'FX' or 'EQ'.
@@ -34,9 +36,8 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
         benchmark for relative positions. A basket has the form 'cid'_'ctype', where
         cid could be 'GLB' for a global basket.
     :param <List[float]> sigrels: values that translate the single signal into contract
-        type and basket signals in the order defined by baskets + ctypes.
-    :param <str> xcat_ret: category denoting the cross section-specific returns,
-        which may be a combination of contracts.
+        type and basket signals in the order defined by ctypes + baskets.
+    :param <str> ret: postfix denoting the returns applied to the contract types.
         The returns are necessary for volatility target-based signals.
     :param <dict> blacklist: cross sectional date ranges that should have zero target
         positions.
@@ -80,11 +81,16 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
           risk management and assets under management.
     """
 
-    assert xcat_sig in set(df['xcats'].unique()), "Signal category missing from the /" \
-                                                  "standardised dataframe."
+    assert xcat_sig in set(df['xcat'].unique()), "Signal category missing from the /" \
+                                                 "standardised dataframe."
+    assert len(ctypes) == len(sigrels)
+    assert scale in ['prop', 'dig']
 
     # Requires understanding the neutral level to use. Building out some of the below
     # parameters into the main signature.
+
+    dfd = reduce_df(df=df, xcats=[xcat_sig], cids=cids, start=start, end=end,
+                    blacklist=blacklist)
     if scale == 'prop':
 
         # Rolling signal: zn-score computed for each of the cross-sections.
@@ -92,59 +98,98 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
         # received.
         # Standard Deviation column of zn-scores.
         # Zn-score acts as a one-for-one dollar conversion.
-        df_signal = make_zn_scores(df, xcat=xcat_sig, sequential=True, cids=cids,
+
+        df_signal = make_zn_scores(dfd, xcat=xcat_sig, sequential=True, cids=cids,
                                    neutral='mean', pan_weight=0)
 
     # [2] Method 'dig' means 'digital' and sets the individual position to either USD1
     # Long or Short, depending on the sign of the signal.
-    elif scale == 'dig':
+    else:
         # One for long, -1 for short.
         # Reduce the DataFrame to the signal: singular xcat defined over the respective
         # cross-sections.
 
-        df_signal = reduce_df(df=df, xcats=xcat_sig, cids=cids, start=start, end=end,
-                              blacklist=blacklist)
+        df_signal = dfd.copy()
         df_signal['value'] = (df_signal['value'] > 0).astype(dtype=np.uint8)
 
         df_signal['value'] = df_signal['value'].replace(to_replace=0, value=-1)
 
-    elif scale == 'vt':
-        assert isinstance(vtarg, float), "Volatility Target is a numerical value."
+    assert isinstance(vtarg, float), "Volatility Target is a numerical value."
+    assert df_signal.shape[1] == 4
 
-        df_signal = df.copy()
-        # Returns of the signal category.
-        df_signal = df_signal.sort_values(by=['cid'])
+    # xcat_sig = 'FXXR_NSA'
+    # Example: ctypes = ['FX', 'EQ']; sigrels = [1, -1]; ret = 'XR_NSA'
+    contract_returns = [c + ret for c in ctypes]
 
-        # Evolving volatility.
-        df_vol = historic_vol(df_signal, xcat=xcat_sig, cids=cids,
-                              lback_periods=lback_periods, lback_meth=lback_meth,
-                              half_life=half_life, start=start, end=end,
-                              blacklist=blacklist, remove_zeros=True, postfix="vol")
+    # Extract the returns: (FXXR_NSA * 1 + EQXR_NSA * -1)
 
-        df_zn_score = make_zn_scores(df_signal, xcat=xcat_sig, sequential=True,
-                                     cids=cids, neutral='mean', pan_weight=0)
+    # The "start" & "end" parameters ensure both series are defined over the same time-
+    # period.
+    for i, c_ret in enumerate(contract_returns):
+        dfd_c_ret = dfd[dfd['xcat'] == c_ret]
+        dfd_c_ret = dfd_c_ret.pivot(index="real_date", columns="cid", values="value")
 
-        # A 1 SD value translates into a USD1 position in the contract. The zn-score
-        # equates to a one-for-one dollar position.
-        # The equation means the previously computed position can be disregarded.
+        dfd_c_ret = dfd_c_ret.sort_index(axis=1)
+        dfd_c_ret *= sigrels[i]
+        if i == 0:
+            dfd_c_rets = dfd_c_ret.copy()
+        else:
+            dfd_c_rets += dfd_c_ret
 
-        # Equation: position * vol_returns = target_vol
+    dfd_stack = dfd_c_rets.stack().to_frame("value").reset_index()
+    dfd_stack['xcat'] = ret
+
+    # Evolving volatility. The function historic_vol() will isolate the df on the
+    # respective category passed. Returns a standardised DataFrame.
+    df_vol = historic_vol(dfd_stack, xcat=ret, cids=cids,
+                          lback_periods=lback_periods, lback_meth=lback_meth,
+                          half_life=half_life, start=start, end=end,
+                          blacklist=blacklist, remove_zeros=True, postfix="")
+
+    dfw_vol = df_vol.pivot(index="real_date", columns="cid", values="value")
+    dfw_vol = dfw_vol.sort_index(axis=1)
+    # Adjust the position according to the volatility target.
+    vol_ratio = vtarg / dfw_vol
+
+    data_frames = []
+    # Number of contracts the signal determines the position for.
+    for i, sigrel in enumerate(sigrels):
+        df_signal_copy = df_signal.copy()
+
+        df_signal_copy['value'] *= sigrel
+
+        df_signal_pivot = df_signal_copy.pivot(index="real_date", columns="cid",
+                                               values="value")
+        df_signal_pivot = df_signal_pivot.sort_index(axis=1)
+
+        # Equation: (target_vol / vol_returns) * position
         # Adjust the position according to the volatility target.
-        position = (vtarg / df_vol['value']) * df_zn_score['value']
+        # The volatility is calculated using the "portfolio" returns (all ctypes).
+        df_signal_vol = df_signal_pivot.multiply(vol_ratio)
 
-        df_signal['value'] = position
+        # Pivot back.
+        dfd_stack = df_signal_vol.stack().to_frame("value").reset_index()
 
-    df_signal['ticker'] = df_signal['xcat'] + df_signal['cid']
-    df_signal['tickers'] += signame
+        dfd_stack['xcat'] = contract_returns[i]
+        data_frames.append(dfd_stack)
 
-    return df_signal
+    df_agg = pd.concat(data_frames, axis=0, ignore_index=True)
+
+    # A 1 SD value translates into a USD1 position in the contract. The zn-score
+    # equates to a one-for-one dollar position.
+    # The equation means the previously computed position can be disregarded.
+
+    df_agg['ticker'] = df_agg['xcat'] + df_agg['cid']
+    df_agg['ticker'] += signame
+
+    return df_agg
 
 
 if __name__ == "__main__":
 
     cids = ['AUD', 'GBP', 'NZD', 'USD']
 
-    xcats = ['FXXR_NSA']
+    xcats = ['FXXR_NSA', 'EQXR_NSA']
 
     df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
                                                 'sd_mult'])
@@ -158,10 +203,20 @@ if __name__ == "__main__":
                                                   'sd_mult', 'ar_coef', 'back_coef'])
 
     df_xcats.loc['FXXR_NSA'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.2]
+    df_xcats.loc['EQXR_NSA'] = ['2012-01-01', '2020-10-30', 0.5, 2, 0, 0.2]
 
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
 
-    print(dfd.sort_values(by=['cid']))
+    # xcat_sig = 'FXXR_NSA'
+    # Example: ctypes = ['FX', 'EQ']; sigrels = [1, -1]; ret = 'XR_NSA'
+    # A single category to determine the position on potentially multiple contracts.
+    position_df = target_positions(df=dfd, cids=cids, xcats=xcats, xcat_sig='FXXR_NSA',
+                                   ctypes=['FX', 'EQ'], sigrels=[1, -1],
+                                   ret='XR_NSA', blacklist=black, start='2012-01-01',
+                                   end='2020-10-30', scale='prop',
+                                   vtarg=0.1, signame='POS')
+
+    print(position_df)
+
