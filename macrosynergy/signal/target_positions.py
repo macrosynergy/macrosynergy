@@ -73,7 +73,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
     :param <str> signame: postfix added to contract to denote signal name.
 
     :return <pd.Dataframe>: standardized dataframe with daily contract position signals
-        in USD, using the columns 'cid', 'xcats', 'real_date' and 'value'.
+        in USD, using the columns 'cid', 'xcat', 'real_date' and 'value'.
 
     Note: A signal is still different from a position in two principal ways. First,
           the position signal can only be implemented with some lag. Second, the actual
@@ -89,7 +89,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
     # Requires understanding the neutral level to use. Building out some of the below
     # parameters into the main signature.
 
-    dfd = reduce_df(df=df, xcats=[xcat_sig], cids=cids, start=start, end=end,
+    dfd = reduce_df(df=df, xcats=xcats, cids=cids, start=start, end=end,
                     blacklist=blacklist)
     if scale == 'prop':
 
@@ -179,8 +179,10 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
     # equates to a one-for-one dollar position.
     # The equation means the previously computed position can be disregarded.
 
-    df_agg['ticker'] = df_agg['xcat'] + df_agg['cid']
-    df_agg['ticker'] += signame
+    columns = ['cid', 'xcat', 'real_date', 'value']
+    df_agg['xcat'] += '_' + signame
+
+    df_agg = df_agg[columns]
 
     return df_agg
 
@@ -220,3 +222,9 @@ if __name__ == "__main__":
 
     print(position_df)
 
+    position_df = target_positions(df=dfd, cids=cids, xcats=xcats, xcat_sig='FXXR_NSA',
+                                   ctypes=['FX'], sigrels=[1], ret='XR_NSA',
+                                   blacklist=black, start='2012-01-01', end='2020-10-30',
+                                   scale='prop', vtarg=0.1, signame='POS')
+
+    print(position_df)
