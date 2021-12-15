@@ -8,11 +8,10 @@ import pandas as pd
 
 class TestAll(unittest.TestCase):
 
-    def __init__(self):
-        self.cids = ['AUD', 'GBP', 'NZD', 'USD']
-        self.xcats = ['FXXR_NSA', 'EQXR_NSA']
-
     def dataframe_generator(self):
+
+        self.__dict__['cids'] = ['AUD', 'GBP', 'NZD', 'USD']
+        self.__dict__['xcats'] = ['FXXR_NSA', 'EQXR_NSA']
 
         df_cids = pd.DataFrame(index=self.cids, columns=['earliest', 'latest',
                                                          'mean_add', 'sd_mult'])
@@ -34,7 +33,12 @@ class TestAll(unittest.TestCase):
 
         self.__dict__['dfd'] = dfd
 
+        assert 'dfd' in vars(self).keys(), "Instantiation of DataFrame missing from " \
+                                           "field dictionary."
+
     def test_target_positions(self):
+
+        self.dataframe_generator()
 
         black = {'AUD': ['2000-01-01', '2003-12-31'],
                  'GBP': ['2018-01-01', '2100-01-01']}
@@ -50,6 +54,34 @@ class TestAll(unittest.TestCase):
                                            start='2012-01-01',
                                            end='2020-10-30', scale='prop',
                                            vtarg=0.1, signame='POS')
+
+        with self.assertRaises(AssertionError):
+            # Testing the assertion on the scale parameter: required ['prop', 'dig'].
+            # Pass in noise.
+            scale = 'vtarg'
+            position_df = target_positions(df=self.dfd, cids=self.cids, xcats=self.xcats,
+                                           xcat_sig=xcat_sig,
+                                           ctypes=['FX', 'EQ'], sigrels=[1, -1],
+                                           ret='XR_NSA', blacklist=black,
+                                           start='2012-01-01',
+                                           end='2020-10-30', scale=scale,
+                                           vtarg=0.1, signame='POS')
+
+        with self.assertRaises(AssertionError):
+            # Length of "sigrels" and "ctypes" must be the same. The number of "sigrels"
+            # corresponds to the number of "ctypes" defined in the data structure passed
+            # into target_positions().
+
+            sigrels = [1, -1, 0.5, 0.25]
+            ctypes = ['FX', 'EQ']
+            position_df = target_positions(df=self.dfd, cids=self.cids, xcats=self.xcats,
+                                           xcat_sig=xcat_sig,
+                                           ctypes=ctypes, sigrels=sigrels,
+                                           ret='XR_NSA', blacklist=black,
+                                           start='2012-01-01',
+                                           end='2020-10-30', scale=scale,
+                                           vtarg=0.1, signame='POS')
+
 
 
 if __name__ == "__main__":
