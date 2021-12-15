@@ -83,7 +83,6 @@ class TestAll(unittest.TestCase):
                                            vtarg=0.1, signame='POS')
 
 
-
 if __name__ == "__main__":
 
     unittest.main()
