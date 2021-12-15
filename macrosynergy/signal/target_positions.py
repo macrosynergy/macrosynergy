@@ -8,9 +8,36 @@ from macrosynergy.panel.historic_vol import historic_vol
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 import random
 
-def preliminary_position(df: pd.DataFrame, cids: List[str], xcat_sig: str,
-                        blacklist: dict = None, start: str = None, end: str = None,
-                        scale: str = 'prop'):
+def preliminary_position(dfd_reduce: pd.DataFrame, cids: List[str], xcat_sig: str,
+                         blacklist: dict = None, start: str = None, end: str = None,
+                         scale: str = 'prop'):
+    """
+    Function designed to establish the dollar position, according to the "scale"
+    parameter, prior to any volatility targeting.
+
+    :param <pd.Dataframe> dfd_reduce: standardized DataFrame containing the following
+        columns: 'cid', 'xcats', 'real_date' and 'value'.
+    :param <List[str]> cids: cross sections of markets or currency areas in which
+        positions should be taken.
+    :param <str> xcat_sig: category that serves as signal across markets.
+    :param <dict> blacklist: cross sectional date ranges that should have zero target
+        positions.
+        This is a standardized dictionary with cross sections as keys and tuples of
+        start and end dates of the blacklist periods in ISO formats as values.
+        If one cross section has multiple blacklist periods, numbers are added to the
+        keys (i.e. TRY_1, TRY_2, etc.)
+    :param <str> start: earliest date in ISO format. Default is None and earliest date
+        for which the signal category is available is used.
+    :param <str> end: latest date in ISO format. Default is None and latest date
+        for which the signal category is available is used.
+    :param <str> scale: method to translate signals into target positions:
+        [1] Default is 'prop', means proportionate. In this case zn-scoring is applied
+            to the signal based on the panel and a 1 SD value translates into a
+            USD1 position in the contract.
+        [2] Method 'dig' means 'digital' and sets the individual position to either USD1
+            long or short, depending on the sign of the signal.
+
+    """
 
     if scale == 'prop':
 
@@ -21,7 +48,7 @@ def preliminary_position(df: pd.DataFrame, cids: List[str], xcat_sig: str,
 
         # Requires understanding the neutral level to use. Building out some of the below
         # parameters into the main signature.
-        df_signal = make_zn_scores(dfd, xcat=xcat_sig, sequential=True, cids=cids,
+        df_signal = make_zn_scores(dfd_reduce, xcat=xcat_sig, sequential=True, cids=cids,
                                    neutral='mean', pan_weight=0)
 
     # [2] Method 'dig' means 'digital' and sets the individual position to either USD1
@@ -30,8 +57,8 @@ def preliminary_position(df: pd.DataFrame, cids: List[str], xcat_sig: str,
         # One for long, -1 for short.
         # Reduce the DataFrame to the signal: singular xcat defined over the respective
         # cross-sections.
-        df_signal = reduce_df(df=df, xcats=[xcat_sig], cids=cids, start=start, end=end,
-                              blacklist=blacklist)
+        df_signal = reduce_df(df=dfd_reduce, xcats=[xcat_sig], cids=cids, start=start,
+                              end=end, blacklist=blacklist)
 
         df_signal['value'] = (df_signal['value'] > 0).astype(dtype=np.uint8)
 
@@ -117,7 +144,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
     dfd = reduce_df(df=df, xcats=xcats, cids=cids, start=start, end=end,
                     blacklist=blacklist)
 
-    df_signal = preliminary_position(df=dfd, cids=cids, xcat_sig=xcat_sig,
+    df_signal = preliminary_position(dfd_reduce=dfd, cids=cids, xcat_sig=xcat_sig,
                                      blacklist=blacklist, start=start, end=end,
                                      scale=scale)
 
