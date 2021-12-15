@@ -8,6 +8,49 @@ from macrosynergy.panel.historic_vol import historic_vol
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 import random
 
+def unit_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
+                   blacklist: dict = None,
+                   start: str = None, end: str = None,
+                   scale: str = 'prop', thresh: float = None):
+    """
+    Establish the unitary position depending on the scaling factor. Will not adjust for
+    any volatility targets.
+
+    :param <pd.Dataframe> df: standardized DataFrame containing the following columns:
+        'cid', 'xcats', 'real_date' and 'value'.
+    :param <List[str]> cids: cross sections of markets or currency areas in which
+        positions should be taken.
+    :param <str> xcat_sig: category that serves as signal across markets.
+    :param <dict> blacklist: cross sectional date ranges that should have zero target
+        positions.
+    :param <str> start: earliest date in ISO format. Default is None and earliest date
+        for which the signal category is available is used.
+    :param <str> end: latest date in ISO format. Default is None and latest date
+        for which the signal category is available is used.
+    :param <str> scale: method to translate signals into target positions:
+        [1] Default is 'prop', means proportionate. In this case zn-scoring is applied
+            to the signal based on the panel, with the neutral level set at zero.
+             A 1 SD value translates into a USD1 position in the contract.
+        [2] Method 'dig' means 'digital' and sets the individual position to either USD1
+            long or short, depending on the sign of the signal.
+    :param <float> thresh: threshold value beyond which zn-scores for propotionate
+        position taking are winsorized. The threshold is the maximum absolute
+        score value in standard deviations. The minimum is 1 standard deviation.
+
+    """
+
+    if scale == 'prop':
+
+        df_unit_pos = make_zn_scores(dfd, xcat=xcat_sig, sequential=True, cids=cids,
+                                     neutral='zero', pan_weight=1, thresh=thresh)
+    else:  # digital positions
+
+        df_unit_pos = reduce_df(df=df, xcats=[xcat_sig], cids=cids, start=start, end=end,
+                              blacklist=blacklist)
+        df_unit_pos['value'] = np.sign(df_unit_pos['value']).astype(dtype=np.uint8)
+
+    return df_unit_pos
+
 def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_sig: str,
                      ctypes: List[str], sigrels: List[float], baskets: List[str] = None,
                      ret: str = 'XR_NSA', blacklist: dict = None,
@@ -101,17 +144,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
 
     # C. Calculate unit positions
 
-    if scale == 'prop':  # proportionate positions
-
-        df_upos = make_zn_scores(dfd, xcat=xcat_sig, sequential=True, cids=cids,
-                                   neutral='zero',  # 0 means no position
-                                   pan_weight=1,  # scores are based on panel
-                                   thresh=thresh)  # potential winsorization
-    else:  # digital positions
-
-        df_upos = reduce_df(df=df, xcats=[xcat_sig], cids=cids, start=start, end=end,
-                              blacklist=blacklist)
-        df_upos['value'] = np.sign(df_upos['value']).astype(dtype=int)
+    df_unit_pos = unit_positions(dfd)
 
     # D. Volatility targeting
 
