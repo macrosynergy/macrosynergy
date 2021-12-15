@@ -8,9 +8,6 @@ from macrosynergy.panel.historic_vol import historic_vol
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 import random
 
-# The standardised dataframe only consists of a single category: the signal category.
-# Depending on the values held in the category, signal generation, take proportionate
-# positions.
 def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_sig: str,
                      ctypes: List[str], sigrels: List[float], baskets: List[str] = None,
                      ret: str = 'XR_NSA', blacklist: dict = None,
@@ -86,9 +83,6 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
     assert len(ctypes) == len(sigrels)
     assert scale in ['prop', 'dig']
 
-    # Requires understanding the neutral level to use. Building out some of the below
-    # parameters into the main signature.
-
     dfd = reduce_df(df=df, xcats=xcats, cids=cids, start=start, end=end,
                     blacklist=blacklist)
     if scale == 'prop':
@@ -96,9 +90,10 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
         # Rolling signal: zn-score computed for each of the cross-sections.
         # The dimensionality of the returned dataframe will match the dataframe
         # received.
-        # Standard Deviation column of zn-scores.
-        # Zn-score acts as a one-for-one dollar conversion.
+        # Zn-score acts as a one-for-one dollar conversion for position in the asset.
 
+        # Requires understanding the neutral level to use. Building out some of the below
+        # parameters into the main signature.
         df_signal = make_zn_scores(dfd, xcat=xcat_sig, sequential=True, cids=cids,
                                    neutral='mean', pan_weight=0)
 
@@ -108,14 +103,15 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
         # One for long, -1 for short.
         # Reduce the DataFrame to the signal: singular xcat defined over the respective
         # cross-sections.
+        df_signal = reduce_df(df=df, xcats=[xcat_sig], cids=cids, start=start, end=end,
+                              blacklist=blacklist)
 
-        df_signal = dfd.copy()
         df_signal['value'] = (df_signal['value'] > 0).astype(dtype=np.uint8)
 
         df_signal['value'] = df_signal['value'].replace(to_replace=0, value=-1)
 
     assert isinstance(vtarg, float), "Volatility Target is a numerical value."
-    assert df_signal.shape[1] == 4
+    assert df_signal.shape[1] == 4, "Incorrect dataframe."
 
     # xcat_sig = 'FXXR_NSA'
     # Example: ctypes = ['FX', 'EQ']; sigrels = [1, -1]; ret = 'XR_NSA'
@@ -136,6 +132,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
         else:
             dfd_c_rets += dfd_c_ret
 
+    # Split the "portfolio" of returns up across the cross-sections held in the panel.
     dfd_stack = dfd_c_rets.stack().to_frame("value").reset_index()
     dfd_stack['xcat'] = ret
 
@@ -165,6 +162,8 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
         # Equation: (target_vol / vol_returns) * position
         # Adjust the position according to the volatility target.
         # The volatility is calculated using the "portfolio" returns (all ctypes).
+        # Is the volatility adjustment applied to all potential positions in the
+        # contract ?
         df_signal_vol = df_signal_pivot.multiply(vol_ratio)
 
         # Pivot back.
@@ -214,6 +213,9 @@ if __name__ == "__main__":
     # xcat_sig = 'FXXR_NSA'
     # Example: ctypes = ['FX', 'EQ']; sigrels = [1, -1]; ret = 'XR_NSA'
     # A single category to determine the position on potentially multiple contracts.
+    # The relevant volatility for the volatility adjustment would be the combined returns
+    # of each contract. In the below instance, the combined returns of
+    # (FXXR_NSA + EQXR_NSA) will be used to determine the evolving volatility.
     position_df = target_positions(df=dfd, cids=cids, xcats=xcats, xcat_sig='FXXR_NSA',
                                    ctypes=['FX', 'EQ'], sigrels=[1, -1],
                                    ret='XR_NSA', blacklist=black, start='2012-01-01',
@@ -225,6 +227,6 @@ if __name__ == "__main__":
     position_df = target_positions(df=dfd, cids=cids, xcats=xcats, xcat_sig='FXXR_NSA',
                                    ctypes=['FX'], sigrels=[1], ret='XR_NSA',
                                    blacklist=black, start='2012-01-01', end='2020-10-30',
-                                   scale='prop', vtarg=0.1, signame='POS')
+                                   scale='dig', vtarg=0.1, signame='POS')
 
     print(position_df)
