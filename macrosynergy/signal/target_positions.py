@@ -172,7 +172,9 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
 
     else:  # if no vol targeting
 
-        df_tpos = df_upos
+        df_tpos = df_upos  # not correct
+
+        # Todo: Unit positions per asset class
 
     return df_tpos
 
