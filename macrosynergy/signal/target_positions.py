@@ -8,6 +8,37 @@ from macrosynergy.panel.historic_vol import historic_vol
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 import random
 
+def preliminary_position(df: pd.DataFrame, cids: List[str], xcat_sig: str,
+                        blacklist: dict = None, start: str = None, end: str = None,
+                        scale: str = 'prop'):
+
+    if scale == 'prop':
+
+        # Rolling signal: zn-score computed for each of the cross-sections.
+        # The dimensionality of the returned dataframe will match the dataframe
+        # received.
+        # Zn-score acts as a one-for-one dollar conversion for position in the asset.
+
+        # Requires understanding the neutral level to use. Building out some of the below
+        # parameters into the main signature.
+        df_signal = make_zn_scores(dfd, xcat=xcat_sig, sequential=True, cids=cids,
+                                   neutral='mean', pan_weight=0)
+
+    # [2] Method 'dig' means 'digital' and sets the individual position to either USD1
+    # Long or Short, depending on the sign of the signal.
+    else:
+        # One for long, -1 for short.
+        # Reduce the DataFrame to the signal: singular xcat defined over the respective
+        # cross-sections.
+        df_signal = reduce_df(df=df, xcats=[xcat_sig], cids=cids, start=start, end=end,
+                              blacklist=blacklist)
+
+        df_signal['value'] = (df_signal['value'] > 0).astype(dtype=np.uint8)
+
+        df_signal['value'] = df_signal['value'].replace(to_replace=0, value=-1)
+
+    return df_signal
+
 def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_sig: str,
                      ctypes: List[str], sigrels: List[float], baskets: List[str] = None,
                      ret: str = 'XR_NSA', blacklist: dict = None,
@@ -85,30 +116,10 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
 
     dfd = reduce_df(df=df, xcats=xcats, cids=cids, start=start, end=end,
                     blacklist=blacklist)
-    if scale == 'prop':
 
-        # Rolling signal: zn-score computed for each of the cross-sections.
-        # The dimensionality of the returned dataframe will match the dataframe
-        # received.
-        # Zn-score acts as a one-for-one dollar conversion for position in the asset.
-
-        # Requires understanding the neutral level to use. Building out some of the below
-        # parameters into the main signature.
-        df_signal = make_zn_scores(dfd, xcat=xcat_sig, sequential=True, cids=cids,
-                                   neutral='mean', pan_weight=0)
-
-    # [2] Method 'dig' means 'digital' and sets the individual position to either USD1
-    # Long or Short, depending on the sign of the signal.
-    else:
-        # One for long, -1 for short.
-        # Reduce the DataFrame to the signal: singular xcat defined over the respective
-        # cross-sections.
-        df_signal = reduce_df(df=df, xcats=[xcat_sig], cids=cids, start=start, end=end,
-                              blacklist=blacklist)
-
-        df_signal['value'] = (df_signal['value'] > 0).astype(dtype=np.uint8)
-
-        df_signal['value'] = df_signal['value'].replace(to_replace=0, value=-1)
+    df_signal = preliminary_position(df=dfd, cids=cids, xcat_sig=xcat_sig,
+                                     blacklist=blacklist, start=start, end=end,
+                                     scale=scale)
 
     assert isinstance(vtarg, float), "Volatility Target is a numerical value."
     assert df_signal.shape[1] == 4, "Incorrect dataframe."
