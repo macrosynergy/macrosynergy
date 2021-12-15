@@ -149,14 +149,14 @@ class Test_All(unittest.TestCase):
         end = aud_blackout[1]
 
         # Validate the number of timestamps, for a particular cross-section, with a
-        # "value" equated to zero equals the expected number which can be precomputed.
+        # "value" equated to one equals the expected number which can be precomputed.
         # Only limitation is it is invariant to the actual timestamp and instead focuses
         # the longevity of the blackout period being correct.
         all_days = pd.date_range(start, end)
         work_days = all_days[all_days.weekday < 5]
 
         aud_df = self.black_dfd[self.black_dfd['cid'] == 'AUD']
-        black_aud_df = aud_df[aud_df['value'] == 0]
+        black_aud_df = aud_df[aud_df['value'] == 1]
 
         self.assertTrue(len(work_days) == black_aud_df.shape[0])
 
@@ -173,7 +173,7 @@ class Test_All(unittest.TestCase):
 
         # Isolate the relevant DataFrame.
         cad_df = self.black_dfd[self.black_dfd['cid'] == 'CAD']
-        black_cad_df = cad_df[cad_df['value'] == 0]
+        black_cad_df = cad_df[cad_df['value'] == 1]
         dates_df = black_cad_df['real_date'].to_numpy()
 
         # "weekend handler" will shift the date forwards.
