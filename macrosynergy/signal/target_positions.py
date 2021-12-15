@@ -43,7 +43,7 @@ def unit_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
 
         df_unit_pos = make_zn_scores(dfd, xcat=xcat_sig, sequential=True, cids=cids,
                                      neutral='zero', pan_weight=1, thresh=thresh)
-    else:  # digital positions
+    else:
 
         df_unit_pos = reduce_df(df=df, xcats=[xcat_sig], cids=cids, start=start, end=end,
                               blacklist=blacklist)
@@ -53,12 +53,10 @@ def unit_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
 
 def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_sig: str,
                      ctypes: List[str], sigrels: List[float], baskets: List[str] = None,
-                     ret: str = 'XR_NSA', blacklist: dict = None,
-                     start: str = None, end: str = None,
-                     scale: str = 'prop', thresh: float = None,
-                     vtarg: float = None,
-                     lback_periods: int = 21, lback_meth: str = 'ma', half_life=11,
-                     signame: str = 'POS'):
+                     ret: str = 'XR_NSA', blacklist: dict = None, start: str = None,
+                     end: str = None, scale: str = 'prop',  thresh: float = None,
+                     vtarg: float = None, lback_periods: int = 21,
+                     lback_meth: str = 'ma', half_life: int = 11, signame: str = 'POS'):
 
     """
     Converts signals into contract-specific target positions
@@ -131,30 +129,25 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
         "Volatility Target must be a float."
 
     cols = ['cid', 'xcat', 'real_date', 'value']
-    assert set(cols) <= set(df.columns), f'df columns must contain {cols}'
+    assert set(cols) <= set(df.columns), f"df columns must contain {cols}."
     df = df[cols]
 
     # Todo: a bit light checks for wrong input
 
-    # B. Reduce to dataframe to rquired slice
-
+    # B. Reduce to dataframe to required slice
     df = df.loc[:, cols]
     dfd = reduce_df(df=df, xcats=xcats, cids=cids, start=start, end=end,
                     blacklist=blacklist)
 
-    # C. Calculate unit positions
-
-    df_unit_pos = unit_positions(dfd)
-
-    # D. Volatility targeting
+    df_unit_pos = unit_positions(df=dfd, cids=cids, xcat_sig=xcat_sig,
+                                 blacklist=blacklist, start=start, end=end,
+                                 scale=scale, thresh=thresh)
+    contract_returns = [c + ret for c in ctypes]
 
     if vtarg is not None:
 
-        # D.1. Calculate combined position returns
-
-        contract_returns = [c + ret for c in ctypes]
-
         for i, c_ret in enumerate(contract_returns):
+
             dfd_c_ret = dfd[dfd['xcat'] == c_ret]
             dfd_c_ret = dfd_c_ret.pivot(index="real_date", columns="cid", values="value")
             dfd_c_ret = dfd_c_ret.sort_index(axis=1) * sigrels[i]
@@ -183,7 +176,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
 
         data_frames = []  # initiate list to collect vol-targeted position dataframes
         for i, sigrel in enumerate(sigrels):
-            df_pos = df_upos.copy()
+            df_pos = df_unit_pos.copy()
             df_pos['value'] *= sigrel
             dfw_pos = df_pos.pivot(index="real_date", columns="cid",
                                    values="value")
@@ -195,18 +188,26 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
             data_frames.append(df_pos_vt)
 
         df_tpos = pd.concat(data_frames, axis=0, ignore_index=True)
-        df_tpos['xcat'] += '_' + signame
-        df_tpos = df_tpos[cols]
 
-    # E. Target position output
+    else:
 
-    # Todo: position names should be cid+'_'+ctype+'_POS'
+        df_concat = []
+        for i, elem in enumerate(contract_returns):
 
-    else:  # if no vol targeting
+            df_unit_pos *= sigrels[i]
+            # The current category, defined on the dataframe, is the signal category.
+            # But the signal is being used to take a position in multiple contracts.
+            # according to the long-short definition. The returned dataframe should be
+            # inclusive of all the contracts.
+            df_unit_pos['xcat'] = elem
 
-        df_tpos = df_upos  # not correct
+            df_concat.append(df_unit_pos)
 
-        # Todo: Unit positions per asset class
+        df_tpos = pd.concat(df_concat, axis=0, ignore_index=True)
+
+    df_tpos['xcat'] += '_' + signame
+    df_tpos['xcat'] = df_tpos['cid'] + '_' + df_tpos['xcat']
+    df_tpos = df_tpos[cols]
 
     return df_tpos
 
