@@ -37,7 +37,13 @@ def unit_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
         position taking are winsorized. The threshold is the maximum absolute
         score value in standard deviations. The minimum is 1 standard deviation.
 
+    :return <pd.Dataframe>: standardized dataframe, of the signal category, with the
+        respective computed position, using the columns 'cid', 'xcat', 'real_date' and
+        'value'.
+
     """
+    options = ['prop', 'dig']
+    assert scale in options, f"The scale parameter must be either {options}"
 
     if scale == 'prop':
 
@@ -47,9 +53,49 @@ def unit_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
 
         df_unit_pos = reduce_df(df=df, xcats=[xcat_sig], cids=cids, start=start, end=end,
                               blacklist=blacklist)
-        df_unit_pos['value'] = np.sign(df_unit_pos['value']).astype(dtype=np.uint8)
+        df_unit_pos['value'] = np.sign(df_unit_pos['value'])
 
     return df_unit_pos
+
+def return_series(dfd: pd.DataFrame, contract_returns: List[str], sigrels: List[str],
+                  ret: str = 'XR_NSA'):
+    """
+    Compute the aggregated return-series, adjusting for the respective signal, for the
+    portfolio of contracts: a single signal can be used to take positions in
+    multiple contract types: EQ, FX.
+
+    :param <pd.Dataframe> dfd: standardized DataFrame containing the following columns:
+        'cid', 'xcats', 'real_date' and 'value'.
+    :param <List[str]> contract_returns: list of the contract return types.
+    :param <List[str]> sigrels: respective signal for each contract type.
+    :param <str> ret: postfix denoting the returns in % applied to the contract types.
+
+    :return <pd.Dataframe>: standardized dataframe with the summed portfolio returns
+        which are used to calculate the evolving volatility, using the columns 'cid',
+        'xcat', 'real_date' and 'value'.
+
+    """
+
+    assert len(contract_returns) == len(sigrels), "Each individual contract requires an " \
+                                                  "associated signal."
+
+    for i, c_ret in enumerate(contract_returns):
+
+        dfd_c_ret = dfd[dfd['xcat'] == c_ret]
+        dfd_c_ret = dfd_c_ret.pivot(index="real_date", columns="cid", values="value")
+        dfd_c_ret = dfd_c_ret.sort_index(axis=1) * sigrels[i]
+        if i == 0:
+            dfd_c_rets = dfd_c_ret.copy()
+        else:
+
+            dfd_c_rets += dfd_c_ret
+
+    dfd_c_rets.dropna(how='all', inplace=True)
+
+    df_pos_vt = dfd_c_rets.stack().to_frame("value").reset_index()
+    df_pos_vt['xcat'] = ret
+
+    return df_pos_vt
 
 def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_sig: str,
                      ctypes: List[str], sigrels: List[float], baskets: List[str] = None,
@@ -95,7 +141,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
         [2] Method 'dig' means 'digital' and sets the individual position to either USD1
             long or short, depending on the sign of the signal.
     :param <float> thresh: threshold value beyond which zn-scores for propotionate
-        posiion taking are winsorized. The threshold is the maximum absolute
+        position taking are winsorized. The threshold is the maximum absolute
         score value in standard deviations. The minimum is 1 standard deviation.
     :param <float> vtarg: This allows volatility targeting on the contract level.
         Default is None, but if a value is chosen then for each contract the
@@ -123,16 +169,17 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
 
     assert xcat_sig in set(df['xcat'].unique()), "Signal category missing from the /" \
                                                  "standardised dataframe."
-    assert len(ctypes) == len(sigrels)
-    assert scale in ['prop', 'dig']
     assert isinstance(vtarg, float) or (vtarg is None), \
         "Volatility Target must be a float."
 
+    assert len(sigrels) == len(ctypes), "The number of signals correspond to the number" \
+                                        "of contracts defined in ctypes."
+
     cols = ['cid', 'xcat', 'real_date', 'value']
     assert set(cols) <= set(df.columns), f"df columns must contain {cols}."
+    assert isinstance(thresh, float), f"Threshold parameter is required to be a " \
+                                      f"numerical value, and not {type(thresh)}."
     df = df[cols]
-
-    # Todo: a bit light checks for wrong input
 
     # B. Reduce to dataframe to required slice
     df = df.loc[:, cols]
@@ -146,19 +193,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
 
     if vtarg is not None:
 
-        for i, c_ret in enumerate(contract_returns):
-
-            dfd_c_ret = dfd[dfd['xcat'] == c_ret]
-            dfd_c_ret = dfd_c_ret.pivot(index="real_date", columns="cid", values="value")
-            dfd_c_ret = dfd_c_ret.sort_index(axis=1) * sigrels[i]
-            if i == 0:  # initiate return dataframe
-                dfd_c_rets = dfd_c_ret.copy()
-            else:  # combine returns
-                dfd_c_rets += dfd_c_ret
-        dfd_c_rets.dropna(how='all', inplace=True)
-
-        df_pos_vt = dfd_c_rets.stack().to_frame("value").reset_index()
-        df_pos_vt['xcat'] = ret
+        df_pos_vt = return_series(dfd, contract_returns, sigrels)
         df_pos_vt = df_pos_vt[cols]
 
         # D.2. Calculate volatility adjustment ratios
@@ -194,7 +229,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
         df_concat = []
         for i, elem in enumerate(contract_returns):
 
-            df_unit_pos *= sigrels[i]
+            df_unit_pos['value'] *= sigrels[i]
             # The current category, defined on the dataframe, is the signal category.
             # But the signal is being used to take a position in multiple contracts.
             # according to the long-short definition. The returned dataframe should be
@@ -236,19 +271,18 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
 
-    # xcat_sig = 'FXXR_NSA'
+    xcat_sig = 'FXXR_NSA'
     # Example: ctypes = ['FX', 'EQ']; sigrels = [1, -1]; ret = 'XR_NSA'
     # A single category to determine the position on potentially multiple contracts.
     # The relevant volatility for the volatility adjustment would be the combined returns
     # of each contract. In the below instance, the combined returns of
     # (FXXR_NSA + EQXR_NSA) will be used to determine the evolving volatility.
-    # position_df = target_positions(df=dfd, cids=cids, xcats=xcats, xcat_sig='FXXR_NSA',
-    #                                ctypes=['FX', 'EQ'], sigrels=[1, -1],
-    #                                ret='XR_NSA', blacklist=black, start='2012-01-01',
-    #                                end='2020-10-30', scale='prop',
-    #                                vtarg=0.1, signame='POS')
-    #
-    # print(position_df)
+    position_df = target_positions(df=dfd, cids=cids, xcats=xcats, xcat_sig='FXXR_NSA',
+                                   ctypes=['FX'], sigrels=[1], ret='XR_NSA',
+                                   blacklist=black, start='2012-01-01', end='2020-10-30',
+                                   scale='dig', vtarg=None, signame='POS')
+
+    print(position_df)
 
     position_df = target_positions(df=dfd, cids=cids, xcats=xcats, xcat_sig='FXXR_NSA',
                                    ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
