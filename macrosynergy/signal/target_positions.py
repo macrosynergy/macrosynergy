@@ -57,8 +57,30 @@ def unit_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
 
     return df_unit_pos
 
+def time_series(dfd: pd.DataFrame, contract_returns: List[str]):
+    """
+    Determines the time-period over which each contract is defined.
+
+    :param <pd.Dataframe> dfd: standardized DataFrame containing the following columns:
+        'cid', 'xcats', 'real_date' and 'value'.
+    :param <List[str]> contract_returns: list of the contract return types.
+
+    :return <dict>: dictionary where the key is the contract and the value is a tuple
+        of the start & end date.
+    """
+
+    durations = {}
+    for i, c_ret in enumerate(contract_returns):
+
+        dfd_c_ret = dfd[dfd['xcat'] == c_ret]
+        dfd_c_ret = dfd_c_ret.pivot(index="real_date", columns="cid", values="value")
+        index = dfd_c_ret.index
+        durations[c_ret] = (index[0], index[-1])
+
+    return durations
+
 def return_series(dfd: pd.DataFrame, contract_returns: List[str], sigrels: List[str],
-                  ret: str = 'XR_NSA'):
+                  time_index: pd.Series, cids: List[str], ret: str = 'XR_NSA'):
     """
     Compute the aggregated return-series, adjusting for the respective signal, for the
     portfolio of contracts: a single signal can be used to take positions in
@@ -68,6 +90,9 @@ def return_series(dfd: pd.DataFrame, contract_returns: List[str], sigrels: List[
         'cid', 'xcats', 'real_date' and 'value'.
     :param <List[str]> contract_returns: list of the contract return types.
     :param <List[str]> sigrels: respective signal for each contract type.
+    :param <pd.Series> time_index: timeframe of the signal category.
+    :param <List[str]> cids: cross-sections of markets or currency areas in which
+        positions should be taken.
     :param <str> ret: postfix denoting the returns in % applied to the contract types.
 
     :return <pd.Dataframe>: standardized dataframe with the summed portfolio returns
@@ -79,16 +104,26 @@ def return_series(dfd: pd.DataFrame, contract_returns: List[str], sigrels: List[
     assert len(contract_returns) == len(sigrels), "Each individual contract requires an " \
                                                   "associated signal."
 
+    cids = sorted(cids)
+    data = np.zeros(shape=(time_index.size, len(cids)))
+    # The signal will delimit the longevity of the possible signal.
+    dfd_c_rets = pd.DataFrame(data=data, columns=cids)
+
     for i, c_ret in enumerate(contract_returns):
 
         dfd_c_ret = dfd[dfd['xcat'] == c_ret]
         dfd_c_ret = dfd_c_ret.pivot(index="real_date", columns="cid", values="value")
-        dfd_c_ret = dfd_c_ret.sort_index(axis=1) * sigrels[i]
-        if i == 0:
-            dfd_c_rets = dfd_c_ret.copy()
-        else:
 
-            dfd_c_rets += dfd_c_ret
+        dfd_c_ret = dfd_c_ret.sort_index(axis=1)
+        dfd_c_ret *= sigrels[i]
+
+        # Add each return series of the contract.
+        dfd_c_rets += dfd_c_ret
+
+    # The number of active timestamps, dimensions of the dataframe, will be determined by
+    # the signal category. If the signal category is defined over the longer timeframe,
+    # the current design allows the "portfolio" return series to still be computed but
+    # exclusively using the signal's return.
 
     dfd_c_rets.dropna(how='all', inplace=True)
 
@@ -177,8 +212,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
 
     cols = ['cid', 'xcat', 'real_date', 'value']
     assert set(cols) <= set(df.columns), f"df columns must contain {cols}."
-    assert isinstance(thresh, float), f"Threshold parameter is required to be a " \
-                                      f"numerical value, and not {type(thresh)}."
+
     df = df[cols]
 
     # B. Reduce to dataframe to required slice
@@ -189,15 +223,19 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
     df_unit_pos = unit_positions(df=dfd, cids=cids, xcat_sig=xcat_sig,
                                  blacklist=blacklist, start=start, end=end,
                                  scale=scale, thresh=thresh)
+    # Duration in which the signal is defined over.
+    time_index = df_unit_pos['real_date']
+
     contract_returns = [c + ret for c in ctypes]
+    durations = time_series(dfd, contract_returns)
 
     if vtarg is not None:
 
-        df_pos_vt = return_series(dfd, contract_returns, sigrels)
+        df_pos_vt = return_series(dfd, contract_returns, sigrels,
+                                  time_index, cids)
         df_pos_vt = df_pos_vt[cols]
 
         # D.2. Calculate volatility adjustment ratios
-
         df_vol = historic_vol(df_pos_vt, xcat=ret, cids=cids,
                               lback_periods=lback_periods, lback_meth=lback_meth,
                               half_life=half_life, start=start, end=end,
@@ -211,12 +249,25 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
 
         data_frames = []  # initiate list to collect vol-targeted position dataframes
         for i, sigrel in enumerate(sigrels):
+
             df_pos = df_unit_pos.copy()
             df_pos['value'] *= sigrel
             dfw_pos = df_pos.pivot(index="real_date", columns="cid",
                                    values="value")
+
+            # Only able to take a position in the contract for the duration in which it
+            # is defined.
+            tuple_dates = durations[contract_returns[i]]
+            start_date = tuple_dates[0]
+            end_date = tuple_dates[-1]
+            # Truncate the signal dataframe to reflect the length of time of the specific
+            # contract.
+            dfw_pos = dfw_pos.truncate(before=start_date, after=end_date)
+
             dfw_pos = dfw_pos.sort_index(axis=1)
-            dfw_pos_vt = dfw_pos.multiply(dfw_vtr)  # vol-targeted positions
+            # Applicable volatility will be applied: depending on the timeframes of each
+            # contract.
+            dfw_pos_vt = dfw_pos.multiply(dfw_vtr)
 
             df_pos_vt = dfw_pos_vt.stack().to_frame("value").reset_index()
             df_pos_vt['xcat'] = contract_returns[i]
@@ -228,6 +279,17 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
 
         df_concat = []
         for i, elem in enumerate(contract_returns):
+
+            tuple_dates = durations[elem]
+            start_date = tuple_dates[0]
+            end_date = tuple_dates[1]
+
+            dates = df_unit_pos['real_date'].to_numpy()
+            condition_start = next(iter(np.where(dates == start_date)[0]))
+            condition_end = next(iter(np.where(dates == end_date)[0]))
+
+            df_unit_pos = df_unit_pos.truncate(before=condition_start,
+                                               after=condition_end)
 
             df_unit_pos['value'] *= sigrels[i]
             # The current category, defined on the dataframe, is the signal category.
