@@ -36,6 +36,9 @@ class TestAll(unittest.TestCase):
         assert 'dfd' in vars(self).keys(), "Instantiation of DataFrame missing from " \
                                            "field dictionary."
 
+    def test_unitary_positions(self):
+        self.dataframe_generator()
+
     def test_target_positions(self):
 
         self.dataframe_generator()
