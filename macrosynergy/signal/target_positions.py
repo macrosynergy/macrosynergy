@@ -310,7 +310,9 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
             # Applicable volatility will be applied: depending on the timeframes of each
             # contract.
 
+            # NaNs to account for the lookback period.
             dfw_pos_vt = dfw_pos.multiply(dfw_vtr)
+            dfw_pos_vt.dropna(how='all', inplace=True)
 
             df_pos_vt = dfw_pos_vt.stack().to_frame("value").reset_index()
             df_pos_vt['xcat'] = contract_returns[i]
@@ -382,12 +384,12 @@ if __name__ == "__main__":
     # The relevant volatility for the volatility adjustment would be the combined returns
     # of each contract. In the below instance, the combined returns of
     # (FXXR_NSA + EQXR_NSA) will be used to determine the evolving volatility.
-    # position_df = target_positions(df=dfd, cids=cids, xcats=xcats, xcat_sig='FXXR_NSA',
-                                   # ctypes=['FX'], sigrels=[1], ret='XR_NSA',
-                                   # blacklist=black, start='2012-01-01', end='2020-10-30',
-                                   # scale='dig', vtarg=None, signame='POS')
+    position_df = target_positions(df=df, cids=cids, xcats=xcats, xcat_sig='FXXR_NSA',
+                                   ctypes=['FX'], sigrels=[1], ret='XR_NSA',
+                                   blacklist=black, start='2012-01-01', end='2020-10-30',
+                                   scale='dig', vtarg=None, signame='POS')
 
-    # print(position_df)
+    print(position_df)
 
     position_df = target_positions(df=df, cids=cids, xcats=xcats, xcat_sig='FXXR_NSA',
                                    ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
