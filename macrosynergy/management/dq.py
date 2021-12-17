@@ -332,6 +332,7 @@ class DataQueryInterface(object):
                  nan_treatment: str = "NA_NOTHING"):
 
         no_tickers = len(tickers)
+        print(f"Number of tickers requested: {no_tickers}.")
         if not count:
             params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
                        "calendar": calendar, "frequency": frequency, "conversion":
@@ -569,7 +570,7 @@ class DataQueryInterface(object):
             else:
                 continue
 
-        print(f"Number of missing tickers from the DataBase: {ticker_missing}.")
+        print(f"Number of missing time-series from the DataBase: {ticker_missing}.")
         return dict_copy
 
     @staticmethod
