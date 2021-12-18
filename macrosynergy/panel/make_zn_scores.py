@@ -195,7 +195,8 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     if thresh is not None:
         dfw_zns.clip(lower=-thresh, upper=thresh, inplace=True)
 
-    df_out = dfw_zns.unstack().reset_index().rename(mapper={0: 'value'}, axis=1)
+    # df_out = dfw_zns.unstack().reset_index().rename(mapper={0: 'value'}, axis=1)
+    df_out = dfw_zns.stack().to_frame("value").reset_index()
     df_out['xcat'] = xcat + postfix
 
     return df_out[df.columns]
