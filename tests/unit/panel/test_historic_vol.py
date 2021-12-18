@@ -113,8 +113,8 @@ class TestAll(unittest.TestCase):
         # Test the above logic.
 
         # Reduce the dataframe to the singular xcat to test the dimensionality reduction.
-        df_reduce = reduce_df(self.dfd, xcats=[xcat], cids=self.cids, start=None, end=None,
-                       blacklist=None)
+        df_reduce = reduce_df(self.dfd, xcats=[xcat], cids=self.cids, start=None,
+                              end=None, blacklist=None)
         no_rows_input = df_reduce.shape[0]
         no_rows_output = df_output.shape[0]
         difference = len(self.cids) * (lback_periods - 1)
