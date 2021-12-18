@@ -9,9 +9,8 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 import random
 
 def unit_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
-                   blacklist: dict = None,
-                   start: str = None, end: str = None,
-                   scale: str = 'prop', thresh: float = None):
+                   blacklist: dict = None, start: str = None, end: str = None,
+                   scale: str = 'prop', min_obs: int = None, thresh: float = None):
     """
     Establish the unitary position depending on the scaling factor. Will not adjust for
     any volatility targets.
@@ -33,6 +32,8 @@ def unit_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
              A 1 SD value translates into a USD1 position in the contract.
         [2] Method 'dig' means 'digital' and sets the individual position to either USD1
             long or short, depending on the sign of the signal.
+    :param <int> min_obs: the minimum number of observations required to calculate
+        zn_scores. Default is 252.
     :param <float> thresh: threshold value beyond which zn-scores for propotionate
         position taking are winsorized. The threshold is the maximum absolute
         score value in standard deviations. The minimum is 1 standard deviation.
@@ -42,13 +43,19 @@ def unit_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
         'value'.
 
     """
+    if scale == 'prop':
+        assert isinstance(min_obs, int), "Minimum observation parameter must be an " \
+                                         "Integer."
+
     options = ['prop', 'dig']
     assert scale in options, f"The scale parameter must be either {options}"
 
     if scale == 'prop':
 
-        df_unit_pos = make_zn_scores(dfd, xcat=xcat_sig, sequential=True, cids=cids,
-                                     neutral='zero', pan_weight=1, thresh=thresh)
+        df_unit_pos = make_zn_scores(df, xcat=xcat_sig, blacklist=blacklist,
+                                     sequential=True, cids=cids, start=start, end=end,
+                                     neutral='zero', pan_weight=1, min_obs=min_obs,
+                                     thresh=thresh)
     else:
 
         df_unit_pos = reduce_df(df=df, xcats=[xcat_sig], cids=cids, start=start, end=end,
@@ -169,8 +176,8 @@ def return_series(dfd: pd.DataFrame, xcat_sig: str, contract_returns: List[str],
 def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_sig: str,
                      ctypes: List[str], sigrels: List[float], baskets: List[str] = None,
                      ret: str = 'XR_NSA', blacklist: dict = None, start: str = None,
-                     end: str = None, scale: str = 'prop',  thresh: float = None,
-                     vtarg: float = None, lback_periods: int = 21,
+                     end: str = None, scale: str = 'prop', min_obs: int = 252,
+                     thresh: float = None, vtarg: float = None, lback_periods: int = 21,
                      lback_meth: str = 'ma', half_life: int = 11, signame: str = 'POS'):
 
     """
@@ -209,6 +216,8 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
              A 1 SD value translates into a USD1 position in the contract.
         [2] Method 'dig' means 'digital' and sets the individual position to either USD1
             long or short, depending on the sign of the signal.
+    :param <int> min_obs: the minimum number of observations required to calculate
+        zn_scores. Default is 252.
     :param <float> thresh: threshold value beyond which zn-scores for propotionate
         position taking are winsorized. The threshold is the maximum absolute
         score value in standard deviations. The minimum is 1 standard deviation.
@@ -398,9 +407,12 @@ if __name__ == "__main__":
 
     print(position_df)
 
+    # The secondary contract, EQXR_NSA, is defined over a shorter timeframe. Therefore,
+    # on the additional dates, a valid position will be computed using the signal
+    # category but a position will not be able to be taken for EQXR_NSA.
     position_df = target_positions(df=df, cids=cids, xcats=xcats, xcat_sig='FXXR_NSA',
                                    ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
-                                   blacklist=black, start='2012-01-01', end='2020-10-30',
-                                   scale='dig', vtarg=None, signame='POS')
+                                   blacklist=black, start='2010-01-01', end='2020-12-31',
+                                   scale='prop', vtarg=None, signame='POS')
 
     print(position_df)
