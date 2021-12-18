@@ -117,9 +117,9 @@ def nan_insert(df: pd.DataFrame, min_obs: int = 252):
 
 
 def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
-                   start: str = None, end: str = None, sequential: bool = False,
-                   min_obs: int = 252, neutral: str = 'zero', thresh: float = None,
-                   pan_weight: float = 1, postfix: str = 'ZN'):
+                   start: str = None, end: str = None, blacklist: dict = None,
+                   sequential: bool = False, min_obs: int = 252, neutral: str = 'zero',
+                   thresh: float = None, pan_weight: float = 1, postfix: str = 'ZN'):
 
     """
     Computes z-scores for a panel around a neutral level ("zn scores").
@@ -133,6 +133,12 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df is
         used.
+    :param <dict> blacklist: cross sectional date ranges that should have zero target
+        positions.
+        This is a standardized dictionary with cross sections as keys and tuples of
+        start and end dates of the blacklist periods in ISO formats as values.
+        If one cross section has multiple blacklist periods, numbers are added to the
+        keys (i.e. TRY_1, TRY_2, etc.)
     :param <bool> sequential: if True (default) score parameters (neutral level and
         standard deviations) are estimated sequentially with concurrently available
         information only.
@@ -159,7 +165,9 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         assert thresh > 1, "The 'thresh' parameter must be larger than 1"
     assert 0 <= pan_weight <= 1, "The 'pan_weight' parameter must be between 0 and 1"
 
-    df = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end)
+    df = reduce_df(df, xcats=[xcat], cids=cids, start=start,
+                   end=end, blacklist=blacklist)
+
     dfw = df.pivot(index='real_date', columns='cid', values='value')
 
     no_dates = dfw.shape[0]
