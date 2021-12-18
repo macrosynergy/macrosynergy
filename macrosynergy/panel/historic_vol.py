@@ -10,7 +10,7 @@ from macrosynergy.management.shape_dfs import reduce_df
 
 def expo_weights(lback_periods: int = 21, half_life: int = 11):
     """
-    Calculates exponetial series weights for finite horizon, normalized to 1.
+    Calculates exponential series weights for finite horizon, normalized to 1.
     
     :param <int>  lback_periods: Number of lookback periods over which volatility is
         calculated. Default is 21.
@@ -120,7 +120,9 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
     df = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end, blacklist=blacklist)
     dfw = df.pivot(index='real_date', columns='cid', values='value')
-    
+
+    # The pandas in-built method df.rolling() will account for NaNs and start from the
+    # "first valid index".
     if lback_meth == 'xma':
         weights = expo_weights(lback_periods, half_life)
         dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(expo_std, w=weights,
