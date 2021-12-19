@@ -322,7 +322,9 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
             # Applicable volatility will be applied: depending on the timeframes of each
             # contract.
 
-            # NaNs to account for the lookback period.
+            # NaNs to account for the lookback period. The position dataframe, through
+            # each iteration, has been reduced to match the respective input's
+            # dimensions.
             dfw_pos_vt = dfw_pos.multiply(dfw_vtr)
             dfw_pos_vt.dropna(how='all', inplace=True)
 
