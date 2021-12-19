@@ -258,6 +258,9 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
 
     cols = ['cid', 'xcat', 'real_date', 'value']
     assert set(cols) <= set(df.columns), f"df columns must contain {cols}."
+    if vtarg is not None:
+        assert isinstance(vtarg, float), f"Numerical value required and not " \
+                                         f"{type(vtarg)}."
 
     df = df[cols]
 
