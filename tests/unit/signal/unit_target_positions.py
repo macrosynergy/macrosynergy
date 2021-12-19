@@ -264,11 +264,70 @@ class TestAll(unittest.TestCase):
             ctypes = ['FX', 'EQ']
             position_df = target_positions(df=self.dfd, cids=self.cids, xcats=self.xcats,
                                            xcat_sig=xcat_sig,
-                                           ctypes=ctypes, sigrels=sigrels,
+                                           ctypes=self.ctypes, sigrels=sigrels,
                                            ret='XR_NSA', blacklist=self.blacklist,
                                            start='2012-01-01',
                                            end='2020-10-30', scale=scale,
                                            vtarg=0.1, signame='POS')
+
+        # In the current test framework there are two contract types, FX & EQ, and the
+        # signal used to subsequently construct a position is FXXR_NSA. If EQXR_NSA is
+        # defined over a shorter timeframe, the position signal must be aligned to its
+        # respective timeframe.
+        # Check the logic matches the above description.
+
+        # The returned standardised dataframe will consist of the signal and the
+        # secondary category where the secondary category will be defined over a shorter
+        # time-period.
+        xcat_sig = 'FXXR_NSA'
+        sigrels = [1, -1]
+        output_df = target_positions(df=self.dfd, cids=self.cids, xcats=self.xcats,
+                                     xcat_sig=xcat_sig, ctypes=self.ctypes,
+                                     sigrels=sigrels, ret='XR_NSA',
+                                     blacklist=self.blacklist, start='2010-01-01',
+                                     end='2020-12-31', scale='dig',
+                                     vtarg=None, signame='POS')
+        # Testing the truncation feature. Concept might appear simple but implementation
+        # is subtle. Isolate the secondary category in the output dataframe. The
+        # dimensions should match.
+        output_df['xcat'] = list(map(lambda str_: str_[4:-4], output_df['xcat']))
+
+        df_eqxr = output_df[output_df['xcat'] == 'EQXR_NSA'].pivot(index="real_date",
+                                                                   columns="cid",
+                                                                   values="value")
+        df_eqxr_input = self.dfd[self.dfd['xcat'] == 'EQXR_NSA'].pivot(index="real_date",
+                                                                       columns="cid",
+                                                                       values="value")
+        self.assertTrue(df_eqxr.shape == df_eqxr_input.shape)
+
+        # Lastly, check the stacking procedure. In this instance, the output dateframe
+        # should match the input dataframe.
+        dfd = reduce_df(df=self.dfd, xcats=self.xcats, cids=self.cids,
+                        start='2010-01-01', end='2020-12-31', blacklist=self.blacklist)
+        self.assertTrue(output_df.shape == dfd.shape)
+
+        # Test the dimensions of the signal to confirm the differing size of the two
+        # individual dataframes that are concatenated into a single structure. The output
+        # dataframe should match the dimensions of the two respective inputs.
+        df_signal = output_df[output_df['xcat'] == xcat_sig].pivot(index="real_date",
+                                                                   columns="cid",
+                                                                   values="value")
+        df_signal_input = self.dfd[self.dfd['xcat'] == xcat_sig].pivot(index="real_date",
+                                                                       columns="cid",
+                                                                       values="value")
+        self.assertTrue(df_signal.shape == df_signal_input.shape)
+
+        # A limited but valid test to determine the logic is correct for the volatility
+        # target is to set the value equal to zero, and consequently all the
+        # corresponding positions should also be zero. If zero volatility is required,
+        # unable to take a position in an asset that has non-zero standard deviation.
+        output_df = target_positions(df=self.dfd, cids=self.cids, xcats=self.xcats,
+                                     xcat_sig=xcat_sig, ctypes=self.ctypes,
+                                     sigrels=sigrels, ret='XR_NSA',
+                                     blacklist=self.blacklist, start='2010-01-01',
+                                     end='2020-12-31', scale='dig',
+                                     vtarg=0.0, signame='POS')
+        self.assertTrue(np.all(output_df['value'] == 0.0))
 
 
 if __name__ == "__main__":
