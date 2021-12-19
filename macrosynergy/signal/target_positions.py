@@ -10,7 +10,7 @@ import random
 
 def unit_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
                    blacklist: dict = None, start: str = None, end: str = None,
-                   scale: str = 'prop', min_obs: int = None, thresh: float = None):
+                   scale: str = 'prop', min_obs: int = 252, thresh: float = None):
     """
     Establish the unitary position depending on the scaling factor. Will not adjust for
     any volatility targets.
@@ -149,7 +149,7 @@ def return_series(dfd: pd.DataFrame, xcat_sig: str, contract_returns: List[str],
             dfd_c_ret = pd.concat([date_fill, dfd_c_ret])
 
             condition_end = next(iter(np.where(time_index == cat_end)[0]))
-            date_fill = framework.iloc[condition_end:]
+            date_fill = framework.iloc[(condition_end + 1):]
             dfd_c_ret = pd.concat([dfd_c_ret, date_fill])
         else:
             pass
