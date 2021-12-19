@@ -329,6 +329,24 @@ class TestAll(unittest.TestCase):
                                      vtarg=0.0, signame='POS')
         self.assertTrue(np.all(output_df['value'] == 0.0))
 
+        # Final check is if the signal category is defined over the shorter timeframe
+        # both contracts individual position dataframes should match the signal.
+        xcat_sig = 'EQXR_NSA'
+        output_df = target_positions(df=self.dfd, cids=self.cids, xcats=self.xcats,
+                                     xcat_sig=xcat_sig, ctypes=self.ctypes,
+                                     sigrels=sigrels, ret='XR_NSA',
+                                     blacklist=self.blacklist, start='2010-01-01',
+                                     end='2020-12-31', scale='dig',
+                                     vtarg=0.85, signame='POS')
+
+        # Will not be able to compare against the signal's input dimensions because of
+        # the application of volatility targeting and the associated lookback period.
+        output_df['xcat'] = list(map(lambda str_: str_[4:-4], output_df['xcat']))
+        df_signal = output_df[output_df['xcat'] == xcat_sig]
+        df_fxxr = output_df[output_df['xcat'] == 'FXXR_NSA']
+
+        self.assertTrue(df_signal.shape == df_fxxr.shape)
+
 
 if __name__ == "__main__":
 
