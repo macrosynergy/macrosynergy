@@ -91,9 +91,9 @@ class TestAll(unittest.TestCase):
         self.assertTrue(val_column[first_negative_index] == -1)
 
         # Little need to test the application of make_zn_scores(), as the function has
-        # its own respective Unit Test but test on the dimensions. If the minimum number
-        # of observations parameter is set to zero, the dimensions of the reduced
-        # dataframe should match the output dataframe.
+        # its own respective Unit Test but test on the dimensions.
+        # If the minimum number of observations parameter is set to zero,
+        # the dimensions of the reduced dataframe should match the output dataframe.
         df_unit_pos = unit_positions(df=self.dfd, cids=self.cids, xcat_sig=xcat_sig,
                                      blacklist=self.blacklist, start='2012-01-01',
                                      end='2020-10-30', scale='prop', min_obs=0,
@@ -132,10 +132,100 @@ class TestAll(unittest.TestCase):
                                   contract_returns=contract_returns, sigrels=sigrels,
                                   time_index=dates, cids=self.cids, ret=ret)
 
-        # First aspect to validate is that the return series, used for volatility
-        # adjusting, is defined over the same time-period as the signal.
+        # The main aspect to validate is that the return series, used for volatility
+        # adjusting, is defined over the same time-period as the signal. In the below
+        # test framework the signal is the longest contract, so any of the truncating
+        # functionality will not be required. Further, both return series are reduced
+        # to the length of the shorter contract (start = '2012-01-01',
+        # end = '2020-10-30'), and subsequently there will not be any alignment issue.
+        # Each return, of the portfolio, will be a consequence of summing the individual
+        # returns from both contracts.
         dfd_sig = dfd[dfd['xcat'] == xcat_sig]
         self.assertTrue(df_pos_vt.shape == dfd_sig.shape)
+
+        # In the below test framework, the signal will be defined over a longer time-
+        # period than the other contract, EQXR_NSA. Therefore, the design of the
+        # algorithm ensures the return-series dataframe, used for volatility adjustments,
+        # will consist of exclusively the signal contract for the aforementioned dates
+        # (timestamps up until EQXR_NSA is realised).
+        # Test the above logic.
+        dfd = reduce_df(df=self.dfd, xcats=self.xcats, cids=self.cids,
+                        start='2010-01-01', end='2020-12-31',
+                        blacklist=self.blacklist)
+
+        df_signal = dfd[dfd['xcat'] == xcat_sig]
+        df_signal_piv = df_signal.pivot(index="real_date", columns="cid",
+                                        values="value").sort_index(axis=1)
+        # The timestamps the signal is defined over are used for constructing the
+        # portfolio dataframe.
+        dates = df_signal_piv.index
+        df_signal_trunc = df_signal_piv.truncate(after='2012-01-01')
+
+        # Until '2012-01-01', the returned value should match the signal's return given
+        # the sigrel is equal to one for the signal.
+        df_pos_vt = return_series(dfd=dfd, xcat_sig=xcat_sig,
+                                  contract_returns=contract_returns, sigrels=sigrels,
+                                  time_index=dates, cids=self.cids, ret=ret)
+
+        df_pos_vt_piv = df_pos_vt.pivot(index="real_date", columns="cid",
+                                        values="value").sort_index(axis=1)
+        df_pos_vt_trunc = df_pos_vt_piv.truncate(after='2012-01-01')
+
+        assert df_signal_trunc.shape == df_pos_vt_trunc.shape
+        difference = np.nan_to_num(df_signal_trunc.to_numpy() - df_pos_vt_trunc.to_numpy())
+
+        # Accounts for floating point precision.
+        self.assertTrue(np.all(difference < 0.000001))
+
+        # The first joint return, portfolio return consisting of the two categories,
+        # should be, if the logic is correct, on '2012-01-01' (if a valid business day).
+        # Coincidentally 2012-01-01 is a weekend, so test on 2012-01-02 which would still
+        # validate if the logic on the function is correct.
+        test = df_pos_vt_piv.loc['2012-01-02'].to_numpy()
+
+        # The signal will invariably populate the returned dataframe first: it is the
+        # basis of the portfolio's return.
+        signal = df_signal_piv.sort_index(axis=1).loc['2012-01-02'] * sigrels[0]
+
+        secondary_cat = dfd[dfd['xcat'] == 'EQXR_NSA'].pivot(index="real_date",
+                                                             columns="cid",
+                                                             values="value")
+        secondary_cat = secondary_cat.loc['2012-01-02'] * sigrels[-1]
+        logic = np.nan_to_num(signal.to_numpy() + secondary_cat.to_numpy())
+
+        self.assertTrue(np.all(np.nan_to_num(test) == logic))
+
+        # The other testcase is if the other contract is defined over a longer
+        # time-period but the returned dataframe should match the dimensions of the
+        # signal contract (time-period of interest).
+        xcat_sig = 'EQXR_NSA'
+        sigrels = [0.5, -0.5]
+        # Required to obtain the time-index and use as the benchmark.
+        df_signal = reduce_df(df=dfd, xcats=[xcat_sig], cids=self.cids,
+                              start='2010-01-01', end='2020-12-31',
+                              blacklist=self.blacklist)
+        df_signal_piv = df_signal.pivot(index="real_date", columns="cid", values="value")
+        dates = df_signal_piv.index
+
+        # Reduce the dataframe to the length of the longer category, FXXR_NSA, such that
+        # the dataframe is applicable to testcase.
+        df_pos_vt = return_series(dfd=dfd, xcat_sig=xcat_sig,
+                                  contract_returns=contract_returns, sigrels=sigrels,
+                                  time_index=dates, cids=self.cids, ret=ret)
+
+        self.assertEqual(df_signal.shape, df_pos_vt.shape)
+        # Test the values to confirm the logic using the first index.
+        test = df_pos_vt.pivot(index="real_date", columns="cid",
+                               values="value").sort_index(axis=1).loc['2012-01-02']
+
+        signal = df_signal_piv.loc['2012-01-02'] * sigrels[0]
+        secondary_cat = dfd[dfd['xcat'] == 'FXXR_NSA'].pivot(index="real_date",
+                                                             columns="cid",
+                                                             values="value")
+        secondary_cat = secondary_cat.sort_index(axis=1).loc['2012-01-02'] * sigrels[-1]
+
+        logic = np.nan_to_num((signal + secondary_cat).to_numpy())
+        self.assertTrue(np.all(np.nan_to_num(test.to_numpy()) == logic))
 
     def test_target_positions(self):
 
