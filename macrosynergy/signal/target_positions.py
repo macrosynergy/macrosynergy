@@ -126,6 +126,9 @@ def return_series(dfd: pd.DataFrame, xcat_sig: str, contract_returns: List[str],
 
     dfd_c_sig = dfd[dfd['xcat'] == xcat_sig]
     dfd_c_rets = dfd_c_sig.pivot(index="real_date", columns="cid", values="value")
+    sigrels = iter(sigrels)
+    dfd_c_rets *= next(sigrels)
+
     c_returns_copy = contract_returns.copy()
     c_returns_copy.remove(xcat_sig)
 
@@ -155,7 +158,7 @@ def return_series(dfd: pd.DataFrame, xcat_sig: str, contract_returns: List[str],
             pass
 
         dfd_c_ret = dfd_c_ret.sort_index(axis=1)
-        dfd_c_ret *= sigrels[i]
+        dfd_c_ret *= next(sigrels)
 
         # Add each return series of the contract.
         dfd_c_rets += dfd_c_ret
