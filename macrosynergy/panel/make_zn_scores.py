@@ -118,7 +118,8 @@ def nan_insert(df: pd.DataFrame, min_obs: int = 252):
 
 def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
                    start: str = None, end: str = None, sequential: bool = False,
-                   min_obs: int = 252, neutral: str = 'zero', thresh: float = None,
+                   min_obs: int = 261,  iis: bool = True,
+                   neutral: str = 'zero', thresh: float = None,
                    pan_weight: float = 1, postfix: str = 'ZN'):
 
     """
@@ -137,7 +138,10 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         standard deviations) are estimated sequentially with concurrently available
         information only.
     :param <int> min_obs: the minimum number of observations required to calculate
-        zn_scores. Default is 252.
+        zn_scores. Default is 261.
+    :param <bool> iis: if True (default) zn-scores are also calculated for the initial
+        sample period defined by min-obs, on an in-sample basis, to avoid losing history.
+        # Todo: implement iss in function
     :param <str> neutral: method to determine neutral level. Default is 'zero'.
         Alternatives are 'mean' and "median".
     :param <float> thresh: threshold value beyond which scores are winsorized,
