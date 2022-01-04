@@ -390,6 +390,7 @@ class DataQueryInterface(object):
                 final_output.extend(results)
 
         tickers_server = list(chain(*tickers_server))
+
         if tickers_server:
             count += 1
             delay += 0.1
@@ -449,7 +450,8 @@ class DataQueryInterface(object):
         # (O(n) + O(nlog(n)) operation.
         no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression]))
 
-        results_dict, output_dict = self.isolate_timeseries(results, original_metrics)
+        results_dict, output_dict = self.isolate_timeseries(results, original_metrics,
+                                                            self.debug)
         results_dict = self.valid_ticker(results_dict, suppress_warning)
 
         results_copy = results_dict.copy()
@@ -464,7 +466,7 @@ class DataQueryInterface(object):
                                           original_metrics)
 
     @staticmethod
-    def isolate_timeseries(list_, metrics):
+    def isolate_timeseries(list_, metrics, debug):
         """
         Isolates the metrics, across all categories & cross-sections, held in the List,
         and concatenates the time-series, column-wise, into a single structure, and
@@ -515,9 +517,24 @@ class DataQueryInterface(object):
         for k, v in output_dict.items():
             arr = np.empty(shape=(no_rows, len(d_frame_order)), dtype=object)
             for i, metric in enumerate(d_frame_order):
-                arr[:, i] = v[metric]
+                try:
+                    arr[:, i] = v[metric]
+                except KeyError:
+                    if debug:
+                        print(f"Metric, {metric}, missing from {k[3:-1]}.")
+                    if 'value' in v.keys():
+                        arr[:, i] = np.nan
+                        clause = True
+                    else:
+                        print(f"'value' metric missing from {k[3:-1]} - removed from "
+                              f"the returned dataframe.")
+                        clause = False
+                        break
+                else:
+                    clause = True
 
-            modified_dict[k] = arr
+            if clause:
+                modified_dict[k] = arr
 
         return modified_dict, output_dict
 
@@ -561,7 +578,8 @@ class DataQueryInterface(object):
                 for i in range(2, no_cols):
                     condition = self.column_check(v, i)
                     if not condition:
-                        warnings.warn("Error has occurred in the DataBase.")
+                        if self.debug:
+                            warnings.warn("Error has occurred in the DataBase.")
 
                 if not suppress_warning:
                     print(f"The ticker, {k}), does not exist in the Database.")
