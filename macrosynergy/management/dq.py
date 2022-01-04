@@ -332,6 +332,7 @@ class DataQueryInterface(object):
                  nan_treatment: str = "NA_NOTHING"):
 
         no_tickers = len(tickers)
+        
         if not count:
             params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
                        "calendar": calendar, "frequency": frequency, "conversion":
@@ -637,6 +638,9 @@ class DataQueryInterface(object):
         df = df.fillna(value=np.nan)
         df = df.reset_index(drop=True)
 
+        for m in original_metrics:
+            df[m] = df[m].astype(dtype=np.float32)
+
         return df
 
     def tickers(self, tickers: list, metrics: list = ['value'],
@@ -699,7 +703,7 @@ class DataQueryInterface(object):
             cids_dmec = ['DEM', 'ESP', 'FRF', 'ITL', 'NLG']  # DM euro area countries
             cids_latm = ['BRL', 'COP', 'CLP', 'MXN', 'PEN']  # Latam countries
             cids_emea = ['HUF', 'ILS', 'PLN', 'RON', 'RUB', 'TRY', 'ZAR']  # EMEA countries
-            cids_emas = ['CNY', 'IDR', 'INR', 'KRW', 'MYR', 'PHP', 'SGD', 'THB',
+            cids_emas = ['CZK', 'CNY', 'IDR', 'INR', 'KRW', 'MYR', 'PHP', 'SGD', 'THB',
                          'TWD']  # EM Asia countries
             cids_dm = cids_dmca + cids_dmec
             cids_em = cids_latm + cids_emea + cids_emas
