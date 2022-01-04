@@ -332,7 +332,7 @@ class DataQueryInterface(object):
                  nan_treatment: str = "NA_NOTHING"):
 
         no_tickers = len(tickers)
-        
+
         if not count:
             params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
                        "calendar": calendar, "frequency": frequency, "conversion":
