@@ -11,7 +11,7 @@ from macrosynergy.management.shape_dfs import reduce_df
 
 class NaivePnL:
 
-    """Estimates and analyses naive illustrative PnLs with limited signal options and
+    """Computes and collects illustrative PnLs with limited signal options and
     disregarding transaction costs
 
     :param <pd.Dataframe> df: standardized data frame with the following necessary
@@ -43,12 +43,17 @@ class NaivePnL:
         self.pnl_names = []  # list for PnL names
         self.black = blacklist
 
-    def make_pnl(self, sig: str, sig_op: str = 'zn_score_pan', pnl_name: str = None,
-                 rebal_freq: str = 'daily', rebal_slip = 0, vol_scale: float = None):
+    def make_pnl(self, sig: str, sig_op: str = 'zn_score_pan',  pnl_name: str = None,
+                 rebal_freq: str = 'daily', rebal_slip = 0, vol_scale: float = None,
+                 min_obs: int = 252, iis: bool = True,
+                 neutral: str = 'zero', thresh: float = None):
+
+        # Todo: implement the four 'pass through arguments to make_zn_score()
+
         """Calculate daily PnL and add to the main dataframe of the class instance
 
         :param <str> sig: name of signal that is the basis for positioning. The signal
-            is assumed to be recorded at the end of the previous trading day.
+            is assumed to be recorded at the end of the day prior to position taking.
         :param <str> sig_op: signal transformation options; must be one of
             'zn_score_pan', 'zn_score_cs', or 'binary'.
             Default 'zn_score_pan' transforms raw signals into z-scores around zero value
@@ -57,18 +62,34 @@ class NaivePnL:
             cross-section alone.
             Option 'binary' transforms signals into uniform long/shorts (1/-1) across all
             sections.
+            N.B.: zn-score here means standardized score with zero being the natural
+            neutral level and standardization through division by mean absolute value.
         :param <str> pnl_name: name of the PnL to be generated and stored.
             Default is none, i.e. a default name is given.
-            Previously calculated PnLs in the class will be overwritten.
+            Previously calculated PnLs in the class will be overwritten. This means that
+            if a set of PnLs is to be compared they require custom names.
         :param <str> rebal_freq: rebalancing frequency for positions according to signal
             must be one of 'daily' (default), 'weekly' or 'monthly'.
         :param <str> rebal_slip: rebalancing slippage in days.  Default is 1, which means
             that it takes one day to rebalance the position and that the new positions
             produces PnL from the second day after the signal has been recorded.
         :param <bool> vol_scale: ex-post scaling of PnL to annualized volatility given.
-            Default is none.
+            This for comparative visualization and not out-of-sample. Default is none.
+        :param <int> min_obs: the minimum number of observations required to calculate
+            zn_scores. Default is 252.
+            # Todo: implement in function
+        :param <bool> iis: if True (default) zn-scores are also calculated for the initial
+            sample period defined by min-obs, on an in-sample basis, to avoid losing history.
+            # Todo: implement in function
+        :param <str> neutral: method to determine neutral level. Default is 'zero'.
+            Alternatives are 'mean' and "median".
+            # Todo: implement in function
+        :param <float> thresh: threshold value beyond which scores are winsorized,
+            i.e. contained at that threshold. Therefore, the threshold is the maximum absolute
+            score value that the function is allowed to produce. The minimum threshold is 1
+            standard deviation.
+            # Todo: implement in function
 
-            This is a convenience functionality, mainly for comparative visualization.
         """
 
         assert sig in self.sigs
@@ -79,9 +100,13 @@ class NaivePnL:
         dfw = dfx.pivot(index=['cid', 'real_date'], columns='xcat', values='value')
 
         if sig_op == 'zn_score_pan':
+            # Todo: below is in-sample; use make_zn_score() for oos calculation
+            # Todo: pass through min_obs, iss, neutral, thresh
             sda = dfw[sig].abs().mean()
             dfw['psig'] = dfw[sig] / sda
-        elif sig_op == 'zn_score_cs':
+        elif sig_op == 'zn_score_cs':  # zn-score based on
+            # Todo: below is in-sample; use make_zn_score() for oos calculation
+            # Todo: pass through min_obs, iss, neutral, thresh
             zn_score = lambda x: x / np.nanmean(np.abs(x))
             dfw['psig'] = dfw[sig].groupby(level=0).apply(zn_score)
         elif sig_op == 'binary':
@@ -139,12 +164,12 @@ class NaivePnL:
             default is 'ALL' (global PnL).
             Note: one can only have multiple PnL categories or multiple cross sections,
             not both.
-        :param <str> start: start date in format.
+        :param <str> start: start date in ISO format.
         :param <str> start: earliest date in ISO format. Default is None and earliest
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
             in df is used.
-        :param <Tuple> figsize: tuple of plot width and height
+        :param <Tuple> figsize: tuple of plot width and height. Default is (10,6).
         """
 
         if pnl_cats is None:
