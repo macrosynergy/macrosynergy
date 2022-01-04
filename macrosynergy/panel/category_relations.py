@@ -29,16 +29,20 @@ class CategoryRelations:
         the data frame.
     :param <int> years: Number of years over which data are aggregate. Supersedes freq
         and does not allow lags, Default is None, meaning no multi-year aggregation.
+        Note: for single year labelled plots, better use freq='A' for cleaner labels.
     :param <str> val: name of column that contains the values of interest. Default is
         'value'.
     :param <str> freq: letter denoting frequency at which the series are to be sampled.
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
     :param <int> lag: Lag (delay of arrival) of second category in periods as set by
         freq. Default is 0.
-    :param <int> fwin: Forward moving average window of first category. Default is 1, i.e
-        no average.
     :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for
         both.
+    # Todo <List[str]> changes: differences (diff) or % changes (pchg) applied to second category
+    # Todo <List[int]> n_periods: number of periods over which changes is applied
+    :param <int> fwin: Forward moving average window of first category. Default is 1, i.e
+        no average.
+
     """
 
     def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
@@ -79,7 +83,10 @@ class CategoryRelations:
         if len(miss_2) > 0:
             print(f"{self.xcats[1]} misses: {miss_2}.")
 
-        return list(set_1.intersection(set_2))
+        usable = list(set_1.intersection(set_2).
+                      intersection(set(self.cids)))  # 3 set intersection
+
+        return usable
 
     def corr_probability(self, coef_box):
 
@@ -245,7 +252,8 @@ if __name__ == "__main__":
     filt2 = (dfd['xcat'] == 'INFL') & (dfd['cid'] == 'NZD')  # all NZD INFL locations
     dfdx = dfd[~(filt1 | filt2)]  # reduced dataframe
 
-    cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'], cids=cids, freq='M',
+    cidx = ['AUD', 'CAD', 'GBP']
+    cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'], cids=cidx, freq='M',
                            xcat_aggs=['mean', 'mean'], lag=1,
                            start='2000-01-01', years=None, blacklist=black)
     cr.reg_scatter(labels=False, coef_box='upper left')

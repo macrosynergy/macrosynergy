@@ -13,17 +13,19 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
                 kind: str = 'bar', sort_cids_by: str = None,
                 title: str = None, ylab: str = None, size: Tuple[float] = (16, 8)):
 
-    """Plot level bars and SD ranges across extended categories and cross sections
+    """Plots averages and various ranges across sections for one or more categories.
 
-    :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
+    :param <pd.Dataframe> df: standardized dataframe with the necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
-    :param <List[str]> xcats: extended categories to be checked on. Default is all in the dataframe.
-    :param <List[str]> cids: cross sections to be checked on. Default is all in the dataframe.
-    :param <str> start: earliest date in ISO format. Default is None and earliest date in df is used.
-    :param <str> end: latest date in ISO format. Default is None and latest date in df is used.
-    :param <str> val: name of column that contains the values of interest. Default is 'value'.
-    :param <str> kind: type of range plot to be used. Default is 'bar'; other option is 'box'.
-    :param <str> sort_cids_by: criterion for sorting cids on x axis; can be 'mean' and 'std'. Default is original order.
+    :param <List[str]> xcats: extended categories to be checked on. Default is all
+        in the dataframe.
+    :param <List[str]> cids: cross sections to plot. Default is all in dataframe.
+    :param <str> start: earliest date in ISO format. Default earliest date in df.
+    :param <str> end: latest date in ISO format. Default is latest date in df.
+    :param <str> val: name of column that contains the values. Default is 'value'.
+    :param <str> kind: type of range plot. Default is 'bar'; other option is 'box'.
+    :param <str> sort_cids_by: criterion for sorting cids on x axis;
+        Arguments can be 'mean' and 'std'. Default is None, i.e. original order.
     :param <str> title: string of chart title; defaults depend on type of range plot.
     :param <str> ylab: y label. Default is no label.
     :param <Tuple[float]> size: Tuple of width and height of graph. Default is (16, 8). 
@@ -41,7 +43,8 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
         if kind == 'bar':
             title = f'Means and standard deviations from {s_date} to {e_date}'
         elif kind == 'box':
-            title = f'Interquartile ranges, extended ranges and outliers from {s_date} to {e_date}'
+            title = f'Interquartile ranges, extended ranges and outliers ' \
+                    f'from {s_date} to {e_date}'
     if ylab is None:
         ylab = ""
 
@@ -58,9 +61,11 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
     fig, ax = plt.subplots(figsize=size)
 
     if kind == 'bar':
-        ax = sns.barplot(x='cid', y=val, hue='xcat', hue_order=xcats, palette='Paired', data=df, ci='sd', order=order)
+        ax = sns.barplot(x='cid', y=val, hue='xcat', hue_order=xcats, palette='Paired',
+                         data=df, ci='sd', order=order)
     elif kind == 'box':
-        ax = sns.boxplot(x='cid', y=val, hue='xcat', hue_order=xcats, palette='Paired', data=df,  order=order)
+        ax = sns.boxplot(x='cid', y=val, hue='xcat', hue_order=xcats, palette='Paired',
+                         data=df,  order=order)
         ax.xaxis.grid(True)
 
     ax.set_title(title,  fontdict={'fontsize': 16})
@@ -77,12 +82,14 @@ if __name__ == "__main__":
 
     cids = ['AUD', 'CAD', 'GBP']
     xcats = ['XR', 'CRY']
-    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
+    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
+                                                'sd_mult'])
     df_cids.loc['AUD', ] = ['2010-01-01', '2020-12-31', 0.5, 0.2]
     df_cids.loc['CAD', ] = ['2011-01-01', '2020-11-30', 0, 1]
     df_cids.loc['GBP', ] = ['2012-01-01', '2020-11-30', 0, 2]
 
-    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef'])
+    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
+                                                  'sd_mult', 'ar_coef', 'back_coef'])
     df_xcats.loc['XR', ] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
     df_xcats.loc['CRY', ] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
 
@@ -90,6 +97,7 @@ if __name__ == "__main__":
 
     view_ranges(dfd, xcats=['XR', 'CRY'], kind='bar', sort_cids_by='mean')
     view_ranges(dfd, xcats=['XR'], cids=cids, kind='box', sort_cids_by='std')
-    view_ranges(dfd, xcats=['XR'], cids=cids, kind='box', start='2012-01-01', end='2018-01-01', sort_cids_by='std')
+    view_ranges(dfd, xcats=['XR'], cids=cids, kind='box', start='2012-01-01',
+                end='2018-01-01', sort_cids_by='std')
 
 
