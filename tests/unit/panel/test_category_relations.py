@@ -11,7 +11,7 @@ class TestAll(unittest.TestCase):
 
     def dataframe_generator(self):
 
-        self.__dict__['cids'] = ['AUD', 'CAD', 'GBP', 'NZD']
+        self.__dict__['cids'] = ['AUD', 'CAD', 'GBP', 'NZD', 'JPY', 'CHF']
         self.__dict__['xcats'] = ['XR', 'CRY', 'GROWTH', 'INFL']
 
         df_cids = pd.DataFrame(index=self.cids,
@@ -20,6 +20,8 @@ class TestAll(unittest.TestCase):
         df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
         df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
         df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
+        df_cids.loc['JPY'] = ['2002-01-01', '2020-09-30', -0.3, 3]
+        df_cids.loc['CHF'] = ['2002-01-01', '2020-09-30', 0.3, 1]
 
         cols = ['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef']
         df_xcats = pd.DataFrame(index=self.xcats, columns=cols)
@@ -43,8 +45,11 @@ class TestAll(unittest.TestCase):
         filt1 = (dfd['xcat'] == 'GROWTH') & (
                     dfd['cid'] == 'AUD')
         filt2 = (dfd['xcat'] == 'INFL') & (dfd['cid'] == 'NZD')
+        filt3 = (dfd['xcat'] == 'INFL') & (dfd['cid'] == 'JPY')
         # Reduced dataframe.
-        dfdx = dfd[~(filt1 | filt2)]
+
+        self.__dict__['filter_tuple'] = (filt1 | filt2 | filt3)
+        dfdx = dfd[~self.filter_tuple]
 
         self.__dict__['dfdx'] = dfdx
 
@@ -79,7 +84,7 @@ class TestAll(unittest.TestCase):
 
         self.dataframe_generator()
 
-        self.__dict__['cidx'] = ['AUD', 'CAD', 'GBP', 'USD']
+        self.__dict__['cidx'] = ['AUD', 'CAD', 'GBP', 'USD', 'CHF']
 
         # The StringIO module is an in-memory file-like Object.
         capturedOutput = io.StringIO()
@@ -88,14 +93,25 @@ class TestAll(unittest.TestCase):
         shared_cids = CategoryRelations.intersection_cids(self.dfdx, ['GROWTH', 'INFL'],
                                                           self.cidx)
         sys.stdout = sys.__stdout__
-        print("Captured: ", capturedOutput.getvalue())
-        print("Captured: ", capturedOutput.getvalue())
-
-        print(capturedOutput.read())
         capturedOutput.seek(0)
-        print(capturedOutput.read())
-        capturedOutput.seek(1)
-        print(capturedOutput.read())
+
+        print_statements = capturedOutput.read().strip('\n').split('.')
+        print_statements = print_statements[:-1]
+
+        # Split on the full stops, so subsequently removed from the Strings displayed in
+        # the console if the conditions are satisfied.
+        self.assertTrue(print_statements[0] == "GROWTH misses: ['AUD', 'USD']")
+        # Account for the space in the console separating both print statements.
+        self.assertTrue(print_statements[1][1:] == "INFL misses: ['USD']")
+
+        # Aim to test the returned list of cross-sections.
+        # Broaden the testcase to further test the accuracy.
+        self.__dict__['cidx'] = ['AUD', 'CAD', 'GBP', 'USD', 'EUR', 'JPY', 'NZD', 'CHF']
+        # Print statements will be returned to the console.
+        shared_cids = CategoryRelations.intersection_cids(self.dfdx, ['GROWTH', 'INFL'],
+                                                          self.cidx)
+
+        self.assertTrue(sorted(shared_cids) == ['CAD', 'CHF', 'GBP'])
 
 
 if __name__ == "__main__":
