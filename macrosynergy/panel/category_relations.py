@@ -74,13 +74,13 @@ class CategoryRelations:
         set_1 = set(df[df['xcat'] == xcats[0]]['cid'].unique())
         set_2 = set(df[df['xcat'] == xcats[1]]['cid'].unique())
 
-        miss_1 = set(cids).difference(set_1)  # cids not available for 1st cat
-        miss_2 = set(cids).difference(set_2)  # cids not available for 2nd cat
+        miss_1 = list(set(cids).difference(set_1))  # cids not available for 1st cat
+        miss_2 = list(set(cids).difference(set_2))  # cids not available for 2nd cat
 
         if len(miss_1) > 0:
-            print(f"{xcats[0]} misses: {miss_1}.")
+            print(f"{xcats[0]} misses: {sorted(miss_1)}.")
         if len(miss_2) > 0:
-            print(f"{xcats[1]} misses: {miss_2}.")
+            print(f"{xcats[1]} misses: {sorted(miss_2)}.")
 
         usable = list(set_1.intersection(set_2).
                       intersection(set(cids)))  # 3 set intersection
@@ -190,9 +190,9 @@ class CategoryRelations:
         """
         assert kind in ['scatter', 'kde', 'hist', 'hex']
 
-        sns.set_theme(style = 'whitegrid')
+        sns.set_theme(style='whitegrid')
         if kind == 'hex':
-            sns.set_theme(style = 'white')
+            sns.set_theme(style='white')
 
         fg = sns.jointplot(data=self.df,  x=self.xcats[0], y=self.xcats[1],
                            kind=kind, height=height, color='steelblue')
