@@ -342,8 +342,10 @@ class DataQueryInterface(object):
                 delay = 0.05
             elif self.thread_handler == 1:
                 delay = 0.25
-            else:
+            elif not floor(no_tickers / 400):
                 delay = 0.2
+            else:
+                delay = 0.25
 
         t = self.thread_handler
         iterations = ceil(no_tickers / t)
