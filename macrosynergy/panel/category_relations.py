@@ -2,12 +2,9 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import statsmodels.api as sm
 from typing import List, Union, Tuple
-from sklearn import datasets, linear_model
 from scipy import stats
 import statsmodels.api as sm
-import time
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import categories_df
@@ -64,27 +61,29 @@ class CategoryRelations:
         assert {'cid', 'xcat', 'real_date', val}.issubset(set(df.columns))
         assert len(xcats) == 2, "Expects two fields."
 
-        shared_cids = self.intersection_cids(df)  # select cids available for both xcats
+        # select cids available for both xcats
+        shared_cids = CategoryRelations.intersection_cids(df, xcats, cids)
         self.df = categories_df(df, xcats, shared_cids, val, start=start,
                                 end=end, freq=freq, blacklist=blacklist, years=years,
                                 lag=lag, fwin=fwin, xcat_aggs=xcat_aggs)
 
-    def intersection_cids(self, df):
+    @classmethod
+    def intersection_cids(cls, df, xcats, cids):
         """Returns list of common cids across categories"""
 
-        set_1 = set(df[df['xcat'] == self.xcats[0]]['cid'].unique())
-        set_2 = set(df[df['xcat'] == self.xcats[1]]['cid'].unique())
+        set_1 = set(df[df['xcat'] == xcats[0]]['cid'].unique())
+        set_2 = set(df[df['xcat'] == xcats[1]]['cid'].unique())
 
-        miss_1 = set(self.cids).difference(set_1)  # cids not available for 1st cat
-        miss_2 = set(self.cids).difference(set_2)  # cids not available for 2nd cat
+        miss_1 = set(cids).difference(set_1)  # cids not available for 1st cat
+        miss_2 = set(cids).difference(set_2)  # cids not available for 2nd cat
 
         if len(miss_1) > 0:
-            print(f"{self.xcats[0]} misses: {miss_1}.")
+            print(f"{xcats[0]} misses: {miss_1}.")
         if len(miss_2) > 0:
-            print(f"{self.xcats[1]} misses: {miss_2}.")
+            print(f"{xcats[1]} misses: {miss_2}.")
 
         usable = list(set_1.intersection(set_2).
-                      intersection(set(self.cids)))  # 3 set intersection
+                      intersection(set(cids)))  # 3 set intersection
 
         return usable
 
@@ -231,8 +230,8 @@ if __name__ == "__main__":
 
     cids = ['AUD', 'CAD', 'GBP', 'NZD']
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
-    df_cids = pd.DataFrame(index = cids,
-                           columns = ['earliest', 'latest', 'mean_add', 'sd_mult'])
+    df_cids = pd.DataFrame(index=cids,
+                           columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
     df_cids.loc['AUD'] = ['2000-01-01', '2020-12-31', 0.1, 1]
     df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
     df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
@@ -252,7 +251,7 @@ if __name__ == "__main__":
     filt2 = (dfd['xcat'] == 'INFL') & (dfd['cid'] == 'NZD')  # all NZD INFL locations
     dfdx = dfd[~(filt1 | filt2)]  # reduced dataframe
 
-    cidx = ['AUD', 'CAD', 'GBP']
+    cidx = ['AUD', 'CAD', 'GBP', 'USD']
     cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'], cids=cidx, freq='M',
                            xcat_aggs=['mean', 'mean'], lag=1,
                            start='2000-01-01', years=None, blacklist=black)
