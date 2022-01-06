@@ -120,7 +120,6 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
 
     return dfx.drop_duplicates()
 
-
 def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                   val: str = 'value', start: str = None, end: str = None,
                   blacklist: dict = None, years: int = None, freq: str = 'M',
@@ -248,13 +247,31 @@ if __name__ == "__main__":
     # Testing categories_df().
     dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
                          xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black)
-    dfc2 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
-                         fwin=3, xcat_aggs=['mean', 'mean'],
-                         start='2000-01-01', blacklist=black)
 
-    dfc3 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
-                         xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black,
-                         years=10)
+    df_lists = []
+    for c in sorted(cids):
+        temp_df = dfc1.loc[c]
+        explan = temp_df['CRY'].to_numpy()
+        print(temp_df)
+        diff = np.empty((explan.size))
+        diff[:] = np.nan
+        diff[:-1] = explan[1:]
+
+        temp_df['CRY'] -= diff
+        print(temp_df)
+        temp_df['cid'] = c
+        temp_df = temp_df.set_index('cid', append=True)
+        df_lists.append(temp_df)
+
+    df_output = pd.concat(df_lists)
+    print(df_output)
+    # dfc2 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
+                         # fwin=3, xcat_aggs=['mean', 'mean'],
+                         # start='2000-01-01', blacklist=black)
+
+    # dfc3 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
+                         # xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black,
+                         # years=10)
 
     # Testing reduce_df().
     filt1 = ~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))
