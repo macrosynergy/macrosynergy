@@ -72,13 +72,29 @@ class CategoryRelations:
 
         # select cids available for both xcats
         shared_cids = CategoryRelations.intersection_cids(df, xcats, cids)
-        self.df = categories_df(df, xcats, shared_cids, val, start=start,
-                                end=end, freq=freq, blacklist=blacklist, years=years,
-                                lag=lag, fwin=fwin, xcat_aggs=xcat_aggs)
+        df = categories_df(df, xcats, shared_cids, val, start=start,
+                           end=end, freq=freq, blacklist=blacklist, years=years,
+                           lag=lag, fwin=fwin, xcat_aggs=xcat_aggs)
+
+        if changes is not None:
+
+            assert changes in ['diff', 'pch']
+            assert isinstance(n_periods, int)
+
+            self.df = self.time_series(df, changes=changes, n_periods=n_periods,
+                                       shared_cids=shared_cids)
+        else:
+            self.df = df
 
     @classmethod
     def intersection_cids(cls, df, xcats, cids):
-        """Returns list of common cids across categories"""
+        """
+        Returns list of common cids across categories.
+
+        :return <List[str]>: usable: List of the common cross-sections across the two
+            categories.
+
+        """
 
         set_1 = set(df[df['xcat'] == xcats[0]]['cid'].unique())
         set_2 = set(df[df['xcat'] == xcats[1]]['cid'].unique())
@@ -96,14 +112,46 @@ class CategoryRelations:
 
         return usable
 
-    def time_series(self, changes: str, n_periods: int):
+    def time_series(self, df: pd.DataFrame, changes: str, n_periods: int,
+                    shared_cids: List[str]):
         """
         Modifying the metric on the explanatory variable: the dataframe's default will be
         the raw value series, defined according to the frequency parameter, but allow for
         additional time-series metrics such as differencing or % changes (pchg).
 
+        :param <pd.DataFrame> df: multi-index DataFrame hosting the two categories: first
+            column represents the dependent variable, second column hosts the explanatory
+            variable. The dataframe's index is the real-date and cross-section.
+        :param <str> changes:
+        :param <int> n_periods:
+        :param <List[str]> shared_cids: shared cross-sections across the two categories
+            and the received list.
 
+        :return <pd.Dataframe>: df: returns the same multi-index dataframe but with an
+            adjusted series inline with the 'changes' parameter.
         """
+
+        df_lists = []
+        for c in shared_cids:
+            temp_df = df.loc[c]
+
+            explan = temp_df[self.xcats[1]].to_numpy()
+            shift = np.empty(explan.size)
+            shift[:] = np.nan
+            shift[n_periods:] = explan[:-n_periods]
+
+            if changes == 'diff':
+                temp_df[self.xcats[1]] -= shift
+            else:
+                diff = explan - shift
+                temp_df[self.xcats[1]] = diff / shift
+
+            temp_df['cid'] = c
+            temp_df = temp_df.set_index('cid', append=True)
+            df_lists.append(temp_df)
+
+        df = pd.concat(df_lists)
+        return df.dropna(axis=0, how='any')
 
     def corr_probability(self, coef_box):
 
@@ -231,7 +279,7 @@ class CategoryRelations:
         elif title is None:
             title = f'{self.xcats[0]} and {self.xcats[1]}'
 
-        fg.fig.suptitle(title, y = 1.02)
+        fg.fig.suptitle(title, y=1.02)
 
         plt.show()
 
@@ -246,7 +294,7 @@ class CategoryRelations:
 
 if __name__ == "__main__":
 
-    cids = ['AUD', 'CAD', 'GBP', 'NZD']
+    cids = ['AUD', 'CAD', 'GBP', 'NZD', 'USD']
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
     df_cids = pd.DataFrame(index=cids,
                            columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
@@ -254,6 +302,7 @@ if __name__ == "__main__":
     df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
     df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
     df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
+    df_cids.loc['USD'] = ['2003-01-01', '2020-12-31', -0.1, 2]
 
     cols = ['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef']
     df_xcats = pd.DataFrame(index=xcats, columns=cols)
@@ -272,8 +321,11 @@ if __name__ == "__main__":
     cidx = ['AUD', 'CAD', 'GBP', 'USD']
     cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'], cids=cidx, freq='M',
                            xcat_aggs=['mean', 'mean'], lag=1,
-                           start='2000-01-01', years=None, blacklist=black)
+                           start='2000-01-01', years=None, blacklist=black,
+                           changes='diff', n_periods=1)
+
     cr.reg_scatter(labels=False, coef_box='upper left')
+    cr.jointplot(kind='hist', xlab='growth', ylab='inflation', height=5)
 
     cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M',
                            xcat_aggs=['mean', 'mean'],
