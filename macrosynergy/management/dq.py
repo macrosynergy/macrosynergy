@@ -342,10 +342,10 @@ class DataQueryInterface(object):
                 delay = 0.05
             elif self.thread_handler == 1:
                 delay = 0.25
-            elif not floor(no_tickers / 400):
+            elif not floor(no_tickers / 1000):
                 delay = 0.2
             else:
-                delay = 0.25
+                delay = 0.45
 
         t = self.thread_handler
         iterations = ceil(no_tickers / t)
@@ -524,13 +524,13 @@ class DataQueryInterface(object):
                     arr[:, i] = v[metric]
                 except KeyError:
                     if debug:
-                        print(f"Metric, {metric}, missing from {k[3:-1]}.")
+                        print(f"The ticker, {k[3:]}, is missing the metric '{metric}' "
+                              f"from the API.")
                     if 'value' in v.keys():
                         arr[:, i] = np.nan
                         clause = True
                     else:
-                        print(f"'value' metric missing from {k[3:-1]} - removed from "
-                              f"the returned dataframe.")
+                        print(f"The ticker, {k[3:]}, is missing from the API.")
                         clause = False
                         break
                 else:
