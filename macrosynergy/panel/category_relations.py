@@ -23,7 +23,7 @@ class CategoryRelations:
     :param <str> end: latest date in ISO format. Default is None and latest date in df
         is used.
     :param <dict> blacklist: cross sections with date ranges that should be excluded from
-        the data frame.
+        the dataframe.
     :param <int> years: Number of years over which data are aggregate. Supersedes freq
         and does not allow lags, Default is None, meaning no multi-year aggregation.
         Note: for single year labelled plots, better use freq='A' for cleaner labels.
@@ -35,8 +35,14 @@ class CategoryRelations:
         freq. Default is 0.
     :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for
         both.
-    # Todo <List[str]> changes: differences (diff) or % changes (pchg) applied to second category
-    # Todo <List[int]> n_periods: number of periods over which changes is applied
+    # Todo <str> changes: differences (diff) or % changes (pchg) applied to second category
+    :param <str> changes: parameter determining the form of the explanatory variable's
+        series. There are two options: i) 'diff': compute the difference over the
+        current date and the corresponding date 'n_periods' prior; ii) 'pchg': percentage
+        change over the time-period. The default is None which equates to the raw value
+        series.
+    :param <int> n_periods: number of periods over which changes are made to the
+        explanatory variable's series.
     :param <int> fwin: Forward moving average window of first category. Default is 1, i.e
         no average.
 
@@ -45,7 +51,8 @@ class CategoryRelations:
     def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                  val: str = 'value', start: str = None, end: str = None,
                  blacklist: dict = None, years = None, freq: str = 'M', lag: int = 0,
-                 fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean')):
+                 fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean'),
+                 changes: str = None, n_periods: int = None):
 
         """Constructs all attributes for the category relationship to be analyzed"""
 
@@ -55,7 +62,9 @@ class CategoryRelations:
         self.freq = freq
         self.lag = lag
         self.years = years 
-        self.aggs = xcat_aggs 
+        self.aggs = xcat_aggs
+        self.changes = changes
+        self.n_periods = n_periods
 
         assert self.freq in ['D', 'W', 'M', 'Q', 'A']
         assert {'cid', 'xcat', 'real_date', val}.issubset(set(df.columns))
@@ -86,6 +95,15 @@ class CategoryRelations:
                       intersection(set(cids)))  # 3 set intersection
 
         return usable
+
+    def time_series(self, changes: str, n_periods: int):
+        """
+        Modifying the metric on the explanatory variable: the dataframe's default will be
+        the raw value series, defined according to the frequency parameter, but allow for
+        additional time-series metrics such as differencing or % changes (pchg).
+
+
+        """
 
     def corr_probability(self, coef_box):
 
