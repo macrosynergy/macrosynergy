@@ -156,7 +156,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     :param <dict> blacklist: cross sections with date ranges that should be excluded from
         the data frame. If one cross section has several blacklist periods append numbers
         to the cross-section code.
-        # Todo: implement in function
+        # Todo: implement blacklist in function
     :param <str> postfix: string appended to category name for output; default is "ZN".
 
     :return <pd.Dataframe>: standardized dataframe with the zn-scores of the chosen xcat:
