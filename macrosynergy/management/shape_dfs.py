@@ -161,7 +161,9 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     """
 
     assert freq in ['D', 'W', 'M', 'Q', 'A']
-    assert not (years is not None) & (lag != 0), 'Lags cannot be applied to year groups'
+    assert not (years is not None) & (lag != 0), 'Lags cannot be applied to year groups.'
+    if years is not None:
+        assert isinstance(start, str), 'Year aggregation requires a start date.'
 
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, blacklist, out_all=True)
 
@@ -255,7 +257,8 @@ if __name__ == "__main__":
     dfc3 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
                          xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black,
                          years=10)
-    # Testing reduce_df().
+
+    # Testing reduce_df()
     filt1 = ~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))
     filt2 = ~((dfd['cid'] == 'NZD') & (dfd['xcat'] == 'INFL'))
     dfdx = dfd[filt1 & filt2]  # simulate missing cross sections
