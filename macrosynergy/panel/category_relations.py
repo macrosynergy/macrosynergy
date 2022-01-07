@@ -35,7 +35,6 @@ class CategoryRelations:
         freq. Default is 0.
     :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for
         both.
-    # Todo <str> changes: differences (diff) or % changes (pchg) applied to second category
     :param <str> changes: parameter determining the form of the explanatory variable's
         series. There are two options: i) 'diff': compute the difference over the
         current date and the corresponding date 'n_periods' prior; ii) 'pchg': percentage
@@ -81,8 +80,10 @@ class CategoryRelations:
             assert changes in ['diff', 'pch']
             assert isinstance(n_periods, int)
 
-            self.df = self.time_series(df, changes=changes, n_periods=n_periods,
-                                       shared_cids=shared_cids)
+            self.df = CategoryRelations.time_series(df, changes=changes,
+                                                    n_periods=n_periods,
+                                                    shared_cids=shared_cids,
+                                                    expln_var=xcats[1])
         else:
             self.df = df
 
@@ -93,7 +94,6 @@ class CategoryRelations:
 
         :return <List[str]>: usable: List of the common cross-sections across the two
             categories.
-
         """
 
         set_1 = set(df[df['xcat'] == xcats[0]]['cid'].unique())
@@ -112,8 +112,9 @@ class CategoryRelations:
 
         return usable
 
-    def time_series(self, df: pd.DataFrame, changes: str, n_periods: int,
-                    shared_cids: List[str]):
+    @classmethod
+    def time_series(cls, df: pd.DataFrame, changes: str, n_periods: int,
+                    shared_cids: List[str], expln_var: str):
         """
         Modifying the metric on the explanatory variable: the dataframe's default will be
         the raw value series, defined according to the frequency parameter, but allow for
@@ -126,6 +127,8 @@ class CategoryRelations:
         :param <int> n_periods:
         :param <List[str]> shared_cids: shared cross-sections across the two categories
             and the received list.
+        :param <str> expln_var: only the explanatory variable's data series will be
+            changed from the raw value series to a difference or percentage change value.
 
         :return <pd.Dataframe>: df: returns the same multi-index dataframe but with an
             adjusted series inline with the 'changes' parameter.
@@ -135,23 +138,24 @@ class CategoryRelations:
         for c in shared_cids:
             temp_df = df.loc[c]
 
-            explan = temp_df[self.xcats[1]].to_numpy()
-            shift = np.empty(explan.size)
+            explan_col = temp_df[expln_var].to_numpy()
+            shift = np.empty(explan_col.size)
             shift[:] = np.nan
-            shift[n_periods:] = explan[:-n_periods]
+            shift[n_periods:] = explan_col[:-n_periods]
 
             if changes == 'diff':
-                temp_df[self.xcats[1]] -= shift
+                temp_df[expln_var] -= shift
             else:
-                diff = explan - shift
-                temp_df[self.xcats[1]] = diff / shift
+                diff = explan_col - shift
+                temp_df[expln_var] = diff / shift
 
             temp_df['cid'] = c
             temp_df = temp_df.set_index('cid', append=True)
             df_lists.append(temp_df)
 
-        df = pd.concat(df_lists)
-        return df.dropna(axis=0, how='any')
+        df_ = pd.concat(df_lists)
+
+        return df_.dropna(axis=0, how='any')
 
     def corr_probability(self, coef_box):
 
