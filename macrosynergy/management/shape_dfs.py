@@ -255,7 +255,6 @@ if __name__ == "__main__":
     dfc3 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
                          xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black,
                          years=10)
-
     # Testing reduce_df().
     filt1 = ~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))
     filt2 = ~((dfd['cid'] == 'NZD') & (dfd['xcat'] == 'INFL'))
