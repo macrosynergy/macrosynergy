@@ -3,6 +3,7 @@ import unittest
 import io
 import sys
 import pandas as pd
+from random import randint
 from tests.simulate import make_qdf
 from macrosynergy.panel.category_relations import CategoryRelations
 from macrosynergy.management.shape_dfs import categories_df
@@ -148,6 +149,7 @@ class TestAll(unittest.TestCase):
                                     val='value', freq='W', blacklist=self.black,
                                     start='2000-01-01', years=None, lag=1,
                                     xcat_aggs=['mean', 'mean'])
+        original_df_copy = original_df.copy()
         no_rows_original = original_df.shape[0]
 
         # The first aspect of the method that can be tested is the dimensionality of the
@@ -171,15 +173,54 @@ class TestAll(unittest.TestCase):
 
         # Again, test the row logic but on a different testcase.
         n_periods = 6
-        df_time_series = CategoryRelations.time_series(original_df, changes='diff',
+        df_time_series = CategoryRelations.time_series(original_df_copy, changes='pch',
                                                        n_periods=n_periods,
                                                        shared_cids=shared_cids,
                                                        expln_var='INFL')
-        # The number of cross-sections remains unchanged.
-        print(df_time_series.shape[0])
-        print(no_rows_original)
-        # self.assertTrue(df_time_series.shape[0] == row_formula(no_rows_original,
-                                                               # n_periods))
+
+        # The number of cross-sections remains unchanged from the above example.
+        self.assertTrue(df_time_series.shape[0] == row_formula(no_rows_original,
+                                                               n_periods))
+
+        # Test the logic of the differencing method and percentage change. Take a random
+        # index and manually check the logic is correct.
+        # To test the fundamental logic of the time_series() method construct a separate
+        # dataframe.
+        # Test on a single cross-section.
+        cidx = ['GBP']
+        shared_cids = CategoryRelations.intersection_cids(self.dfdx, ['GROWTH', 'INFL'],
+                                                          cidx)
+
+        test_df = categories_df(self.dfdx, ['GROWTH', 'INFL'], shared_cids,
+                                val='value', freq='W', blacklist=self.black,
+                                start='2000-01-01', years=None, lag=1,
+                                xcat_aggs=['mean', 'mean'])
+
+        test_df_copy = test_df.copy().droplevel(level='cid')
+        no_rows = test_df_copy.shape[0]
+        # Isolate a randomly chosen row, index, to test the differencing logic.
+        row_test = randint(n_periods, no_rows)
+
+        n_periods = 4
+        df_time_series = CategoryRelations.time_series(test_df, changes='diff',
+                                                       n_periods=n_periods,
+                                                       shared_cids=shared_cids,
+                                                       expln_var='INFL')
+
+        df_time_series = df_time_series.droplevel(level='cid')
+        # Accounts for the removal of NaN values.
+        nan_adjustment = (row_test - n_periods)
+        test_value = df_time_series.iloc[nan_adjustment]['INFL']
+
+        # Logic: manual computation.
+        difference = test_df_copy.iloc[row_test]['INFL'] - \
+                     test_df_copy.iloc[nan_adjustment]['INFL']
+
+        self.assertEqual(test_value, difference)
+
+        # The logic and assembly of a the new dataframe have both been tested. The other
+        # methods in the Class are for visualisation and heavily dependent on external
+        # packages.
 
 
 if __name__ == "__main__":
