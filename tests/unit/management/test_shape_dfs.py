@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from tests.simulate import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df, categories_df
-from math import ceil
+from math import ceil, floor
 
 class TestAll(unittest.TestCase):
 
@@ -96,25 +96,66 @@ class TestAll(unittest.TestCase):
         self.assertAlmostEqual(x1, x2)
 
     def test_categories_df_year(self):
+
         self.dataframe_constructor()
 
+        # The year aggregation of the data is computed from the specified start date (the
+        # parameter received), as opposed to the earliest date in the dataframe.
+        # Therefore, if the "years" parameter is not equal to None, the "start" parameter
+        # must be defined.
+        with self.assertRaises(AssertionError):
+            dfc = categories_df(self.dfd, xcats=['XR', 'CRY'], cids=['CAD'],
+                                freq='M', lag=0, xcat_aggs=['mean', 'mean'],
+                                start=None, years=7)
+
+        # Lag must be zero if "years" is not equal to None.
+        with self.assertRaises(AssertionError):
+            dfc = categories_df(self.dfd, xcats=['XR', 'CRY'], cids=['CAD'],
+                                freq='M', lag=1, xcat_aggs=['mean', 'mean'],
+                                start=None, years=7)
+
         # Test a specific cross-section. Check the year conversion. Applied from the
-        # earliest year across all cross-sections.
+        # defined start date. The yearly interval will be computed from the "start"
+        # parameter.
+        start = pd.Timestamp('2000-01-01').year
+        years = 10
+
         filt1 = (self.dfd['cid'] == 'CAD')
         dfd = self.dfd[filt1]
-        s_year = 2010
-        e_year = dfd['real_date'].max().year + 1
 
-        years = 10
+        s_year = dfd['real_date'].min().year
+        e_year = dfd['real_date'].max().year + 1
+        # The number of possible buckets the cross-section could be defined over:
+        # dependent on the date of the first realised value.
+        no_buckets = ceil((e_year - start) / years)
+
+        # Adjust for the formal start date.
+        start_bucket = int(floor(s_year - start) / years)
+
         dfc = categories_df(dfd, xcats=['XR', 'CRY'], cids=['CAD'],
                             freq='M', lag=0, xcat_aggs=['mean', 'mean'],
                             start='2000-01-01', years=years)
 
-        no_years = (e_year - s_year)
-        no_rows = ceil(no_years / years)
+        realised_buckets = no_buckets - start_bucket
         filter_df = dfc.loc['CAD', :]
 
-        self.assertTrue(no_rows == filter_df.shape[0])
+        self.assertTrue(realised_buckets == filter_df.shape[0])
+
+        # Apply the same logic but to a different testcase.
+        years = 4
+        no_buckets = ceil((e_year - start) / years)
+
+        # Adjust for the formal start date.
+        start_bucket = int(floor(s_year - start) / years)
+
+        dfc = categories_df(dfd, xcats=['XR', 'CRY'], cids=['CAD'],
+                            freq='M', lag=0, xcat_aggs=['mean', 'mean'],
+                            start='2000-01-01', years=years)
+
+        realised_buckets = no_buckets - start_bucket
+        filter_df = dfc.loc['CAD', :]
+
+        self.assertTrue(realised_buckets == filter_df.shape[0])
 
     def test_categories_df_lags(self):
         self.dataframe_constructor()
