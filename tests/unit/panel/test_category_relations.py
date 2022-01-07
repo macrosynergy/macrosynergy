@@ -142,11 +142,13 @@ class TestAll(unittest.TestCase):
         shared_cids = CategoryRelations.intersection_cids(self.dfdx, ['GROWTH', 'INFL'],
                                                           self.cidx)
 
+        no_cross_sections = len(shared_cids)
         # DataFrame passed into time_series() method.
-        df = categories_df(self.dfdx, ['GROWTH', 'INFL'], shared_cids, val='value',
-                           freq='W', blacklist=self.black, start='2000-01-01',
-                           years=None, lag=1, xcat_aggs=['mean', 'mean'])
-        print(df.shape)
+        original_df = categories_df(self.dfdx, ['GROWTH', 'INFL'], shared_cids,
+                                    val='value', freq='W', blacklist=self.black,
+                                    start='2000-01-01', years=None, lag=1,
+                                    xcat_aggs=['mean', 'mean'])
+        no_rows_original = original_df.shape[0]
 
         # The first aspect of the method that can be tested is the dimensionality of the
         # returned DataFrame. By computing the difference or percentage change over a
@@ -157,11 +159,27 @@ class TestAll(unittest.TestCase):
         # Test the above occurs for each cross-section. The number of rows in the
         # returned dataframe will drop by (n_periods * cross_sections).
 
-        df_time_series = CategoryRelations.time_series(df, changes='diff',
-                                                       n_periods=3,
+        n_periods = 3
+        df_time_series = CategoryRelations.time_series(original_df, changes='diff',
+                                                       n_periods=n_periods,
                                                        shared_cids=shared_cids,
                                                        expln_var='INFL')
-        print(df_time_series.shape)
+
+        row_formula = lambda no_rows, n: no_rows - (no_cross_sections * n)
+        self.assertTrue(df_time_series.shape[0] == row_formula(no_rows_original,
+                                                               n_periods))
+
+        # Again, test the row logic but on a different testcase.
+        n_periods = 6
+        df_time_series = CategoryRelations.time_series(original_df, changes='diff',
+                                                       n_periods=n_periods,
+                                                       shared_cids=shared_cids,
+                                                       expln_var='INFL')
+        # The number of cross-sections remains unchanged.
+        print(df_time_series.shape[0])
+        print(no_rows_original)
+        # self.assertTrue(df_time_series.shape[0] == row_formula(no_rows_original,
+                                                               # n_periods))
 
 
 if __name__ == "__main__":
