@@ -4,11 +4,12 @@ import io
 import sys
 import pandas as pd
 from tests.simulate import make_qdf
-from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.panel.category_relations import CategoryRelations
+from macrosynergy.management.shape_dfs import categories_df
 
 class TestAll(unittest.TestCase):
 
+    # Method used to construct the respective DataFrame.
     def dataframe_generator(self):
 
         self.__dict__['cids'] = ['AUD', 'CAD', 'GBP', 'NZD', 'JPY', 'CHF']
@@ -80,6 +81,23 @@ class TestAll(unittest.TestCase):
                                    lag=1, start='2000-01-01', years=None,
                                    blacklist=self.black)
 
+        with self.assertRaises(AssertionError):
+            # Test the parameter 'changes' - only able to receive two string values:
+            # i) 'diff'; ii) 'pch'.
+            cr = CategoryRelations(self.dfdx, xcats=['GROWTH', 'INFL'], cids=self.cidx,
+                                   freq='M', xcat_aggs=['mean', 'mean'], lag=1,
+                                   start='2000-01-01', years=None, blacklist=self.black,
+                                   changes='pchg', n_periods=1)
+
+        with self.assertRaises(AssertionError):
+            # If the 'changes' parameter is not set to None, the number of periods,
+            # n_periods, in which the differencing or percentage change is computed must
+            # be specified and be an Integer value.
+            cr = CategoryRelations(self.dfdx, xcats=['GROWTH', 'INFL'], cids=self.cidx,
+                                   freq='M', xcat_aggs=['mean', 'mean'], lag=1,
+                                   start='2000-01-01', years=None, blacklist=self.black,
+                                   changes='pch', n_periods=None)
+
     def test_intersection_cids(self):
 
         self.dataframe_generator()
@@ -112,6 +130,38 @@ class TestAll(unittest.TestCase):
                                                           self.cidx)
 
         self.assertTrue(sorted(shared_cids) == ['CAD', 'CHF', 'GBP'])
+
+    # Test the conversion method from raw value to either n-period differencing or
+    # percentage change.
+    def test_time_series(self):
+
+        self.dataframe_generator()
+
+        # Generate the dataframe passed into the time_series() method: the procedure
+        # occurs inside the Class's constructor.
+        shared_cids = CategoryRelations.intersection_cids(self.dfdx, ['GROWTH', 'INFL'],
+                                                          self.cidx)
+
+        # DataFrame passed into time_series() method.
+        df = categories_df(self.dfdx, ['GROWTH', 'INFL'], shared_cids, val='value',
+                           freq='W', blacklist=self.black, start='2000-01-01',
+                           years=None, lag=1, xcat_aggs=['mean', 'mean'])
+        print(df.shape)
+
+        # The first aspect of the method that can be tested is the dimensionality of the
+        # returned DataFrame. By computing the difference or percentage change over a
+        # fixed number of time-periods, the first "n-periods" dates will not have the
+        # preceding dates required to obtain a differenced value for that respective
+        # date. Therefore, the index will be filled with a NaN which will subsequently be
+        # dropped.
+        # Test the above occurs for each cross-section. The number of rows in the
+        # returned dataframe will drop by (n_periods * cross_sections).
+
+        df_time_series = CategoryRelations.time_series(df, changes='diff',
+                                                       n_periods=3,
+                                                       shared_cids=shared_cids,
+                                                       expln_var='INFL')
+        print(df_time_series.shape)
 
 
 if __name__ == "__main__":
