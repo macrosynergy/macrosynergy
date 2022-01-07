@@ -172,13 +172,13 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         for i in range(2):
             dfw = df[df['xcat'] == xcats[i]].pivot(index='real_date', columns='cid',
                                                    values=val)
-            dfw = dfw.resample(freq).agg(xcat_aggs[i])  # frequency conversion
+            dfw = dfw.resample(freq).agg(xcat_aggs[i])
             if (i == 0) & (fwin > 1):
-                dfw = dfw.rolling(window=fwin).mean().shift(1-fwin)
+                dfw = dfw.rolling(window=fwin).mean().shift(1 - fwin)
             if (i == 1) & (lag > 0):
-                dfw = dfw.shift(lag)  # Lag second category for late arrival
-            dfx = pd.melt(dfw.reset_index(), id_vars=['real_date'], value_vars=cids,
-                          value_name=val)
+                dfw = dfw.shift(lag)
+            dfx = pd.melt(dfw.reset_index(), id_vars=['real_date'],
+                          value_vars=cids, value_name=val)
             dfx['xcat'] = xcats[i]
             dfc = dfc.append(dfx[col_names])
     else:
@@ -248,30 +248,13 @@ if __name__ == "__main__":
     dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
                          xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black)
 
-    df_lists = []
-    for c in sorted(cids):
-        temp_df = dfc1.loc[c]
-        explan = temp_df['CRY'].to_numpy()
-        print(temp_df)
-        diff = np.empty((explan.size))
-        diff[:] = np.nan
-        diff[:-1] = explan[1:]
+    dfc2 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
+                         fwin=3, xcat_aggs=['mean', 'mean'],
+                         start='2000-01-01', blacklist=black)
 
-        temp_df['CRY'] -= diff
-        print(temp_df)
-        temp_df['cid'] = c
-        temp_df = temp_df.set_index('cid', append=True)
-        df_lists.append(temp_df)
-
-    df_output = pd.concat(df_lists)
-    print(df_output)
-    # dfc2 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
-                         # fwin=3, xcat_aggs=['mean', 'mean'],
-                         # start='2000-01-01', blacklist=black)
-
-    # dfc3 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
-                         # xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black,
-                         # years=10)
+    dfc3 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
+                         xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black,
+                         years=10)
 
     # Testing reduce_df().
     filt1 = ~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))
