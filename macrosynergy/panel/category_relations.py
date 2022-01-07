@@ -154,7 +154,6 @@ class CategoryRelations:
             df_lists.append(temp_df)
 
         df_ = pd.concat(df_lists)
-
         return df_.dropna(axis=0, how='any')
 
     def corr_probability(self, coef_box):
@@ -326,7 +325,7 @@ if __name__ == "__main__":
     cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'], cids=cidx, freq='M',
                            xcat_aggs=['mean', 'mean'], lag=1,
                            start='2000-01-01', years=None, blacklist=black,
-                           changes='diff', n_periods=1)
+                           changes='diff', n_periods=6)
 
     cr.reg_scatter(labels=False, coef_box='upper left')
     cr.jointplot(kind='hist', xlab='growth', ylab='inflation', height=5)
