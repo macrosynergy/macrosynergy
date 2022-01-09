@@ -347,8 +347,9 @@ class DataQueryInterface(object):
             elif not floor(no_tickers / 1500):
                 delay = 0.5
             else:
-                delay = 0.65
+                delay = 0.7
 
+        print(f"Time delay: {delay}.")
         t = self.thread_handler
         iterations = ceil(no_tickers / t)
         tick_list_compr = [tickers[(i * t): (i * t) + t] for i in range(iterations)]
