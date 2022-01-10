@@ -9,10 +9,8 @@ from macrosynergy.panel.make_zn_scores import *
 from random import randint, choice, shuffle, seed
 from collections import defaultdict
 
-warnings.filterwarnings("ignore")
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
-    import md5, sha
 
 class TestAll(unittest.TestCase):
 
