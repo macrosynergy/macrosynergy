@@ -151,125 +151,6 @@ class DataQueryInterface(object):
             print(f'exc_value: {exc_value}')
             print(f'exc_traceback: {exc_traceback}')
 
-    @staticmethod
-    def _debug_response(response: requests.Response) -> None:
-        """Debug error response from DataQuery request
-
-        :param <requests.Response> response:
-            response from REST API request to DataQuery.
-        :return: None
-
-        """
-        print("[", response.status_code, "] -", response.text)
-        print("apparent encoding:", response.apparent_encoding)
-        print("cookies:", response.cookies)
-        print("elapsed:", response.elapsed)
-        print("encoding:", response.encoding)
-        print("history:", response.history, "permanent redirect:",
-              response.is_permanent_redirect,
-              "redirect:", response.is_redirect)
-        # print("JSON:", response.json())
-        print("links:", response.links)
-        print("OK:", response.ok)
-        print("reason:", response.reason)
-        print("request:", response.request)
-        print("url:", response.url)
-        print("text:", response.text)
-        print("raw:", response.raw)
-        print("response headers:", response.headers)
-        print("Send headers:", response.request.headers)
-
-    def _fetch(self, endpoint: str = "/groups", select: str = "groups",
-               params: dict = None) -> Optional[Union[list, dict]]:
-        """Fetch the response from DataQuery
-
-        :param <str> endpoint: default '/groups',
-            end-point of DataQuery to be explored.
-        :param <str> select: default 'groups',
-            string with select for within the endpoint.
-        :param <str> params: dictionary of parameters to be passed to request
-
-        :return: list of response from DataQuery
-        :rtype: <list>
-
-        """
-
-        # TODO map select to endpoint
-        assert isinstance(select, str), \
-            f"select must be a string and not {type(select)}: {select}"
-
-        check = ["instruments", "groups", "filters", "info"]
-        assert select in check, \
-            f"select statement, {select:s} not found in list {check}"
-
-        assert isinstance(endpoint, str), \
-            f"endpoint must be a <str> and not {type(endpoint)}: {endpoint}"
-
-        url = self.base_url + endpoint
-        self.last_url = url
-
-        logging.debug(f"request from endpoint: {url:s}")
-
-        # TODO count/checksum of items...
-        results = []
-        count = 0
-
-        while True:
-            count += 1
-            # TODO move to separate function...
-            with requests.get(url=url, cert=(self.crt, self.key),
-                              headers=self.headers, params=params) as r:
-                self.status_code = r.status_code = r.status_code
-                self.last_response = r.text
-
-                self.last_url = r.url
-
-                if self.debug:
-                    self._debug_response(response=r)
-
-                if r.status_code != requests.codes.ok:
-                    code = r.status_code
-                    msg = f"response status code {r.status_code:d}"
-                    if code in DQ_ERROR_MSG.keys():
-                        msg += f": {DQ_ERROR_MSG[code]:s}"
-
-                    logging.error(msg)
-                    return None
-
-                if r.status_code != 200:
-                    logging.warning(f"response code {r.status_code:d}")
-
-            response = json.loads(self.last_response)
-
-            if "info" in response.keys():
-                # TODO check select == 'info'?
-                return response["info"]
-
-            if "error" in response.keys() or "errors" in response.keys():
-                logging.error(f"Error in response %s for url %s", response, self.last_url)
-                raise ValueError(f"Error in response from DQ: {response}")
-
-            logging.debug(f"count: %d, items: %d, page-size: %d", count, response["items"], response["page-size"])
-
-            # TODO parse response...
-            assert select in response.keys()
-            results.extend(response[select])
-
-            assert "links" in response.keys(), \
-                f"'links' not found in keys {response.keys()}"
-
-            assert "next" in response['links'][1].keys(), \
-                f"'next' missing from links keys:" \
-                f" {response['links'][1].keys()}"
-
-            if response["links"][1]["next"] is None:
-                break
-
-            url = f"{self.base_url:s}{response['links'][1]['next']:s}"
-            params = {}
-
-        return results
-
     def _fetch_threading(self, endpoint, params: dict):
 
         url = self.base_url + endpoint
@@ -282,48 +163,33 @@ class DataQueryInterface(object):
                     last_response = r.text
 
             response = json.loads(last_response)
-            dictionary = response[select][0]['attributes'][0]
-
-            if not isinstance(dictionary['time-series'], list):
-                self.ticker_warning = False
-                self.ticker_residual.append(dictionary['expression'])
-
-            if not select in response.keys():
-                break
+            try:
+                dictionary = response[select][0]['attributes'][0]
+            except KeyError:
+                print("Server error.")
+                print(f"Response: {response}.")
             else:
-                results.extend(response[select])
 
-            assert "next" in response['links'][1].keys(), \
-                f"'next' missing from links keys: " \
-                f" {response['links'][1].keys()}"
+                if not isinstance(dictionary['time-series'], list):
+                    self.ticker_warning = False
+                    self.ticker_residual.append(dictionary['expression'])
 
-            if response["links"][1]["next"] is None:
-                break
+                if not select in response.keys():
+                    break
+                else:
+                    results.extend(response[select])
 
-            url = f"{self.base_url:s}{response['links'][1]['next']:s}"
-            params = {}
+                assert "next" in response['links'][1].keys(), \
+                    f"'next' missing from links keys: " \
+                    f" {response['links'][1].keys()}"
 
-        return results
+                if response["links"][1]["next"] is None:
+                    break
 
-    def check_connection(self) -> bool:
-        """Check connect (heartbeat) to DataQuery
+                url = f"{self.base_url:s}{response['links'][1]['next']:s}"
+                params = {}
 
-        :return: success of connection check if True (return code 200),
-            and False otherwise.
-        :rtype: <bool>
-
-        """
-
-        results = self._fetch(endpoint="/services/heartbeat", select='info')
-
-        assert isinstance(results, dict), f"Response from DQ: {results}"
-
-        if int(results["code"]) != 200:
-            msg = f"Message: {results['message']:s}," \
-                  f" Description: {results['description']:s}"
-            logging.error(msg)
-
-        return int(results["code"]) == 200
+            return results
 
     def _request(self, endpoint: str, tickers: List[str], params: dict,
                  delay: int = None, count: int = 0, start_date: str = None,
@@ -332,6 +198,7 @@ class DataQueryInterface(object):
                  nan_treatment: str = "NA_NOTHING"):
 
         no_tickers = len(tickers)
+        print(f"No. Tickers: {no_tickers}.")
 
         if not count:
             params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
@@ -347,7 +214,7 @@ class DataQueryInterface(object):
             elif not floor(no_tickers / 1500):
                 delay = 0.5
             else:
-                delay = 0.7
+                delay = 0.75
 
         print(f"Time delay: {delay}.")
         t = self.thread_handler
@@ -364,6 +231,7 @@ class DataQueryInterface(object):
         if self.concurrent:
             for i in range(exterior_iterations):
 
+                print(f"Number of iterations: {i}.")
                 output = []
                 if i > 0:
                     time.sleep(delay)
@@ -382,6 +250,7 @@ class DataQueryInterface(object):
                         try:
                             response = f.result()
                         except ValueError:
+                            print("Server being hit too quickly.")
                             delay += 0.05
                             tickers_server.append(f.__dict__[str(id(f))])
                         else:
@@ -514,6 +383,7 @@ class DataQueryInterface(object):
                         # Again, requires a form of logging if condition satisfied.
                         continue
 
+        print(f"Output Dictionary: {output_dict}.")
         output_dict_c = output_dict.copy()
         t_dict = next(iter(output_dict_c.values()))
         no_rows = next(iter(t_dict.values())).size
