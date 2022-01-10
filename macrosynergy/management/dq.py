@@ -285,7 +285,7 @@ class DataQueryInterface(object):
             dictionary = response[select][0]['attributes'][0]
 
             if not isinstance(dictionary['time-series'], list):
-                self.ticker_warning = True
+                self.ticker_warning = False
                 self.ticker_residual.append(dictionary['expression'])
 
             if not select in response.keys():
@@ -344,9 +344,12 @@ class DataQueryInterface(object):
                 delay = 0.25
             elif not floor(no_tickers / 1000):
                 delay = 0.2
+            elif not floor(no_tickers / 1500):
+                delay = 0.5
             else:
-                delay = 0.45
+                delay = 0.7
 
+        print(f"Time delay: {delay}.")
         t = self.thread_handler
         iterations = ceil(no_tickers / t)
         tick_list_compr = [tickers[(i * t): (i * t) + t] for i in range(iterations)]
@@ -379,6 +382,7 @@ class DataQueryInterface(object):
                         try:
                             response = f.result()
                         except ValueError:
+                            delay += 0.05
                             tickers_server.append(f.__dict__[str(id(f))])
                         else:
                             if isinstance(response, list):
