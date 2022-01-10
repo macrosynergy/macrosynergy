@@ -117,16 +117,17 @@ def nan_insert(df: pd.DataFrame, min_obs: int = 252):
 
 
 def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
-                   start: str = None, end: str = None, sequential: bool = False,
+                   start: str = None, end: str = None, sequential: bool = True,
                    min_obs: int = 261,  iis: bool = True,
                    neutral: str = 'zero', thresh: float = None,
-                   pan_weight: float = 1, postfix: str = 'ZN'):
+                   pan_weight: float = 1, blacklist: dict = None,
+                   postfix: str = 'ZN'):
 
     """
     Computes z-scores for a panel around a neutral level ("zn scores").
     
-    :param <pd.Dataframe> df: standardized data frame with the following necessary columns:
-        'cid', 'xcat', 'real_date' and 'value.
+    :param <pd.Dataframe> df: standardized data frame with following necessary columns:
+        'cid', 'xcat', 'real_date' and 'value'.
     :param <str> xcat:  extended category for which the zn_score is calculated.
     :param <List[str]> cids: cross sections for which zn_scores are calculated; default
         is all available for category.
@@ -141,17 +142,21 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         zn_scores. Default is 261.
     :param <bool> iis: if True (default) zn-scores are also calculated for the initial
         sample period defined by min-obs, on an in-sample basis, to avoid losing history.
-        # Todo: implement iss in function
+        # Todo: implement iis in function
     :param <str> neutral: method to determine neutral level. Default is 'zero'.
         Alternatives are 'mean' and "median".
     :param <float> thresh: threshold value beyond which scores are winsorized,
-        i.e. contained at that threshold. Therefore, the threshold is the maximum absolute
+        i.e. contained at that threshold. The threshold is the maximum absolute
         score value that the function is allowed to produce. The minimum threshold is 1
         standard deviation.
     :param <float> pan_weight: weight of panel (versus individual cross section) for
         calculating the z-score parameters, i.e. the neutral level and the standard
         deviation. Default is 1, i.e. panel data are the basis for the parameters.
         Lowest possible value is 0, i.e. parameters are all specific to cross section.
+    :param <dict> blacklist: cross sections with date ranges that should be excluded from
+        the data frame. If one cross section has several blacklist periods append numbers
+        to the cross-section code.
+        # Todo: implement blacklist in function
     :param <str> postfix: string appended to category name for output; default is "ZN".
 
     :return <pd.Dataframe>: standardized dataframe with the zn-scores of the chosen xcat:
@@ -163,6 +168,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         assert thresh > 1, "The 'thresh' parameter must be larger than 1"
     assert 0 <= pan_weight <= 1, "The 'pan_weight' parameter must be between 0 and 1"
 
+    df = df.loc[:, ['cid', 'xcat', 'real_date', 'value']]
     df = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end)
     dfw = df.pivot(index='real_date', columns='cid', values='value')
 
