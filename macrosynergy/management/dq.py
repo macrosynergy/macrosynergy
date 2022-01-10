@@ -140,7 +140,6 @@ class DataQueryInterface(object):
         self.concurrent = concurrent
         self.thread_handler = thread_handler
         self.ticker_residual = []
-        self.ticker_warning = False
 
     def __enter__(self):
         return self
@@ -163,33 +162,28 @@ class DataQueryInterface(object):
                     last_response = r.text
 
             response = json.loads(last_response)
-            try:
-                dictionary = response[select][0]['attributes'][0]
-            except KeyError:
-                print("Server error.")
-                print(f"Response: {response}.")
+
+            dictionary = response[select][0]['attributes'][0]
+
+            if not isinstance(dictionary['time-series'], list):
+                print("Server error: List not found.")
+
+            if not select in response.keys():
+                break
             else:
+                results.extend(response[select])
 
-                if not isinstance(dictionary['time-series'], list):
-                    self.ticker_warning = False
-                    self.ticker_residual.append(dictionary['expression'])
+            assert "next" in response['links'][1].keys(), \
+                f"'next' missing from links keys: " \
+                f" {response['links'][1].keys()}"
 
-                if not select in response.keys():
-                    break
-                else:
-                    results.extend(response[select])
+            if response["links"][1]["next"] is None:
+                break
 
-                assert "next" in response['links'][1].keys(), \
-                    f"'next' missing from links keys: " \
-                    f" {response['links'][1].keys()}"
+            url = f"{self.base_url:s}{response['links'][1]['next']:s}"
+            params = {}
 
-                if response["links"][1]["next"] is None:
-                    break
-
-                url = f"{self.base_url:s}{response['links'][1]['next']:s}"
-                params = {}
-
-            return results
+        return results
 
     def _request(self, endpoint: str, tickers: List[str], params: dict,
                  delay: int = None, count: int = 0, start_date: str = None,
@@ -214,7 +208,7 @@ class DataQueryInterface(object):
             elif not floor(no_tickers / 1500):
                 delay = 0.5
             else:
-                delay = 0.75
+                delay = 0.5
 
         print(f"Time delay: {delay}.")
         t = self.thread_handler
@@ -251,7 +245,7 @@ class DataQueryInterface(object):
                             response = f.result()
                         except ValueError:
                             print("Server being hit too quickly.")
-                            delay += 0.05
+                            # delay += 0.05
                             tickers_server.append(f.__dict__[str(id(f))])
                         else:
                             if isinstance(response, list):
@@ -317,17 +311,25 @@ class DataQueryInterface(object):
 
         results = self._request(endpoint="/expressions/time-series",
                                 tickers=expression, params=params, **kwargs)
-        if self.ticker_warning:
-            results_ = self._request(endpoint="/expressions/time-series",
-                                     tickers=self.ticker_residual, params=params,
-                                     count=0, **kwargs)
-            results += results_
 
         # (O(n) + O(nlog(n)) operation.
         no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression]))
 
-        results_dict, output_dict = self.isolate_timeseries(results, original_metrics,
-                                                            self.debug)
+        results_dict, output_dict, s_list = self.isolate_timeseries(results,
+                                                                    original_metrics,
+                                                                    self.debug,
+                                                                    False)
+        if s_list:
+            sequential = True
+            self.__dict__['concurrent'] = False
+            results_seq = self._request(endpoint="/expressions/time-series",
+                                        tickers=s_list, params=params, **kwargs)
+            r_dict, o_dict, s_list = self.isolate_timeseries(results_seq,
+                                                             original_metrics,
+                                                             self.debug,
+                                                             sequential=sequential)
+            results_dict = {**results_dict, **r_dict}
+
         results_dict = self.valid_ticker(results_dict, suppress_warning)
 
         results_copy = results_dict.copy()
@@ -342,14 +344,18 @@ class DataQueryInterface(object):
                                           original_metrics)
 
     @staticmethod
-    def isolate_timeseries(list_, metrics, debug):
+    def isolate_timeseries(list_, metrics, debug, sequential):
         """
         Isolates the metrics, across all categories & cross-sections, held in the List,
         and concatenates the time-series, column-wise, into a single structure, and
         subsequently stores that structure in a dictionary where the dictionary's
         keys will be each Ticker.
 
-        :param: List returned from DataQuery.
+        :param list_: returned from DataQuery.
+        :param metrics: metrics requested from the API.
+        :param debug: used to understand any underlying issue.
+        :param sequential: if series are not returned, potentially the fault of the
+            threading mechanism, isolate each Ticker and run sequentially.
 
         :return: dictionary.
         """
@@ -390,8 +396,11 @@ class DataQueryInterface(object):
         modified_dict = {}
         d_frame_order = ['real_date'] + metrics
 
+        ticker_list = []
         for k, v in output_dict.items():
+
             arr = np.empty(shape=(no_rows, len(d_frame_order)), dtype=object)
+            clause = True
             for i, metric in enumerate(d_frame_order):
                 try:
                     arr[:, i] = v[metric]
@@ -399,20 +408,23 @@ class DataQueryInterface(object):
                     if debug:
                         print(f"The ticker, {k[3:]}, is missing the metric '{metric}' "
                               f"from the API.")
-                    if 'value' in v.keys():
-                        arr[:, i] = np.nan
-                        clause = True
+
+                    temp_list = [k + ',' + m + ')' for m in metrics]
+                    ticker_list += temp_list
+                    if sequential:
+                        if 'value' in v.keys():
+                            arr[:, i] = np.nan
+                        else:
+                            print(f"The ticker, {k[3:]}, is missing from the API.")
+                            clause = False
+                            break
                     else:
-                        print(f"The ticker, {k[3:]}, is missing from the API.")
-                        clause = False
                         break
-                else:
-                    clause = True
 
             if clause:
                 modified_dict[k] = arr
 
-        return modified_dict, output_dict
+        return modified_dict, output_dict, ticker_list
 
     @staticmethod
     def column_check(v, col):
