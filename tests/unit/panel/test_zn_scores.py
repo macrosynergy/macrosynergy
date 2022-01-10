@@ -139,7 +139,7 @@ class TestAll(unittest.TestCase):
 
         # If the "iis" is set to True, the dimensions of the dataframe should remain the
         # same. The make_zn_scores function will compute a zn_score for all dates:
-        # starting from the first available date.
+        # starting from the first available date. Therefore, leave the code unmodified.
         self.assertTrue(self.dfw.shape == dfw_zns.shape)
 
     def test_zn_scores(self):
@@ -156,9 +156,14 @@ class TestAll(unittest.TestCase):
                                 neutral='std', thresh=0.5, pan_weight=1.0, postfix='ZN')
 
         with self.assertRaises(AssertionError):
-            # Test catching panel weight
+            # Test catching panel weight.
             df = make_zn_scores(self.dfd, 'XR', self.cids, sequential=False,
                                 pan_weight=1.2)
+
+        with self.assertRaises(AssertionError):
+            # Test the iis parameter being a boolean value.
+            df = make_zn_scores(self.dfd, 'XR', self.cids, sequential=False,
+                                pan_weight=1.2, iis=0)
 
         # Testing on Panel = 1.0 (default value)
         df_panel = make_zn_scores(self.dfd, 'CRY', self.cids, sequential=True, min_obs=0,
