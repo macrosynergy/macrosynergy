@@ -7,19 +7,16 @@ and private key to verify the request.
 """
 import requests
 import base64
-from typing import Optional, Union, List
+from typing import List
 import json
 import pandas as pd
 import numpy as np
 import os
-import logging
-from math import ceil, log, floor
+from math import ceil, floor
 from collections import defaultdict
 import warnings
-import threading
 import concurrent.futures
 import time
-from queue import Queue
 from itertools import chain
 
 BASE_URL = "https://platform.jpmorgan.com/research/dataquery/api/v2"
@@ -131,7 +128,6 @@ class DataQueryInterface(object):
             raise ValueError(msg)
         self.crt = crt
 
-        # For debugging
         self.debug = debug
         self.last_url = None
         self.status_code = None
@@ -139,7 +135,6 @@ class DataQueryInterface(object):
         self.date_all = date_all
         self.concurrent = concurrent
         self.thread_handler = thread_handler
-        self.ticker_residual = []
 
     def __enter__(self):
         return self
@@ -151,6 +146,17 @@ class DataQueryInterface(object):
             print(f'exc_traceback: {exc_traceback}')
 
     def _fetch_threading(self, endpoint, params: dict):
+        """
+        Method responsible for requesting Tickers from the API. Able to pass in 20
+        Tickers in a single request. If there is a request failure, the function will
+        return a None-type Object and the request will be made again but with a slower
+        delay.
+
+        :param <str> endpoint:
+        :param <dict> params: dictionary containing the required parameters.
+
+        return <dict>: singular dictionary obtaining maximum 20 elements.
+        """
 
         url = self.base_url + endpoint
         select = "instruments"
@@ -166,7 +172,6 @@ class DataQueryInterface(object):
             dictionary = response[select][0]['attributes'][0]
 
             if not isinstance(dictionary['time-series'], list):
-                print("Server error: List not found.")
                 return None
 
             if not select in response.keys():
@@ -191,16 +196,35 @@ class DataQueryInterface(object):
                  end_date: str = None, calendar: str = "CAL_ALLDAYS",
                  frequency: str = "FREQ_DAY", conversion: str = "CONV_LASTBUS_ABS",
                  nan_treatment: str = "NA_NOTHING"):
+        """
+        Method designed to concurrently request tickers from the API. Each initiated
+        thread will handle batches of 20 tickers, and 10 threads will be active
+        concurrently. Able to request data sequentially if required or server overload.
+
+        :param <str> endpoint: url.
+        :param <List[str]> tickers: List of Tickers.
+        :param <dict> params: dictionary of required parameters for request.
+        :param <Integer> delay: each release of a thread requires a delay (roughly 200
+            milliseconds) to prevent overwhelming DataQuery. Computed dynamically if DQ
+            is being hit too hard.
+        :param <str> start_date:
+        :param <str> end_date:
+        :param <str> calendar:
+        :param <str> frequency: frequency metric - default is daily.
+        :param <str> conversion:
+        :param <str> nan_treatment:
+
+        return <dict>: single dictionary containing all the requested Tickers and their
+            respective time-series over the defined dates.
+        """
 
         no_tickers = len(tickers)
-        print(f"No. Tickers: {no_tickers}.")
         if not count:
             params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
                        "calendar": calendar, "frequency": frequency, "conversion":
                        conversion, "nan_treatment": nan_treatment}
             params.update(params_)
 
-        print(f"Time delay: {delay}.")
         t = self.thread_handler
         iterations = ceil(no_tickers / t)
         tick_list_compr = [tickers[(i * t): (i * t) + t] for i in range(iterations)]
@@ -215,7 +239,6 @@ class DataQueryInterface(object):
         if self.concurrent:
             for i in range(exterior_iterations):
 
-                print(f"Number of iterations: {i}.")
                 output = []
                 if i > 0:
                     time.sleep(delay)
@@ -226,18 +249,18 @@ class DataQueryInterface(object):
                         params_copy["expressions"] = elem
                         results = executor.submit(self._fetch_threading, endpoint,
                                                   params_copy)
-                        if results is not None:
-                            time.sleep(delay)
-                            results.__dict__[str(id(results))] = elem
-                            output.append(results)
-                        else:
-                            return None
+                        time.sleep(delay)
+                        results.__dict__[str(id(results))] = elem
+                        output.append(results)
+
                     for f in concurrent.futures.as_completed(output):
                         try:
                             response = f.result()
+                            if f.__dict__['_result'] == None:
+                                return None
+
                         except ValueError:
-                            print("Server being hit too quickly.")
-                            # delay += 0.05
+                            delay += 0.05
                             tickers_server.append(f.__dict__[str(id(f))])
                         else:
                             if isinstance(response, list):
@@ -254,11 +277,20 @@ class DataQueryInterface(object):
         tickers_server = list(chain(*tickers_server))
         if tickers_server:
             count += 1
-            delay += 0.1
-            recursive_output = final_output + self._request(endpoint=endpoint,
-                                                            tickers=list(set(tickers_server)),
-                                                            params=params, delay=delay,
-                                                            count=count)
+            recursive_call = True
+            while recursive_call:
+
+                delay += 0.1
+                try:
+                    recursive_output = final_output + self._request(endpoint=endpoint,
+                                                                    tickers=list(set(tickers_server)),
+                                                                    params=params,
+                                                                    delay=delay, count=count)
+                except TypeError:
+                    continue
+                else:
+                    recursive_call = False
+
             return recursive_output
 
         return final_output
@@ -271,31 +303,24 @@ class DataQueryInterface(object):
         elif not floor(no_tickers / 1000):
             delay = 0.2
         else:
-            delay = 0.25
+            delay = 0.3
 
         return delay
 
     def get_ts_expression(self, expression, original_metrics, suppress_warning,
                           **kwargs):
         """
+        Main driver function. Receives the Tickers and returns the respective dataframe.
 
-        start_date: str = None, end_date: str = None,
-                          calendar: str = "CAL_ALLDAYS",
-                          frequency: str = "FREQ_DAY",
-                          conversion: str = "CONV_LASTBUS_ABS",
-                          nan_treatment: str = "NA_NOTHING"):
+        :param <List[str]> expression: categories & respective cross-sections requested.
+        :param <List[str]> original_metrics: List of required metrics: the returned
+            DataFrame will reflect the order of the received List.
+        :param <Boolean> suppress_warning: required for debugging.
+        :param <dict> **kwargs: dictionary of additional arguments
 
-        Get timeseries (ts) using expression from old DataQuery notation.
-        Will manipulate all the cross-sections
-
-        :param expression: Categories & respective cross-sections requested.
-        :param original_metrics: List of required metrics:
-                                 the returned DataFrame will reflect the received List.
-        :param **kwargs: dictionary of additional arguments
-
-        :return: pd.DataFrame: ['cid', 'xcat', 'real_date'] + [original_metrics]
-
+        :return: pd.DataFrame: ['cid', 'xcat', 'real_date'] + [original_metrics].
         """
+
         for metric in original_metrics:
             assert metric in ['value', 'eop_lag', 'mop_lag', 'grading'], \
                 f"Incorrect metric passed: {metric}."
@@ -317,7 +342,6 @@ class DataQueryInterface(object):
                                     tickers=expression, params={},
                                     delay = (c_delay + 0.1), **kwargs)
 
-        # (O(n) + O(nlog(n)) operation.
         no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression]))
 
         results_dict, output_dict, s_list = self.isolate_timeseries(results,
@@ -355,6 +379,9 @@ class DataQueryInterface(object):
         and concatenates the time-series, column-wise, into a single structure, and
         subsequently stores that structure in a dictionary where the dictionary's
         keys will be each Ticker.
+        Will validate that each requested metric is available, in the data dictionary,
+        for each Ticker. If not, will run the Tickers sequentially to confirm the issue
+        is not ascribed to multithreading overloading the load balancer.
 
         :param list_: returned from DataQuery.
         :param metrics: metrics requested from the API.
@@ -362,13 +389,12 @@ class DataQueryInterface(object):
         :param sequential: if series are not returned, potentially the fault of the
             threading mechanism, isolate each Ticker and run sequentially.
 
-        :return: dictionary.
+        :return: dict.
         """
         output_dict = defaultdict(dict)
         size = len(list_)
 
         for i in range(size):
-            flag = False
             try:
                 r = list_.pop()
             except IndexError:
@@ -380,19 +406,14 @@ class DataQueryInterface(object):
 
                 ticker_split = ','.join(ticker[:-1])
                 ts_arr = np.array(dictionary['time-series'])
-                if ts_arr.size == 1:
-                    # Requires a form of logging if condition satisfied.
-                    flag = True
 
-                if not flag:
-                    if ticker_split not in output_dict:
-                        output_dict[ticker_split]['real_date'] = ts_arr[:, 0]
-                        output_dict[ticker_split][metric] = ts_arr[:, 1]
-                    elif metric not in output_dict[ticker_split]:
-                        output_dict[ticker_split][metric] = ts_arr[:, 1]
-                    else:
-                        # Again, requires a form of logging if condition satisfied.
-                        continue
+                if ticker_split not in output_dict:
+                    output_dict[ticker_split]['real_date'] = ts_arr[:, 0]
+                    output_dict[ticker_split][metric] = ts_arr[:, 1]
+                elif metric not in output_dict[ticker_split]:
+                    output_dict[ticker_split][metric] = ts_arr[:, 1]
+                else:
+                    continue
 
         output_dict_c = output_dict.copy()
         t_dict = next(iter(output_dict_c.values()))
@@ -412,7 +433,7 @@ class DataQueryInterface(object):
                 except KeyError:
                     if debug:
                         print(f"The ticker, {k[3:]}, is missing the metric '{metric}' "
-                              f"whilst the requests are running concurrently - will"
+                              f"whilst the requests are running concurrently - will "
                               f"check the API sequentially.")
 
                     temp_list = [k + ',' + m + ')' for m in metrics]
@@ -422,7 +443,7 @@ class DataQueryInterface(object):
                             arr[:, i] = np.nan
                         else:
                             print(f"The ticker, {k[3:]}, is missing from the API after "
-                                  f"running sequentially - will not be in the returned"
+                                  f"running sequentially - will not be in the returned "
                                   f"dataframe.")
                             clause = False
                             break
@@ -458,9 +479,10 @@ class DataQueryInterface(object):
         NoneType Objects, the Ticker is not valid, and it will be popped from the
         dictionary.
 
-        :param: Dictionary.
+        :param <dict> _dict:
+        :param <Boolean> suppress_warning:
 
-        :return: Dictionary.
+        :return: dict.
         """
 
         ticker_missing = 0
@@ -494,7 +516,7 @@ class DataQueryInterface(object):
         into a single DataFrame retaining the order both row-wise, in terms of cross-
         sections, and column-wise, in terms of the metrics.
 
-        :param <Dictionary> _dict:
+        :param <dict> _dict:
         :param <Integer> no_metrics: Number of metrics requested.
         :param <List[str]> original_metrics: Order of the metrics passed.
 
@@ -541,17 +563,17 @@ class DataQueryInterface(object):
     def tickers(self, tickers: list, metrics: list = ['value'],
                 start_date: str='2000-01-01', suppress_warning=False):
         """
-        Returns standardized dataframe of specified base tickers and metric
+        Returns standardized dataframe of specified base tickers and metric/
 
         :param <List[str]> tickers: JPMaQS ticker of form <cid>_<xcat>.
         :param <List[str]> metrics: must choose one or more from 'value', 'eop_lag',
-                                    'mop_lag', or 'grading'. Default is ['value'].
+            'mop_lag', or 'grading'. Default is ['value'].
         :param <str> start_date: first date in ISO 8601 string format.
         :param <boolean> suppress_warning: used to suppress warning of any invalid
-                                           ticker received by DataQuery.
+            ticker received by DataQuery.
 
         :return <pd.Dataframe> standardized dataframe with columns 'cid', 'xcats',
-                               'real_date' and chosen metrics.
+            'real_date' and chosen metrics.
         """
 
         df = self.get_ts_expression(expression=tickers, original_metrics=metrics,
@@ -566,31 +588,26 @@ class DataQueryInterface(object):
     def download(self, tickers=None, xcats=None, cids=None, metrics=['value'],
                  start_date='2000-01-01', suppress_warning=False):
         """
-        Returns standardized dataframe of specified base tickers and metrics
+        Returns standardized dataframe of specified base tickers and metrics.
 
         :param <List[str]> tickers: JPMaQS ticker of form <cid>_<xcat>. Can be combined
-                                    with selection of categories.
-
+            with selection of categories.
         :param <List[str]> xcats: JPMaQS category codes. Downloaded for all standard
-                                  cross sections identifiers available
-        (if cids are not specified) or those selected (if cids are specified).
-        Standard cross sections here include major developed and emerging currency
-        markets. See JPMaQS documentation.
+            cross sections identifiers available (if cids are not specified) or those
+            selected (if cids are specified). Standard cross sections here include major
+            developed and emerging currency markets. See JPMaQS documentation.
         :param <List[str]> cids: JPMaQS cross-section identifiers, typically based  on
-                                 currency code. See JPMaQS documentation.
+            currency code. See JPMaQS documentation.
         :param <str> metrics: must choose one or more from 'value', 'eop_lag', 'mop_lag',
-                              or 'grade'. Default is ['value'].
-
+            or 'grade'. Default is ['value'].
         :param <str> start_date: first date in ISO 8601 string format.
         :param <str> path: relative path from notebook to credential files.
         :param <boolean> suppress_warning: used to suppress warning of any invalid
-                                           ticker received by DataQuery.
+            ticker received by DataQuery.
 
         :return <pd.Dataframe> standardized dataframe with columns 'cid', 'xcats',
                                'real_date' and chosen metrics.
         """
-
-        # A. Collect all standard cross sections.
 
         if (cids is None) & (xcats is not None):
             cids_dmca = ['AUD', 'CAD', 'CHF', 'EUR', 'GBP', 'JPY', 'NOK', 'NZD', 'SEK',
@@ -604,7 +621,6 @@ class DataQueryInterface(object):
             cids_em = cids_latm + cids_emea + cids_emas
             cids = sorted(cids_dm + cids_em)  # standard default
 
-        # B. Collect all tickers and metrics to be downloaded
         if isinstance(tickers, str):
             tickers = [tickers]
         elif tickers is None:
@@ -626,7 +642,8 @@ class DataQueryInterface(object):
             add_tix = [cid + '_' + xcat for xcat in xcats for cid in cids]
             tickers = tickers + add_tix
 
-        df = self.tickers(tickers, metrics=metrics, suppress_warning=suppress_warning,
+        df = self.tickers(tickers, metrics=metrics,
+                          suppress_warning=suppress_warning,
                           start_date=start_date)
 
         return df
