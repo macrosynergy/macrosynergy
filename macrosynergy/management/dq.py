@@ -172,7 +172,6 @@ class DataQueryInterface(object):
             dictionary = response[select][0]['attributes'][0]
 
             if not isinstance(dictionary['time-series'], list):
-                print("Entered firstly.")
                 return None
 
             if not select in response.keys():
@@ -219,9 +218,7 @@ class DataQueryInterface(object):
             respective time-series over the defined dates.
         """
 
-        print(f"Delay: {delay}.")
         no_tickers = len(tickers)
-        print(f"No. of Tickers: {no_tickers}.")
         if not count:
             params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
                        "calendar": calendar, "frequency": frequency, "conversion":
@@ -242,7 +239,6 @@ class DataQueryInterface(object):
         if self.concurrent:
             for i in range(exterior_iterations):
 
-                print(f"Iterations: {i}.")
                 output = []
                 if i > 0:
                     time.sleep(delay)
@@ -265,7 +261,6 @@ class DataQueryInterface(object):
 
                         except ValueError:
                             delay += 0.05
-                            print("Server being hit too quickly.")
                             tickers_server.append(f.__dict__[str(id(f))])
                         else:
                             if isinstance(response, list):
@@ -343,7 +338,6 @@ class DataQueryInterface(object):
                                 delay=c_delay, **kwargs)
 
         while results is None:
-            print("Entered.")
             c_delay += 0.1
             results = self._request(endpoint="/expressions/time-series",
                                     tickers=expression, params={},
@@ -415,7 +409,6 @@ class DataQueryInterface(object):
                 ticker_split = ','.join(ticker[:-1])
                 ts_arr = np.array(dictionary['time-series'])
                 if ts_arr.size == 1:
-                    print(f"Ticker: {ticker}.")
                     flag = True
 
                 if not flag:
