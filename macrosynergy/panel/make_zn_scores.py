@@ -85,7 +85,7 @@ def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fa
     return arr_neutral
 
 
-def nan_insert(df: pd.DataFrame, min_obs: int = 252):
+def nan_insert(df: pd.DataFrame, min_obs: int = 252, iis: bool = True):
 
     """
     Adjust cross-sections individually for the minimum number of observations required by
@@ -95,33 +95,37 @@ def nan_insert(df: pd.DataFrame, min_obs: int = 252):
         cross-sections. The DataFrame's columns will naturally consist of each
         cross-section's return series.
     :param <int> min_obs:  the minimum number of observations required to calculate
-        zn_scores. Default is 252.
+        zn_scores. Default is 261.
+    :param <bool> iis: if True (default) zn-scores are also calculated for the initial
+        sample period defined by min-obs, on an in-sample basis, to avoid losing history.
 
     :return <pd.Dataframe> df: returns the same DataFrame received but with the insertion
         of NaN values.
     """
-    
-    active_dates = {}
-    columns_ = df.columns
-    index_dates = list(df.index)
-    
-    for i, col in enumerate(columns_):
-        s = df.iloc[:, i]
-        date = s.first_valid_index()
-        active_dates[col] = index_dates.index(date)  # dictionary of indices of first non-NA value
 
-    for k, v in active_dates.items():
-        df[k][v: (v + min_obs)] = np.nan
+    if not iis:
+    
+        active_dates = {}
+        columns_ = df.columns
+        index_dates = list(df.index)
+    
+        for i, col in enumerate(columns_):
+            s = df.iloc[:, i]
+            date = s.first_valid_index()
+            # Dictionary of indices of first non-NA value.
+            active_dates[col] = index_dates.index(date)
+
+        for k, v in active_dates.items():
+            df[k][v: (v + min_obs)] = np.nan
 
     return df
 
 
 def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
-                   start: str = None, end: str = None, sequential: bool = True,
-                   min_obs: int = 261,  iis: bool = True,
+                   start: str = None, end: str = None, blacklist: dict = None,
+                   sequential: bool = True, min_obs: int = 261,  iis: bool = True,
                    neutral: str = 'zero', thresh: float = None,
-                   pan_weight: float = 1, blacklist: dict = None,
-                   postfix: str = 'ZN'):
+                   pan_weight: float = 1, postfix: str = 'ZN'):
 
     """
     Computes z-scores for a panel around a neutral level ("zn scores").
@@ -135,6 +139,9 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df is
         used.
+    :param <dict> blacklist: cross sections with date ranges that should be excluded from
+        the data frame. If one cross section has several blacklist periods append numbers
+        to the cross-section code.
     :param <bool> sequential: if True (default) score parameters (neutral level and
         standard deviations) are estimated sequentially with concurrently available
         information only.
@@ -142,7 +149,6 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         zn_scores. Default is 261.
     :param <bool> iis: if True (default) zn-scores are also calculated for the initial
         sample period defined by min-obs, on an in-sample basis, to avoid losing history.
-        # Todo: implement iis in function
     :param <str> neutral: method to determine neutral level. Default is 'zero'.
         Alternatives are 'mean' and "median".
     :param <float> thresh: threshold value beyond which scores are winsorized,
@@ -153,10 +159,6 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         calculating the z-score parameters, i.e. the neutral level and the standard
         deviation. Default is 1, i.e. panel data are the basis for the parameters.
         Lowest possible value is 0, i.e. parameters are all specific to cross section.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from
-        the data frame. If one cross section has several blacklist periods append numbers
-        to the cross-section code.
-        # Todo: implement blacklist in function
     :param <str> postfix: string appended to category name for output; default is "ZN".
 
     :return <pd.Dataframe>: standardized dataframe with the zn-scores of the chosen xcat:
@@ -167,9 +169,11 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     if thresh is not None:
         assert thresh > 1, "The 'thresh' parameter must be larger than 1"
     assert 0 <= pan_weight <= 1, "The 'pan_weight' parameter must be between 0 and 1"
+    assert isinstance(iis, bool), "Boolean Object required."
 
     df = df.loc[:, ['cid', 'xcat', 'real_date', 'value']]
-    df = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end)
+    df = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end,
+                   blacklist=blacklist)
     dfw = df.pivot(index='real_date', columns='cid', values='value')
 
     no_dates = dfw.shape[0]
@@ -180,7 +184,8 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         ar_neutral = pan_neutral(dfw, neutral, sequential)
 
         dfx = dfw.sub(ar_neutral, axis='rows')  # df of excess values (minus neutrals)
-        ar_sds = np.array([dfx.iloc[0:(i + 1), :].stack().abs().mean() for i in range(dfx.shape[0])])
+        ar_sds = np.array([dfx.iloc[0:(i + 1), :].stack().abs().mean()
+                           for i in range(dfx.shape[0])])
         dfw_zns_pan = dfx.div(ar_sds, axis='rows')
     else:
         dfw_zns_pan = dfw * 0
@@ -191,21 +196,24 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         dfx = dfw.sub(arr_neutral, axis='rows')
 
         ar_sds = np.empty((no_dates, len(cross_sections)))
-        for i in range(len(cross_sections)):  # produce cross-section specific deviations around neutral value
+        # Produce cross-section specific deviations around the neutral value.
+        for i in range(len(cross_sections)):
             column = dfx.iloc[:, i]
-            ar_sds[:, i] = np.array([column[0:(j + 1)].abs().mean() for j in range(no_dates)])
+            ar_sds[:, i] = np.array([column[0:(j + 1)].abs().mean()
+                                     for j in range(no_dates)])
         dfw_zns_css = dfx.div(ar_sds, axis='rows')
     else:
         dfw_zns_css = dfw * 0
 
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
-    dfw_zns = nan_insert(dfw_zns, min_obs)
+    dfw_zns = nan_insert(dfw_zns, min_obs, iis)
     dfw_zns = dfw_zns.dropna(axis=0, how='all')
     
     if thresh is not None:
         dfw_zns.clip(lower=-thresh, upper=thresh, inplace=True)
 
-    df_out = dfw_zns.unstack().reset_index().rename(mapper={0: 'value'}, axis=1)
+    # df_out = dfw_zns.unstack().reset_index().rename(mapper={0: 'value'}, axis=1)
+    df_out = dfw_zns.stack().to_frame("value").reset_index()
     df_out['xcat'] = xcat + postfix
 
     return df_out[df.columns]
@@ -216,7 +224,8 @@ if __name__ == "__main__":
     cids = ['AUD', 'CAD', 'GBP', 'USD', 'NZD']
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
 
-    df_cids = pd.DataFrame(index = cids, columns = ['earliest', 'latest', 'mean_add', 'sd_mult'])
+    df_cids = pd.DataFrame(index = cids, columns = ['earliest', 'latest', 'mean_add',
+                                                    'sd_mult'])
 
     df_cids.loc['AUD'] = ['2010-01-01', '2020-12-31', 0.5, 2]
     df_cids.loc['CAD'] = ['2011-01-01', '2020-11-30', 0, 1]
@@ -233,7 +242,9 @@ if __name__ == "__main__":
     
     print("Uses Ralph's make_qdf() function.")
     dfd = make_qdf(df_cids, df_xcats, back_ar = 0.75)
-    
-    df_output = make_zn_scores(dfd, xcat='CRY', sequential=True, cids=cids, neutral='mean',
-                               pan_weight=0.65)
+
+    print(dfd)
+    df_output = make_zn_scores(dfd, xcat='CRY', sequential=True, cids=cids, iis=True,
+                               neutral='mean', pan_weight=0.65)
+    print(df_output)
     df_pivot = df_output.pivot(index='real_date', columns='cid', values='value')

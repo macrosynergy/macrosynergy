@@ -120,7 +120,6 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
 
     return dfx.drop_duplicates()
 
-
 def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                   val: str = 'value', start: str = None, end: str = None,
                   blacklist: dict = None, years: int = None, freq: str = 'M',
@@ -154,7 +153,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         the role of the explanatory.
     :param <int> fwin: Forward moving average window of first category. Default is 1,
         i.e no average.
-        Note: this parameter is used mainly for target returns as dependent variables.
+        Note: This parameter is used mainly for target returns as dependent variables.
     :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for
         both.
 
@@ -162,7 +161,9 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     """
 
     assert freq in ['D', 'W', 'M', 'Q', 'A']
-    assert not (years is not None) & (lag != 0), 'Lags cannot be applied to year groups'
+    assert not (years is not None) & (lag != 0), 'Lags cannot be applied to year groups.'
+    if years is not None:
+        assert isinstance(start, str), 'Year aggregation requires a start date.'
 
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, blacklist, out_all=True)
 
@@ -173,39 +174,45 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         for i in range(2):
             dfw = df[df['xcat'] == xcats[i]].pivot(index='real_date', columns='cid',
                                                    values=val)
-            dfw = dfw.resample(freq).agg(xcat_aggs[i])  # frequency conversion
+            dfw = dfw.resample(freq).agg(xcat_aggs[i])
             if (i == 0) & (fwin > 1):
-                dfw = dfw.rolling(window=fwin).mean().shift(1-fwin)
+                dfw = dfw.rolling(window=fwin).mean().shift(1 - fwin)
             if (i == 1) & (lag > 0):
-                dfw = dfw.shift(lag)  # lag second category for late arrival
-            dfx = pd.melt(dfw.reset_index(), id_vars=['real_date'], value_vars=cids,
-                          value_name=val)
+                dfw = dfw.shift(lag)
+            dfx = pd.melt(dfw.reset_index(), id_vars=['real_date'],
+                          value_vars=cids, value_name=val)
             dfx['xcat'] = xcats[i]
             dfc = dfc.append(dfx[col_names])
     else:
         s_year = pd.to_datetime(start).year
         e_year = df['real_date'].max().year + 1
 
-        s_years = range(s_year, e_year, years)
+        grouping = int((e_year - s_year) / years)
+        remainder = (e_year - s_year) % years
+
         year_groups = {}
-        for y in s_years:
-            ey = y + years - 1 if (y + years - 1) <= e_year else 'now'
-            y_key = f'{y} - {ey}'
-            y_value = [i for i in range(y, y + years)]
-            year_groups[y_key] = y_value
+        for group in range(grouping):
+            value = [i for i in range(s_year, s_year + years)]
+            key = f"{s_year} - {s_year + (years - 1)}"
+            year_groups[key] = value
 
-        def translate(year):
-            return np.array(list(year_groups.keys()))[[year in l for l in
-                                                       list(year_groups.values())]][0]
+            s_year += years
 
-        df['custom_date'] = df['real_date'].dt.year.apply(translate)
+        v = [i for i in range(s_year, s_year + (remainder + 1))]
+        year_groups[f"{s_year} - now"] = v
+        list_y_groups = list(year_groups.keys())
+
+        translate_ = lambda year: list_y_groups[int((year % 2000) / years)]
+        df['custom_date'] = df['real_date'].dt.year.apply(translate_)
         for i in range(2):
             dfx = df[df['xcat'] == xcats[i]]
-            dfx = dfx.groupby(['xcat', 'cid', 'custom_date']).agg(xcat_aggs[i]).reset_index()
+            dfx = dfx.groupby(['xcat', 'cid',
+                               'custom_date']).agg(xcat_aggs[i]).reset_index()
             dfx = dfx.rename(columns={"custom_date": "real_date"})
             dfc = dfc.append(dfx[col_names])
 
-    return dfc.pivot(index=('cid', 'real_date'), columns='xcat', values=val).dropna()[xcats]
+    return dfc.pivot(index=('cid', 'real_date'), columns='xcat',
+                     values=val).dropna()[xcats]
 
 
 if __name__ == "__main__":
@@ -239,15 +246,19 @@ if __name__ == "__main__":
     tickers = [cid + "_XR" for cid in cids]
     dfd_xt = reduce_df_by_ticker(dfd, ticks=tickers, blacklist=black)
 
+    # Testing categories_df().
     dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
                          xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black)
+
     dfc2 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
                          fwin=3, xcat_aggs=['mean', 'mean'],
                          start='2000-01-01', blacklist=black)
+
     dfc3 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
                          xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black,
                          years=10)
 
+    # Testing reduce_df()
     filt1 = ~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))
     filt2 = ~((dfd['cid'] == 'NZD') & (dfd['xcat'] == 'INFL'))
     dfdx = dfd[filt1 & filt2]  # simulate missing cross sections
