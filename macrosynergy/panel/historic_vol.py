@@ -10,7 +10,7 @@ from macrosynergy.management.shape_dfs import reduce_df
 
 def expo_weights(lback_periods: int = 21, half_life: int = 11):
     """
-    Calculates exponetial series weights for finite horizon, normalized to 1.
+    Calculates exponential series weights for finite horizon, normalized to 1.
     
     :param <int>  lback_periods: Number of lookback periods over which volatility is
         calculated. Default is 21.
@@ -120,7 +120,9 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
     df = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end, blacklist=blacklist)
     dfw = df.pivot(index='real_date', columns='cid', values='value')
-    
+
+    # The pandas in-built method df.rolling() will account for NaNs and start from the
+    # "first valid index".
     if lback_meth == 'xma':
         weights = expo_weights(lback_periods, half_life)
         dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(expo_std, w=weights,
@@ -129,7 +131,9 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(flat_std,
                                                                     remove_zeros=remove_zeros)
 
-    df_out = dfwa.unstack().reset_index().rename(mapper={0: 'value'}, axis=1)
+    df_out = dfwa.stack().to_frame("value").reset_index()
+
+    # df_out = dfwa.unstack().reset_index().rename(mapper={0: 'value'}, axis=1)
     df_out['xcat'] = xcat + postfix
 
     return df_out[df.columns]
@@ -147,7 +151,6 @@ if __name__ == "__main__":
     df_cids.loc['CAD'] = ['2011-01-01', '2020-11-30', 0, 1]
     df_cids.loc['GBP'] = ['2012-01-01', '2020-10-30', -0.2, 0.5]
     df_cids.loc['USD'] = ['2013-01-01', '2020-09-30', -0.2, 0.5]
-    df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
 
     df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
                                                   'sd_mult', 'ar_coef', 'back_coef'])
@@ -159,8 +162,5 @@ if __name__ == "__main__":
 
     weights = expo_weights(lback_periods=21, half_life=11)
 
-    df = historic_vol(dfd, cids=cids, xcat='XR', lback_periods=42, lback_meth='ma',
-                      remove_zeros=True)
-    df = historic_vol(dfd, cids=cids, xcat='XR', lback_periods=42, lback_meth='xma',
-                      half_life=21,
-                      remove_zeros=True)
+    df = historic_vol(dfd, cids=cids, xcat='XR', lback_periods=21, lback_meth='ma',
+                      half_life=11, remove_zeros=True)
