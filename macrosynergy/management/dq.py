@@ -517,7 +517,7 @@ class DataQueryInterface(object):
             else:
                 continue
 
-        print(f"Number of missing tickers from the DataBase: {ticker_missing}.")
+        print(f"Number of missing time-series from the DataBase: {ticker_missing}.")
         return dict_copy
 
     @staticmethod
