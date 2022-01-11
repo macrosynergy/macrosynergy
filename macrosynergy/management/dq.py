@@ -167,6 +167,7 @@ class DataQueryInterface(object):
 
             if not isinstance(dictionary['time-series'], list):
                 print("Server error: List not found.")
+                return None
 
             if not select in response.keys():
                 break
@@ -193,22 +194,11 @@ class DataQueryInterface(object):
 
         no_tickers = len(tickers)
         print(f"No. Tickers: {no_tickers}.")
-
         if not count:
             params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
                        "calendar": calendar, "frequency": frequency, "conversion":
                        conversion, "nan_treatment": nan_treatment}
             params.update(params_)
-            if not floor(no_tickers / 100) and self.thread_handler > 1:
-                delay = 0.05
-            elif self.thread_handler == 1:
-                delay = 0.25
-            elif not floor(no_tickers / 1000):
-                delay = 0.2
-            elif not floor(no_tickers / 1500):
-                delay = 0.5
-            else:
-                delay = 0.5
 
         print(f"Time delay: {delay}.")
         t = self.thread_handler
@@ -236,10 +226,12 @@ class DataQueryInterface(object):
                         params_copy["expressions"] = elem
                         results = executor.submit(self._fetch_threading, endpoint,
                                                   params_copy)
-                        time.sleep(delay)
-                        results.__dict__[str(id(results))] = elem
-                        output.append(results)
-
+                        if results is not None:
+                            time.sleep(delay)
+                            results.__dict__[str(id(results))] = elem
+                            output.append(results)
+                        else:
+                            return None
                     for f in concurrent.futures.as_completed(output):
                         try:
                             response = f.result()
@@ -260,7 +252,6 @@ class DataQueryInterface(object):
                 final_output.extend(results)
 
         tickers_server = list(chain(*tickers_server))
-
         if tickers_server:
             count += 1
             delay += 0.1
@@ -271,6 +262,18 @@ class DataQueryInterface(object):
             return recursive_output
 
         return final_output
+
+    @staticmethod
+    def delay_compute(no_tickers):
+
+        if not floor(no_tickers / 100):
+            delay = 0.05
+        elif not floor(no_tickers / 1000):
+            delay = 0.2
+        else:
+            delay = 0.25
+
+        return delay
 
     def get_ts_expression(self, expression, original_metrics, suppress_warning,
                           **kwargs):
@@ -304,13 +307,15 @@ class DataQueryInterface(object):
 
         expression = dq_tix
 
-        params = {}
-        if "data" in kwargs.keys():
-            assert kwargs["data"] == "ALL"
-            params.update({"data":  kwargs.pop("data")})
-
+        c_delay = self.delay_compute(len(dq_tix))
         results = self._request(endpoint="/expressions/time-series",
-                                tickers=expression, params=params, **kwargs)
+                                tickers=expression, params={},
+                                delay=c_delay, **kwargs)
+
+        if results is None:
+            results = self._request(endpoint="/expressions/time-series",
+                                    tickers=expression, params={},
+                                    delay = (c_delay + 0.1), **kwargs)
 
         # (O(n) + O(nlog(n)) operation.
         no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression]))
@@ -323,7 +328,7 @@ class DataQueryInterface(object):
             sequential = True
             self.__dict__['concurrent'] = False
             results_seq = self._request(endpoint="/expressions/time-series",
-                                        tickers=s_list, params=params, **kwargs)
+                                        tickers=s_list, params={}, **kwargs)
             r_dict, o_dict, s_list = self.isolate_timeseries(results_seq,
                                                              original_metrics,
                                                              self.debug,
@@ -407,7 +412,8 @@ class DataQueryInterface(object):
                 except KeyError:
                     if debug:
                         print(f"The ticker, {k[3:]}, is missing the metric '{metric}' "
-                              f"from the API.")
+                              f"whilst the requests are running concurrently - will"
+                              f"check the API sequentially.")
 
                     temp_list = [k + ',' + m + ')' for m in metrics]
                     ticker_list += temp_list
@@ -415,7 +421,9 @@ class DataQueryInterface(object):
                         if 'value' in v.keys():
                             arr[:, i] = np.nan
                         else:
-                            print(f"The ticker, {k[3:]}, is missing from the API.")
+                            print(f"The ticker, {k[3:]}, is missing from the API after "
+                                  f"running sequentially - will not be in the returned"
+                                  f"dataframe.")
                             clause = False
                             break
                     else:
