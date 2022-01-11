@@ -285,7 +285,7 @@ class DataQueryInterface(object):
             dictionary = response[select][0]['attributes'][0]
 
             if not isinstance(dictionary['time-series'], list):
-                self.ticker_warning = True
+                self.ticker_warning = False
                 self.ticker_residual.append(dictionary['expression'])
 
             if not select in response.keys():
@@ -332,7 +332,7 @@ class DataQueryInterface(object):
                  nan_treatment: str = "NA_NOTHING"):
 
         no_tickers = len(tickers)
-        print(f"Number of tickers requested: {no_tickers}.")
+
         if not count:
             params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
                        "calendar": calendar, "frequency": frequency, "conversion":
@@ -342,9 +342,14 @@ class DataQueryInterface(object):
                 delay = 0.05
             elif self.thread_handler == 1:
                 delay = 0.25
-            else:
+            elif not floor(no_tickers / 1000):
                 delay = 0.2
+            elif not floor(no_tickers / 1500):
+                delay = 0.5
+            else:
+                delay = 0.7
 
+        print(f"Time delay: {delay}.")
         t = self.thread_handler
         iterations = ceil(no_tickers / t)
         tick_list_compr = [tickers[(i * t): (i * t) + t] for i in range(iterations)]
@@ -377,6 +382,7 @@ class DataQueryInterface(object):
                         try:
                             response = f.result()
                         except ValueError:
+                            delay += 0.05
                             tickers_server.append(f.__dict__[str(id(f))])
                         else:
                             if isinstance(response, list):
@@ -391,6 +397,7 @@ class DataQueryInterface(object):
                 final_output.extend(results)
 
         tickers_server = list(chain(*tickers_server))
+
         if tickers_server:
             count += 1
             delay += 0.1
@@ -450,7 +457,8 @@ class DataQueryInterface(object):
         # (O(n) + O(nlog(n)) operation.
         no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression]))
 
-        results_dict, output_dict = self.isolate_timeseries(results, original_metrics)
+        results_dict, output_dict = self.isolate_timeseries(results, original_metrics,
+                                                            self.debug)
         results_dict = self.valid_ticker(results_dict, suppress_warning)
 
         results_copy = results_dict.copy()
@@ -465,7 +473,7 @@ class DataQueryInterface(object):
                                           original_metrics)
 
     @staticmethod
-    def isolate_timeseries(list_, metrics):
+    def isolate_timeseries(list_, metrics, debug):
         """
         Isolates the metrics, across all categories & cross-sections, held in the List,
         and concatenates the time-series, column-wise, into a single structure, and
@@ -516,9 +524,24 @@ class DataQueryInterface(object):
         for k, v in output_dict.items():
             arr = np.empty(shape=(no_rows, len(d_frame_order)), dtype=object)
             for i, metric in enumerate(d_frame_order):
-                arr[:, i] = v[metric]
+                try:
+                    arr[:, i] = v[metric]
+                except KeyError:
+                    if debug:
+                        print(f"The ticker, {k[3:]}, is missing the metric '{metric}' "
+                              f"from the API.")
+                    if 'value' in v.keys():
+                        arr[:, i] = np.nan
+                        clause = True
+                    else:
+                        print(f"The ticker, {k[3:]}, is missing from the API.")
+                        clause = False
+                        break
+                else:
+                    clause = True
 
-            modified_dict[k] = arr
+            if clause:
+                modified_dict[k] = arr
 
         return modified_dict, output_dict
 
@@ -562,7 +585,8 @@ class DataQueryInterface(object):
                 for i in range(2, no_cols):
                     condition = self.column_check(v, i)
                     if not condition:
-                        warnings.warn("Error has occurred in the DataBase.")
+                        if self.debug:
+                            warnings.warn("Error has occurred in the DataBase.")
 
                 if not suppress_warning:
                     print(f"The ticker, {k}), does not exist in the Database.")
@@ -619,6 +643,9 @@ class DataQueryInterface(object):
         df = df[df['real_date'].dt.dayofweek < 5]
         df = df.fillna(value=np.nan)
         df = df.reset_index(drop=True)
+
+        for m in original_metrics:
+            df[m] = df[m].astype(dtype=np.float32)
 
         return df
 
@@ -682,7 +709,7 @@ class DataQueryInterface(object):
             cids_dmec = ['DEM', 'ESP', 'FRF', 'ITL', 'NLG']  # DM euro area countries
             cids_latm = ['BRL', 'COP', 'CLP', 'MXN', 'PEN']  # Latam countries
             cids_emea = ['HUF', 'ILS', 'PLN', 'RON', 'RUB', 'TRY', 'ZAR']  # EMEA countries
-            cids_emas = ['CNY', 'IDR', 'INR', 'KRW', 'MYR', 'PHP', 'SGD', 'THB',
+            cids_emas = ['CZK', 'CNY', 'IDR', 'INR', 'KRW', 'MYR', 'PHP', 'SGD', 'THB',
                          'TWD']  # EM Asia countries
             cids_dm = cids_dmca + cids_dmec
             cids_em = cids_latm + cids_emea + cids_emas
