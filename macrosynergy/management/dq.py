@@ -31,40 +31,18 @@ DQ_ERROR_MSG = {
 
 class DataQueryInterface(object):
     """
-    Initiate the object DataQueryInterface
+    Initiate the object DataQueryInterface.
 
     ©JP Morgan
 
-    DataQuery Data Universet
-    * Fixed Income
-    * Securitzed Products
-    * Credit Products
-    * Emerging Markets: Cash bonds, swaps, ...
-    * Foreign Exchange rates
-
     Authentication:
-      1. Client authentication through 2-way SSL
-      2. User authentication (HTTP basic)
-
-    Restriction of 5 concurrent requests per second per certificate.
-
-    There is a difference between "Basic" and "Premium" user access
-    in API v2.0
-
-    Functional overview
-      1. "/groups"
-      2. "/groups/search"
-      ...
-
-    API end points? End point categories:
-      1. Catalog discovery: "/group", "/group/search", ...
-      2. Reference data extraction
-      3. Market data extraction
+      1. Client authentication through 2-way SSL.
+      2. User authentication (HTTP basic).
 
     The URL http://www.jpmm.com points to https://markets.jpmorgan.com
 
     JP Morgan DataQuery API is based on the OpenAPI standard
-     (https://en.wikipedia.org/wiki/OpenAPI_Specification)
+    (https://en.wikipedia.org/wiki/OpenAPI_Specification)
     which is build on Swagger (https://swagger.io/docs/).
 
     Data models for returns:
@@ -85,7 +63,7 @@ class DataQueryInterface(object):
         if True download all history of data.
     :param <bool> debug: boolean,
         if True run the interface in debugging mode.
-
+    :param <bool> concurrent: run the requests concurrently.
 
     :return: None
     """
@@ -207,6 +185,9 @@ class DataQueryInterface(object):
         :param <Integer> delay: each release of a thread requires a delay (roughly 200
             milliseconds) to prevent overwhelming DataQuery. Computed dynamically if DQ
             is being hit too hard.
+        :param <Integer> count: tracks the number of recursive calls of the method. The
+            first call requires defining the parameter dictionary used for the request
+            API.
         :param <str> start_date:
         :param <str> end_date:
         :param <str> calendar:
@@ -315,7 +296,7 @@ class DataQueryInterface(object):
         :param <List[str]> expression: categories & respective cross-sections requested.
         :param <List[str]> original_metrics: List of required metrics: the returned
             DataFrame will reflect the order of the received List.
-        :param <Boolean> suppress_warning: required for debugging.
+        :param <bool> suppress_warning: required for debugging.
         :param <dict> **kwargs: dictionary of additional arguments
 
         :return: pd.DataFrame: ['cid', 'xcat', 'real_date'] + [original_metrics].
@@ -468,7 +449,7 @@ class DataQueryInterface(object):
         :param <np.array> v:
         :param <Integer> col: used to isolate the column being checked.
 
-        :return Boolean.
+        :return bool.
         """
         returns = list(v[:, col])
         condition = all([isinstance(elem, type(None)) for elem in returns])
@@ -485,7 +466,7 @@ class DataQueryInterface(object):
         dictionary.
 
         :param <dict> _dict:
-        :param <Boolean> suppress_warning:
+        :param <bool> suppress_warning:
 
         :return: dict.
         """
@@ -574,7 +555,7 @@ class DataQueryInterface(object):
         :param <List[str]> metrics: must choose one or more from 'value', 'eop_lag',
             'mop_lag', or 'grading'. Default is ['value'].
         :param <str> start_date: first date in ISO 8601 string format.
-        :param <boolean> suppress_warning: used to suppress warning of any invalid
+        :param <bool> suppress_warning: used to suppress warning of any invalid
             ticker received by DataQuery.
 
         :return <pd.Dataframe> standardized dataframe with columns 'cid', 'xcats',
@@ -607,7 +588,7 @@ class DataQueryInterface(object):
             or 'grade'. Default is ['value'].
         :param <str> start_date: first date in ISO 8601 string format.
         :param <str> path: relative path from notebook to credential files.
-        :param <boolean> suppress_warning: used to suppress warning of any invalid
+        :param <bool> suppress_warning: used to suppress warning of any invalid
             ticker received by DataQuery.
 
         :return <pd.Dataframe> standardized dataframe with columns 'cid', 'xcats',
