@@ -162,7 +162,12 @@ if __name__ == "__main__":
     dfd_3 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=None,
                                 blacklist=None,  basket=['AUD'],
                                 rel_meth='subtract', rel_xcats=None, postfix='RV')
-    # Contrived test example.
-    dfd_4 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=['AUD'],
+
+    # Contrived test examples.
+    dfd_4 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=['AUD', 'CAD'],
+                                blacklist=None,  basket=['AUD'],
+                                rel_meth='subtract', rel_xcats=None, postfix='RV')
+
+    dfd_5 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=['AUD'],
                                 blacklist=None,  basket=['AUD'],
                                 rel_meth='subtract', rel_xcats=None, postfix='RV')
