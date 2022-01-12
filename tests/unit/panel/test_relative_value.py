@@ -5,6 +5,7 @@ import pandas as pd
 from tests.simulate import make_qdf
 from macrosynergy.panel.make_relative_value import make_relative_value
 from macrosynergy.management.shape_dfs import reduce_df
+from random import randint, choice
 
 class TestAll(unittest.TestCase):
 
@@ -69,11 +70,11 @@ class TestAll(unittest.TestCase):
         # section as well, the notion of computing the relative value is not appropriate.
         # Therefore, the returned dataframe, from the function, will be empty simply
         # because its functionality is not applicable.
-        dfd_4 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=['AUD'],
+        dfd_1 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=['AUD'],
                                     blacklist=None, basket=['AUD'],
                                     rel_meth='subtract', rel_xcats=None, postfix='RV')
 
-        self.assertTrue(dfd_4.empty)
+        self.assertTrue(dfd_1.empty)
 
         # First part of the logic to validate is the stacking mechanism, and subsequent
         # dimensions of the returned dataframe. Once the reduction is accounted for, the
@@ -101,7 +102,87 @@ class TestAll(unittest.TestCase):
         self.assertEqual(dfx.shape, dfd_rl.shape)
 
         # Test the proposal that any dates with only a single realised value will be
-        # truncated from the dataframe.
+        # truncated from the dataframe given understanding the relative value of a single
+        # realised return is meaningless.
+        # The difference between the dimensions of the input dataframe and the returned
+        # dataframe should correspond to the number of indices with only a single value.
+
+        xcats = self.xcats[0]
+        cids = self.cids
+        # Ensures for a period of time only a single cross-section is defined.
+        start = '2000-01-01'
+        end = '2020-09-30'
+        dfx = reduce_df(df=self.dfd, xcats=[xcats], cids=cids, start=start,
+                        end=end, blacklist=None, out_all=False)
+        input_rows = dfx.shape[0]
+        dfw = dfx.pivot(index='real_date', columns='cid', values='value')
+
+        data = dfw.to_numpy()
+        active_cross = np.sum(~np.isnan(data), axis=1)
+        single_value = np.where(active_cross == 1)[0]
+        no_single_values = single_value.size
+
+        # Apply the function to understand if the logic above holds.
+        dfd_rl = make_relative_value(self.dfd, xcats=xcats, cids=cids, start=start,
+                                     end=end, blacklist=None, basket=None,
+                                     rel_meth='divide', rel_xcats=None, postfix='RV')
+        output_rows = dfd_rl.shape[0]
+
+        self.assertTrue(output_rows == (input_rows - no_single_values))
+
+        # Aim to test the application of the actual relative_value method: subtract or
+        # divide.
+        # If the basket contains a single cross-section, the relative value is simply the
+        # realised return of the respective cross-section. Therefore, the cross-section
+        # chosen will consequently have a zero value for each output if the logic is
+        # correct.
+        basket_cid = ['AUD']
+        dfd_2 = make_relative_value(dfd, xcats=['INFL'], cids=self.cids,
+                                    blacklist=None, basket=basket_cid,
+                                    rel_meth='subtract', rel_xcats=None, postfix='RV')
+
+        basket_df = dfd_2[dfd_2['cid'] == basket_cid[0]]
+        values = basket_df['value'].to_numpy()
+        self.assertTrue((np.sum(values) - 0.0) < 0.00001)
+
+        # Test the logic of the function if there are multiple cross-sections defined in
+        # basket.
+        # Incorporate three cross-sections for the basket.
+        basket_cid = ['AUD', 'CAD', 'GBP']
+        xcats = choice(self.xcats)
+        start = '2001-01-01'
+        end = '2020-10-30'
+        dfx = reduce_df(df=self.dfd, xcats=[xcats], cids=cids, start=start,
+                        end=end, blacklist=None, out_all=False)
+
+        dfd_3 = make_relative_value(dfx, xcats=xcats, cids=self.cids,
+                                    blacklist=self.blacklist, basket=basket_cid,
+                                    rel_meth='subtract', rel_xcats=None, postfix='RV')
+        # Isolate an arbitrarily chosen date and test the logic
+        dfw = dfx.pivot(index='real_date', columns='cid', values='value')
+        index = dfw.index
+        no_rows = index.size
+        range_ = (int(no_rows * 0.25), int(no_rows * 0.75))
+
+        random_index = randint(*range_)
+        date = index[random_index]
+
+        random_row = dfw.iloc[random_index, :]
+        random_row_dict = random_row.to_dict()
+        values = [v for k, v in random_row_dict.items() if k in basket_cid]
+        manual_mean = sum(values) / len(values)
+
+        computed_values = (random_row - manual_mean)
+        computed_values = computed_values.to_numpy()
+
+        dfd_3_pivot = dfd_3.pivot(index='real_date', columns='cid', values='value')
+        output_index = dfd_3_pivot.index
+        index_val = np.where(output_index == date)[0]
+
+        function_output = dfd_3_pivot.iloc[index_val, :]
+        function_output = function_output.to_numpy()
+
+        self.assertTrue(np.all(computed_values == function_output))
 
 
 if __name__ == '__main__':
