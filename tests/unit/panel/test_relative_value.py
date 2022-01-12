@@ -32,7 +32,30 @@ class TestAll(unittest.TestCase):
 
         black = {'AUD': ['2000-01-01', '2003-12-31'],
                  'GBP': ['2018-01-01', '2100-01-01']}
+
         self.__dict__['blacklist'] = black
+
+    def test_relative_value(self):
+
+        self.dataframe_generator()
+        dfd = self.dfd
+
+        with self.assertRaises(AssertionError):
+            dfd_1 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=None,
+                                        blacklist=None, rel_meth='subtraction',
+                                        rel_xcats=None, postfix='RV')
+
+        with self.assertRaises(AssertionError):
+            dfd_2 = make_relative_value(dfd, xcats=('XR', 'GROWTH'), cids=None,
+                                        blacklist=None, basket=['AUD', 'CAD', 'GBP'],
+                                        rel_meth='subtract',
+                                        rel_xcats=['XRvB3', 'GROWTHvB3', 'INFLvB3'])
+
+        with self.assertRaises(AssertionError):
+            dfd_3 = make_relative_value(dfd, xcats=['XR', 'GROWTH'], cids=['GBP'],
+                                        blacklist=None, basket=['AUD', 'CAD'],
+                                        rel_meth='divide',
+                                        rel_xcats=['XRvB3', 'GROWTHvB3', 'INFLvB3'])
 
 
 if __name__ == '__main__':
