@@ -31,7 +31,9 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         the output.
     :param <List[str]> basket: cross-sections to be used for the relative value
         benchmark. The default is every cross-section which is available in the dataframe
-        over the respective time-period.
+        over the respective time-period. If the basket is not complete, covering all
+        cross-sections, the basket is required to be a valid subset of the available
+        cross-sections.
     :param <str> rel_meth: method for calculating relative value. Default is 'subtract'.
         Alternative is 'divide'.
     :param <List[str]> rel_xcats: addendum to extended category name to indicate relative
@@ -47,7 +49,12 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
     assert rel_meth in ['subtract', 'divide'], "rel_meth must be 'subtract' or 'divide'," \
                                                "and not {rel_meth}."
 
-    assert isinstance(xcats, list), "List of categories expected."
+    assert isinstance(xcats, list) or isinstance(xcats, str), "List of categories " \
+                                                              "expected, or a single" \
+                                                              "category passed as a " \
+                                                              "string object."
+    if isinstance(xcats, str):
+        xcats = [xcats]
 
     if cids is None:
         cids = list(df['cid'].unique())
@@ -65,12 +72,15 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
     available_xcats = df['xcat'].unique()
 
+    if len(cids) == len(basket) == 1:
+        return df_out
+
     # Implicit assumption that both categories are defined over the same cross-sections.
-    for i, cat in enumerate(xcats):
+    for i, xcat in enumerate(xcats):
 
-        assert cat in available_xcats, f'category {cat} is not in dataframe'
+        assert xcat in available_xcats, f'category {xcat} is not in dataframe'
 
-        dfx = reduce_df(df, [cat], cids, start, end,
+        dfx = reduce_df(df, [xcat], cids, start, end,
                         blacklist,
                         out_all=False)[['cid', 'real_date', 'value']]
 
@@ -81,8 +91,10 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
             # Mean of (available) cross sections at each point in time.
             bm = dfb.groupby(by='real_date').mean()
         else:
+            # Relative value is mapped against a single cross-section.
             bm = dfb.set_index('real_date')['value']
         dfw = dfx.pivot(index='real_date', columns='cid', values='value')
+
         # Taking an average is only justified if the number of cross-sections, for the
         # respective date, exceeds one.
         dfw = dfw[dfw.count(axis=1) > 1]
@@ -98,7 +110,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
                                                   axis=1)
 
         if rel_xcats is None:
-            df_new['xcat'] = cat + postfix
+            df_new['xcat'] = xcat + postfix
         else:
             df_new['xcat'] = rel_xcats[i]
 
@@ -136,15 +148,19 @@ if __name__ == "__main__":
 
     # Applications
 
-    dfd_1 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=None,
-                                blacklist=None,
-                                rel_meth='subtract', rel_xcats=None, postfix='RV')
+    # dfd_1 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=None,
+                                # blacklist=None, rel_meth='subtract', rel_xcats=None,
+                                # postfix='RV')
 
-    dfd_2 = make_relative_value(dfd, xcats=['XR', 'GROWTH', 'INFL'], cids=None,
-                                blacklist=None,  basket=['AUD', 'CAD', 'GBP'],
-                                rel_meth='subtract', rel_xcats=['XRvB3', 'GROWTHvB3',
-                                'INFLvB3'])
+    # dfd_2 = make_relative_value(dfd, xcats=['XR', 'GROWTH', 'INFL'], cids=None,
+                                # blacklist=None,  basket=['AUD', 'CAD', 'GBP'],
+                                # rel_meth='subtract', rel_xcats=['XRvB3', 'GROWTHvB3',
+                                # 'INFLvB3'])
 
-    dfd_3 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=None,
+    # dfd_3 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=None,
+                                # blacklist=None,  basket=['AUD'],
+                                # rel_meth='subtract', rel_xcats=None, postfix='RV')
+    # Contrived test example.
+    dfd_4 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=['AUD'],
                                 blacklist=None,  basket=['AUD'],
                                 rel_meth='subtract', rel_xcats=None, postfix='RV')
