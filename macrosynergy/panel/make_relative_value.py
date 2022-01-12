@@ -1,10 +1,6 @@
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-import statsmodels.api as sm
-from typing import List, Union, Tuple
 
+import pandas as pd
+from typing import List
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 
@@ -61,7 +57,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
     if basket is not None:
         miss = set(basket) - set(cids)
-        assert len(miss) == 0, f" The basket elements {miss} are not in specified or " \
+        assert len(miss) == 0, f"The basket elements {miss} are not in specified or " \
                                f"are not available cross-sections."
     else:
         basket = cids  # Default basket is all available cross-sections.
@@ -70,33 +66,40 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
     # Host dataframe.
     df_out = pd.DataFrame(columns=col_names)
 
-    available_xcats = df['xcat'].unique()
+    # Reduce the dataframe to the defined categories.
+    # If the categories passed to the parameter "xcats" are not present in the dataframe,
+    # the below function will classify their absence in the console, and return the
+    # reduced dataframe on the categories which are available in the received dataframe.
+    dfx = reduce_df(df, xcats, cids, start, end, blacklist,
+                    out_all=False)
+    available_xcats = dfx['xcat'].unique()
 
     if len(cids) == len(basket) == 1:
         return df_out
 
     # Implicit assumption that both categories are defined over the same cross-sections.
-    for i, xcat in enumerate(xcats):
+    for i, xcat in enumerate(available_xcats):
 
-        assert xcat in available_xcats, f'category {xcat} is not in dataframe'
-
-        dfx = reduce_df(df, [xcat], cids, start, end,
-                        blacklist,
-                        out_all=False)[['cid', 'real_date', 'value']]
+        # Defined in the scope of the above iteration: updates through each loop.
+        df_xcat = dfx[dfx['xcat'] == xcat]
+        dfx_xcat = df_xcat[['cid', 'real_date', 'value']]
 
         # Reduce the dataframe to the specified basket.
-        dfb = dfx[dfx['cid'].isin(basket)]
+        dfb = dfx_xcat[dfx_xcat['cid'].isin(basket)]
 
         if len(basket) > 1:
-            # Mean of (available) cross sections at each point in time.
+            # Mean of (available) cross sections at each point in time. If all
+            # cross-sections defined in the "basket" data structure are not available for
+            # a specific date, compute the mean over the available subset.
             bm = dfb.groupby(by='real_date').mean()
         else:
             # Relative value is mapped against a single cross-section.
             bm = dfb.set_index('real_date')['value']
-        dfw = dfx.pivot(index='real_date', columns='cid', values='value')
+        dfw = dfx_xcat.pivot(index='real_date', columns='cid', values='value')
 
-        # Taking an average is only justified if the number of cross-sections, for the
-        # respective date, exceeds one.
+        # Taking an average and computing the relative value is only justified if the
+        # number of cross-sections, for the respective date, exceeds one. Therefore, if
+        # any rows have only a single cross-section, remove the dates from the dataframe.
         dfw = dfw[dfw.count(axis=1) > 1]
         dfa = pd.merge(dfw, bm, how='left', left_index=True, right_index=True)
 
@@ -147,19 +150,18 @@ if __name__ == "__main__":
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
 
     # Applications
+    dfd_1 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=None,
+                                blacklist=None, rel_meth='subtract', rel_xcats=None,
+                                postfix='RV')
 
-    # dfd_1 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=None,
-                                # blacklist=None, rel_meth='subtract', rel_xcats=None,
-                                # postfix='RV')
+    dfd_2 = make_relative_value(dfd, xcats=['XR', 'GROWTH', 'INFL'], cids=None,
+                                blacklist=None,  basket=['AUD', 'CAD', 'GBP'],
+                                rel_meth='subtract', rel_xcats=['XRvB3', 'GROWTHvB3',
+                                'INFLvB3'])
 
-    # dfd_2 = make_relative_value(dfd, xcats=['XR', 'GROWTH', 'INFL'], cids=None,
-                                # blacklist=None,  basket=['AUD', 'CAD', 'GBP'],
-                                # rel_meth='subtract', rel_xcats=['XRvB3', 'GROWTHvB3',
-                                # 'INFLvB3'])
-
-    # dfd_3 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=None,
-                                # blacklist=None,  basket=['AUD'],
-                                # rel_meth='subtract', rel_xcats=None, postfix='RV')
+    dfd_3 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=None,
+                                blacklist=None,  basket=['AUD'],
+                                rel_meth='subtract', rel_xcats=None, postfix='RV')
     # Contrived test example.
     dfd_4 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=['AUD'],
                                 blacklist=None,  basket=['AUD'],
