@@ -7,8 +7,9 @@ from macrosynergy.management.shape_dfs import reduce_df
 
 def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                         start: str = None, end: str = None, blacklist: dict = None,
-                        basket: List[str] = None, rel_meth: str = 'subtract',
-                        rel_xcats: List[str] = None, postfix: str = 'R'):
+                        basket: List[str] = None, complete_cross: bool = False,
+                        rel_meth: str = 'subtract', rel_xcats: List[str] = None,
+                        postfix: str = 'R'):
     """
     Returns dataframe with values relative to an average for basket of cross sections
     through subtraction or division.
@@ -30,6 +31,12 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         over the respective time-period. If the basket is not complete, covering all
         cross-sections, the basket is required to be a valid subset of the available
         cross-sections.
+    :param <bool> complete_cross: Boolean parameter that outlines whether each category
+        is required to have the full set of cross-sections held by the basket parameter.
+        Default is False. If False, the mean, for the relative value, will use the subset
+        that is available for that category. For instance, if basket = ['AUD', 'CAD',
+        'GBP', 'NZD'] but available cids = ['GBP', 'NZD'], the basket will be implicitly
+        updated to basket = ['GBP', 'NZD'] for that respective category.
     :param <str> rel_meth: method for calculating relative value. Default is 'subtract'.
         Alternative is 'divide'.
     :param <List[str]> rel_xcats: addendum to extended category name to indicate relative
@@ -77,11 +84,30 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
     if len(cids) == len(basket) == 1:
         return df_out
 
+    intersection_function = lambda l_1, l_2: list(set(l_1) & set(l_2))
+
     # Implicit assumption that both categories are defined over the same cross-sections.
     for i, xcat in enumerate(available_xcats):
 
-        # Defined in the scope of the above iteration: updates through each loop.
         df_xcat = dfx[dfx['xcat'] == xcat]
+        available_cids = df_xcat['cid'].unique()
+
+        # If True, all cross-sections defined in the "basket" data structure are
+        # available for the respective category.
+
+        intersection = intersection_function(basket, available_cids)
+        clause = len(intersection)
+        missing_cids = list(set(basket) - set(intersection))
+        if clause != len(basket) and complete_cross:
+            print(f"The category, {xcat}, is missing {missing_cids} which are included in"
+                  f" the basket {basket}. Therefore, the category will be excluded from "
+                  "the returned dataframe.")
+            continue
+
+        elif clause != len(basket):
+            print(f"The category, {xcat}, is missing {missing_cids}. "
+                  f"The new basket will be {intersection}.")
+
         dfx_xcat = df_xcat[['cid', 'real_date', 'value']]
 
         # Reduce the dataframe to the specified basket.
@@ -131,17 +157,17 @@ if __name__ == "__main__":
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
     df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
                                                 'sd_mult'])
-    df_cids.loc['AUD',] = ['2000-01-01', '2020-12-31', 0.1, 1]
-    df_cids.loc['CAD',] = ['2001-01-01', '2020-11-30', 0, 1]
-    df_cids.loc['GBP',] = ['2002-01-01', '2020-11-30', 0, 2]
-    df_cids.loc['NZD',] = ['2002-01-01', '2020-09-30', -0.1, 2]
+    df_cids.loc['AUD'] = ['2000-01-01', '2020-12-31', 0.1, 1]
+    df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
+    df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
+    df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
 
     df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
                                                   'sd_mult', 'ar_coef', 'back_coef'])
-    df_xcats.loc['XR',] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
-    df_xcats.loc['CRY',] = ['2000-01-01', '2020-10-30', 1, 2, 0.95, 1]
-    df_xcats.loc['GROWTH',] = ['2001-01-01', '2020-10-30', 1, 2, 0.9, 1]
-    df_xcats.loc['INFL',] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
+    df_xcats.loc['XR'] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
+    df_xcats.loc['CRY'] = ['2000-01-01', '2020-10-30', 1, 2, 0.95, 1]
+    df_xcats.loc['GROWTH'] = ['2001-01-01', '2020-10-30', 1, 2, 0.9, 1]
+    df_xcats.loc['INFL'] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
@@ -171,3 +197,20 @@ if __name__ == "__main__":
     dfd_5 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=['AUD'],
                                 blacklist=None,  basket=['AUD'],
                                 rel_meth='subtract', rel_xcats=None, postfix='RV')
+
+    # Testing for complete-cross parameter.
+    xcats = ['XR', 'CRY']
+    start = '2000-01-01'
+    end = '2020-12-31'
+    dfx = reduce_df(df=dfd, xcats=xcats, cids=cids, start=start,
+                    end=end, blacklist=None, out_all=False)
+
+    # On the reduced dataframe, remove a single cross-section from one of the
+    # categories.
+    filt1 = ~((dfx['cid'] == 'AUD') & (dfx['xcat'] == 'XR'))
+    dfdx = dfx[filt1]
+    # Pass in the filtered dataframe.
+    dfd_rl = make_relative_value(dfdx, xcats=xcats, cids=cids, start=start,
+                                 end=end, blacklist=None, basket=None,
+                                 complete_cross=True, rel_meth='subtract',
+                                 rel_xcats=None, postfix='RV')
