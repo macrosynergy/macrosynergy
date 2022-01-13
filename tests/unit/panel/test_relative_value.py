@@ -1,11 +1,13 @@
+
 import unittest
-import random
 import numpy as np
 import pandas as pd
 from tests.simulate import make_qdf
 from macrosynergy.panel.make_relative_value import make_relative_value
 from macrosynergy.management.shape_dfs import reduce_df
 from random import randint, choice
+import io
+import sys
 
 class TestAll(unittest.TestCase):
 
@@ -37,7 +39,7 @@ class TestAll(unittest.TestCase):
 
         self.__dict__['blacklist'] = black
 
-    def test_relative_value(self):
+    def test_relative_value_dimensionality(self):
 
         self.dataframe_generator()
         dfd = self.dfd
@@ -130,6 +132,56 @@ class TestAll(unittest.TestCase):
 
         self.assertTrue(output_rows == (input_rows - no_single_values))
 
+        # Test "complete_cross" parameter.
+
+        # Construct a dataframe containing two categories but one of the categories is
+        # defined over fewer cross-sections. To be precise, the cross-sections present
+        # for the aforementioned category will be a subset of the cross-sections
+        # available for the secondary category. Further, the basket will be set to the
+        # union of cross-sections.
+        dfd = self.dfd
+        xcats = ['XR', 'CRY']
+        cids = self.cids
+        start = '2000-01-01'
+        end = '2020-12-31'
+        dfx = reduce_df(df=dfd, xcats=xcats, cids=cids, start=start,
+                        end=end, blacklist=None, out_all=False)
+
+        # On the reduced dataframe, remove a single cross-section from one of the
+        # categories.
+        filt1 = ~((dfx['cid'] == 'AUD') & (dfx['xcat'] == 'XR'))
+        dfdx = dfx[filt1]
+
+        # Pass in the filtered dataframe, and test whether the correct print statement
+        # appears in the console.
+        capturedOutput = io.StringIO()
+        sys.stdout = capturedOutput
+        dfd_rl = make_relative_value(dfdx, xcats=xcats, cids=cids, start=start,
+                                     end=end, blacklist=None, basket=None,
+                                     complete_cross = False, rel_meth='subtract',
+                                     rel_xcats=None, postfix='RV')
+        sys.stdout = sys.__stdout__
+        capturedOutput.seek(0)
+        print_statement = capturedOutput.read()[-23:-2]
+        test = "['CAD', 'GBP', 'NZD']"
+        self.assertTrue(print_statement == test)
+
+        # If the "complete_cross" parameter is set to True, the corresponding category
+        # defined over an incomplete set of cross-sections will be removed from the
+        # output dataframe.
+        dfd_rl = make_relative_value(dfdx, xcats=xcats, cids=cids, start=start,
+                                     end=end, blacklist=None, basket=None,
+                                     complete_cross = True, rel_meth='subtract',
+                                     rel_xcats=None, postfix='RV')
+        # Assert the dataframe only contains a single category: the category with a
+        # complete set of cross-sections.
+        self.assertTrue(dfd_rl['xcat'].unique()[0] == 'CRYRV')
+
+    def test_relative_value_logic(self):
+
+        self.dataframe_generator()
+        dfd = self.dfd
+
         # Aim to test the application of the actual relative_value method: subtract or
         # divide.
         # If the basket contains a single cross-section, the relative value is simply the
@@ -146,13 +198,15 @@ class TestAll(unittest.TestCase):
         self.assertTrue((np.sum(values) - 0.0) < 0.00001)
 
         # Test the logic of the function if there are multiple cross-sections defined in
-        # basket.
+        # basket. First, test the relative value using subtraction and secondly test
+        # relative value using division.
+
         # Incorporate three cross-sections for the basket.
         basket_cid = ['AUD', 'CAD', 'GBP']
         xcats = choice(self.xcats)
         start = '2001-01-01'
         end = '2020-10-30'
-        dfx = reduce_df(df=self.dfd, xcats=[xcats], cids=cids, start=start,
+        dfx = reduce_df(df=self.dfd, xcats=[xcats], cids=self.cids, start=start,
                         end=end, blacklist=None, out_all=False)
 
         dfd_3 = make_relative_value(dfx, xcats=xcats, cids=self.cids,
@@ -182,7 +236,27 @@ class TestAll(unittest.TestCase):
         function_output = dfd_3_pivot.iloc[index_val, :]
         function_output = function_output.to_numpy()
 
-        self.assertTrue(np.all(computed_values == function_output))
+        self.assertTrue(np.all(computed_values == function_output[0]))
+
+        # Test the division.
+        # Computing make_relative_value() on a single category that has been chosen
+        # randomly.
+        dfd_4 = make_relative_value(dfx, xcats=xcats, cids=self.cids,
+                                    blacklist=self.blacklist, basket=basket_cid,
+                                    rel_meth='divide', rel_xcats=None, postfix='RV')
+
+        # Divide each cross-section's realised return by the mean of the basket.
+        computed_values = (random_row / manual_mean)
+        computed_values = computed_values.to_numpy()
+
+        dfd_4_pivot = dfd_4.pivot(index='real_date', columns='cid', values='value')
+        output_index = dfd_4_pivot.index
+        index_val = np.where(output_index == date)[0]
+
+        function_output = dfd_4_pivot.iloc[index_val, :]
+        function_output = function_output.to_numpy()
+
+        self.assertTrue(np.all(computed_values == function_output[0]))
 
 
 if __name__ == '__main__':
