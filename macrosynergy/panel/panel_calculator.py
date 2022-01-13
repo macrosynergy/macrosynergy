@@ -6,8 +6,51 @@ from macrosynergy.management.shape_dfs import reduce_df
 import re
 import random
 
+def separation(function: str):
 
-def panel_calculator(df: pd.DataFrame, calcs: List[str], cids: List[str] = None,
+    clean = lambda elem: elem.strip()
+
+    split = function.split(' = ')
+    if len(split) != 2:
+        assert "Expected form of formula is y = f(x)."
+    else:
+        key_value = tuple(map(clean, split))
+
+    return key_value
+
+def involved_xcats(xcats: List[str], expression: str):
+
+    indices_dict = {}
+    for category in xcats:
+
+        pattern = re.compile(category)
+        indices = pattern.finditer(expression)
+
+        groups = []
+        for index in indices:
+            groups.append(index.span())
+        indices_dict[category] = groups
+
+    return indices_dict
+
+def expression_modify(df: pd.DataFrame, indices_dict: dict, expression: str,
+                      main_category: str):
+
+    assert main_category in indices_dict.keys(), "Error in defined function."
+
+    for category, indices in indices_dict.items():
+
+        dfx = df[df['xcat'] == category]
+        dfw = dfx.pivot(index='real_date', columns='cid', values='value')
+        # Iterate through the possible indices (where the expression is mentioned) and
+        # substitute the corresponding dataframe.
+        for tup in indices:
+            first = tup[0]
+            last = tup[1]
+            expression = expression[:first] + "dfw" + expression[last:]
+
+
+def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] = None,
                      xcats: List[str] = None, start: str = None, end: str = None,
                      blacklist: dict = None) -> object:
     """
@@ -15,8 +58,9 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str], cids: List[str] = None,
 
     :param <pd.Dataframe> df: standardized dataframe with following necessary columns:
         'cid', 'xcat', 'real_date' and 'value'.
-    :param <List[str]> calcs:  set of calculations in string format with category names
-        as arguments.
+    :param <List[str]> calcs:  List containing the functions applied to each respective
+        category outlined in the xcats parameter. The function will be specified in the
+        form of an equation. For instance, "XR = XR + 0.5".
     :param <List[str]> cids: cross sections for which the new panels are calculated.
     :param <List[str]> xcats: the categories the panel calculator is applied to.
     :param <str> start: earliest date in ISO format. Default is None and earliest date in
@@ -52,7 +96,18 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str], cids: List[str] = None,
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start,
                     end=end, blacklist=blacklist)
 
-    return dfx
+    dict_function = {}
+    for calc in calcs:
+        separate = separation(calc)
+        dict_function[separate[0]] = separate[1]
+
+    output_df = []
+    unique_categories = dfx['xcat'].unique()
+    # The function is applied to every cross-section uniformly and every date over the
+    # time-period.
+    for k, v in dict_function.items():
+
+        indices_dict = involved_xcats(xcats=unique_categories, expression=v)
 
 
 if __name__ == "__main__":
@@ -86,5 +141,5 @@ if __name__ == "__main__":
 
     filt1 = (dfd['xcat'] == 'XR')
     dfdx = dfd[filt1]
-    df_calc = panel_calculator(df=dfdx, calcs=["XR + 0.5"], cids=cids, xcats=['XR'],
+    df_calc = panel_calculator(df=dfdx, calcs=["XR = (XR + 0.5) / XR"], cids=cids, xcats=['XR'],
                                start=start, end=end, blacklist=black)
