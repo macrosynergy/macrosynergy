@@ -11,8 +11,7 @@ def pan_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fals
     Compute neutral values of return series based on a panel, i.e. all cross-sections in
     the dataFrame.
 
-    :param <pd.Dataframe> df: "wide" dataframe with time index and cross section columns
-        of returns.
+    :param <pd.Dataframe> df: "wide" dataframe with time index and cross section columns.
     :param <str> neutral: method to determine neutral level. Default is 'zero'.
         Alternatives are 'mean' and "median".
     :param <bool> sequential: if True (default) score parameters (neutral level and
