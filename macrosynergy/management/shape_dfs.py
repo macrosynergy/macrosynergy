@@ -10,7 +10,7 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
               start: str = None, end: str = None, blacklist: dict = None,
               out_all: bool = False, intersect: bool = False):
     """
-    Filter dataframe by xcats and cids and notify about missing xcats and cids
+    Filter dataframe by xcats and cids and notify about missing xcats and cids.
 
     :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
         'cid', 'xcats', 'real_date'.
@@ -30,7 +30,7 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
         Default is False.
 
     :return <pd.Dataframe>: reduced dataframe that also removes duplicates or
-        (for out_all True) dataframe and avalaible and selected xcats and cids
+        (for out_all True) dataframe and available and selected xcats and cids.
     """
 
     dfx = df[df['real_date'] >= pd.to_datetime(start)] if start is not None else df
@@ -49,7 +49,7 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
     else:
         missing = sorted(set(xcats) - set(xcats_in_df))
         if len(missing) > 0:
-            print(f'Missing cross sections: {missing}')
+            print(f"Missing categories: {missing}.")
             xcats.remove(missing)
 
     dfx = dfx[dfx['xcat'].isin(xcats)]
@@ -238,8 +238,10 @@ if __name__ == "__main__":
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    dfd_x1 = reduce_df(dfd, xcats=xcats, cids=cids[0], start='2012-01-01',
-                       end='2018-01-31')
+    dfd_x1 = reduce_df(dfd, xcats=xcats[:-1], cids=cids[0],
+                       start='2012-01-01', end='2018-01-31')
+    print(dfd_x1['xcat'].unique())
+
     dfd_x2 = reduce_df(dfd, xcats=xcats, cids=cids, start='2012-01-01', end='2018-01-31')
     dfd_x3 = reduce_df(dfd, xcats=xcats, cids=cids, blacklist=black)
 

@@ -133,7 +133,6 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
     df_out = dfwa.stack().to_frame("value").reset_index()
 
-    # df_out = dfwa.unstack().reset_index().rename(mapper={0: 'value'}, axis=1)
     df_out['xcat'] = xcat + postfix
 
     return df_out[df.columns]
