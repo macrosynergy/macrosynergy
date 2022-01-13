@@ -84,7 +84,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
     if len(cids) == len(basket) == 1:
         return df_out
 
-    intersection_function = lambda l_1, l_2: list(set(l_1) & set(l_2))
+    intersection_function = lambda l_1, l_2: sorted(list(set(l_1) & set(l_2)))
 
     # Implicit assumption that both categories are defined over the same cross-sections.
     for i, xcat in enumerate(available_xcats):
