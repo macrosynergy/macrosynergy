@@ -5,6 +5,7 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 import re
 import random
+from queue import LifoQueue
 
 def separation(function: str):
 
@@ -18,8 +19,37 @@ def separation(function: str):
 
     return key_value
 
-def parenthesis_check(expression: str):
-    pass
+
+def checkBalance(expression: str):
+    """
+    Function designed to delimit whether the binary mathematical function has been
+    enclosed in parenthesis correctly.
+
+    :param <str> expression: mathematical function applied to specific category.
+
+    return <bool>: binary value representing whether the parenthesis are correct or not.
+    """
+
+    stack = LifoQueue(maxsize=100)
+    length = len(expression)
+
+    for i, c in enumerate(expression):
+        assert c != " ", "Expression must not contain spaces."
+        if c == "(":
+            stack.put(c)
+        elif c == ")":
+
+            if stack.get() == "(":
+                continue
+            else:
+                return False
+        else:
+            continue
+
+    if stack.empty():
+        return True
+    else:
+        return False
 
 def binary_operations(expression: str, indices_dict: dict):
     """
@@ -157,6 +187,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
     # The function is applied to every cross-section uniformly and every date over the
     # time-period.
     for k, v in dict_function.items():
+        assert checkBalance(v), f"Parenethesis incorrect in function passed."
 
         indices_dict = involved_xcats(xcats=unique_categories, expression=v)
         no_categories = len(indices_dict.keys())
