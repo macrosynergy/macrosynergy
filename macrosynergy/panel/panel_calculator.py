@@ -18,6 +18,33 @@ def separation(function: str):
 
     return key_value
 
+def parenthesis_check(expression: str):
+    pass
+
+def binary_operations(expression: str, indices_dict: dict):
+    """
+    In mathematics, a binary operation is a rule for combining two elements, operands, to
+    produce another element. Therefore, split the expression on the binary operator. The
+    purpose of such a procedure is to evaluate the expression in separate components.
+
+    :param <str> expression: an expression involving two or more categories. For
+        instance, expression = (OLDCAT1 + 0.5 * OLDCAT2) would be deconstructed into two
+        separate strings allowing an evaluation of the unary operations first.
+    :param <dict> indices_dict: dictionary containing the categories involved in the
+        expression and their respective indices in the expression.
+    """
+
+    binary_operators = ["+", "-", "*", "/"]
+    pass
+
+def order_indices(indices_dict: dict):
+    """
+    Order the
+
+    """
+
+    pass
+
 def involved_xcats(xcats: List[str], expression: str):
 
     indices_dict = {}
@@ -29,7 +56,10 @@ def involved_xcats(xcats: List[str], expression: str):
         groups = []
         for index in indices:
             groups.append(index.span())
-        indices_dict[category] = groups
+        if groups:
+            indices_dict[category] = groups
+        else:
+            continue
 
     return indices_dict
 
@@ -38,17 +68,38 @@ def expression_modify(df: pd.DataFrame, indices_dict: dict, expression: str,
 
     assert main_category in indices_dict.keys(), "Error in defined function."
 
+    category_df_dict = {}
+    index_adjustment = 0
     for category, indices in indices_dict.items():
+        c_copy = category
 
-        dfx = df[df['xcat'] == category]
+        dfx = df[df['xcat'] == c_copy]
         dfw = dfx.pivot(index='real_date', columns='cid', values='value')
-        # Iterate through the possible indices (where the expression is mentioned) and
-        # substitute the corresponding dataframe.
-        for tup in indices:
-            first = tup[0]
-            last = tup[1]
-            expression = expression[:first] + "dfw" + expression[last:]
 
+        category_df_dict[category] = dfw
+        # The String will be converted to the memory handler for the dataframe in memory.
+        dfw_xcat = "dfw_" + category
+        locals()[dfw_xcat] = dfw
+
+        # Iterate through the possible indices (where the expression is mentioned) and
+        # substitute the corresponding dataframe. For instance, XR = XR + 0.5 will be
+        # converted to: (dfw = dfw + 0.5) where dfw is the pivoted dataframe.
+
+        for i, tup in enumerate(indices):
+
+            first = (tup[0] + index_adjustment)
+            last = (tup[1] + index_adjustment)
+
+            replace = f"locals()[{dfw_xcat}]"
+            expression = expression[:first] + replace + expression[last:]
+            index_adjustment = len(replace) - len(category)
+
+    dfw = category_df_dict[main_category]
+    # Redefine the variable.
+    expression = "dfw = " + expression
+    print(expression)
+    exec(expression)
+    return dfw
 
 def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] = None,
                      xcats: List[str] = None, start: str = None, end: str = None,
@@ -77,7 +128,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
     Notes:
     Panel calculation strings can use functions and unary mathematical operators
     in accordance with numpy convention to indicate the desired calculation such as:
-        "NEWCAT = OLDCAT1 + 0.5 * OLDCAT2"
+        "NEWCAT = (OLDCAT1 + 0.5) * OLDCAT2"
         "NEWCAT = np.log(OLDCAT1) - np.abs(OLDCAT2) ** 1/2"
     Panel calculation can also involve individual indicator series (to be applied
     to all series in the panel by using the @ as prefix, such as:
@@ -108,6 +159,18 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
     for k, v in dict_function.items():
 
         indices_dict = involved_xcats(xcats=unique_categories, expression=v)
+        no_categories = len(indices_dict.keys())
+
+        if no_categories > 1:
+            binary_operations(expression=v, indices_dict=indices_dict)
+        # df = expression_modify(df=dfx, indices_dict=indices_dict,
+                               # expression=v, main_category=k)
+
+        # output_df[k] = df
+
+    # df_out = df.stack().to_frame("value").reset_index()
+
+    return dfx
 
 
 if __name__ == "__main__":
@@ -139,7 +202,11 @@ if __name__ == "__main__":
     start = '2010-01-01'
     end = '2020-12-31'
 
-    filt1 = (dfd['xcat'] == 'XR')
+    filt1 = (dfd['xcat'] == 'XR') | (dfd['xcat'] == 'CRY')
     dfdx = dfd[filt1]
-    df_calc = panel_calculator(df=dfdx, calcs=["XR = (XR + 0.5) / XR"], cids=cids, xcats=['XR'],
-                               start=start, end=end, blacklist=black)
+
+    df_calc = panel_calculator(df=dfdx,
+                               calcs=["XR = XR + 0.5 / CRY", "CRY = np.log(CRY)"],
+                               cids=cids, xcats=['XR', 'CRY'], start=start, end=end,
+                               blacklist=black)
+
