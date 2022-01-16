@@ -182,8 +182,12 @@ def evaluateHelp(df: pd.DataFrame, expression: str, index: int):
             return left - right, index
         elif opr == "*":
             return left * right, index
-        else:
+        elif opr == "/":
             return left / right, index
+        else:
+            concat = left + "right" + ")"
+            return eval(concat)
+
     elif char.isnumeric():
         start = index
 
@@ -198,6 +202,8 @@ def evaluateHelp(df: pd.DataFrame, expression: str, index: int):
         while char.isalpha() or char in ["(", ")", "."]:
             index += 1
             char = expression[index]
+            if char == "n" and expression[index: (index + 3)] == "np.":
+                return expression[start:index], (index - 2)
 
         category = expression[start:index]
         dfw = dataframe_pivot(df=df, category=category)
@@ -302,6 +308,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
 
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start,
                     end=end, blacklist=blacklist)
+    print(dfx)
 
     dict_function = {}
     for calc in calcs:
@@ -352,9 +359,14 @@ if __name__ == "__main__":
     filt1 = (dfd['xcat'] == 'XR') | (dfd['xcat'] == 'CRY')
     dfdx = dfd[filt1]
 
-    df_calc = panel_calculator(df=dfdx,
-                               calcs=["XR = (np.abs(XR)+0.552)"],
-                               cids=cids, xcats=['XR'], start=start, end=end,
-                               blacklist=black)
+    # df_calc = panel_calculator(df=dfdx,
+                               # calcs=["XR = (np.abs(XR)+0.552)"],
+                               # cids=cids, xcats=['XR'], start=start, end=end,
+                               # blacklist=black)
 
     # Further testcase.
+    df_calc = panel_calculator(df=dfdx,
+                               calcs=["XR = (np.square(np.abs(XR)+0.5))"],
+                               cids=cids, xcats=['XR'], start=start, end=end,
+                               blacklist=black)
+    print(df_calc)
