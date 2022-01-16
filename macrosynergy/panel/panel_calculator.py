@@ -8,6 +8,15 @@ import random
 from queue import LifoQueue
 
 def separation(function: str):
+    """
+    Method used to split the mathematical function on the equal sign to return two
+    separate strings. For example, NEWCAT = ((OLDCAT1+0.5)*OLDCAT2) will be returned as a
+    tuple (NEWCAT, ((OLDCAT1+0.5)*OLDCAT2)).
+
+    param <str> function: mathematical function applied to a specific panel.
+
+    :return <tuple>: (NEWCAT, ((OLDCAT1+0.5)*OLDCAT2)).
+    """
 
     clean = lambda elem: elem.strip()
 
@@ -42,13 +51,15 @@ def checkExpression(expression: str):
     parenthesis_counter = 0
     arithmetic_counter = 0
     for i, c in enumerate(expression):
+
         assert c != " ", "Expression must not contain spaces."
         if c == "(":
             parenthesis_counter += 1
             stack.put(c)
         elif c == ")":
 
-            if stack.get() == "(":
+            condition = stack.empty()
+            if not condition and stack.get() == "(":
                 continue
             else:
                 return False
@@ -99,12 +110,35 @@ def involved_xcats(xcats: List[str], expression: str):
     return indices_dict
 
 def dataframe_pivot(df: pd.DataFrame, category: str):
+    """
+    Returns a pivoted dataframe on a single panel: each cross-section will be handled by
+    a column. Used to support the recursive evaluation method.
+
+    :param <pd.DataFrame> df:
+    :param <str> category: category to pivot the dataframe on.
+
+    :return <pd.DataFrame>: pivoted dataframe.
+    """
     dfx = df[df['xcat'] == category]
     dfw = dfx.pivot(index='real_date', columns='cid', values='value')
 
     return dfw
 
 def evaluateHelp(df: pd.DataFrame, expression: str, index: int):
+    """
+    Recursively evaluate the expression. The algorithm will break up the individual
+    arithmetic operations, according to the parenthesis, and using a Stack data structure
+    "collapse" onto the final output. The most interior parenthesis will be calculated
+    first, LIFO principle, and the output will be used to recoil back to calculate the
+    remaining binary operations.
+
+    :param <pd.DataFrame> df:
+    :param <str> expression:
+    :param <int> index: used for pointer arithmetic - iterating through the string
+        object.
+
+    :return <pd.DataFrame>: pivoted dataframe with the mathematical calculation applied.
+    """
 
     char = expression[index]
     if char == "(":
@@ -117,13 +151,13 @@ def evaluateHelp(df: pd.DataFrame, expression: str, index: int):
         right, index = evaluateHelp(df, expression, index)
         index += 1
         if opr == "+":
-            return (left + right), index
+            return left + right, index
         elif opr == "-":
-            return (left - right), index
+            return left - right, index
         elif opr == "*":
-            return (left * right), index
+            return left * right, index
         else:
-            return round((left / right), ndigits=2), index
+            return left / right, index
     elif char.isnumeric():
         start = index
 
@@ -147,9 +181,17 @@ def evaluateHelp(df: pd.DataFrame, expression: str, index: int):
         return 0
 
 def evaluate(df: pd.DataFrame, expression: str):
+    """
+    Driver function to initiate the recursive algorithm. Used to define the index
+    variable.
+
+    :param <pd.DataFrame> df:
+    :param <str> expression:
+
+    :return <pd.DataFrame>
+    """
     index = 0
 
-    print("Called.")
     return evaluateHelp(df, expression, index)
 
 def expression_modify(df: pd.DataFrame, indices_dict: dict, expression: str,
@@ -250,6 +292,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
 
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start,
                     end=end, blacklist=blacklist)
+    print(dfx)
 
     dict_function = {}
     for calc in calcs:
@@ -264,6 +307,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
         assert checkExpression(v), f"Parenthesis are incorrect in the function passed."
 
         dfw = evaluate(df=dfx, expression=v)
+        print(dfw)
 
     return dfw
 
@@ -285,7 +329,7 @@ if __name__ == "__main__":
     df_xcats = pd.DataFrame(index = xcats, columns = ['earliest', 'latest', 'mean_add',
                                                       'sd_mult', 'ar_coef', 'back_coef'])
     df_xcats.loc['XR'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
-    df_xcats.loc['CRY'] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
+    df_xcats.loc['CRY'] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
     df_xcats.loc['GROWTH'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
     df_xcats.loc['INFL'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
@@ -301,7 +345,7 @@ if __name__ == "__main__":
     dfdx = dfd[filt1]
 
     df_calc = panel_calculator(df=dfdx,
-                               calcs=["XR = (XR+0.5)/CRY)"],
-                               cids=cids, xcats=['XR', 'CRY'], start=start, end=end,
+                               calcs=["XR = (XR+0.552)"],
+                               cids=cids, xcats=['XR'], start=start, end=end,
                                blacklist=black)
 
