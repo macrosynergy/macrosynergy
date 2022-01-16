@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from typing import List, Union, Tuple
+from typing import List
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 import re
@@ -319,14 +319,22 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
 
     output_df = []
     unique_categories = dfx['xcat'].unique()
+    col_names = ['cid', 'xcat', 'real_date', 'value']
 
     for k, v in dict_function.items():
         assert v[0] == "(" and v[-1] == ")", "Function must be encased in parenthesis."
         assert checkExpression(v), f"Parenthesis are incorrect in the function passed."
 
         dfw = evaluate(df=dfx, expression=v)
+        df_out = dfw.stack().to_frame("value").reset_index()
+        df_out['xcat'] = k
+        df_new = df_out.sort_values(['cid', 'real_date'])[col_names]
 
-    return dfw
+        output_df.append(df_new)
+
+    df_calc = pd.concat(output_df)
+
+    return df_calc.reset_index(drop=True)
 
 
 if __name__ == "__main__":
@@ -370,11 +378,11 @@ if __name__ == "__main__":
                                calcs=["XR = (np.square(np.abs(XR)+0.5))"],
                                cids=cids, xcats=['XR'], start=start, end=end,
                                blacklist=black)
-    print(df_calc)
 
     # Further testcase.
     df_calc = panel_calculator(df=dfdx,
-                               calcs=["XR = (np.sqrt(np.square(np.abs(XR)+0.5)))"],
-                               cids=cids, xcats=['XR'], start=start, end=end,
+                               calcs=["XR = (np.sqrt(np.square(np.abs(XR)+0.5)))",
+                                      "CRY = (np.abs(CRY)-0.5)"],
+                               cids=cids, xcats=['XR', 'CRY'], start=start, end=end,
                                blacklist=black)
     print(df_calc)
