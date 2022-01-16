@@ -50,8 +50,8 @@ def checkExpression(expression: str):
 
     parenthesis_counter = 0
     arithmetic_counter = 0
+    numpy_counter = 0
     for i, c in enumerate(expression):
-
         assert c != " ", "Expression must not contain spaces."
         if c == "(":
             parenthesis_counter += 1
@@ -65,11 +65,14 @@ def checkExpression(expression: str):
                 return False
         elif c in ["+", "-", "*", "/"]:
             arithmetic_counter += 1
+        elif (c + expression[i + 1: i + 3]) == "np.":
+            numpy_counter += 1
         else:
             continue
 
-    error_message = "Invalid expression. Each arithmetic operator requires parenthesis."
-    assert arithmetic_counter == parenthesis_counter, error_message
+    error_message = "Invalid expression. Each arithmetic operator, and numpy expression," \
+                    " requires parenthesis."
+    assert parenthesis_counter == (arithmetic_counter + numpy_counter), error_message
     if stack.empty():
         return True
     else:
@@ -113,16 +116,38 @@ def dataframe_pivot(df: pd.DataFrame, category: str):
     """
     Returns a pivoted dataframe on a single panel: each cross-section will be handled by
     a column. Used to support the recursive evaluation method.
+    Further, any numpy function will be evaluated on the respective category and the
+    pivoted dataframe will be returned having applied np.function(). For instance,
+    np.abs(XR) -> np.abs(df[df['xcat'] == XR]).
 
     :param <pd.DataFrame> df:
     :param <str> category: category to pivot the dataframe on.
 
     :return <pd.DataFrame>: pivoted dataframe.
     """
-    dfx = df[df['xcat'] == category]
-    dfw = dfx.pivot(index='real_date', columns='cid', values='value')
+    numpy_clause = (category[:3] == "np.")
+    if numpy_clause:
+        c_index = 0
+        c_list = list(category)
+        category_copy = c_list.copy()
+        category_copy.reverse()
+        for c in category_copy:
+            if c != "(":
+                c_index += 1
+            else:
+                break
 
-    return dfw
+        xcat = "".join(c_list[-c_index:-1])
+        dfx = df[df['xcat'] == xcat]
+        dfw = dfx.pivot(index='real_date', columns='cid', values='value')
+
+        adjustment = category[:-c_index] + "dfw" + ")"
+        return eval(adjustment)
+
+    else:
+        dfx = df[df['xcat'] == category]
+        dfw = dfx.pivot(index='real_date', columns='cid', values='value')
+        return dfw
 
 def evaluateHelp(df: pd.DataFrame, expression: str, index: int):
     """
@@ -130,7 +155,8 @@ def evaluateHelp(df: pd.DataFrame, expression: str, index: int):
     arithmetic operations, according to the parenthesis, and using a Stack data structure
     "collapse" onto the final output. The most interior parenthesis will be calculated
     first, LIFO principle, and the output will be used to recoil back to calculate the
-    remaining binary operations.
+    remaining binary operations. Will internally handle the inclusion of numpy
+    functionality applied to certain categories.
 
     :param <pd.DataFrame> df:
     :param <str> expression:
@@ -169,7 +195,7 @@ def evaluateHelp(df: pd.DataFrame, expression: str, index: int):
     elif char.isalpha():
         start = index
 
-        while char.isalpha():
+        while char.isalpha() or char in ["(", ")", "."]:
             index += 1
             char = expression[index]
 
@@ -231,22 +257,6 @@ def expression_modify(df: pd.DataFrame, indices_dict: dict, expression: str,
 
     return dfw
 
-def binary_operations(expression: str, indices_dict: dict):
-    """
-    In mathematics, a binary operation is a rule for combining two elements, operands, to
-    produce another element. Therefore, split the expression on the binary operator. The
-    purpose of such a procedure is to evaluate the expression in separate components.
-
-    :param <str> expression: an expression involving two or more categories. For
-        instance, expression = ((OLDCAT1+0.5)*OLDCAT2) would be deconstructed into two
-        separate strings allowing an evaluation of the unary operations first.
-    :param <dict> indices_dict: dictionary containing the categories involved in the
-        expression and their respective indices in the expression.
-    """
-
-    binary_operators = ["+", "-", "*", "/"]
-    pass
-
 def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] = None,
                      xcats: List[str] = None, start: str = None, end: str = None,
                      blacklist: dict = None) -> object:
@@ -292,7 +302,6 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
 
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start,
                     end=end, blacklist=blacklist)
-    print(dfx)
 
     dict_function = {}
     for calc in calcs:
@@ -307,7 +316,6 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
         assert checkExpression(v), f"Parenthesis are incorrect in the function passed."
 
         dfw = evaluate(df=dfx, expression=v)
-        print(dfw)
 
     return dfw
 
@@ -345,7 +353,8 @@ if __name__ == "__main__":
     dfdx = dfd[filt1]
 
     df_calc = panel_calculator(df=dfdx,
-                               calcs=["XR = (XR+0.552)"],
+                               calcs=["XR = (np.abs(XR)+0.552)"],
                                cids=cids, xcats=['XR'], start=start, end=end,
                                blacklist=black)
 
+    # Further testcase.
