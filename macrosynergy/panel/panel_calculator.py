@@ -20,10 +20,16 @@ def separation(function: str):
     return key_value
 
 
-def checkBalance(expression: str):
+def checkExpression(expression: str):
     """
-    Function designed to delimit whether the binary mathematical function has been
-    enclosed in parenthesis correctly.
+    There are three aspects of the expression that must be confirmed prior to initiating
+    the panel_calculator() function using the aforementioned expression. Firstly,
+    spaces are not permitted. For instance, "NEWCAT = (OLDCAT1 + 0.5)" must be
+    "NEWCAT = (OLDCAT1+0.5)". Secondly, the number of matching parenthesis, included in
+    the expression, is delimited by the number of arithmetic operations. Again,
+    "NEWCAT = (OLDCAT1 + 0.5) * OLDCAT2" must be in the form: "((OLDCAT1+0.5)*OLDCAT2)".
+    And, lastly, check each opening bracket has a matching pair.
+    If the above criteria are satisfied, the expression has been defined correctly.
 
     :param <str> expression: mathematical function applied to specific category.
 
@@ -33,9 +39,12 @@ def checkBalance(expression: str):
     stack = LifoQueue(maxsize=100)
     length = len(expression)
 
+    parenthesis_counter = 0
+    arithmetic_counter = 0
     for i, c in enumerate(expression):
         assert c != " ", "Expression must not contain spaces."
         if c == "(":
+            parenthesis_counter += 1
             stack.put(c)
         elif c == ")":
 
@@ -43,39 +52,35 @@ def checkBalance(expression: str):
                 continue
             else:
                 return False
+        elif c in ["+", "-", "*", "/"]:
+            arithmetic_counter += 1
         else:
             continue
 
+    error_message = "Invalid expression. Each arithmetic operator requires parenthesis."
+    assert arithmetic_counter == parenthesis_counter, error_message
     if stack.empty():
         return True
     else:
         return False
 
-def binary_operations(expression: str, indices_dict: dict):
-    """
-    In mathematics, a binary operation is a rule for combining two elements, operands, to
-    produce another element. Therefore, split the expression on the binary operator. The
-    purpose of such a procedure is to evaluate the expression in separate components.
-
-    :param <str> expression: an expression involving two or more categories. For
-        instance, expression = (OLDCAT1 + 0.5 * OLDCAT2) would be deconstructed into two
-        separate strings allowing an evaluation of the unary operations first.
-    :param <dict> indices_dict: dictionary containing the categories involved in the
-        expression and their respective indices in the expression.
-    """
-
-    binary_operators = ["+", "-", "*", "/"]
-    pass
-
-def order_indices(indices_dict: dict):
-    """
-    Order the
-
-    """
-
-    pass
-
 def involved_xcats(xcats: List[str], expression: str):
+    """
+    Understand the number of categories involved in each specific panel calculation and
+    return their respective indices in the expression.
+    The chosen work flow, for each expression, is largely predicated on the number of
+    involved categories. For instance, if the function is a unary operation, the work
+    flow required is tractable. In contrast, if multiple categories are involved, the
+    approach has to be more considered.
+
+    :param <List[str]> xcats: the categories held in the dataframe. The categories
+        referenced in the expression must be a subset of the categories defined in the
+        dataframe.
+    :param <str> expression:
+
+    :return <dict>: the keys will be the categories referenced in the expression, and the
+        values will be their indices.
+    """
 
     indices_dict = {}
     for category in xcats:
@@ -92,6 +97,60 @@ def involved_xcats(xcats: List[str], expression: str):
             continue
 
     return indices_dict
+
+def dataframe_pivot(df: pd.DataFrame, category: str):
+    dfx = df[df['xcat'] == category]
+    dfw = dfx.pivot(index='real_date', columns='cid', values='value')
+
+    return dfw
+
+def evaluateHelp(df: pd.DataFrame, expression: str, index: int):
+
+    char = expression[index]
+    if char == "(":
+
+        index += 1
+        left, index = evaluateHelp(df, expression, index)
+        opr = expression[index]
+        index += 1
+
+        right, index = evaluateHelp(df, expression, index)
+        index += 1
+        if opr == "+":
+            return (left + right), index
+        elif opr == "-":
+            return (left - right), index
+        elif opr == "*":
+            return (left * right), index
+        else:
+            return round((left / right), ndigits=2), index
+    elif char.isnumeric():
+        start = index
+
+        while char.isnumeric() or char == ".":
+            index += 1
+            char = expression[index]
+        return float(expression[start:index]), index
+
+    elif char.isalpha():
+        start = index
+
+        while char.isalpha():
+            index += 1
+            char = expression[index]
+
+        category = expression[start:index]
+        dfw = dataframe_pivot(df=df, category=category)
+        return dfw, index
+
+    else:
+        return 0
+
+def evaluate(df: pd.DataFrame, expression: str):
+    index = 0
+
+    print("Called.")
+    return evaluateHelp(df, expression, index)
 
 def expression_modify(df: pd.DataFrame, indices_dict: dict, expression: str,
                       main_category: str):
@@ -127,9 +186,24 @@ def expression_modify(df: pd.DataFrame, indices_dict: dict, expression: str,
     dfw = category_df_dict[main_category]
     # Redefine the variable.
     expression = "dfw = " + expression
-    print(expression)
-    exec(expression)
+
     return dfw
+
+def binary_operations(expression: str, indices_dict: dict):
+    """
+    In mathematics, a binary operation is a rule for combining two elements, operands, to
+    produce another element. Therefore, split the expression on the binary operator. The
+    purpose of such a procedure is to evaluate the expression in separate components.
+
+    :param <str> expression: an expression involving two or more categories. For
+        instance, expression = ((OLDCAT1+0.5)*OLDCAT2) would be deconstructed into two
+        separate strings allowing an evaluation of the unary operations first.
+    :param <dict> indices_dict: dictionary containing the categories involved in the
+        expression and their respective indices in the expression.
+    """
+
+    binary_operators = ["+", "-", "*", "/"]
+    pass
 
 def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] = None,
                      xcats: List[str] = None, start: str = None, end: str = None,
@@ -184,24 +258,14 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
 
     output_df = []
     unique_categories = dfx['xcat'].unique()
-    # The function is applied to every cross-section uniformly and every date over the
-    # time-period.
+
     for k, v in dict_function.items():
-        assert checkBalance(v), f"Parenethesis incorrect in function passed."
+        assert v[0] == "(" and v[-1] == ")", "Function must be encased in parenthesis."
+        assert checkExpression(v), f"Parenthesis are incorrect in the function passed."
 
-        indices_dict = involved_xcats(xcats=unique_categories, expression=v)
-        no_categories = len(indices_dict.keys())
+        dfw = evaluate(df=dfx, expression=v)
 
-        if no_categories > 1:
-            binary_operations(expression=v, indices_dict=indices_dict)
-        # df = expression_modify(df=dfx, indices_dict=indices_dict,
-                               # expression=v, main_category=k)
-
-        # output_df[k] = df
-
-    # df_out = df.stack().to_frame("value").reset_index()
-
-    return dfx
+    return dfw
 
 
 if __name__ == "__main__":
@@ -237,7 +301,7 @@ if __name__ == "__main__":
     dfdx = dfd[filt1]
 
     df_calc = panel_calculator(df=dfdx,
-                               calcs=["XR = XR + 0.5 / CRY", "CRY = np.log(CRY)"],
+                               calcs=["XR = (XR+0.5)/CRY)"],
                                cids=cids, xcats=['XR', 'CRY'], start=start, end=end,
                                blacklist=black)
 
