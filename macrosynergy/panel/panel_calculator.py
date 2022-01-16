@@ -186,7 +186,7 @@ def evaluateHelp(df: pd.DataFrame, expression: str, index: int):
             return left / right, index
         else:
             concat = left + "right" + ")"
-            return eval(concat)
+            return eval(concat), index
 
     elif char.isnumeric():
         start = index
@@ -224,7 +224,10 @@ def evaluate(df: pd.DataFrame, expression: str):
     """
     index = 0
 
-    return evaluateHelp(df, expression, index)
+    output = evaluateHelp(df, expression, index)
+    if isinstance(output, tuple):
+        output = output[0]
+    return output
 
 def expression_modify(df: pd.DataFrame, indices_dict: dict, expression: str,
                       main_category: str):
@@ -308,7 +311,6 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
 
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start,
                     end=end, blacklist=blacklist)
-    print(dfx)
 
     dict_function = {}
     for calc in calcs:
@@ -359,14 +361,20 @@ if __name__ == "__main__":
     filt1 = (dfd['xcat'] == 'XR') | (dfd['xcat'] == 'CRY')
     dfdx = dfd[filt1]
 
-    # df_calc = panel_calculator(df=dfdx,
-                               # calcs=["XR = (np.abs(XR)+0.552)"],
-                               # cids=cids, xcats=['XR'], start=start, end=end,
-                               # blacklist=black)
+    df_calc = panel_calculator(df=dfdx,
+                               calcs=["XR = (np.abs(XR)+0.552)"],
+                               cids=cids, xcats=['XR'], start=start, end=end,
+                               blacklist=black)
+
+    df_calc = panel_calculator(df=dfdx,
+                               calcs=["XR = (np.square(np.abs(XR)+0.5))"],
+                               cids=cids, xcats=['XR'], start=start, end=end,
+                               blacklist=black)
+    print(df_calc)
 
     # Further testcase.
     df_calc = panel_calculator(df=dfdx,
-                               calcs=["XR = (np.square(np.abs(XR)+0.5))"],
+                               calcs=["XR = (np.sqrt(np.square(np.abs(XR)+0.5)))"],
                                cids=cids, xcats=['XR'], start=start, end=end,
                                blacklist=black)
     print(df_calc)
