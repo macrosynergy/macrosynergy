@@ -14,10 +14,12 @@ class CategoryRelations:
     """Class for analyzing and visualizing two categories across a panel
 
     :param <pd.Dataframe> df: standardized data frame with following necessary columns:
-        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+        'cid', 'xcat', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: Exactly two extended categories to be checked on.
-    :param <List[str]> cids: cross sections to be checked on. Default is all in the
-        dataframe.
+        Typically the first category is the explanatory variable and the second category
+        the explained variable.
+    :param <List[str]> cids: cross sections for which the category relation is being
+        checked. Default is all in the dataframe.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df
@@ -31,18 +33,19 @@ class CategoryRelations:
         'value'.
     :param <str> freq: letter denoting frequency at which the series are to be sampled.
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
-    :param <int> lag: Lag (delay of arrival) of second category in periods as set by
-        freq. Default is 0.
+    :param <int> lag: Lag (delay of arrival) of first (explanatory) category in periods
+        as set by freq. Default is 0.
+        Note: for analyses with explanatory and dependent categories, the first takes
+        the role of the explanatory.
     :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for
         both.
-    :param <str> changes: parameter determining the form of the explanatory variable's
-        series. There are two options: i) 'diff': compute the difference over the
-        current date and the corresponding date 'n_periods' prior; ii) 'pchg': percentage
-        change over the time-period. The default is None which equates to the raw value
-        series.
-    :param <int> n_periods: number of periods over which changes are made to the
-        explanatory variable's series.
-    :param <int> fwin: Forward moving average window of first category. Default is 1, i.e
+    :param <str> xcat1_chg: time series change applied to first category.
+        Default is None. Change options are 'diff' (first difference) and 'pchg'
+        (percentage change). The changes are calculated over the number of
+        periods determined by `n_periods`.
+    :param <int> n_periods: number of periods over which changes of the first category
+        have been calculated. Default is 1.
+    :param <int> fwin: Forward moving average window of second category. Default is 1, i.e
         no average.
 
     """
@@ -51,7 +54,7 @@ class CategoryRelations:
                  val: str = 'value', start: str = None, end: str = None,
                  blacklist: dict = None, years = None, freq: str = 'M', lag: int = 0,
                  fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean'),
-                 changes: str = None, n_periods: int = None):
+                 xcat1_chg: str = None, n_periods: int = 1):
 
         """Constructs all attributes for the category relationship to be analyzed"""
 
@@ -62,7 +65,7 @@ class CategoryRelations:
         self.lag = lag
         self.years = years 
         self.aggs = xcat_aggs
-        self.changes = changes
+        self.xcat1_chg = xcat1_chg
         self.n_periods = n_periods
 
         assert self.freq in ['D', 'W', 'M', 'Q', 'A']
@@ -75,12 +78,12 @@ class CategoryRelations:
                            end=end, freq=freq, blacklist=blacklist, years=years,
                            lag=lag, fwin=fwin, xcat_aggs=xcat_aggs)
 
-        if changes is not None:
+        if xcat1_chg is not None:
 
-            assert changes in ['diff', 'pch']
+            assert xcat1_chg in ['diff', 'pch']
             assert isinstance(n_periods, int)
 
-            self.df = CategoryRelations.time_series(df, changes=changes,
+            self.df = CategoryRelations.time_series(df, change=xcat1_chg,
                                                     n_periods=n_periods,
                                                     shared_cids=shared_cids,
                                                     expln_var=xcats[1])
@@ -113,17 +116,17 @@ class CategoryRelations:
         return usable
 
     @classmethod
-    def time_series(cls, df: pd.DataFrame, changes: str, n_periods: int,
+    def time_series(cls, df: pd.DataFrame, change: str, n_periods: int,
                     shared_cids: List[str], expln_var: str):
         """
         Modifying the metric on the explanatory variable: the dataframe's default will be
         the raw value series, defined according to the frequency parameter, but allow for
-        additional time-series metrics such as differencing or % changes (pchg).
+        additional time-series metrics such as differencing or % change (pchg).
 
         :param <pd.DataFrame> df: multi-index DataFrame hosting the two categories: first
             column represents the dependent variable, second column hosts the explanatory
             variable. The dataframe's index is the real-date and cross-section.
-        :param <str> changes:
+        :param <str> change:
         :param <int> n_periods:
         :param <List[str]> shared_cids: shared cross-sections across the two categories
             and the received list.
@@ -131,7 +134,7 @@ class CategoryRelations:
             changed from the raw value series to a difference or percentage change value.
 
         :return <pd.Dataframe>: df: returns the same multi-index dataframe but with an
-            adjusted series inline with the 'changes' parameter.
+            adjusted series inline with the 'change' parameter.
         """
 
         df_lists = []
@@ -143,7 +146,7 @@ class CategoryRelations:
             shift[:] = np.nan
             shift[n_periods:] = explan_col[:-n_periods]
 
-            if changes == 'diff':
+            if change == 'diff':
                 temp_df[expln_var] -= shift
             else:
                 diff = explan_col - shift
@@ -325,7 +328,7 @@ if __name__ == "__main__":
     cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'], cids=cidx, freq='M',
                            xcat_aggs=['mean', 'mean'], lag=1,
                            start='2000-01-01', years=None, blacklist=black,
-                           changes='diff', n_periods=6)
+                           xcat1_chg='diff', n_periods=6)
 
     cr.reg_scatter(labels=False, coef_box='upper left')
     cr.jointplot(kind='hist', xlab='growth', ylab='inflation', height=5)

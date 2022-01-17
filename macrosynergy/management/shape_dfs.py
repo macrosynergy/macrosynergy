@@ -120,6 +120,7 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
 
     return dfx.drop_duplicates()
 
+
 def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                   val: str = 'value', start: str = None, end: str = None,
                   blacklist: dict = None, years: int = None, freq: str = 'M',
@@ -147,10 +148,8 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         'value'.
     :param <str> freq: letter denoting frequency at which the series are to be sampled.
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
-    :param <int> lag: Lag (delay of arrival) of second category in periods as set by
-        freq. Default is 0.
-        Note: for analyses with dependent and explanatory categories, the second takes
-        the role of the explanatory.
+    :param <int> lag: Lag (delay of arrival) of first (explanatory) category in periods
+        as set by freq. Default is 0.
     :param <int> fwin: Forward moving average window of first category. Default is 1,
         i.e no average.
         Note: This parameter is used mainly for target returns as dependent variables.
@@ -175,10 +174,10 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
             dfw = df[df['xcat'] == xcats[i]].pivot(index='real_date', columns='cid',
                                                    values=val)
             dfw = dfw.resample(freq).agg(xcat_aggs[i])
-            if (i == 0) & (fwin > 1):
-                dfw = dfw.rolling(window=fwin).mean().shift(1 - fwin)
-            if (i == 1) & (lag > 0):
+            if (i == 0) & (lag > 0):  # first category (explanatory) is shifted forward
                 dfw = dfw.shift(lag)
+            if (i == 1) & (fwin > 0):
+                dfw = dfw.rolling(window=fwin).mean().shift(1 - fwin)
             dfx = pd.melt(dfw.reset_index(), id_vars=['real_date'],
                           value_vars=cids, value_name=val)
             dfx['xcat'] = xcats[i]
@@ -249,7 +248,7 @@ if __name__ == "__main__":
     dfd_xt = reduce_df_by_ticker(dfd, ticks=tickers, blacklist=black)
 
     # Testing categories_df().
-    dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
+    dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=1,
                          xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black)
 
     dfc2 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
