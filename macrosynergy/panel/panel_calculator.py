@@ -1,3 +1,4 @@
+
 import numpy as np
 import pandas as pd
 from typing import List
@@ -123,11 +124,16 @@ def single_cross(c_list: List[str], category_copy: List[str]):
     """
 
     c_index = 0
+    terminal_index = 0
     for c in category_copy:
-        if c != "_":
+        if c != "_" and c != ")":
             c_index += 1
+        elif c == ")":
+            terminal_index += 1
         else:
             break
+
+    c_index += terminal_index
     cid_index = 0
     for c in category_copy[c_index:]:
         if c != "@":
@@ -135,7 +141,7 @@ def single_cross(c_list: List[str], category_copy: List[str]):
         else:
             break
 
-    xcat = "".join(c_list[-c_index:-1])
+    xcat = "".join(c_list[-c_index:-terminal_index])
     adjust = (c_index + 1)
     cid = "".join(c_list[-(cid_index + c_index):-adjust])
     numpy_formula = "".join(c_list[:-(cid_index + adjust)])
@@ -171,14 +177,21 @@ def dataframe_pivot(df: pd.DataFrame, category: str, single_cid: bool):
                 else:
                     break
             xcat = "".join(c_list[-c_index:-1])
-            dfx = df[df['xcat'] == xcat]
         else:
-            return None
+            xcat, cid, numpy_formula = single_cross(c_list=c_list,
+                                                    category_copy=category_copy)
+
+        dfx = df[df['xcat'] == xcat]
         dfw = dfx.pivot(index='real_date', columns='cid', values='value')
 
-        adjustment = category[:-c_index] + "dfw" + ")"
-        return eval(adjustment)
-
+        if not single_cid:
+            adjustment = category[:-c_index] + "dfw" + ")"
+            return eval(adjustment)
+        else:
+            adjustment = numpy_formula + "dfw[cid]" + ")"
+            adjustment = "dfw[cid]" + " = " + adjustment
+            exec(adjustment)
+            return dfw
     else:
         dfx = df[df['xcat'] == category]
         dfw = dfx.pivot(index='real_date', columns='cid', values='value')
@@ -272,43 +285,6 @@ def evaluate(df: pd.DataFrame, expression: str):
         output = output[0]
     return output
 
-def expression_modify(df: pd.DataFrame, indices_dict: dict, expression: str,
-                      main_category: str):
-
-    assert main_category in indices_dict.keys(), "Error in defined function."
-
-    category_df_dict = {}
-    index_adjustment = 0
-    for category, indices in indices_dict.items():
-        c_copy = category
-
-        dfx = df[df['xcat'] == c_copy]
-        dfw = dfx.pivot(index='real_date', columns='cid', values='value')
-
-        category_df_dict[category] = dfw
-        # The String will be converted to the memory handler for the dataframe in memory.
-        dfw_xcat = "dfw_" + category
-        locals()[dfw_xcat] = dfw
-
-        # Iterate through the possible indices (where the expression is mentioned) and
-        # substitute the corresponding dataframe. For instance, XR = XR + 0.5 will be
-        # converted to: (dfw = dfw + 0.5) where dfw is the pivoted dataframe.
-
-        for i, tup in enumerate(indices):
-
-            first = (tup[0] + index_adjustment)
-            last = (tup[1] + index_adjustment)
-
-            replace = f"locals()[{dfw_xcat}]"
-            expression = expression[:first] + replace + expression[last:]
-            index_adjustment = len(replace) - len(category)
-
-    dfw = category_df_dict[main_category]
-    # Redefine the variable.
-    expression = "dfw = " + expression
-
-    return dfw
-
 def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] = None,
                      start: str = None, end: str = None,
                      blacklist: dict = None) -> object:
@@ -357,7 +333,6 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
         separate = separation(calc)
         dict_function[separate[0]] = separate[1]
 
-
     xcats = list(dict_function.keys())
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start,
                     end=end, blacklist=blacklist)
@@ -392,7 +367,7 @@ if __name__ == "__main__":
     df_cids.loc['AUD'] = ['2010-01-01', '2020-12-31', 0.5, 2]
     df_cids.loc['CAD'] = ['2011-01-01', '2020-11-30', 0, 1]
     df_cids.loc['GBP'] = ['2012-01-01', '2020-11-30', -0.2, 0.5]
-    df_cids.loc['USD'] = ['2013-01-01', '2020-09-30', -0.2, 0.5]
+    df_cids.loc['USD'] = ['2010-01-01', '2020-12-30', -0.2, 0.5]
     df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
 
     df_xcats = pd.DataFrame(index = xcats, columns = ['earliest', 'latest', 'mean_add',
@@ -438,3 +413,15 @@ if __name__ == "__main__":
     df_calc = panel_calculator(df=dfdx,
                                calcs=["CRY = ((np.log(np.square(np.abs(CRY)+0.5)))+1)"],
                                cids=cids, start=start, end=end, blacklist=black)
+
+    # Further testcase.
+    # Testing the inclusion of a mathematical function being applied to a single
+    # cross-section, as opposed to the complete panel.
+
+    filt3 = (dfd['xcat'] == 'XR') | (dfd['xcat'] == 'CRY')
+    dfdx = dfd[filt3]
+    df_calc = panel_calculator(df=dfdx,
+                               calcs=["XR = (XR-np.sqrt(@USD_CRY))",
+                                      "CRY = np.abs(CRY)"],
+                               cids=cids, start=start, end=end,
+                               blacklist=black)
