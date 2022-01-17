@@ -34,6 +34,10 @@ class TestAll(unittest.TestCase):
 
         self.__dict__['blacklist'] = black
 
+    def test_panel_calculator(self):
+
+        self.dataframe_generator()
+
         
 if __name__ == '__main__':
 
