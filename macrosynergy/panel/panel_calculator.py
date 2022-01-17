@@ -28,7 +28,6 @@ def separation(function: str):
 
     return key_value
 
-
 def checkExpression(expression: str):
     """
     There are three aspects of the expression that must be confirmed prior to initiating
@@ -112,7 +111,37 @@ def involved_xcats(xcats: List[str], expression: str):
 
     return indices_dict
 
-def dataframe_pivot(df: pd.DataFrame, category: str):
+def single_cross(c_list: List[str], category_copy: List[str]):
+    """
+    Method designed to break up expression where the mathematical function is applied
+    to a single cross-section. Will return the category and associated cross-section.
+
+    :param <List[str]> c_list: expression held inside a List.
+    :param <List[str]> category_copy: above List but in reverse order.
+
+    :return <tuple(str, str)>:
+    """
+
+    c_index = 0
+    for c in category_copy:
+        if c != "_":
+            c_index += 1
+        else:
+            break
+    cid_index = 0
+    for c in category_copy[c_index:]:
+        if c != "@":
+            cid_index += 1
+        else:
+            break
+
+    xcat = "".join(c_list[-c_index:-1])
+    cid = "".join(c_list[-(cid_index + c_index):-c_index])
+    numpy_formula = "".join(c_list[:-(cid_index + c_index)])
+
+    return xcat, cid, numpy_formula
+
+def dataframe_pivot(df: pd.DataFrame, category: str, single_cid: bool):
     """
     Returns a pivoted dataframe on a single panel: each cross-section will be handled by
     a column. Used to support the recursive evaluation method.
@@ -122,6 +151,8 @@ def dataframe_pivot(df: pd.DataFrame, category: str):
 
     :param <pd.DataFrame> df:
     :param <str> category: category to pivot the dataframe on.
+    :param <bool> single_cid: boolean parameter indicating whether a mathematical
+        function is applied to the complete panel or a single cross-section.
 
     :return <pd.DataFrame>: pivoted dataframe.
     """
@@ -131,14 +162,17 @@ def dataframe_pivot(df: pd.DataFrame, category: str):
         c_list = list(category)
         category_copy = c_list.copy()
         category_copy.reverse()
-        for c in category_copy:
-            if c != "(":
-                c_index += 1
-            else:
-                break
 
-        xcat = "".join(c_list[-c_index:-1])
-        dfx = df[df['xcat'] == xcat]
+        if not single_cid:
+            for c in category_copy:
+                if c != "(":
+                    c_index += 1
+                else:
+                    break
+            xcat = "".join(c_list[-c_index:-1])
+            dfx = df[df['xcat'] == xcat]
+        else:
+            return None
         dfw = dfx.pivot(index='real_date', columns='cid', values='value')
 
         adjustment = category[:-c_index] + "dfw" + ")"
@@ -199,14 +233,22 @@ def evaluateHelp(df: pd.DataFrame, expression: str, index: int):
     elif char.isalpha():
         start = index
 
-        while char.isalpha() or char in ["(", ")", "."]:
+        single_cid = False
+        while char.isalpha() or char in ["(", ")", ".", "@", "_"]:
             index += 1
-            char = expression[index]
+            try:
+                expression[index]
+            except IndexError:
+                break
+            else:
+                char = expression[index]
             if char == "n" and expression[index: (index + 3)] == "np.":
                 return expression[start:index], (index - 2)
+            elif char == "@":
+                single_cid = True
 
         category = expression[start:index]
-        dfw = dataframe_pivot(df=df, category=category)
+        dfw = dataframe_pivot(df=df, category=category, single_cid=single_cid)
         return dfw, index
 
     else:
@@ -267,7 +309,7 @@ def expression_modify(df: pd.DataFrame, indices_dict: dict, expression: str,
     return dfw
 
 def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] = None,
-                     xcats: List[str] = None, start: str = None, end: str = None,
+                     start: str = None, end: str = None,
                      blacklist: dict = None) -> object:
     """
     Calculates panels based on simple operations in input panels.
@@ -278,7 +320,6 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
         category outlined in the xcats parameter. The function will be specified in the
         form of an equation. For instance, "XR = XR + 0.5".
     :param <List[str]> cids: cross sections for which the new panels are calculated.
-    :param <List[str]> xcats: the categories the panel calculator is applied to.
     :param <str> start: earliest date in ISO format. Default is None and earliest date in
         df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df is
@@ -296,33 +337,35 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
         "NEWCAT = (OLDCAT1 + 0.5) * OLDCAT2"
         "NEWCAT = np.log(OLDCAT1) - np.abs(OLDCAT2) ** 1/2"
     Panel calculation can also involve individual indicator series (to be applied
-    to all series in the panel by using the @ as prefix, such as:
+    to all series in the panel by using the @ as prefix), such as:
         "NEWCAT = OLDCAT1 - np.sqrt(@USD_OLDCAT2)"
     If more than one new category is calculated, the resulting panels can be used
     sequentially in the calculations, such as:
         ["NEWCAT1 = 1 + OLDCAT1/100", "NEWCAT2 = OLDCAT2 * NEWCAT1]
 
     """
-    assert isinstance(xcats, list), f"List of categories expected, and not object type:" \
-                                    " {type(xcats)}."
-    assert isinstance(cids, list), f"Cross-sections passed must be held in a List."
-    assert isinstance(calcs, list), "List of functions expected."
-    assert all([isinstance(elem, str) for elem in calcs]), "Elements must be strings."
 
-    dfx = reduce_df(df, xcats=xcats, cids=cids, start=start,
-                    end=end, blacklist=blacklist)
+    assert isinstance(calcs, list), "List of functions expected."
+    assert all([isinstance(elem, str) for elem in calcs]), "Each formula in the panel " \
+                                                           "calculation list must be a" \
+                                                           "string."
+    assert isinstance(cids, list), "List of cross-sections expected."
 
     dict_function = {}
     for calc in calcs:
         separate = separation(calc)
         dict_function[separate[0]] = separate[1]
 
+
+    xcats = list(dict_function.keys())
+    dfx = reduce_df(df, xcats=xcats, cids=cids, start=start,
+                    end=end, blacklist=blacklist)
+
     output_df = []
     unique_categories = dfx['xcat'].unique()
     col_names = ['cid', 'xcat', 'real_date', 'value']
 
     for k, v in dict_function.items():
-        assert v[0] == "(" and v[-1] == ")", "Function must be encased in parenthesis."
         assert checkExpression(v), f"Parenthesis are incorrect in the function passed."
 
         dfw = evaluate(df=dfx, expression=v)
@@ -371,18 +414,26 @@ if __name__ == "__main__":
 
     df_calc = panel_calculator(df=dfdx,
                                calcs=["XR = (np.abs(XR)+0.552)"],
-                               cids=cids, xcats=['XR'], start=start, end=end,
+                               cids=cids, start=start, end=end,
                                blacklist=black)
 
     df_calc = panel_calculator(df=dfdx,
                                calcs=["XR = (np.square(np.abs(XR)+0.5))"],
-                               cids=cids, xcats=['XR'], start=start, end=end,
+                               cids=cids, start=start, end=end,
                                blacklist=black)
 
     # Further testcase.
+    # Exploring the breadth of the panel calculation.
     df_calc = panel_calculator(df=dfdx,
                                calcs=["XR = (np.sqrt(np.square(np.abs(XR)+0.5)))",
                                       "CRY = (np.abs(CRY)-0.5)"],
-                               cids=cids, xcats=['XR', 'CRY'], start=start, end=end,
+                               cids=cids, start=start, end=end,
                                blacklist=black)
-    print(df_calc)
+
+    filt2 = dfd['xcat'] == 'CRY'
+    dfdx = dfd[filt2]
+    df_calc = panel_calculator(df=dfdx, calcs=["CRY = np.square(CRY)"], cids=cids,
+                               start=start, end=end, blacklist=black)
+    df_calc = panel_calculator(df=dfdx,
+                               calcs=["CRY = ((np.log(np.square(np.abs(CRY)+0.5)))+1)"],
+                               cids=cids, start=start, end=end, blacklist=black)
