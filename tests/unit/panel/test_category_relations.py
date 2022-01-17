@@ -88,7 +88,7 @@ class TestAll(unittest.TestCase):
             cr = CategoryRelations(self.dfdx, xcats=['GROWTH', 'INFL'], cids=self.cidx,
                                    freq='M', xcat_aggs=['mean', 'mean'], lag=1,
                                    start='2000-01-01', years=None, blacklist=self.black,
-                                   changes='pchg', n_periods=1)
+                                   xcat1_chg='pchg', n_periods=1)
 
         with self.assertRaises(AssertionError):
             # If the 'changes' parameter is not set to None, the number of periods,
@@ -97,7 +97,7 @@ class TestAll(unittest.TestCase):
             cr = CategoryRelations(self.dfdx, xcats=['GROWTH', 'INFL'], cids=self.cidx,
                                    freq='M', xcat_aggs=['mean', 'mean'], lag=1,
                                    start='2000-01-01', years=None, blacklist=self.black,
-                                   changes='pch', n_periods=None)
+                                   xcat1_chg='pch', n_periods=None)
 
     def test_intersection_cids(self):
 
@@ -162,7 +162,7 @@ class TestAll(unittest.TestCase):
         # returned dataframe will drop by (n_periods * cross_sections).
 
         n_periods = 3
-        df_time_series = CategoryRelations.time_series(original_df, changes='diff',
+        df_time_series = CategoryRelations.time_series(original_df, change='diff',
                                                        n_periods=n_periods,
                                                        shared_cids=shared_cids,
                                                        expln_var='INFL')
@@ -173,7 +173,7 @@ class TestAll(unittest.TestCase):
 
         # Again, test the row logic but on a different testcase.
         n_periods = 6
-        df_time_series = CategoryRelations.time_series(original_df_copy, changes='pch',
+        df_time_series = CategoryRelations.time_series(original_df_copy, change='pch',
                                                        n_periods=n_periods,
                                                        shared_cids=shared_cids,
                                                        expln_var='INFL')
@@ -202,7 +202,7 @@ class TestAll(unittest.TestCase):
         row_test = randint(n_periods, no_rows)
 
         n_periods = 4
-        df_time_series = CategoryRelations.time_series(test_df, changes='diff',
+        df_time_series = CategoryRelations.time_series(test_df, change='diff',
                                                        n_periods=n_periods,
                                                        shared_cids=shared_cids,
                                                        expln_var='INFL')

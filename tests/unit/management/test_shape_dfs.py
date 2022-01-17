@@ -7,6 +7,7 @@ from tests.simulate import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df, categories_df
 from math import ceil, floor
 
+
 class TestAll(unittest.TestCase):
 
     def dataframe_constructor(self):
@@ -160,14 +161,15 @@ class TestAll(unittest.TestCase):
     def test_categories_df_lags(self):
         self.dataframe_constructor()
 
-        dfc = categories_df(self.dfd, xcats=['XR', 'CRY'], cids=self.cids, freq='M',
-                            lag=1, fwin=3, xcat_aggs=['mean', 'last'])
+        dfc = categories_df(self.dfd, xcats=['CRY', 'XR'], cids=self.cids, freq='M',
+                            lag=1, fwin=3, xcat_aggs=['last', 'mean'])
 
         # Check the correct application of 1st series forward (average) window.
         filt1 = (self.dfd['real_date'].dt.year == 2013) & \
                 (self.dfd['real_date'].dt.month.isin([10, 11, 12]))
         filt2 = (self.dfd['cid'] == 'AUD') & (self.dfd['xcat'] == 'XR')
-        x1 = round(float(np.mean(self.dfd[filt1 & filt2].set_index('real_date').resample('M').mean())), 10)
+        x1 = round(float(np.mean(self.dfd[filt1 & filt2].set_index('real_date').
+                                 resample('M').mean())), 10)
 
         x2 = round(float(dfc.loc[('AUD', '2013-10-31'), 'XR']), 10)
         self.assertAlmostEqual(x1, x2)
