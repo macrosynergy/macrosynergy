@@ -136,8 +136,9 @@ def single_cross(c_list: List[str], category_copy: List[str]):
             break
 
     xcat = "".join(c_list[-c_index:-1])
-    cid = "".join(c_list[-(cid_index + c_index):-c_index])
-    numpy_formula = "".join(c_list[:-(cid_index + c_index)])
+    adjust = (c_index + 1)
+    cid = "".join(c_list[-(cid_index + c_index):-adjust])
+    numpy_formula = "".join(c_list[:-(cid_index + adjust)])
 
     return xcat, cid, numpy_formula
 
