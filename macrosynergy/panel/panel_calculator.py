@@ -216,6 +216,7 @@ def evaluateHelp(df: pd.DataFrame, expression: str, index: int):
     :return <pd.DataFrame>: pivoted dataframe with the mathematical calculation applied.
     """
 
+    l_expression = len(expression)
     char = expression[index]
     if char == "(":
 
@@ -262,6 +263,9 @@ def evaluateHelp(df: pd.DataFrame, expression: str, index: int):
                 return expression[start:index], (index - 2)
             elif char == "@":
                 single_cid = True
+
+        if index == l_expression and expression[0] == "(":
+            index -= 1
 
         category = expression[start:index]
         dfw = dataframe_pivot(df=df, category=category, single_cid=single_cid)
@@ -414,7 +418,6 @@ if __name__ == "__main__":
                                calcs=["XRCALC = (XR+np.abs(CRY))"],
                                cids=cids, start=start, end=end,
                                blacklist=black)
-    print(df_calc)
 
     # Further testcase.
     # Exploring the breadth of the panel calculation.
@@ -452,4 +455,3 @@ if __name__ == "__main__":
                                       "XRCALCTWO = np.sqrt(XRCALCONE)"],
                                cids=cids, start=start, end=end,
                                blacklist=black)
-    print(df_calc)
