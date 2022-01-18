@@ -140,34 +140,42 @@ class DataQueryInterface(object):
         select = "instruments"
 
         results = []
-        while True:
-            with requests.get(url=url, cert=(self.crt, self.key), headers=self.headers,
-                              params=params) as r:
-                    last_response = r.text
+        n = 0
+        clause = (n <= 5)
 
-            response = json.loads(last_response)
-
-            dictionary = response[select][0]['attributes'][0]
-
-            if not isinstance(dictionary['time-series'], list):
-                return None
-
-            if not select in response.keys():
-                break
+        while clause:
+            try:
+                r = requests.get(url=url, cert=(self.crt, self.key),
+                                headers=self.headers, params=params)
+            except ConnectionResetError:
+                n += 1
+                time.sleep(0.05)
+                print(f"Server error: will retry. Attempt number: {n}.")
+                continue
             else:
-                results.extend(response[select])
+                last_response = r.text
+                response = json.loads(last_response)
 
-            assert "next" in response['links'][1].keys(), \
-                f"'next' missing from links keys: " \
-                f" {response['links'][1].keys()}"
+                dictionary = response[select][0]['attributes'][0]
 
-            if response["links"][1]["next"] is None:
-                break
+                if not isinstance(dictionary['time-series'], list):
+                    return None
 
-            url = f"{self.base_url:s}{response['links'][1]['next']:s}"
-            params = {}
+                if not select in response.keys():
+                    break
+                else:
+                    results.extend(response[select])
 
-        return results
+                if response["links"][1]["next"] is None:
+                    break
+
+                url = f"{self.base_url:s}{response['links'][1]['next']:s}"
+                params = {}
+
+        if isinstance(results, list):
+            return results
+        else:
+            return None
 
     def _request(self, endpoint: str, tickers: List[str], params: dict,
                  delay: int = None, count: int = 0, start_date: str = None,
