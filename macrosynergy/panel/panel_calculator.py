@@ -29,6 +29,42 @@ def separation(function: str):
 
     return key_value
 
+def involved_xcats(dictionary: dict, xcats_available: List[str]):
+    """
+    Understand the number of categories involved in each specific panel calculation.
+    The chosen work flow, for each expression, is largely predicated on the number of
+    involved categories. For instance, if the function is a unary operation, the work
+    flow required is tractable. In contrast, if multiple categories are involved, the
+    approach has to be more considered.
+
+    :param <dict> dictionary: dictionary formed by splitting the panel calculation on the
+        equality sign.
+    :param <List[str]> xcats_available: sample space of possible categories able to be
+        referenced in each calculation.
+
+    :return <dict>: return a list of the categories that are referenced in the panel
+        calculations. The list of categories must be either be a complete set of the
+        available categories, or a valid subset.
+    """
+
+    xcats_copy = xcats_available.copy()
+    xcats = []
+
+    # Polynomial algorithm.
+    for v in dictionary.values():
+        for xcat in xcats_copy:
+
+            pattern = re.compile(xcat)
+            indices = pattern.finditer(v)
+            try:
+                next(iter(indices))
+            except StopIteration:
+                continue
+            else:
+                xcats.append(xcat)
+
+    return list(set(xcats))
+
 def checkExpression(expression: str):
     """
     There are three aspects of the expression that must be confirmed prior to initiating
@@ -78,47 +114,13 @@ def checkExpression(expression: str):
     else:
         return False
 
-def involved_xcats(xcats: List[str], expression: str):
-    """
-    Understand the number of categories involved in each specific panel calculation and
-    return their respective indices in the expression.
-    The chosen work flow, for each expression, is largely predicated on the number of
-    involved categories. For instance, if the function is a unary operation, the work
-    flow required is tractable. In contrast, if multiple categories are involved, the
-    approach has to be more considered.
-
-    :param <List[str]> xcats: the categories held in the dataframe. The categories
-        referenced in the expression must be a subset of the categories defined in the
-        dataframe.
-    :param <str> expression:
-
-    :return <dict>: the keys will be the categories referenced in the expression, and the
-        values will be their indices.
-    """
-
-    indices_dict = {}
-    for category in xcats:
-
-        pattern = re.compile(category)
-        indices = pattern.finditer(expression)
-
-        groups = []
-        for index in indices:
-            groups.append(index.span())
-        if groups:
-            indices_dict[category] = groups
-        else:
-            continue
-
-    return indices_dict
-
 def single_cross(c_list: List[str], category_copy: List[str]):
     """
     Method designed to break up expression where the mathematical function is applied
     to a single cross-section. Will return the category and associated cross-section.
 
     :param <List[str]> c_list: expression held inside a List.
-    :param <List[str]> category_copy: above List but in reverse order.
+    :param <List[str]> category_copy: above list but in reverse order.
 
     :return <tuple(str, str)>:
     """
@@ -281,6 +283,7 @@ def evaluate(df: pd.DataFrame, expression: str):
     index = 0
 
     output = evaluateHelp(df, expression, index)
+
     if isinstance(output, tuple):
         output = output[0]
     return output
@@ -293,7 +296,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
 
     :param <pd.Dataframe> df: standardized dataframe with following necessary columns:
         'cid', 'xcat', 'real_date' and 'value'.
-    :param <List[str]> calcs:  List containing the functions applied to each respective
+    :param <List[str]> calcs:  list containing the functions applied to each respective
         category outlined in the xcats parameter. The function will be specified in the
         form of an equation. For instance, "XR = XR + 0.5".
     :param <List[str]> cids: cross sections for which the new panels are calculated.
@@ -318,7 +321,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
         "NEWCAT = OLDCAT1 - np.sqrt(@USD_OLDCAT2)"
     If more than one new category is calculated, the resulting panels can be used
     sequentially in the calculations, such as:
-        ["NEWCAT1 = 1 + OLDCAT1/100", "NEWCAT2 = OLDCAT2 * NEWCAT1]
+        ["NEWCAT1 = 1 + OLDCAT1/100", "NEWCAT2 = OLDCAT2 * NEWCAT1"]
 
     """
 
@@ -333,12 +336,13 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
         separate = separation(calc)
         dict_function[separate[0]] = separate[1]
 
-    xcats = list(dict_function.keys())
+    unique_categories = list(df['xcat'].unique())
+    xcats = involved_xcats(dictionary=dict_function, xcats_available=unique_categories)
+
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start,
                     end=end, blacklist=blacklist)
 
     output_df = []
-    unique_categories = dfx['xcat'].unique()
     col_names = ['cid', 'xcat', 'real_date', 'value']
 
     for k, v in dict_function.items():
@@ -348,6 +352,11 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
         df_out = dfw.stack().to_frame("value").reset_index()
         df_out['xcat'] = k
         df_new = df_out.sort_values(['cid', 'real_date'])[col_names]
+
+        # Integrate the newly formed category into the original dataframe allowing it to
+        # be used in other panel calculations.
+        dfx = pd.concat([dfx, df_new])
+        dfx = dfx.reset_index(drop=True)
 
         output_df.append(df_new)
 
@@ -388,40 +397,59 @@ if __name__ == "__main__":
     filt1 = (dfd['xcat'] == 'XR') | (dfd['xcat'] == 'CRY')
     dfdx = dfd[filt1]
 
+    # Start of the testing. Various testcases included to understand the capabilities of
+    # the designed function.
     df_calc = panel_calculator(df=dfdx,
-                               calcs=["XR = (np.abs(XR)+0.552)"],
+                               calcs=["XRCALC = (np.abs(XR)+0.552)"],
                                cids=cids, start=start, end=end,
                                blacklist=black)
 
     df_calc = panel_calculator(df=dfdx,
-                               calcs=["XR = (np.square(np.abs(XR)+0.5))"],
+                               calcs=["XRCALC = (np.square(np.abs(XR)+0.5))"],
                                cids=cids, start=start, end=end,
                                blacklist=black)
+
+    # Testing multiple categories being referenced in a single expression.
+    df_calc = panel_calculator(df=dfdx,
+                               calcs=["XRCALC = (XR+np.abs(CRY))"],
+                               cids=cids, start=start, end=end,
+                               blacklist=black)
+    print(df_calc)
 
     # Further testcase.
     # Exploring the breadth of the panel calculation.
     df_calc = panel_calculator(df=dfdx,
-                               calcs=["XR = (np.sqrt(np.square(np.abs(XR)+0.5)))",
-                                      "CRY = (np.abs(CRY)-0.5)"],
+                               calcs=["XRCALC = (np.sqrt(np.square(np.abs(XR)+0.5)))",
+                                      "CRYCALC = (np.abs(CRY)-0.5)"],
                                cids=cids, start=start, end=end,
                                blacklist=black)
 
     filt2 = dfd['xcat'] == 'CRY'
     dfdx = dfd[filt2]
-    df_calc = panel_calculator(df=dfdx, calcs=["CRY = np.square(CRY)"], cids=cids,
+    df_calc = panel_calculator(df=dfdx, calcs=["CRYCALC = np.square(CRY)"], cids=cids,
                                start=start, end=end, blacklist=black)
-    df_calc = panel_calculator(df=dfdx,
-                               calcs=["CRY = ((np.log(np.square(np.abs(CRY)+0.5)))+1)"],
-                               cids=cids, start=start, end=end, blacklist=black)
+
+    calc_list = ["CRYCALC = ((np.log(np.square(np.abs(CRY)+0.5)))+1)"]
+    df_calc = panel_calculator(df=dfdx, calcs=calc_list, cids=cids, start=start,
+                               end=end, blacklist=black)
 
     # Further testcase.
     # Testing the inclusion of a mathematical function being applied to a single
     # cross-section, as opposed to the complete panel.
-
     filt3 = (dfd['xcat'] == 'XR') | (dfd['xcat'] == 'CRY')
     dfdx = dfd[filt3]
     df_calc = panel_calculator(df=dfdx,
-                               calcs=["XR = (XR-np.sqrt(@USD_CRY))",
-                                      "CRY = np.abs(CRY)"],
+                               calcs=["XRCALC = (XR-np.sqrt(@USD_CRY))",
+                                      "CRYCALC = np.abs(CRY)"],
                                cids=cids, start=start, end=end,
                                blacklist=black)
+
+    # Further testcase.
+    # Testing the feature of using the internally calculated category in a subsequent
+    # calculation. Example: "NEWCAT2 = (OLDCAT2*NEWCAT1)"
+    df_calc = panel_calculator(df=dfdx,
+                               calcs=["XRCALCONE = (XR+100)",
+                                      "XRCALCTWO = np.sqrt(XRCALCONE)"],
+                               cids=cids, start=start, end=end,
+                               blacklist=black)
+    print(df_calc)
