@@ -3,6 +3,7 @@ import unittest
 import numpy as np
 import pandas as pd
 from tests.simulate import make_qdf
+from macrosynergy.panel.panel_calculator import panel_calculator
 
 class TestAll(unittest.TestCase):
 
@@ -37,6 +38,16 @@ class TestAll(unittest.TestCase):
     def test_panel_calculator(self):
 
         self.dataframe_generator()
+
+        black = {'AUD': ['2000-01-01', '2003-12-31'],
+                 'GBP': ['2018-01-01', '2100-01-01']}
+
+        start = '2010-01-01'
+        end = '2020-12-31'
+        df_calc = panel_calculator(df=self.dfd, calcs=["XRCALC = (XR+CRY)"],
+                                   cids=self.cids, start=start, end=end,
+                                   blacklist=black)
+        print(df_calc)
 
         
 if __name__ == '__main__':
