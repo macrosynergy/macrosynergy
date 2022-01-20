@@ -111,6 +111,38 @@ def first_index(df_row_no: int, column: pd.Series, min_obs: int):
 
     return df_row_no, first_date, date_index
 
+def in_sampling(column: pd.Series, neutral: str, active_days: int, date_index: int,
+                min_obs: int):
+    """
+    To prevent loss of information, calculate the first minimum number of observation
+    days using an in-sampling technique (time-series data is realised, and subsequently
+    not computed on a rolling basis).
+
+    :param <pd.Series> column: individual cross-section's time-series data.
+    :param <str> neutral:
+    :param <int> active_days: number of active days the cross-section is defined over.
+    :param <int> date_index: index of the first active trading day.
+    :param <int> min_obs:
+
+    """
+
+    iis_period = column.iloc[:min_obs]
+    if neutral == "mean":
+        neutral_iis = iis_period.mean()
+        os_neutral = np.array([column.iloc[0:(i + 1)].mean()
+                               for i in range(active_days)])
+    else:
+        neutral_iis = iis_period.median()
+        os_neutral = np.array([column.iloc[0:(i + 1)].median()
+                               for i in range(active_days)])
+
+    iis_neutral = np.repeat(neutral_iis, min_obs)
+    os_neutral = os_neutral[min_obs:]
+    prior_to_first = np.empty(date_index)
+    prior_to_first[:] = np.nan
+    arr = np.concatenate([prior_to_first, iis_neutral, os_neutral])
+
+    return arr
 
 def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = False,
                   min_obs: int = 261, iis: bool = False):
@@ -157,17 +189,10 @@ def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fa
                     arr_neutral[date_index:(date_index + min_obs), i] = np.nan
 
                 elif sequential and iis:
-                    iis_period = column.iloc[:min_obs]
-                    mean_iis = iis_period.mean()
-                    iis_neutral = np.repeat(mean_iis, min_obs)
-
-                    os_neutral = np.array([column.iloc[0:(i + 1)].mean()
-                                           for i in range(df_row_no)])
-                    os_neutral = os_neutral[min_obs:]
-                    prior_to_first = np.empty(date_index)
-                    prior_to_first[:] = np.nan
-                    arr_neutral[:, i] = np.concatenate([prior_to_first,
-                                                        iis_neutral, os_neutral])
+                    arr_neutral[:, i] = in_sampling(column=column, neutral=neutral,
+                                                    active_days=df_row_no,
+                                                    date_index=date_index,
+                                                    min_obs=min_obs)
                 else:
                     arr_neutral[date_index:, i] = np.repeat(column.mean(), df_row_no)
                     arr_neutral[:date_index, i] = np.nan
@@ -182,17 +207,10 @@ def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fa
                     arr_neutral[date_index:(date_index + min_obs), i] = np.nan
 
                 elif sequential and iis:
-                    iis_period = column.iloc[:min_obs]
-                    median_iis = iis_period.median()
-                    iis_neutral = np.repeat(median_iis, min_obs)
-
-                    os_neutral = np.array([column.iloc[0:(i + 1)].median()
-                                           for i in range(df_row_no)])
-                    os_neutral = os_neutral[min_obs:]
-                    prior_to_first = np.empty(date_index)
-                    prior_to_first[:] = np.nan
-                    arr_neutral[:, i] = np.concatenate([prior_to_first,
-                                                        iis_neutral, os_neutral])
+                    arr_neutral[:, i] = in_sampling(column=column, neutral=neutral,
+                                                    active_days=df_row_no,
+                                                    date_index=date_index,
+                                                    min_obs=min_obs)
                 else:
                     arr_neutral[date_index:, i] = np.repeat(column.median(), df_row_no)
                     arr_neutral[:date_index, i] = np.nan
