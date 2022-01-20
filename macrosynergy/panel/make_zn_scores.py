@@ -4,6 +4,21 @@ from typing import List
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 
+def func_executor(df: pd.DataFrame, neutral: str, n: int):
+    """
+    Function used to clean up the repetitive code in the below methods. Will produce the
+    evolving neutral level.
+
+    :param <pd.DataFrame> df:
+    :param <str> neutral:
+    :param <int> n: number of dates the neutral level is computed over.
+    """
+
+    if neutral == "mean":
+        return np.array([df.iloc[0:(i + 1), :].stack().mean() for i in range(n)])
+    else:
+        return np.array([df.iloc[0:(i + 1), :].stack().median() for i in range(n)])
+
 def pan_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = False,
                 min_obs: int = 261, iis: bool = False):
 
@@ -37,32 +52,33 @@ def pan_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fals
         per row. Therefore, a one-dimensional array will be returned whose length matches
         the row dimension of the dataframe df.
     """
+    no_rows = df.shape[0]
 
     if neutral == 'mean':
         if sequential and not iis:
-            ar_neutral = np.array([df.iloc[0:(i + 1), :].stack().mean()
-                                   for i in range(df.shape[0])])
+            ar_neutral = func_executor(df=df, neutral=neutral,
+                                       n=no_rows)
             ar_neutral[:min_obs] = np.nan
 
         elif sequential and iis:
             iis_neutral = np.repeat(df.iloc[0:min_obs].stack().mean(),
                                     min_obs)
-            os_neutral = np.array([df.iloc[0:(i + 1), :].stack().mean()
-                                   for i in range(df.shape[0])])
+            os_neutral = func_executor(df=df, neutral=neutral,
+                                       n=no_rows)
             os_neutral = os_neutral[min_obs:]
             ar_neutral = np.concatenate([iis_neutral, os_neutral])
         else:  
-            ar_neutral = np.repeat(df.stack().mean(), df.shape[0])
+            ar_neutral = np.repeat(df.stack().mean(), no_rows)
 
     elif neutral == 'median':  
         if sequential and not iis:
-            ar_neutral = np.array([df.iloc[0:(i + 1), :].stack().median()
-                                   for i in range(df.shape[0])])
+            ar_neutral = func_executor(df=df, neutral=neutral,
+                                       n=no_rows)
             ar_neutral[:min_obs] = np.nan
         elif sequential and iis:
             iis_neutral = np.repeat(df.iloc[0:min_obs].stack().median(), min_obs)
-            os_neutral = np.array([df.iloc[0:(i + 1), :].stack().median()
-                                   for i in range(df.shape[0])])
+            os_neutral = func_executor(df=df, neutral=neutral,
+                                       n=no_rows)
             os_neutral = os_neutral[min_obs:]
             ar_neutral = np.concatenate([iis_neutral, os_neutral])
         else:  
