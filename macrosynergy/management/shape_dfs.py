@@ -12,7 +12,7 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
     """
     Filter dataframe by xcats and cids and notify about missing xcats and cids.
 
-    :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
+    :param <pd.Dataframe> df: standardized dataframe with the necessary columns:
         'cid', 'xcats', 'real_date'.
     :param <List[str]> xcats: extended categories to be checked on. Default is all in the
         dataframe.

@@ -91,16 +91,15 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
 
     # F. Calculate the panels and collect
 
-    for i, calc in enumerate(calcs):
-        new_xcat = list(ops.keys())[i]
-        exec(calc)  # execute panel operation based on string
-        exec(f'global dfw_add; dfw_add = {new_xcat}')  # convenience assignment
+    for new_xcat, formula in ops.items():
+        dfw_add = eval(formula)
         df_add = pd.melt(dfw_add.reset_index(), id_vars=['real_date'])
         df_add['xcat'] = new_xcat
-        if i == 0:
+        if new_xcat == list(ops.keys())[0]:
             df_out = df_add[cols]
         else:
             df_out = df_out.append(df_add[cols])
+        exec(f'{new_xcat} = dfw_add')  # we main need a df for subsequent calculations
 
     return df_out
 
