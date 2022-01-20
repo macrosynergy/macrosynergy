@@ -217,6 +217,25 @@ def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fa
         
     return arr_neutral
 
+def iis_std(dfx: pd.DataFrame, min_obs: int):
+    """
+    Function designed to compute the standard deviations but accounts for in-sampling
+    period. The in-sampling standard deviation will be a fixed value.
+
+    :param <pd.DataFrame> dfx: dataFrame recording the differences from the neutral
+        level.
+    :param <int> min_obs:
+
+    """
+    no_dates = dfx.shape[0]
+
+    iis_dfx = dfx.iloc[0:min_obs, :]
+    iis_sds = np.array(iis_dfx.stack().abs().mean())
+    ar_sds = np.array([dfx.iloc[0:(i + 1), :].stack().abs().mean()
+                       for i in range(no_dates)])
+    ar_sds[:min_obs] = iis_sds
+
+    return ar_sds
 
 def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
                    start: str = None, end: str = None, blacklist: dict = None,
@@ -284,9 +303,12 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     if pan_weight > 0:
 
         ar_neutral = pan_neutral(dfw, neutral, sequential, min_obs, iis)
-        dfx = dfw.sub(ar_neutral, axis='rows')  # df of excess values (minus neutrals)
-        ar_sds = np.array([dfx.iloc[0:(i + 1), :].stack().abs().mean()
-                           for i in range(dfx.shape[0])])
+        dfx = dfw.sub(ar_neutral, axis='rows')
+        if iis:
+            ar_sds = iis_std(dfx=dfx, min_obs=min_obs)
+        else:
+            ar_sds = np.array([dfx.iloc[0:(i + 1), :].stack().abs().mean()
+                                for i in range(dfx.shape[0])])
 
         dfw_zns_pan = dfx.div(ar_sds, axis='rows')
     else:
