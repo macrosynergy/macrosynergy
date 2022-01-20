@@ -174,9 +174,9 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
             dfw = df[df['xcat'] == xcats[i]].pivot(index='real_date', columns='cid',
                                                    values=val)
             dfw = dfw.resample(freq).agg(xcat_aggs[i])
-            if (i == 0) & (lag > 0):  # first category (explanatory) is shifted forward
+            if (i == 0) and (lag > 0):  # first category (explanatory) is shifted forward
                 dfw = dfw.shift(lag)
-            if (i == 1) & (fwin > 0):
+            if (i == 1) and (fwin > 0):
                 dfw = dfw.rolling(window=fwin).mean().shift(1 - fwin)
             dfx = pd.melt(dfw.reset_index(), id_vars=['real_date'],
                           value_vars=cids, value_name=val)
