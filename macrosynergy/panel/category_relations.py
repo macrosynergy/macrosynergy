@@ -56,7 +56,7 @@ class CategoryRelations:
                  fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean'),
                  xcat1_chg: str = None, n_periods: int = 1):
 
-        """Constructs all attributes for the category relationship to be analyzed"""
+        """Constructs all attributes for the category relationship to be analyzed."""
 
         self.xcats = xcats
         self.cids = cids 
@@ -86,7 +86,7 @@ class CategoryRelations:
             self.df = CategoryRelations.time_series(df, change=xcat1_chg,
                                                     n_periods=n_periods,
                                                     shared_cids=shared_cids,
-                                                    expln_var=xcats[1])
+                                                    expln_var=xcats[0])
         else:
             self.df = df
 
@@ -124,7 +124,7 @@ class CategoryRelations:
         additional time-series metrics such as differencing or % change (pchg).
 
         :param <pd.DataFrame> df: multi-index DataFrame hosting the two categories: first
-            column represents the dependent variable, second column hosts the explanatory
+            column represents the explanatory variable; second column hosts the dependent
             variable. The dataframe's index is the real-date and cross-section.
         :param <str> change:
         :param <int> n_periods:
