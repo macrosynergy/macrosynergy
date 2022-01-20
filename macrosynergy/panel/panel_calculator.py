@@ -1,4 +1,3 @@
-
 import numpy as np
 import pandas as pd
 from typing import List
@@ -8,41 +7,17 @@ import re
 import random
 from queue import LifoQueue
 
-def separation(function: str):
-    """
-    Method used to split the mathematical function on the equal sign to return two
-    separate strings. For example, NEWCAT = ((OLDCAT1+0.5)*OLDCAT2) will be returned as a
-    tuple (NEWCAT, ((OLDCAT1+0.5)*OLDCAT2)).
-
-    param <str> function: mathematical function applied to a specific panel.
-
-    :return <tuple>: (NEWCAT, ((OLDCAT1+0.5)*OLDCAT2)).
-    """
-
-    clean = lambda elem: elem.strip()
-
-    split = function.split(' = ')
-    if len(split) != 2:
-        assert "Expected form of formula is y = f(x)."
-    else:
-        key_value = tuple(map(clean, split))
-
-    return key_value
 
 def involved_xcats(dictionary: dict, xcats_available: List[str]):
     """
-    Understand the number of categories involved in each specific panel calculation.
-    The chosen work flow, for each expression, is largely predicated on the number of
-    involved categories. For instance, if the function is a unary operation, the work
-    flow required is tractable. In contrast, if multiple categories are involved, the
-    approach has to be more considered.
+    Collect categories involved in panel calculations
 
-    :param <dict> dictionary: dictionary formed by splitting the panel calculation on the
-        equality sign.
+    :param <dict> dictionary: keys of new category names and values of related formula
+        in string format.
     :param <List[str]> xcats_available: sample space of possible categories able to be
         referenced in each calculation.
 
-    :return <dict>: return a list of the categories that are referenced in the panel
+    :return <dict>: list of the categories that are referenced in the panel
         calculations. The list of categories must be either be a complete set of the
         available categories, or a valid subset.
     """
@@ -64,6 +39,7 @@ def involved_xcats(dictionary: dict, xcats_available: List[str]):
                 xcats.append(xcat)
 
     return list(set(xcats))
+
 
 def checkExpression(expression: str):
     """
@@ -114,6 +90,7 @@ def checkExpression(expression: str):
     else:
         return False
 
+
 def single_cross(c_list: List[str], category_copy: List[str]):
     """
     Method designed to break up expression where the mathematical function is applied
@@ -149,6 +126,7 @@ def single_cross(c_list: List[str], category_copy: List[str]):
     numpy_formula = "".join(c_list[:-(cid_index + adjust)])
 
     return xcat, cid, numpy_formula
+
 
 def dataframe_pivot(df: pd.DataFrame, category: str, single_cid: bool):
     """
@@ -198,6 +176,7 @@ def dataframe_pivot(df: pd.DataFrame, category: str, single_cid: bool):
         dfx = df[df['xcat'] == category]
         dfw = dfx.pivot(index='real_date', columns='cid', values='value')
         return dfw
+
 
 def evaluateHelp(df: pd.DataFrame, expression: str, index: int):
     """
@@ -274,6 +253,7 @@ def evaluateHelp(df: pd.DataFrame, expression: str, index: int):
     else:
         return 0
 
+
 def evaluate(df: pd.DataFrame, expression: str):
     """
     Driver function to initiate the recursive algorithm. Used to define the index
@@ -292,18 +272,20 @@ def evaluate(df: pd.DataFrame, expression: str):
         output = output[0]
     return output
 
+
 def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] = None,
                      start: str = None, end: str = None,
-                     blacklist: dict = None) -> object:
+                     blacklist: dict = None):
     """
-    Calculates panels based on simple operations in input panels.
+    Calculates new data panels through operations on existing panels.
 
     :param <pd.Dataframe> df: standardized dataframe with following necessary columns:
         'cid', 'xcat', 'real_date' and 'value'.
-    :param <List[str]> calcs:  list containing the functions applied to each respective
-        category outlined in the xcats parameter. The function will be specified in the
-        form of an equation. For instance, "XR = XR + 0.5".
-    :param <List[str]> cids: cross sections for which the new panels are calculated.
+    :param <List[str]> calcs:  list of formulas denoting operations on panels of
+        categories. Words in capital letters denote category panels.
+        Otherwise the formulas can include numpy functions and standard binary operators.
+        See notes below.
+    :param <List[str]> cids: cross sections over which the panels are defined.
     :param <str> start: earliest date in ISO format. Default is None and earliest date in
         df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df is
@@ -316,29 +298,30 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
         format, i.e the columns 'cid', 'xcat', 'real_date' and 'value'.
 
     Notes:
-    Panel calculation strings can use functions and unary mathematical operators
-    in accordance with numpy convention to indicate the desired calculation such as:
-        "NEWCAT = (OLDCAT1 + 0.5) * OLDCAT2"
-        "NEWCAT = np.log(OLDCAT1) - np.abs(OLDCAT2) ** 1/2"
+    Panel calculation strings can use numpy functions and unary/binary operators go
+    category panels, whereby the category is indicated by capital letters, underscores
+    and numbers.
+    Calculated category and panel operations must be separated by '='.
+    "NEWCAT = (OLDCAT1 + 0.5) * OLDCAT2"
+    "NEWCAT = np.log(OLDCAT1) - np.abs(OLDCAT2) ** 1/2"
     Panel calculation can also involve individual indicator series (to be applied
     to all series in the panel by using the @ as prefix), such as:
-        "NEWCAT = OLDCAT1 - np.sqrt(@USD_OLDCAT2)"
+    "NEWCAT = OLDCAT1 - np.sqrt(@USD_OLDCAT2)"
     If more than one new category is calculated, the resulting panels can be used
     sequentially in the calculations, such as:
-        ["NEWCAT1 = 1 + OLDCAT1/100", "NEWCAT2 = OLDCAT2 * NEWCAT1"]
+    ["NEWCAT1 = 1 + OLDCAT1/100", "NEWCAT2 = OLDCAT2 * NEWCAT1"]
 
     """
 
     assert isinstance(calcs, list), "List of functions expected."
-    assert all([isinstance(elem, str) for elem in calcs]), "Each formula in the panel " \
-                                                           "calculation list must be a" \
-                                                           "string."
+    assert all([isinstance(elem, str) for elem in calcs]),\
+        "Each formula in the panel calculation list must be a string."
     assert isinstance(cids, list), "List of cross-sections expected."
 
     dict_function = {}
     for calc in calcs:
-        separate = separation(calc)
-        dict_function[separate[0]] = separate[1]
+        calc_parts = calc.split('=', maxsplit=1)
+        dict_function[calc_parts[0].strip()] = calc_parts[1].strip()
 
     unique_categories = list(df['xcat'].unique())
     xcats = involved_xcats(dictionary=dict_function, xcats_available=unique_categories)
@@ -404,9 +387,8 @@ if __name__ == "__main__":
     # Start of the testing. Various testcases included to understand the capabilities of
     # the designed function.
     df_calc = panel_calculator(df=dfdx,
-                               calcs=["XRCALC = (np.abs(XR)+0.552)"],
-                               cids=cids, start=start, end=end,
-                               blacklist=black)
+                               calcs=["XRCALC = (np.abs(XR)+0.552"],
+                               cids=cids, start=start, end=end)
 
     df_calc = panel_calculator(df=dfdx,
                                calcs=["XRCALC = (np.square(np.abs(XR)+0.5))"],
