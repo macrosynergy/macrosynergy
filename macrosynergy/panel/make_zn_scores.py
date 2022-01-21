@@ -88,7 +88,23 @@ def pan_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fals
 
     return ar_neutral
 
-def first_index(df_row_no: int, column: pd.Series, min_obs: int):
+def first_value(column: pd.Series):
+    """
+    Returns the integer index at which the series' first realised value occurs.
+
+    :param: < pd.Series > column:
+
+    return <int> first_index:
+    """
+
+    index = column.index
+    date = column.first_valid_index()
+    date_index = next(iter(np.where(index == date)[0]))
+
+    return date_index
+
+
+def index_info(df_row_no: int, column: pd.Series, min_obs: int):
     """
     Method used to determine the first date where the cross-section has a realised value.
     Will vary across the panel.
@@ -100,19 +116,17 @@ def first_index(df_row_no: int, column: pd.Series, min_obs: int):
     :param: <pd.Series> column: individual cross-section's data-series.
     :param: <int> min_obs:
 
+    :return <int>:
     """
 
-    index = column.index
-    date = column.first_valid_index()
-    date_index = next(iter(np.where(index == date)[0]))
-
+    date_index = first_value(column)
     df_row_no -= date_index
     first_date = date_index + min_obs
 
     return df_row_no, first_date, date_index
 
-def in_sampling(column: pd.Series, neutral: str, active_days: int, date_index: int,
-                min_obs: int):
+def in_sampling(column: pd.Series, neutral: str, active_days: int,
+                date_index: int, min_obs: int):
     """
     To prevent loss of information, calculate the first minimum number of observation
     days using an in-sampling technique (time-series data is realised, and subsequently
@@ -174,9 +188,9 @@ def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fa
 
             column = df.iloc[:, i]
             original_index_no = no_dates
-            df_row_no, first_date, date_index = first_index(df_row_no=original_index_no,
-                                                            column=column,
-                                                            min_obs=min_obs)
+            df_row_no, first_date, date_index = index_info(df_row_no=original_index_no,
+                                                           column=column,
+                                                           min_obs=min_obs)
 
             column = column[date_index:]
             if neutral == "mean":
@@ -217,7 +231,7 @@ def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fa
         
     return arr_neutral
 
-def iis_std(dfx: pd.DataFrame, min_obs: int):
+def iis_std_panel(dfx: pd.DataFrame, min_obs: int, iis: bool = True):
     """
     Function designed to compute the standard deviations but accounts for in-sampling
     period. The in-sampling standard deviation will be a fixed value.
@@ -225,17 +239,47 @@ def iis_std(dfx: pd.DataFrame, min_obs: int):
     :param <pd.DataFrame> dfx: dataFrame recording the differences from the neutral
         level.
     :param <int> min_obs:
+    :param <bool> iis:
 
+    :return <np.ndarray> ar_sds: an array of daily standard deviations.
     """
     no_dates = dfx.shape[0]
 
-    iis_dfx = dfx.iloc[0:min_obs, :]
-    iis_sds = np.array(iis_dfx.stack().abs().mean())
     ar_sds = np.array([dfx.iloc[0:(i + 1), :].stack().abs().mean()
                        for i in range(no_dates)])
-    ar_sds[:min_obs] = iis_sds
+    if iis:
+        iis_dfx = dfx.iloc[0:min_obs, :]
+        iis_sds = np.array(iis_dfx.stack().abs().mean())
+        ar_sds[:min_obs] = iis_sds
 
     return ar_sds
+
+def iis_std_cross(column: pd.Series, min_obs: int, date_index: int = 0,
+                  iis: bool = True):
+    """
+    Standard deviation for cross-sectional zn_scores. Will account for the in-sampling
+    period.
+
+    :param <pd.Series> column: individual cross-section's deviation from the respective
+        cross-section's neutral level.
+    :param <int> min_obs:
+    :param <int> date_index: index of the first realised value for each series. Only
+        applicable for cross-sectional zn_scores.
+
+    :return <np.ndarray> ar_sds:
+    """
+
+    no_dates = column.size
+    ar_sds = np.array([column[0:(j + 1)].abs().mean() for j in range(no_dates)])
+
+    if iis:
+        iis_end_date = date_index + min_obs
+        iis_column = column[date_index:iis_end_date]
+        iis_sds = np.array(iis_column.abs().mean())
+        ar_sds[date_index: iis_end_date] = iis_sds
+
+    return ar_sds
+
 
 def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
                    start: str = None, end: str = None, blacklist: dict = None,
@@ -304,12 +348,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
         ar_neutral = pan_neutral(dfw, neutral, sequential, min_obs, iis)
         dfx = dfw.sub(ar_neutral, axis='rows')
-        if iis:
-            ar_sds = iis_std(dfx=dfx, min_obs=min_obs)
-        else:
-            ar_sds = np.array([dfx.iloc[0:(i + 1), :].stack().abs().mean()
-                                for i in range(dfx.shape[0])])
-
+        ar_sds = iis_std_panel(dfx=dfx, min_obs=min_obs, iis=iis)
         dfw_zns_pan = dfx.div(ar_sds, axis='rows')
     else:
         dfw_zns_pan = dfw * 0
@@ -319,12 +358,14 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         arr_neutral = cross_neutral(dfw, neutral, sequential, min_obs, iis)
         dfx = dfw.sub(arr_neutral, axis='rows')
 
-        ar_sds = np.empty((no_dates, len(cross_sections)))
-        # Produce cross-section specific deviations around the neutral value.
-        for i in range(len(cross_sections)):
+        no_cids = len(cross_sections)
+        ar_sds = np.empty((no_dates, no_cids))
+
+        for i in range(no_cids):
             column = dfx.iloc[:, i]
-            ar_sds[:, i] = np.array([column[0:(j + 1)].abs().mean()
-                                     for j in range(no_dates)])
+            date_index = first_value(column)
+            ar_sds[:, i] = iis_std_cross(column=column, min_obs=min_obs,
+                                         date_index=date_index, iis=iis)
         dfw_zns_css = dfx.div(ar_sds, axis='rows')
     else:
         dfw_zns_css = dfw * 0
