@@ -7,6 +7,26 @@ import re
 import random
 from queue import LifoQueue
 
+def separation(function: str):
+    """
+    Method used to split the mathematical function on the equal sign to return two
+    separate strings. For example NEWCAT = ((OLDCAT1+0.5)*OLDCAT2) will be returned as a
+    tuple (NEWCAT, ((OLDCAT1+0.5)*OLDCAT2)).
+
+    param: <str> function: mathematical function applied to a specific panel.
+
+    :return <tuple>: (NEWCAT, ((OLDCAT1+0.5)*OLDCAT2))
+    """
+
+    clean = lambda elem: elem.strip()
+
+    split = function.split(' = ')
+    if len(split) != 2:
+        assert "Expected form of formula is y = f(x)."
+    else:
+        key_value = tuple(map(clean, split))
+
+    return key_value
 
 def involved_xcats(dictionary: dict, xcats_available: List[str]):
     """
@@ -320,8 +340,8 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
 
     dict_function = {}
     for calc in calcs:
-        calc_parts = calc.split('=', maxsplit=1)
-        dict_function[calc_parts[0].strip()] = calc_parts[1].strip()
+        separate = separation(calc)
+        dict_function[separate[0]] = separate[1]
 
     unique_categories = list(df['xcat'].unique())
     xcats = involved_xcats(dictionary=dict_function, xcats_available=unique_categories)
