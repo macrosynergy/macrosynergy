@@ -4,10 +4,8 @@ import numpy as np
 import pandas as pd
 import warnings
 from tests.simulate import make_qdf
-from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.panel.make_zn_scores import *
-from random import randint, choice, shuffle, seed
-from collections import defaultdict
+
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
