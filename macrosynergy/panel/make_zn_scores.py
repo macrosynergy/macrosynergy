@@ -188,25 +188,21 @@ def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fa
 
             column = df.iloc[:, i]
             original_index_no = no_dates
-            df_row_no, first_date, date_index = index_info(df_row_no=original_index_no,
-                                                           column=column,
+            df_row_no, first_date, date_index = index_info(original_index_no, column,
                                                            min_obs=min_obs)
-
             column = column[date_index:]
             if neutral == "mean":
                 if sequential and not iis:
                     mean_arr = np.array([column[0:(j + 1)].mean()
-                                                for j in range(df_row_no)])
+                                         for j in range(df_row_no)])
 
                     arr_neutral[date_index:, i] = mean_arr
                     arr_neutral[:date_index, i] = np.nan
                     arr_neutral[date_index:(date_index + min_obs), i] = np.nan
 
                 elif sequential and iis:
-                    arr_neutral[:, i] = in_sampling(column=column, neutral=neutral,
-                                                    active_days=df_row_no,
-                                                    date_index=date_index,
-                                                    min_obs=min_obs)
+                    arr_neutral[:, i] = in_sampling(column, neutral, df_row_no,
+                                                    date_index, min_obs)
                 else:
                     arr_neutral[date_index:, i] = np.repeat(column.mean(), df_row_no)
                     arr_neutral[:date_index, i] = np.nan
@@ -221,10 +217,8 @@ def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fa
                     arr_neutral[date_index:(date_index + min_obs), i] = np.nan
 
                 elif sequential and iis:
-                    arr_neutral[:, i] = in_sampling(column=column, neutral=neutral,
-                                                    active_days=df_row_no,
-                                                    date_index=date_index,
-                                                    min_obs=min_obs)
+                    arr_neutral[:, i] = in_sampling(column, neutral, df_row_no,
+                                                    date_index, min_obs)
                 else:
                     arr_neutral[date_index:, i] = np.repeat(column.median(), df_row_no)
                     arr_neutral[:date_index, i] = np.nan
@@ -348,7 +342,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
         ar_neutral = pan_neutral(dfw, neutral, sequential, min_obs, iis)
         dfx = dfw.sub(ar_neutral, axis='rows')
-        ar_sds = iis_std_panel(dfx=dfx, min_obs=min_obs, iis=iis)
+        ar_sds = iis_std_panel(dfx, min_obs, iis)
         dfw_zns_pan = dfx.div(ar_sds, axis='rows')
     else:
         dfw_zns_pan = dfw * 0
@@ -364,8 +358,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         for i in range(no_cids):
             column = dfx.iloc[:, i]
             date_index = first_value(column)
-            ar_sds[:, i] = iis_std_cross(column=column, min_obs=min_obs,
-                                         date_index=date_index, iis=iis)
+            ar_sds[:, i] = iis_std_cross(column, min_obs, date_index, iis)
         dfw_zns_css = dfx.div(ar_sds, axis='rows')
     else:
         dfw_zns_css = dfw * 0
