@@ -13,20 +13,20 @@ from macrosynergy.management.shape_dfs import categories_df
 class CategoryRelations:
     """Class for analyzing and visualizing two categories across a panel
 
-    :param <pd.Dataframe> df: standardized data frame with following necessary columns:
+    :param <pd.Dataframe> df: standardized data frame with the necessary columns:
         'cid', 'xcat', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: Exactly two extended categories to be checked on.
-        Typically the first category is the explanatory variable and the second category
-        the explained variable.
-    :param <List[str]> cids: cross sections for which the category relation is being
-        checked. Default is all in the dataframe.
-    :param <str> start: earliest date in ISO format. Default is None and earliest date
-        in df is used.
-    :param <str> end: latest date in ISO format. Default is None and latest date in df
-        is used.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from
-        the dataframe.
-    :param <int> years: Number of years over which data are aggregate. Supersedes freq
+        If there is a hypothesized explanatory-dependent relation, the first category
+        is the explanatory variable and the second category the explained variable.
+    :param <List[str]> cids: cross-sections for which the category relation is being
+        analyzed. Default is all in the dataframe.
+    :param <str> start: earliest date in ISO format. Default is None in which case the
+        earliest date in the df will be used.
+    :param <str> end: latest date in ISO format. Default is None in which case the
+        latest date in the df will be used.
+    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
+        the analysis.
+    :param <int> years: Number of years over which data are aggregated. Supersedes freq
         and does not allow lags, Default is None, meaning no multi-year aggregation.
         Note: for single year labelled plots, better use freq='A' for cleaner labels.
     :param <str> val: name of column that contains the values of interest. Default is
@@ -35,8 +35,9 @@ class CategoryRelations:
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
     :param <int> lag: Lag (delay of arrival) of first (explanatory) category in periods
         as set by freq. Default is 0.
-        Note: for analyses with explanatory and dependent categories, the first takes
-        the role of the explanatory.
+        Importantly, for analyses with explanatory and dependent categories, the first
+        takes the role of the explanatory and a positive lag means that the explanatory
+        values will be deferred into the future.
     :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for
         both.
     :param <str> xcat1_chg: time series change applied to first category.
@@ -45,8 +46,16 @@ class CategoryRelations:
         periods determined by `n_periods`.
     :param <int> n_periods: number of periods over which changes of the first category
         have been calculated. Default is 1.
-    :param <int> fwin: Forward moving average window of second category. Default is 1, i.e
-        no average.
+    :param <int> fwin: Forward moving average window of second category. Default is 1,
+        i.e no average.
+        Importantly, for analyses with explanatory and dependent categories, the second
+        takes the role of the dependent and a forward window means that the dependent
+        values average forward into the future.
+    :param: <List[float]> xcat_trims: two-element list with maximum absolute values
+        for the two categories. Observations with higher values will be trimmed, i.e.
+        excluded from the analysis. Default is None for both.
+        The trimming is applied after all transformations have been applied.
+        Todo: implement!
 
     """
 
@@ -54,7 +63,8 @@ class CategoryRelations:
                  val: str = 'value', start: str = None, end: str = None,
                  blacklist: dict = None, years = None, freq: str = 'M', lag: int = 0,
                  fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean'),
-                 xcat1_chg: str = None, n_periods: int = 1):
+                 xcat1_chg: str = None, n_periods: int = 1,
+                 xcat_trims: List[str] = [None, None]):
 
         """Constructs all attributes for the category relationship to be analyzed."""
 
@@ -67,6 +77,7 @@ class CategoryRelations:
         self.aggs = xcat_aggs
         self.xcat1_chg = xcat1_chg
         self.n_periods = n_periods
+        self.aggs = xcat_trims  # Todo: implement
 
         assert self.freq in ['D', 'W', 'M', 'Q', 'A']
         assert {'cid', 'xcat', 'real_date', val}.issubset(set(df.columns))
