@@ -6,6 +6,27 @@ from macrosynergy.management.shape_dfs import reduce_df
 import re
 import random
 
+def involved_xcats(ops: dict):
+    """
+    Function used to understand the original categories involved in the panel
+    calculations. To isolate the involved categories in the expression, spaces are
+    required either side of the category. For instance, NEWCAT1 = np.abs( XR ).
+    Further, each category will exclusively involve capital letters which aids
+    determining the categories in the string expression.
+
+    :param <dict> ops: dictionary containing the panel calculation where the key is the
+        newly formed category and the value the calculation.
+    """
+
+    xcats_used = []
+
+    new_xcats = list(ops.keys())
+    for op in ops.values():
+        op_list = op.split(' ')
+        xcats_used += [x for x in op_list if re.match('^[A-Z]', x)
+                       and x not in new_xcats]
+
+    return set(xcats_used)
 
 def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] = None,
                      start: str = None, end: str = None,
@@ -36,72 +57,57 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
     category panels, whereby the category is indicated by capital letters, underscores
     and numbers.
     Calculated category and panel operations must be separated by '='.
-    "NEWCAT = (OLDCAT1 + 0.5) * OLDCAT2"
-    "NEWCAT = np.log(OLDCAT1) - np.abs(OLDCAT2) ** 1/2"
+        "NEWCAT = (OLDCAT1 + 0.5) * OLDCAT2"
+        "NEWCAT = np.log(OLDCAT1) - np.abs(OLDCAT2) ** 1/2"
     Panel calculation can also involve individual indicator series (to be applied
     to all series in the panel by using the @ as prefix), such as:
-    "NEWCAT = OLDCAT1 - np.sqrt(@USD_OLDCAT2)"
+        "NEWCAT = OLDCAT1 - np.sqrt(@USD_OLDCAT2)"
     If more than one new category is calculated, the resulting panels can be used
     sequentially in the calculations, such as:
     ["NEWCAT1 = 1 + OLDCAT1/100", "NEWCAT2 = OLDCAT2 * NEWCAT1"]
 
     """
 
-    # A. Asserts
-
     cols = ['cid', 'xcat', 'real_date', 'value']
     assert set(cols).issubset(set(df.columns))
     assert isinstance(calcs, list), "List of functions expected."
-    assert all([isinstance(elem, str) for elem in calcs]),\
+    assert all([isinstance(elem, str) for elem in calcs]), \
         "Each formula in the panel calculation list must be a string."
     assert isinstance(cids, list), "List of cross-sections expected."
-
-    # B. Collect new category names and their formulas
 
     ops = {}
     for calc in calcs:
         calc_parts = calc.split('=', maxsplit=1)
         ops[calc_parts[0].strip()] = calc_parts[1].strip()
 
-    # C. Check if all required categories are in the dataframe
+    old_xcats_used = involved_xcats(ops=ops)
 
-    xcats_used = []
-    for op in ops.values():
-        op_list = op.split(' ')
-        xcats_used += [x for x in op_list if re.match('^[A-Z]', x)]
+    available_xcats = set(df['xcat'].unique())
+    missing = sorted(old_xcats_used - available_xcats)
+    assert len(missing) == 0, f"Missing categories: {missing}"
 
-    old_xcats_used = list(set(xcats_used) - set([x for x in ops.keys()]))
-    missing = sorted(set(old_xcats_used) - set(df['xcat'].unique()))
-    assert len(missing) == 0, f"Missing categories: {missing}."
-
-    # D. Reduce dataframe with intersection requirement
-
-    dfx = reduce_df(df, xcats=old_xcats_used, cids=cids,
-                    start=start, end=end, blacklist=blacklist,
-                    intersect=True)
-
-    # E. Create all required wide dataframes with category names
+    # Reduce the dataframe to the cross-sections available in all categories.
+    dfx = reduce_df(df, xcats=list(old_xcats_used), cids=cids, start=start,
+                    end=end, blacklist=blacklist, intersect=True)
 
     for xcat in old_xcats_used:
         dfxx = dfx[dfx['xcat'] == xcat]
         dfw = dfxx.pivot(index='real_date', columns='cid', values='value')
-        exec(f'{xcat} =dfw')
-        # Todo: check if alignment of indices is necessary and implement if so
-        # Todo: add individual cross section option
+        exec(f'{xcat} = dfw')
 
-    # F. Calculate the panels and collect
-
+    output_df = []
     for new_xcat, formula in ops.items():
+
         dfw_add = eval(formula)
         df_add = pd.melt(dfw_add.reset_index(), id_vars=['real_date'])
         df_add['xcat'] = new_xcat
-        if new_xcat == list(ops.keys())[0]:
-            df_out = df_add[cols]
-        else:
-            df_out = df_out.append(df_add[cols])
+        output_df.append(df_add)
         exec(f'{new_xcat} = dfw_add')  # we main need a df for subsequent calculations
 
-    return df_out
+    df_calc = pd.concat(output_df)[cols]
+    df_calc.reset_index(drop=True)
+
+    return df_calc
 
 
 if __name__ == "__main__":
@@ -133,14 +139,10 @@ if __name__ == "__main__":
     start = '2010-01-01'
     end = '2020-12-31'
 
-    filt1 = (dfd['xcat'] == 'XR') | (dfd['xcat'] == 'CRY')
-    dfdx = dfd[filt1]
-
     # Start of the testing. Various testcases included to understand the capabilities of
     # the designed function.
-    df_calc = panel_calculator(df=dfdx,
-                               calcs=["NEW1 = np.abs( XR ) + 0.552 + 2 * CRY",
-                                      "NEW2 = NEW1 / XR"],
-                               cids=cids, start=start, end=end)
 
-    df_calc.head()
+    formula_3 = "(GROWTH - np.sqrt( @USD_INFL ))"
+    df_calc = panel_calculator(df=dfd, calcs=["NEW1 = np.abs( XR ) + 0.552 + 2 * CRY",
+                                              "NEW2 = NEW1 * 2"],
+                               cids=cids, start=start, end=end)
