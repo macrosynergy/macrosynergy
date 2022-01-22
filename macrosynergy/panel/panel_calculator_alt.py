@@ -44,6 +44,13 @@ def iterator_func(expression: str, symbol: str, index: int):
     :return <int>: index of the associated symbol.
     """
 
+    elem = expression[index]
+    iterator = index
+    while elem != symbol:
+        iterator += 1
+        elem = expression[iterator]
+
+    return iterator
 
 def formula_reconstruction(formula: str, indices: List[int]):
     """
@@ -66,7 +73,7 @@ def formula_reconstruction(formula: str, indices: List[int]):
     for index in indices:
 
         iterator = iterator_func(formula, "_", index)
-        cid_tracker[(index)] = formula[(index + 1): iterator]
+        cid_tracker[index] = formula[(index + 1): iterator]
 
         start = iterator
         end = iterator_func(formula, " ", index=iterator)
@@ -83,7 +90,7 @@ def formula_reconstruction(formula: str, indices: List[int]):
 
         formula = formula[:cid_start] + formula[xcat_start:]
 
-    return formula
+    return formula, cid_start
 
 def involved_xcats(ops: dict):
     """
@@ -101,12 +108,10 @@ def involved_xcats(ops: dict):
 
     new_xcats = list(ops.keys())
     for op in ops.values():
-
         op_list = op.split(' ')
         xcats_used += [x for x in op_list if re.match('^[A-Z]', x)
                        and x not in new_xcats]
 
-    print(xcats_used)
     return set(xcats_used)
 
 def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] = None,
@@ -157,9 +162,14 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
     assert isinstance(cids, list), "List of cross-sections expected."
 
     ops = {}
-    for calc in calcs:
+    for i, calc in enumerate(calcs):
         calc_parts = calc.split('=', maxsplit=1)
-        ops[calc_parts[0].strip()] = calc_parts[1].strip()
+        key = calc_parts[0].strip()
+        value = calc_parts[1].strip()
+        indices = symbol_finder(expression=value, index=0)
+        if indices:
+            value, cid_dict = formula_reconstruction(formula=value, indices=indices)
+        ops[key] = value
 
     old_xcats_used = involved_xcats(ops=ops)
 
@@ -224,5 +234,5 @@ if __name__ == "__main__":
     # the designed function.
 
     formula_3 = "NEW3 = GROWTH - np.sqrt( @USD_INFL )"
-    formulas = ["NEW1 = np.abs( XR ) + 0.552 + 2 * CRY", "NEW2 = NEW1 * 2"]
+    formulas = ["NEW1 = np.abs( XR ) + 0.552 + 2 * CRY", "NEW2 = NEW1 * 2", formula_3]
     df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
