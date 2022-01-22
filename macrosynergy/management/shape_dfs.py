@@ -12,7 +12,7 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
     """
     Filter dataframe by xcats and cids and notify about missing xcats and cids.
 
-    :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
+    :param <pd.Dataframe> df: standardized dataframe with the necessary columns:
         'cid', 'xcats', 'real_date'.
     :param <List[str]> xcats: extended categories to be checked on. Default is all in the
         dataframe.
@@ -248,16 +248,16 @@ if __name__ == "__main__":
     dfd_xt = reduce_df_by_ticker(dfd, ticks=tickers, blacklist=black)
 
     # Testing categories_df().
-    dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=1,
-                         xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black)
-
-    dfc2 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
-                         fwin=3, xcat_aggs=['mean', 'mean'],
-                         start='2000-01-01', blacklist=black)
+    # dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=1,
+    #                      xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black)
+    #
+    # dfc2 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
+    #                      fwin=3, xcat_aggs=['mean', 'mean'],
+    #                      start='2000-01-01', blacklist=black)
 
     dfc3 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
                          xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black,
-                         years=10)
+                         years=3)
 
     # Testing reduce_df()
     filt1 = ~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))
