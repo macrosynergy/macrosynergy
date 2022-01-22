@@ -5,6 +5,7 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 import re
 import random
+from collections import OrderedDict
 
 def symbol_finder(expression: str, index: int = 0):
     """
@@ -140,6 +141,31 @@ def involved_xcats(ops: dict):
 
     return set(xcats_used)
 
+def cross_section_append(index_cid: dict, expression: str):
+    """
+    Subroutine designed to modify the formula to account for the presence of single
+    cross-sections on certain categories. For instance, np.sqrt(@USD_OLDCAT2).
+
+    :param <dict> index_cid: the dictionary's key will be the concerning category's
+        starting index and the value will be the relevant cross-section.
+    :param <str> expression:
+
+    :return <str> expression: updated formula.
+    """
+
+    index_cid = OrderedDict(sorted(index_cid.items()))
+
+    add_length = 0
+    for k, v in index_cid.items():
+
+        end_cat = iterator_func(expression, symbol=" ", index=(k + add_length))
+        addition = "['" + v + "'].to_numpy()[:, np.newaxis]"
+        expression = expression[:end_cat] + addition + expression[end_cat:]
+        add_length = len(addition)
+
+    return expression
+
+
 def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] = None,
                      start: str = None, end: str = None,
                      blacklist: dict = None):
@@ -172,7 +198,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
         "NEWCAT = (OLDCAT1 + 0.5) * OLDCAT2"
         "NEWCAT = np.log(OLDCAT1) - np.abs(OLDCAT2) ** 1/2"
     Panel calculation can also involve individual indicator series (to be applied
-    to all series in the panel by using the @ as prefix), such as:
+    to all series in the corresponding panel by using the @ as prefix), such as:
         "NEWCAT = OLDCAT1 - np.sqrt(@USD_OLDCAT2)"
     If more than one new category is calculated, the resulting panels can be used
     sequentially in the calculations, such as:
@@ -188,7 +214,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
     assert isinstance(cids, list), "List of cross-sections expected."
 
     ops, expression_cid = formula_handler(calcs)
-    
+
     if not expression_cid:
         del expression_cid
 
@@ -205,16 +231,21 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
     for xcat in old_xcats_used:
         dfxx = dfx[dfx['xcat'] == xcat]
         dfw = dfxx.pivot(index='real_date', columns='cid', values='value')
-        exec(f'{xcat} = dfw')
+        exec(f"{xcat} = dfw")
 
     output_df = []
+    index = 0
     for new_xcat, formula in ops.items():
 
+        if index in expression_cid.keys():
+            formula = cross_section_append(index_cid=expression_cid[index],
+                                           expression=formula)
         dfw_add = eval(formula)
         df_add = pd.melt(dfw_add.reset_index(), id_vars=['real_date'])
         df_add['xcat'] = new_xcat
         output_df.append(df_add)
-        exec(f'{new_xcat} = dfw_add')  # we main need a df for subsequent calculations
+        exec(f'{new_xcat} = dfw_add')
+        index += 1
 
     df_calc = pd.concat(output_df)[cols]
     df_calc.reset_index(drop=True)
@@ -241,7 +272,7 @@ if __name__ == "__main__":
     df_xcats.loc['XR'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
     df_xcats.loc['CRY'] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
     df_xcats.loc['GROWTH'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
-    df_xcats.loc['INFL'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
+    df_xcats.loc['INFL'] = ['2012-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
@@ -254,6 +285,8 @@ if __name__ == "__main__":
     # Start of the testing. Various testcases included to understand the capabilities of
     # the designed function.
 
-    formula_3 = "NEW3 = GROWTH - np.sqrt( @USD_INFL )"
+    formula_3 = "NEW3 = GROWTH - np.square( @USD_INFL )"
     formulas = ["NEW1 = np.abs( XR ) + 0.552 + 2 * CRY", "NEW2 = NEW1 * 2", formula_3]
     df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+
+    print(df_calc)
