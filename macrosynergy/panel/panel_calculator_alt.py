@@ -141,14 +141,18 @@ def involved_xcats(ops: dict):
 
     return set(xcats_used)
 
-def cross_section_append(index_cid: dict, expression: str):
+def cross_section_append(index_cid: dict, expression: str, dates_dict: dict):
     """
     Subroutine designed to modify the formula to account for the presence of single
     cross-sections on certain categories. For instance, np.sqrt(@USD_OLDCAT2).
+    Further, will align the involved dataframes which is required due to the conversion
+    to a np.ndarray.
 
     :param <dict> index_cid: the dictionary's key will be the concerning category's
         starting index and the value will be the relevant cross-section.
     :param <str> expression:
+    :param <dict> dates_dict: dictionary consisting of each category and their respective
+        start and end date across the panel series.
 
     :return <str> expression: updated formula.
     """
@@ -156,12 +160,33 @@ def cross_section_append(index_cid: dict, expression: str):
     index_cid = OrderedDict(sorted(index_cid.items()))
 
     add_length = 0
+    xcat = ""
     for k, v in index_cid.items():
 
         end_cat = iterator_func(expression, symbol=" ", index=(k + add_length))
+        xcat = expression[k:end_cat]
+
         addition = "['" + v + "'].to_numpy()[:, np.newaxis]"
         expression = expression[:end_cat] + addition + expression[end_cat:]
         add_length = len(addition)
+
+    cats_indices = {}
+    for k in dates_dict.keys():
+
+        pattern = re.compile(k)
+        indices = pattern.finditer(expression)
+        try:
+            next(iter(indices))
+        except StopIteration:
+            continue
+        else:
+            cats_indices[k] = indices
+
+    for k in cats_indices.keys():
+        start_date = dates_dict[k][0]
+        print(type(start_date))
+        end_date = dates_dict[k][0]
+        print(end_date)
 
     return expression
 
@@ -228,9 +253,12 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
     dfx = reduce_df(df, xcats=list(old_xcats_used), cids=cids, start=start,
                     end=end, blacklist=blacklist, intersect=True)
 
+    dates_xcat = {}
     for xcat in old_xcats_used:
         dfxx = dfx[dfx['xcat'] == xcat]
         dfw = dfxx.pivot(index='real_date', columns='cid', values='value')
+        dates_xcat[xcat] = (dfw.index[0], dfw.index[1])
+
         exec(f"{xcat} = dfw")
 
     output_df = []
@@ -239,7 +267,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
 
         if index in expression_cid.keys():
             formula = cross_section_append(index_cid=expression_cid[index],
-                                           expression=formula)
+                                           expression=formula, dates_dict=dates_xcat)
         dfw_add = eval(formula)
         df_add = pd.melt(dfw_add.reset_index(), id_vars=['real_date'])
         df_add['xcat'] = new_xcat
