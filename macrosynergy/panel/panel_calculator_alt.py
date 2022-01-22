@@ -6,6 +6,85 @@ from macrosynergy.management.shape_dfs import reduce_df
 import re
 import random
 
+def symbol_finder(expression: str, index: int = 0):
+    """
+    Method used to understand if the category involved in the expression only concerns a
+    single cross-section.
+
+    :param <str> expression: associated formula.
+    :param <int> index: variable used to track the index of the expression.
+
+    :return <List[int]> list of indices where the "@" symbol occurs.
+    """
+
+    indices = []
+    adjustment = 0
+
+    while index != -1:
+
+        index = expression.find("@")
+        if index != -1:
+            indices.append(index + adjustment)
+            adjustment = (index + 1) + adjustment
+
+            index += 1
+            expression = expression[index:]
+
+    return indices
+
+def iterator_func(expression: str, symbol: str, index: int):
+    """
+    Indefinite iterator until a specific symbol is found. Will return the index of the
+    respective symbol.
+
+    :param <str> expression:
+    :param <str> symbol:
+    :param <int> index: starting index of the iterator.
+
+    :return <int>: index of the associated symbol.
+    """
+
+
+def formula_reconstruction(formula: str, indices: List[int]):
+    """
+    Reconstruct the formula to handle single cross-sections. The purpose is to return the
+    formula but with the removal of the single cross-section declaration and instead
+    leave the xcat. For instance, "@USD_GROWTH" will be reduced to "GROWTH". The
+    originally referenced cross-section will be stored in a separate data structure and
+    incorporated in the formula in a different capacity.
+
+    :param <str> formula: "((@USD_GROWTH - np.sqrt( @USD_INFL )) / @USD_XR )"
+    :param <List[int]> indices: list of indices where the "@" symbol occurs in the
+        expression.
+
+    :return <str>: returns the updated formula.
+    """
+
+    cid_tracker = {}
+    xcat_tracker = {}
+
+    for index in indices:
+
+        iterator = iterator_func(formula, "_", index)
+        cid_tracker[(index)] = formula[(index + 1): iterator]
+
+        start = iterator
+        end = iterator_func(formula, " ", index=iterator)
+
+        xcat_tracker[(start + 1)] = formula[(start + 1): end]
+
+    reconstruction = tuple(zip(cid_tracker.keys(), xcat_tracker.keys()))
+    adjustment = 0
+    for tup in reconstruction:
+
+        xcat_start = tup[1] - adjustment
+        cid_start = tup[0] - adjustment
+        adjustment += (xcat_start - cid_start)
+
+        formula = formula[:cid_start] + formula[xcat_start:]
+
+    return formula
+
 def involved_xcats(ops: dict):
     """
     Function used to understand the original categories involved in the panel
@@ -22,10 +101,12 @@ def involved_xcats(ops: dict):
 
     new_xcats = list(ops.keys())
     for op in ops.values():
+
         op_list = op.split(' ')
         xcats_used += [x for x in op_list if re.match('^[A-Z]', x)
                        and x not in new_xcats]
 
+    print(xcats_used)
     return set(xcats_used)
 
 def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] = None,
@@ -142,7 +223,6 @@ if __name__ == "__main__":
     # Start of the testing. Various testcases included to understand the capabilities of
     # the designed function.
 
-    formula_3 = "(GROWTH - np.sqrt( @USD_INFL ))"
-    df_calc = panel_calculator(df=dfd, calcs=["NEW1 = np.abs( XR ) + 0.552 + 2 * CRY",
-                                              "NEW2 = NEW1 * 2"],
-                               cids=cids, start=start, end=end)
+    formula_3 = "NEW3 = GROWTH - np.sqrt( @USD_INFL )"
+    formulas = ["NEW1 = np.abs( XR ) + 0.552 + 2 * CRY", "NEW2 = NEW1 * 2"]
+    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
