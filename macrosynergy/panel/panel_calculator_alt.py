@@ -90,7 +90,33 @@ def formula_reconstruction(formula: str, indices: List[int]):
 
         formula = formula[:cid_start] + formula[xcat_start:]
 
-    return formula, cid_start
+    return formula, cid_tracker
+
+def formula_handler(calcs: List[str]):
+    """
+    Separate the functions, contained in the list, y = f(x), on the equality sign. The
+    codomain will be the key and the function will be the value.
+
+    :param <List[str]> calcs:
+
+    :return <dict>: dictionary hosting the function.
+    """
+
+    ops = {}
+    expression_cid = {}
+    for i, calc in enumerate(calcs):
+
+        calc_parts = calc.split('=', maxsplit=1)
+        value = calc_parts[1].strip()
+        indices = symbol_finder(expression=value, index=0)
+
+        if indices:
+            value, cid_dict = formula_reconstruction(formula=value, indices=indices)
+            expression_cid[i] = cid_dict
+
+        ops[calc_parts[0].strip()] = value
+
+    return ops, expression_cid
 
 def involved_xcats(ops: dict):
     """
@@ -161,15 +187,10 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
         "Each formula in the panel calculation list must be a string."
     assert isinstance(cids, list), "List of cross-sections expected."
 
-    ops = {}
-    for i, calc in enumerate(calcs):
-        calc_parts = calc.split('=', maxsplit=1)
-        key = calc_parts[0].strip()
-        value = calc_parts[1].strip()
-        indices = symbol_finder(expression=value, index=0)
-        if indices:
-            value, cid_dict = formula_reconstruction(formula=value, indices=indices)
-        ops[key] = value
+    ops, expression_cid = formula_handler(calcs)
+    
+    if not expression_cid:
+        del expression_cid
 
     old_xcats_used = involved_xcats(ops=ops)
 
