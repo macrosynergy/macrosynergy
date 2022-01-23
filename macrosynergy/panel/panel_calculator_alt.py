@@ -141,6 +141,39 @@ def involved_xcats(ops: dict):
 
     return set(xcats_used)
 
+def pandas_alignment(dates_dict: dict, expression: str):
+    """
+    Function designed to return the latest start date and earliest end date across the
+    categories involved in the expression. Reduce all dataframes to be defined over the
+    same time-period.
+
+    :param <dict> dates_dict:
+    :param <str> expression:
+
+    return <pd.Timestamp>:
+    """
+
+    cats_indices = {}
+    for k in dates_dict.keys():
+
+        pattern = re.compile(k)
+        indices = pattern.finditer(expression)
+        result = [match.span() for match in indices]
+
+        if result:
+            cats_indices[k] = result
+
+    s_date = pd.Timestamp.min
+    e_date = pd.Timestamp.max
+
+    for k in cats_indices.keys():
+        if dates_dict[k][0] > s_date:
+            s_date = dates_dict[k][0]
+        if dates_dict[k][1] < e_date:
+            e_date = dates_dict[k][1]
+
+    return s_date, e_date, cats_indices
+
 def cross_section_append(index_cid: dict, expression: str, dates_dict: dict):
     """
     Subroutine designed to modify the formula to account for the presence of single
@@ -156,37 +189,31 @@ def cross_section_append(index_cid: dict, expression: str, dates_dict: dict):
 
     :return <str> expression: updated formula.
     """
+    global s_date, e_date
 
     index_cid = OrderedDict(sorted(index_cid.items()))
 
     add_length = 0
-    xcat = ""
     for k, v in index_cid.items():
 
         end_cat = iterator_func(expression, symbol=" ", index=(k + add_length))
-        xcat = expression[k:end_cat]
 
         addition = "['" + v + "'].to_numpy()[:, np.newaxis]"
         expression = expression[:end_cat] + addition + expression[end_cat:]
         add_length = len(addition)
 
-    cats_indices = {}
-    for k in dates_dict.keys():
+    s_date, e_date, cats_indices = pandas_alignment(dates_dict, expression)
+    cats_indices = OrderedDict(sorted(cats_indices.items()))
 
-        pattern = re.compile(k)
-        indices = pattern.finditer(expression)
-        try:
-            next(iter(indices))
-        except StopIteration:
-            continue
-        else:
-            cats_indices[k] = indices
-
-    for k in cats_indices.keys():
-        start_date = dates_dict[k][0]
-        print(type(start_date))
-        end_date = dates_dict[k][0]
-        print(end_date)
+    trunc = ".loc[s_date:e_date]"
+    length = 0
+    counter = 0
+    for k, v in cats_indices.items():
+        for tup in v:
+            index = tup[1] + (length * counter)
+            expression = expression[:index] + trunc + expression[index:]
+            counter += 1
+            length = len(trunc) * counter
 
     return expression
 
@@ -257,7 +284,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
     for xcat in old_xcats_used:
         dfxx = dfx[dfx['xcat'] == xcat]
         dfw = dfxx.pivot(index='real_date', columns='cid', values='value')
-        dates_xcat[xcat] = (dfw.index[0], dfw.index[1])
+        dates_xcat[xcat] = (dfw.index[0], dfw.index[-1])
 
         exec(f"{xcat} = dfw")
 
@@ -300,7 +327,7 @@ if __name__ == "__main__":
     df_xcats.loc['XR'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
     df_xcats.loc['CRY'] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
     df_xcats.loc['GROWTH'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
-    df_xcats.loc['INFL'] = ['2012-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
+    df_xcats.loc['INFL'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
