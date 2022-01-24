@@ -167,7 +167,6 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, blacklist, out_all=True)
 
     col_names = ['cid', 'xcat', 'real_date', val]
-    dfc = pd.DataFrame(columns=col_names)
 
     df_output = []
     if years is None:
@@ -213,8 +212,10 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
             df_output.append(dfx[col_names])
 
     dfc = pd.concat(df_output)
-    return dfc.pivot(index=('cid', 'real_date'), columns='xcat',
-                     values=val).dropna()[xcats]
+    dfc = dfc.pivot(index=('cid', 'real_date'), columns='xcat',
+                    values=val).dropna()[xcats]
+
+    return dfc
 
 
 if __name__ == "__main__":
@@ -268,3 +269,7 @@ if __name__ == "__main__":
     dfdx = dfd[filt1 & filt2]  # simulate missing cross sections
     dfd_x1, xctx, cidx = reduce_df(dfdx, xcats=['XR', 'CRY', 'INFL'], cids=cids,
                                    intersect=True, out_all=True)
+
+    dfc = categories_df(dfd, xcats=['XR', 'CRY'], cids=['CAD'],
+                        freq='M', lag=0, xcat_aggs=['mean', 'mean'],
+                        start='2000-01-01', years=10)
