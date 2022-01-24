@@ -88,8 +88,12 @@ def formula_reconstruction(formula: str, indices: List[int]):
 
         xcat_start = tup[1] - adjustment
         cid_start = tup[0] - adjustment
-        adjustment += (xcat_start - cid_start)
 
+        value = cid_tracker[tup[0]]
+        cid_tracker.pop(tup[0])
+        cid_tracker[(tup[0] - adjustment)] = value
+
+        adjustment += (xcat_start - cid_start)
         formula = formula[:cid_start] + formula[xcat_start:]
 
     return formula, cid_tracker
@@ -109,7 +113,9 @@ def formula_handler(calcs: List[str]):
     for i, calc in enumerate(calcs):
 
         calc_parts = calc.split('=', maxsplit=1)
+        # Suppress to imperative inclusion of terminal parenthesis.
         value = calc_parts[1].strip()
+        value = calc_parts[1]
         indices = symbol_finder(expression=value, index=0)
 
         if indices:
@@ -160,7 +166,6 @@ def pandas_alignment(dates_dict: dict, expression: str):
         pattern = re.compile(k)
         indices = pattern.finditer(expression)
         result = [match.span() for match in indices]
-
         if result:
             cats_indices[k] = result
 
@@ -197,11 +202,13 @@ def cross_section_append(index_cid: dict, expression: str, dates_dict: dict):
     add_length = 0
     for k, v in index_cid.items():
 
-        end_cat = iterator_func(expression, symbol=" ", index=(k + add_length))
+        cat_index = (k + add_length)
+        end_cat = iterator_func(expression, symbol=" ", index=cat_index)
 
         addition = "['" + v + "'].to_numpy()[:, np.newaxis]"
         expression = expression[:end_cat] + addition + expression[end_cat:]
-        add_length = len(addition)
+
+        add_length += len(addition)
 
     s_date, e_date, cats_indices = pandas_alignment(dates_dict, expression)
     cats_indices = OrderedDict(sorted(cats_indices.items()))
@@ -329,7 +336,7 @@ if __name__ == "__main__":
     df_xcats.loc['XR'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
     df_xcats.loc['CRY'] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
     df_xcats.loc['GROWTH'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
-    df_xcats.loc['INFL'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
+    df_xcats.loc['INFL'] = ['2012-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
@@ -344,8 +351,9 @@ if __name__ == "__main__":
 
     formula_3 = "NEW3 = GROWTH - np.square( @USD_INFL )"
     formulas = ["NEW1 = np.abs( XR ) + 0.552 + 2 * CRY", "NEW2 = NEW1 * 2", formula_3]
-    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+    # df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
 
     # Secondary testcase.
-    formula = "NEW1 = ((GROWTH - np.square( @USD_INFL )) / @USD_INFL )"
+    formula = "NEW1 = (( GROWTH - np.square( @USD_INFL )) / @USD_INFL )"
     formulas = [formula]
+    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
