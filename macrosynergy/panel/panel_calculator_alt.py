@@ -164,7 +164,6 @@ def pandas_alignment(dates_dict: dict, expression: str):
     cats_tuple = []
     cats_indices = {}
     for k in dates_dict.keys():
-
         pattern = re.compile(k)
         indices = pattern.finditer(expression)
         result = [match.span() for match in indices]
@@ -177,7 +176,8 @@ def pandas_alignment(dates_dict: dict, expression: str):
             else:
                 cats_tuple.append((k, next(iter(result))))
             cats_indices[k] = result
-
+        else:
+            continue
     s_date = pd.Timestamp.min
     e_date = pd.Timestamp.max
 
