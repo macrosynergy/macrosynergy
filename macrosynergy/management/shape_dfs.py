@@ -248,12 +248,12 @@ if __name__ == "__main__":
     dfd_xt = reduce_df_by_ticker(dfd, ticks=tickers, blacklist=black)
 
     # Testing categories_df().
-    # dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=1,
-    #                      xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black)
-    #
-    # dfc2 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
-    #                      fwin=3, xcat_aggs=['mean', 'mean'],
-    #                      start='2000-01-01', blacklist=black)
+    dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=1,
+                         xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black)
+
+    dfc2 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
+                         fwin=3, xcat_aggs=['mean', 'mean'],
+                         start='2000-01-01', blacklist=black)
 
     dfc3 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
                          xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black,
@@ -265,3 +265,4 @@ if __name__ == "__main__":
     dfdx = dfd[filt1 & filt2]  # simulate missing cross sections
     dfd_x1, xctx, cidx = reduce_df(dfdx, xcats=['XR', 'CRY', 'INFL'], cids=cids,
                                    intersect=True, out_all=True)
+    print(dfd_x1['real_date'])
