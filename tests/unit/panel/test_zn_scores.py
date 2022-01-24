@@ -4,10 +4,9 @@ import numpy as np
 import pandas as pd
 import warnings
 from tests.simulate import make_qdf
-from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.panel.make_zn_scores import *
-from random import randint, choice, shuffle, seed
-from collections import defaultdict
+from random import randint
+
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -113,6 +112,9 @@ class TestAll(unittest.TestCase):
 
         ar_mean = cross_neutral(self.dfw, neutral='mean', sequential=False)
         ar_median = cross_neutral(self.dfw, neutral='median', sequential=False)
+
+        # Arbitrarily chosen index to test the logic.
+        index = 21
         for i, cross in enumerate(self.cids):
 
             column = self.dfw[[cross]].to_numpy()
@@ -123,13 +125,15 @@ class TestAll(unittest.TestCase):
             
             mean = np.sum(column) / len(column)
             dif = np.abs(mean_col - mean)
-            self.assertTrue(np.all(dif < epsilon))  # Test if function mean is correct.
+            # Test if function mean is correct.
+            self.assertTrue(np.nan_to_num(dif[index]) < epsilon)
 
             median = np.median(column)
             median_col = self.handle_nan(ar_median[:, i])
 
             dif = np.abs(median_col - median)
-            self.assertTrue(np.all(dif < epsilon))  # Test if function median is correct.
+            # Test if function median is correct.
+            self.assertTrue(np.nan_to_num(dif[index]) < epsilon)
 
         min_obs = 261
         ar_mean = cross_neutral(self.dfw, neutral='mean', sequential=True,
@@ -151,9 +155,10 @@ class TestAll(unittest.TestCase):
             column = self.dfw[[cid]]
             cum_mean = column.expanding(min_periods=(min_obs + 1)).mean()
             cum_mean = self.handle_nan(cum_mean[cid].to_numpy())
+
             dif = self.handle_nan(ar_mean[:, i]) - cum_mean
             # Check correct cumulative means.
-            self.assertTrue(np.all(dif < epsilon))
+            self.assertTrue(np.nan_to_num(dif[index]) < epsilon)
 
             iis_period = ar_median[date_index:(date_index + min_obs), i]
             first_val_iis = iis_period[0]
@@ -202,30 +207,36 @@ class TestAll(unittest.TestCase):
         dfw_zns_pan = dfx.div(ar_sds, axis='rows')
         dfw_zns_pan = dfw_zns_pan.dropna(axis = 0, how='all')
 
+        # Check the zn_scores, across a panel, on a specific date. Discount the
+        # internal randomness.
+        no_rows = dfw_zns_pan.shape[0]
+        index = randint(0, no_rows)
+
         zn_scores = df_panel.to_numpy()
         arr_zns_pan = dfw_zns_pan.to_numpy()
-        dif = zn_scores - arr_zns_pan
-        dif = np.nan_to_num(dif, nan = 0.0)
+        dif = zn_scores[index] - arr_zns_pan[index]
 
         epsilon = 0.000001
-        self.assertTrue(np.all(dif < epsilon))
+        self.assertTrue(np.all(np.nan_to_num(dif) < epsilon))
 
         # Test weighting function.
+        min_obs = 252
         panel_df = make_zn_scores(self.dfd, 'CRY', self.cids, start="2010-01-04",
-                                  sequential=True, min_obs=252, neutral='mean',
-                                  thresh=None, pan_weight=1.0, postfix='ZN')
+                                  sequential=False, min_obs=0, neutral='mean',
+                                  iis=False, thresh=None, pan_weight=0.75, postfix='ZN')
         df_cross = make_zn_scores(self.dfd, 'CRY', self.cids, start="2010-01-04",
-                                  sequential=True, min_obs=252, neutral='mean',
-                                  thresh=None, pan_weight=0.0, postfix='ZN')
+                                  sequential=False, min_obs=0, neutral='mean',
+                                  iis=False, thresh=None, pan_weight=0.25, postfix='ZN')
 
         df_average = make_zn_scores(self.dfd, 'CRY', self.cids, start="2010-01-04",
-                                    sequential=True, min_obs=252,
+                                    sequential=False, min_obs=0, iis=False,
                                     neutral='mean', thresh=None, pan_weight=0.5,
                                     postfix='ZN')
 
         panel_df = panel_df.pivot(index='real_date', columns='cid', values='value')
         df_cross = df_cross.pivot(index='real_date', columns='cid', values='value')
         df_average = df_average.pivot(index='real_date', columns='cid', values='value')
+        index = randint(0, df_average.shape[0])
 
         # Drop the first row in the panel data.
         panel_df = panel_df.drop(panel_df.index[[0]])
@@ -233,10 +244,11 @@ class TestAll(unittest.TestCase):
         check_arr = df_check.to_numpy()
         average_arr = df_average.to_numpy()
 
-        dif = check_arr - average_arr
-        dif = np.nan_to_num(dif, nan = 0.0)
+        # Again, validate on a randomly chosen index.
+        dif = check_arr[index] - average_arr[index]
         self.assertTrue(np.all(dif < epsilon))
 
+        # Test the usage of the threshold parameter.
         threshold = 2.35
         df_thresh = make_zn_scores(self.dfd, 'CRY', self.cids, start="2010-01-01",
                                    sequential=True, min_obs=252, neutral='mean',
@@ -246,6 +258,7 @@ class TestAll(unittest.TestCase):
         thresh_arr = df_thresh.to_numpy()
         # Compress multidimensional array into a one-dimensional array.
         values = thresh_arr.ravel()
+        values = values.astype(dtype=np.float64)
 
         check = sum(values[~np.isnan(values)] > threshold)
 

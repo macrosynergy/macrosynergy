@@ -167,8 +167,8 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, blacklist, out_all=True)
 
     col_names = ['cid', 'xcat', 'real_date', val]
-    dfc = pd.DataFrame(columns=col_names)
 
+    df_output = []
     if years is None:
         for i in range(2):
             dfw = df[df['xcat'] == xcats[i]].pivot(index='real_date', columns='cid',
@@ -181,7 +181,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
             dfx = pd.melt(dfw.reset_index(), id_vars=['real_date'],
                           value_vars=cids, value_name=val)
             dfx['xcat'] = xcats[i]
-            dfc = dfc.append(dfx[col_names])
+            df_output.append(dfx[col_names])
     else:
         s_year = pd.to_datetime(start).year
         e_year = df['real_date'].max().year + 1
@@ -202,16 +202,20 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         list_y_groups = list(year_groups.keys())
 
         translate_ = lambda year: list_y_groups[int((year % 2000) / years)]
+        df['real_date'] = pd.to_datetime(df['real_date'], errors='coerce')
         df['custom_date'] = df['real_date'].dt.year.apply(translate_)
         for i in range(2):
             dfx = df[df['xcat'] == xcats[i]]
             dfx = dfx.groupby(['xcat', 'cid',
                                'custom_date']).agg(xcat_aggs[i]).reset_index()
             dfx = dfx.rename(columns={"custom_date": "real_date"})
-            dfc = dfc.append(dfx[col_names])
+            df_output.append(dfx[col_names])
 
-    return dfc.pivot(index=('cid', 'real_date'), columns='xcat',
-                     values=val).dropna()[xcats]
+    dfc = pd.concat(df_output)
+    dfc = dfc.pivot(index=('cid', 'real_date'), columns='xcat',
+                    values=val).dropna()[xcats]
+
+    return dfc
 
 
 if __name__ == "__main__":
@@ -248,12 +252,12 @@ if __name__ == "__main__":
     dfd_xt = reduce_df_by_ticker(dfd, ticks=tickers, blacklist=black)
 
     # Testing categories_df().
-    # dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=1,
-    #                      xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black)
-    #
-    # dfc2 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
-    #                      fwin=3, xcat_aggs=['mean', 'mean'],
-    #                      start='2000-01-01', blacklist=black)
+    dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=1,
+                         xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black)
+
+    dfc2 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
+                         fwin=3, xcat_aggs=['mean', 'mean'],
+                         start='2000-01-01', blacklist=black)
 
     dfc3 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
                          xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black,
@@ -265,3 +269,7 @@ if __name__ == "__main__":
     dfdx = dfd[filt1 & filt2]  # simulate missing cross sections
     dfd_x1, xctx, cidx = reduce_df(dfdx, xcats=['XR', 'CRY', 'INFL'], cids=cids,
                                    intersect=True, out_all=True)
+
+    dfc = categories_df(dfd, xcats=['XR', 'CRY'], cids=['CAD'],
+                        freq='M', lag=0, xcat_aggs=['mean', 'mean'],
+                        start='2000-01-01', years=10)
