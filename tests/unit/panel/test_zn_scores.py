@@ -5,6 +5,7 @@ import pandas as pd
 import warnings
 from tests.simulate import make_qdf
 from macrosynergy.panel.make_zn_scores import *
+from random import randint
 
 
 with warnings.catch_warnings():
@@ -200,10 +201,13 @@ class TestAll(unittest.TestCase):
         dfw_zns_pan = dfx.div(ar_sds, axis='rows')
         dfw_zns_pan = dfw_zns_pan.dropna(axis = 0, how='all')
 
+        # Check the zn_scores, across a panel, on a specific date.
+        no_rows = dfw_zns_pan.shape[0]
+        index = randint(0, no_rows)
+
         zn_scores = df_panel.to_numpy()
         arr_zns_pan = dfw_zns_pan.to_numpy()
-        dif = zn_scores - arr_zns_pan
-        dif = np.nan_to_num(dif, nan = 0.0)
+        dif = zn_scores[index] - arr_zns_pan[index]
 
         epsilon = 0.000001
         self.assertTrue(np.all(dif < epsilon))
