@@ -184,6 +184,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
             df_output.append(dfx[col_names])
     else:
         s_year = pd.to_datetime(start).year
+        start_year = s_year
         e_year = df['real_date'].max().year + 1
 
         grouping = int((e_year - s_year) / years)
@@ -201,7 +202,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         year_groups[f"{s_year} - now"] = v
         list_y_groups = list(year_groups.keys())
 
-        translate_ = lambda year: list_y_groups[int((year % 2000) / years)]
+        translate_ = lambda year: list_y_groups[int((year % start_year) / years)]
         df['real_date'] = pd.to_datetime(df['real_date'], errors='coerce')
         df['custom_date'] = df['real_date'].dt.year.apply(translate_)
         for i in range(2):
