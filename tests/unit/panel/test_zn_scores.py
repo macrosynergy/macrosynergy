@@ -256,6 +256,7 @@ class TestAll(unittest.TestCase):
         thresh_arr = df_thresh.to_numpy()
         # Compress multidimensional array into a one-dimensional array.
         values = thresh_arr.ravel()
+        values = values.astype(dtype=np.float64)
 
         check = sum(values[~np.isnan(values)] > threshold)
 
