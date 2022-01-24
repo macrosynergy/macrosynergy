@@ -150,11 +150,13 @@ class TestAll(unittest.TestCase):
             column = self.dfw[[cid]]
             cum_mean = column.expanding(min_periods=(min_obs + 1)).mean()
             cum_mean = self.handle_nan(cum_mean[cid].to_numpy())
-            index = randint(0, cum_mean.size)
+
+            # Arbitrarily chosen index to test the logic.
+            index = 21
 
             dif = self.handle_nan(ar_mean[:, i]) - cum_mean
             # Check correct cumulative means.
-            self.assertTrue(np.all(dif[index] < epsilon))
+            self.assertTrue(dif[index] < epsilon)
 
             iis_period = ar_median[date_index:(date_index + min_obs), i]
             first_val_iis = iis_period[0]
