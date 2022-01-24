@@ -112,6 +112,9 @@ class TestAll(unittest.TestCase):
 
         ar_mean = cross_neutral(self.dfw, neutral='mean', sequential=False)
         ar_median = cross_neutral(self.dfw, neutral='median', sequential=False)
+
+        # Arbitrarily chosen index to test the logic.
+        index = 21
         for i, cross in enumerate(self.cids):
 
             column = self.dfw[[cross]].to_numpy()
@@ -122,13 +125,13 @@ class TestAll(unittest.TestCase):
             
             mean = np.sum(column) / len(column)
             dif = np.abs(mean_col - mean)
-            self.assertTrue(np.all(dif < epsilon))  # Test if function mean is correct.
+            self.assertTrue(dif[index] < epsilon)  # Test if function mean is correct.
 
             median = np.median(column)
             median_col = self.handle_nan(ar_median[:, i])
 
             dif = np.abs(median_col - median)
-            self.assertTrue(np.all(dif < epsilon))  # Test if function median is correct.
+            self.assertTrue(dif[index] < epsilon)  # Test if function median is correct.
 
         min_obs = 261
         ar_mean = cross_neutral(self.dfw, neutral='mean', sequential=True,
@@ -150,9 +153,6 @@ class TestAll(unittest.TestCase):
             column = self.dfw[[cid]]
             cum_mean = column.expanding(min_periods=(min_obs + 1)).mean()
             cum_mean = self.handle_nan(cum_mean[cid].to_numpy())
-
-            # Arbitrarily chosen index to test the logic.
-            index = 21
 
             dif = self.handle_nan(ar_mean[:, i]) - cum_mean
             # Check correct cumulative means.
