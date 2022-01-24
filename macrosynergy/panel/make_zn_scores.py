@@ -411,3 +411,7 @@ if __name__ == "__main__":
 
     df_output = make_zn_scores(dfd, xcat='XR', sequential=False, cids=cids, iis=True,
                                neutral='mean', pan_weight=1.0, min_obs = 261)
+
+    df_cross = make_zn_scores(dfd, 'XR', cids, start="2010-01-04",
+                              sequential=True, min_obs=0, neutral='mean',
+                              iis=False, thresh=None, pan_weight=0, postfix='ZN')
