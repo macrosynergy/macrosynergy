@@ -205,7 +205,8 @@ class TestAll(unittest.TestCase):
         dfw_zns_pan = dfx.div(ar_sds, axis='rows')
         dfw_zns_pan = dfw_zns_pan.dropna(axis = 0, how='all')
 
-        # Check the zn_scores, across a panel, on a specific date.
+        # Check the zn_scores, across a panel, on a specific date. Discount the
+        # internal randomness.
         no_rows = dfw_zns_pan.shape[0]
         index = randint(0, no_rows)
 
@@ -214,19 +215,19 @@ class TestAll(unittest.TestCase):
         dif = zn_scores[index] - arr_zns_pan[index]
 
         epsilon = 0.000001
-        self.assertTrue(np.all(dif < epsilon))
+        self.assertTrue(np.all(np.nan_to_num(dif) < epsilon))
 
         # Test weighting function.
         min_obs = 252
         panel_df = make_zn_scores(self.dfd, 'CRY', self.cids, start="2010-01-04",
-                                  sequential=True, min_obs=0, neutral='mean',
-                                  iis=False, thresh=None, pan_weight=1.0, postfix='ZN')
+                                  sequential=False, min_obs=0, neutral='mean',
+                                  iis=False, thresh=None, pan_weight=0.75, postfix='ZN')
         df_cross = make_zn_scores(self.dfd, 'CRY', self.cids, start="2010-01-04",
-                                  sequential=True, min_obs=0, neutral='mean',
-                                  iis=False, thresh=None, pan_weight=0.0, postfix='ZN')
+                                  sequential=False, min_obs=0, neutral='mean',
+                                  iis=False, thresh=None, pan_weight=0.25, postfix='ZN')
 
         df_average = make_zn_scores(self.dfd, 'CRY', self.cids, start="2010-01-04",
-                                    sequential=True, min_obs=0, iis=False,
+                                    sequential=False, min_obs=0, iis=False,
                                     neutral='mean', thresh=None, pan_weight=0.5,
                                     postfix='ZN')
 
