@@ -169,6 +169,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     col_names = ['cid', 'xcat', 'real_date', val]
     dfc = pd.DataFrame(columns=col_names)
 
+    df_output = []
     if years is None:
         for i in range(2):
             dfw = df[df['xcat'] == xcats[i]].pivot(index='real_date', columns='cid',
@@ -181,7 +182,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
             dfx = pd.melt(dfw.reset_index(), id_vars=['real_date'],
                           value_vars=cids, value_name=val)
             dfx['xcat'] = xcats[i]
-            dfc = dfc.append(dfx[col_names])
+            df_output.append(dfx[col_names])
     else:
         s_year = pd.to_datetime(start).year
         e_year = df['real_date'].max().year + 1
@@ -209,8 +210,9 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
             dfx = dfx.groupby(['xcat', 'cid',
                                'custom_date']).agg(xcat_aggs[i]).reset_index()
             dfx = dfx.rename(columns={"custom_date": "real_date"})
-            dfc = dfc.append(dfx[col_names])
+            df_output.append(dfx[col_names])
 
+    dfc = pd.concat(df_output)
     return dfc.pivot(index=('cid', 'real_date'), columns='xcat',
                      values=val).dropna()[xcats]
 
@@ -266,4 +268,3 @@ if __name__ == "__main__":
     dfdx = dfd[filt1 & filt2]  # simulate missing cross sections
     dfd_x1, xctx, cidx = reduce_df(dfdx, xcats=['XR', 'CRY', 'INFL'], cids=cids,
                                    intersect=True, out_all=True)
-    print(dfd_x1['real_date'])
