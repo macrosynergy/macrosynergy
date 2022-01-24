@@ -213,21 +213,23 @@ class TestAll(unittest.TestCase):
         self.assertTrue(np.all(dif < epsilon))
 
         # Test weighting function.
+        min_obs = 252
         panel_df = make_zn_scores(self.dfd, 'CRY', self.cids, start="2010-01-04",
-                                  sequential=True, min_obs=252, neutral='mean',
-                                  thresh=None, pan_weight=1.0, postfix='ZN')
+                                  sequential=True, min_obs=0, neutral='mean',
+                                  iis=False, thresh=None, pan_weight=1.0, postfix='ZN')
         df_cross = make_zn_scores(self.dfd, 'CRY', self.cids, start="2010-01-04",
-                                  sequential=True, min_obs=252, neutral='mean',
-                                  thresh=None, pan_weight=0.0, postfix='ZN')
+                                  sequential=True, min_obs=0, neutral='mean',
+                                  iis=False, thresh=None, pan_weight=0.0, postfix='ZN')
 
         df_average = make_zn_scores(self.dfd, 'CRY', self.cids, start="2010-01-04",
-                                    sequential=True, min_obs=252,
+                                    sequential=True, min_obs=0, iis=False,
                                     neutral='mean', thresh=None, pan_weight=0.5,
                                     postfix='ZN')
 
         panel_df = panel_df.pivot(index='real_date', columns='cid', values='value')
         df_cross = df_cross.pivot(index='real_date', columns='cid', values='value')
         df_average = df_average.pivot(index='real_date', columns='cid', values='value')
+        index = randint(0, df_average.shape[0])
 
         # Drop the first row in the panel data.
         panel_df = panel_df.drop(panel_df.index[[0]])
@@ -235,8 +237,8 @@ class TestAll(unittest.TestCase):
         check_arr = df_check.to_numpy()
         average_arr = df_average.to_numpy()
 
-        dif = check_arr - average_arr
-        dif = np.nan_to_num(dif, nan = 0.0)
+        # Again, validate on a randomly chosen index.
+        dif = check_arr[index] - average_arr[index]
         self.assertTrue(np.all(dif < epsilon))
 
         threshold = 2.35
