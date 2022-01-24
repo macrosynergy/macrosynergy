@@ -336,6 +336,12 @@ if __name__ == "__main__":
     dfdx = dfd[~(filt1 | filt2)]  # reduced dataframe
 
     cidx = ['AUD', 'CAD', 'GBP', 'USD']
+
+    cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'],
+                           cids=cidx, xcat_aggs=['mean', 'mean'],
+                           start='2005-01-01', blacklist=black,
+                           years=3)
+
     cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'], cids=cidx, freq='M',
                            xcat_aggs=['mean', 'mean'], lag=1,
                            start='2000-01-01', years=None, blacklist=black,
