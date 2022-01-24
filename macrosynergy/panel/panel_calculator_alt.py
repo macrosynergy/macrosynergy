@@ -6,6 +6,7 @@ from macrosynergy.management.shape_dfs import reduce_df
 import re
 import random
 from collections import OrderedDict
+from itertools import repeat
 
 
 def symbol_finder(expression: str, index: int = 0):
@@ -160,13 +161,21 @@ def pandas_alignment(dates_dict: dict, expression: str):
     return <pd.Timestamp>:
     """
 
+    cats_tuple = []
     cats_indices = {}
     for k in dates_dict.keys():
 
         pattern = re.compile(k)
         indices = pattern.finditer(expression)
         result = [match.span() for match in indices]
+
         if result:
+            no = len(result)
+            if no > 1:
+                xcat_l = repeat(k, no)
+                cats_tuple.append(tuple(zip(xcat_l, result)))
+            else:
+                cats_tuple.append((k, next(iter(result))))
             cats_indices[k] = result
 
     s_date = pd.Timestamp.min
@@ -178,7 +187,30 @@ def pandas_alignment(dates_dict: dict, expression: str):
         if dates_dict[k][1] < e_date:
             e_date = dates_dict[k][1]
 
-    return s_date, e_date, cats_indices
+    return s_date, e_date, cats_indices, cats_tuple
+
+def category_order(cats_indices: List[tuple]):
+    """
+    Order the List according to the indices of the respective categories. The
+    categories occurring earliest in the expression will account for the first elements
+    in the returned List.
+
+    :param <List[tuple]> cats_indices:
+
+    return <List[tuple]> cats_indices: ordered list.
+    """
+
+    no_xcats = len(cats_indices)
+    for i in range(1, no_xcats):
+        current = cats_indices[i]
+        j = (i - 1)
+
+        while j >= 0 and cats_indices[j][1][0] > current[1][0]:
+            cats_indices[j + 1] = cats_indices[j]
+            j -= 1
+        cats_indices[j + 1] = current
+
+    return cats_indices
 
 def cross_section_append(index_cid: dict, expression: str, dates_dict: dict):
     """
@@ -210,18 +242,18 @@ def cross_section_append(index_cid: dict, expression: str, dates_dict: dict):
 
         add_length += len(addition)
 
-    s_date, e_date, cats_indices = pandas_alignment(dates_dict, expression)
-    cats_indices = OrderedDict(sorted(cats_indices.items()))
+    s_date, e_date, cats_indices, cats_tuple = pandas_alignment(dates_dict, expression)
+    cats_tuple = category_order(cats_tuple)
 
     trunc = ".loc[s_date:e_date]"
     length = 0
     counter = 0
-    for k, v in cats_indices.items():
-        for tup in v:
-            index = tup[1] + (length * counter)
-            expression = expression[:index] + trunc + expression[index:]
-            counter += 1
-            length = len(trunc) * counter
+    for elem in cats_tuple:
+        indices = elem[1]
+        index = indices[1] + (length * counter)
+        expression = expression[:index] + trunc + expression[index:]
+        counter += 1
+        length = len(trunc) * counter
 
     return expression
 
@@ -356,4 +388,12 @@ if __name__ == "__main__":
     # Secondary testcase.
     formula = "NEW1 = (( GROWTH - np.square( @USD_INFL )) / @USD_INFL )"
     formulas = [formula]
+    # df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+
+    # Third testcase.
+    formula = "NEW1 = ( GROWTH * @USD_INFL )"
+    formula_2 = "NEW2 = ( XR - @USD_GROWTH )"
+    formulas = [formula, formula_2]
     df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+
+    print(df_calc)
