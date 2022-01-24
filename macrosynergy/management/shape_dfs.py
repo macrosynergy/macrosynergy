@@ -202,6 +202,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         list_y_groups = list(year_groups.keys())
 
         translate_ = lambda year: list_y_groups[int((year % 2000) / years)]
+        df['real_date'] = pd.to_datetime(df['real_date'], errors='coerce')
         df['custom_date'] = df['real_date'].dt.year.apply(translate_)
         for i in range(2):
             dfx = df[df['xcat'] == xcats[i]]
