@@ -136,6 +136,7 @@ class TestAll(unittest.TestCase):
         # Adjust for the formal start date.
         start_bucket = int(floor(s_year - start) / years)
 
+        self.dfd['real_date'] = pd.to_datetime(self.dfd['real_date'], errors='coerce')
         dfc = categories_df(dfd, xcats=['XR', 'CRY'], cids=['CAD'],
                             freq='M', lag=0, xcat_aggs=['mean', 'mean'],
                             start='2000-01-01', years=years)
