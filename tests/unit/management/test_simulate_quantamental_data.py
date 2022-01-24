@@ -54,8 +54,19 @@ class Test_All(unittest.TestCase):
         self.black_dfd = make_qdf_black(df_cids, df_xcats, self.blackout)
 
     @staticmethod
-    def ar1_coef(x):
-        return np.corrcoef(np.array([x[:-1], x[1:]]))[0, 1]
+    def handle_nan(arr):
+        arr = np.nan_to_num(arr)
+        arr = arr[arr != 0.0]
+
+        return arr
+
+    def ar1_coef(self, x):
+
+        x = self.handle_nan(x)
+        arr_1 = x[:-1]
+        arr_2 = x[1:]
+
+        return np.corrcoef(np.array([arr_1, arr_2]))[0, 1]
 
     def cor_coef(self, df, ticker_x, ticker_y):
         x = ticker_x.split('_', 1)
