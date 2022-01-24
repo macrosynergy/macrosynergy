@@ -120,7 +120,9 @@ class TestAll(unittest.TestCase):
         dfw = dfx.pivot(index='real_date', columns='cid', values='value')
 
         data = dfw.to_numpy()
+        data = data.astype(dtype=np.float64)
         active_cross = np.sum(~np.isnan(data), axis=1)
+
         single_value = np.where(active_cross == 1)[0]
         no_single_values = single_value.size
 
