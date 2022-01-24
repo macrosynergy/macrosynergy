@@ -14,7 +14,7 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
                    ncol: int = 3, same_y: bool = True, all_xticks: bool = False,
                    title: str = None, title_adj: float = 0.95,
                    xcat_labels: List[str] = None, label_adj: float = 0.05,
-                   size: Tuple[float] = (12, 7), aspect: float = 1.7):
+                   size: Tuple[float] = (12, 7), aspect: float = 1.7, height: float = 3):
 
     """Displays a facet grid of time line charts of one or more categories
 
@@ -41,9 +41,10 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
         extended categories.
     :param <float> label_adj: parameter that sets bottom of figure to fit the label.
         Default is 0.05.
-    :param <Tuple[float]> size: two-element tuple setting width/height of figure.
-        Default is (12, 7).
-    :param <float> aspect: width-height ratio for plots in facet.
+    :param <Tuple[float]> size: two-element tuple setting width/height of single cross
+        section plot. Default is (12, 7). This is irrelevant for facet grid.
+    :param <float> aspect: width-height ratio for plots in facet. Default is 1.7.
+    :param <float> height: height of plots in facet. Default is 3.
 
     """
 
@@ -54,9 +55,10 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
         df[val] = df.sort_values(['cid', 'xcat', "real_date"])[['cid', 'xcat', val]].\
             groupby(['cid', 'xcat']).cumsum()
 
-    sns.set(rc={'figure.figsize': size}, style='darkgrid')
+    sns.set(style='darkgrid')
     if len(cids) == 1:
-        ax = sns.lineplot(data=df, x='real_date', y=val, hue='xcat', ci=None)
+        ax = sns.lineplot(data=df, x='real_date', y=val, hue='xcat', ci=None,
+                          size=size)
         plt.axhline(y=0, c=".5")
         handles, labels = ax.get_legend_handles_labels()
         label = labels[0:] if xcat_labels is None else xcat_labels
@@ -67,7 +69,8 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
             plt.title(title)
     else:
         fg = sns.FacetGrid(data=df, col='cid', col_wrap=ncol, sharey=same_y,
-                           aspect=aspect, col_order=cids)
+                           aspect=aspect, height=height,
+                           col_order=cids)
         fg.map_dataframe(sns.lineplot, x='real_date', y=val, hue='xcat',
                          hue_order=xcats, ci=None)
         fg.map(plt.axhline, y=0, c=".5")
@@ -115,7 +118,8 @@ if __name__ == "__main__":
 
     view_timelines(dfdx, xcats=['XR', 'CRY'], cids=cids, ncol=2,
                    xcat_labels=['Return', 'Carry'],
-                   title='Carry and return', title_adj=0.9, label_adj=0.1)
+                   title='Carry and return', title_adj=0.9, label_adj=0.1,
+                   aspect=1, height=5)
     view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids[0], ncol=1,
                    title='AUD return and carry')
     view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids[0], ncol=1,
