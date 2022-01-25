@@ -98,11 +98,10 @@ class CategoryRelations:
                                                shared_cids=shared_cids,
                                                expln_var=xcats[0])
 
-        if not all([elem == None for elem in xcat_trims]):
-
+        if self.xcat_trims[0] != None:
             assert len(xcat_trims) == len(xcats), "Two values expected corresponding to " \
                                                   "the number of categories."
-            types = [isinstance(elem, float) for elem in xcat_trims]
+            types = [isinstance(elem, float) and elem >= 0.0 for elem in xcat_trims]
             assert all(types), "Expected two floating point values."
 
             df = CategoryRelations.outlier_trim(df, xcats, xcat_trims)
