@@ -183,6 +183,8 @@ def pandas_alignment(dates_dict: dict, expression: str):
             else:
                 cats_tuple.append((k, next(iter(result))))
             cats_indices[k] = result
+        else:
+            continue
 
     s_date = pd.Timestamp.min
     e_date = pd.Timestamp.max
@@ -351,6 +353,9 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
         exec(f'{new_xcat} = dfw_add')
         index += 1
 
+        # Update the dates dictionary to include the newly formed category.
+        dates_xcat[new_xcat] = (dfw_add.index[0], dfw_add.index[-1])
+
     df_calc = pd.concat(output_df)[cols]
     df_calc.reset_index(drop=True)
 
@@ -392,17 +397,22 @@ if __name__ == "__main__":
     formula_3 = "NEW3 = GROWTH - np.square( @USD_INFL )"
     formulas = ["NEW1 = np.abs( XR ) + 0.552 + 2 * CRY", "NEW2 = NEW1 * 2", formula_3]
     df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
-    print(df_calc)
 
     # Secondary testcase.
     formula = "NEW1 = (( GROWTH - np.square( @USD_INFL )) / @USD_INFL )"
     formulas = [formula]
     df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
-    print(df_calc)
 
-    # Third testcase.
+    # Third testcase. Referencing the newly formed category.
     formula = "NEW1 = ( GROWTH * @USD_INFL )"
     formula_2 = "NEW2 = ( XR - @USD_GROWTH )"
     formulas = [formula, formula_2]
     df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+
+    # Fourth testcase. Referencing the newly formed category.
+    formula = "NEW1 = ( GROWTH - INFL )"  # Growth adjusted for inflation.
+    formula_2 = "NEW2 = ( XR - @USD_NEW1 )"
+    formulas = [formula, formula_2]
+    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+    
     print(df_calc)
