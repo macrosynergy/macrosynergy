@@ -35,6 +35,7 @@ def symbol_finder(expression: str, index: int = 0):
 
     return indices
 
+
 def iterator_func(expression: str, symbol: str, index: int):
     """
     Indefinite iterator until a specific symbol is found. Will return the index of the
@@ -54,6 +55,7 @@ def iterator_func(expression: str, symbol: str, index: int):
         elem = expression[iterator]
 
     return iterator
+
 
 def formula_reconstruction(formula: str, indices: List[int]):
     """
@@ -99,6 +101,7 @@ def formula_reconstruction(formula: str, indices: List[int]):
 
     return formula, cid_tracker
 
+
 def formula_handler(calcs: List[str]):
     """
     Separate the functions, contained in the list, y = f(x), on the equality sign. The
@@ -127,6 +130,7 @@ def formula_handler(calcs: List[str]):
 
     return ops, expression_cid
 
+
 def involved_xcats(ops: dict):
     """
     Function used to understand the original categories involved in the panel
@@ -148,6 +152,7 @@ def involved_xcats(ops: dict):
                        and x not in new_xcats]
 
     return set(xcats_used)
+
 
 def pandas_alignment(dates_dict: dict, expression: str):
     """
@@ -189,6 +194,7 @@ def pandas_alignment(dates_dict: dict, expression: str):
 
     return s_date, e_date, cats_indices, cats_tuple
 
+
 def category_order(cats_indices: List[tuple]):
     """
     Order the List according to the indices of the respective categories. The
@@ -211,6 +217,7 @@ def category_order(cats_indices: List[tuple]):
         cats_indices[j + 1] = current
 
     return cats_indices
+
 
 def cross_section_append(index_cid: dict, expression: str, dates_dict: dict):
     """
