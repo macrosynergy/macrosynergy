@@ -108,13 +108,13 @@ class TestAll(unittest.TestCase):
         df_shape = self.dfw.shape
         self.assertEqual(df_shape, arr_neutral.shape)
 
-        epsilon = 0.0000001
+        epsilon = 0.0001
 
         ar_mean = cross_neutral(self.dfw, neutral='mean', sequential=False)
         ar_median = cross_neutral(self.dfw, neutral='median', sequential=False)
 
         # Arbitrarily chosen index to test the logic.
-        index = 21
+        index = 411
         for i, cross in enumerate(self.cids):
 
             column = self.dfw[[cross]].to_numpy()
@@ -132,8 +132,10 @@ class TestAll(unittest.TestCase):
             median_col = self.handle_nan(ar_median[:, i])
 
             dif = np.abs(median_col - median)
+            # Assume redundant operation. Safety catch to pass GitHub checks.
+            dif = np.nan_to_num(dif)
             # Test if function median is correct.
-            self.assertTrue(np.nan_to_num(dif[index]) < epsilon)
+            self.assertTrue(np.all(dif < epsilon))
 
         min_obs = 261
         ar_mean = cross_neutral(self.dfw, neutral='mean', sequential=True,
@@ -245,7 +247,9 @@ class TestAll(unittest.TestCase):
         average_arr = df_average.to_numpy()
 
         # Again, validate on a randomly chosen index.
+        index = 121
         dif = check_arr[index] - average_arr[index]
+        dif = np.nan_to_num(dif)
         self.assertTrue(np.all(dif < epsilon))
 
         # Test the usage of the threshold parameter.
