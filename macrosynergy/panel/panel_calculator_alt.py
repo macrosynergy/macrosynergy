@@ -178,7 +178,8 @@ def pandas_alignment(dates_dict: dict, expression: str):
             no = len(result)
             if no > 1:
                 xcat_l = repeat(k, no)
-                cats_tuple.append(tuple(zip(xcat_l, result)))
+                tuple_ = list(zip(xcat_l, result))
+                cats_tuple += tuple_
             else:
                 cats_tuple.append((k, next(iter(result))))
             cats_indices[k] = result
@@ -375,7 +376,7 @@ if __name__ == "__main__":
     df_xcats.loc['XR'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
     df_xcats.loc['CRY'] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
     df_xcats.loc['GROWTH'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
-    df_xcats.loc['INFL'] = ['2012-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
+    df_xcats.loc['INFL'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
@@ -390,17 +391,18 @@ if __name__ == "__main__":
 
     formula_3 = "NEW3 = GROWTH - np.square( @USD_INFL )"
     formulas = ["NEW1 = np.abs( XR ) + 0.552 + 2 * CRY", "NEW2 = NEW1 * 2", formula_3]
-    # df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+    print(df_calc)
 
     # Secondary testcase.
     formula = "NEW1 = (( GROWTH - np.square( @USD_INFL )) / @USD_INFL )"
     formulas = [formula]
-    # df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+    print(df_calc)
 
     # Third testcase.
     formula = "NEW1 = ( GROWTH * @USD_INFL )"
     formula_2 = "NEW2 = ( XR - @USD_GROWTH )"
     formulas = [formula, formula_2]
     df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
-
     print(df_calc)
