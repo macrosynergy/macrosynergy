@@ -130,12 +130,13 @@ class TestAll(unittest.TestCase):
 
             median = np.median(column)
             median_col = self.handle_nan(ar_median[:, i])
+            median_col = list(set(median_col))
+            self.assertTrue(len(median_col) == 1)
 
-            dif = np.abs(median_col - median)
-            # Assume redundant operation. Safety catch to pass GitHub checks.
-            dif = np.nan_to_num(dif)
+            value = median_col[0]
+            dif = np.abs(median - value)
             # Test if function median is correct.
-            self.assertAlmostEqual(np.nansum(dif), 0.0)
+            self.assertTrue(dif < epsilon)
 
         min_obs = 261
         ar_mean = cross_neutral(self.dfw, neutral='mean', sequential=True,
