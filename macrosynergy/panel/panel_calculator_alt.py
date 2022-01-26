@@ -483,4 +483,10 @@ if __name__ == "__main__":
               "INFL.pct_change(periods=1, fill_method='pad')"
     formulas = [formula]
     df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
-    print(df_calc)
+
+    # Seventh testcase.
+    formulas = ["NEW1 = np.square(np.abs( XR ))"]
+    filt1 = (dfd['xcat'] == 'XR')
+    dfdx = dfd[filt1]
+
+    df_calc = panel_calculator(df=dfdx, calcs=formulas, cids=cids, start=start, end=end)
