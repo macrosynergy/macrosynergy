@@ -130,22 +130,24 @@ def formula_handler(calcs: List[str]):
 
     return ops, expression_cid
 
-def time_series_check(formula: str):
+def time_series_check(formula: str, index: int):
     """
     Determine if the panel has any time-series methods applied. If a time-series
     conversion is applied, the function will return the terminal index of the respective
     category.
 
     :param <str> formula:
+    :param <int> index: starting index to iterate over.
 
     :return <int>:
     """
 
     check = lambda a, b, c: (a.isupper() and b == "." and c.islower())
+
     f = formula
     length = len(f)
     clause = False
-    for i in range(0, (length - 2)):
+    for i in range(index, (length - 2)):
         if check(f[i], f[i + 1], f[i + 2]):
             clause = True
             break
@@ -154,6 +156,29 @@ def time_series_check(formula: str):
 
     return i, clause
 
+def xcat_isolator(expression: str, start_index: str, index: int):
+    """
+    Split the category from the time-series operation. The function will return the
+    respective category.
+
+    :param <str> expression:
+    :param <str> start_index: starting index to search over.
+    :param <int> index: defines the end of the search space over the expression.
+
+    :return <str> xcat.
+    """
+
+    op_copy = expression[start_index:index + 1]
+
+    start = 0
+    elem = op_copy[start_index]
+    while not elem.isupper():
+        start += 1
+        elem = op_copy[start]
+
+    xcat = op_copy[start:(index + 1)]
+
+    return xcat, (start_index + start + len(xcat))
 
 def involved_xcats(ops: dict):
     """
@@ -171,13 +196,14 @@ def involved_xcats(ops: dict):
     new_xcats = list(ops.keys())
 
     for op in ops.values():
-        index, clause = time_series_check(formula=op)
-        print(clause)
+        index, clause = time_series_check(formula=op, index=0)
+        start_index = 0
         if clause:
-            op_copy = op[:index + 1]
-            start = re.match('^[A-Z]', op_copy).span()[0]
-            xcat = op[start:(index + 1)]
-            xcats_used.append(xcat)
+            while clause:
+                xcat, end = xcat_isolator(op, start_index, index)
+                xcats_used.append(xcat)
+                index, clause = time_series_check(op, index=end)
+                start_index = end
         else:
             op_list = op.split(' ')
             xcats_used += [x for x in op_list if re.match('^[A-Z]', x)
@@ -373,7 +399,6 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
         if index in expression_cid.keys():
             formula = cid_append(formula, index_cid=expression_cid[index],
                                  dates_dict=dates_xcat)
-
         dfw_add = eval(formula)
         df_add = pd.melt(dfw_add.reset_index(), id_vars=['real_date'])
         df_add['xcat'] = new_xcat
@@ -446,6 +471,13 @@ if __name__ == "__main__":
     # Fifth testcase.
     # Integration of time-series operations.
     formula = "NEW1 = GROWTH.pct_change(periods=1, fill_method='pad')"
+    formulas = [formula]
+    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+
+    # Sixth testcase.
+    # Further testing of time-series operations.
+    formula = "NEW1 = GROWTH.pct_change(periods=1, fill_method='pad') - " \
+              "INFL.pct_change(periods=1, fill_method='pad')"
     formulas = [formula]
     df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
     print(df_calc)
