@@ -134,12 +134,13 @@ def time_series_check(formula: str, index: int):
     """
     Determine if the panel has any time-series methods applied. If a time-series
     conversion is applied, the function will return the terminal index of the respective
-    category.
+    category. Further, a boolean parameter is also returned to confirm the presence of a
+    time-series operation.
 
     :param <str> formula:
     :param <int> index: starting index to iterate over.
 
-    :return <int>:
+    :return <int, bool>:
     """
 
     check = lambda a, b, c: (a.isupper() and b == "." and c.islower())
@@ -190,6 +191,8 @@ def involved_xcats(ops: dict):
 
     :param <dict> ops: dictionary containing the panel calculation where the key is the
         newly formed category and the value the calculation.
+
+    :return <set> xcats_used: unique categories referenced across all formulas.
     """
 
     xcats_used = []
@@ -260,7 +263,7 @@ def category_order(cats_indices: List[tuple]):
     """
     Order the List according to the indices of the respective categories. The
     categories occurring earliest in the expression will account for the first elements
-    in the returned List.
+    in the returned List. Utilises a polynomial sorting algorithm called Insertion Sort.
 
     :param <List[tuple]> cats_indices:
 
