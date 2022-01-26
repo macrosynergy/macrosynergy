@@ -5,6 +5,60 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 import re
 import random
+import warnings
+
+warnings.filterwarnings("ignore")
+
+def time_series_check(formula: str, index: int):
+    """
+    Determine if the panel has any time-series methods applied. If a time-series
+    conversion is applied, the function will return the terminal index of the respective
+    category. Further, a boolean parameter is also returned to confirm the presence of a
+    time-series operation.
+
+    :param <str> formula:
+    :param <int> index: starting index to iterate over.
+
+    :return <int, bool>:
+    """
+
+    check = lambda a, b, c: (a.isupper() and b == "." and c.islower())
+
+    f = formula
+    length = len(f)
+    clause = False
+    for i in range(index, (length - 2)):
+        if check(f[i], f[i + 1], f[i + 2]):
+            clause = True
+            break
+        else:
+            continue
+
+    return i, clause
+
+def xcat_isolator(expression: str, start_index: str, index: int):
+    """
+    Split the category from the time-series operation. The function will return the
+    respective category.
+
+    :param <str> expression:
+    :param <str> start_index: starting index to search over.
+    :param <int> index: defines the end of the search space over the expression.
+
+    :return <str> xcat.
+    """
+
+    op_copy = expression[start_index:index + 1]
+
+    start = 0
+    elem = op_copy[start_index]
+    while not elem.isupper():
+        start += 1
+        elem = op_copy[start]
+
+    xcat = op_copy[start:(index + 1)]
+
+    return xcat, (start_index + start + len(xcat))
 
 
 def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] = None,
@@ -52,36 +106,48 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
         "Each formula in the panel calculation list must be a string."
     assert isinstance(cids, list), "List of cross-sections expected."
 
-    # B. Collect new category names and their formulas
+    # B. Collect new category names and their formulas.
 
     ops = {}
     for calc in calcs:
         calc_parts = calc.split('=', maxsplit=1)
         ops[calc_parts[0].strip()] = calc_parts[1].strip()
 
-    # C. Check if all required categories are in the dataframe
+    # C. Check if all required categories are in the dataframe.
 
     xcats_used = []
     singles_used = []
     for op in ops.values():
-        op_list = op.split(' ')
-        xcats_used += [x for x in op_list if re.match('^[A-Z]', x)]
-        singles_used += [s for s in op_list if re.match('^i', s)]
+        index, clause = time_series_check(formula=op, index=0)
+        start_index = 0
+        if clause:
+            while clause:
+                xcat, end_ = xcat_isolator(op, start_index, index)
+                xcats_used.append(xcat)
+                index, clause = time_series_check(op, index=end_)
+                start_index = end_
+        else:
+            op_list = op.split(' ')
+            xcats_used += [x for x in op_list if re.match('^[A-Z]', x)]
+            singles_used += [s for s in op_list if re.match('^i', s)]
 
     single_xcats = [x[5:] for x in singles_used]
     all_xcats_used = xcats_used + single_xcats
-    old_xcats_used = list(set(all_xcats_used) - set([x for x in ops.keys()]))
+
+    new_xcats = list(ops.keys())
+    old_xcats_used = set(all_xcats_used) - set(new_xcats)
+    old_xcats_used = list(old_xcats_used)
     missing = sorted(set(old_xcats_used) - set(df['xcat'].unique()))
     assert len(missing) == 0, f"Missing categories: {missing}."
 
-    # D. Reduce dataframe with intersection requirement
+    # D. Reduce dataframe with intersection requirement.
 
     dfx = reduce_df(df, xcats=old_xcats_used, cids=cids,
                     start=start, end=end, blacklist=blacklist,
                     intersect=True)
     cidx = np.sort(dfx['cid'].unique())
 
-    # E. Create all required wide dataframes with category names
+    # E. Create all required wide dataframes with category names.
 
     for xcat in old_xcats_used:
         dfxx = dfx[dfx['xcat'] == xcat]
@@ -95,19 +161,17 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
         dfw.columns = cidx
         exec(f'{single} = dfw')
 
-    # F. Calculate the panels and collect
+    # F. Calculate the panels and collect.
 
     for new_xcat, formula in ops.items():
         dfw_add = eval(formula)
-        # Todo: check if this works for all operations and aligns indexes reliably
-        # Todo: does it work with time series methods (.diff(), .lag() and so forth?
         df_add = pd.melt(dfw_add.reset_index(), id_vars=['real_date'])
         df_add['xcat'] = new_xcat
         if new_xcat == list(ops.keys())[0]:
             df_out = df_add[cols]
         else:
             df_out = df_out.append(df_add[cols])
-        exec(f'{new_xcat} = dfw_add')  # we main need a df for subsequent calculations
+        exec(f'{new_xcat} = dfw_add')
 
     return df_out
 
@@ -128,10 +192,10 @@ if __name__ == "__main__":
 
     df_xcats = pd.DataFrame(index = xcats, columns = ['earliest', 'latest', 'mean_add',
                                                       'sd_mult', 'ar_coef', 'back_coef'])
-    df_xcats.loc['XR'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
+    df_xcats.loc['XR'] = ['2012-01-01', '2020-12-31', 0, 1, 0, 0.3]
     df_xcats.loc['CRY'] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
     df_xcats.loc['GROWTH'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
-    df_xcats.loc['INFL'] = ['2010-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
+    df_xcats.loc['INFL'] = ['2012-01-01', '2020-09-30', 1, 2, 0.8, 0.5]
 
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
@@ -146,14 +210,25 @@ if __name__ == "__main__":
 
     # Start of the testing. Various testcases included to understand the capabilities of
     # the designed function.
-    df_calc = panel_calculator(df=dfd,
-                               calcs=["NEW1 = np.abs( XR ) + 0.52 + 2 * CRY + iGBP_INFL",
-                                      "NEW2 = NEW1 / XR"],
-                               cids=cids, start=start, end=end)
+    formula = ["NEW1 = np.abs( XR ) + 0.52 + 2 * CRY + iGBP_INFL", "NEW2 = NEW1 / XR"]
+    # df_calc = panel_calculator(df=dfd, calcs=formula, cids=cids, start=start, end=end)
 
-    df_calc = panel_calculator(df=dfdx,
-                               calcs=["NEW1 = np.abs( XR ) + 0.552 + 2 * CRY",
-                                      "NEW2 = NEW1 / XR"],
-                               cids=cids, start=start, end=end)
+    formula = ["NEW1 = np.abs( XR ) + 0.552 + 2 * CRY", "NEW2 = NEW1 / XR"]
+    # df_calc = panel_calculator(df=dfdx, calcs=formula, cids=cids, start=start, end=end)
 
-    df_calc.head()
+    # Third testcase.
+    formula = "NEW1 = GROWTH - INFL"
+    formula_3 = "NEW2 = XR - iUSD_NEW1"
+    formulas = [formula, formula_3]
+    # df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+
+    # Fourth testcase.
+    formula = "NEW1 = GROWTH - iUSD_INFL / iUSD_XR"
+    formulas = [formula]
+    # df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+
+    formula = "NEW1 = GROWTH.pct_change(periods=1, fill_method='pad') - " \
+              "INFL.pct_change(periods=1, fill_method='pad')"
+    formulas = [formula]
+    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+    print(df_calc)
