@@ -69,7 +69,8 @@ def formula_reconstruction(formula: str, indices: List[int]):
     :param <List[int]> indices: list of indices where the "@" symbol occurs in the
         expression.
 
-    :return <str>: returns the updated formula.
+    :return <str, dict>: returns the updated formula and a tracking mechanism for the
+        cross-sections.
     """
 
     cid_tracker = {}
@@ -109,7 +110,7 @@ def formula_handler(calcs: List[str]):
 
     :param <List[str]> calcs:
 
-    :return <dict>: dictionary hosting the function.
+    :return <dict, dict>: dictionary hosting the function.
     """
 
     ops = {}
@@ -119,7 +120,6 @@ def formula_handler(calcs: List[str]):
         calc_parts = calc.split('=', maxsplit=1)
         # Suppress to imperative inclusion of terminal parenthesis.
         value = calc_parts[1].strip()
-        value = calc_parts[1]
         indices = symbol_finder(expression=value, index=0)
 
         if indices:
@@ -129,6 +129,30 @@ def formula_handler(calcs: List[str]):
         ops[calc_parts[0].strip()] = value
 
     return ops, expression_cid
+
+def time_series_check(formula: str):
+    """
+    Determine if the panel has any time-series methods applied. If a time-series
+    conversion is applied, the function will return the terminal index of the respective
+    category.
+
+    :param <str> formula:
+
+    :return <int>:
+    """
+
+    check = lambda a, b, c: (a.isupper() and b == "." and c.islower())
+    f = formula
+    length = len(f)
+    clause = False
+    for i in range(0, (length - 2)):
+        if check(f[i], f[i + 1], f[i + 2]):
+            clause = True
+            break
+        else:
+            continue
+
+    return i, clause
 
 
 def involved_xcats(ops: dict):
@@ -144,12 +168,20 @@ def involved_xcats(ops: dict):
     """
 
     xcats_used = []
-
     new_xcats = list(ops.keys())
+
     for op in ops.values():
-        op_list = op.split(' ')
-        xcats_used += [x for x in op_list if re.match('^[A-Z]', x)
-                       and x not in new_xcats]
+        index, clause = time_series_check(formula=op)
+        print(clause)
+        if clause:
+            op_copy = op[:index + 1]
+            start = re.match('^[A-Z]', op_copy).span()[0]
+            xcat = op[start:(index + 1)]
+            xcats_used.append(xcat)
+        else:
+            op_list = op.split(' ')
+            xcats_used += [x for x in op_list if re.match('^[A-Z]', x)
+                           and x not in new_xcats]
 
     return set(xcats_used)
 
@@ -221,17 +253,16 @@ def category_order(cats_indices: List[tuple]):
 
     return cats_indices
 
-
-def cross_section_append(index_cid: dict, expression: str, dates_dict: dict):
+def cid_append(expression: str, index_cid: dict, dates_dict: dict):
     """
     Subroutine designed to modify the formula to account for the presence of single
     cross-sections on certain categories. For instance, np.sqrt(@USD_OLDCAT2).
     Further, will align the involved dataframes which is required due to the conversion
     to a np.ndarray.
 
+    :param <str> expression:
     :param <dict> index_cid: the dictionary's key will be the concerning category's
         starting index and the value will be the relevant cross-section.
-    :param <str> expression:
     :param <dict> dates_dict: dictionary consisting of each category and their respective
         start and end date across the panel series.
 
@@ -317,9 +348,6 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
 
     ops, expression_cid = formula_handler(calcs)
 
-    if not expression_cid:
-        del expression_cid
-
     old_xcats_used = involved_xcats(ops=ops)
 
     available_xcats = set(df['xcat'].unique())
@@ -343,8 +371,8 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
     for new_xcat, formula in ops.items():
 
         if index in expression_cid.keys():
-            formula = cross_section_append(index_cid=expression_cid[index],
-                                           expression=formula, dates_dict=dates_xcat)
+            formula = cid_append(formula, index_cid=expression_cid[index],
+                                 dates_dict=dates_xcat)
 
         dfw_add = eval(formula)
         df_add = pd.melt(dfw_add.reset_index(), id_vars=['real_date'])
@@ -414,5 +442,10 @@ if __name__ == "__main__":
     formula_2 = "NEW2 = ( XR - @USD_NEW1 )"
     formulas = [formula, formula_2]
     df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
-    
+
+    # Fifth testcase.
+    # Integration of time-series operations.
+    formula = "NEW1 = GROWTH.pct_change(periods=1, fill_method='pad')"
+    formulas = [formula]
+    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
     print(df_calc)
