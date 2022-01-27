@@ -45,27 +45,29 @@ class TestAll(unittest.TestCase):
 
         filt = (df_calc['xcat'] == xcat)
         df_new = df_calc[filt].pivot(index='real_date', columns='cid', values='value')
-        dates = list(df_new.index)
-        date = choice(dates)
+        df_new_trunc = df_new.dropna(axis=0, how="any")
 
+        dates = list(df_new_trunc.index)
+        date = choice(dates)
         return df_new, date
 
     def row_value(self, filt_df: pd.DataFrame, date: pd.Timestamp, cid: str,
                   xcats: List[str]):
 
         values = []
+        no_xcats = len(xcats)
 
         input_values = filt_df[filt_df['real_date'] == date]
         input_values = input_values[input_values['cid'] == cid]
-        for cat in xcats:
-            val = input_values[input_values['xcat'] == cat]['value']
-            val = np.nan_to_num(val)
-            try:
-                values.append(val[0])
-            except IndexError:
-                values = self.row_value(filt_df, "2015-01-03", cid, xcats)
+        if no_xcats > 1:
+            for cat in xcats:
 
-        return values
+                val = input_values[input_values['xcat'] == cat]['value']
+                values.append(float(val))
+            return values
+        else:
+            val = input_values[input_values['xcat'] == xcats[0]]['value']
+            return float(val)
 
     def test_panel_calculator_dimension(self):
         # Function used test the alignment of dataframes if categories are defined over
@@ -150,21 +152,21 @@ class TestAll(unittest.TestCase):
         date = choice(dates)
         # Test on Australia.
         cross_section = 'AUD'
-        row_value = df_new1.loc[date][cross_section]
+        computed_value = df_new1.loc[date][cross_section]
         xr, cry = self.row_value(filt_df, date, cross_section, ['XR', 'CRY'])
 
         # Manually produce: "NEW1 = np.abs( XR ) + 0.52 + 2 * CRY".
-        self.assertTrue(row_value == (np.abs(float(xr)) + 0.52 + 2 * float(cry)))
+        self.assertTrue(computed_value == (np.abs(float(xr)) + 0.52 + 2 * float(cry)))
 
         # Check NEW2: "NEW2 = NEW1 / XR".
         cross_section = 'USD'
         df_new2, date = self.dataframe_pivot(df_calc, "NEW2")
 
-        row_value = df_new2.loc[date][cross_section]
+        computed_value = df_new2.loc[date][cross_section]
         xr = self.row_value(filt_df, date, cross_section, ['XR'])
         new1_val = df_new1.loc[date][cross_section]
 
-        self.assertTrue(row_value == float(new1_val) / xr[0])
+        self.assertTrue(computed_value == float(new1_val) / float(xr))
 
         # ii)
         # Test on the application of multiple numpy functions applied to a single cross-
@@ -182,11 +184,12 @@ class TestAll(unittest.TestCase):
         df_new2, date = self.dataframe_pivot(df_calc, xcat="NEW2")
 
         cross_section = 'USD'
-        row_value = df_new2.loc[date][cross_section]
+        computed_value = df_new2.loc[date][cross_section]
         xr = self.row_value(filt_df, date, cross_section, ['XR'])
+        xr = float(xr)
 
         # The formula is contrived but tests the strength of the incorporation of Numpy.
-        self.assertTrue(row_value == np.log(np.square(np.abs(xr))))
+        self.assertTrue(computed_value == np.log(np.square(np.abs(xr))))
 
         # iii)
         # Test on the application of a single cross-section. Applying a binary operation
@@ -208,10 +211,46 @@ class TestAll(unittest.TestCase):
         xcats = ['GROWTH', 'INFL', 'XR']
         growth = self.row_value(filt_df, date, cross_section, ['GROWTH'])
         cross_section = 'USD'
-        infl, xr = self.row_value(filt_df, date, cross_section, xcats[1:])
+        infl, xr = self.row_value(filt_df, date, cross_section, ['INFL', 'XR'])
 
-        manual_calculator = (growth[0] - infl) / xr
+        manual_calculator = (growth - infl) / xr
         self.assertTrue(row_value_gbp == manual_calculator)
+
+    def test_panel_calculator_time_series(self):
+
+        self.dataframe_generator()
+
+        # Test the panel calculator on time-series operations applied to pandas
+        # dataframes. For example, percentage change, shifts and other associated
+        # methods.
+        # Will implicitly test the two accompanying methods which are used when
+        # time-series operations are applied.
+
+        formula = "NEW1 = GROWTH.pct_change(periods=1, fill_method='pad') - " \
+                  "INFL.pct_change(periods=1, fill_method='pad')"
+        formula_2 = "NEW2 = NEW1 / XR"
+        formulas = [formula, formula_2]
+        df_calc = panel_calculator(df=self.dfd, calcs=formulas, cids=self.cids,
+                                   start=self.start, end=self.end)
+        df_new1, date = self.dataframe_pivot(df_calc, "NEW1")
+        date_2 = date - pd.DateOffset(1)
+
+        while date_2.day_of_week > 5:
+            date_2 -= pd.DateOffset(1)
+
+        filt_1 = (self.dfd['xcat'] != 'CRY')
+        filt_df = self.dfd[filt_1]
+        cross_section = 'CAD'
+        # To test the percentage change, will require values across consecutive days.
+        growth, infl = self.row_value(filt_df, date, cross_section, ['GROWTH', 'INFL'])
+        growth_2, infl_2 = self.row_value(filt_df, date_2, cross_section,
+                                          ['GROWTH', 'INFL'])
+        growth_pct = ((growth - growth_2) / growth_2)
+        infl_pct = ((infl - infl_2) / infl_2)
+        manual_compute = growth_pct - infl_pct
+        row_value_cad = df_new1.loc[date][cross_section]
+
+        self.assertTrue(round(manual_compute, 5) == round(row_value_cad, 5))
 
 
 if __name__ == '__main__':
