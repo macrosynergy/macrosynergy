@@ -33,8 +33,8 @@ class TestAll(unittest.TestCase):
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
         self.__dict__['dfd'] = dfd
 
-        black = {'AUD': ['2000-01-01', '2003-12-31'],
-                 'GBP': ['2018-01-01', '2100-01-01']}
+        black = {'AUD': ['2021-01-01', '2022-12-31'],
+                 'GBP': ['2021-01-01', '2100-01-01']}
 
         self.__dict__['blacklist'] = black
         self.__dict__['start'] = '2010-01-01'
@@ -48,7 +48,8 @@ class TestAll(unittest.TestCase):
         df_new_trunc = df_new.dropna(axis=0, how="any")
 
         dates = list(df_new_trunc.index)
-        date = choice(dates)
+        # Further restrictions on possible values.
+        date = choice(dates[100:-100])
         return df_new, date
 
     def row_value(self, filt_df: pd.DataFrame, date: pd.Timestamp, cid: str,
@@ -172,7 +173,7 @@ class TestAll(unittest.TestCase):
         # Test on the application of multiple numpy functions applied to a single cross-
         # section. Aim is to understand the breadth and durability of the eval() method.
         formula = "NEW1 = GROWTH - INFL"
-        formula_2 = "NEW2 = np.log(np.square(np.abs( XR )))"
+        formula_2 = "NEW2 = np.square(np.abs( XR ))"
         formulas = [formula, formula_2]
         df_calc = panel_calculator(df=self.dfd, calcs=formulas,
                                    cids=self.cids, start=self.start, end=self.end,
@@ -189,7 +190,7 @@ class TestAll(unittest.TestCase):
         xr = float(xr)
 
         # The formula is contrived but tests the strength of the incorporation of Numpy.
-        self.assertTrue(computed_value == np.log(np.square(np.abs(xr))))
+        self.assertTrue(computed_value == np.square(np.abs(xr)))
 
         # iii)
         # Test on the application of a single cross-section. Applying a binary operation
