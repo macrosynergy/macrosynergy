@@ -229,6 +229,6 @@ if __name__ == "__main__":
 
     formula = "NEW1 = GROWTH.pct_change(periods=1, fill_method='pad') - " \
               "INFL.pct_change(periods=1, fill_method='pad')"
-    formulas = [formula]
-    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
-    print(df_calc)
+    formula_2 = "NEW2 = NEW1 / XR.pct_change(periods=1, fill_method='pad')"
+    formulas = [formula, formula_2]
+    # df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
