@@ -2,6 +2,7 @@
 import unittest
 import io
 import sys
+import numpy as np
 import pandas as pd
 from random import randint
 from tests.simulate import make_qdf
@@ -98,6 +99,22 @@ class TestAll(unittest.TestCase):
                                    freq='M', xcat_aggs=['mean', 'mean'], lag=1,
                                    start='2000-01-01', years=None, blacklist=self.black,
                                    xcat1_chg='pch', n_periods=None)
+
+        with self.assertRaises(AssertionError):
+            # The two values held in the "xcat_trims" must both be floating point values.
+            # Although computationally valid, integer types are not permissible: integer
+            # values would have to be defined as floats.
+            cr = CategoryRelations(self.dfdx, xcats=['GROWTH', 'INFL'], cids=self.cidx,
+                                   freq='M', xcat_aggs=['mean', 'mean'], lag=1,
+                                   start='2000-01-01', years=None, blacklist=self.black,
+                                   xcat1_chg = None, xcat_trims = [3.25, 3])
+
+        with self.assertRaises(AssertionError):
+            # Trivial check to confirm the length of "xcat_trims" parameter.
+            cr = CategoryRelations(self.dfdx, xcats=['GROWTH', 'INFL'], cids=self.cidx,
+                                   freq='M', xcat_aggs=['mean', 'mean'], lag=1,
+                                   start='2000-01-01', years=None, blacklist=self.black,
+                                   xcat1_chg = None, xcat_trims = [3.25, 3.0, 2.0])
 
     def test_intersection_cids(self):
 
@@ -221,6 +238,58 @@ class TestAll(unittest.TestCase):
         # The logic and assembly of a the new dataframe have both been tested. The other
         # methods in the Class are for visualisation and heavily dependent on external
         # packages.
+
+    def test_outlier_trim(self):
+
+        self.dataframe_generator()
+
+        # Generate the dataframe passed into the outlier_trim() method: the procedure
+        # occurs inside the Class's constructor.
+        shared_cids = CategoryRelations.intersection_cids(self.dfdx, ['GROWTH', 'INFL'],
+                                                          self.cidx)
+
+        no_cross_sections = len(shared_cids)
+        # DataFrame passed into time_series() method or outlier_trim() depending on
+        # parameter.
+        original_df = categories_df(self.dfdx, ['GROWTH', 'INFL'], shared_cids,
+                                    val='value', freq='W', blacklist=self.black,
+                                    start='2000-01-01', years=None, lag=1,
+                                    xcat_aggs=['mean', 'mean'])
+
+        xcat_trims = [2.5, 2.75]
+        df = CategoryRelations.outlier_trim(df=original_df, xcats=['GROWTH', 'INFL'],
+                                            xcat_trims=xcat_trims)
+        tuple_unpack = lambda tup: tup[0]
+        c_sections = set(map(tuple_unpack, df.index))
+        self.assertTrue(sorted(c_sections) == sorted(shared_cids))
+
+        explanatory = df['GROWTH']
+        condition = np.where(explanatory > 2.5)
+        list_ = next(iter(condition))
+        self.assertTrue(len(list_) == 0)
+
+        dependent = df['INFL']
+        condition = np.where(dependent > 2.75)
+        list_ = next(iter(condition))
+        self.assertTrue(len(list_) == 0)
+
+        # Trivial test. Validate that if the floating point values in "xcat_trims" are
+        # both set to their maximum value, the output dataframe's dimensions should match
+        # the input dataframe.
+
+        # Further, also test the method works changed dataframe (time-series modified).
+        n_periods = 3
+        df_time_series = CategoryRelations.time_series(original_df, change='diff',
+                                                       n_periods=n_periods,
+                                                       shared_cids=shared_cids,
+                                                       expln_var='GROWTH')
+        val_1 = np.max(np.abs(df_time_series['GROWTH']))
+        val_2 = np.max(np.abs(df_time_series['INFL']))
+        epsilon = 0.0000001
+        xcat_trims = [(val_1 + epsilon), (val_2 + epsilon)]
+        df = CategoryRelations.outlier_trim(df=df_time_series, xcats=['GROWTH', 'INFL'],
+                                            xcat_trims=xcat_trims)
+        self.assertTrue(df.shape == df_time_series.shape)
 
 
 if __name__ == "__main__":
