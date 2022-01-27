@@ -28,7 +28,7 @@ class TestAll(unittest.TestCase):
         df_xcats.loc['XR'] = ['2010-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
         df_xcats.loc['CRY'] = ['2011-01-01', '2020-12-31', 1, 2, 0.95, 1]
         df_xcats.loc['GROWTH'] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 1]
-        df_xcats.loc['INFL'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
+        df_xcats.loc['INFL'] = ['2011-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
         self.__dict__['dfd'] = dfd
@@ -50,8 +50,8 @@ class TestAll(unittest.TestCase):
 
         return df_new, date
 
-    @staticmethod
-    def row_value(filt_df: pd.DataFrame, date: pd.Timestamp, cid: str, xcats: List[str]):
+    def row_value(self, filt_df: pd.DataFrame, date: pd.Timestamp, cid: str,
+                  xcats: List[str]):
 
         values = []
 
@@ -60,7 +60,10 @@ class TestAll(unittest.TestCase):
         for cat in xcats:
             val = input_values[input_values['xcat'] == cat]['value']
             val = np.nan_to_num(val)
-            values.append(val[0])
+            try:
+                values.append(val[0])
+            except IndexError:
+                values = self.row_value(filt_df, "2015-01-03", cid, xcats)
 
         return values
 
@@ -101,13 +104,25 @@ class TestAll(unittest.TestCase):
         # Test the dimensions on a testcase involving a single cross-section where the
         # cross-section is defined over a reduced time-period. Therefore, the majority of
         # dates in the returned dataframe will be NaN values.
-        formula = "NEW1 = GROWTH - iUSD_INFL / iUSD_XR"
+        formula = "NEW1 = GROWTH - iUSD_INFL"
         formulas = [formula]
+
+        # Both GROWTH & INFL have start dates set to "2011-01-01". However, USD's first
+        # active trading day is 2015-01-01 which should be reflected in the returned
+        # dataframe.
+        usd_date = "2015-01-01"
+        self.dataframe_generator(date=usd_date)
         df_calc = panel_calculator(df=self.dfd, calcs=formulas,
                                    cids=self.cids, start=self.start, end=self.end,
                                    blacklist=self.blacklist)
 
-        self.dataframe_generator(date="2014-01-01")
+        df_calc_new1, date = self.dataframe_pivot(df_calc, xcat="NEW1")
+        df_calc_new1 = df_calc_new1.dropna(axis=0, how='all')
+        date_index = list(df_calc_new1.index)
+
+        first_date = date_index[0]
+        usd_date = pd.Timestamp(usd_date)
+        self.assertTrue(usd_date == first_date)
 
     def test_panel_calculator(self):
 
@@ -129,7 +144,9 @@ class TestAll(unittest.TestCase):
         tuple_ = self.dataframe_pivot(df_calc, "NEW1")
         df_new1 = tuple_[0]
 
-        dates = list(filt_df['real_date'])
+        date_series = filt_df['real_date']
+
+        dates = list(date_series[date_series > pd.Timestamp("2013-01-01")])
         date = choice(dates)
         # Test on Australia.
         cross_section = 'AUD'
@@ -141,8 +158,8 @@ class TestAll(unittest.TestCase):
 
         # Check NEW2: "NEW2 = NEW1 / XR".
         cross_section = 'USD'
-        tuple_ = self.dataframe_pivot(df_calc, "NEW2")
-        df_new2 = tuple_[0]
+        df_new2, date = self.dataframe_pivot(df_calc, "NEW2")
+
         row_value = df_new2.loc[date][cross_section]
         xr = self.row_value(filt_df, date, cross_section, ['XR'])
         new1_val = df_new1.loc[date][cross_section]
@@ -178,18 +195,23 @@ class TestAll(unittest.TestCase):
 
         # Adjust macroeconomic growth, across various countries, to US inflationary
         # pressure.
-        formula = "NEW1 = GROWTH - iUSD_INFL / iUSD_XR"
+        formula = "NEW1 = ( GROWTH - iUSD_INFL ) / iUSD_XR"
         formulas = [formula]
-        df_calc = panel_calculator(df=self.dfd, calcs=formulas,
-                                   cids=self.cids, start=self.start, end=self.end,
-                                   blacklist=self.blacklist)
+        df_calc_cross = panel_calculator(df=self.dfd, calcs=formulas,
+                                         cids=self.cids, start=self.start, end=self.end,
+                                         blacklist=self.blacklist)
 
-        df_new1, date = self.dataframe_pivot(df_calc, xcat="NEW1")
+        cross_section = "GBP"
+        df_new1, date = self.dataframe_pivot(df_calc_cross, xcat="NEW1")
+        row_value_gbp = df_new1.loc[date][cross_section]
 
+        xcats = ['GROWTH', 'INFL', 'XR']
+        growth = self.row_value(filt_df, date, cross_section, ['GROWTH'])
+        cross_section = 'USD'
+        infl, xr = self.row_value(filt_df, date, cross_section, xcats[1:])
 
-
-
-
+        manual_calculator = (growth[0] - infl) / xr
+        self.assertTrue(row_value_gbp == manual_calculator)
 
 
 if __name__ == '__main__':
