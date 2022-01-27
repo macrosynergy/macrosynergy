@@ -49,7 +49,10 @@ class TestAll(unittest.TestCase):
 
         dates = list(df_new_trunc.index)
         # Further restrictions on possible values.
-        date = choice(dates[100:-100])
+        date = choice(dates)
+        while date > pd.Timestamp("2019-01-01") or date < pd.Timestamp("2014-01-01"):
+            date = choice(dates)
+
         return df_new, date
 
     def row_value(self, filt_df: pd.DataFrame, date: pd.Timestamp, cid: str,
@@ -229,7 +232,7 @@ class TestAll(unittest.TestCase):
 
         formula = "NEW1 = GROWTH.pct_change(periods=1, fill_method='pad') - " \
                   "INFL.pct_change(periods=1, fill_method='pad')"
-        formula_2 = "NEW2 = NEW1 / XR"
+        formula_2 = "NEW2 = INFL / XR"
         formulas = [formula, formula_2]
         df_calc = panel_calculator(df=self.dfd, calcs=formulas, cids=self.cids,
                                    start=self.start, end=self.end)
@@ -252,6 +255,35 @@ class TestAll(unittest.TestCase):
         row_value_cad = df_new1.loc[date][cross_section]
 
         self.assertTrue(round(manual_compute, 5) == round(row_value_cad, 5))
+
+        # Validate the second field.
+        tuple_ = self.dataframe_pivot(df_calc, "NEW2")
+        df_new2 = tuple_[0]
+
+        xr = self.row_value(filt_df, date, cross_section, ['XR'])
+        manual_compute = infl / xr
+
+        row_value_cad = df_new2.loc[date][cross_section]
+        self.assertTrue(manual_compute == row_value_cad)
+
+        # Secondary test on a different pandas operation. Testing the functionality
+        # covers the entire breadth of the sample space.
+        formula = "NEW1 = GROWTH.shift(periods=4, freq=None, axis=0)"
+        formulas = [formula]
+        df_calc = panel_calculator(df=self.dfd, calcs=formulas, cids=self.cids,
+                                   start=self.start, end=self.end)
+        filt_2 = (self.dfd['xcat'] == 'GROWTH')
+        filt_df = self.dfd[filt_2]
+        df_new1, date = self.dataframe_pivot(df_calc, "NEW1")
+        date_2 = date - pd.DateOffset(4)
+
+        while date_2.day_of_week > 5:
+            date_2 -= pd.DateOffset(1)
+
+        growth = self.row_value(filt_df, date_2, cross_section, ['GROWTH'])
+        row_value_cad = df_new1.loc[date][cross_section]
+
+        self.assertTrue(growth == row_value_cad)
 
 
 if __name__ == '__main__':
