@@ -11,8 +11,8 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
                         rel_meth: str = 'subtract', rel_xcats: List[str] = None,
                         postfix: str = 'R'):
     """
-    Returns dataframe with values relative to an average for basket of cross sections
-    through subtraction or division.
+    Returns dataframe with values relative to a basket average of cross-sections
+    based on either subtraction of the basket (default) or division by the basket.
 
     :param <pd.DataFrame> df:  standardized data frame with the following necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
@@ -27,9 +27,9 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
     :param <dict> blacklist: cross-sections with date ranges that should be excluded from
         the output.
     :param <List[str]> basket: cross-sections to be used for the relative value
-        benchmark. The default is every cross-section which is available in the dataframe
-        over the respective time-period. If the basket is not complete, covering all
-        cross-sections, the basket is required to be a valid subset of the available
+        benchmark. The default is every cross-section in the chosen list that is
+        available in the dataframe over the respective time-period.
+        However, the basked can be reduced to a valid subset of the available
         cross-sections.
     :param <bool> complete_cross: Boolean parameter that outlines whether each category
         is required to have the full set of cross-sections held by the basket parameter.

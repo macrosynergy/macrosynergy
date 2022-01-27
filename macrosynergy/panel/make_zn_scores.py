@@ -4,6 +4,7 @@ from typing import List
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 
+
 def func_executor(df: pd.DataFrame, neutral: str, n: int):
     """
     Function used to clean up the repetitive code in the below methods. Will produce the
@@ -18,6 +19,7 @@ def func_executor(df: pd.DataFrame, neutral: str, n: int):
         return np.array([df.iloc[0:(i + 1), :].stack().mean() for i in range(n)])
     else:
         return np.array([df.iloc[0:(i + 1), :].stack().median() for i in range(n)])
+
 
 def pan_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = False,
                 min_obs: int = 261, iis: bool = False):
@@ -225,6 +227,7 @@ def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fa
         
     return arr_neutral
 
+
 def iis_std_panel(dfx: pd.DataFrame, min_obs: int, iis: bool = True):
     """
     Function designed to compute the standard deviations but accounts for in-sampling
@@ -247,6 +250,7 @@ def iis_std_panel(dfx: pd.DataFrame, min_obs: int, iis: bool = True):
         ar_sds[:min_obs] = iis_sds
 
     return ar_sds
+
 
 def iis_std_cross(column: pd.Series, min_obs: int, date_index: int = 0,
                   iis: bool = True):
