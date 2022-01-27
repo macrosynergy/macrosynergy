@@ -9,7 +9,7 @@ from typing import List
 
 class TestAll(unittest.TestCase):
 
-    def dataframe_generator(self):
+    def dataframe_generator(self, date = '2002-01-01'):
         self.__dict__['cids'] = ['AUD', 'CAD', 'GBP', 'NZD', 'USD']
         self.__dict__['xcats'] = ['XR', 'CRY', 'GROWTH', 'INFL']
         df_cids = pd.DataFrame(index=self.cids,
@@ -19,7 +19,7 @@ class TestAll(unittest.TestCase):
         df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
         df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
         df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
-        df_cids.loc['USD'] = ['2001-01-01', '2020-10-30', 0.2, 2]
+        df_cids.loc['USD'] = [date, '2020-10-30', 0.2, 2]
 
         df_xcats = pd.DataFrame(index=self.xcats,
                                 columns=['earliest', 'latest', 'mean_add', 'sd_mult',
@@ -45,8 +45,10 @@ class TestAll(unittest.TestCase):
 
         filt = (df_calc['xcat'] == xcat)
         df_new = df_calc[filt].pivot(index='real_date', columns='cid', values='value')
+        dates = list(df_new.index)
+        date = choice(dates)
 
-        return df_new
+        return df_new, date
 
     @staticmethod
     def row_value(filt_df: pd.DataFrame, date: pd.Timestamp, cid: str, xcats: List[str]):
@@ -62,14 +64,13 @@ class TestAll(unittest.TestCase):
 
         return values
 
-    def test_panel_calculator(self):
-
+    def test_panel_calculator_dimension(self):
+        # Function used test the alignment of dataframes if categories are defined over
+        # different time-periods. If there are a differing date ranges, NaN values will
+        # populate the respective dates that are not shared across each involved
+        # category.
         self.dataframe_generator()
 
-        # Test the panel calculator on various testcases and validate that the computed
-        # values are correct.
-
-        # i)
         formulas = ["NEW1 = np.abs( XR ) + 0.52 + 2 * CRY",
                     "NEW2 = NEW1 / XR"]
         df_calc = panel_calculator(df=self.dfd, calcs=formulas,
@@ -90,13 +91,45 @@ class TestAll(unittest.TestCase):
         # defined over the same time-period but pd.DataFrames will match on the index.
         first_date = np.min(date_column)
         end_date = np.max(date_column)
-        df_new1 = self.dataframe_pivot(df_calc, "NEW1")
+        tuple_ = self.dataframe_pivot(df_calc, "NEW1")
+        df_new1 = tuple_[0]
         date_range = list(df_new1.index)
 
         self.assertTrue(first_date == date_range[0])
         self.assertTrue(end_date == date_range[-1])
 
-        dates = list(self.dfd['real_date'])
+        # Test the dimensions on a testcase involving a single cross-section where the
+        # cross-section is defined over a reduced time-period. Therefore, the majority of
+        # dates in the returned dataframe will be NaN values.
+        formula = "NEW1 = GROWTH - iUSD_INFL / iUSD_XR"
+        formulas = [formula]
+        df_calc = panel_calculator(df=self.dfd, calcs=formulas,
+                                   cids=self.cids, start=self.start, end=self.end,
+                                   blacklist=self.blacklist)
+
+        self.dataframe_generator(date="2014-01-01")
+
+    def test_panel_calculator(self):
+
+        self.dataframe_generator()
+
+        # Test the panel calculator on various testcases and validate that the computed
+        # values are correct.
+
+        # i)
+        formulas = ["NEW1 = np.abs( XR ) + 0.52 + 2 * CRY",
+                    "NEW2 = NEW1 / XR"]
+        df_calc = panel_calculator(df=self.dfd, calcs=formulas,
+                                   cids=self.cids, start=self.start, end=self.end,
+                                   blacklist=self.blacklist)
+
+        filt_1 = (self.dfd['xcat'] == 'XR') | (self.dfd['xcat'] == 'CRY')
+        filt_df = self.dfd[filt_1]
+
+        tuple_ = self.dataframe_pivot(df_calc, "NEW1")
+        df_new1 = tuple_[0]
+
+        dates = list(filt_df['real_date'])
         date = choice(dates)
         # Test on Australia.
         cross_section = 'AUD'
@@ -108,12 +141,55 @@ class TestAll(unittest.TestCase):
 
         # Check NEW2: "NEW2 = NEW1 / XR".
         cross_section = 'USD'
-        df_new2 = self.dataframe_pivot(df_calc, "NEW2")
+        tuple_ = self.dataframe_pivot(df_calc, "NEW2")
+        df_new2 = tuple_[0]
         row_value = df_new2.loc[date][cross_section]
         xr = self.row_value(filt_df, date, cross_section, ['XR'])
         new1_val = df_new1.loc[date][cross_section]
 
         self.assertTrue(row_value == float(new1_val) / xr[0])
+
+        # ii)
+        # Test on the application of multiple numpy functions applied to a single cross-
+        # section. Aim is to understand the breadth and durability of the eval() method.
+        formula = "NEW1 = GROWTH - INFL"
+        formula_2 = "NEW2 = np.log(np.square(np.abs( XR )))"
+        formulas = [formula, formula_2]
+        df_calc = panel_calculator(df=self.dfd, calcs=formulas,
+                                   cids=self.cids, start=self.start, end=self.end,
+                                   blacklist=self.blacklist)
+        # Exclude the rudimentary check the rudimentary formula.
+        filt_2 = (self.dfd['xcat'] != 'CRY')
+        filt_df = self.dfd[filt_2]
+
+        df_new2, date = self.dataframe_pivot(df_calc, xcat="NEW2")
+
+        cross_section = 'USD'
+        row_value = df_new2.loc[date][cross_section]
+        xr = self.row_value(filt_df, date, cross_section, ['XR'])
+
+        # The formula is contrived but tests the strength of the incorporation of Numpy.
+        self.assertTrue(row_value == np.log(np.square(np.abs(xr))))
+
+        # iii)
+        # Test on the application of a single cross-section. Applying a binary operation
+        # relative to a single cross-section: adjusting returns to US inflationary
+        # pressure for example.
+
+        # Adjust macroeconomic growth, across various countries, to US inflationary
+        # pressure.
+        formula = "NEW1 = GROWTH - iUSD_INFL / iUSD_XR"
+        formulas = [formula]
+        df_calc = panel_calculator(df=self.dfd, calcs=formulas,
+                                   cids=self.cids, start=self.start, end=self.end,
+                                   blacklist=self.blacklist)
+
+        df_new1, date = self.dataframe_pivot(df_calc, xcat="NEW1")
+
+
+
+
+
 
 
 if __name__ == '__main__':
