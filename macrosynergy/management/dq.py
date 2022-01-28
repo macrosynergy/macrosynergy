@@ -556,6 +556,7 @@ class DataQueryInterface(object):
         for m in original_metrics:
             df[m] = df[m].astype(dtype=np.float32)
 
+        df.real_date = pd.to_datetime(df.real_date)
         return df
 
     def tickers(self, tickers: list, metrics: list = ['value'],
