@@ -173,7 +173,7 @@ class DataQueryInterface(object):
             except ConnectionResetError:
                 counter += 1
                 time.sleep(0.05)
-                print(f"Server error: will retry. Attempt number: {n}.")
+                print(f"Server error: will retry. Attempt number: {counter}.")
                 continue
             else:
                 last_response = r.text
@@ -256,7 +256,6 @@ class DataQueryInterface(object):
         if self.concurrent:
             for i in range(exterior_iterations):
 
-                print(f"Number of iterations: {i}.")
                 output = []
                 if i > 0:
                     time.sleep(delay)
