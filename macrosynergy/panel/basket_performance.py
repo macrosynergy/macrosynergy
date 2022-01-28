@@ -79,11 +79,9 @@ def inverse_weight(dfw_ret: pd.DataFrame, lback_meth: str = "xma",
 
     :return <pd.DataFrame>: Dataframe of weights.
 
-    N.B: The rolling standard deviation will be calculated either using the standard
+    N.B.: The rolling standard deviation will be calculated either using the standard
     moving average (ma) or the exponential moving average (xma). Both will require
-    returns before a first weight can be computed
-    Todo "Later": this function will need to option to shorten the lookback window
-     and/or backfill.
+    returns before a first weight can be computed.
     """
 
     if lback_meth == "ma":
@@ -150,11 +148,10 @@ def max_weight_func(weights: pd.DataFrame, max_weight: float):
     :return <pd.DataFrame>: Will return the modified weight DataFrame.
 
     N.B.: If the maximum weight is less than the equal weight weight, this replaces the
-          computed weight with the equal weight. For instance,
-          [np.nan, 0.63, np.nan, np.nan, 0.27] becomes [np.nan, 0.5, np.nan, np.nan, 0.5].
-          Otherwise, the function calls the ConvergeRow Class to ensure all weights
-          "converge" to a value within the upper-bound. Allow for a margin of error set
-          to 0.001.
+    computed weight with the equal weight. For instance,
+    [np.nan, 0.63, np.nan, np.nan, 0.27] becomes [np.nan, 0.5, np.nan, np.nan, 0.5].
+    Otherwise, the function calls the ConvergeRow Class to ensure all weights "converge"
+    to a value within the upper-bound. Allow for a margin of error set to 0.001.
     """
 
     dfw_wgs = weights.to_numpy()
@@ -174,9 +171,9 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
                        wgt: str = None, max_weight: float = 1.0,
                        basket_tik: str = "GLB_ALL", return_weights: bool = False):
 
-    """Basket performance
-    Returns approximate return and - optionally - carry series for a basket of underlying
-    contracts.
+    """
+    Basket performance returns approximate return and - optionally - carry series for a
+    basket of underlying contracts.
 
     :param <pd.Dataframe> df: standardized DataFrame with following columns: 'cid',
         'xcats', 'real_date' and 'value'.
@@ -193,15 +190,15 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
         to the cross section code.
     :param <str> weight_meth: method used for weighting constituent returns and carry.
         Options are as follows:
-        [1] "equal": all constituents with non-NA returns have the same weight.
-            This is the default.
-        [2] "fixed": weights are proportionate to single list of values (corresponding to
-            contracts) provided passed to argument `weights`.
-        [3] "invsd": weights based on inverse to standard deviations of recent returns.
-        [4] "values": weights proportionate to a panel of values of exogenous weight
-            category.
-        [5] "inv_values": weights are inversely proportionate to of values of exogenous
-            weight category.
+    [1] "equal": all constituents with non-NA returns have the same weight.
+        This is the default.
+    [2] "fixed": weights are proportionate to single list of values (corresponding to
+        contracts) provided passed to argument `weights`.
+    [3] "invsd": weights based on inverse to standard deviations of recent returns.
+    [4] "values": weights proportionate to a panel of values of exogenous weight
+        category.
+    [5] "inv_values": weights are inversely proportionate to of values of exogenous
+        weight category.
     :param <str> lback_meth: lookback method for "invsd" weighting method. Default is
         "xma" (exponential MA). The alternative is simple moving average ("ma").
     :param <int> lback_periods: lookback periods. Default is 21. Half-time for "xma" and
@@ -212,9 +209,9 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
     :param <str> wgt: postfix used to identify exogenous weight category. Analogously to
         carry and return postfixes this should be added to base tickers to identify the
         values that denote contract weights.
-    :param <float> max_weight: maximum weight of a single contract.
-        Default is 1, i.e no restriction.
-        N.B.: The purpose of the restriction is to limit concentration within the basket.
+    :param <float> max_weight: maximum weight of a single contract. Default is 1, i.e no
+        restriction. The purpose of the restriction is to limit concentration within the
+        basket.
     :param <str> basket_tik: name of basket base ticker (analogous to contract name) to
         be used for  return and (possibly) carry are calculated. Default is "GLB_ALL".
     :param <bool> return_weights: if True ddd cross-section weights to output dataframe
