@@ -156,26 +156,30 @@ class DataQueryInterface(object):
                 last_response = r.text
                 response = json.loads(last_response)
 
-                dictionary = response[select][0]['attributes'][0]
-
-                if not isinstance(dictionary['time-series'], list):
-                    return None
-
-                if not select in response.keys():
-                    break
+                try:
+                    dictionary = response[select][0]['attributes'][0]
+                except KeyError:
+                    print(response['errors'][0]['message'])
+                    raise RuntimeError
                 else:
-                    results.extend(response[select])
+                    if not isinstance(dictionary['time-series'], list):
+                        return None
 
-                if response["links"][1]["next"] is None:
-                    break
+                    if not select in response.keys():
+                        break
+                    else:
+                        results.extend(response[select])
 
-                url = f"{self.base_url:s}{response['links'][1]['next']:s}"
-                params = {}
+                    if response["links"][1]["next"] is None:
+                        break
 
-        if isinstance(results, list):
-            return results
-        else:
-            return None
+                    url = f"{self.base_url:s}{response['links'][1]['next']:s}"
+                    params = {}
+
+            if isinstance(results, list):
+                return results
+            else:
+                return None
 
     def _request(self, endpoint: str, tickers: List[str], params: dict,
                  delay: int = None, count: int = 0, start_date: str = None,
@@ -552,6 +556,7 @@ class DataQueryInterface(object):
         for m in original_metrics:
             df[m] = df[m].astype(dtype=np.float32)
 
+        df.real_date = pd.to_datetime(df.real_date)
         return df
 
     def tickers(self, tickers: list, metrics: list = ['value'],
