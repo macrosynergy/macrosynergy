@@ -35,7 +35,7 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
     'latest': string of latest date (ISO) for which country values are available;
     'mean_add': float of country-specific addition to any category's mean;
     'sd_mult': float of country-specific multiplier of an category's standard
-               deviation.
+        deviation.
     :param <pd.DataFrame> df_xcats: dataframe with parameters by xcat. Row indices are
         cross-sections. Columns are:
     'earliest': string of earliest date (ISO) for which category values are available;
@@ -44,7 +44,7 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
     'sd_mult': float of country-specific multiplier of an category's standard deviation;
     'ar_coef': float between 0 and 1 denoting set autocorrelation of the category;
     'back_coef': float, coefficient with which communal (mean 0, SD 1) background
-                 factor is added to categoy values.
+        factor is added to categoy values.
     :param <float> back_ar: float between 0 and 1 denoting set autocorrelation of the
         background factor. Default is zero.
 
@@ -103,21 +103,19 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
 
     :param <pd.DataFrame> df_cids: dataframe with parameters by cid. Row indices are
         cross-sections. Columns are:
-    'earliest': string of earliest date (ISO) for which country values are
-                available;
+    'earliest': string of earliest date (ISO) for which country values are available;
     'latest': string of latest date (ISO) for which country values are available;
     'mean_add': float of country-specific addition to any category's mean;
     'sd_mult': float of country-specific multiplier of an category's standard deviation.
     :param <pd.DataFrame> df_xcats: dataframe with parameters by xcat. Row indices are
         cross-sections. Columns are:
-    'earliest': string of earliest date (ISO) for which category values are
-                available;
+    'earliest': string of earliest date (ISO) for which category values are available;
     'latest': string of latest date (ISO) for which category values are available;
     'mean_add': float of category-specific addition;
     'sd_mult': float of country-specific multiplier of an category's standard deviation;
     'ar_coef': float between 0 and 1 denoting set autocorrelation of the category;
     'back_coef': float, coefficient with which communal (mean 0, SD 1) background
-                 factor is added to categoy values.
+        factor is added to categoy values.
     :param <dict> blackout: Dictionary defining the blackout periods for each cross-
         section. The expected form of the dictionary is:
     {'AUD': (Timestamp('2000-01-13 00:00:00'), Timestamp('2000-01-13 00:00:00')),
