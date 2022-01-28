@@ -69,7 +69,8 @@ def formula_reconstruction(formula: str, indices: List[int]):
     :param <List[int]> indices: list of indices where the "@" symbol occurs in the
         expression.
 
-    :return <str>: returns the updated formula.
+    :return <str, dict>: returns the updated formula and a tracking mechanism for the
+        cross-sections.
     """
 
     cid_tracker = {}
@@ -109,7 +110,7 @@ def formula_handler(calcs: List[str]):
 
     :param <List[str]> calcs:
 
-    :return <dict>: dictionary hosting the function.
+    :return <dict, dict>: dictionary hosting the function.
     """
 
     ops = {}
@@ -119,7 +120,6 @@ def formula_handler(calcs: List[str]):
         calc_parts = calc.split('=', maxsplit=1)
         # Suppress to imperative inclusion of terminal parenthesis.
         value = calc_parts[1].strip()
-        value = calc_parts[1]
         indices = symbol_finder(expression=value, index=0)
 
         if indices:
@@ -130,6 +130,56 @@ def formula_handler(calcs: List[str]):
 
     return ops, expression_cid
 
+def time_series_check(formula: str, index: int):
+    """
+    Determine if the panel has any time-series methods applied. If a time-series
+    conversion is applied, the function will return the terminal index of the respective
+    category. Further, a boolean parameter is also returned to confirm the presence of a
+    time-series operation.
+
+    :param <str> formula:
+    :param <int> index: starting index to iterate over.
+
+    :return <int, bool>:
+    """
+
+    check = lambda a, b, c: (a.isupper() and b == "." and c.islower())
+
+    f = formula
+    length = len(f)
+    clause = False
+    for i in range(index, (length - 2)):
+        if check(f[i], f[i + 1], f[i + 2]):
+            clause = True
+            break
+        else:
+            continue
+
+    return i, clause
+
+def xcat_isolator(expression: str, start_index: str, index: int):
+    """
+    Split the category from the time-series operation. The function will return the
+    respective category.
+
+    :param <str> expression:
+    :param <str> start_index: starting index to search over.
+    :param <int> index: defines the end of the search space over the expression.
+
+    :return <str> xcat.
+    """
+
+    op_copy = expression[start_index:index + 1]
+
+    start = 0
+    elem = op_copy[start_index]
+    while not elem.isupper():
+        start += 1
+        elem = op_copy[start]
+
+    xcat = op_copy[start:(index + 1)]
+
+    return xcat, (start_index + start + len(xcat))
 
 def involved_xcats(ops: dict):
     """
@@ -141,15 +191,26 @@ def involved_xcats(ops: dict):
 
     :param <dict> ops: dictionary containing the panel calculation where the key is the
         newly formed category and the value the calculation.
+
+    :return <set> xcats_used: unique categories referenced across all formulas.
     """
 
     xcats_used = []
-
     new_xcats = list(ops.keys())
+
     for op in ops.values():
-        op_list = op.split(' ')
-        xcats_used += [x for x in op_list if re.match('^[A-Z]', x)
-                       and x not in new_xcats]
+        index, clause = time_series_check(formula=op, index=0)
+        start_index = 0
+        if clause:
+            while clause:
+                xcat, end = xcat_isolator(op, start_index, index)
+                xcats_used.append(xcat)
+                index, clause = time_series_check(op, index=end)
+                start_index = end
+        else:
+            op_list = op.split(' ')
+            xcats_used += [x for x in op_list if re.match('^[A-Z]', x)
+                           and x not in new_xcats]
 
     return set(xcats_used)
 
@@ -178,10 +239,13 @@ def pandas_alignment(dates_dict: dict, expression: str):
             no = len(result)
             if no > 1:
                 xcat_l = repeat(k, no)
-                cats_tuple.append(tuple(zip(xcat_l, result)))
+                tuple_ = list(zip(xcat_l, result))
+                cats_tuple += tuple_
             else:
                 cats_tuple.append((k, next(iter(result))))
             cats_indices[k] = result
+        else:
+            continue
 
     s_date = pd.Timestamp.min
     e_date = pd.Timestamp.max
@@ -199,7 +263,7 @@ def category_order(cats_indices: List[tuple]):
     """
     Order the List according to the indices of the respective categories. The
     categories occurring earliest in the expression will account for the first elements
-    in the returned List.
+    in the returned List. Utilises a polynomial sorting algorithm called Insertion Sort.
 
     :param <List[tuple]> cats_indices:
 
@@ -218,17 +282,16 @@ def category_order(cats_indices: List[tuple]):
 
     return cats_indices
 
-
-def cross_section_append(index_cid: dict, expression: str, dates_dict: dict):
+def cid_append(expression: str, index_cid: dict, dates_dict: dict):
     """
     Subroutine designed to modify the formula to account for the presence of single
     cross-sections on certain categories. For instance, np.sqrt(@USD_OLDCAT2).
     Further, will align the involved dataframes which is required due to the conversion
     to a np.ndarray.
 
+    :param <str> expression:
     :param <dict> index_cid: the dictionary's key will be the concerning category's
         starting index and the value will be the relevant cross-section.
-    :param <str> expression:
     :param <dict> dates_dict: dictionary consisting of each category and their respective
         start and end date across the panel series.
 
@@ -314,9 +377,6 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
 
     ops, expression_cid = formula_handler(calcs)
 
-    if not expression_cid:
-        del expression_cid
-
     old_xcats_used = involved_xcats(ops=ops)
 
     available_xcats = set(df['xcat'].unique())
@@ -340,15 +400,17 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
     for new_xcat, formula in ops.items():
 
         if index in expression_cid.keys():
-            formula = cross_section_append(index_cid=expression_cid[index],
-                                           expression=formula, dates_dict=dates_xcat)
-
+            formula = cid_append(formula, index_cid=expression_cid[index],
+                                 dates_dict=dates_xcat)
         dfw_add = eval(formula)
         df_add = pd.melt(dfw_add.reset_index(), id_vars=['real_date'])
         df_add['xcat'] = new_xcat
         output_df.append(df_add)
         exec(f'{new_xcat} = dfw_add')
         index += 1
+
+        # Update the dates dictionary to include the newly formed category.
+        dates_xcat[new_xcat] = (dfw_add.index[0], dfw_add.index[-1])
 
     df_calc = pd.concat(output_df)[cols]
     df_calc.reset_index(drop=True)
@@ -375,7 +437,7 @@ if __name__ == "__main__":
     df_xcats.loc['XR'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
     df_xcats.loc['CRY'] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
     df_xcats.loc['GROWTH'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
-    df_xcats.loc['INFL'] = ['2012-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
+    df_xcats.loc['INFL'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
@@ -390,17 +452,41 @@ if __name__ == "__main__":
 
     formula_3 = "NEW3 = GROWTH - np.square( @USD_INFL )"
     formulas = ["NEW1 = np.abs( XR ) + 0.552 + 2 * CRY", "NEW2 = NEW1 * 2", formula_3]
-    # df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
 
     # Secondary testcase.
     formula = "NEW1 = (( GROWTH - np.square( @USD_INFL )) / @USD_INFL )"
     formulas = [formula]
-    # df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
 
-    # Third testcase.
+    # Third testcase. Referencing the newly formed category.
     formula = "NEW1 = ( GROWTH * @USD_INFL )"
     formula_2 = "NEW2 = ( XR - @USD_GROWTH )"
     formulas = [formula, formula_2]
     df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
 
-    print(df_calc)
+    # Fourth testcase. Referencing the newly formed category.
+    formula = "NEW1 = ( GROWTH - INFL )"  # Growth adjusted for inflation.
+    formula_2 = "NEW2 = ( XR - @USD_NEW1 )"
+    formulas = [formula, formula_2]
+    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+
+    # Fifth testcase.
+    # Integration of time-series operations.
+    formula = "NEW1 = GROWTH.pct_change(periods=1, fill_method='pad')"
+    formulas = [formula]
+    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+
+    # Sixth testcase.
+    # Further testing of time-series operations.
+    formula = "NEW1 = GROWTH.pct_change(periods=1, fill_method='pad') - " \
+              "INFL.pct_change(periods=1, fill_method='pad')"
+    formulas = [formula]
+    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+
+    # Seventh testcase.
+    formulas = ["NEW1 = np.square(np.abs( XR ))"]
+    filt1 = (dfd['xcat'] == 'XR')
+    dfdx = dfd[filt1]
+
+    df_calc = panel_calculator(df=dfdx, calcs=formulas, cids=cids, start=start, end=end)
