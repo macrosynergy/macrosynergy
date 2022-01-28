@@ -76,11 +76,12 @@ class TestAll(unittest.TestCase):
     @staticmethod
     def date_computer(start_date: pd.Timestamp, no_days: int):
 
-        for i in range(no_days):
-            if start_date.isoweekday() == 1:
-                start_date -= pd.DateOffset(no_days + 2)
-            else:
-                start_date -= pd.DateOffset(no_days)
+        # Adjust for weekend. The original dataframe works exclusively with weekdays.
+        condition = start_date.isoweekday() - no_days
+        if condition <= 0:
+            start_date -= pd.DateOffset(no_days + 2)
+        else:
+            start_date -= pd.DateOffset(no_days)
 
         return start_date
 
@@ -280,7 +281,7 @@ class TestAll(unittest.TestCase):
 
         # Secondary test on a different pandas operation. Testing the functionality
         # covers the entire breadth of the sample space.
-        formula = "NEW1 = GROWTH.shift(periods=1, freq=None, axis=0)"
+        formula = "NEW1 = GROWTH.shift(periods=4, freq=None, axis=0)"
         formulas = [formula]
         df_calc = panel_calculator(df=self.dfd, calcs=formulas, cids=self.cids,
                                    start=self.start, end=self.end)
@@ -288,7 +289,7 @@ class TestAll(unittest.TestCase):
         filt_df = self.dfd[filt_2]
         df_new1, date = self.dataframe_pivot(df_calc, "NEW1")
 
-        date_2 = self.date_computer(date, no_days=1)
+        date_2 = self.date_computer(date, no_days=4)
 
         growth = self.row_value(filt_df, date_2, cross_section, ['GROWTH'])
         row_value_cad = df_new1.loc[date][cross_section]
