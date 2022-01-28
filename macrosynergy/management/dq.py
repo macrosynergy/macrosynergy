@@ -314,6 +314,18 @@ class DataQueryInterface(object):
 
     @staticmethod
     def delay_compute(no_tickers):
+        """
+        DataQuery is only able to handle a request every 200 milliseconds. However, given
+        the erratic behaviour of threads, the time delay between the release of each
+        request must be a function of the size of the request: the smaller the request,
+        the closer the delay parameter can be to the limit of 200 milliseconds.
+        Therefore, the function adjusts the delay parameter to the number of tickers
+        requested.
+
+        :param <int> no_tickers: number of tickers requested.
+
+        :return <float> delay: internally computed value.
+        """
 
         if not floor(no_tickers / 100):
             delay = 0.05
@@ -333,9 +345,9 @@ class DataQueryInterface(object):
         :param <List[str]> original_metrics: List of required metrics: the returned
             DataFrame will reflect the order of the received List.
         :param <bool> suppress_warning: required for debugging.
-        :param <dict> **kwargs: dictionary of additional arguments
+        :param <dict> kwargs: dictionary of additional arguments.
 
-        :return: pd.DataFrame: ['cid', 'xcat', 'real_date'] + [original_metrics].
+        :return: <pd.DataFrame> df: ['cid', 'xcat', 'real_date'] + [original_metrics].
         """
 
         for metric in original_metrics:
@@ -407,7 +419,7 @@ class DataQueryInterface(object):
         :param sequential: if series are not returned, potentially the fault of the
             threading mechanism, isolate each Ticker and run sequentially.
 
-        :return: dict.
+        :return: <dict> modified_dict.
         """
         output_dict = defaultdict(dict)
         size = len(list_)
@@ -485,7 +497,7 @@ class DataQueryInterface(object):
         :param <np.array> v:
         :param <Integer> col: used to isolate the column being checked.
 
-        :return bool.
+        :return <bool> condition.
         """
         returns = list(v[:, col])
         condition = all([isinstance(elem, type(None)) for elem in returns])
@@ -504,7 +516,7 @@ class DataQueryInterface(object):
         :param <dict> _dict:
         :param <bool> suppress_warning:
 
-        :return: dict.
+        :return: <dict> dict_copy.
         """
 
         ticker_missing = 0
@@ -628,8 +640,8 @@ class DataQueryInterface(object):
         :param <bool> suppress_warning: used to suppress warning of any invalid
             ticker received by DataQuery.
 
-        :return <pd.Dataframe> standardized dataframe with columns 'cid', 'xcats',
-                               'real_date' and chosen metrics.
+        :return <pd.Dataframe> df: standardized dataframe with columns 'cid', 'xcats',
+            'real_date' and chosen metrics.
         """
 
         if (cids is None) & (xcats is not None):
