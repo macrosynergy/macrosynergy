@@ -156,30 +156,25 @@ class DataQueryInterface(object):
                 last_response = r.text
                 response = json.loads(last_response)
 
-                try:
-                    dictionary = response[select][0]['attributes'][0]
-                except KeyError:
-                    print(response['errors'][0]['message'])
-                    raise RuntimeError
+                dictionary = response[select][0]['attributes'][0]
+                if not isinstance(dictionary['time-series'], list):
+                    return None
+
+                if not select in response.keys():
+                    break
                 else:
-                    if not isinstance(dictionary['time-series'], list):
-                        return None
+                    results.extend(response[select])
 
-                    if not select in response.keys():
-                        break
-                    else:
-                        results.extend(response[select])
+                if response["links"][1]["next"] is None:
+                    break
 
-                    if response["links"][1]["next"] is None:
-                        break
+                url = f"{self.base_url:s}{response['links'][1]['next']:s}"
+                params = {}
 
-                    url = f"{self.base_url:s}{response['links'][1]['next']:s}"
-                    params = {}
-
-            if isinstance(results, list):
-                return results
-            else:
-                return None
+        if isinstance(results, list):
+            return results
+        else:
+            return None
 
     def _request(self, endpoint: str, tickers: List[str], params: dict,
                  delay: int = None, count: int = 0, start_date: str = None,
@@ -232,6 +227,7 @@ class DataQueryInterface(object):
         if self.concurrent:
             for i in range(exterior_iterations):
 
+                print(f"Number of iterations: {i}.")
                 output = []
                 if i > 0:
                     time.sleep(delay)
