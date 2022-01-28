@@ -73,6 +73,17 @@ class TestAll(unittest.TestCase):
             val = input_values[input_values['xcat'] == xcats[0]]['value']
             return float(val)
 
+    @staticmethod
+    def date_computer(start_date: pd.Timestamp, no_days: int):
+
+        for i in range(no_days):
+            if start_date.isoweekday() == 1:
+                start_date -= pd.DateOffset(no_days + 2)
+            else:
+                start_date -= pd.DateOffset(no_days)
+
+        return start_date
+
     def test_panel_calculator_dimension(self):
         # Function used test the alignment of dataframes if categories are defined over
         # different time-periods. If there are a differing date ranges, NaN values will
@@ -239,7 +250,7 @@ class TestAll(unittest.TestCase):
         df_new1, date = self.dataframe_pivot(df_calc, "NEW1")
         date_2 = date - pd.DateOffset(1)
 
-        while date_2.day_of_week > 5:
+        while date_2.isoweekday() > 5:
             date_2 -= pd.DateOffset(1)
 
         filt_1 = (self.dfd['xcat'] != 'CRY')
@@ -249,6 +260,7 @@ class TestAll(unittest.TestCase):
         growth, infl = self.row_value(filt_df, date, cross_section, ['GROWTH', 'INFL'])
         growth_2, infl_2 = self.row_value(filt_df, date_2, cross_section,
                                           ['GROWTH', 'INFL'])
+
         growth_pct = ((growth - growth_2) / growth_2)
         infl_pct = ((infl - infl_2) / infl_2)
         manual_compute = growth_pct - infl_pct
@@ -268,22 +280,20 @@ class TestAll(unittest.TestCase):
 
         # Secondary test on a different pandas operation. Testing the functionality
         # covers the entire breadth of the sample space.
-        formula = "NEW1 = GROWTH.shift(periods=4, freq=None, axis=0)"
+        formula = "NEW1 = GROWTH.shift(periods=1, freq=None, axis=0)"
         formulas = [formula]
         df_calc = panel_calculator(df=self.dfd, calcs=formulas, cids=self.cids,
                                    start=self.start, end=self.end)
         filt_2 = (self.dfd['xcat'] == 'GROWTH')
         filt_df = self.dfd[filt_2]
         df_new1, date = self.dataframe_pivot(df_calc, "NEW1")
-        date_2 = date - pd.DateOffset(4)
 
-        while date_2.day_of_week > 5:
-            date_2 -= pd.DateOffset(1)
+        date_2 = self.date_computer(date, no_days=1)
 
         growth = self.row_value(filt_df, date_2, cross_section, ['GROWTH'])
         row_value_cad = df_new1.loc[date][cross_section]
 
-        self.assertTrue(growth == row_value_cad)
+        self.assertTrue(round(growth, 5) == round(row_value_cad, 5))
 
 
 if __name__ == '__main__':
