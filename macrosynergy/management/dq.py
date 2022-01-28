@@ -123,6 +123,29 @@ class DataQueryInterface(object):
             print(f'exc_value: {exc_value}')
             print(f'exc_traceback: {exc_traceback}')
 
+    @staticmethod
+    def server_retry(response: dict, select: str):
+        """
+        DQ requests are powered by four servers. Therefore, if a single server is failing
+        try the remaining three servers for a request. In theory, trying the sample space
+        of servers should invariably result in a successful request: assuming all four
+        servers are not concurrently down. The number of trials is five: the sample space
+        of servers should be exhausted.
+
+        :param <dict> response: server response.
+        :param <str> select: key hosting the server's response in the dictionary.
+
+        :return <bool> server_response:
+        """
+
+        try:
+            response[select]
+        except KeyError:
+            print(response['errors'][0]['message'])
+            return False
+        else:
+            return True
+
     def _fetch_threading(self, endpoint, params: dict):
         """
         Method responsible for requesting Tickers from the API. Able to pass in 20
@@ -140,21 +163,27 @@ class DataQueryInterface(object):
         select = "instruments"
 
         results = []
-        n = 0
-        clause = (n <= 5)
+        counter = 0
+        clause = lambda counter: (counter <= 5)
 
-        while clause:
+        while clause(counter):
             try:
                 r = requests.get(url=url, cert=(self.crt, self.key),
                                 headers=self.headers, params=params)
             except ConnectionResetError:
-                n += 1
+                counter += 1
                 time.sleep(0.05)
                 print(f"Server error: will retry. Attempt number: {n}.")
                 continue
             else:
                 last_response = r.text
                 response = json.loads(last_response)
+
+                count = 0
+                while not self.server_retry(response, select):
+                    count += 1
+                    if count > 5:
+                        raise RuntimeError
 
                 dictionary = response[select][0]['attributes'][0]
                 if not isinstance(dictionary['time-series'], list):
