@@ -9,6 +9,7 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
+
 def time_series_check(formula: str, index: int):
     """
     Determine if the panel has any time-series methods applied. If a time-series
@@ -35,6 +36,7 @@ def time_series_check(formula: str, index: int):
             continue
 
     return i, clause
+
 
 def xcat_isolator(expression: str, start_index: str, index: int):
     """
@@ -66,6 +68,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
                      blacklist: dict = None):
     """
     Calculates new data panels through operations on existing panels.
+
     :param <pd.Dataframe> df: standardized dataframe with following necessary columns:
         'cid', 'xcat', 'real_date' and 'value'.
     :param <List[str]> calcs:  list of formulas denoting operations on panels of
@@ -80,8 +83,10 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
     :param <dict> blacklist: cross sections with date ranges that should be excluded from
         the dataframe. If one cross section has several blacklist periods append numbers
         to the cross-section code.
+
     :return <pd.Dataframe>: standardized dataframe with all new categories in standard
         format, i.e the columns 'cid', 'xcat', 'real_date' and 'value'.
+
     Notes:
     Panel calculation strings can use numpy functions and unary/binary operators go
     category panels, whereby the category is indicated by capital letters, underscores
