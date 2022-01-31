@@ -141,7 +141,7 @@ class DataQueryInterface(object):
         try:
             response[select]
         except KeyError:
-            print(response['errors'][0]['message'])
+            print(f"{response['errors'][0]['message']} - will try a different server.")
             return False
         else:
             return True
@@ -183,7 +183,7 @@ class DataQueryInterface(object):
                 while not self.server_retry(response, select):
                     count += 1
                     if count > 5:
-                        raise RuntimeError
+                        raise RuntimeError("All servers are down.")
 
                 dictionary = response[select][0]['attributes'][0]
                 if not isinstance(dictionary['time-series'], list):
