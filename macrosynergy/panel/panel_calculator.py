@@ -91,15 +91,17 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
     Panel calculation strings can use numpy functions and unary/binary operators go
     category panels, whereby the category is indicated by capital letters, underscores
     and numbers.
+    Panel category names that are not at the beginning or end of the string must always
+    have a space before and after the name.
     Calculated category and panel operations must be separated by '='.
-    "NEWCAT = (OLDCAT1 + 0.5) * OLDCAT2"
-    "NEWCAT = np.log(OLDCAT1) - np.abs(OLDCAT2) ** 1/2"
+    "NEWCAT = ( OLDCAT1 + 0.5) * OLDCAT2"
+    "NEWCAT = np.log( OLDCAT1 ) - np.abs( OLDCAT2 ) ** 1/2"
     Panel calculation can also involve individual indicator series (to be applied
     to all series in the panel by using th 'i' as prefix), such as:
-    "NEWCAT = OLDCAT1 - np.sqrt(iUSD_OLDCAT2)"
+    "NEWCAT = OLDCAT1 - np.sqrt( iUSD_OLDCAT2 )"
     If more than one new category is calculated, the resulting panels can be used
     sequentially in the calculations, such as:
-    ["NEWCAT1 = 1 + OLDCAT1/100", "NEWCAT2 = OLDCAT2 * NEWCAT1"]
+    ["NEWCAT1 = 1 + OLDCAT1 / 100", "NEWCAT2 = OLDCAT2 * NEWCAT1"]
     """
 
     # A. Asserts
@@ -160,7 +162,9 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
         exec(f'{xcat} = dfw')
 
     for single in singles_used:
+        # Todo: extract from main df not dfx, as single indicator my not be from panel
         dfxx = dfx[(dfx['cid'] + '_' + dfx['xcat']) == single[1:]]
+        # Todo: extract with correct start and end dats, maybe with reduce_df
         dfx1 = dfxx.set_index('real_date')['value'].to_frame()
         dfw = pd.concat([dfx1] * len(cidx), axis=1, ignore_index=True)
         dfw.columns = cidx
