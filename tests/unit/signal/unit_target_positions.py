@@ -31,7 +31,7 @@ class TestAll(unittest.TestCase):
 
         df_xcats.loc['FXXR_NSA'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.2]
         df_xcats.loc['EQXR_NSA'] = ['2012-01-01', '2020-10-30', 0.5, 2, 0, 0.2]
-        df_xcats.loc['SIG_NSA'] = ['2010-01-01', '2020-12-3', 0, 10, 0.4, 0.2]
+        df_xcats.loc['SIG_NSA'] = ['2013-01-01', '2020-12-30', 0, 10, 0.4, 0.2]
 
         random.seed(2)
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
@@ -351,6 +351,20 @@ class TestAll(unittest.TestCase):
         df_fxxr = output_df[output_df['xcat'] == 'FXXR_NSA']
 
         self.assertTrue(df_signal.shape == df_fxxr.shape)
+
+        dfd = reduce_df(df=self.dfd, xcats=self.xcats, cids=self.cids,
+                        start='2012-01-01', end='2020-10-30', blacklist=None)
+        output_df = target_positions(df=dfd, cids=self.cids,
+                                     xcats=['FXXR_NSA', 'EQXR_NSA', 'SIG_NSA'],
+                                     xcat_sig='SIG_NSA', ctypes=['FX', 'EQ'],
+                                     sigrels=[1, 0.5], ret='XR_NSA', blacklist=None,
+                                     start='2012-01-01', end='2020-10-30', scale='dig',
+                                     vtarg=None, signame='POS')
+        # The signal is defined over the shortest timeframe. Therefore, both categories,
+        # where a position is taken, will have a time index that matches the signal if
+        # volatility targeting is set to None.
+        df_sig = dfd[dfd['xcat'] == 'SIG_NSA']
+        self.assertTrue((df_sig.shape[0] * 2) == output_df.shape[0])
 
 
 if __name__ == "__main__":
