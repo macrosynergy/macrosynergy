@@ -122,20 +122,10 @@ def composite_returns(df: pd.DataFrame, xcat_sig: str, contract_returns: List[st
     framework = pd.DataFrame(data=data, columns=cids, index=time_index)
     framework.columns.name = 'cid'
 
-    df_c_sig = df[df['xcat'] == xcat_sig]
-    df_c_rets = df_c_sig.pivot(index="real_date", columns="cid", values="value")
-
-    # Todo: pack next four lines into loop to save code
-    sigrels = iter(sigrels)
-    df_c_rets *= next(sigrels)
-
-    c_returns_copy = contract_returns.copy()
-    c_returns_copy.remove(xcat_sig)
-
     signal_start = time_index[0]  # Todo: No! This should not be used
     signal_end = time_index[-1]
 
-    for i, c_ret in enumerate(c_returns_copy):
+    for i, c_ret in enumerate(contract_returns):
 
         df_c_ret = df[df['xcat'] == c_ret]
         df_c_ret = df_c_ret.pivot(index="real_date", columns="cid", values="value")
@@ -161,7 +151,10 @@ def composite_returns(df: pd.DataFrame, xcat_sig: str, contract_returns: List[st
         df_c_ret *= next(sigrels)
 
         # Add each return series of the contract.
-        df_c_rets += df_c_ret
+        if i == 0:
+            df_c_rets = df_c_ret
+        else:
+            df_c_rets += df_c_ret
 
     # Believe this operation is now redundant.
     df_c_rets.dropna(how='all', inplace=True)
@@ -296,7 +289,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
 
         dfw_vol = df_vol.pivot(index="real_date", columns="cid", values="value")
         dfw_vol = dfw_vol.sort_index(axis=1)
-        dfw_vtr = 100 * vtarg / dfw_vol  # vol-target ratio to be applied
+        dfw_vtr = 100 * vtarg / dfw_vol  # vol-target ratio to be applied.
 
         # C.3. Calculated vol-targeted positions
 
@@ -345,8 +338,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
             start_date = tuple_dates[0]
             end_date = tuple_dates[1]
 
-            df_upos_copy = df_upos_copy.truncate(before=start_date,
-                                                         after=end_date)
+            df_upos_copy = df_upos_copy.truncate(before=start_date, after=end_date)
 
             df_upos_copy *= sigrels[i]
             # The current category, defined on the dataframe, is the signal category.
