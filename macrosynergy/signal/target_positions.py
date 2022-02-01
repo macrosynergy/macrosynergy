@@ -9,9 +9,9 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 import random
 
 
-def unit_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
-                   blacklist: dict = None, start: str = None, end: str = None,
-                   scale: str = 'prop', min_obs: int = 252, thresh: float = None):
+def unit_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, start: str = None,
+                   end: str = None, scale: str = 'prop',  min_obs: int = 252,
+                   thresh: float = None):
 
     """
     Calculate unit positions from signals based on zn-scoring (proportionate method)
@@ -22,8 +22,6 @@ def unit_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
     :param <List[str]> cids: cross sections of markets or currency areas in which
         positions should be taken.
     :param <str> xcat_sig: category that serves as signal across markets.
-    :param <dict> blacklist: cross sectional date ranges that should have zero target
-        positions.  # Todo: check if redundant in this context
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         for which the signal category is available is used.
     :param <str> end: latest date in ISO format. Default is None and latest date
@@ -53,14 +51,14 @@ def unit_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
 
         assert isinstance(min_obs, int), \
             "Minimum observation parameter must be an integer."
-        df_up = make_zn_scores(df, xcat=xcat_sig, blacklist=blacklist,
-                               sequential=True, cids=cids, start=start, end=end,
-                               neutral='zero', pan_weight=1, min_obs=min_obs,
-                               thresh=thresh)
+        df_up = make_zn_scores(df, xcat=xcat_sig, sequential=True, cids=cids,
+                               start=start, end=end, neutral='zero', pan_weight=1,
+                               min_obs=min_obs, thresh=thresh)
     else:
 
+        # Blacklist can be rigidly set to None given its application at the end.
         df_up = reduce_df(df=df, xcats=[xcat_sig], cids=cids, start=start, end=end,
-                          blacklist=blacklist)
+                          blacklist=None)
         df_up['value'] = np.sign(df_up['value'])
 
     return df_up
@@ -101,7 +99,6 @@ def composite_returns(df: pd.DataFrame, xcat_sig: str, contract_returns: List[st
     :param <List[str]> contract_returns: list of the contract return types.
     :param <List[str]> sigrels: respective signal for each contract type.
     :param <pd.Series> time_index: datetime index for which signals are available
-        # Todo: remove argument
     :param <List[str]> cids: cross-sections of markets or currency areas in which
         positions should be taken.
     :param <str> ret: postfix denoting the returns in % applied to the contract types.
@@ -117,53 +114,25 @@ def composite_returns(df: pd.DataFrame, xcat_sig: str, contract_returns: List[st
 
     cids = sorted(cids)
     data = np.zeros(shape=(time_index.size, len(cids)))
-    # The signal will delimit the longevity of the possible position.  # Todo No!
-    # Todo: composite returns should be calculate for all available dates
+    # The signal will delimit the longevity of the possible position.
     framework = pd.DataFrame(data=data, columns=cids, index=time_index)
     framework.columns.name = 'cid'
 
-    df_c_sig = df[df['xcat'] == xcat_sig]
-    df_c_rets = df_c_sig.pivot(index="real_date", columns="cid", values="value")
-
-    # Todo: pack next four lines into loop to save code
-    sigrels = iter(sigrels)
-    df_c_rets *= next(sigrels)
-
-    c_returns_copy = contract_returns.copy()
-    c_returns_copy.remove(xcat_sig)
-
-    signal_start = time_index[0]  # Todo: No! This should not be used
-    signal_end = time_index[-1]
-
-    for i, c_ret in enumerate(c_returns_copy):
+    for i, c_ret in enumerate(contract_returns):
 
         df_c_ret = df[df['xcat'] == c_ret]
         df_c_ret = df_c_ret.pivot(index="real_date", columns="cid", values="value")
-        cat_index = df_c_ret.index
-        cat_start = cat_index[0]
-        cat_end = cat_index[-1]
-
-        # Only concerned by the return series that are aligned to the signal.
-        df_c_ret = df_c_ret.truncate(before=signal_start, after=signal_end)
-
-        if cat_start > signal_start or cat_end < signal_end:
-            condition_start = next(iter(np.where(time_index == cat_start)[0]))
-            date_fill = framework.iloc[:condition_start]
-            df_c_ret = pd.concat([date_fill, df_c_ret])
-
-            condition_end = next(iter(np.where(time_index == cat_end)[0]))
-            date_fill = framework.iloc[(condition_end + 1):]
-            df_c_ret = pd.concat([df_c_ret, date_fill])
-        else:
-            pass
 
         df_c_ret = df_c_ret.sort_index(axis=1)
-        df_c_ret *= next(sigrels)
+        df_c_ret *= sigrels[i]
 
         # Add each return series of the contract.
-        df_c_rets += df_c_ret
+        if i == 0:
+            df_c_rets = df_c_ret
+        else:
+            df_c_rets += df_c_ret
 
-    # Believe this operation is now redundant.
+    # Any dates not shared both all categories will be removed.
     df_c_rets.dropna(how='all', inplace=True)
 
     df_rets = df_c_rets.stack().to_frame("value").reset_index()
@@ -174,10 +143,9 @@ def composite_returns(df: pd.DataFrame, xcat_sig: str, contract_returns: List[st
 
 def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_sig: str,
                      ctypes: List[str], sigrels: List[float],
-                     baskets: List[str] = None,
-                     ret: str = 'XR_NSA', blacklist: dict = None, start: str = None,
-                     end: str = None, scale: str = 'prop',
-                     min_obs: int = 252,
+                     baskets: List[str] = None, ret: str = 'XR_NSA',
+                     blacklist: dict = None, start: str = None,
+                     end: str = None, scale: str = 'prop', min_obs: int = 252,
                      thresh: float = None, vtarg: float = None, lback_periods: int = 21,
                      lback_meth: str = 'ma', half_life: int = 11, signame: str = 'POS'):
 
@@ -191,7 +159,6 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
     :param <List[str]> xcats: the categories (signals amd position returns) the
         standardised dataframe is defined over.
         Must include the (ctypes + ret) for volatility targeting.
-        # Todo: check if this can be made implicit
     :param <str> xcat_sig: category that serves as signal across markets.
     :param <List[str]> ctypes: contract types that are traded across markets. They should
         correspond to return tickers. Examples are 'FX' or 'EQ'.
@@ -262,16 +229,18 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
     # B. Get unit position information
 
     df = df.loc[:, cols]
-    dfx = reduce_df(df=df, xcats=xcats, cids=cids, start=start, end=end,
-                    blacklist=None)  # Todo: blacklist must be applied at end
+    contract_returns = [c + ret for c in ctypes]
+    xcats = contract_returns + [xcat_sig]
 
+    dfx = reduce_df(df=df, xcats=xcats, cids=cids, start=start, end=end, blacklist=None)
+
+    # zn-scores or signs.
     df_upos = unit_positions(df=dfx, cids=cids, xcat_sig=xcat_sig,
-                             blacklist=blacklist, start=start, end=end,
-                             scale=scale, thresh=thresh)  # zn-scores or signs
+                             start=start, end=end, scale=scale, thresh=thresh)
 
     df_upos_w = df_upos.pivot(index="real_date", columns="cid", values="value")
     # N.B.: index is determined by the longest cross-section.
-    time_index = df_upos_w.index  # Todo: return lookback killer - should not be used
+    time_index = df_upos_w.index
 
     contract_returns = [c + ret for c in ctypes]
     start_end_dates = start_end(dfx, contract_returns)  # get return types' starts/ends
@@ -292,11 +261,10 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
                               lback_periods=lback_periods, lback_meth=lback_meth,
                               half_life=half_life, start=start, end=end,
                               blacklist=blacklist, remove_zeros=True, postfix="")
-        # Todo: The dimensions may not match signals
 
         dfw_vol = df_vol.pivot(index="real_date", columns="cid", values="value")
         dfw_vol = dfw_vol.sort_index(axis=1)
-        dfw_vtr = 100 * vtarg / dfw_vol  # vol-target ratio to be applied
+        dfw_vtr = 100 * vtarg / dfw_vol  # vol-target ratio to be applied.
 
         # C.3. Calculated vol-targeted positions
 
@@ -345,8 +313,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
             start_date = tuple_dates[0]
             end_date = tuple_dates[1]
 
-            df_upos_copy = df_upos_copy.truncate(before=start_date,
-                                                         after=end_date)
+            df_upos_copy = df_upos_copy.truncate(before=start_date, after=end_date)
 
             df_upos_copy *= sigrels[i]
             # The current category, defined on the dataframe, is the signal category.
@@ -364,6 +331,12 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
     df_tpos['xcat'] += '_' + signame
     df_tpos['xcat'] = df_tpos['cid'] + '_' + df_tpos['xcat']
     df_tpos = df_tpos[cols]
+
+    # Apply the blacklist period. Aim to retain the blackout periods for calculating the
+    # target positions. Once the target positions have been computed, apply the blackout
+    # period.
+    df_tpos = reduce_df(df=df_tpos, xcats=None, cids=None, start=start, end=end,
+                        blacklist=blacklist)
 
     return df_tpos
 
@@ -398,22 +371,21 @@ if __name__ == "__main__":
                                    ctypes=['FX', 'EQ'], sigrels=[1, 0.5], ret='XR_NSA',
                                    blacklist=black, start='2012-01-01', end='2020-10-30',
                                    scale='dig', vtarg=5, signame='POS')
+    print(position_df)
 
-    # print(position_df)
-    #
-    # position_df = target_positions(df=dfd, cids=cids, xcats=xcats, xcat_sig='FXXR_NSA',
-    #                                ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
-    #                                blacklist=black, start='2012-01-01', end='2020-10-30',
-    #                                scale='dig', vtarg=0.1, signame='POS')
-    #
-    # print(position_df)
-    #
-    # # The secondary contract, EQXR_NSA, is defined over a shorter timeframe. Therefore,
-    # # on the additional dates, a valid position will be computed using the signal
-    # # category but a position will not be able to be taken for EQXR_NSA.
-    # position_df = target_positions(df=dfd, cids=cids, xcats=xcats, xcat_sig='FXXR_NSA',
-    #                                ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
-    #                                blacklist=black, start='2010-01-01', end='2020-12-31',
-    #                                scale='prop', vtarg=None, signame='POS')
-    #
-    # print(position_df)
+    position_df = target_positions(df=dfd, cids=cids, xcats=xcats, xcat_sig='FXXR_NSA',
+                                   ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
+                                   blacklist=black, start='2012-01-01', end='2020-10-30',
+                                   scale='dig', vtarg=0.1, signame='POS')
+
+    print(position_df)
+
+    # The secondary contract, EQXR_NSA, is defined over a shorter timeframe. Therefore,
+    # on the additional dates, a valid position will be computed using the signal
+    # category but a position will not be able to be taken for EQXR_NSA.
+    position_df = target_positions(df=dfd, cids=cids, xcats=xcats, xcat_sig='FXXR_NSA',
+                                   ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
+                                   blacklist=black, start='2010-01-01', end='2020-12-31',
+                                   scale='prop', vtarg=None, signame='POS')
+
+    print(position_df)
