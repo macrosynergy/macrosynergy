@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import pandas as pd
 from tests.simulate import make_qdf
-from macrosynergy.panel.panel_calculator_alt2 import panel_calculator
+from macrosynergy.panel.panel_calculator import panel_calculator
 from random import randint, choice
 from typing import List
 
