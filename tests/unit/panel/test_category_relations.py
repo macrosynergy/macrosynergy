@@ -101,15 +101,6 @@ class TestAll(unittest.TestCase):
                                    xcat1_chg='pch', n_periods=None)
 
         with self.assertRaises(AssertionError):
-            # The two values held in the "xcat_trims" must both be floating point values.
-            # Although computationally valid, integer types are not permissible: integer
-            # values would have to be defined as floats.
-            cr = CategoryRelations(self.dfdx, xcats=['GROWTH', 'INFL'], cids=self.cidx,
-                                   freq='M', xcat_aggs=['mean', 'mean'], lag=1,
-                                   start='2000-01-01', years=None, blacklist=self.black,
-                                   xcat1_chg = None, xcat_trims = [3.25, 3])
-
-        with self.assertRaises(AssertionError):
             # Trivial check to confirm the length of "xcat_trims" parameter.
             cr = CategoryRelations(self.dfdx, xcats=['GROWTH', 'INFL'], cids=self.cidx,
                                    freq='M', xcat_aggs=['mean', 'mean'], lag=1,

@@ -53,8 +53,8 @@ class CategoryRelations:
         values average forward into the future.
     :param: <List[float]> xcat_trims: two-element list with maximum absolute values
         for the two respective categories. Observations with higher values will be
-        trimmed, i.e. excluded from the analysis. Default is None for both.
-        The trimming is applied after all transformations have been applied.
+        trimmed, i.e. removed from the analysis (not winsorized!). Default is None
+        for both. Trimming is applied after all other transformations.
 
     """
 
@@ -98,11 +98,13 @@ class CategoryRelations:
                                                shared_cids=shared_cids,
                                                expln_var=xcats[0])
 
-        if self.xcat_trims[0] != None:
+        if any([xt is not None for xt in self.xcat_trims]):
+
             assert len(xcat_trims) == len(xcats), "Two values expected corresponding to " \
                                                   "the number of categories."
-            types = [isinstance(elem, float) and elem >= 0.0 for elem in xcat_trims]
-            assert all(types), "Expected two floating point values."
+            types = [isinstance(elem, (float, int)) and elem >= 0.0
+                     for elem in xcat_trims]
+            assert any(types), "Expected two floating point values."
 
             df = CategoryRelations.outlier_trim(df, xcats, xcat_trims)
 
@@ -383,7 +385,7 @@ if __name__ == "__main__":
     cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'], cids=cidx, freq='M',
                            xcat_aggs=['mean', 'mean'], lag=1,
                            start='2000-01-01', years=None, blacklist=black,
-                           xcat1_chg=None, xcat_trims=[2.75, 2.5])
+                           xcat1_chg=None, xcat_trims=[2, 2])
 
     cr.reg_scatter(labels=False, coef_box='upper left')
     cr.jointplot(kind='hist', xlab='growth', ylab='inflation', height=5)
