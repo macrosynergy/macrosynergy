@@ -260,5 +260,5 @@ if __name__ == "__main__":
     formula = "NEW1 = XR - iUSD_XR"
     formula_2 = "NEW2 = GROWTH - iCHF_INFL"
     formulas = [formula, formula_2]
-    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+    # df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
 
