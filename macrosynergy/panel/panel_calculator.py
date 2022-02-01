@@ -162,10 +162,16 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
         exec(f'{xcat} = dfw')
 
     for single in singles_used:
-        # Todo: extract from main df not dfx, as single indicator my not be from panel
-        dfxx = dfx[(dfx['cid'] + '_' + dfx['xcat']) == single[1:]]
-        # Todo: extract with correct start and end dats, maybe with reduce_df
+        try:
+            df[(df['cid'] + '_' + df['xcat']) == single[1:]]
+        except ValueError:
+            raise "Ticker missing from the dataframe."
+        else:
+            dfxx = df[(df['cid'] + '_' + df['xcat']) == single[1:]]
+
         dfx1 = dfxx.set_index('real_date')['value'].to_frame()
+        dfx1 = dfx1.truncate(before=start, after=end)
+        
         dfw = pd.concat([dfx1] * len(cidx), axis=1, ignore_index=True)
         dfw.columns = cidx
         exec(f'{single} = dfw')
