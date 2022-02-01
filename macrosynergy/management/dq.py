@@ -123,6 +123,29 @@ class DataQueryInterface(object):
             print(f'exc_value: {exc_value}')
             print(f'exc_traceback: {exc_traceback}')
 
+    @staticmethod
+    def server_retry(response: dict, select: str):
+        """
+        DQ requests are powered by four servers. Therefore, if a single server is failing
+        try the remaining three servers for a request. In theory, trying the sample space
+        of servers should invariably result in a successful request: assuming all four
+        servers are not concurrently down. The number of trials is five: the sample space
+        of servers should be exhausted.
+
+        :param <dict> response: server response.
+        :param <str> select: key hosting the server's response in the dictionary.
+
+        :return <bool> server_response:
+        """
+
+        try:
+            response[select]
+        except KeyError:
+            print(f"{response['errors'][0]['message']} - will try a different server.")
+            return False
+        else:
+            return True
+
     def _fetch_threading(self, endpoint, params: dict):
         """
         Method responsible for requesting Tickers from the API. Able to pass in 20
@@ -140,34 +163,47 @@ class DataQueryInterface(object):
         select = "instruments"
 
         results = []
-        while True:
-            with requests.get(url=url, cert=(self.crt, self.key), headers=self.headers,
-                              params=params) as r:
-                    last_response = r.text
+        counter = 0
+        clause = lambda counter: (counter <= 5)
 
-            response = json.loads(last_response)
-
-            dictionary = response[select][0]['attributes'][0]
-
-            if not isinstance(dictionary['time-series'], list):
-                return None
-
-            if not select in response.keys():
-                break
+        while clause(counter):
+            try:
+                r = requests.get(url=url, cert=(self.crt, self.key),
+                                headers=self.headers, params=params)
+            except ConnectionResetError:
+                counter += 1
+                time.sleep(0.05)
+                print(f"Server error: will retry. Attempt number: {counter}.")
+                continue
             else:
-                results.extend(response[select])
+                last_response = r.text
+                response = json.loads(last_response)
 
-            assert "next" in response['links'][1].keys(), \
-                f"'next' missing from links keys: " \
-                f" {response['links'][1].keys()}"
+                count = 0
+                while not self.server_retry(response, select):
+                    count += 1
+                    if count > 5:
+                        raise RuntimeError("All servers are down.")
 
-            if response["links"][1]["next"] is None:
-                break
+                dictionary = response[select][0]['attributes'][0]
+                if not isinstance(dictionary['time-series'], list):
+                    return None
 
-            url = f"{self.base_url:s}{response['links'][1]['next']:s}"
-            params = {}
+                if not select in response.keys():
+                    break
+                else:
+                    results.extend(response[select])
 
-        return results
+                if response["links"][1]["next"] is None:
+                    break
+
+                url = f"{self.base_url:s}{response['links'][1]['next']:s}"
+                params = {}
+
+        if isinstance(results, list):
+            return results
+        else:
+            return None
 
     def _request(self, endpoint: str, tickers: List[str], params: dict,
                  delay: int = None, count: int = 0, start_date: str = None,
@@ -278,6 +314,18 @@ class DataQueryInterface(object):
 
     @staticmethod
     def delay_compute(no_tickers):
+        """
+        DataQuery is only able to handle a request every 200 milliseconds. However, given
+        the erratic behaviour of threads, the time delay between the release of each
+        request must be a function of the size of the request: the smaller the request,
+        the closer the delay parameter can be to the limit of 200 milliseconds.
+        Therefore, the function adjusts the delay parameter to the number of tickers
+        requested.
+
+        :param <int> no_tickers: number of tickers requested.
+
+        :return <float> delay: internally computed value.
+        """
 
         if not floor(no_tickers / 100):
             delay = 0.05
@@ -297,9 +345,9 @@ class DataQueryInterface(object):
         :param <List[str]> original_metrics: List of required metrics: the returned
             DataFrame will reflect the order of the received List.
         :param <bool> suppress_warning: required for debugging.
-        :param <dict> **kwargs: dictionary of additional arguments
+        :param <dict> kwargs: dictionary of additional arguments.
 
-        :return: pd.DataFrame: ['cid', 'xcat', 'real_date'] + [original_metrics].
+        :return: <pd.DataFrame> df: ['cid', 'xcat', 'real_date'] + [original_metrics].
         """
 
         for metric in original_metrics:
@@ -371,7 +419,7 @@ class DataQueryInterface(object):
         :param sequential: if series are not returned, potentially the fault of the
             threading mechanism, isolate each Ticker and run sequentially.
 
-        :return: dict.
+        :return: <dict> modified_dict.
         """
         output_dict = defaultdict(dict)
         size = len(list_)
@@ -449,7 +497,7 @@ class DataQueryInterface(object):
         :param <np.array> v:
         :param <Integer> col: used to isolate the column being checked.
 
-        :return bool.
+        :return <bool> condition.
         """
         returns = list(v[:, col])
         condition = all([isinstance(elem, type(None)) for elem in returns])
@@ -468,7 +516,7 @@ class DataQueryInterface(object):
         :param <dict> _dict:
         :param <bool> suppress_warning:
 
-        :return: dict.
+        :return: <dict> dict_copy.
         """
 
         ticker_missing = 0
@@ -544,6 +592,7 @@ class DataQueryInterface(object):
         for m in original_metrics:
             df[m] = df[m].astype(dtype=np.float32)
 
+        df.real_date = pd.to_datetime(df.real_date)
         return df
 
     def tickers(self, tickers: list, metrics: list = ['value'],
@@ -591,8 +640,8 @@ class DataQueryInterface(object):
         :param <bool> suppress_warning: used to suppress warning of any invalid
             ticker received by DataQuery.
 
-        :return <pd.Dataframe> standardized dataframe with columns 'cid', 'xcats',
-                               'real_date' and chosen metrics.
+        :return <pd.Dataframe> df: standardized dataframe with columns 'cid', 'xcats',
+            'real_date' and chosen metrics.
         """
 
         if (cids is None) & (xcats is not None):

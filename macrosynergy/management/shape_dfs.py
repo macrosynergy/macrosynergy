@@ -12,7 +12,7 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
     """
     Filter dataframe by xcats and cids and notify about missing xcats and cids.
 
-    :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
+    :param <pd.Dataframe> df: standardized dataframe with the necessary columns:
         'cid', 'xcats', 'real_date'.
     :param <List[str]> xcats: extended categories to be checked on. Default is all in the
         dataframe.
@@ -167,23 +167,24 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, blacklist, out_all=True)
 
     col_names = ['cid', 'xcat', 'real_date', val]
-    dfc = pd.DataFrame(columns=col_names)
 
+    df_output = []
     if years is None:
         for i in range(2):
             dfw = df[df['xcat'] == xcats[i]].pivot(index='real_date', columns='cid',
                                                    values=val)
             dfw = dfw.resample(freq).agg(xcat_aggs[i])
-            if (i == 0) & (lag > 0):  # first category (explanatory) is shifted forward
+            if (i == 0) and (lag > 0):  # first category (explanatory) is shifted forward
                 dfw = dfw.shift(lag)
-            if (i == 1) & (fwin > 0):
+            if (i == 1) and (fwin > 0):
                 dfw = dfw.rolling(window=fwin).mean().shift(1 - fwin)
             dfx = pd.melt(dfw.reset_index(), id_vars=['real_date'],
                           value_vars=cids, value_name=val)
             dfx['xcat'] = xcats[i]
-            dfc = dfc.append(dfx[col_names])
+            df_output.append(dfx[col_names])
     else:
         s_year = pd.to_datetime(start).year
+        start_year = s_year
         e_year = df['real_date'].max().year + 1
 
         grouping = int((e_year - s_year) / years)
@@ -201,17 +202,21 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         year_groups[f"{s_year} - now"] = v
         list_y_groups = list(year_groups.keys())
 
-        translate_ = lambda year: list_y_groups[int((year % 2000) / years)]
+        translate_ = lambda year: list_y_groups[int((year % start_year) / years)]
+        df['real_date'] = pd.to_datetime(df['real_date'], errors='coerce')
         df['custom_date'] = df['real_date'].dt.year.apply(translate_)
         for i in range(2):
             dfx = df[df['xcat'] == xcats[i]]
             dfx = dfx.groupby(['xcat', 'cid',
                                'custom_date']).agg(xcat_aggs[i]).reset_index()
             dfx = dfx.rename(columns={"custom_date": "real_date"})
-            dfc = dfc.append(dfx[col_names])
+            df_output.append(dfx[col_names])
 
-    return dfc.pivot(index=('cid', 'real_date'), columns='xcat',
-                     values=val).dropna()[xcats]
+    dfc = pd.concat(df_output)
+    dfc = dfc.pivot(index=('cid', 'real_date'), columns='xcat',
+                    values=val).dropna()[xcats]
+
+    return dfc
 
 
 if __name__ == "__main__":
@@ -257,7 +262,7 @@ if __name__ == "__main__":
 
     dfc3 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
                          xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black,
-                         years=10)
+                         years=3)
 
     # Testing reduce_df()
     filt1 = ~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))
@@ -265,3 +270,7 @@ if __name__ == "__main__":
     dfdx = dfd[filt1 & filt2]  # simulate missing cross sections
     dfd_x1, xctx, cidx = reduce_df(dfdx, xcats=['XR', 'CRY', 'INFL'], cids=cids,
                                    intersect=True, out_all=True)
+
+    dfc = categories_df(dfd, xcats=['XR', 'CRY'], cids=['CAD'],
+                        freq='M', lag=0, xcat_aggs=['mean', 'mean'],
+                        start='2000-01-01', years=10)
