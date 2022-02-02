@@ -87,7 +87,7 @@ def start_end(df: pd.DataFrame, contract_returns: List[str]):
     return start_end_dates
 
 
-def composite_returns(df: pd.DataFrame, xcat_sig: str, contract_returns: List[str],
+def composite_returns(df: pd.DataFrame, contract_returns: List[str],
                       sigrels: List[str], time_index: pd.Series, cids: List[str],
                       ret: str = 'XR_NSA'):
     """
@@ -95,7 +95,6 @@ def composite_returns(df: pd.DataFrame, xcat_sig: str, contract_returns: List[st
 
     :param <pd.Dataframe> df: standardized DataFrame containing the following columns:
         'cid', 'xcats', 'real_date' and 'value'.
-    :param <str> xcat_sig: category that serves as signal across markets.
     :param <List[str]> contract_returns: list of the contract return types.
     :param <List[str]> sigrels: respective signal for each contract type.
     :param <pd.Series> time_index: datetime index for which signals are available
@@ -141,12 +140,11 @@ def composite_returns(df: pd.DataFrame, xcat_sig: str, contract_returns: List[st
     return df_rets
 
 
-def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_sig: str,
-                     ctypes: List[str], sigrels: List[float],
-                     baskets: List[str] = None, ret: str = 'XR_NSA',
-                     blacklist: dict = None, start: str = None,
-                     end: str = None, scale: str = 'prop', min_obs: int = 252,
-                     thresh: float = None, vtarg: float = None, lback_periods: int = 21,
+def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: List[str],
+                     sigrels: List[float], baskets: List[str] = None, ret: str = 'XR_NSA',
+                     blacklist: dict = None, start: str = None, end: str = None,
+                     scale: str = 'prop', min_obs: int = 252, thresh: float = None,
+                     vtarg: float = None, lback_periods: int = 21,
                      lback_meth: str = 'ma', half_life: int = 11, signame: str = 'POS'):
 
     """
@@ -156,9 +154,6 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
         'cid', 'xcats', 'real_date' and 'value'.
     :param <List[str]> cids: cross sections of markets or currency areas in which
         positions should be taken.
-    :param <List[str]> xcats: the categories (signals amd position returns) the
-        standardised dataframe is defined over.
-        Must include the (ctypes + ret) for volatility targeting.
     :param <str> xcat_sig: category that serves as signal across markets.
     :param <List[str]> ctypes: contract types that are traded across markets. They should
         correspond to return tickers. Examples are 'FX' or 'EQ'.
@@ -236,7 +231,8 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcats: List[str], xcat_s
 
     # zn-scores or signs.
     df_upos = unit_positions(df=dfx, cids=cids, xcat_sig=xcat_sig,
-                             start=start, end=end, scale=scale, thresh=thresh)
+                             start=start, end=end, scale=scale, min_obs=min_obs,
+                             thresh=thresh)
 
     df_upos_w = df_upos.pivot(index="real_date", columns="cid", values="value")
     # N.B.: index is determined by the longest cross-section.
@@ -366,14 +362,13 @@ if __name__ == "__main__":
     xcat_sig = 'FXXR_NSA'
 
     position_df = target_positions(df=dfd, cids=cids,
-                                   xcats=['FXXR_NSA', 'EQXR_NSA', 'SIG_NSA'],
                                    xcat_sig='SIG_NSA',
                                    ctypes=['FX', 'EQ'], sigrels=[1, 0.5], ret='XR_NSA',
                                    blacklist=black, start='2012-01-01', end='2020-10-30',
                                    scale='dig', vtarg=5, signame='POS')
     print(position_df)
 
-    position_df = target_positions(df=dfd, cids=cids, xcats=xcats, xcat_sig='FXXR_NSA',
+    position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
                                    ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
                                    blacklist=black, start='2012-01-01', end='2020-10-30',
                                    scale='dig', vtarg=0.1, signame='POS')
@@ -383,7 +378,7 @@ if __name__ == "__main__":
     # The secondary contract, EQXR_NSA, is defined over a shorter timeframe. Therefore,
     # on the additional dates, a valid position will be computed using the signal
     # category but a position will not be able to be taken for EQXR_NSA.
-    position_df = target_positions(df=dfd, cids=cids, xcats=xcats, xcat_sig='FXXR_NSA',
+    position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
                                    ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
                                    blacklist=black, start='2010-01-01', end='2020-12-31',
                                    scale='prop', vtarg=None, signame='POS')
