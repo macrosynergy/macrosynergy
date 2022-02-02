@@ -90,6 +90,7 @@ def pan_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fals
 
     return ar_neutral
 
+
 def first_value(column: pd.Series):
     """
     Returns the integer index at which the series' first realised value occurs.
@@ -127,6 +128,7 @@ def index_info(df_row_no: int, column: pd.Series, min_obs: int):
 
     return df_row_no, first_date, date_index
 
+
 def in_sampling(column: pd.Series, neutral: str, active_days: int,
                 date_index: int, min_obs: int):
     """
@@ -159,6 +161,7 @@ def in_sampling(column: pd.Series, neutral: str, active_days: int,
     arr = np.concatenate([prior_to_first, iis_neutral, os_neutral])
 
     return arr
+
 
 def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = False,
                   min_obs: int = 261, iis: bool = False):

@@ -368,4 +368,6 @@ class TestAll(unittest.TestCase):
 
 if __name__ == "__main__":
 
-    unittest.main()
+    pass
+
+    # unittest.main()
