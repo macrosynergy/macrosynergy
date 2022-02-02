@@ -62,7 +62,7 @@ class TestAll(unittest.TestCase):
             # Testing the assertion on the scale parameter: required ['prop', 'dig'].
             # Pass in noise.
             scale = 'vtarg'
-            position_df = target_positions(df=self.dfd, cids=self.cids, xcats=self.xcats,
+            position_df = target_positions(df=self.dfd, cids=self.cids,
                                            xcat_sig='FXXR_NSA',
                                            ctypes=['FX', 'EQ'], sigrels=[1, -1],
                                            ret='XR_NSA', blacklist=self.blacklist,
@@ -238,7 +238,7 @@ class TestAll(unittest.TestCase):
             # Test the assertion that the signal field must be present in the defined
             # dataframe. Will throw an assertion.
             xcat_sig = 'INTGRWTH_NSA'
-            position_df = target_positions(df=self.dfd, cids=self.cids, xcats=self.xcats,
+            position_df = target_positions(df=self.dfd, cids=self.cids,
                                            xcat_sig=xcat_sig,
                                            ctypes=['FX', 'EQ'], sigrels=[1, -1],
                                            ret='XR_NSA', blacklist=self.blacklist,
@@ -250,7 +250,7 @@ class TestAll(unittest.TestCase):
             # Testing the assertion on the scale parameter: required ['prop', 'dig'].
             # Pass in noise.
             scale = 'vtarg'
-            position_df = target_positions(df=self.dfd, cids=self.cids, xcats=self.xcats,
+            position_df = target_positions(df=self.dfd, cids=self.cids,
                                            xcat_sig=xcat_sig,
                                            ctypes=['FX', 'EQ'], sigrels=[1, -1],
                                            ret='XR_NSA', blacklist=self.blacklist,
@@ -265,7 +265,7 @@ class TestAll(unittest.TestCase):
 
             sigrels = [1, -1, 0.5, 0.25]
             ctypes = ['FX', 'EQ']
-            position_df = target_positions(df=self.dfd, cids=self.cids, xcats=self.xcats,
+            position_df = target_positions(df=self.dfd, cids=self.cids,
                                            xcat_sig=xcat_sig,
                                            ctypes=self.ctypes, sigrels=sigrels,
                                            ret='XR_NSA', blacklist=self.blacklist,
@@ -284,7 +284,7 @@ class TestAll(unittest.TestCase):
         # time-period.
         xcat_sig = 'FXXR_NSA'
         sigrels = [1, -1]
-        output_df = target_positions(df=self.dfd, cids=self.cids, xcats=self.xcats,
+        output_df = target_positions(df=self.dfd, cids=self.cids,
                                      xcat_sig=xcat_sig, ctypes=self.ctypes,
                                      sigrels=sigrels, ret='XR_NSA',
                                      blacklist=self.blacklist, start='2012-01-01',
@@ -326,7 +326,7 @@ class TestAll(unittest.TestCase):
         # target is to set the value equal to zero, and consequently all the
         # corresponding positions should also be zero. If zero volatility is required,
         # unable to take a position in an asset that has non-zero standard deviation.
-        output_df = target_positions(df=self.dfd, cids=self.cids, xcats=self.xcats,
+        output_df = target_positions(df=self.dfd, cids=self.cids,
                                      xcat_sig=xcat_sig, ctypes=self.ctypes,
                                      sigrels=sigrels, ret='XR_NSA',
                                      blacklist=self.blacklist, start='2010-01-01',
@@ -337,7 +337,7 @@ class TestAll(unittest.TestCase):
         # Final check is if the signal category is defined over the shorter timeframe
         # both contracts individual position dataframes should match the signal.
         xcat_sig = 'EQXR_NSA'
-        output_df = target_positions(df=self.dfd, cids=self.cids, xcats=self.xcats,
+        output_df = target_positions(df=self.dfd, cids=self.cids,
                                      xcat_sig=xcat_sig, ctypes=self.ctypes,
                                      sigrels=sigrels, ret='XR_NSA',
                                      blacklist=self.blacklist, start='2010-01-01',
@@ -355,7 +355,6 @@ class TestAll(unittest.TestCase):
         dfd = reduce_df(df=self.dfd, xcats=self.xcats, cids=self.cids,
                         start='2012-01-01', end='2020-10-30', blacklist=None)
         output_df = target_positions(df=dfd, cids=self.cids,
-                                     xcats=['FXXR_NSA', 'EQXR_NSA', 'SIG_NSA'],
                                      xcat_sig='SIG_NSA', ctypes=['FX', 'EQ'],
                                      sigrels=[1, 0.5], ret='XR_NSA', blacklist=None,
                                      start='2012-01-01', end='2020-10-30', scale='dig',

@@ -162,13 +162,17 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
         exec(f'{xcat} = dfw')
 
     for single in singles_used:
-        # Todo: extract from main df not dfx, as single indicator my not be from panel
-        dfxx = dfx[(dfx['cid'] + '_' + dfx['xcat']) == single[1:]]
-        # Todo: extract with correct start and end dats, maybe with reduce_df
-        dfx1 = dfxx.set_index('real_date')['value'].to_frame()
-        dfw = pd.concat([dfx1] * len(cidx), axis=1, ignore_index=True)
-        dfw.columns = cidx
-        exec(f'{single} = dfw')
+        ticker = single[1:]
+        dfxx = df[(df['cid'] + '_' + df['xcat']) == ticker]
+        if dfxx.empty:
+            raise ValueError(f"Ticker, {ticker}, missing from the dataframe.")
+        else:
+            dfx1 = dfxx.set_index('real_date')['value'].to_frame()
+            dfx1 = dfx1.truncate(before=start, after=end)
+
+            dfw = pd.concat([dfx1] * len(cidx), axis=1, ignore_index=True)
+            dfw.columns = cidx
+            exec(f'{single} = dfw')
 
     # F. Calculate the panels and collect.
 
@@ -198,6 +202,7 @@ if __name__ == "__main__":
     df_cids.loc['GBP'] = ['2012-01-01', '2020-11-30', -0.2, 0.5]
     df_cids.loc['USD'] = ['2010-01-01', '2020-12-30', -0.2, 0.5]
     df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
+    df_cids.loc['EUR'] = ['2002-01-01', '2020-09-30', -0.2, 2]
 
     df_xcats = pd.DataFrame(index = xcats, columns = ['earliest', 'latest', 'mean_add',
                                                       'sd_mult', 'ar_coef', 'back_coef'])
@@ -234,10 +239,26 @@ if __name__ == "__main__":
     # Fourth testcase.
     formula = "NEW1 = GROWTH - iUSD_INFL / iUSD_XR"
     formulas = [formula]
-    # df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
 
     formula = "NEW1 = GROWTH.pct_change(periods=1, fill_method='pad') - " \
               "INFL.pct_change(periods=1, fill_method='pad')"
     formula_2 = "NEW2 = NEW1 / XR.pct_change(periods=1, fill_method='pad')"
     formulas = [formula, formula_2]
     # df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+
+    # Fifth testcase: EUR is not passed in as one of the cross-sections in "cids"
+    # parameter but is defined in the dataframe. Therefore, code will not break.
+    cids = ['AUD', 'CAD', 'GBP', 'USD', 'NZD']
+    formula = "NEW1 = XR - iUSD_XR"
+    formula_2 = "NEW2 = GROWTH - iEUR_INFL"
+    formulas = [formula, formula_2]
+    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+
+    # Sixth testcase - an error should be thrown given CHF_INFL is not defined.
+    cids = ['AUD', 'CAD', 'GBP', 'USD', 'NZD']
+    formula = "NEW1 = XR - iUSD_XR"
+    formula_2 = "NEW2 = GROWTH - iCHF_INFL"
+    formulas = [formula, formula_2]
+    # df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
+
