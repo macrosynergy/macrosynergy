@@ -211,7 +211,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
     assert xcat_sig in set(df['xcat'].unique()), \
         "Signal category missing from the standardised dataframe."
-    assert isinstance(cs_vtarg, (float, int)) or (vtarg is None) \
+    assert isinstance(cs_vtarg, (float, int)) or (cs_vtarg is None) \
         and not isinstance(cs_vtarg, bool), \
         "Volatility Target must be numeric or None."
     assert len(sigrels) == len(ctypes), \
@@ -230,8 +230,6 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
     xcats = contract_returns + [xcat_sig]
 
     dfx = reduce_df(df=df, xcats=xcats, cids=cids, start=start, end=end, blacklist=None)
-
-    start_end_dates = start_end(dfx, contract_returns)  # return types' starts/ends
 
     # C. Calculate and reformat unit positions
 
@@ -273,15 +271,6 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
             dfw_pos = df_pos.pivot(index="real_date", columns="cid",
                                    values="value")
 
-            # Only take a position in the contract for specific availability.
-            # Todo: not needed
-            tuple_dates = start_end_dates[contract_returns[i]]
-            start_date = tuple_dates[0]
-            end_date = tuple_dates[1]
-            dfw_pos = dfw_pos.truncate(before=start_date, after=end_date)\
-                .sort_index(axis=1)
-
-
             # NaNs to account for the lookback period. The position dataframe, through
             # each iteration, has been reduced to match the respective input's
             # dimensions.
@@ -300,12 +289,6 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
         for i, elem in enumerate(contract_returns):
             # Instantiate a new copy through each iteration.
             df_upos_copy = df_upos_w.copy()
-
-            tuple_dates = start_end_dates[elem]
-            start_date = tuple_dates[0]
-            end_date = tuple_dates[1]
-
-            df_upos_copy = df_upos_copy.truncate(before=start_date, after=end_date)
 
             df_upos_copy *= sigrels[i]
             # The current category, defined on the dataframe, is the signal category.
@@ -330,7 +313,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
     df_tpos = reduce_df(df=df_tpos, xcats=None, cids=None, start=start, end=end,
                         blacklist=blacklist)
 
-    return df_tpos
+    return df_tpos.reset_index()
 
 
 if __name__ == "__main__":
