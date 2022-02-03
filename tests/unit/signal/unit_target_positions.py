@@ -111,10 +111,9 @@ class TestAll(unittest.TestCase):
 
         # Tractable function - requires few tests. Validate each contract type is held in
         # the dictionary, and its associated value is a tuple.
-        durations = start_end(self.dfd, contract_returns)
+        # durations = start_end(self.dfd, contract_returns)
 
-        self.assertTrue(list(durations.keys()) == contract_returns)
-        self.assertTrue(all([isinstance(v, tuple) for v in durations.values()]))
+        # Function removed from source code.
 
     def test_composite_returns(self):
 
