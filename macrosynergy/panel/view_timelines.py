@@ -57,8 +57,9 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
 
     sns.set(style='darkgrid')
     if len(cids) == 1:
+        sns.set(rc={'figure.figsize': size})
         ax = sns.lineplot(data=df, x='real_date', y=val, hue='xcat', ci=None,
-                          size=size)
+                          sizes=size)
         plt.axhline(y=0, c=".5")
         handles, labels = ax.get_legend_handles_labels()
         label = labels[0:] if xcat_labels is None else xcat_labels
@@ -116,11 +117,11 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfdx = dfd[~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))]
 
-    view_timelines(dfdx, xcats=['XR', 'CRY'], cids=cids, ncol=2,
-                   xcat_labels=['Return', 'Carry'],
-                   title='Carry and return', title_adj=0.9, label_adj=0.1,
-                   aspect=1, height=5)
-    view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids[0], ncol=1,
+    # view_timelines(dfdx, xcats=['XR', 'CRY'], cids=cids, ncol=2,
+    #                xcat_labels=['Return', 'Carry'],
+    #                title='Carry and return', title_adj=0.9, label_adj=0.1,
+    #                aspect=1, height=5)
+    view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids[0], ncol=1, size=(10, 5),
                    title='AUD return and carry')
     view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids[0], ncol=1,
                    xcat_labels=['Return', 'Carry'],
