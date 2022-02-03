@@ -63,29 +63,6 @@ def unit_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, start: str 
     return df_up
 
 
-def start_end(df: pd.DataFrame, contract_returns: List[str]):
-    """
-    Determines the time-period over which each contract is defined.
-
-    :param <pd.Dataframe> df: standardized DataFrame containing the following columns:
-        'cid', 'xcats', 'real_date' and 'value'.
-    :param <List[str]> contract_returns: list of the contract return types.
-
-    :return <dict>: dictionary where the key is the contract and the value is a tuple
-        of the start & end date.
-    """
-
-    start_end_dates = {}
-    for i, c_ret in enumerate(contract_returns):
-
-        df_c_ret = df[df['xcat'] == c_ret]
-        df_c_ret = df_c_ret.pivot(index="real_date", columns="cid", values="value")
-        index = df_c_ret.index
-        start_end_dates[c_ret] = (index[0], index[-1])
-
-    return start_end_dates
-
-
 def composite_returns(df: pd.DataFrame, contract_returns: List[str],
                       sigrels: List[str], ret: str = 'XR_NSA'):
     """
@@ -312,8 +289,8 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
     # period.
     df_tpos = reduce_df(df=df_tpos, xcats=None, cids=None, start=start, end=end,
                         blacklist=blacklist)
-
-    return df_tpos.reset_index()
+    df_tpos = df_tpos.sort_values(['cid', 'real_date'])[cols]
+    return df_tpos.reset_index(drop=True)
 
 
 if __name__ == "__main__":
