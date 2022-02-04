@@ -225,7 +225,7 @@ if __name__ == "__main__":
     # Start of the testing. Various testcases included to understand the capabilities of
     # the designed function.
     formula = ["NEW1 = np.abs( XR ) + 0.52 + 2 * CRY + iGBP_INFL", "NEW2 = NEW1 / XR"]
-    # df_calc = panel_calculator(df=dfd, calcs=formula, cids=cids, start=start, end=end)
+    df_calc = panel_calculator(df=dfd, calcs=formula, cids=cids, start=start, end=end)
 
     formula = ["NEW1 = np.abs( XR ) + 0.552 + 2 * CRY", "NEW2 = NEW1 / XR"]
     # df_calc = panel_calculator(df=dfdx, calcs=formula, cids=cids, start=start, end=end)
