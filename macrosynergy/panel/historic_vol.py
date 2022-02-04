@@ -88,6 +88,7 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         macroeconomic fields.
     :param <str> xcat:  extended category denoting the return series for which volatility
         should be calculated.
+        Note: in JPMaQS returns are represented in %, i.e. 5 means 5%.
     :param <List[str]> cids: cross sections for which volatility is calculated;
         default is all available for the category.
     :param <int>  lback_periods: Number of lookback periods over which volatility is
@@ -112,6 +113,8 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
     :return <pd.Dataframe>: standardized dataframe with the estimated annualized standard
         deviations of the chosen xcat.
+        If the input 'value' is in % (as is the standard in JPMaQS) then the output
+        will also be in %.
         'cid', 'xcat', 'real_date' and 'value'.
     """
 
