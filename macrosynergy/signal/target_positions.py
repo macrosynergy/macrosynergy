@@ -9,12 +9,12 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 import random
 
 
-def unit_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, start: str = None,
+def modify_signals(df: pd.DataFrame, cids: List[str], xcat_sig: str, start: str = None,
                    end: str = None, scale: str = 'prop',  min_obs: int = 252,
                    thresh: float = None):
 
     """
-    Calculate unit positions from signals based on zn-scoring (proportionate method)
+    Calculate modified cross-section signals based on zn-scoring (proportionate method)
     or conversion to signs (digital method).
 
     :param <pd.Dataframe> df: standardized DataFrame containing the following columns:
@@ -40,9 +40,8 @@ def unit_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, start: str 
         position taking are winsorized. The threshold is the maximum absolute
         score value in standard deviations. The minimum is 1 standard deviation.
 
-    :return <pd.Dataframe>: standardized dataframe, of the signal category, with the
-        respective computed position, using the columns 'cid', 'xcat', 'real_date' and
-        'value'.
+    :return <pd.Dataframe>: standardized dataframe, of modified signaks, using the 
+        columns 'cid', 'xcat', 'real_date' and 'value'.
 
     """
 
@@ -51,30 +50,27 @@ def unit_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, start: str 
 
     if scale == 'prop':
 
-        df_up = make_zn_scores(df, xcat=xcat_sig, sequential=True, cids=cids,
+        df_ms = make_zn_scores(df, xcat=xcat_sig, sequential=True, cids=cids,
                                start=start, end=end, neutral='zero', pan_weight=1,
                                min_obs=min_obs, thresh=thresh)
     else:
 
-        df_up = reduce_df(df=df, xcats=[xcat_sig], cids=cids, start=start, end=end,
+        df_ms = reduce_df(df=df, xcats=[xcat_sig], cids=cids, start=start, end=end,
                           blacklist=None)
-        df_up['value'] = np.sign(df_up['value'])
+        df_ms['value'] = np.sign(df_ms['value'])
 
-    return df_up
+    return df_ms
 
 
-def composite_returns(df: pd.DataFrame, contract_returns: List[str],
+def cs_unit_returns(df: pd.DataFrame, contract_returns: List[str],
                       sigrels: List[str], ret: str = 'XR_NSA'):
     """
-    Calculate returns of composite positions (that jointly depend on one signal).
+    Calculate returns of composite unit positions (that jointly depend on one signal).
 
     :param <pd.Dataframe> df: standardized DataFrame containing the following columns:
         'cid', 'xcats', 'real_date' and 'value'.
     :param <List[str]> contract_returns: list of the contract return types.
-    :param <List[str]> sigrels: respective signal for each contract type.
-    :param <pd.Series> time_index: datetime index for which signals are available
-    :param <List[str]> cids: cross-sections of markets or currency areas in which
-        positions should be taken.
+    :param <List[float]> sigrels: respective signal for each contract type.
     :param <str> ret: postfix denoting the returns in % applied to the contract types.
 
     :return <pd.Dataframe>: standardized dataframe with the summed portfolio returns
@@ -94,8 +90,7 @@ def composite_returns(df: pd.DataFrame, contract_returns: List[str],
         df_c_ret = df_c_ret.sort_index(axis=1)
         df_c_ret *= sigrels[i]
 
-        # Add each return series of the contract.
-        if i == 0:
+        if i == 0:  # Add each return series of the contract.
             df_c_rets = df_c_ret
         else:
             df_c_rets += df_c_ret
@@ -125,7 +120,8 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
         positions should be taken.
     :param <str> xcat_sig: category that serves as signal across markets.
     :param <List[str]> ctypes: contract types that are traded across markets. They should
-        correspond to return tickers. Examples are 'FX' or 'EQ'.
+        correspond to return categories in the dataframe if the `ret` argument is
+        appended. Examples are 'FX' or 'EQ'.
     :param <List[str]> baskets: cross-section and contract types that constitute a basket
         that is traded in accordance with all cross-section signals, for example as a
         benchmark for relative positions. A basket has the form 'cid'_'ctype', where
@@ -146,26 +142,29 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
         for which the signal category is available is used.
     :param <str> end: latest date in ISO format. Default is None and latest date
         for which the signal category is available is used.
-    :param <str> scale: method that translates signals into target positions:
+    :param <str> scale: method that translates signals into unit target positions:
         [1] Default is 'prop' for proportionate. In this case zn-scoring is applied
             to the signal based on the panel, with the neutral level set at zero.
             A 1 SD value translates into a USD1 position in the contract.
             This translation may apply winsorization through the `thresh` argument
         [2] Method 'dig' means 'digital' and sets the individual position to either USD1
             long or short, depending on the sign of the signal.
+        Note that unit target positions may subsequently be calibrated to meet cross-
+        section volatility targets.
     :param <int> min_obs: the minimum number of observations required to calculate
         zn_scores. Default is 252.
-        Note: For the initial period of the signal time series in-sample
+        Note: For the initial minimum period of the signal time series in-sample
         zn-scoring is used.
     :param <float> thresh: threshold value beyond which zn-scores for proportionate
         position taking are winsorized. The threshold is the maximum absolute
         score value in standard deviations. The minimum is 1 standard deviation.
     :param <float> cs_vtarg: This allows volatility targeting at the cross-section level.
-        Default is None, but if a value is chosen then for each cross-section the
-        proportionate or digital position is translated into a position that carries
-        a historic return standard deviation equal to the value given. For example, 10
-        means that the target position in the cross-section carries a recent historical
-        annualized standard deviation of 10 dollars (or other currency units).
+        Default is None, but if a value is chosen then for each cross-section a unit
+        position is defined as a position for which the annual return standard deviation
+        is equal to that value.
+        For example, a target of 10 and a cross-section signal of 0.5 standard deviations
+        would translate into a target position that carries a recent historical
+        annualized standard deviation of 5 dollars (or other currency units).
     :param <int>  lback_periods: Number of lookback periods over which volatility is
         calculated. Default is 21.
     :param <str> lback_meth: Lookback method to calculate the volatility.
@@ -173,11 +172,11 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
     :param <int> half_life: Refers to the half-time for "xma". Default is 11.
     :param <str> posname: postfix added to contract to denote position name.
 
-    :return <pd.Dataframe>: standardized dataframe with daily contract position signals
+    :return <pd.Dataframe>: standardized dataframe with daily target positions
         in USD, using the columns 'cid', 'xcat', 'real_date' and 'value'.
 
     Note: A target position differs from a signal insofar as it is a dollar amount and
-          considers basic traits of signal usage.
+          determines to what extent size of signal (as opposed to direction) matters.
           A target position also differs from an actual position in two ways. First,
           the actual position can only be aligned with the target with some lag. Second,
           the actual position will be affected by other considerations, such as
@@ -208,31 +207,31 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
     dfx = reduce_df(df=df, xcats=xcats, cids=cids, start=start, end=end, blacklist=None)
 
-    # C. Calculate and reformat unit positions
+    # C. Calculate and reformat modified cross-sectional signals 
 
-    df_upos = unit_positions(df=dfx, cids=cids, xcat_sig=xcat_sig,
+    df_mods = modify_signals(df=dfx, cids=cids, xcat_sig=xcat_sig,
                              start=start, end=end, scale=scale, min_obs=min_obs,
                              thresh=thresh)  # (USD 1 per SD or sign)
 
-    df_upos_w = df_upos.pivot(index="real_date", columns="cid", values="value")
-    # N.B.: index of wide df is determined by the longest cross-section.
+    df_mods_w = df_mods.pivot(index="real_date", columns="cid", values="value")
 
-    # D. Volatility targeting
+    # D. Volatility target ratios (if required)
 
     if isinstance(cs_vtarg, (int, float)):
 
         # D.1. Composite signal-related positions as basis for volatility targeting
 
-        df_crets = composite_returns(dfx, contract_returns=contract_returns,
+        df_csurs = cs_unit_returns(dfx, contract_returns=contract_returns,
                                      sigrels=sigrels)  # gives cross-section returns
-        df_crets = df_crets[cols]
+        df_csurs = df_csurs[cols]
 
         # D.2. Calculate volatility adjustment ratios
 
-        df_vol = historic_vol(df_crets, xcat=ret, cids=cids,
+        df_vol = historic_vol(df_csurs, xcat=ret, cids=cids,
                               lback_periods=lback_periods, lback_meth=lback_meth,
                               half_life=half_life, start=start, end=end,
-                              remove_zeros=True, postfix="")
+                              remove_zeros=True,
+                              postfix="")  # gives unit position vols
 
         dfw_vol = df_vol.pivot(index="real_date", columns="cid", values="value")
         dfw_vol = dfw_vol.sort_index(axis=1)
@@ -240,10 +239,12 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
         # C.3. Calculated vol-targeted positions
 
+        # Todo: take 244-262 out of loop and unify with 266-294 to single position calculator
+
         data_frames = []
         for i, sigrel in enumerate(sigrels):
 
-            df_pos = df_upos.copy()
+            df_pos = df_mods.copy()
             df_pos['value'] *= sigrel
             dfw_pos = df_pos.pivot(index="real_date", columns="cid",
                                    values="value")
@@ -254,9 +255,9 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
             dfw_pos_vt = dfw_pos.multiply(dfw_vtr)
             dfw_pos_vt.dropna(how='all', inplace=True)
 
-            df_crets = dfw_pos_vt.stack().to_frame("value").reset_index()
-            df_crets['xcat'] = contract_returns[i]
-            data_frames.append(df_crets)
+            df_posi = dfw_pos_vt.stack().to_frame("value").reset_index()
+            df_posi['xcat'] = ctypes[i]
+            data_frames.append(df_posi)
 
         df_tpos = pd.concat(data_frames, axis=0, ignore_index=True)
 
@@ -265,18 +266,18 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
         df_concat = []
         for i, elem in enumerate(contract_returns):
             # Instantiate a new copy through each iteration.
-            df_upos_copy = df_upos_w.copy()
+            df_mods_copy = df_mods_w.copy()
 
-            df_upos_copy *= sigrels[i]
+            df_mods_copy *= sigrels[i]
             # The current category, defined on the dataframe, is the signal category.
             # But the signal is being used to take a position in multiple contracts.
             # according to the long-short definition. The returned dataframe should be
             # inclusive of all the contracts.
-            df_upos = df_upos_copy.stack().to_frame("value").reset_index()
+            df_mods = df_mods_copy.stack().to_frame("value").reset_index()
 
-            df_upos['xcat'] = elem
+            df_mods['xcat'] = elem
 
-            df_concat.append(df_upos)
+            df_concat.append(df_mods)
 
         df_tpos = pd.concat(df_concat, axis=0, ignore_index=True)
 
