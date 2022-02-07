@@ -107,7 +107,7 @@ def cs_unit_returns(df: pd.DataFrame, contract_returns: List[str],
 
 def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: List[str],
                      sigrels: List[float], baskets: List[str] = None, ret: str = 'XR_NSA',
-                     blacklist: dict = None, start: str = None, end: str = None,
+                     start: str = None, end: str = None,
                      scale: str = 'prop', min_obs: int = 252, thresh: float = None,
                      cs_vtarg: float = None, lback_periods: int = 21,
                      lback_meth: str = 'ma', half_life: int = 11, posname: str = 'POS'):
@@ -115,30 +115,27 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
     """
     Converts signals into contract-specific target positions
 
-    :param <pd.Dataframe> df: standardized DataFrame containing the following columns:
-        'cid', 'xcats', 'real_date' and 'value'.
+    :param <pd.Dataframe> df: standardized DataFrame containing at least the following
+        columns: 'cid', 'xcats', 'real_date' and 'value'.
     :param <List[str]> cids: cross-sections of markets or currency areas in which
         positions should be taken.
     :param <str> xcat_sig: category that serves as signal across markets.
     :param <List[str]> ctypes: contract types that are traded across markets. They should
         correspond to return categories in the dataframe if the `ret` argument is
         appended. Examples are 'FX' or 'EQ'.
-    :param <List[str]> baskets: cross-section and contract types that constitute a basket
-        that is traded in accordance with all cross-section signals, for example as a
-        benchmark for relative positions. A basket has the form 'cid'_'ctype', where
-        cid could, for example, be 'GLB' for a global basket.
+    :param <Dict[Any, Dict]> baskets: dictionary of basket dictionaries. The inner
+        dictionary takes a string of form <cross_section>_<contract_type> as key and a
+        list of string of the same form as value. The key labels the basket. The value
+        defines the contracts that are used for forming the basket. Pe default the
+        contract have equal weights. An example would be:
+        {{'APC_FX' : ['AUD_FX', ''NZD_FX', 'JPY_FX']},
+         {'APC_EQ' : ['AUD_EQ', ''CNY_EQ', 'INR_EQ', 'JPY_EQ']}}
         # Todo: has yet to be implemented
     :param <List[float]> sigrels: values that translate the single signal into contract
-        type and basket signals in the order defined by ctypes + baskets.
+        type and basket signals in the order defined by keys.
     :param <str> ret: postfix denoting the returns in % associated with contract types.
         For JPMaQS derivatives return data this is typically "XR_NSA".
         The returns are necessary for volatility target-based signals.
-    :param <dict> blacklist: cross-sectional date ranges that should have zero target
-        positions.
-        This is a standardized dictionary with cross sections as keys and tuples of
-        start and end dates of the blacklist periods in ISO formats as values.
-        If one cross section has multiple blacklist periods, numbers are added to the
-        keys (i.e. TRY_1, TRY_2, etc.)
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         for which the signal category is available is used.
     :param <str> end: latest date in ISO format. Default is None and latest date
@@ -197,6 +194,8 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
     assert isinstance(min_obs, int), \
         "Minimum observation parameter must be an integer."
 
+    # Todo: asserts for other argument types and permissible values
+
     cols = ['cid', 'xcat', 'real_date', 'value']
     assert set(cols) <= set(df.columns), f"df columns must contain {cols}."
 
@@ -218,7 +217,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
     # D. Volatility target ratios (if required).
 
-    clause = False
+    use_vtr = False
     if isinstance(cs_vtarg, (int, float)):
 
         # D.1. Composite signal-related positions as basis for volatility targeting.
@@ -238,33 +237,23 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
         dfw_vol = df_vol.pivot(index="real_date", columns="cid", values="value")
         dfw_vol = dfw_vol.sort_index(axis=1)
         dfw_vtr = 100 * cs_vtarg / dfw_vol  # vol-target ratio to be applied.
-        clause = True
+        use_vtr = True
 
-    # C.1. Calculate the positions. If necessary adjust for volatility targeting.
+    # E. Actual position calculation
+
     data_frames = []
-    for i, sigrel in enumerate(sigrels):
+    for i, sigrel in enumerate(sigrels):  # loop through legs of cross-section positions
 
-        df_mods_copy = df_mods_w.copy()
-        # The current category, defined on the dataframe, is the signal category.
-        # But the signal is being used to take a position in multiple contracts
-        # according to the long-short definition. The returned dataframe should be
-        # inclusive of all the contracts.
-        df_mods_copy *= sigrel
+        df_mods_copy = df_mods_w.copy()  # copy of all modified signals
+        df_mods_copy *= sigrel  # modified signal x sigrel = pre-VT position of leg
 
-        # Adjust for volatility targeting. If required increase or decrease the exposure,
-        # on a cross-sectional basis, to achieve the volatility targeting. The target,
-        # predicated on the signal, should simply act as a scaling factor to the signal:
-        # it will not change the direction - only the magnitude of the position will
-        # change if a desired volatility is specified.
-
-        # D.3. Scale the target positions according to the volatility adjustment ratios.
-        if clause:
-            # NaNs to account for the look-back period. The position dataframe, through
-            # each iteration, has been reduced to match the respective input's
-            # dimensions.
-            dfw_pos_vt = df_mods_copy.multiply(dfw_vtr)
+        if use_vtr:
+            dfw_pos_vt = df_mods_copy.multiply(dfw_vtr)  # apply vtr
             dfw_pos_vt.dropna(how='all', inplace=True)
-            df_mods_copy = dfw_pos_vt
+            df_mods_copy = dfw_pos_vt  # Todo: why not modify directly?
+
+        # Todo: if basket this translates into n basket contract positions
+        # Todo: contract position = basket_position / n
 
         df_posi = df_mods_copy.stack().to_frame("value").reset_index()
         df_posi['xcat'] = ctypes[i]
@@ -276,13 +265,11 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
     df_tpos['xcat'] = df_tpos['cid'] + '_' + df_tpos['xcat']
     df_tpos = df_tpos[cols]
 
-    # Apply the blacklist period. Aim to retain the blackout periods for calculating the
-    # target positions. Once the target positions have been computed, apply the blackout
-    # period.
-    df_tpos = reduce_df(df=df_tpos, xcats=None, cids=None, start=start,
-                        end=end, blacklist=blacklist)
+    df_tpos = reduce_df(df=df_tpos, xcats=None, cids=None, start=start, end=end)
 
     df_tpos = df_tpos.sort_values(['cid', 'xcat', 'real_date'])[cols]
+    # Todo: if baskets are used position have to be consolidated
+    # Todo: this means positions with same ['cid', 'xcat', 'real_date'] must be added
     return df_tpos.reset_index(drop=True)
 
 
@@ -313,13 +300,13 @@ if __name__ == "__main__":
     position_df = target_positions(df=dfd, cids=cids,
                                    xcat_sig='SIG_NSA',
                                    ctypes=['FX', 'EQ'], sigrels=[1, 0.5], ret='XR_NSA',
-                                   blacklist=black, start='2012-01-01', end='2020-10-30',
+                                   start='2012-01-01', end='2020-10-30',
                                    scale='prop', min_obs=252, cs_vtarg=5, posname='POS')
     print(position_df)
 
     position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
                                    ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
-                                   blacklist=black, start='2012-01-01', end='2020-10-30',
+                                   start='2012-01-01', end='2020-10-30',
                                    scale='dig', cs_vtarg=0.1, posname='POS')
 
     print(position_df)
@@ -329,7 +316,7 @@ if __name__ == "__main__":
     # category but a position will not be able to be taken for EQXR_NSA.
     position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
                                    ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
-                                   blacklist=black, start='2010-01-01', end='2020-12-31',
+                                   start='2010-01-01', end='2020-12-31',
                                    scale='prop', cs_vtarg=None, posname='POS')
 
     print(position_df)
