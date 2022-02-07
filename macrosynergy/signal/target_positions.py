@@ -207,7 +207,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
     dfx = reduce_df(df=df, xcats=xcats, cids=cids, start=start, end=end, blacklist=None)
 
-    # C. Calculate and reformat modified cross-sectional signals 
+    # C. Calculate and reformat modified cross-sectional signals.
 
     df_mods = modify_signals(df=dfx, cids=cids, xcat_sig=xcat_sig,
                              start=start, end=end, scale=scale, min_obs=min_obs,
@@ -215,71 +215,61 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
     df_mods_w = df_mods.pivot(index="real_date", columns="cid", values="value")
 
-    # D. Volatility target ratios (if required)
+    # D. Volatility target ratios (if required).
 
+    clause = False
     if isinstance(cs_vtarg, (int, float)):
 
-        # D.1. Composite signal-related positions as basis for volatility targeting
+        # D.1. Composite signal-related positions as basis for volatility targeting.
 
         df_csurs = cs_unit_returns(dfx, contract_returns=contract_returns,
                                      sigrels=sigrels)  # gives cross-section returns
         df_csurs = df_csurs[cols]
 
-        # D.2. Calculate volatility adjustment ratios
+        # D.2. Calculate volatility adjustment ratios.
 
         df_vol = historic_vol(df_csurs, xcat=ret, cids=cids,
                               lback_periods=lback_periods, lback_meth=lback_meth,
                               half_life=half_life, start=start, end=end,
                               remove_zeros=True,
-                              postfix="")  # gives unit position vols
+                              postfix="")  # gives unit position vols.
 
         dfw_vol = df_vol.pivot(index="real_date", columns="cid", values="value")
         dfw_vol = dfw_vol.sort_index(axis=1)
         dfw_vtr = 100 * cs_vtarg / dfw_vol  # vol-target ratio to be applied.
+        clause = True
 
-        # C.3. Calculated vol-targeted positions
+    # C.1. Calculate the positions. If necessary adjust for volatility targeting.
+    data_frames = []
+    for i, sigrel in enumerate(sigrels):
 
-        # Todo: take 244-262 out of loop and unify with 266-294 to single position calculator
+        df_mods_copy = df_mods_w.copy()
+        # The current category, defined on the dataframe, is the signal category.
+        # But the signal is being used to take a position in multiple contracts
+        # according to the long-short definition. The returned dataframe should be
+        # inclusive of all the contracts.
+        df_mods_copy *= sigrel
 
-        data_frames = []
-        for i, sigrel in enumerate(sigrels):
+        # Adjust for volatility targeting. If required increase or decrease the exposure,
+        # on a cross-sectional basis, to achieve the volatility targeting. The target,
+        # predicated on the signal, should simply act as a scaling factor to the signal:
+        # it will not change the direction - only the magnitude of the position will
+        # change if a desired volatility is specified.
 
-            df_pos = df_mods.copy()
-            df_pos['value'] *= sigrel
-            dfw_pos = df_pos.pivot(index="real_date", columns="cid",
-                                   values="value")
-
-            # NaNs to account for the lookback period. The position dataframe, through
+        # D.3. Scale the target positions according to the volatility adjustment ratios.
+        if clause:
+            # NaNs to account for the look-back period. The position dataframe, through
             # each iteration, has been reduced to match the respective input's
             # dimensions.
-            dfw_pos_vt = dfw_pos.multiply(dfw_vtr)
+            dfw_pos_vt = df_mods_copy.multiply(dfw_vtr)
             dfw_pos_vt.dropna(how='all', inplace=True)
+            df_mods_copy = dfw_pos_vt
 
-            df_posi = dfw_pos_vt.stack().to_frame("value").reset_index()
-            df_posi['xcat'] = ctypes[i]
-            data_frames.append(df_posi)
+        df_posi = df_mods_copy.stack().to_frame("value").reset_index()
+        df_posi['xcat'] = ctypes[i]
+        data_frames.append(df_posi)
 
-        df_tpos = pd.concat(data_frames, axis=0, ignore_index=True)
-
-    else:
-
-        df_concat = []
-        for i, elem in enumerate(contract_returns):
-            # Instantiate a new copy through each iteration.
-            df_mods_copy = df_mods_w.copy()
-
-            df_mods_copy *= sigrels[i]
-            # The current category, defined on the dataframe, is the signal category.
-            # But the signal is being used to take a position in multiple contracts.
-            # according to the long-short definition. The returned dataframe should be
-            # inclusive of all the contracts.
-            df_mods = df_mods_copy.stack().to_frame("value").reset_index()
-
-            df_mods['xcat'] = elem
-
-            df_concat.append(df_mods)
-
-        df_tpos = pd.concat(df_concat, axis=0, ignore_index=True)
+    df_tpos = pd.concat(data_frames, axis=0, ignore_index=True)
 
     df_tpos['xcat'] += '_' + posname
     df_tpos['xcat'] = df_tpos['cid'] + '_' + df_tpos['xcat']
@@ -288,9 +278,10 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
     # Apply the blacklist period. Aim to retain the blackout periods for calculating the
     # target positions. Once the target positions have been computed, apply the blackout
     # period.
-    df_tpos = reduce_df(df=df_tpos, xcats=None, cids=None, start=start, end=end,
-                        blacklist=blacklist)
-    df_tpos = df_tpos.sort_values(['cid', 'real_date'])[cols]
+    df_tpos = reduce_df(df=df_tpos, xcats=None, cids=None, start=start,
+                        end=end, blacklist=blacklist)
+
+    df_tpos = df_tpos.sort_values(['cid', 'xcat', 'real_date'])[cols]
     return df_tpos.reset_index(drop=True)
 
 
@@ -322,7 +313,7 @@ if __name__ == "__main__":
                                    xcat_sig='SIG_NSA',
                                    ctypes=['FX', 'EQ'], sigrels=[1, 0.5], ret='XR_NSA',
                                    blacklist=black, start='2012-01-01', end='2020-10-30',
-                                   scale='prop', cs_vtarg=5, posname='POS')
+                                   scale='prop', min_obs=252, cs_vtarg=5, posname='POS')
     print(position_df)
 
     position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
