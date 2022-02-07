@@ -63,7 +63,8 @@ def modify_signals(df: pd.DataFrame, cids: List[str], xcat_sig: str, start: str 
 
 
 def cs_unit_returns(df: pd.DataFrame, contract_returns: List[str],
-                      sigrels: List[str], ret: str = 'XR_NSA'):
+                    sigrels: List[str], ret: str = 'XR_NSA'):
+
     """
     Calculate returns of composite unit positions (that jointly depend on one signal).
 
