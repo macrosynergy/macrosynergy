@@ -378,7 +378,7 @@ if __name__ == "__main__":
     cidx = ['AUD', 'CAD', 'GBP', 'USD']
 
     cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'],
-                           cids=cidx, xcat_aggs=['mean', 'mean'],
+                           cids=cidx, xcat_aggs=['last', 'mean'],
                            start='2005-01-01', blacklist=black,
                            years=3)
 
