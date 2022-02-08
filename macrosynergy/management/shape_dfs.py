@@ -171,6 +171,10 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     df_output = []
     if years is None:
         for i in range(2):
+            # If the aggregation method is "last", a separate workflow is not required
+            # given the aggregation is applied to a pivoted dataframe. However, if the
+            # "years" condition is satisfied, the usage of groupby() requires additional
+            # steps to handle the "last" aggregator as a redundant column is included.
             dfw = df[df['xcat'] == xcats[i]].pivot(index='real_date', columns='cid',
                                                    values=val)
             dfw = dfw.resample(freq).agg(xcat_aggs[i])
