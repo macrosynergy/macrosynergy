@@ -276,6 +276,22 @@ class TestAll(unittest.TestCase):
                                            weights=gdp_figures, max_weight=0.4,
                                            basket_tik="GLB_ALL", return_weights=False)
 
+        # Testing the assertions enforced on the "start" & "end" parameters.
+        with self.assertRaises(AssertionError):
+            df_return = basket_performance(dfd_test, contracts=c, ret="XR_NSA",
+                                           cry="CRY_NSA", start = "Janary 1st, 2020",
+                                           weight_meth="equal", wgt=None, max_weight=0.4,
+                                           basket_tik="GLB_ALL", return_weights=False)
+
+        # Testing the assertion that the "weights" parameter is always equal to None
+        # unless the weighting method is 'fixed'. Important to prevent confusion over
+        # parameter names: 'weight_meth', 'weights', 'wgt' etc.
+        with self.assertRaises(AssertionError):
+            df_return = basket_performance(dfd_test, contracts=c, ret="XR_NSA",
+                                           cry="CRY_NSA", weights="invsd", wgt=None,
+                                           max_weight=0.4, basket_tik="GLB_ALL",
+                                           return_weights=False)
+
         df_return = basket_performance(dfd_test, contracts=c, ret="XR_NSA", cry=None,
                                        blacklist=black, weight_meth="equal",
                                        max_weight=1.0, basket_tik="GLB_ALL",
