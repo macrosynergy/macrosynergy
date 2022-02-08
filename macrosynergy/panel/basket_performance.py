@@ -40,7 +40,7 @@ def equal_weight(df_ret: pd.DataFrame) -> pd.DataFrame:
 def fixed_weight(df_ret: pd.DataFrame, weights: List[float]):
     """
     Calculates fixed weights based on a single list of values and a corresponding return
-    panel dataframe
+    panel dataframe.
 
     :param <pd.DataFrame> df_ret: Return series matrix. Multidimensional.
     :param <List[float]> weights: List of floats determining weight allocation.
@@ -67,7 +67,7 @@ def fixed_weight(df_ret: pd.DataFrame, weights: List[float]):
 def inverse_weight(dfw_ret: pd.DataFrame, lback_meth: str = "xma",
                    lback_periods: int = 21, remove_zeros: bool = True):
     """
-    Calculates weights inversely proportionate to recent return standard deviations
+    Calculates weights inversely proportionate to recent return standard deviations.
 
     :param <pd.DataFrame> dfw_ret: panel dataframe of returns.
     :param <str> lback_meth: Lookback method for "invsd" weighting method. Default is
@@ -222,9 +222,27 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
     """
 
     assert isinstance(ret, str), "return category must be a <str>."
+    assert isinstance(cry, str), "carry category must be a <str>."
     assert isinstance(contracts, list) and all(isinstance(c, str) for c in contracts), \
         "contracts must be string list."
     assert 0.0 < max_weight <= 1.0
+    assert weight_meth in ['equal', 'fixed', 'values', 'inv_values']
+    if weight_meth == 'fixed':
+        error_message = "Expects a List of floating point values."
+        assert all([isinstance(elem, float) for elem in weights]), error_message
+    else:
+        assert weights is None, "The weights parameter should only be defined if the " \
+                                "weight method is 'fixed'."
+    if weight_meth == 'invsd':
+        error_message = "The two lookback options for the inverse-weighting method are" \
+                        "Moving Average, 'ma', and Exponential Moving Average, 'xma'."
+        assert lback_meth in ["xma", "ma"], error_message
+        assert isinstance(lback_periods, int), "The lookback period must be an Integer " \
+                                               "value."
+
+    date_error = "Expected form of string: '%Y-%m-%d'."
+    assert pd.Timestamp(start).strftime("%Y-%m-%d"), date_error
+    assert pd.Timestamp(end).strftime("%Y-%m-%d"), date_error
 
     # A. Extract relevant data
 
@@ -379,6 +397,8 @@ if __name__ == "__main__":
     dfd_4 = basket_performance(dfd, contracts, ret='XR_NSA', cry=None,
                                weight_meth='equal', wgt=None, max_weight=0.41,
                                return_weights=True)
-    print(dfd_4)
 
+    dfd_5 = basket_performance(dfd, contracts, ret='XR_NSA', cry='CRY_NSA',
+                               weight_meth='invsd', wgt=None, max_weight=0.41,
+                               return_weights=False)
 
