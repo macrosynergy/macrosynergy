@@ -222,7 +222,8 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
     """
 
     assert isinstance(ret, str), "return category must be a <str>."
-    assert isinstance(cry, str), "carry category must be a <str>."
+    if cry is not None:
+        assert isinstance(cry, str), "carry category must be a <str>."
     assert isinstance(contracts, list) and all(isinstance(c, str) for c in contracts), \
         "contracts must be string list."
     assert 0.0 < max_weight <= 1.0
@@ -241,8 +242,16 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
                                                "value."
 
     date_error = "Expected form of string: '%Y-%m-%d'."
-    assert pd.Timestamp(start).strftime("%Y-%m-%d"), date_error
-    assert pd.Timestamp(end).strftime("%Y-%m-%d"), date_error
+    if start is not None:
+        try:
+            pd.Timestamp(start).strftime("%Y-%m-%d")
+        except ValueError:
+            raise AssertionError(date_error)
+    elif end is not None:
+        try:
+            pd.Timestamp(start).strftime("%Y-%m-%d")
+        except ValueError:
+            raise AssertionError(date_error)
 
     # A. Extract relevant data
 
