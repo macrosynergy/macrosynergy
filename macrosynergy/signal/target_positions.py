@@ -2,10 +2,11 @@
 import numpy as np
 import pandas as pd
 from typing import List
-from macrosynergy.panel.make_zn_scores import *
 from macrosynergy.management.shape_dfs import reduce_df
-from macrosynergy.panel.historic_vol import historic_vol
 from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.panel.historic_vol import historic_vol
+from macrosynergy.panel.make_zn_scores import *
+from macrosynergy.panel.basket_performance import weight_dateframe
 import random
 
 
@@ -193,8 +194,6 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
         "defined in ctypes."
     assert isinstance(min_obs, int), \
         "Minimum observation parameter must be an integer."
-
-    # Todo: asserts for other argument types and permissible values
 
     cols = ['cid', 'xcat', 'real_date', 'value']
     assert set(cols) <= set(df.columns), f"df columns must contain {cols}."
