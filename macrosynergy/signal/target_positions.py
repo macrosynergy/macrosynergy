@@ -80,8 +80,8 @@ def cs_unit_returns(df: pd.DataFrame, contract_returns: List[str],
 
     """
 
-    assert len(contract_returns) == len(sigrels), \
-        "Each individual contract requires an associated signal."
+    error_message = "Each individual contract requires an associated signal."
+    assert len(contract_returns) == len(sigrels), error_message
 
     for i, c_ret in enumerate(contract_returns):
 
@@ -125,11 +125,11 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
         appended. Examples are 'FX' or 'EQ'.
     :param <Dict[Any, Dict]> baskets: dictionary of basket dictionaries. The inner
         dictionary takes a string of form <cross_section>_<contract_type> as key and a
-        list of string of the same form as value. The key labels the basket. The value
-        defines the contracts that are used for forming the basket. Pe default the
-        contract have equal weights. An example would be:
-        {{'APC_FX' : ['AUD_FX', ''NZD_FX', 'JPY_FX']},
-         {'APC_EQ' : ['AUD_EQ', ''CNY_EQ', 'INR_EQ', 'JPY_EQ']}}
+        list of string of the same form. The key labels the basket. The value
+        defines the contracts that are used for forming the basket. The default weighting
+        method is for equal weights. An example would be:
+        {'APC_FX' : ['AUD_FX', 'NZD_FX', 'JPY_FX'],
+        'APC_EQ' : ['AUD_EQ', 'CNY_EQ', 'INR_EQ', 'JPY_EQ']}
         # Todo: has yet to be implemented
     :param <List[float]> sigrels: values that translate the single signal into contract
         type and basket signals in the order defined by keys.
@@ -223,7 +223,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
         # D.1. Composite signal-related positions as basis for volatility targeting.
 
         df_csurs = cs_unit_returns(dfx, contract_returns=contract_returns,
-                                     sigrels=sigrels)  # gives cross-section returns
+                                     sigrels=sigrels)  # Gives cross-section returns.
         df_csurs = df_csurs[cols]
 
         # D.2. Calculate volatility adjustment ratios.
@@ -232,7 +232,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
                               lback_periods=lback_periods, lback_meth=lback_meth,
                               half_life=half_life, start=start, end=end,
                               remove_zeros=True,
-                              postfix="")  # gives unit position vols.
+                              postfix="")  # Gives unit position vols.
 
         dfw_vol = df_vol.pivot(index="real_date", columns="cid", values="value")
         dfw_vol = dfw_vol.sort_index(axis=1)
