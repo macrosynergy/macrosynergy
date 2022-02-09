@@ -162,6 +162,71 @@ def max_weight_func(weights: pd.DataFrame, max_weight: float):
 
     return weights
 
+def weight_dateframe(dfx: pd.DataFrame, weight_meth: str, weights: List[float],
+                     ticks_wgt: List[str] = None, lback_meth: str = "xma",
+                     lback_periods: int = 21, max_weight: float = 1.0,
+                     remove_zeros: bool = True):
+
+    """
+    Subroutine used to compute the weights for the basket of returns.
+
+    :param <pd.DataFrame> dfx:
+    :param <str> weight_meth:
+    :param <List[float]> weights:
+    :param <List[str]> ticks_wgt: List of tickers weights are computed for.
+    :param <str> lback_meth:
+    :param <int> lback_periods:
+    :param <float> max_weight:
+    :param <bool> remove_zeros:
+
+    :return <pd.DataFrame>: Will return the weight DataFrame.
+    """
+
+    # C. Apply the appropriate weighting method.
+    dfx_ticks_wgt = dfx[dfx["ticker"].isin(ticks_wgt)]
+    dfw_ret = dfx_ticks_wgt.pivot(index="real_date", columns="ticker", values="value")
+
+    if weight_meth == "equal":
+        dfw_wgs = equal_weight(df_ret=dfw_ret)
+
+    elif weight_meth == "fixed":
+        message = "Weighting method 'fixed' requires a list of weights."
+        message_2 = "List of weights must be equal to the number of contracts."
+        assert isinstance(weights, list), message
+        assert dfw_ret.shape[1] == len(weights), message_2
+        for w in weights:
+            try:
+                int(w)
+            except ValueError:
+                print(f"List, {weights}, must be all numerical values.")
+                raise
+        dfw_wgs = fixed_weight(df_ret=dfw_ret, weights=weights)
+
+    elif weight_meth == "invsd":
+        dfw_wgs = inverse_weight(dfw_ret=dfw_ret, lback_meth=lback_meth,
+                                 lback_periods=lback_periods, remove_zeros=remove_zeros)
+
+    elif weight_meth in ["values", "inv_values"]:
+        dfw_wgt = dfw_ret.shift(1)  # Lag by one day to be used as weights.
+        cols = sorted(dfw_wgt.columns)
+        dfw_ret = dfw_wgt.reindex(cols, axis=1)
+        dfw_wgt = dfw_wgt.reindex(cols, axis=1)
+        dfw_wgs = values_weight(dfw_ret, dfw_wgt, weight_meth)
+
+    else:
+        raise NotImplementedError(f"Weight method unknown {weight_meth}")
+
+    # D. Remove leading NA rows.
+
+    fvi = max(dfw_wgs.first_valid_index(), dfw_ret.first_valid_index())
+    dfw_wgs, dfw_ret = dfw_wgs[fvi:], dfw_ret[fvi:]
+
+    # E. Impose cap on cross-section weight.
+
+    if max_weight < 1.0:
+        dfw_wgs = max_weight_func(weights=dfw_wgs, max_weight=max_weight)
+
+    return dfw_wgs
 
 def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NSA",
                        cry: str = None, start: str = None, end: str = None,
@@ -227,7 +292,7 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
     assert isinstance(contracts, list) and all(isinstance(c, str) for c in contracts), \
         "contracts must be string list."
     assert 0.0 < max_weight <= 1.0
-    assert weight_meth in ['equal', 'fixed', 'values', 'inv_values']
+    assert weight_meth in ['equal', 'fixed', 'values', 'inv_values', 'invsd']
     if weight_meth == 'fixed':
         error_message = "Expects a List of floating point values."
         assert all([isinstance(elem, float) for elem in weights]), error_message
@@ -259,19 +324,22 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
     tickers = ticks_ret.copy()  # Initiates general tickers list.
 
     cry_flag = cry is not None  # Boolean for carry being used.
-    if cry_flag:  # Creates a List of contract carries
+    if cry_flag:  # Creates a List of contract carries.
         ticks_cry = [c + cry for c in contracts]
         tickers += ticks_cry  # Add to general ticker list.
 
     wgt_flag = (wgt is not None) and (weight_meth in ["values", "inv_values"])
     if wgt_flag:
-        assert isinstance(wgt, str), f"Parameter, 'wgt', must be a string and not a " \
-                                      "{type(wgt)."
+        error = f"'wgt' must be a string and not a {type(wgt)}."
+        assert isinstance(wgt, str), error
         ticks_wgt = [c + wgt for c in contracts]
+        ticks_ret = ticks_wgt
         tickers += ticks_wgt
+    else:
+        ticks_wgt = None
 
     dfx = reduce_df_by_ticker(df, start=start, end=end, ticks=tickers,
-                              blacklist=blacklist)  # extract relevant df
+                              blacklist=blacklist)
 
     # B. Pivot relevant data
 
@@ -283,58 +351,13 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
         dfw_cry = dfw_ticks_cry.pivot(index="real_date", columns="ticker",
                                       values="value")
 
-    # C. Apply the appropriate weighting method
+    # C. Apply the appropriate weighting method.
+    dfw_wgs = weight_dateframe(dfx, weight_meth=weight_meth, weights=weights,
+                               ticks_wgt=ticks_ret, lback_meth=lback_meth,
+                               lback_periods=lback_periods, max_weight=max_weight,
+                               remove_zeros=remove_zeros)
 
-    if weight_meth == "equal":
-        dfw_wgs = equal_weight(df_ret=dfw_ret)
-
-    elif weight_meth == "fixed":
-        assert isinstance(weights, list), "Method 'fixed' requires a list of weights " \
-                                          "to be assigned to 'weights'."
-        assert dfw_ret.shape[1] == len(weights), "List of weights must be equal " \
-                                                 "to number of contracts."
-        for w in weights:
-            try:
-                int(w)
-            except ValueError:
-                print(f"List, {weights}, must be all numerical values.")
-                raise
-        dfw_wgs = fixed_weight(df_ret=dfw_ret, weights=weights)
-
-    elif weight_meth == "invsd":
-        dfw_wgs = inverse_weight(dfw_ret=dfw_ret, lback_meth=lback_meth,
-                                  lback_periods=lback_periods, remove_zeros=remove_zeros)
-
-    elif wgt_flag:
-        ticks_in_df = list(set(df["ticker"].to_numpy()))
-        for w_ticker in ticks_wgt:
-            assert w_ticker in ticks_in_df, "Weight Ticker, {w_ticker}, absent from " \
-                                            "the dataframe. Unable to be used as an " \
-                                            "external weight category."
-        dfw_ticks_wgt = dfx[dfx["ticker"].isin(ticks_wgt)]
-        dfw_wgt = dfw_ticks_wgt.pivot(index="real_date", columns="ticker",
-                                      values="value")
-
-        dfw_wgt = dfw_wgt.shift(1)  # lag by one day to be used as weights
-        dfw_ret = dfw_ret.reindex(sorted(dfw_ret.columns), axis=1)
-        dfw_wgt = dfw_wgt.reindex(sorted(dfw_wgt.columns), axis=1)
-        dfw_wgs = values_weight(dfw_ret, dfw_wgt, weight_meth)
-
-    else:
-        raise NotImplementedError(f"Weight method unknown {weight_meth}")
-
-    # D. Remove leading NA rows.
-
-    fvi = max(dfw_wgs.first_valid_index(), dfw_ret.first_valid_index())
-    dfw_wgs, dfw_ret = dfw_wgs[fvi:], dfw_ret[fvi:]
-
-    # E. Impose cap on cross-section weight
-
-    if max_weight < 1.0:
-        dfw_wgs = max_weight_func(weights=dfw_wgs, max_weight=max_weight)
-
-    # F. Calculate and store weighted average returns
-
+    # F. Calculate and store weighted average returns.
     select = ["ticker", "real_date", "value"]
     dfxr = (dfw_ret.multiply(dfw_wgs)).sum(axis=1)  # calculate weighted averages
     dfxr = dfxr.to_frame("value").reset_index()
@@ -390,9 +413,9 @@ if __name__ == "__main__":
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
     contracts = ['AUD_FX', 'AUD_EQ', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
 
-    gdp_figures = [17.0, 17.0, 41.0, 9.0, 250]
+    gdp_figures = [17.0, 17.0, 41.0, 9.0, 250.0]
     dfd_1 = basket_performance(dfd, contracts, ret='XR_NSA', cry='CRY_NSA',
-                               weight_meth='values', wgt='WBASE_NSA', max_weight=0.35,
+                               weight_meth='equal', wgt='WBASE_NSA', max_weight=0.35,
                                return_weights=False)
 
     dfd_2 = basket_performance(dfd, contracts, ret='XR_NSA', cry=None,
