@@ -6,14 +6,13 @@ from typing import List
 from macrosynergy.panel.historic_vol import expo_weights, expo_std, flat_std
 from macrosynergy.management.shape_dfs import reduce_df_by_ticker
 from macrosynergy.panel.converge_row import ConvergeRow
-from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 class Basket(object):
 
     def __init__(self, df: pd.DataFrame, contracts: List[str], ret: str = "XR_NSA",
                  weight_meth: str = 'equal', cry: str = None,
                  start: str = None, end: str = None, blacklist: dict = None,
-                 wgt: str = None, basket_tik: str = "GLB_ALL"):
+                 wgt: str = None):
 
         """
         Class' Constructor.
@@ -23,6 +22,17 @@ class Basket(object):
         :param <List[str]> contracts: base tickers (combinations of cross-sections and
             base categories) denoting contracts that go into the basket.
         :param <str> ret: return category postfix; default is "XR_NSA".
+        :param <str> weight_meth: method used for weighting constituent returns and carry.
+            Options are as follows:
+        [1] "equal": all constituents with non-NA returns have the same weight.
+            This is the default.
+        [2] "fixed": weights are proportionate to single list of values (corresponding to
+            contracts) provided passed to argument `weights`.
+        [3] "invsd": weights based on inverse to standard deviations of recent returns.
+        [4] "values": weights proportionate to a panel of values of exogenous weight
+            category.
+        [5] "inv_values": weights are inversely proportionate to of values of exogenous
+            weight category.
         :param <str> cry: carry category postfix; default is None.
         :param <str> start: earliest date in ISO 8601 format. Default is None.
         :param <str> end: latest date in ISO 8601 format. Default is None.
@@ -44,6 +54,7 @@ class Basket(object):
         self.contract = contracts
         self.tickers = self.ticker_list(self)
         self.ret = ret
+        self.weight_meth = weight_meth
         self.cry = cry
         self.start = self.date_check(start)
         self.end = self.date_check(end)
@@ -53,7 +64,6 @@ class Basket(object):
         if self.cry_flag:
             self.dfw_cry = self.pivot_dateframe(self.ticks_cry)
         self.wgt = wgt
-        self.basket_tik = basket_tik
 
     def pivot_dataframe(self, tick_list):
         dfx_ticks_list = self.dfx[self.dfx["ticker"].isin(tick_list)]
@@ -181,8 +191,7 @@ class Basket(object):
 
         return df_wgts
 
-    def values_weight(self, dfw_ret: pd.DataFrame, dfw_wgt: pd.DataFrame,
-                      weight_meth: str):
+    def values_weight(self, dfw_ret: pd.DataFrame, dfw_wgt: pd.DataFrame):
         """
         Returns weights based on an external weighting category.
 
@@ -190,8 +199,6 @@ class Basket(object):
             contracts.
         :param <pd.DataFrame> dfw_wgt: Standard wide dataframe of weight category values
             across time and contracts.
-        :param <str> weight_meth: Weighting method. must be one of "values" or
-            "inv_values".
 
         :return <pd.DataFrame>: Dataframe of weights.
         """
@@ -210,7 +217,7 @@ class Basket(object):
         # Zeroes treated as NaNs.
         weights_df[cols] = weights_df[cols].replace({'0': np.nan, 0: np.nan})
 
-        if weight_meth != "values":
+        if self.weight_meth != "values":
             weights_df = 1 / weights_df
 
         weights = weights_df.divide(weights_df.sum(axis=1), axis=0)
@@ -245,23 +252,12 @@ class Basket(object):
 
         return weights
 
-    def weight_dateframe(self, weight_meth: str, weights: List[float],
-                         lback_meth: str = "xma", lback_periods: int = 21,
-                         max_weight: float = 1.0, remove_zeros: bool = True):
+    def weight_dateframe(self, weights: List[float] = None, lback_meth: str = "xma",
+                         lback_periods: int = 21, max_weight: float = 1.0,
+                         remove_zeros: bool = True):
         """
         Subroutine used to compute the weights for the basket of returns.
 
-        :param <str> weight_meth: method used for weighting constituent returns and carry.
-            Options are as follows:
-        [1] "equal": all constituents with non-NA returns have the same weight.
-            This is the default.
-        [2] "fixed": weights are proportionate to single list of values (corresponding to
-            contracts) provided passed to argument `weights`.
-        [3] "invsd": weights based on inverse to standard deviations of recent returns.
-        [4] "values": weights proportionate to a panel of values of exogenous weight
-            category.
-        [5] "inv_values": weights are inversely proportionate to of values of exogenous
-            weight category.
         :param <List[float]> weights: single list of weights corresponding to the base
             tickers in `contracts` argument. This is only relevant for the fixed weight
             method.
@@ -276,7 +272,8 @@ class Basket(object):
         :return <pd.DataFrame>: Will return the weight DataFrame.
         """
         assert 0.0 < max_weight <= 1.0
-        assert weight_meth in ['equal', 'fixed', 'values', 'inv_values', 'invsd']
+        weight_meth = self.weight_meth
+        assert self.weight_meth in ['equal', 'fixed', 'values', 'inv_values', 'invsd']
 
         # C. Apply the appropriate weighting method.
         if not self.wgt_flag:
@@ -295,12 +292,7 @@ class Basket(object):
             message_2 = "List of weights must be equal to the number of contracts."
             assert isinstance(weights, list), message
             assert dfw_ret.shape[1] == len(weights), message_2
-            for w in weights:
-                try:
-                    int(w)
-                except ValueError:
-                    print(f"List, {weights}, must be all numerical values.")
-                    raise
+            assert all(isinstance(w, (int, float)) for w in weights)
 
             dfw_wgs = self.fixed_weight(df_ret=dfw_ret, weights=weights)
 
@@ -318,7 +310,7 @@ class Basket(object):
             cols = sorted(dfw_wgt.columns)
             dfw_ret = dfw_wgt.reindex(cols, axis=1)
             dfw_wgt = dfw_wgt.reindex(cols, axis=1)
-            dfw_wgs = self.values_weight(dfw_ret, dfw_wgt, weight_meth)
+            dfw_wgs = self.values_weight(dfw_ret, dfw_wgt)
 
         else:
             raise NotImplementedError(f"Weight method unknown {weight_meth}")
@@ -376,7 +368,7 @@ class Basket(object):
             w["ticker"] = contracts_
             w = w.loc[w.value > 0, select]
             store.append(w)
-            
+
         # Concatenate along the date index, and subsequently drop to restore natural
         # index.
         df = pd.concat(store, axis=0, ignore_index=True)
