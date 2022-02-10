@@ -7,6 +7,7 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.panel.historic_vol import historic_vol
 from macrosynergy.panel.make_zn_scores import *
 from macrosynergy.panel.basket_performance import weight_dateframe
+from macrosynergy.panel.basket_performance_class import Basket
 import random
 
 
@@ -131,7 +132,6 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
         method is for equal weights. An example would be:
         {'APC_FX' : ['AUD_FX', 'NZD_FX', 'JPY_FX'],
         'APC_EQ' : ['AUD_EQ', 'CNY_EQ', 'INR_EQ', 'JPY_EQ']}
-        # Todo: has yet to be implemented
     :param <List[float]> sigrels: values that translate the single signal into contract
         type and basket signals in the order defined by keys.
     :param <str> ret: postfix denoting the returns in % associated with contract types.
@@ -184,16 +184,16 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
     # A. Initial checks
 
-    assert xcat_sig in set(df['xcat'].unique()), \
-        "Signal category missing from the standardised dataframe."
-    assert isinstance(cs_vtarg, (float, int)) or (cs_vtarg is None) \
-        and not isinstance(cs_vtarg, bool), \
-        "Volatility Target must be numeric or None."
-    assert len(sigrels) == len(ctypes), \
-        "The number of signal relations must be equal to the number of contracts " \
-        "defined in ctypes."
-    assert isinstance(min_obs, int), \
-        "Minimum observation parameter must be an integer."
+    categories = set(df['xcat'].unique())
+    error_1 = "Signal category missing from the standardised dataframe."
+    assert xcat_sig in categories, error_1
+    error_2 = "Volatility Target must be numeric value."
+    if cs_vtarg is not None:
+        assert isinstance(cs_vtarg, (float, int)), error_2
+    error_3 = "The number of signal relations must be equal to the number of contracts " \
+              "defined in 'ctypes'."
+    assert len(sigrels) == len(ctypes), error_3
+    assert isinstance(min_obs, int), "Minimum observation parameter must be an integer."
 
     cols = ['cid', 'xcat', 'real_date', 'value']
     assert set(cols) <= set(df.columns), f"df columns must contain {cols}."
@@ -204,7 +204,8 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
     contract_returns = [c + ret for c in ctypes]
     xcats = contract_returns + [xcat_sig]
 
-    dfx = reduce_df(df=df, xcats=xcats, cids=cids, start=start, end=end, blacklist=None)
+    dfx = reduce_df(df=df, xcats=xcats, cids=cids, start=start,
+                    end=end, blacklist=None)
 
     # C. Calculate and reformat modified cross-sectional signals.
 
@@ -251,9 +252,23 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
             dfw_pos_vt.dropna(how='all', inplace=True)
             df_mods_copy = dfw_pos_vt  # Todo: why not modify directly?
 
-        # Todo: if basket this translates into n basket contract positions
-        # Todo: contract position = basket_position / n
+        split = lambda b: b.split('_')[0]
+        for k, v in baskets.items():
 
+            if split(k) == ctypes[i]:
+                cross_sections = list(map(split, v))
+                basket = Basket(df=df, contracts=v, ret=ret, weight_meth='equal',
+                                cry=None, start=start, end=end, blacklist=None, wgt=None)
+
+                dfw_wgs = basket.weight_dateframe(weights=None, max_weight = 1.0,
+                                                  remove_zeros = True)
+                df_mods_copy = df_mods_copy[cross_sections]
+                df_mods_copy = df_mods_copy.multiply(dfw_wgs)
+                df_posi = df_mods_copy.stack().to_frame("value").reset_index()
+                df_posi['xcat'] = k
+                data_frames.append(df_posi)
+
+        print(df_mods_copy)
         df_posi = df_mods_copy.stack().to_frame("value").reset_index()
         df_posi['xcat'] = ctypes[i]
         data_frames.append(df_posi)
