@@ -106,6 +106,41 @@ def cs_unit_returns(df: pd.DataFrame, contract_returns: List[str],
 
     return df_rets
 
+def basket_handler(df: pd.DataFrame, baskets: dict, ctype: str, ret: str,
+                   start: str = None, end: str = None):
+    """
+    Function designed to compute the target positions for the constituents of a basket.
+    The function will return the corresponding basket dataframe for each basket defined
+    in the dictionary.
+
+    :param <pd.DataFrame> df: standardised dataframe.
+    :param <str> ret: postfix denoting the returns in % applied to the contract types.
+    :param <str> start:
+    :param <str> end:
+    :param <dict> baskets:
+    :param <str> ctype: contract type
+
+    :return <List[pd.Dataframe]>: List of dataframes for each basket.
+    """
+
+    split = lambda b: b.split('_')[0]
+    dataframe_list = []
+    for k, v in baskets.items():
+
+        if split(k) == ctype:
+            cross_sections = list(map(split, v))
+            basket = Basket(df=df, contracts=v, ret=ret, weight_meth='equal',
+                            cry=None, start=start, end=end, blacklist=None, wgt=None)
+
+            dfw_wgs = basket.weight_dateframe(weights=None, max_weight=1.0,
+                                              remove_zeros=True)
+            df_mods_copy = df_mods_copy[cross_sections]
+            df_mods_copy = df_mods_copy.multiply(dfw_wgs)
+            df_posi = df_mods_copy.stack().to_frame("value").reset_index()
+            df_posi['xcat'] = k
+            dataframe_list.append(df_posi)
+
+    return dataframe_list
 
 def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: List[str],
                      sigrels: List[float], baskets: List[str] = None, ret: str = 'XR_NSA',
@@ -125,11 +160,10 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
     :param <List[str]> ctypes: contract types that are traded across markets. They should
         correspond to return categories in the dataframe if the `ret` argument is
         appended. Examples are 'FX' or 'EQ'.
-    :param <Dict[Any, Dict]> baskets: dictionary of basket dictionaries. The inner
-        dictionary takes a string of form <cross_section>_<contract_type> as key and a
-        list of string of the same form. The key labels the basket. The value
-        defines the contracts that are used for forming the basket. The default weighting
-        method is for equal weights. An example would be:
+    :param <dict> baskets: The key is of the form <cross_section>_<contract_type> and the
+        value will be a list of the associated contracts. The key labels the basket. The
+        value defines the contracts that are used for forming the basket. The default
+        weighting method is for equal weights. An example would be:
         {'APC_FX' : ['AUD_FX', 'NZD_FX', 'JPY_FX'],
         'APC_EQ' : ['AUD_EQ', 'CNY_EQ', 'INR_EQ', 'JPY_EQ']}
     :param <List[float]> sigrels: values that translate the single signal into contract
@@ -252,23 +286,11 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
             dfw_pos_vt.dropna(how='all', inplace=True)
             df_mods_copy = dfw_pos_vt  # Todo: why not modify directly?
 
-        split = lambda b: b.split('_')[0]
-        for k, v in baskets.items():
+        if baskets:
+            dataframes_list = basket_handler(df, baskets=baskets, ret=ret, start=start,
+                                             end=end)
+            data_frames += dataframes_list
 
-            if split(k) == ctypes[i]:
-                cross_sections = list(map(split, v))
-                basket = Basket(df=df, contracts=v, ret=ret, weight_meth='equal',
-                                cry=None, start=start, end=end, blacklist=None, wgt=None)
-
-                dfw_wgs = basket.weight_dateframe(weights=None, max_weight = 1.0,
-                                                  remove_zeros = True)
-                df_mods_copy = df_mods_copy[cross_sections]
-                df_mods_copy = df_mods_copy.multiply(dfw_wgs)
-                df_posi = df_mods_copy.stack().to_frame("value").reset_index()
-                df_posi['xcat'] = k
-                data_frames.append(df_posi)
-
-        print(df_mods_copy)
         df_posi = df_mods_copy.stack().to_frame("value").reset_index()
         df_posi['xcat'] = ctypes[i]
         data_frames.append(df_posi)
