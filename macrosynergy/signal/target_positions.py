@@ -106,7 +106,7 @@ def cs_unit_returns(df: pd.DataFrame, contract_returns: List[str],
 
     return df_rets
 
-def basket_handler(df: pd.DataFrame, df_mods_w: pd.DataFrame, baskets: dict, ctype: str,
+def basket_handler(df: pd.DataFrame, df_mods_w: pd.DataFrame, contracts: List[str],
                    ret: str, start: str = None, end: str = None):
     """
     Function designed to compute the target positions for the constituents of a basket.
@@ -119,31 +119,25 @@ def basket_handler(df: pd.DataFrame, df_mods_w: pd.DataFrame, baskets: dict, cty
     :param <str> ret: postfix denoting the returns in % applied to the contract types.
     :param <str> start:
     :param <str> end:
-    :param <dict> baskets:
-    :param <str> ctype: contract type
+    :param <dict> contracts: the constituents that make up each basket.
 
     :return <List[pd.Dataframe]>: List of dataframes for each basket.
     """
 
     split = lambda b: b.split('_')[0]
-    dataframe_list = []
-    for k, v in baskets.items():
 
-        if split(k) == ctype:
-            cross_sections = list(map(split, v))
-            basket = Basket(df=df, contracts=v, ret=ret, weight_meth='equal',
-                            cry=None, start=start, end=end, blacklist=None, wgt=None)
+    cross_sections = list(map(split, contracts))
+    basket = Basket(df=df, contracts=contracts, ret=ret, cry=None, start=start, end=end,
+                    blacklist=None, wgt=None)
 
-            dfw_wgs = basket.weight_dateframe(weights=None, max_weight=1.0,
-                                              remove_zeros=True)
-            # Reduce to the cross-sections held in the respective basket.
-            df_mods_w = df_mods_w[cross_sections]
-            df_mods_w = df_mods_w.multiply(dfw_wgs)
-            df_posi = df_mods_w.stack().to_frame("value").reset_index()
-            df_posi['xcat'] = k
-            dataframe_list.append(df_posi)
+    dfw_wgs = basket.weight_dateframe(weight_meth="equal", weights=None, max_weight=1.0,
+                                      remove_zeros=True)
+    # Reduce to the cross-sections held in the respective basket.
+    df_mods_w = df_mods_w[cross_sections]
+    # Adjust the target positions to reflect the weighting method.
+    df_mods_w = df_mods_w.multiply(dfw_wgs)
 
-    return dataframe_list
+    return df_mods_w
 
 def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: List[str],
                      sigrels: List[float], baskets: dict = None, ret: str = 'XR_NSA',
@@ -163,12 +157,14 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
     :param <List[str]> ctypes: contract types that are traded across markets. They should
         correspond to return categories in the dataframe if the `ret` argument is
         appended. Examples are 'FX' or 'EQ'.
-    :param <dict> baskets: The key is of the form <cross_section>_<contract_type> and the
-        value will be a list of the associated contracts. The key labels the basket. The
-        value defines the contracts that are used for forming the basket. The default
-        weighting method is for equal weights. An example would be:
+    :param <dict> baskets: a dictionary containing the name of each basket and the
+        corresponding constituents. The key is of the form
+        <cross_section>_<contract_type> and the value will be a list of the associated
+        contracts. The key labels the basket. The value defines the contracts that are
+        used for forming the basket. The default weighting method is for equal weights.
+        An example would be:
         {'APC_FX' : ['AUD_FX', 'NZD_FX', 'JPY_FX'],
-        'APC_EQ' : ['AUD_EQ', 'CNY_EQ', 'INR_EQ', 'JPY_EQ']}
+         'APC_EQ' : ['AUD_EQ', 'CNY_EQ', 'INR_EQ', 'JPY_EQ']}
     :param <List[float]> sigrels: values that translate the single signal into contract
         type and basket signals in the order defined by keys.
     :param <str> ret: postfix denoting the returns in % associated with contract types.
@@ -228,11 +224,15 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
     if cs_vtarg is not None:
         assert isinstance(cs_vtarg, (float, int)), error_2
     error_3 = "The number of signal relations must be equal to the number of contracts " \
-              "defined in 'ctypes'."
-    no_baskets = 0
+              "and and baskets defined in 'ctypes'."
+
+    basket_names = []
+    ctypes_baskets = ctypes + basket_names
     if baskets:
-        no_baskets = len(list(baskets.keys()))
-    clause = len(ctypes) + no_baskets
+        basket_names = list(baskets.keys())
+        ctypes_baskets = ctypes + basket_names
+
+    clause = len(ctypes_baskets)
     assert len(sigrels) == clause, error_3
     assert isinstance(min_obs, int), "Minimum observation parameter must be an integer."
 
@@ -283,27 +283,31 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
     # E. Actual position calculation
 
     data_frames = []
-    for i, sigrel in enumerate(sigrels):  # loop through legs of cross-section positions
+    ctypes_sigrels = dict(zip(ctypes_baskets, sigrels))
+    for k, v in ctypes_sigrels.items():  # loop through legs of cross-section positions
 
-        df_mods_copy = df_mods_w.copy()  # copy of all modified signals
+        # Copy of all modified signals. The single signal is being used to take a
+        # position in multiple contracts. However, the position taken in each contract
+        # will vary according to the specified signal.
+        df_mods_copy = df_mods_w.copy()
 
         if use_vtr:
             # Apply vtr - scaling factor.
             dfw_pos_vt = df_mods_copy.multiply(dfw_vtr)
             dfw_pos_vt.dropna(how='all', inplace=True)
-            df_mods_copy = dfw_pos_vt  # Todo: why not modify directly?
+            df_mods_copy = dfw_pos_vt
 
-        if baskets:
-            dataframes_list = basket_handler(df, baskets=baskets, ret=ret, start=start,
-                                             end=end)
-            data_frames += dataframes_list
-
+        if k in basket_names:
+            contracts = baskets[k]
+            df_mods_copy = basket_handler(df, df_mods_copy, contracts=contracts,
+                                          ret=ret, start=start, end=end)
+            
         # Allows for the signal being applied to the basket constituents on the original
         # dataframe.
-        df_mods_copy *= sigrel  # modified signal x sigrel = post-VT position.
+        df_mods_copy *= v  # modified signal x sigrel = post-VT position.
 
         df_posi = df_mods_copy.stack().to_frame("value").reset_index()
-        df_posi['xcat'] = ctypes[i]
+        df_posi['xcat'] = k
         data_frames.append(df_posi)
 
     df_tpos = pd.concat(data_frames, axis=0, ignore_index=True)
@@ -370,3 +374,4 @@ if __name__ == "__main__":
                                    sigrels=[1, -1, -0.5], ret='XR_NSA',
                                    start='2010-01-01', end='2020-12-31',
                                    scale='prop', cs_vtarg=None, posname='POS')
+    print(position_df)
