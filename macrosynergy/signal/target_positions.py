@@ -106,14 +106,16 @@ def cs_unit_returns(df: pd.DataFrame, contract_returns: List[str],
 
     return df_rets
 
-def basket_handler(df: pd.DataFrame, baskets: dict, ctype: str, ret: str,
-                   start: str = None, end: str = None):
+def basket_handler(df: pd.DataFrame, df_mods_w: pd.DataFrame, baskets: dict, ctype: str,
+                   ret: str, start: str = None, end: str = None):
     """
     Function designed to compute the target positions for the constituents of a basket.
     The function will return the corresponding basket dataframe for each basket defined
     in the dictionary.
 
     :param <pd.DataFrame> df: standardised dataframe.
+    :param <pd.DataFrame> df_mods_w: target position dataframe. Will be multiplied by the
+        weight dataframe to establish the positions for the basket of constituents.
     :param <str> ret: postfix denoting the returns in % applied to the contract types.
     :param <str> start:
     :param <str> end:
@@ -134,16 +136,17 @@ def basket_handler(df: pd.DataFrame, baskets: dict, ctype: str, ret: str,
 
             dfw_wgs = basket.weight_dateframe(weights=None, max_weight=1.0,
                                               remove_zeros=True)
-            df_mods_copy = df_mods_copy[cross_sections]
-            df_mods_copy = df_mods_copy.multiply(dfw_wgs)
-            df_posi = df_mods_copy.stack().to_frame("value").reset_index()
+            # Reduce to the cross-sections held in the respective basket.
+            df_mods_w = df_mods_w[cross_sections]
+            df_mods_w = df_mods_w.multiply(dfw_wgs)
+            df_posi = df_mods_w.stack().to_frame("value").reset_index()
             df_posi['xcat'] = k
             dataframe_list.append(df_posi)
 
     return dataframe_list
 
 def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: List[str],
-                     sigrels: List[float], baskets: List[str] = None, ret: str = 'XR_NSA',
+                     sigrels: List[float], baskets: dict = None, ret: str = 'XR_NSA',
                      start: str = None, end: str = None,
                      scale: str = 'prop', min_obs: int = 252, thresh: float = None,
                      cs_vtarg: float = None, lback_periods: int = 21,
@@ -226,7 +229,11 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
         assert isinstance(cs_vtarg, (float, int)), error_2
     error_3 = "The number of signal relations must be equal to the number of contracts " \
               "defined in 'ctypes'."
-    assert len(sigrels) == len(ctypes), error_3
+    no_baskets = 0
+    if baskets:
+        no_baskets = len(list(baskets.keys()))
+    clause = len(ctypes) + no_baskets
+    assert len(sigrels) == clause, error_3
     assert isinstance(min_obs, int), "Minimum observation parameter must be an integer."
 
     cols = ['cid', 'xcat', 'real_date', 'value']
@@ -279,10 +286,10 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
     for i, sigrel in enumerate(sigrels):  # loop through legs of cross-section positions
 
         df_mods_copy = df_mods_w.copy()  # copy of all modified signals
-        df_mods_copy *= sigrel  # modified signal x sigrel = pre-VT position of leg
 
         if use_vtr:
-            dfw_pos_vt = df_mods_copy.multiply(dfw_vtr)  # apply vtr
+            # Apply vtr - scaling factor.
+            dfw_pos_vt = df_mods_copy.multiply(dfw_vtr)
             dfw_pos_vt.dropna(how='all', inplace=True)
             df_mods_copy = dfw_pos_vt  # Todo: why not modify directly?
 
@@ -290,6 +297,10 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
             dataframes_list = basket_handler(df, baskets=baskets, ret=ret, start=start,
                                              end=end)
             data_frames += dataframes_list
+
+        # Allows for the signal being applied to the basket constituents on the original
+        # dataframe.
+        df_mods_copy *= sigrel  # modified signal x sigrel = post-VT position.
 
         df_posi = df_mods_copy.stack().to_frame("value").reset_index()
         df_posi['xcat'] = ctypes[i]
@@ -338,14 +349,11 @@ if __name__ == "__main__":
                                    ctypes=['FX', 'EQ'], sigrels=[1, 0.5], ret='XR_NSA',
                                    start='2012-01-01', end='2020-10-30',
                                    scale='prop', min_obs=252, cs_vtarg=5, posname='POS')
-    print(position_df)
 
     position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
                                    ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
                                    start='2012-01-01', end='2020-10-30',
                                    scale='dig', cs_vtarg=0.1, posname='POS')
-
-    print(position_df)
 
     # The secondary contract, EQXR_NSA, is defined over a shorter timeframe. Therefore,
     # on the additional dates, a valid position will be computed using the signal
@@ -355,4 +363,10 @@ if __name__ == "__main__":
                                    start='2010-01-01', end='2020-12-31',
                                    scale='prop', cs_vtarg=None, posname='POS')
 
-    print(position_df)
+    # Testcase for both panel and individual basket performance.
+    position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
+                                   ctypes=['FX', 'EQ'],
+                                   baskets={'APC_FX': ['AUD_FX', 'NZD_FX']},
+                                   sigrels=[1, -1, -0.5], ret='XR_NSA',
+                                   start='2010-01-01', end='2020-12-31',
+                                   scale='prop', cs_vtarg=None, posname='POS')
