@@ -132,10 +132,14 @@ def basket_handler(df: pd.DataFrame, df_mods_w: pd.DataFrame, contracts: List[st
 
     dfw_wgs = basket.weight_dateframe(weight_meth="equal", weights=None, max_weight=1.0,
                                       remove_zeros=True)
+    dfw_wgs = dfw_wgs.reindex(sorted(dfw_wgs.columns), axis=1)
+
     # Reduce to the cross-sections held in the respective basket.
     df_mods_w = df_mods_w[cross_sections]
+    df_mods_w = df_mods_w.reindex(sorted(df_mods_w.columns), axis=1)
+
     # Adjust the target positions to reflect the weighting method.
-    df_mods_w = df_mods_w.multiply(dfw_wgs)
+    df_mods_w = df_mods_w.multiply(dfw_wgs.to_numpy())
 
     return df_mods_w
 
@@ -301,7 +305,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
             contracts = baskets[k]
             df_mods_copy = basket_handler(df, df_mods_copy, contracts=contracts,
                                           ret=ret, start=start, end=end)
-            
+
         # Allows for the signal being applied to the basket constituents on the original
         # dataframe.
         df_mods_copy *= v  # modified signal x sigrel = post-VT position.
