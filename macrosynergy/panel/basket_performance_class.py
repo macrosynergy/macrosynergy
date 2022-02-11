@@ -10,9 +10,8 @@ from macrosynergy.panel.converge_row import ConvergeRow
 class Basket(object):
 
     def __init__(self, df: pd.DataFrame, contracts: List[str], ret: str = "XR_NSA",
-                 weight_meth: str = 'equal', cry: str = None,
-                 start: str = None, end: str = None, blacklist: dict = None,
-                 wgt: str = None):
+                 cry: str = None, start: str = None, end: str = None,
+                 blacklist: dict = None, wgt: str = None):
 
         """
         Class' Constructor.
@@ -22,23 +21,16 @@ class Basket(object):
         :param <List[str]> contracts: base tickers (combinations of cross-sections and
             base categories) denoting contracts that go into the basket.
         :param <str> ret: return category postfix; default is "XR_NSA".
-        :param <str> weight_meth: method used for weighting constituent returns and carry.
-            Options are as follows:
-        [1] "equal": all constituents with non-NA returns have the same weight.
-            This is the default.
-        [2] "fixed": weights are proportionate to single list of values (corresponding to
-            contracts) provided passed to argument `weights`.
-        [3] "invsd": weights based on inverse to standard deviations of recent returns.
-        [4] "values": weights proportionate to a panel of values of exogenous weight
-            category.
-        [5] "inv_values": weights are inversely proportionate to of values of exogenous
-            weight category.
         :param <str> cry: carry category postfix; default is None.
         :param <str> start: earliest date in ISO 8601 format. Default is None.
         :param <str> end: latest date in ISO 8601 format. Default is None.
         :param <dict> blacklist: cross-sections with date ranges that should be excluded
             from the dataframe. If one cross-section has several blacklist periods append
             numbers to the cross-section code.
+        :param <str> wgt: postfix used to identify exogenous weight category. Analogously
+            to carry and return postfixes this should be added to base tickers to
+            identify the values that denote contract weights. Only applicable for the
+            weight methods 'values' or 'inv_values'.
 
         """
 
@@ -49,18 +41,17 @@ class Basket(object):
         if cry is not None:
             assert isinstance(cry, str), "carry category must be a <str>."
 
+        self.tickers = self.ticker_list(contracts, ret, cry, wgt)
         self.dfx = reduce_df_by_ticker(df, start=start, end=end, ticks=self.tickers,
                                        blacklist=blacklist)
         self.contract = contracts
-        self.tickers = self.ticker_list(self)
         self.ret = ret
-        self.weight_meth = weight_meth
         self.cry = cry
         self.start = self.date_check(start)
         self.end = self.date_check(end)
         self.cry_flag = (cry is not None)
-        self.wgt_flag = (wgt is not None) and (weight_meth in ["values", "inv_values"])
-        self.dfw_ret = self.pivot_dateframe(self.ticks_ret)
+        self.wgt_flag = (wgt is not None)
+        self.dfw_ret = self.pivot_dataframe(self.ticks_ret)
         if self.cry_flag:
             self.dfw_cry = self.pivot_dateframe(self.ticks_cry)
         self.wgt = wgt
@@ -79,22 +70,34 @@ class Basket(object):
             except ValueError:
                 raise AssertionError(date_error)
 
-    def ticker_list(self):
+    def ticker_list(self, contracts: List[str], ret: str, cry: str, wgt: str):
+        """
+        Method used to establish the list of tickers involved in the computation. The
+        list will potentially consist of the return categories, the carry categories and
+        an exogenous weight category used for the weight dataframe.
 
-        ticks_ret = [c + self.ret for c in self.contracts]
-        self.__dict__['ticks_ret'] == ticks_ret
+        :param <List[str]> contracts:
+        :param <str> ret:
+        :param <str> cry:
+        :param <str> wgt:
+
+        :return <List[str]>: list of tickers.
+        """
+
+        ticks_ret = [c + ret for c in contracts]
+        self.__dict__['ticks_ret'] = ticks_ret
         tickers = ticks_ret.copy()
 
         # Boolean for carry being used.
-        if self.cry_flag:
-            ticks_cry = [c + self.cry for c in self.contracts]
+        if cry is not None:
+            ticks_cry = [c + cry for c in contracts]
             self.__dict__['ticks_cry'] = ticks_cry
             tickers += ticks_cry
 
-        if self.wgt_flag:
-            error = f"'wgt' must be a string. Received: {type(self.wgt)}."
-            assert isinstance(self.wgt, str), error
-            ticks_wgt = [c + self.wgt for c in self.contracts]
+        if wgt is not None:
+            error = f"'wgt' must be a string. Received: {type(wgt)}."
+            assert isinstance(wgt, str), error
+            ticks_wgt = [c + wgt for c in contracts]
             self.__dict__['ticks_wgt'] = ticks_wgt
             tickers += ticks_wgt
 
@@ -147,7 +150,7 @@ class Basket(object):
 
         # Replaces weight factors with zeroes if concurrent return unavailable.
         weight = act_cross.multiply(broadcast)
-        weight_arr = weight.to_numpy()  # convert df to np array
+        weight_arr = weight.to_numpy()  # convert df to np array.
         weight[weight.columns] = weight_arr / np.sum(weight_arr, axis=1)[:, np.newaxis]
         self.check_weights(weight)
 
@@ -191,7 +194,8 @@ class Basket(object):
 
         return df_wgts
 
-    def values_weight(self, dfw_ret: pd.DataFrame, dfw_wgt: pd.DataFrame):
+    def values_weight(self, dfw_ret: pd.DataFrame, dfw_wgt: pd.DataFrame,
+                      weight_meth: str):
         """
         Returns weights based on an external weighting category.
 
@@ -199,6 +203,7 @@ class Basket(object):
             contracts.
         :param <pd.DataFrame> dfw_wgt: Standard wide dataframe of weight category values
             across time and contracts.
+        :param <str> weight_meth:
 
         :return <pd.DataFrame>: Dataframe of weights.
         """
@@ -217,7 +222,7 @@ class Basket(object):
         # Zeroes treated as NaNs.
         weights_df[cols] = weights_df[cols].replace({'0': np.nan, 0: np.nan})
 
-        if self.weight_meth != "values":
+        if weight_meth != "values":
             weights_df = 1 / weights_df
 
         weights = weights_df.divide(weights_df.sum(axis=1), axis=0)
@@ -252,12 +257,23 @@ class Basket(object):
 
         return weights
 
-    def weight_dateframe(self, weights: List[float] = None, lback_meth: str = "xma",
-                         lback_periods: int = 21, max_weight: float = 1.0,
-                         remove_zeros: bool = True):
+    def weight_dateframe(self, weight_meth: str = "equal", weights: List[float] = None,
+                         lback_meth: str = "xma", lback_periods: int = 21,
+                         max_weight: float = 1.0, remove_zeros: bool = True):
         """
         Subroutine used to compute the weights for the basket of returns.
 
+        :param <str> weight_meth: method used for weighting constituent returns and carry.
+            Options are as follows:
+        [1] "equal": all constituents with non-NA returns have the same weight.
+            This is the default.
+        [2] "fixed": weights are proportionate to single list of values (corresponding to
+            contracts) provided passed to argument `weights`.
+        [3] "invsd": weights based on inverse to standard deviations of recent returns.
+        [4] "values": weights proportionate to a panel of values of exogenous weight
+            category.
+        [5] "inv_values": weights are inversely proportionate to of values of exogenous
+            weight category.
         :param <List[float]> weights: single list of weights corresponding to the base
             tickers in `contracts` argument. This is only relevant for the fixed weight
             method.
@@ -272,8 +288,7 @@ class Basket(object):
         :return <pd.DataFrame>: Will return the weight DataFrame.
         """
         assert 0.0 < max_weight <= 1.0
-        weight_meth = self.weight_meth
-        assert self.weight_meth in ['equal', 'fixed', 'values', 'inv_values', 'invsd']
+        assert weight_meth in ['equal', 'fixed', 'values', 'inv_values', 'invsd']
 
         # C. Apply the appropriate weighting method.
         if not self.wgt_flag:
