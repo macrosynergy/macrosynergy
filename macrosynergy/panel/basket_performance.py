@@ -300,7 +300,7 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
         assert weights is None, "The weights parameter should only be defined if the " \
                                 "weight method is 'fixed'."
     if weight_meth == 'invsd':
-        error_message = "The two lookback options for the inverse-weighting method are" \
+        error_message = "The two lookback options for the inverse-weighting method are " \
                         "Moving Average, 'ma', and Exponential Moving Average, 'xma'."
         assert lback_meth in ["xma", "ma"], error_message
         assert isinstance(lback_periods, int), "The lookback period must be an Integer " \
@@ -318,7 +318,7 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
         except ValueError:
             raise AssertionError(date_error)
 
-    # A. Extract relevant data
+    # A. Extract relevant data.
 
     ticks_ret = [c + ret for c in contracts]
     tickers = ticks_ret.copy()  # Initiates general tickers list.
@@ -341,7 +341,7 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
     dfx = reduce_df_by_ticker(df, start=start, end=end, ticks=tickers,
                               blacklist=blacklist)
 
-    # B. Pivot relevant data
+    # B. Pivot relevant data.
 
     dfx_ticks_ret = dfx[dfx["ticker"].isin(ticks_ret)]
     dfw_ret = dfx_ticks_ret.pivot(index="real_date", columns="ticker", values="value")
@@ -359,7 +359,7 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
 
     # F. Calculate and store weighted average returns.
     select = ["ticker", "real_date", "value"]
-    dfxr = (dfw_ret.multiply(dfw_wgs)).sum(axis=1)  # calculate weighted averages
+    dfxr = (dfw_ret.multiply(dfw_wgs)).sum(axis=1)  # calculate weighted averages.
     dfxr = dfxr.to_frame("value").reset_index()
     dfxr = dfxr.assign(ticker=basket_tik + "_" + ret)[select]
     store = [dfxr]
@@ -372,7 +372,8 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
     if return_weights:
         dfw_wgs.columns.name = "cid"
         w = dfw_wgs.stack().to_frame("value").reset_index()
-        contracts_ = list(map(lambda c: c[:-len(ret)] + "WGT", w["cid"].to_numpy()))
+        func = lambda c: c[:-len(ret)] + "WGT"
+        contracts_ = list(map(func, w["cid"].to_numpy()))
         contracts_ = np.array(contracts_)
         w["ticker"] = contracts_
         w = w.loc[w.value > 0, select]
@@ -433,4 +434,3 @@ if __name__ == "__main__":
     dfd_5 = basket_performance(dfd, contracts, ret='XR_NSA', cry='CRY_NSA',
                                weight_meth='invsd', wgt=None, max_weight=0.41,
                                return_weights=False)
-
