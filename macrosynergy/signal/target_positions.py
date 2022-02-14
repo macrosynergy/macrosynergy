@@ -110,8 +110,7 @@ def basket_handler(df: pd.DataFrame, df_mods_w: pd.DataFrame, contracts: List[st
                    ret: str, start: str = None, end: str = None):
     """
     Function designed to compute the target positions for the constituents of a basket.
-    The function will return the corresponding basket dataframe for each basket defined
-    in the dictionary.
+    The function will return the corresponding basket dataframe of positions.
 
     :param <pd.DataFrame> df: standardised dataframe.
     :param <pd.DataFrame> df_mods_w: target position dataframe. Will be multiplied by the
@@ -121,7 +120,7 @@ def basket_handler(df: pd.DataFrame, df_mods_w: pd.DataFrame, contracts: List[st
     :param <str> end:
     :param <dict> contracts: the constituents that make up each basket.
 
-    :return <List[pd.Dataframe]>: List of dataframes for each basket.
+    :return <pd.Dataframe>: basket positions weight-adjusted.
     """
 
     split = lambda b: b.split('_')[0]
@@ -142,6 +141,64 @@ def basket_handler(df: pd.DataFrame, df_mods_w: pd.DataFrame, contracts: List[st
     df_mods_w = df_mods_w.multiply(dfw_wgs.to_numpy())
 
     return df_mods_w
+
+def consolidation_help(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
+    """
+    The function receives a panel dataframe and a basket of cross-sections of the same
+    contract type. Therefore, aim to consolidate the targeted positions across the shared
+    contracts.
+
+    :param <pd.DataFrame> panel_df:
+    :param <pd.DataFrame> basket_df:
+
+    :return <pd.DataFrame, pd.DataFrame> returns the consolidated and reduced dataframes.
+    """
+
+    basket_cids = basket_df['cid'].unique()
+    panel_cids = panel_df['cid'].unique()
+
+    basket_df_c = basket_df.copy()
+    for cid in basket_cids:
+        if cid in panel_cids:
+            basket_indices = basket_df['cid'] == cid
+            df_1 = basket_df[basket_indices]
+            indices = panel_df['cid'] == cid
+            panel_df[indices]['value'] += df_1['value']
+            basket_indices = ~basket_indices
+            basket_df = basket_df[basket_indices]
+        else:
+            continue
+
+    return panel_df, basket_df.reset_index()
+
+def consolidation_driver(data_frames: List[pd.DataFrame], ctypes: List[str]):
+    """
+    Method used to consolidate positions if baskets are used. The constituents of a
+    basket will be a subset of one of the panels.
+
+    :param <List[pd.DataFrame]> data_frames: list of the target position dataframes.
+    :param <List[str]> ctypes:
+
+    :return <List[pd.DataFrame]> list of dataframes having consolidated positions.
+    """
+
+    no_ctypes = len(ctypes)
+    dict_ = dict(zip(ctypes[:no_ctypes], data_frames[:no_ctypes]))
+    df_baskets = data_frames[no_ctypes:]
+
+    split_2 = lambda b: b.split('_')[1]
+    # Iterating exclusively through the basket dataframes.
+    reduced_baskets = []
+    for df in df_baskets:
+        category = list(map(split_2, df['xcat'].to_numpy()))
+        c_type = category[0]
+
+        panel_df = dict_[c_type]
+        panel_df, basket_df = consolidation_help(panel_df, basket_df=df)
+        dict_[c_type] = panel_df
+        reduced_baskets.append(basket_df)
+
+    return list(dict_.values()) + reduced_baskets
 
 def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: List[str],
                      sigrels: List[float], baskets: dict = None, ret: str = 'XR_NSA',
@@ -288,7 +345,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
     data_frames = []
     ctypes_sigrels = dict(zip(ctypes_baskets, sigrels))
-    for k, v in ctypes_sigrels.items():  # loop through legs of cross-section positions
+    for k, v in ctypes_sigrels.items():
 
         # Copy of all modified signals. The single signal is being used to take a
         # position in multiple contracts. However, the position taken in each contract
@@ -312,8 +369,11 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
         df_posi = df_mods_copy.stack().to_frame("value").reset_index()
         df_posi['xcat'] = k
+        df_posi = df_posi.sort_values(['cid', 'xcat', 'real_date'])
         data_frames.append(df_posi)
 
+    if baskets:
+        data_frames = consolidation_driver(data_frames, ctypes)
     df_tpos = pd.concat(data_frames, axis=0, ignore_index=True)
 
     df_tpos['xcat'] += '_' + posname
@@ -323,7 +383,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
     df_tpos = reduce_df(df=df_tpos, xcats=None, cids=None, start=start, end=end)
 
     df_tpos = df_tpos.sort_values(['cid', 'xcat', 'real_date'])[cols]
-    # Todo: if baskets are used position have to be consolidated
+
     # Todo: this means positions with same ['cid', 'xcat', 'real_date'] must be added
     return df_tpos.reset_index(drop=True)
 
