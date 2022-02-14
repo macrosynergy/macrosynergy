@@ -383,7 +383,10 @@ class Basket(object):
         Produces a full dataframe of all basket performance categories (inclusive of both
         returns and carries). The parameter, "weight_meth", will delimit the
         weighting method used to compute the basket returns, as each potential weight
-        dataframe will be held as a field on the instance.
+        dataframe will be held as a field on the instance. Further, the
+        basket_performance method can be called individually for every weighting method,
+        and the corresponding output dataframe will be stored as an instance with the
+        handle "basket_<weight_meth>".
 
         :param <pd.DataFrame> weight_meth:
         :param <str> basket_tik: name of basket base ticker (analogous to contract name)
@@ -397,7 +400,8 @@ class Basket(object):
             'real_date' and 'value'.
         """
         assert isinstance(weight_meth, str), "Expects <str>."
-        assertion_error = "The method, weight_dataframe(), must be called prior to " \
+        assertion_error = f"The method, weight_dataframe(), must be called, using the" \
+                          f"associated weight method {weight_meth}, prior to " \
                           "basket_performance()."
         assert weight_meth in self.__dict__.keys(), assertion_error
         dfw_wgs = self.__dict__[weight_meth]
@@ -427,4 +431,7 @@ class Basket(object):
         # Concatenate along the date index, and subsequently drop to restore natural
         # index.
         df = pd.concat(store, axis=0, ignore_index=True)
+        key = "basket_" + weight_meth
+        self.__dict__[key] = df
+
         return df
