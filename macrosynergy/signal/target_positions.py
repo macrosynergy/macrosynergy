@@ -157,24 +157,26 @@ def consolidation_help(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
     basket_cids = basket_df['cid'].unique()
     panel_cids = panel_df['cid'].unique()
 
-    for cid in basket_cids:
-        if cid in panel_cids:
+    panel_copy = []
+    for cid in panel_cids:
+        indices = panel_df['cid'] == cid
+        temp_df = panel_df[indices]
+
+        if cid in basket_cids:
             basket_indices = basket_df['cid'] == cid
             b_values = basket_df[basket_indices]['value'].to_numpy()
-            indices = panel_df['cid'] == cid
-            panel_values = panel_df[indices]['value'].to_numpy()
-            consolidation = panel_values + b_values
 
-            start = indices.index[0]
-            end = indices.index[-1]
-            panel_df[indices]['value'] = consolidation
+            panel_values = temp_df['value'].to_numpy()
+            consolidation = panel_values + b_values
+            temp_df['value'] = consolidation
+            panel_copy.append(temp_df)
 
             basket_indices = ~basket_indices
             basket_df = basket_df[basket_indices]
         else:
-            continue
+            panel_copy.append(temp_df)
 
-    return panel_df, basket_df.reset_index()
+    return pd.concat(panel_copy), basket_df
 
 def consolidation_driver(data_frames: List[pd.DataFrame], ctypes: List[str]):
     """
@@ -374,7 +376,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
         df_posi = df_mods_copy.stack().to_frame("value").reset_index()
         df_posi['xcat'] = k
-        df_posi = df_posi.sort_values(['cid', 'xcat', 'real_date'])
+        df_posi = df_posi.sort_values(['cid', 'xcat', 'real_date'])[cols]
         data_frames.append(df_posi)
 
     if baskets:
