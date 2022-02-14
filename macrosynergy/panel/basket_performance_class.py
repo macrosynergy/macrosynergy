@@ -1,7 +1,6 @@
 
 import numpy as np
 import pandas as pd
-import random
 from typing import List
 from macrosynergy.panel.historic_vol import expo_weights, expo_std, flat_std
 from macrosynergy.management.shape_dfs import reduce_df_by_ticker
@@ -264,35 +263,21 @@ class Basket(object):
 
         return weights
 
-    def weight_dateframe(self, weight_meth: str = "equal", weights: List[float] = None,
+    def weight_df_helper(self, weight_meth: str = "equal", weights: List[float] = None,
                          lback_meth: str = "xma", lback_periods: int = 21,
                          max_weight: float = 1.0, remove_zeros: bool = True):
         """
-        Subroutine used to compute the weights for the basket of returns.
+        Subroutine used to compute the weights for the basket of returns. Will
+        instantiate the computed weight dataframe on the instance using the name of the
+        weighting method as the field's name.
 
-        :param <str> weight_meth: method used for weighting constituent returns and carry.
-            Options are as follows:
-        [1] "equal": all constituents with non-NA returns have the same weight.
-            This is the default.
-        [2] "fixed": weights are proportionate to single list of values (corresponding to
-            contracts) provided passed to argument `weights`.
-        [3] "invsd": weights based on inverse to standard deviations of recent returns.
-        [4] "values": weights proportionate to a panel of values of exogenous weight
-            category.
-        [5] "inv_values": weights are inversely proportionate to of values of exogenous
-            weight category.
-        :param <List[float]> weights: single list of weights corresponding to the base
-            tickers in `contracts` argument. This is only relevant for the fixed weight
-            method.
-        :param <str> lback_meth: lookback method for "invsd" weighting method. Default is
-            Exponential MA, "ema". The alternative is simple moving average, "ma".
+        :param <str> weight_meth:
+        :param <List[float]> weights:
+        :param <str> lback_meth:
         :param <int> lback_periods:
-        :param <float> max_weight: maximum weight of a single contract. Default is 1, i.e
-            zero restrictions. The purpose of the restriction is to limit concentration
-            within the basket.
-        :param <bool> remove_zeros: removes the zeros. Default is set to True.
+        :param <float> max_weight:
+        :param <bool> remove_zeros:
 
-        :return <pd.DataFrame>: Will return the weight DataFrame.
         """
         assert 0.0 < max_weight <= 1.0
         assert weight_meth in ['equal', 'fixed', 'values', 'inv_values', 'invsd']
@@ -348,16 +333,59 @@ class Basket(object):
             dfw_wgs = self.max_weight_func(weights=dfw_wgs, max_weight=max_weight)
 
         self.__dict__[weight_meth] = dfw_wgs
-        return dfw_wgs
 
-    def basket_performance(self, dfw_wgs: pd.DataFrame, basket_tik: str = "GLB_ALL",
+    def weight_dataframe(self, weight_meth: str or List[str] = "equal",
+                         weights: List[float] = None,
+                         lback_meth: str = "xma", lback_periods: int = 21,
+                         max_weight: float = 1.0, remove_zeros: bool = True):
+        """
+        Wrapper function concealing the logic of the primary method. The purpose of the
+        wrapper function is to handle either a single weight method being received or
+        multiple weight methods. The latter will be held inside a List.
+
+        :param <str or List[str]> weight_meth: method used for weighting constituent
+            returns and carry. The parameter can receive either a single weight method or
+            multiple weighting methods. The options are as follows:
+        [1] "equal": all constituents with non-NA returns have the same weight.
+            This is the default.
+        [2] "fixed": weights are proportionate to single list of values (corresponding to
+            contracts) provided passed to argument `weights`.
+        [3] "invsd": weights based on inverse to standard deviations of recent returns.
+        [4] "values": weights proportionate to a panel of values of exogenous weight
+            category.
+        [5] "inv_values": weights are inversely proportionate to of values of exogenous
+            weight category.
+        :param <List[float]> weights: single list of weights corresponding to the base
+            tickers in `contracts` argument. This is only relevant for the fixed weight
+            method.
+        :param <str> lback_meth: lookback method for "invsd" weighting method. Default is
+            Exponential MA, "ema". The alternative is simple moving average, "ma".
+        :param <int> lback_periods:
+        :param <float> max_weight: maximum weight of a single contract. Default is 1, i.e
+            zero restrictions. The purpose of the restriction is to limit concentration
+            within the basket.
+        :param <bool> remove_zeros: removes the zeros. Default is set to True.
+        """
+        assertion_error = "String or List expected."
+        assert isinstance(weight_meth, (list, str)), assertion_error
+        if isinstance(weight_meth, str):
+            self.weight_df_helper(weight_meth, weights, lback_meth, lback_periods,
+                                  max_weight, remove_zeros)
+        else:
+            for method in weight_meth:
+                self.weight_df_helper(method, weights, lback_meth, lback_periods,
+                                      max_weight, remove_zeros)
+
+    def basket_performance(self, weight_meth: str, basket_tik: str = "GLB_ALL",
                            return_weights: bool = False):
 
         """
-        Returns a full dataframe of all basket performance categories which is inclusive
-        of both returns and carries.
+        Produces a full dataframe of all basket performance categories (inclusive of both
+        returns and carries). The parameter, "weight_meth", will delimit the
+        weighting method used to compute the basket returns, as each potential weight
+        dataframe will be held as a field on the instance.
 
-        :param <pd.DataFrame> dfw_wgs: Weight DataFrame for the basket's constituents.
+        :param <pd.DataFrame> weight_meth:
         :param <str> basket_tik: name of basket base ticker (analogous to contract name)
             to be used for return and (possibly) carry are calculated. Default is
             "GLB_ALL".
@@ -368,6 +396,11 @@ class Basket(object):
             (possibly) carry data in standard form, i.e. columns 'cid', 'xcats',
             'real_date' and 'value'.
         """
+        assert isinstance(weight_meth, str), "Expects <str>."
+        assertion_error = "The method, weight_dataframe(), must be called prior to " \
+                          "basket_performance()."
+        assert weight_meth in self.__dict__.keys(), assertion_error
+        dfw_wgs = self.__dict__[weight_meth]
 
         # F. Calculate and store weighted average returns.
         select = ["ticker", "real_date", "value"]
