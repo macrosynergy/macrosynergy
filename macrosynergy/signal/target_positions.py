@@ -157,13 +157,18 @@ def consolidation_help(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
     basket_cids = basket_df['cid'].unique()
     panel_cids = panel_df['cid'].unique()
 
-    basket_df_c = basket_df.copy()
     for cid in basket_cids:
         if cid in panel_cids:
             basket_indices = basket_df['cid'] == cid
-            df_1 = basket_df[basket_indices]
+            b_values = basket_df[basket_indices]['value'].to_numpy()
             indices = panel_df['cid'] == cid
-            panel_df[indices]['value'] += df_1['value']
+            panel_values = panel_df[indices]['value'].to_numpy()
+            consolidation = panel_values + b_values
+
+            start = indices.index[0]
+            end = indices.index[-1]
+            panel_df[indices]['value'] = consolidation
+
             basket_indices = ~basket_indices
             basket_df = basket_df[basket_indices]
         else:
@@ -438,4 +443,3 @@ if __name__ == "__main__":
                                    sigrels=[1, -1, -0.5], ret='XR_NSA',
                                    start='2010-01-01', end='2020-12-31',
                                    scale='prop', cs_vtarg=None, posname='POS')
-    print(position_df)
