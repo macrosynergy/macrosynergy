@@ -14,7 +14,8 @@ class Basket(object):
                  blacklist: dict = None, wgt: str = None):
 
         """
-        Class' Constructor.
+        Class' Constructor. The Class' purpose is to calculate the returns and carries of
+        baskets of financial contracts using various weight methods.
 
         :param <pd.Dataframe> df: standardized DataFrame with following columns: 'cid',
             'xcats', 'real_date' and 'value'.
@@ -105,6 +106,12 @@ class Basket(object):
 
     @staticmethod
     def check_weights(weight: pd.DataFrame):
+        """
+        Validates that the weights computed on each timestamp sum to one accounting for
+        floating point error.
+
+        :param <pd.DataFrame> weight: weight dataframe.
+        """
         check = weight.sum(axis=1)
         c = ~((abs(check - 1) < 1e-6) | (abs(check) < 1e-6))
         assert not any(c), f"weights must sum to one (or zero), not: {check[c]}"
@@ -117,7 +124,7 @@ class Basket(object):
 
         :param <pd.DataFrame> df_ret: data-frame with returns.
 
-        :return <pd.DataFrame> : dataframe of weights.
+        :return <pd.DataFrame>: dataframe of weights.
         """
 
         act_cross = (~df_ret.isnull())
@@ -340,15 +347,15 @@ class Basket(object):
         if max_weight < 1.0:
             dfw_wgs = self.max_weight_func(weights=dfw_wgs, max_weight=max_weight)
 
-        self.__dict__['dfw_wgs'] = dfw_wgs
+        self.__dict__[weight_meth] = dfw_wgs
         return dfw_wgs
 
     def basket_performance(self, dfw_wgs: pd.DataFrame, basket_tik: str = "GLB_ALL",
                            return_weights: bool = False):
 
         """
-        Basket performance returns a single approximate return and - optionally - carry
-        series for the basket of underlying contracts.
+        Returns a full dataframe of all basket performance categories which is inclusive
+        of both returns and carries.
 
         :param <pd.DataFrame> dfw_wgs: Weight DataFrame for the basket's constituents.
         :param <str> basket_tik: name of basket base ticker (analogous to contract name)
