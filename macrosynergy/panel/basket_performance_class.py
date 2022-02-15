@@ -54,6 +54,8 @@ class Basket(object):
         self.dfw_ret = self.pivot_dataframe(self.ticks_ret)
         if self.cry_flag:
             self.dfw_cry = self.pivot_dateframe(self.ticks_cry)
+        else:
+            self.dfw_cry = None
         self.wgt = wgt
 
     def pivot_dataframe(self, tick_list):
@@ -376,19 +378,73 @@ class Basket(object):
                 self.weight_df_helper(method, weights, lback_meth, lback_periods,
                                       max_weight, remove_zeros)
 
-    def basket_performance(self, weight_meth: str, basket_tik: str = "GLB_ALL",
-                           return_weights: bool = False):
+    @staticmethod
+    def bp_helper(weight_meth: str, dfw_wgs: pd.DataFrame, dfw_ret: pd.DataFrame,
+                  dfw_cry: pd.DataFrame, ret: str = "XR_NSA", cry: str = None,
+                  cry_flag: bool = False, basket_tik: str = "GLB_ALL",
+                  return_weights: bool = False):
 
         """
-        Produces a full dataframe of all basket performance categories (inclusive of both
-        returns and carries). The parameter, "weight_meth", will delimit the
-        weighting method used to compute the basket returns, as each potential weight
-        dataframe will be held as a field on the instance. Further, the
-        basket_performance method can be called individually for every weighting method,
-        and the corresponding output dataframe will be stored as an instance with the
-        handle "basket_<weight_meth>".
+        Helper function. The parameter, "weight_meth", will delimit the weighting method
+        used to compute the basket returns, as each potential weight dataframe will be
+        held as a field on the instance. Further, the basket_performance method can be
+        called individually for every weighting method, and the corresponding output
+        dataframe will be stored as an instance with the handle "basket_<weight_meth>".
 
-        :param <pd.DataFrame> weight_meth:
+        :param <str> weight_meth:
+        :param <pd.DataFrame> dfw_wgs: weight dataframe used in computation.
+        :param <pd.DataFrame> dfw_ret: return dataframe.
+        :param <pd.DataFrame> dfw_cry: carry dataframe.
+        :param <str> ret:
+        :param <str> cry:
+        :param <bool> cry_flag: carry flag.
+        :param <str> basket_tik:
+        :param <bool> return_weights:
+
+        :return <pd.Dataframe>:
+        """
+
+        # F. Calculate and store weighted average returns.
+        select = ["ticker", "real_date", "value"]
+        dfxr = dfw_ret.multiply(dfw_wgs).sum(axis=1)
+        dfxr = dfxr.to_frame("value").reset_index()
+        name = basket_tik + "_" + weight_meth.upper() + "_"
+        dfxr = dfxr.assign(ticker=name + ret)[select]
+        store = [dfxr]
+
+        if cry_flag:
+            dfcry = dfw_cry.multiply(dfw_wgs).sum(axis=1)
+            dfcry = dfcry.to_frame("value").reset_index()
+            dfcry = dfcry.assign(ticker=name + cry)[select]
+            store.append(dfcry)
+        if return_weights:
+            dfw_wgs.columns.name = "cid"
+            w = dfw_wgs.stack().to_frame("value").reset_index()
+
+            func = lambda c: c[:-len(ret)] + "WGT_" + weight_meth
+            contracts_ = list(map(func, w["cid"].to_numpy()))
+            contracts_ = np.array(contracts_)
+            w["ticker"] = contracts_
+            w = w.sort_values(['ticker', 'real_date'])[['ticker', 'real_date', 'value']]
+            w = w.loc[w.value > 0, select]
+            store.append(w)
+
+        # Concatenate along the date index, and subsequently drop to restore natural
+        # index.
+        df = pd.concat(store, axis=0, ignore_index=True)
+
+        return df
+
+    def basket_performance(self, weight_meth: str or List[str],
+                           basket_tik: str = "GLB_ALL",
+                           return_weights: bool = False):
+        """
+        Produces a full dataframe of all basket performance categories (inclusive of both
+        returns and carries). If more than a single weighting method is passed, the
+        function will return the corresponding number of basket performance dataframes
+        which are concatenated into a single dataframe.
+
+        :param <List[str]> weight_meth:
         :param <str> basket_tik: name of basket base ticker (analogous to contract name)
             to be used for return and (possibly) carry are calculated. Default is
             "GLB_ALL".
@@ -399,39 +455,35 @@ class Basket(object):
             (possibly) carry data in standard form, i.e. columns 'cid', 'xcats',
             'real_date' and 'value'.
         """
-        assert isinstance(weight_meth, str), "Expects <str>."
-        assertion_error = f"The method, weight_dataframe(), must be called, using the" \
-                          f"associated weight method {weight_meth}, prior to " \
-                          "basket_performance()."
-        assert weight_meth in self.__dict__.keys(), assertion_error
-        dfw_wgs = self.__dict__[weight_meth]
 
-        # F. Calculate and store weighted average returns.
-        select = ["ticker", "real_date", "value"]
-        dfxr = self.dfw_ret.multiply(dfw_wgs).sum(axis=1)
-        dfxr = dfxr.to_frame("value").reset_index()
-        dfxr = dfxr.assign(ticker=basket_tik + "_" + self.ret)[select]
-        store = [dfxr]
+        assertion_error = "String or List expected."
+        assert isinstance(weight_meth, (list, str)), assertion_error
 
-        if self.cry_flag:
-            dfcry = self.dfw_cry.multiply(dfw_wgs).sum(axis=1)
-            dfcry = dfcry.to_frame("value").reset_index()
-            dfcry = dfcry.assign(ticker=basket_tik + "_" + self.cry)[select]
-            store.append(dfcry)
-        if return_weights:
-            dfw_wgs.columns.name = "cid"
-            w = dfw_wgs.stack().to_frame("value").reset_index()
-            func = lambda c: c[:-len(self.ret)] + "WGT"
-            contracts_ = list(map(func, w["cid"].to_numpy()))
-            contracts_ = np.array(contracts_)
-            w["ticker"] = contracts_
-            w = w.loc[w.value > 0, select]
-            store.append(w)
+        if isinstance(weight_meth, str):
+            dfw_wgs = self.__dict__[weight_meth]
+            df = self.bp_helper(weight_meth, dfw_wgs, self.dfw_ret, self.dfw_cry,
+                                ret=self.ret, cry=self.cry, cry_flag=self.cry_flag,
+                                basket_tik=basket_tik, return_weights=return_weights)
+        else:
+            df = []
+            for w in weight_meth:
+                assertion_error = f"The method, weight_dataframe(), must be called, " \
+                                  f"using the associated weight method {w}, prior to " \
+                                  "basket_performance()."
+                fields = self.__dict__.keys()
+                assert w in fields, assertion_error
+                dfw_wgs = self.__dict__[w]
+                key = "basket_" + w
+                if key not in fields:
+                    df_w = self.bp_helper(w, dfw_wgs, self.dfw_ret, self.dfw_cry,
+                                          self.ret, self.cry, self.cry_flag, basket_tik,
+                                          return_weights=return_weights)
+                    self.__dict__[key] = df_w
 
-        # Concatenate along the date index, and subsequently drop to restore natural
-        # index.
-        df = pd.concat(store, axis=0, ignore_index=True)
-        key = "basket_" + weight_meth
-        self.__dict__[key] = df
+                else:
+                    df_w = self.__dict__[key]
+
+                df.append(df_w)
+            df = pd.concat(df)
 
         return df
