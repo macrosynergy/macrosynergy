@@ -5,11 +5,12 @@ from typing import List
 from macrosynergy.panel.historic_vol import expo_weights, expo_std, flat_std
 from macrosynergy.management.shape_dfs import reduce_df_by_ticker
 from macrosynergy.panel.converge_row import ConvergeRow
+from itertools import chain
 
 class Basket(object):
 
     def __init__(self, df: pd.DataFrame, contracts: List[str], ret: str = "XR_NSA",
-                 cry: str = None, start: str = None, end: str = None,
+                 cry: List[str] = None, start: str = None, end: str = None,
                  blacklist: dict = None, wgt: str = None):
 
         """
@@ -21,7 +22,8 @@ class Basket(object):
         :param <List[str]> contracts: base tickers (combinations of cross-sections and
             base categories) denoting contracts that go into the basket.
         :param <str> ret: return category postfix; default is "XR_NSA".
-        :param <str> cry: carry category postfix; default is None.
+        :param <List[str] or str> cry: carry category postfix; default is None. The field
+            can either be a single carry or multiple carries defined in a List.
         :param <str> start: earliest date in ISO 8601 format. Default is None.
         :param <str> end: latest date in ISO 8601 format. Default is None.
         :param <dict> blacklist: cross-sections with date ranges that should be excluded
@@ -39,7 +41,8 @@ class Basket(object):
         assert all(isinstance(c, str) for c in contracts), error
         assert isinstance(ret, str), "return category must be a <str>."
         if cry is not None:
-            assert isinstance(cry, str), "carry category must be a <str>."
+            error = "carry category must be a <str> or, if multiple categories, <list>."
+            assert isinstance(cry, (list, str)), error
 
         self.tickers = self.ticker_list(contracts, ret, cry, wgt)
         self.dfx = reduce_df_by_ticker(df, start=start, end=end, ticks=self.tickers,
@@ -52,7 +55,12 @@ class Basket(object):
         self.cry_flag = (cry is not None)
         self.wgt_flag = (wgt is not None)
         self.dfw_ret = self.pivot_dataframe(self.ticks_ret)
-        if self.cry_flag:
+        if isinstance(cry, list):
+            dfw_cry = []
+            for i in range(self.no_cry):
+                dfw_cry.append(self.pivot_dateframe(self.ticks_cry[i]))
+            self.dfw_cry = dfw_cry
+        elif self.cry_flag:
             self.dfw_cry = self.pivot_dateframe(self.ticks_cry)
         else:
             self.dfw_cry = None
@@ -91,10 +99,20 @@ class Basket(object):
         tickers = ticks_ret.copy()
 
         # Boolean for carry being used.
-        if cry is not None:
+        if cry is not None and isinstance(cry, str):
             ticks_cry = [c + cry for c in contracts]
             self.__dict__['ticks_cry'] = ticks_cry
             tickers += ticks_cry
+            self.__dict__['no_cry'] = 1
+        elif isinstance(cry, list):
+            cry = list(set(cry))
+            self.__dict__['cry'] = cry
+            ticks_cry = []
+            for c_ in cry:
+                ticks_cry += [c + c_ for c in contracts]
+            self.__dict__['ticks_cry'] = ticks_cry
+            tickers += chain(ticks_cry)
+            self.__dict__['no_cry'] = len(cry)
 
         if wgt is not None:
             error = f"'wgt' must be a string. Received: {type(wgt)}."
@@ -336,7 +354,7 @@ class Basket(object):
 
         self.__dict__[weight_meth] = dfw_wgs
 
-    def weight_dataframe(self, weight_meth: str or List[str] = "equal",
+    def weight_dataframe(self, weight_meth: List[str] = "equal",
                          weights: List[float] = None,
                          lback_meth: str = "xma", lback_periods: int = 21,
                          max_weight: float = 1.0, remove_zeros: bool = True):
@@ -379,9 +397,39 @@ class Basket(object):
                                       max_weight, remove_zeros)
 
     @staticmethod
+    def carry_handler(dfw_wgs: pd.DataFrame, dfw_cry: List[pd.DataFrame], cry: List[str],
+                      no_cry: int, name: str):
+        """
+        Method designed to handle multiple carries. If multiple carries are defined, each
+        output dataframe will be stored in a List.
+
+        :param <pd.DataFrame> dfw_wgs:
+        :param <List[pd.DataFrame> dfw_cry:
+        :param <str> cry:
+        :param <int> no_cry:
+        :param <str> name: postfix for the basket plus the respective weighting method.
+
+        return <List[pd.DataFrame]>: list of the basket carry returns.
+        """
+
+        cry_list = []
+        select = ["ticker", "real_date", "value"]
+        if no_cry == 1:
+            dfw_cry = [dfw_cry]
+            cry = [cry]
+
+        for i, df_c in enumerate(dfw_cry):
+            dfcry = df_c.multiply(dfw_wgs).sum(axis=1)
+            dfcry = dfcry.to_frame("value").reset_index()
+            dfcry = dfcry.assign(ticker=name + cry[i])[select]
+            cry_list.append(dfcry)
+
+        return cry_list
+
+    @staticmethod
     def bp_helper(weight_meth: str, dfw_wgs: pd.DataFrame, dfw_ret: pd.DataFrame,
-                  dfw_cry: pd.DataFrame, ret: str = "XR_NSA", cry: str = None,
-                  cry_flag: bool = False, basket_tik: str = "GLB_ALL",
+                  dfw_cry: List[pd.DataFrame], ret: str = "XR_NSA", cry: str = None,
+                  cry_flag: bool = False, no_cry: int = 0, basket_tik: str = "GLB_ALL",
                   return_weights: bool = False):
 
         """
@@ -392,10 +440,12 @@ class Basket(object):
         :param <str> weight_meth:
         :param <pd.DataFrame> dfw_wgs: weight dataframe used in computation.
         :param <pd.DataFrame> dfw_ret: return dataframe.
-        :param <pd.DataFrame> dfw_cry: carry dataframe.
+        :param <List[pd.DataFrame]> dfw_cry: potentially a list of carry dataframes, or
+            a single pivoted dataframe.
         :param <str> ret:
         :param <str> cry:
         :param <bool> cry_flag: carry flag.
+        :param <int> no_cry: number of carries defined. Default is set to zero reflecting
         :param <str> basket_tik:
         :param <bool> return_weights:
 
@@ -411,10 +461,8 @@ class Basket(object):
         store = [dfxr]
 
         if cry_flag:
-            dfcry = dfw_cry.multiply(dfw_wgs).sum(axis=1)
-            dfcry = dfcry.to_frame("value").reset_index()
-            dfcry = dfcry.assign(ticker=name + cry)[select]
-            store.append(dfcry)
+            cry_list = Basket.carry_handler(dfw_wgs, dfw_cry, cry, no_cry, name)
+            store += cry_list
         if return_weights:
             dfw_wgs.columns.name = "cid"
             w = dfw_wgs.stack().to_frame("value").reset_index()
@@ -433,8 +481,7 @@ class Basket(object):
 
         return df
 
-    def basket_performance(self, weight_meth: str or List[str],
-                           basket_tik: str = "GLB_ALL",
+    def basket_performance(self, weight_meth: List[str], basket_tik: str = "GLB_ALL",
                            return_weights: bool = False):
         """
         Produces a full dataframe of all basket performance categories (inclusive of both
@@ -461,7 +508,8 @@ class Basket(object):
             dfw_wgs = self.__dict__[weight_meth]
             df = self.bp_helper(weight_meth, dfw_wgs, self.dfw_ret, self.dfw_cry,
                                 ret=self.ret, cry=self.cry, cry_flag=self.cry_flag,
-                                basket_tik=basket_tik, return_weights=return_weights)
+                                no_cry=self.no_cry, basket_tik=basket_tik,
+                                return_weights=return_weights)
         else:
             df = []
             for w in weight_meth:
@@ -474,8 +522,8 @@ class Basket(object):
                 key = "basket_" + w
                 if key not in fields:
                     df_w = self.bp_helper(w, dfw_wgs, self.dfw_ret, self.dfw_cry,
-                                          self.ret, self.cry, self.cry_flag, basket_tik,
-                                          return_weights=return_weights)
+                                          self.ret, self.cry, self.cry_flag,
+                                          self.no_cry, basket_tik, return_weights)
                     self.__dict__[key] = df_w
 
                 else:
