@@ -385,11 +385,9 @@ class Basket(object):
                   return_weights: bool = False):
 
         """
-        Helper function. The parameter, "weight_meth", will delimit the weighting method
-        used to compute the basket returns, as each potential weight dataframe will be
-        held as a field on the instance. Further, the basket_performance method can be
-        called individually for every weighting method, and the corresponding output
-        dataframe will be stored as an instance with the handle "basket_<weight_meth>".
+        Helper function hosting the source code. The parameter, "weight_meth", will
+        delimit the weighting method used to compute the basket returns, as each
+        potential weight dataframe will be held as a field on the instance.
 
         :param <str> weight_meth:
         :param <pd.DataFrame> dfw_wgs: weight dataframe used in computation.
