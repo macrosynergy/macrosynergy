@@ -376,6 +376,7 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
         contracts_ = list(map(func, w["cid"].to_numpy()))
         contracts_ = np.array(contracts_)
         w["ticker"] = contracts_
+        w = w.sort_values(['ticker', 'real_date'])[['ticker', 'real_date', 'value']]
         w = w.loc[w.value > 0, select]
         store.append(w)
 
@@ -430,6 +431,7 @@ if __name__ == "__main__":
     dfd_4 = basket_performance(dfd, contracts, ret='XR_NSA', cry=None,
                                weight_meth='equal', wgt=None, max_weight=0.41,
                                return_weights=True)
+    print(dfd_4)
 
     dfd_5 = basket_performance(dfd, contracts, ret='XR_NSA', cry='CRY_NSA',
                                weight_meth='invsd', wgt=None, max_weight=0.41,
