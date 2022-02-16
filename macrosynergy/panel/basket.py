@@ -1,21 +1,23 @@
 
 import numpy as np
 import pandas as pd
+import random
 from typing import List
 from macrosynergy.panel.historic_vol import expo_weights, expo_std, flat_std
 from macrosynergy.management.shape_dfs import reduce_df_by_ticker
 from macrosynergy.panel.converge_row import ConvergeRow
-from itertools import chain
+from macrosynergy.management.simulate_quantamental_data import make_qdf
+
 
 class Basket(object):
 
     def __init__(self, df: pd.DataFrame, contracts: List[str], ret: str = "XR_NSA",
                  cry: List[str] = None, start: str = None, end: str = None,
-                 blacklist: dict = None, wgt: str = None):
+                 blacklist: dict = None, ewgts: List[str] = None):
 
         """
-        Class' Constructor. The Class' purpose is to calculate the returns and carries of
-        baskets of financial contracts using various weight methods.
+        Calculates the returns and carries of baskets of financial contracts using
+        various weighting methods.
 
         :param <pd.Dataframe> df: standardized DataFrame with following columns: 'cid',
             'xcats', 'real_date' and 'value'.
@@ -29,50 +31,63 @@ class Basket(object):
         :param <dict> blacklist: cross-sections with date ranges that should be excluded
             from the dataframe. If one cross-section has several blacklist periods append
             numbers to the cross-section code.
-        :param <str> wgt: postfix used to identify exogenous weight category. Analogously
-            to carry and return postfixes this should be added to base tickers to
-            identify the values that denote contract weights. Only applicable for the
-            weight methods 'values' or 'inv_values'.
+        :param List[str] ewgts: one or more postfixes that may identify exogenous weight
+            categories. Similar to return postfixes they are appended to base tickers.
 
         """
 
         assert isinstance(contracts, list)
-        error = "contracts must be string list."
-        assert all(isinstance(c, str) for c in contracts), error
-        assert isinstance(ret, str), "return category must be a <str>."
-        if cry is not None:
-            error = "carry category must be a <str> or, if multiple categories, <list>."
-            assert isinstance(cry, (list, str)), error
+        assert all(isinstance(c, str) for c in contracts), \
+            "`contracts` must be list of strings"
+        self.contract = contracts  # Todo: must be self.contracts, but hard to refactor
 
-        self.tickers = self.ticker_list(contracts, ret, cry, wgt)
-        self.dfx = reduce_df_by_ticker(df, start=start, end=end, ticks=self.tickers,
-                                       blacklist=blacklist)
-        self.contract = contracts
+        assert isinstance(ret, str), "`ret`must be a string"
         self.ret = ret
+        self.ticks_ret = [con + ret for con in contracts]
+        self.dfw_ret = self.pivot_dataframe(df, self.ticks_ret)
+
+        if cry is not None:
+            error = "`cry` must be a string or a list of strings"
+            assert isinstance(cry, (list, str)), error
+        cry = [cry] if isinstance(cry, str) else cry  # remove ambiguity of type
         self.cry = cry
+        self.ticklists_cry = {}
+        self.dfws_cry = {}
+        self.ticks_cry = []
+        if cry is not None:
+            for cr in cry:
+                ticks = [con + cr for con in contracts]
+                self.ticklists_cry[cr] = ticks
+                self.ticks_cry = self.ticks_cry + ticks
+                self.dfws_cry[cr] = self.pivot_dataframe(df, self.ticklists_cry[cr])
+
+        if ewgts is not None:
+            error = "`ewgts` must be a string or a list of strings"
+            assert isinstance(ewgts, (list, str)), error
+        wgt = [ewgts] if isinstance(ewgts, str) else ewgts  # remove ambiguity of type
+        self.wgt = wgt
+        if wgt is not None:
+            self.ticks_wgt = [con + wg for con in contracts for wg in wgt]
+        else:
+            self.ticks_wgt = []
+
+        self.tickers = self.ticks_ret + self.ticks_cry + self.ticks_wgt
         self.start = self.date_check(start)
         self.end = self.date_check(end)
-        self.cry_flag = (cry is not None)
-        self.wgt_flag = (wgt is not None)
-        self.dfw_ret = self.pivot_dataframe(self.ticks_ret)
-        if isinstance(cry, list):
-            dfw_cry = []
-            for i in range(self.no_cry):
-                dfw_cry.append(self.pivot_dateframe(self.ticks_cry[i]))
-            self.dfw_cry = dfw_cry
-        elif self.cry_flag:
-            self.dfw_cry = self.pivot_dateframe(self.ticks_cry)
-        else:
-            self.dfw_cry = None
-        self.wgt = wgt
+        self.dfx = reduce_df_by_ticker(df, start=start, end=end, ticks=self.tickers,
+                                       blacklist=blacklist)
 
-    def pivot_dataframe(self, tick_list):
-        dfx_ticks_list = self.dfx[self.dfx["ticker"].isin(tick_list)]
-        dfw = dfx_ticks_list.pivot(index="real_date", columns="ticker", values="value")
+    @staticmethod
+    def pivot_dataframe(df, tick_list):
+        """Makes a wide dataframe with time index"""
+        df['ticker'] = df['cid'] + '_' + df['xcat']
+        dfx = df[df["ticker"].isin(tick_list)]
+        dfw = dfx.pivot(index="real_date", columns="ticker", values="value")
         return dfw
 
     @staticmethod
     def date_check(date_string):
+        """Checks if string can be converted into date format"""
         date_error = "Expected form of string: '%Y-%m-%d'."
         if date_string is not None:
             try:
@@ -80,54 +95,10 @@ class Basket(object):
             except ValueError:
                 raise AssertionError(date_error)
 
-    def ticker_list(self, contracts: List[str], ret: str, cry: str, wgt: str):
-        """
-        Method used to establish the list of tickers involved in the computation. The
-        list will potentially consist of the return categories, the carry categories and
-        an exogenous weight category used for the weight dataframe.
-
-        :param <List[str]> contracts:
-        :param <str> ret:
-        :param <str> cry:
-        :param <str> wgt:
-
-        :return <List[str]>: list of tickers.
-        """
-
-        ticks_ret = [c + ret for c in contracts]
-        self.__dict__['ticks_ret'] = ticks_ret
-        tickers = ticks_ret.copy()
-
-        # Boolean for carry being used.
-        if cry is not None and isinstance(cry, str):
-            ticks_cry = [c + cry for c in contracts]
-            self.__dict__['ticks_cry'] = ticks_cry
-            tickers += ticks_cry
-            self.__dict__['no_cry'] = 1
-        elif isinstance(cry, list):
-            cry = list(set(cry))
-            self.__dict__['cry'] = cry
-            ticks_cry = []
-            for c_ in cry:
-                ticks_cry += [c + c_ for c in contracts]
-            self.__dict__['ticks_cry'] = ticks_cry
-            tickers += chain(ticks_cry)
-            self.__dict__['no_cry'] = len(cry)
-
-        if wgt is not None:
-            error = f"'wgt' must be a string. Received: {type(wgt)}."
-            assert isinstance(wgt, str), error
-            ticks_wgt = [c + wgt for c in contracts]
-            self.__dict__['ticks_wgt'] = ticks_wgt
-            tickers += ticks_wgt
-
-        return tickers
-
     @staticmethod
     def check_weights(weight: pd.DataFrame):
         """
-        Validates that the weights computed on each timestamp sum to one accounting for
-        floating point error.
+        Checks if all rows in dataframe add up to roughly 1
 
         :param <pd.DataFrame> weight: weight dataframe.
         """
@@ -137,19 +108,20 @@ class Basket(object):
 
     def equal_weight(self, df_ret: pd.DataFrame) -> pd.DataFrame:
         """
-        Equal weight function: receives the pivoted return DataFrame and determines the
-        number of non-NA cross-sections per timestamp, and subsequently distribute the
-        weight evenly across non-NA cross-sections.
+        Calculates dataframe of equal weights based on available return data.
 
-        :param <pd.DataFrame> df_ret: data-frame with returns.
+        :param <pd.DataFrame> df_ret: wide time-indexed data frame of returns.
 
         :return <pd.DataFrame>: dataframe of weights.
+
+        Note: The method determines the  number of non-NA cross-sections per timestamp,
+        and subsequently distributes the weights evenly across non-NA cross-sections.
         """
 
         act_cross = (~df_ret.isnull())
         uniform = (1 / act_cross.sum(axis=1)).values
         uniform = uniform[:, np.newaxis]
-        # Apply equal value to all cross sections.
+
         broadcast = np.repeat(uniform, df_ret.shape[1], axis=1)
 
         weight = act_cross.multiply(broadcast)
@@ -481,36 +453,26 @@ class Basket(object):
 
         return df
 
-    def basket_performance(self, weight_meth: List[str], basket_tik: str = "GLB_ALL",
-                           return_weights: bool = False):
+    def make_basket(self, weight_meth: str, basket_name: str = "GLB_ALL"):
         """
-        Produces a full dataframe of all basket performance categories (inclusive of both
-        returns and carries). If more than a single weighting method is passed, the
-        function will return the corresponding number of basket performance dataframes
-        which are concatenated into a single dataframe.
+        Calculates all basket performance categories
 
-        :param <List[str]> weight_meth:
-        :param <str> basket_tik: name of basket base ticker (analogous to contract name)
+        :param <str> weight_meth: one of the following # Todo: options
+        :param <str> basket_name: name of basket base ticker (analogous to contract name)
             to be used for return and (possibly) carry are calculated. Default is
             "GLB_ALL".
-        :param <bool> return_weights: if True add cross-section weights to output
-            dataframe with 'WGT' postfix. Default is False.
-
-        :return <pd.Dataframe>: standardized DataFrame with the basket return and
-            (possibly) carry data in standard form, i.e. columns 'cid', 'xcats',
-            'real_date' and 'value'.
         """
 
-        assertion_error = "String or List expected."
-        assert isinstance(weight_meth, (list, str)), assertion_error
+        assert isinstance(weight_meth, str), "`weight_meth` must be string"
+        # Todo: should just make/store single method's performance data and weights
 
         if isinstance(weight_meth, str):
-            dfw_wgs = self.__dict__[weight_meth]
-            df = self.bp_helper(weight_meth, dfw_wgs, self.dfw_ret, self.dfw_cry,
+            dfw_wgs = self.__dict__[weight_meth]  # Todo: ??
+            df = self.bp_helper(weight_meth, dfw_wgs, self.dfw_ret, self.dfws_cry,
                                 ret=self.ret, cry=self.cry, cry_flag=self.cry_flag,
-                                no_cry=self.no_cry, basket_tik=basket_tik,
+                                no_cry=self.no_cry, basket_name=basket_name,
                                 return_weights=return_weights)
-        else:
+        else:  # Todo: not needed
             df = []
             for w in weight_meth:
                 assertion_error = f"The method, weight_dataframe(), must be called, " \
@@ -521,9 +483,9 @@ class Basket(object):
                 dfw_wgs = self.__dict__[w]
                 key = "basket_" + w
                 if key not in fields:
-                    df_w = self.bp_helper(w, dfw_wgs, self.dfw_ret, self.dfw_cry,
+                    df_w = self.bp_helper(w, dfw_wgs, self.dfw_ret, self.dfws_cry,
                                           self.ret, self.cry, self.cry_flag,
-                                          self.no_cry, basket_tik, return_weights)
+                                          self.no_cry, basket_name, return_weights)
                     self.__dict__[key] = df_w
 
                 else:
@@ -533,3 +495,64 @@ class Basket(object):
             df = pd.concat(df)
 
         return df
+
+    def return_basket(self, basket_names: List[str]):
+        """
+        Return standardized dataframe with one or more basket performance data,
+
+        :param basket_names: single basket name or list for which performance data
+            are to be returned.
+
+        :return <pd.Dataframe>: standardized DataFrame with the basket return and
+            (possibly) carry data in standard form, i.e. columns 'cid', 'xcats',
+            'real_date' and 'value'.
+        """
+        # Todo: simple function, no more than 3 lines
+        pass
+
+    def return_weights(self, basket_name: str):
+        """
+        Return standardized dataframe with one or more basket performance data,
+
+        :param basket_name: single basket name or list for which performance data
+            are to be returned.
+
+        :return <pd.Dataframe>: standardized DataFrame with basket weights.
+        """
+        # Todo: simple function, no more than 3 lines
+        pass
+
+
+if __name__ == "__main__":
+
+    cids = ['AUD', 'GBP', 'NZD', 'USD']
+    xcats = ['FXXR_NSA', 'FXCRY_NSA', 'FXCRR_NSA', 'EQXR_NSA', 'EQCRY_NSA', 'EQCRR_NSA']
+
+    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
+                                                'sd_mult'])
+
+    df_cids.loc['AUD'] = ['2010-01-01', '2020-12-31', 0, 1]
+    df_cids.loc['GBP'] = ['2011-01-01', '2020-11-30', 0, 2]
+    df_cids.loc['NZD'] = ['2012-01-01', '2020-12-31', 0, 3]
+    df_cids.loc['USD'] = ['2010-01-01', '2020-12-31', 0, 4]
+
+    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
+                                                  'sd_mult', 'ar_coef', 'back_coef'])
+    df_xcats.loc['FXXR_NSA'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.2]
+    df_xcats.loc['FXCRY_NSA'] = ['2010-01-01', '2020-12-31', 1, 1, 0.9, 0.2]
+    df_xcats.loc['FXCRR_NSA'] = ['2010-01-01', '2020-12-31', 0.5, 0.8, 0.9, 0.2]
+    df_xcats.loc['EQXR_NSA'] = ['2012-01-01', '2020-12-31', 0.5, 2, 0, 0.2]
+    df_xcats.loc['EQCRY_NSA'] = ['2010-01-01', '2020-12-31', 2, 1.5, 0.9, 0.5]
+    df_xcats.loc['EQCRR_NSA'] = ['2010-01-01', '2020-12-31', 1.5, 1.5, 0.9, 0.5]
+
+    random.seed(2)
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+
+    black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
+    contracts = ['AUD_FX', 'AUD_EQ', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
+    gdp_figures = [17.0, 17.0, 41.0, 9.0, 250.0]
+
+    contracts_1 = ['AUD_FX', 'GBP_FX', 'NZD_FX', 'USD_EQ']
+    basket_1 = Basket(dfd, contracts=contracts_1,
+                      ret='XR_NSA', cry=['CRY_NSA', 'CRR_NSA'])
+    df = basket_1.make_basket(weight_meth='equal', basket_name='GLB_EQUAL')
