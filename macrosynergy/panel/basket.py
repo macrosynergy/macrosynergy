@@ -532,3 +532,10 @@ if __name__ == "__main__":
 
     df_weight = basket_1.return_weights("GLB_EQUAL")
     print(df_weight)
+
+    basket_2 = Basket(df=dfd, contracts=contracts_1,
+                      ret='XR_NSA', blacklist=black)
+    basket_2.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
+                         max_weight=0.55, remove_zeros=True, basket_name='GLB_EQUAL')
+    df_basket = basket_1.return_basket("GLB_EQUAL")
+    print(df_basket)
