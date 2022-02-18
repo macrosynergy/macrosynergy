@@ -54,7 +54,7 @@ class Basket(object):
         self.cry_flag = (cry is not None)
         self.wgt_flag = (wgt is not None)
         self.dfw_ret = self.pivot_dataframe(self.ticks_ret)
-        self.dfw_cry = self.carry_handler(cry)
+        self.dfw_cry = self.carry_list(cry)
         self.wgt = wgt
 
     def ticker_list(self, contracts: List[str], ret: str, cry: str, wgt: str):
@@ -131,7 +131,7 @@ class Basket(object):
         dfw = dfx_ticks_list.pivot(index="real_date", columns="ticker", values="value")
         return dfw
 
-    def carry_handler(self, cry):
+    def carry_list(self, cry):
         """
         Handles for multiple carries. If multiple carries are requested, each wide
         dataframe will be stored in a list.
