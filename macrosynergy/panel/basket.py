@@ -71,6 +71,7 @@ class Basket(object):
         """
 
         category_flag = category is not None
+        self.__dict__[cat_name + "_flag"] = category_flag
         if category_flag:
             error = "`cry` must be a <str> or a <List[str]>."
             assert isinstance(category, (list, str)), error
@@ -281,8 +282,8 @@ class Basket(object):
 
     def make_weights(self, weight_meth: str = "equal", weights: List[float] = None,
                      lback_meth: str = "xma", lback_periods: int = 21,
-                     ewgt: str = None,
-                     max_weight: float = 1.0, remove_zeros: bool = True):
+                     ewgt: str = None, max_weight: float = 1.0,
+                     remove_zeros: bool = True):
         """
         Returns wide dataframe of weights to be used for basket series.
 
@@ -291,9 +292,11 @@ class Basket(object):
             multiple weighting methods. The options are as follows:
             [1] "equal": all constituents with non-NA returns have the same weight.
                 This is the default.
-            [2] "fixed": weights are proportionate to single list of values (corresponding to
-                contracts) provided passed to argument `weights`.
-            [3] "invsd": weights based on inverse to standard deviations of recent returns.
+            [2] "fixed": weights are proportionate to a single list of values provided
+                which are passed to argument `weights` (each value corresponds to a
+                single contract).
+            [3] "invsd": weights based on inverse to standard deviations of recent
+                returns.
             [4] "values": weights proportionate to a panel of values of exogenous weight
                 category.
             [5] "inv_values": weights are inversely proportionate to of values of exogenous
@@ -341,7 +344,7 @@ class Basket(object):
                                           remove_zeros=remove_zeros)
 
         elif weight_meth in ["values", "inv_values"]:
-            assert ewgt in self.wgt, f'{ewgt} is not in this basket instance'
+            assert ewgt in self.wgt, f'{ewgt} is not defined on the instance.'
             dfw_wgt = self.dfws_wgt[ewgt].shift(1)  # Lag by one day to be used as weights.
             cols = sorted(dfw_wgt.columns)
             dfw_ret = dfw_wgt.reindex(cols, axis=1)
@@ -364,27 +367,17 @@ class Basket(object):
         return dfw_wgs
 
     def make_basket(self, weight_meth: str = "equal", weights: List[float] = None,
-                          lback_meth: str = "xma", lback_periods: int = 21,
-                          ewgt: str =None, max_weight: float = 1.0, remove_zeros: bool = True,
-                          basket_name: str = "GLB_ALL"):
+                    lback_meth: str = "xma", lback_periods: int = 21,
+                    ewgt: str = None, max_weight: float = 1.0, remove_zeros: bool = True,
+                    basket_name: str = "GLB_ALL"):
         """
-        Calculates all basket performance categories
+        Calculates all basket performance categories.
 
-        :param <str or List[str]> weight_meth: method used for weighting constituent
-            returns and carry. The parameter can receive either a single weight method or
-            multiple weighting methods. The options are as follows:
-            [1] "equal": all constituents with non-NA returns have the same weight.
-                This is the default.
-            [2] "fixed": weights are proportionate to single list of values (corresponding to
-                contracts) provided passed to argument `weights`.
-            [3] "invsd": weights based on inverse to standard deviations of recent returns.
-            [4] "values": weights proportionate to a panel of values of exogenous weight
-                category.
-            [5] "inv_values": weights are inversely proportionate to of values of exogenous
-                weight category.
-        :param <str> lback_meth: lookback method for "invsd" weighting method. Default is
-            Exponential MA, "ema". The alternative is simple moving average, "ma".
-        :param <int> lback_periods: Lookback periods for "invsd" weighting method.
+        :param <str or List[str]> weight_meth:
+        :param <List[float]> weights:
+        :param <str> lback_meth: look-back method for "invsd" weighting method. Default
+            is Exponential MA, "ema". The alternative is simple moving average, "ma".
+        :param <int> lback_periods: look-back periods for "invsd" weighting method.
             Default is 21.  Half-time for "xma" and full lookback period for "ma".
         :param <str> ewgt: Exogenous weight postfix that defines the weight value panel.
             Only needed for the 'values' or 'inv_values' method.
@@ -401,22 +394,34 @@ class Basket(object):
 
         dfw_wgs = self.make_weights(weight_meth=weight_meth, weights=weights,
                                     lback_meth=lback_meth, lback_periods=lback_periods,
-                                    ewgt=ewgt,
-                                    max_weight=max_weight, remove_zeros=remove_zeros)
+                                    ewgt=ewgt, max_weight=max_weight,
+                                    remove_zeros=remove_zeros)
 
+        select = ["ticker", "real_date", "value"]
         dfw_bret = self.dfw_ret.multiply(dfw_wgs).sum(axis=1)
-        # Todo: reshape to df with 'cid', 'xcat', 'real_date', 'value' using basket_name
-        for cr in self.cry:
-            dfw_bcry = self.dfws_cry[cr].multiply(dfw_wgs).sum(axis=1)
-            # Todo: reshape to standard df with 'cid', 'xcat', 'real_date' and 'value'
-            # append to standardized return df_retcry
+        dfxr = dfw_bret.to_frame("value").reset_index()
+        basket_ret = basket_name + self.ret
+        dfxr = dfxr.assign(ticker=basket_ret)[select]
+        store = [dfxr]
 
-        # Todo: store dfw_wgs in dict_wgs and standardized retcry df in dict_retcry
-        # i.e self.dict_retcry[basket_name] = df_retcry
+        if self.cry_flag:
+            cry_list = []
+            for cr in self.cry:
+                dfw_bcry = self.dfws_cry[cr].multiply(dfw_wgs).sum(axis=1)
+                dfcry = dfw_bcry.to_frame("value").reset_index()
+                basket_cry = basket_name + cr
+                dfcry = dfcry.assign(ticker=basket_cry)[select]
+                cry_list.append(dfcry)
+
+            store += cry_list
+
+        df_retcry = pd.concat(store)
+        self.dict_retcry[basket_name] = df_retcry
+        self.dfws_wgt[basket_name] = dfw_wgs
 
     def return_basket(self, basket_names: List[str]):
         """
-        Return standardized dataframe with one or more basket performance data,
+        Return standardized dataframe with one or more basket performance data.
 
         :param basket_names: single basket name or list for which performance data
             are to be returned.
@@ -425,20 +430,34 @@ class Basket(object):
             (possibly) carry data in standard form, i.e. columns 'cid', 'xcats',
             'real_date' and 'value'.
         """
-        # Todo: just collates the referenced dfs in self.dict_retcry and returns
-        pass
+        ret_baskets = []
+        for b in basket_names:
+            ret_baskets.append(self.dict_retcry[b])
 
-    def return_weights(self, basket_name: str):
+        return pd.concat(ret_baskets)
+
+    def return_weights(self, basket_names: List[str]):
         """
-        Return standardized dataframe with one or more basket performance data,
+        Return the standardised dataframe containing the corresponding weights used to
+        compute the basket.
 
-        :param basket_name: single basket name or list for which performance data
+        :param basket_names: single basket name or list for which performance data
             are to be returned.
 
         :return <pd.Dataframe>: standardized DataFrame with basket weights.
         """
-        # Todo: just collates the referenced dfs in self.dict_wgt and returns
-        pass
+
+        weight_baskets = []
+        select = ['ticker', 'real_date', 'value']
+        for b in basket_names:
+            dfw_wgs = self.dfws_wgt[b]
+            dfw_wgs.columns.name = "cid"
+            w = dfw_wgs.stack().to_frame("value").reset_index()
+            w = w.sort_values(['ticker', 'real_date'])[select]
+            w = w.loc[w.value > 0, select]
+            weight_baskets.append(w)
+
+        return pd.concat(weight_baskets)
 
 
 if __name__ == "__main__":
