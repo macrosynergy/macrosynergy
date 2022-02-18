@@ -39,45 +39,14 @@ class Basket(object):
         assert isinstance(contracts, list)
         assert all(isinstance(c, str) for c in contracts), \
             "`contracts` must be list of strings"
-        self.contract = contracts  # Todo: must be self.contracts, but hard to refactor
-
         assert isinstance(ret, str), "`ret`must be a string"
+
+        self.contracts = contracts
         self.ret = ret
         self.ticks_ret = [con + ret for con in contracts]
         self.dfw_ret = self.pivot_dataframe(df, self.ticks_ret)
-
-        if cry is not None:
-            error = "`cry` must be a string or a list of strings"
-            assert isinstance(cry, (list, str)), error
-        cry = [cry] if isinstance(cry, str) else cry  # remove ambiguity of type
-        # Todo: check later if all of the below are actually needed
-        self.cry = cry
-        self.ticklists_cry = {}
-        self.dfws_cry = {}
-        self.ticks_cry = []
-        if cry is not None:
-            for cr in cry:
-                ticks = [con + cr for con in contracts]
-                self.ticklists_cry[cr] = ticks
-                self.ticks_cry = self.ticks_cry + ticks
-                self.dfws_cry[cr] = self.pivot_dataframe(df, self.ticklists_cry[cr])
-
-        if ewgts is not None:
-            error = "`ewgts` must be a string or a list of strings"
-            assert isinstance(ewgts, (list, str)), error
-        wgt = [ewgts] if isinstance(ewgts, str) else ewgts  # remove ambiguity of type
-        # Todo: check later if all of the below are actually needed
-        self.wgt = wgt
-        self.ticklists_wgt = {}
-        self.dfws_wgt = {}
-        self.ticks_wgt = []
-        if wgt is not None:
-            for wg in wgt:
-                ticks = [con + wg for con in contracts]
-                self.ticklists_wgt[wg] = ticks
-                self.ticks_wgt = self.ticks_wgt + ticks
-                self.dfws_wgt[wg] = self.pivot_dataframe(df, self.ticklists_cry[wg])
-
+        self.dfws_cry = self.category_handler(df, cry, "cry")
+        self.dfws_wgt = self.category_handler(df, ewgts, "wgt")
         self.tickers = self.ticks_ret + self.ticks_cry + self.ticks_wgt
         self.start = self.date_check(start)
         self.end = self.date_check(end)
@@ -87,9 +56,47 @@ class Basket(object):
         self.dict_retcry = {}  # dictionary for collecting basket return/carry dfs
         self.dict_wgs = {}  # dictionary for collecting basket return/carry dfs
 
+    def category_handler(self, df: pd.DataFrame, category: List[str], cat_name: str):
+        """
+        Handles for multiple carries or external weights. Each category will be stored in
+        a dictionary where the key will be the associated postfix and the value will be
+        the respective wide dataframe.
+
+        :param <pd.DataFrame> df: original, standardised dataframe.
+        :param <List[str]> category: carry category postfix.
+        :param <str> cat_name: associated name of the category: carry, "cry", or external
+            weight, "wgt".
+
+        :param <dict> dfws_cry:
+        """
+
+        category_flag = category is not None
+        if category_flag:
+            error = "`cry` must be a <str> or a <List[str]>."
+            assert isinstance(category, (list, str)), error
+            category = [category] if isinstance(category, str) else category
+
+            self.__dict__[cat_name] = category
+            dfws_category = {}
+            for cr in category:
+                ticks = [con + cr for con in self.contracts]
+                self.__dict__["ticks_" + cat_name] = ticks
+                dfws_category[cr] = self.pivot_dataframe(df, ticks)
+
+        return dfws_category
+
     @staticmethod
     def pivot_dataframe(df, tick_list):
-        """Makes a wide dataframe with time index"""
+        """
+        Reduces the standardised dataframe to include a subset of the possible tickers
+        and, subsequently returns a wide dataframe: each column corresponds to a ticker.
+
+        :param <List[str]> tick_list: list of the respective tickers.
+        :param <pd.DataFrame> df: standardised dataframe.
+
+        :return <pd.DataFrame> dfw: wide dataframe.
+        """
+
         df['ticker'] = df['cid'] + '_' + df['xcat']
         dfx = df[df["ticker"].isin(tick_list)]
         dfw = dfx.pivot(index="real_date", columns="ticker", values="value")
@@ -97,7 +104,14 @@ class Basket(object):
 
     @staticmethod
     def date_check(date_string):
-        """Checks if string can be converted into date format"""
+        """
+        Validates that the dates passed are valid timestamp expressions and will convert
+        to the required form '%Y-%m-%d'. Will raise an assertion if not in the expected
+        form.
+
+        :param <str> date_string: valid date expression. For instance, "1st January,
+            2000."
+        """
         date_error = "Expected form of string: '%Y-%m-%d'."
         if date_string is not None:
             try:
