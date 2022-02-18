@@ -17,7 +17,11 @@ class Basket(object):
 
         """
         Calculates the returns and carries of baskets of financial contracts using
-        various weighting methods.
+        various weighting methods. Each instance of the Class will have an associated
+        standardised dataframe, and the categories it will be defined over are the
+        return and carry categories, and external weights if required. Therefore, if
+        additional return or carry categories are required, a new instance will have to
+        to be instantiated by the user.
 
         :param <pd.Dataframe> df: standardized DataFrame with following columns: 'cid',
             'xcat', 'real_date' and 'value'.
@@ -53,8 +57,8 @@ class Basket(object):
         self.dfx = reduce_df_by_ticker(df, start=start, end=end, ticks=self.tickers,
                                        blacklist=blacklist)
 
-        self.dict_retcry = {}  # dictionary for collecting basket return/carry dfs
-        self.dict_wgs = {}  # dictionary for collecting basket return/carry dfs
+        self.dict_retcry = {}  # dictionary for collecting basket return/carry dfs.
+        self.dict_wgs = {}  # dictionary for collecting basket return/carry dfs.
 
     def category_handler(self, df: pd.DataFrame, category: List[str], cat_name: str):
         """
@@ -79,10 +83,13 @@ class Basket(object):
 
             self.__dict__[cat_name] = category
             dfws_category = {}
-            for cr in category:
-                ticks = [con + cr for con in self.contracts]
+            for cat in category:
+                ticks = [con + cat for con in self.contracts]
                 self.__dict__["ticks_" + cat_name] = ticks
-                dfws_category[cr] = self.pivot_dataframe(df, ticks)
+                dfws_category[cat] = self.pivot_dataframe(df, ticks)
+        else:
+            dfws_category = None
+            self.__dict__["ticks_" + cat_name] = []
 
         return dfws_category
 
@@ -417,24 +424,39 @@ class Basket(object):
 
         df_retcry = pd.concat(store)
         self.dict_retcry[basket_name] = df_retcry
-        self.dfws_wgt[basket_name] = dfw_wgs
+        self.dict_wgs[basket_name] = dfw_wgs
 
     def return_basket(self, basket_names: List[str]):
         """
-        Return standardized dataframe with one or more basket performance data.
+        Return standardized dataframe with one or more basket performance data. Various
+        baskets can be computed on the same instance using different weighting methods.
+        However, the return type or carry type, for each basket dataframe, will be the
+        same. The performance data will only change from using the different weighting
+        method.
 
-        :param basket_names: single basket name or list for which performance data
-            are to be returned.
+        :param <List[str]> basket_names: single basket name or list for which performance
+            data are to be returned.
 
         :return <pd.Dataframe>: standardized DataFrame with the basket return and
             (possibly) carry data in standard form, i.e. columns 'cid', 'xcats',
             'real_date' and 'value'.
         """
+        basket_error = "String or List of basket names expected."
+        assert isinstance(basket_error, (list, str)), basket_error
+        if isinstance(basket_names, str):
+            basket_names = [basket_names]
+
         ret_baskets = []
         for b in basket_names:
-            ret_baskets.append(self.dict_retcry[b])
+            try:
+                dfw_retcry = self.dict_retcry[b]
+            except KeyError as e:
+                print(f"Incorrect basket name, {e}.")
+            else:
+                ret_baskets.append(dfw_retcry)
 
-        return pd.concat(ret_baskets)
+        return_df = pd.concat(ret_baskets)
+        return return_df.reset_index()
 
     def return_weights(self, basket_names: List[str]):
         """
@@ -446,18 +468,29 @@ class Basket(object):
 
         :return <pd.Dataframe>: standardized DataFrame with basket weights.
         """
+        basket_error = "String or List of basket names expected."
+        assert isinstance(basket_error, (list, str)), basket_error
+        if isinstance(basket_names, str):
+            basket_names = [basket_names]
 
         weight_baskets = []
         select = ['ticker', 'real_date', 'value']
         for b in basket_names:
-            dfw_wgs = self.dfws_wgt[b]
-            dfw_wgs.columns.name = "cid"
-            w = dfw_wgs.stack().to_frame("value").reset_index()
-            w = w.sort_values(['ticker', 'real_date'])[select]
-            w = w.loc[w.value > 0, select]
-            weight_baskets.append(w)
+            try:
+                dfw_wgs = self.dict_wgs[b]
+            except KeyError as e:
+                print(f"Incorrect basket name, {e}.")
+            else:
+                dfw_wgs.columns.name = "cid"
+                w = dfw_wgs.stack().to_frame("value").reset_index()
+                w = w.sort_values(['real_date'])
+                w = w.rename(columns={'cid': 'ticker'})
+                w = w[select]
+                w = w.loc[w.value > 0, select]
+                weight_baskets.append(w)
 
-        return pd.concat(weight_baskets)
+        return_df = pd.concat(weight_baskets)
+        return return_df.reset_index()
 
 
 if __name__ == "__main__":
@@ -490,6 +523,12 @@ if __name__ == "__main__":
     gdp_figures = [17.0, 17.0, 41.0, 9.0, 250.0]
 
     contracts_1 = ['AUD_FX', 'GBP_FX', 'NZD_FX', 'USD_EQ']
-    basket_1 = Basket(dfd, contracts=contracts_1,
-                      ret='XR_NSA', cry=['CRY_NSA', 'CRR_NSA'])
-    basket_1.make_basket(weight_meth='equal', basket_name='GLB_EQUAL')
+    basket_1 = Basket(df=dfd, contracts=contracts_1,
+                      ret='XR_NSA', cry=['CRY_NSA', 'CRR_NSA'], blacklist=black)
+    basket_1.make_basket(weight_meth='equal', max_weight=0.55, basket_name='GLB_EQUAL')
+
+    df_basket = basket_1.return_basket("GLB_EQUAL")
+    print(df_basket)
+
+    df_weight = basket_1.return_weights("GLB_EQUAL")
+    print(df_weight)
