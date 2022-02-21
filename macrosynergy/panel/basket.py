@@ -292,42 +292,26 @@ class Basket(object):
                      ewgt: str = None, max_weight: float = 1.0,
                      remove_zeros: bool = True):
         """
-        Returns wide dataframe of weights to be used for basket series.
+        Returns wide dataframe of weights to be used for basket series. The method can be
+        called independently on the instance and will return a wide dataframe but the
+        Class's expected engagement is to call the method return_weights() to receive the
+        corresponding standardised weight dataframe. The method should only be called
+        from the scope of make_basket().
 
-        :param <str or List[str]> weight_meth: method used for weighting constituent
-            returns and carry. The parameter can receive either a single weight method or
-            multiple weighting methods. The options are as follows:
-            [1] "equal": all constituents with non-NA returns have the same weight.
-                This is the default.
-            [2] "fixed": weights are proportionate to a single list of values provided
-                which are passed to argument `weights` (each value corresponds to a
-                single contract).
-            [3] "invsd": weights based on inverse to standard deviations of recent
-                returns.
-            [4] "values": weights proportionate to a panel of values of exogenous weight
-                category.
-            [5] "inv_values": weights are inversely proportionate to of values of exogenous
-                weight category.
-        :param <List[float]> weights: single list of weights corresponding to the base
-            tickers in `contracts` argument. This is only relevant for the fixed weight
-            method.
-        :param <str> lback_meth: lookback method for "invsd" weighting method. Default is
-            Exponential MA, "ema". The alternative is simple moving average, "ma".
-        :param <int> lback_periods: Lookback periods for "invsd" weighting method.
-            Default is 21.  Half-time for "xma" and full lookback period for "ma".
-        :param <str> ewgt: Exogenous weight postfix that defines the weight value panel.
-            Only needed for the 'values' or 'inv_values' method.
-        :param <float> max_weight: maximum weight of a single contract. Default is 1, i.e
-            zero restrictions. The purpose of the restriction is to limit concentration
-            within the basket.
-        :param <bool> remove_zeros: removes the zeros. Default is set to True.
+        :param <str> weight_meth:
+        :param <List[float]> weights:
+        :param <str> lback_meth:
+        :param <int> lback_periods:
+        :param <str> ewgt:
+        :param <float> max_weight:
+        :param <bool> remove_zeros:
 
         return: <pd.DataFrame>: wide dataframe of contract weights across time.
         """
         assert 0.0 < max_weight <= 1.0
         assert weight_meth in ['equal', 'fixed', 'values', 'inv_values', 'invsd']
 
-        # Apply weight method
+        # Apply weight method.
 
         if weight_meth == "equal":
             dfw_wgs = self.equal_weight(df_ret=self.dfw_ret)
@@ -352,7 +336,8 @@ class Basket(object):
 
         elif weight_meth in ["values", "inv_values"]:
             assert ewgt in self.wgt, f'{ewgt} is not defined on the instance.'
-            dfw_wgt = self.dfws_wgt[ewgt].shift(1)  # Lag by one day to be used as weights.
+            # Lag by one day to be used as weights.
+            dfw_wgt = self.dfws_wgt[ewgt].shift(1)
             cols = sorted(dfw_wgt.columns)
             dfw_ret = dfw_wgt.reindex(cols, axis=1)
             dfw_wgt = dfw_wgt.reindex(cols, axis=1)
@@ -380,8 +365,23 @@ class Basket(object):
         """
         Calculates all basket performance categories.
 
-        :param <str or List[str]> weight_meth:
-        :param <List[float]> weights:
+        :param <str> weight_meth: method used for weighting constituent returns and
+            carry. The parameter can receive either a single weight method or
+            multiple weighting methods. The options are as follows:
+            [1] "equal": all constituents with non-NA returns have the same weight.
+                This is the default.
+            [2] "fixed": weights are proportionate to a single list of values provided
+                which are passed to argument `weights` (each value corresponds to a
+                single contract).
+            [3] "invsd": weights based on inverse to standard deviations of recent
+                returns.
+            [4] "values": weights proportionate to a panel of values of exogenous weight
+                category.
+            [5] "inv_values": weights are inversely proportionate to of values of exogenous
+                weight category.
+        :param <List[float]> weights: single list of weights corresponding to the base
+            tickers in `contracts` argument. This is only relevant for the fixed weight
+            method.
         :param <str> lback_meth: look-back method for "invsd" weighting method. Default
             is Exponential MA, "ema". The alternative is simple moving average, "ma".
         :param <int> lback_periods: look-back periods for "invsd" weighting method.
@@ -407,7 +407,7 @@ class Basket(object):
         select = ["ticker", "real_date", "value"]
         dfw_bret = self.dfw_ret.multiply(dfw_wgs).sum(axis=1)
         dfxr = dfw_bret.to_frame("value").reset_index()
-        basket_ret = basket_name + self.ret
+        basket_ret = basket_name + "_" + self.ret
         dfxr = dfxr.assign(ticker=basket_ret)[select]
         store = [dfxr]
 
@@ -416,7 +416,7 @@ class Basket(object):
             for cr in self.cry:
                 dfw_bcry = self.dfws_cry[cr].multiply(dfw_wgs).sum(axis=1)
                 dfcry = dfw_bcry.to_frame("value").reset_index()
-                basket_cry = basket_name + cr
+                basket_cry = basket_name + "_" + cr
                 dfcry = dfcry.assign(ticker=basket_cry)[select]
                 cry_list.append(dfcry)
 
@@ -496,7 +496,8 @@ class Basket(object):
 if __name__ == "__main__":
 
     cids = ['AUD', 'GBP', 'NZD', 'USD']
-    xcats = ['FXXR_NSA', 'FXCRY_NSA', 'FXCRR_NSA', 'EQXR_NSA', 'EQCRY_NSA', 'EQCRR_NSA']
+    xcats = ['FXXR_NSA', 'FXCRY_NSA', 'FXCRR_NSA', 'EQXR_NSA', 'EQCRY_NSA', 'EQCRR_NSA',
+             'FXWBASE_NSA', 'EQWBASE_NSA']
 
     df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
                                                 'sd_mult'])
@@ -514,6 +515,8 @@ if __name__ == "__main__":
     df_xcats.loc['EQXR_NSA'] = ['2012-01-01', '2020-12-31', 0.5, 2, 0, 0.2]
     df_xcats.loc['EQCRY_NSA'] = ['2010-01-01', '2020-12-31', 2, 1.5, 0.9, 0.5]
     df_xcats.loc['EQCRR_NSA'] = ['2010-01-01', '2020-12-31', 1.5, 1.5, 0.9, 0.5]
+    df_xcats.loc['FXWBASE_NSA'] = ['2010-01-01', '2020-12-31', 1, 1.5, 0.8, 0.5]
+    df_xcats.loc['EQWBASE_NSA'] = ['2010-01-01', '2020-12-31', 1, 1.5, 0.9, 0.5]
 
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
@@ -523,19 +526,46 @@ if __name__ == "__main__":
     gdp_figures = [17.0, 17.0, 41.0, 9.0, 250.0]
 
     contracts_1 = ['AUD_FX', 'GBP_FX', 'NZD_FX', 'USD_EQ']
+
+    # First test. Multiple carries. Equal weight method.
+    # The main aspect to check in the code is that basket performance has been applied to
+    # both the return category and the multiple carry categories.
     basket_1 = Basket(df=dfd, contracts=contracts_1,
-                      ret='XR_NSA', cry=['CRY_NSA', 'CRR_NSA'], blacklist=black)
-    basket_1.make_basket(weight_meth='equal', max_weight=0.55, basket_name='GLB_EQUAL')
+                      ret="XR_NSA", cry=["CRY_NSA", "CRR_NSA"], blacklist=black)
+    # basket_1.make_basket(weight_meth="equal", max_weight=0.55, basket_name="GLB_EQUAL")
 
-    df_basket = basket_1.return_basket("GLB_EQUAL")
-    print(df_basket)
+    # df_basket = basket_1.return_basket("GLB_EQUAL")
+    # print(df_basket)
 
-    df_weight = basket_1.return_weights("GLB_EQUAL")
-    print(df_weight)
+    # df_weight = basket_1.return_weights("GLB_EQUAL")
+    # print(df_weight)
 
+    # Second test. Zero carries. Inverse weight method.
+    # However, call make_basket() method multiple times, using different weighting
+    # methods, to understand how the basket's performance varies with different weight
+    # methods. For instance, does limiting the volatility of the basket, over a period of
+    # time, produce lower returns than simply taking an equal weight ?
     basket_2 = Basket(df=dfd, contracts=contracts_1,
-                      ret='XR_NSA', blacklist=black)
+                      ret="XR_NSA", blacklist=black)
     basket_2.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
-                         max_weight=0.55, remove_zeros=True, basket_name='GLB_EQUAL')
-    df_basket = basket_1.return_basket("GLB_EQUAL")
-    print(df_basket)
+                         max_weight=0.55, remove_zeros=True, basket_name="GLB_INVERSE")
+    df_basket_inv = basket_2.return_basket("GLB_INVERSE")
+
+    # basket_2.make_basket(weight_meth="equal", max_weight=0.55, basket_name="GLB_EQUAL")
+    # df_basket_equal = basket_2.return_basket("GLB_EQUAL")
+    # print(df_basket_inv)
+    # print(df_basket_equal)
+
+    # Third test. One carry. Inverse values weight method.
+    # Allow for multiple external weight methods being passed in. If multiple external
+    # weight categories are involved in the basket calculation, pass all the categories
+    # on the instance and call the make_basket() method separately using the respective
+    # weight categories.
+    basket_3 = Basket(df=dfd, contracts=contracts_1, ret="XR_NSA", blacklist=black,
+                      ewgts=['FXWBASE_NSA', 'EQWBASE_NSA'])
+
+    basket_3.make_basket(weight_meth="inv_values", ewgt="FXWBASE_NSA",
+                         max_weight=0.55, basket_name="GLB_INV_VALUES")
+
+    df_basket_inv_values = basket_3.return_basket("GLB_INV_VALUES")
+    print(df_basket_inv_values)
