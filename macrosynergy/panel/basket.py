@@ -341,7 +341,7 @@ class Basket(object):
             cols = sorted(dfw_wgt.columns)
             dfw_ret = dfw_wgt.reindex(cols, axis=1)
             dfw_wgt = dfw_wgt.reindex(cols, axis=1)
-            dfw_wgs = self.values_weight(dfw_ret, dfw_wgt)
+            dfw_wgs = self.values_weight(dfw_ret, dfw_wgt, weight_meth)
 
         else:
             raise NotImplementedError(f"Weight method unknown {weight_meth}")
@@ -561,3 +561,13 @@ if __name__ == "__main__":
     # weight categories are involved in the basket calculation, pass all the categories
     # on the instance and call the make_basket() method separately using the respective
     # weight categories.
+
+    basket_3 = Basket(df=dfd, contracts=contracts_1, ret="XR_NSA", cry=["CRY_NSA"],
+                      blacklist=black, ewgts=['WBASE_NSA', 'WBASE_NSA'])
+
+    basket_3.make_basket(weight_meth="inv_values", ewgt="WBASE_NSA", max_weight=0.55,
+                         remove_zeros=True,
+                         basket_name="GLB_INV_VALUES")
+
+    df_inv_values = basket_3.return_basket("GLB_INV_VALUES")
+    print(df_inv_values)
