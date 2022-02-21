@@ -63,13 +63,13 @@ class Basket(object):
     def store_attributes(self, df: pd.DataFrame, pfx: List[str], pf_name: str):
         """
         Adds multiple attributes to class based on postfixes that denote carry or
-        weight types.
+        external weight types.
 
         :param <pd.DataFrame> df: original, standardised dataframe.
-        :param <List[str]> pfx: carry category postfix.
+        :param <List[str]> pfx: category postfixes involved in the basket calculation.
         :param <str> pf_name: associated name of the postfix "cry" or "wgt".
 
-        Note: These are [1] flags of existence of cary and weight strings in class,
+        Note: These are [1] flags of existence of carry and weight strings in class,
         [2] lists of tickers related to all postfixes, [3] a dictionary of wide time
         series panel dataframes for all postfixes.
         """
@@ -362,6 +362,32 @@ class Basket(object):
 
         return dfw_wgs
 
+    @staticmethod
+    def column_manager(df_cat: pd.DataFrame, dfw_wgs: pd.DataFrame):
+        """
+        Will match the column names of the two dataframes involved in the computation:
+        either the return & weight dataframes or the carry & weight dataframes. The
+        pandas multiply operation requires the column names, of both dataframes involved
+        in the binary operation, to be identical.
+
+        :param <pd.DataFrame> df_cat: return or carry dataframe.
+        :param <pd.DataFrame> dfw_wgs: weight dataframe.
+
+        :return <pd.DataFrame> dfw_wgs: modified weight dataframe (column names will map
+            to the other dataframe received).
+        """
+
+        df_cat = df_cat.reindex(sorted(df_cat.columns), axis=1)
+        dfw_wgs = dfw_wgs.reindex(sorted(dfw_wgs.columns), axis=1)
+
+        ret_cols = df_cat.columns
+        weight_cols = dfw_wgs.columns
+
+        if all(ret_cols != weight_cols):
+            dfw_wgs.columns = ret_cols
+
+        return dfw_wgs
+
     def make_basket(self, weight_meth: str = "equal", weights: List[float] = None,
                     lback_meth: str = "xma", lback_periods: int = 21,
                     ewgt: str = None, max_weight: float = 1.0, remove_zeros: bool = True,
@@ -409,13 +435,8 @@ class Basket(object):
                                     remove_zeros=remove_zeros)
         select = ["ticker", "real_date", "value"]
 
-        ret_cols = self.dfw_ret.columns
-        weight_cols = dfw_wgs.columns
-
-        if all(ret_cols != weight_cols):
-            dfw_wgs.columns = ret_cols
-
-        dfw_bret = self.dfw_ret.multiply(dfw_wgs).sum(axis=1)
+        dfw_wgs_copy = self.column_manager(df_cat=self.dfw_ret, dfw_wgs=dfw_wgs)
+        dfw_bret = self.dfw_ret.multiply(dfw_wgs_copy).sum(axis=1)
         dfxr = dfw_bret.to_frame("value").reset_index()
         basket_ret = basket_name + "_" + self.ret
         dfxr = dfxr.assign(ticker=basket_ret)[select]
@@ -424,6 +445,7 @@ class Basket(object):
         if self.cry_flag:
             cry_list = []
             for cr in self.cry:
+                dfw_wgs = self.column_manager(df_cat=self.dfws_cry[cr], dfw_wgs=dfw_wgs)
                 dfw_bcry = self.dfws_cry[cr].multiply(dfw_wgs).sum(axis=1)
                 dfcry = dfw_bcry.to_frame("value").reset_index()
                 basket_cry = basket_name + "_" + cr
@@ -481,6 +503,7 @@ class Basket(object):
 
         :return <pd.Dataframe>: standardized DataFrame with basket weights.
         """
+
         if basket_names is None:
             basket_names = list(self.dict_wgs.keys())
 
