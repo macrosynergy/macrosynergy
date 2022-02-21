@@ -239,7 +239,8 @@ class DataQueryInterface(object):
         if not count:
             params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
                        "calendar": calendar, "frequency": frequency, "conversion":
-                       conversion, "nan_treatment": nan_treatment}
+                       conversion, "nan_treatment": nan_treatment,
+                       "data": "NO_REFERENCE_DATA"}
             params.update(params_)
 
         t = self.thread_handler
