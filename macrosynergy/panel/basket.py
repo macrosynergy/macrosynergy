@@ -456,7 +456,7 @@ class Basket(object):
                 ret_baskets.append(dfw_retcry)
 
         return_df = pd.concat(ret_baskets)
-        return return_df.reset_index()
+        return return_df.reset_index(drop=True)
 
     def return_weights(self, basket_names: List[str]):
         """
@@ -490,7 +490,7 @@ class Basket(object):
                 weight_baskets.append(w)
 
         return_df = pd.concat(weight_baskets)
-        return return_df.reset_index()
+        return return_df.reset_index(drop=True)
 
 
 if __name__ == "__main__":
