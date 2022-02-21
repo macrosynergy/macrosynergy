@@ -532,13 +532,13 @@ if __name__ == "__main__":
     # both the return category and the multiple carry categories.
     basket_1 = Basket(df=dfd, contracts=contracts_1,
                       ret="XR_NSA", cry=["CRY_NSA", "CRR_NSA"], blacklist=black)
-    # basket_1.make_basket(weight_meth="equal", max_weight=0.55, basket_name="GLB_EQUAL")
+    basket_1.make_basket(weight_meth="equal", max_weight=0.55, basket_name="GLB_EQUAL")
 
-    # df_basket = basket_1.return_basket("GLB_EQUAL")
-    # print(df_basket)
+    df_basket = basket_1.return_basket("GLB_EQUAL")
+    print(df_basket)
 
-    # df_weight = basket_1.return_weights("GLB_EQUAL")
-    # print(df_weight)
+    df_weight = basket_1.return_weights("GLB_EQUAL")
+    print(df_weight)
 
     # Second test. Zero carries. Inverse weight method.
     # However, call make_basket() method multiple times, using different weighting
@@ -551,21 +551,13 @@ if __name__ == "__main__":
                          max_weight=0.55, remove_zeros=True, basket_name="GLB_INVERSE")
     df_basket_inv = basket_2.return_basket("GLB_INVERSE")
 
-    # basket_2.make_basket(weight_meth="equal", max_weight=0.55, basket_name="GLB_EQUAL")
-    # df_basket_equal = basket_2.return_basket("GLB_EQUAL")
-    # print(df_basket_inv)
-    # print(df_basket_equal)
+    basket_2.make_basket(weight_meth="equal", max_weight=0.55, basket_name="GLB_EQUAL")
+    df_basket_equal = basket_2.return_basket("GLB_EQUAL")
+    print(df_basket_inv)
+    print(df_basket_equal)
 
     # Third test. One carry. Inverse values weight method.
     # Allow for multiple external weight methods being passed in. If multiple external
     # weight categories are involved in the basket calculation, pass all the categories
     # on the instance and call the make_basket() method separately using the respective
     # weight categories.
-    basket_3 = Basket(df=dfd, contracts=contracts_1, ret="XR_NSA", blacklist=black,
-                      ewgts=['FXWBASE_NSA', 'EQWBASE_NSA'])
-
-    basket_3.make_basket(weight_meth="inv_values", ewgt="FXWBASE_NSA",
-                         max_weight=0.55, basket_name="GLB_INV_VALUES")
-
-    df_basket_inv_values = basket_3.return_basket("GLB_INV_VALUES")
-    print(df_basket_inv_values)
