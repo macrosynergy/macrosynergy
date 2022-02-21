@@ -56,7 +56,6 @@ class Basket(object):
         self.end = self.date_check(end)
         self.dfx = reduce_df_by_ticker(df, start=start, end=end, ticks=self.tickers,
                                        blacklist=blacklist)
-
         self.dict_retcry = {}  # dictionary for collecting basket return/carry dfs.
         self.dict_wgs = {}  # dictionary for collecting basket return/carry dfs.
 
@@ -76,8 +75,10 @@ class Basket(object):
 
         category_flag = category is not None
         self.__dict__[cat_name + "_flag"] = category_flag
+        self.__dict__["ticks_" + cat_name] = []
+
         if category_flag:
-            error = "`cry` must be a <str> or a <List[str]>."
+            error = f"'{cat_name}' must be a <str> or a <List[str]>."
             assert isinstance(category, (list, str)), error
             category = [category] if isinstance(category, str) else category
 
@@ -85,11 +86,10 @@ class Basket(object):
             dfws_category = {}
             for cat in category:
                 ticks = [con + cat for con in self.contracts]
-                self.__dict__["ticks_" + cat_name] = ticks
+                self.__dict__["ticks_" + cat_name] += ticks
                 dfws_category[cat] = self.pivot_dataframe(df, ticks)
         else:
             dfws_category = None
-            self.__dict__["ticks_" + cat_name] = []
 
         return dfws_category
 
@@ -403,8 +403,14 @@ class Basket(object):
                                     lback_meth=lback_meth, lback_periods=lback_periods,
                                     ewgt=ewgt, max_weight=max_weight,
                                     remove_zeros=remove_zeros)
-
         select = ["ticker", "real_date", "value"]
+
+        ret_cols = self.dfw_ret.columns
+        weight_cols = dfw_wgs.columns
+
+        if all(ret_cols != weight_cols):
+            dfw_wgs.columns = ret_cols
+
         dfw_bret = self.dfw_ret.multiply(dfw_wgs).sum(axis=1)
         dfxr = dfw_bret.to_frame("value").reset_index()
         basket_ret = basket_name + "_" + self.ret
@@ -563,11 +569,17 @@ if __name__ == "__main__":
     # weight categories.
 
     basket_3 = Basket(df=dfd, contracts=contracts_1, ret="XR_NSA", cry=["CRY_NSA"],
-                      blacklist=black, ewgts=['WBASE_NSA', 'WBASE_NSA'])
+                      blacklist=black, ewgts='WBASE_NSA')
 
     basket_3.make_basket(weight_meth="inv_values", ewgt="WBASE_NSA", max_weight=0.55,
-                         remove_zeros=True,
-                         basket_name="GLB_INV_VALUES")
+                         remove_zeros=True, basket_name="GLB_INV_VALUES")
 
     df_inv_values = basket_3.return_basket("GLB_INV_VALUES")
     print(df_inv_values)
+    df_weight = basket_3.return_weights("GLB_INV_VALUES")
+    print(df_weight)
+
+    basket_3.make_basket(weight_meth="equal", max_weight=0.55, remove_zeros=True,
+                         basket_name="GLB_EQUAL")
+    df_equal = basket_3.return_basket("GLB_EQUAL")
+    print(df_equal)
