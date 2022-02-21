@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 import random
-from typing import List
+from typing import List, Union
 from macrosynergy.panel.historic_vol import expo_weights, expo_std, flat_std
 from macrosynergy.management.shape_dfs import reduce_df_by_ticker
 from macrosynergy.panel.converge_row import ConvergeRow
@@ -12,22 +12,19 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 class Basket(object):
 
     def __init__(self, df: pd.DataFrame, contracts: List[str], ret: str = "XR_NSA",
-                 cry: List[str] = None, start: str = None, end: str = None,
+                 cry: Union[str, List[str]] = None, start: str = None, end: str = None,
                  blacklist: dict = None, ewgts: List[str] = None):
 
         """
         Calculates the returns and carries of baskets of financial contracts using
-        various weighting methods. Each instance of the Class will have an associated
-        standardised dataframe, and the categories it will be defined over are the
-        return and carry categories, and external weights if required. Therefore, if
-        additional return or carry categories are required, a new instance will have to
-        to be instantiated by the user.
+        various weighting methods.
 
-        :param <pd.Dataframe> df: standardized DataFrame with following columns: 'cid',
+        :param <pd.Dataframe> df: standardized DataFrame containing the columns: 'cid',
             'xcat', 'real_date' and 'value'.
         :param <List[str]> contracts: base tickers (combinations of cross-sections and
-            base categories) denoting contracts that go into the basket.
-        :param <str> ret: return category postfix; default is "XR_NSA".
+            base categories) that define the contracts that go into the basket.
+        :param <str> ret: return category postfix to be appended to the contract base;
+            default is "XR_NSA".
         :param <List[str] or str> cry: carry category postfix; default is None. The field
             can either be a single carry or multiple carries defined in a List.
         :param <str> start: earliest date in ISO 8601 format. Default is None.
@@ -38,6 +35,8 @@ class Basket(object):
         :param List[str] ewgts: one or more postfixes that may identify exogenous weight
             categories. Similar to return postfixes they are appended to base tickers.
 
+        N.B.: Each instance of the class will update associated standardised dataframes,
+        containing return and carry categories, and external weights.
         """
 
         assert isinstance(contracts, list)
@@ -49,8 +48,10 @@ class Basket(object):
         self.ret = ret
         self.ticks_ret = [con + ret for con in contracts]
         self.dfw_ret = self.pivot_dataframe(df, self.ticks_ret)
-        self.dfws_cry = self.category_handler(df, cry, "cry")
-        self.dfws_wgt = self.category_handler(df, ewgts, "wgt")
+
+        self.store_attributes(df, cry, "cry")
+        self.store_attributes(df, ewgts, "wgt")
+
         self.tickers = self.ticks_ret + self.ticks_cry + self.ticks_wgt
         self.start = self.date_check(start)
         self.end = self.date_check(end)
@@ -60,38 +61,38 @@ class Basket(object):
         self.dict_retcry = {}  # dictionary for collecting basket return/carry dfs.
         self.dict_wgs = {}  # dictionary for collecting basket return/carry dfs.
 
-    def category_handler(self, df: pd.DataFrame, category: List[str], cat_name: str):
+    def store_attributes(self, df: pd.DataFrame, pfx: List[str], pf_name: str):
         """
-        Handles for multiple carries or external weights. Each category will be stored in
-        a dictionary where the key will be the associated postfix and the value will be
-        the respective wide dataframe.
+        Adds multiple attributes to class based on postfixes that denote carry or
+        weight types.
 
         :param <pd.DataFrame> df: original, standardised dataframe.
-        :param <List[str]> category: carry category postfix.
-        :param <str> cat_name: associated name of the category: carry, "cry", or external
-            weight, "wgt".
+        :param <List[str]> pfx: carry category postfix.
+        :param <str> pf_name: associated name of the postfix "cry" or "wgt".
 
-        :param <dict> dfws_cry:
+        Note: These are [1] flags of existence of cary and weight strings in class,
+        [2] lists of tickers related to all postfixes, [3] a dictionary of wide time
+        series panel dataframes for all postfixes.
         """
 
-        category_flag = category is not None
-        self.__dict__[cat_name + "_flag"] = category_flag
-        if category_flag:
+        pfx_flag = pfx is not None
+        self.__dict__[pf_name + "_flag"] = pfx_flag
+        if pfx_flag:
             error = "`cry` must be a <str> or a <List[str]>."
-            assert isinstance(category, (list, str)), error
-            category = [category] if isinstance(category, str) else category
+            assert isinstance(pfx, (list, str)), error
+            pfx = [pfx] if isinstance(pfx, str) else pfx
 
-            self.__dict__[cat_name] = category
-            dfws_category = {}
-            for cat in category:
+            self.__dict__[pf_name] = pfx
+            dfws_pfx = {}
+            for cat in pfx:
                 ticks = [con + cat for con in self.contracts]
-                self.__dict__["ticks_" + cat_name] = ticks
-                dfws_category[cat] = self.pivot_dataframe(df, ticks)
+                self.__dict__["ticks_" + pf_name] = ticks
+                dfws_pfx[cat] = self.pivot_dataframe(df, ticks)
         else:
-            dfws_category = None
-            self.__dict__["ticks_" + cat_name] = []
+            dfws_pfx = None
+            self.__dict__["ticks_" + pf_name] = []
 
-        return dfws_category
+        self.__dict__["dfws_" + pf_name] = dfws_pfx
 
     @staticmethod
     def pivot_dataframe(df, tick_list):
@@ -292,19 +293,24 @@ class Basket(object):
                      ewgt: str = None, max_weight: float = 1.0,
                      remove_zeros: bool = True):
         """
-        Returns wide dataframe of weights to be used for basket series. The method can be
-        called independently on the instance and will return a wide dataframe but the
-        Class's expected engagement is to call the method return_weights() to receive the
-        corresponding standardised weight dataframe. The method should only be called
-        from the scope of make_basket().
+        Returns wide dataframe of weights to be used for basket series.
 
-        :param <str> weight_meth:
-        :param <List[float]> weights:
-        :param <str> lback_meth:
-        :param <int> lback_periods:
-        :param <str> ewgt:
-        :param <float> max_weight:
-        :param <bool> remove_zeros:
+        :param <str> weight_meth: method used for weighting constituent returns and
+            carry. The parameter can receive either a single weight method or
+            multiple weighting methods. See `make_basket` docstring.
+        :param <List[float]> weights: single list of weights corresponding to the base
+            tickers in `contracts` argument. This is only relevant for the fixed weight
+            method.
+        :param <str> lback_meth: look-back method for "invsd" weighting method. Default
+            is Exponential MA, "ema". The alternative is simple moving average, "ma".
+        :param <int> lback_periods: look-back periods for "invsd" weighting method.
+            Default is 21.  Half-time for "xma" and full lookback period for "ma".
+        :param <str> ewgt: Exogenous weight postfix that defines the weight value panel.
+            Only needed for the 'values' or 'inv_values' method.
+        :param <float> max_weight: maximum weight of a single contract. Default is 1, i.e
+            zero restrictions. The purpose of the restriction is to limit concentration
+            within the basket.
+        :param <bool> remove_zeros: removes the zeros. Default is set to True.
 
         return: <pd.DataFrame>: wide dataframe of contract weights across time.
         """
@@ -326,8 +332,7 @@ class Basket(object):
             dfw_wgs = self.fixed_weight(df_ret=self.dfw_ret, weights=weights)
 
         elif weight_meth == "invsd":
-            error_message = "Two options for the inverse-weighting method are 'ma' and " \
-                            "'xma'."
+            error_message = "Lookback method method must be 'ma' or 'xma'."
             assert lback_meth in ["xma", "ma"], error_message
             assert isinstance(lback_periods, int), "Expects <int>."
             dfw_wgs = self.inverse_weight(dfw_ret=self.dfw_ret, lback_meth=lback_meth,
@@ -351,7 +356,7 @@ class Basket(object):
         fvi = max(dfw_wgs.first_valid_index(), self.dfw_ret.first_valid_index())
         dfw_wgs = dfw_wgs[fvi:]
 
-        # Impose cap on cross-section weight.
+        # Impose cap on cross-section weights.
 
         if max_weight < 1.0:
             dfw_wgs = self.max_weight_func(weights=dfw_wgs, max_weight=max_weight)
@@ -426,21 +431,23 @@ class Basket(object):
         self.dict_retcry[basket_name] = df_retcry
         self.dict_wgs[basket_name] = dfw_wgs
 
-    def return_basket(self, basket_names: List[str]):
+    def return_basket(self, basket_names: Union[str, List[str]] = None):
         """
-        Return standardized dataframe with one or more basket performance data. Various
-        baskets can be computed on the same instance using different weighting methods.
-        However, the return type or carry type, for each basket dataframe, will be the
-        same. The performance data will only change from using the different weighting
-        method.
+        Return standardized dataframe of basket performance data based on one or more
+        weighting methods.
 
-        :param <List[str]> basket_names: single basket name or list for which performance
-            data are to be returned.
+        :param <str or List[str]> basket_names: single basket name or list for which
+            performance data are to be returned. If none is given all baskets added to
+            the instance are selected.
 
         :return <pd.Dataframe>: standardized DataFrame with the basket return and
             (possibly) carry data in standard form, i.e. columns 'cid', 'xcats',
             'real_date' and 'value'.
         """
+
+        if basket_names is None:
+            basket_names = list(self.dict_retcry.keys())
+
         basket_error = "String or List of basket names expected."
         assert isinstance(basket_error, (list, str)), basket_error
         if isinstance(basket_names, str):
@@ -451,23 +458,27 @@ class Basket(object):
             try:
                 dfw_retcry = self.dict_retcry[b]
             except KeyError as e:
-                print(f"Incorrect basket name, {e}.")
+                print(f"Basket not found: {e}.")
             else:
                 ret_baskets.append(dfw_retcry)
 
         return_df = pd.concat(ret_baskets)
         return return_df.reset_index(drop=True)
 
-    def return_weights(self, basket_names: List[str]):
+    def return_weights(self, basket_names: Union[str, List[str]] = None):
         """
         Return the standardised dataframe containing the corresponding weights used to
         compute the basket.
 
-        :param basket_names: single basket name or list for which performance data
-            are to be returned.
+        :param <str or List[str]> basket_names: single basket name or list for which
+            performance data are to be returned. If none is given all baskets added to
+            the instance are selected.
 
         :return <pd.Dataframe>: standardized DataFrame with basket weights.
         """
+        if basket_names is None:
+            basket_names = list(self.dict_wgs.keys())
+
         basket_error = "String or List of basket names expected."
         assert isinstance(basket_error, (list, str)), basket_error
         if isinstance(basket_names, str):
@@ -479,7 +490,7 @@ class Basket(object):
             try:
                 dfw_wgs = self.dict_wgs[b]
             except KeyError as e:
-                print(f"Incorrect basket name, {e}.")
+                print(f"Basket not found: {e}.")
             else:
                 dfw_wgs.columns.name = "cid"
                 w = dfw_wgs.stack().to_frame("value").reset_index()
@@ -532,7 +543,14 @@ if __name__ == "__main__":
     # both the return category and the multiple carry categories.
     basket_1 = Basket(df=dfd, contracts=contracts_1,
                       ret="XR_NSA", cry=["CRY_NSA", "CRR_NSA"], blacklist=black)
-    # basket_1.make_basket(weight_meth="equal", max_weight=0.55, basket_name="GLB_EQUAL")
+    basket_1.make_basket(weight_meth="equal", max_weight=0.55,
+                         basket_name="GLBEQUAL")
+    basket_1.make_basket(weight_meth="fixed", max_weight=0.55,
+                         weights=[1/6, 1/6, 1/6, 1/2],
+                         basket_name="GLBFIXED")
+    dfp_1 = basket_1.return_basket()
+    dfw_1 = basket_1.return_weights()
+
 
     # df_basket = basket_1.return_basket("GLB_EQUAL")
     # print(df_basket)
