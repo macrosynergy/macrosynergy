@@ -172,22 +172,22 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
                        basket_tik: str = "GLB_ALL", return_weights: bool = False):
 
     """
-    Basket performance returns approximate return and - optionally - carry series for a
-    basket of underlying contracts.
+    Basket performance returns a single approximate return and - optionally - carry
+    series for a basket of underlying contracts.
 
     :param <pd.Dataframe> df: standardized DataFrame with following columns: 'cid',
         'xcats', 'real_date' and 'value'.
-    :param <List[str]> contracts: base tickers (combinations of cross sections and base
+    :param <List[str]> contracts: base tickers (combinations of cross-sections and base
         categories) denoting contracts that go into the basket.
     :param <str> ret: return category postfix; default is "XR_NSA".
     :param <str> cry: carry category postfix; default is None.
     :param <str> start: earliest date in ISO 8601 format. Default is None, i.e.
-        earliest date in data frame is used.
-    :param <str> end: latest date in ISO 8601 format. Default is None, i.e. latest date
-        in data frame is used.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from
-        the data frame. If one cross section has several blacklist periods append numbers
-        to the cross section code.
+        the earliest date in data frame is used.
+    :param <str> end: latest date in ISO 8601 format. Default is None, i.e. the latest
+        date in data frame is used.
+    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
+        the data frame. If one cross-section has several blacklist periods append numbers
+        to the cross-section code.
     :param <str> weight_meth: method used for weighting constituent returns and carry.
         Options are as follows:
     [1] "equal": all constituents with non-NA returns have the same weight.
@@ -205,7 +205,7 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
         full lookback period for "ma".
     :param <bool> remove_zeros: removes the zeros. Default is set to True.
     :param <List[float]> weights: single list of weights corresponding to the base
-        tickers in the contracts argument. This is only relevant for weight_meth="fixed".
+        tickers in `contracts` argument. This is only relevant for `weight_meth="fixed"`.
     :param <str> wgt: postfix used to identify exogenous weight category. Analogously to
         carry and return postfixes this should be added to base tickers to identify the
         values that denote contract weights.
@@ -232,8 +232,7 @@ def basket_performance(df: pd.DataFrame, contracts: List[str], ret: str = "XR_NS
     tickers = ticks_ret.copy()  # Initiates general tickers list.
 
     cry_flag = cry is not None  # Boolean for carry being used.
-    if cry_flag:
-        # Creates a List of contract carries
+    if cry_flag:  # Creates a List of contract carries
         ticks_cry = [c + cry for c in contracts]
         tickers += ticks_cry  # Add to general ticker list.
 
