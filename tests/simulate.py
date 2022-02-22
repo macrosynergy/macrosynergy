@@ -97,7 +97,8 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
     return df_out.reset_index(drop=True)
 
 
-def dataframe_basket(ret = 'XR_NSA', cry = 'CRY_NSA', start = None, end = None):
+def dataframe_basket(ret = 'XR_NSA', cry = ['CRY_NSA'], start = None, end = None,
+                     black = None):
 
     cids = ['AUD', 'GBP', 'NZD', 'USD']
     xcats = ['FXXR_NSA', 'FXCRY_NSA', 'FXCRR_NSA', 'EQXR_NSA', 'EQCRY_NSA', 'EQCRR_NSA',
@@ -125,7 +126,6 @@ def dataframe_basket(ret = 'XR_NSA', cry = 'CRY_NSA', start = None, end = None):
 
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-    black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
 
     contracts = ['AUD_FX', 'AUD_EQ', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
     ticks_cry = []
@@ -145,11 +145,9 @@ def dataframe_basket(ret = 'XR_NSA', cry = 'CRY_NSA', start = None, end = None):
                                                    columns="ticker", values="value")
         dfw_cry_list.append(dfw_cry)
     if len(dfw_cry_list) == 1:
-        dfw_cry = next(iter(dfw_cry_list))
-    else:
-        dfw_cry = dfw_cry_list
+        dfw_cry_list = next(iter(dfw_cry_list))
 
-    return dfw_ret, dfw_cry, dfd
+    return dfw_ret, dfw_cry_list, dfd
 
 
 # DataFrame used for more scrupulous, thorough testing.
