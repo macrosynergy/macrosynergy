@@ -130,7 +130,7 @@ class Basket(object):
     @staticmethod
     def check_weights(weight: pd.DataFrame):
         """
-        Checks if all rows in dataframe add up to roughly 1
+        Checks if all rows in dataframe add up to roughly 1.
 
         :param <pd.DataFrame> weight: weight dataframe.
         """
@@ -326,7 +326,8 @@ class Basket(object):
             message_2 = "List of weights must be equal to the number of contracts."
             assert isinstance(weights, list), message
             assert self.dfw_ret.shape[1] == len(weights), message_2
-            assert all(isinstance(w, (int, float)) for w in weights)
+            message_3 = "Expects a list of floating point values."
+            assert all(isinstance(w, (int, float)) for w in weights), message_3
 
             dfw_wgs = self.fixed_weight(df_ret=self.dfw_ret, weights=weights)
 
