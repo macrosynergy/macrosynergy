@@ -6,7 +6,7 @@ import random
 import sys
 from tests.simulate import dataframe_basket, construct_df
 from macrosynergy.panel.basket import Basket
-from macrosynergy.management.shape_dfs import reduce_df_by_ticker
+from macrosynergy.management.shape_dfs import reduce_df, reduce_df_by_ticker
 from macrosynergy.panel.historic_vol import flat_std
 from itertools import chain
 
@@ -17,15 +17,22 @@ class TestAll(unittest.TestCase):
     def dataframe_generator(self):
 
         self.__dict__['ret'] = 'XR_NSA'
-        self.__dict__['cry'] = ['CRY_NSA']
-        self.__dict__['black'] = {'AUD': ['2000-01-01', '2003-12-31'],
-                                  'GBP': ['2018-01-01', '2100-01-01']}
+        self.__dict__['cry'] = ['CRY_NSA', 'CRR_NSA']
+        black = {'AUD': ['2000-01-01', '2003-12-31'],
+                 'GBP': ['2018-01-01', '2100-01-01']}
+        self.__dict__['black'] = black
         dfw_ret, dfw_cry, dfd = dataframe_basket(ret = self.ret, cry = self.cry,
                                                  black=self.black)
         self.__dict__['dfw_ret'] = dfw_ret
         self.__dict__['dfw_cry'] = dfw_cry
         self.__dict__['dfd'] = dfd
-        self.__dict__['contracts'] = ['AUD_FX', 'AUD_EQ', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
+        contracts = ['AUD_FX', 'AUD_EQ', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
+        self.__dict__['contracts'] = contracts
+
+        # Instantiate an instance of the Class.
+        basket = Basket(df=dfd, contracts=contracts, ret="XR_NSA",
+                        cry=["CRY_NSA", "CRR_NSA"], blacklist=black)
+        self.__dict__['basket'] = basket
 
     # Internal method used to return a dataframe with the uniform weights and a bool
     # array indicating which rows the procedure is necessary for.
@@ -46,7 +53,7 @@ class TestAll(unittest.TestCase):
     # Validate that the method catches any computed weights, in the dataframe, which
     # exceed one.
     def test_check_weights(self):
-        weights_arr = np.random.rand((3, 15))
+        weights_arr = np.random.rand(15, 3)
         cols = ['col_' + str(i + 1) for i in range(3)]
         weights = pd.DataFrame(data=weights_arr, columns=cols)
         # Exceeds the permitted weight limit.
@@ -63,7 +70,7 @@ class TestAll(unittest.TestCase):
         act_cross = dfw_bool.sum(axis=1).to_numpy()
         equal = 1 / act_cross
 
-        weights = Basket.equal_weight(self.dfw_ret)
+        weights = self.basket.equal_weight(self.dfw_ret)
         
         self.assertEqual(self.dfw_ret.shape, weights.shape)
         # Defined over the same time-period.
@@ -81,7 +88,7 @@ class TestAll(unittest.TestCase):
         # Pass in GDP figures of the respective cross-sections as weights.
         # contracts = ['AUD_FX', 'AUD_EQ', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
         w = [1/6, 1/12, 1/6, 1/2, 1/12]
-        weights = Basket.fixed_weight(df_ret=self.dfw_ret, weights=w)
+        weights = self.basket.fixed_weight(df_ret=self.dfw_ret, weights=w)
 
         self.assertEqual(self.dfw_ret.shape, weights.shape)
 
@@ -91,12 +98,14 @@ class TestAll(unittest.TestCase):
             x1 = np.sum(ar_w[ar_row > 0])  # Sum non-zero base values.
             # Inverse of the original calculation.
             x2 = np.sum(ar_row * np.sum(ar_w[ar_row > 0]))  # Sum weighted base values.
-            self.assertTrue(x1 == x2)
+            x1 = round(x1, 4)
+            x2 = round(x2, 4)
+            self.assertTrue(abs(x1 - x2) < 0.0001)
 
     def test_inverse_weight(self):
 
         self.dataframe_generator()
-        weights = Basket.inverse_weight(self.dfw_ret, "ma")
+        weights = self.basket.inverse_weight(self.dfw_ret, "ma")
         fvi = weights.first_valid_index()
         weights = weights[fvi:]
         sum_ = np.sum(weights, axis=1)
@@ -151,7 +160,7 @@ class TestAll(unittest.TestCase):
 
         xcats_ = ['FXWBASE_NSA', 'EQWBASE_NSA']
         # Dataframe consisting exclusively of the external weight categories.
-        dfd_weights = dfd[dfd['xcat'] == xcats_[0]] | dfd[dfd['xcat'] == xcats_[1]]
+        dfd_weights = reduce_df(df=dfd, xcats=xcats_)
 
         wgt = 'WBASE_NSA'
         contracts = ['AUD_FX', 'AUD_EQ', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
@@ -163,9 +172,9 @@ class TestAll(unittest.TestCase):
         dfx = reduce_df_by_ticker(dfd_weights, ticks=tickers, blacklist=black_)
         w_df = dfx.pivot(index="real_date", columns="ticker", values="value")
 
-        weights = Basket.values_weight(dfw_ret, w_df, weight_meth="values")
+        weights = self.basket.values_weight(dfw_ret, w_df, weight_meth="values")
         self.assertTrue(weights.shape == dfw_ret.shape)
-        weights_inv = Basket.values_weight(dfw_ret, w_df, weight_meth="inv_values")
+        weights_inv = self.basket.values_weight(dfw_ret, w_df, weight_meth="inv_values")
         self.assertTrue(weights_inv.shape == dfw_ret.shape)
 
         # Validate that weights correspond to original values.
@@ -200,7 +209,7 @@ class TestAll(unittest.TestCase):
         # to the equal weight.
         weights_uni, uni_bool = self.weight_check(pseudo_df, max_weight)
 
-        weights = Basket.max_weight_func(pseudo_df, max_weight)
+        weights = self.basket.max_weight_func(pseudo_df, max_weight)
         weights = weights.to_numpy()
         weights_uni = weights_uni.to_numpy()
 
@@ -223,11 +232,11 @@ class TestAll(unittest.TestCase):
         # After the application of the inverse standard deviation weighting method,
         # the rows up until the window has been populated will become obsolete.
         # Therefore, the rows should be removed.
-        weights = Basket.inverse_weight(dfw_ret, "xma")
+        weights = self.basket.inverse_weight(dfw_ret, "xma")
         fvi = weights.first_valid_index()
         weights = weights[fvi:]
 
-        weights = Basket.max_weight_func(weights, max_weight)
+        weights = self.basket.max_weight_func(weights, max_weight)
 
         weights_uni, uni_bool = self.weight_check(weights, max_weight)
         weights = weights.to_numpy()
@@ -270,14 +279,14 @@ class TestAll(unittest.TestCase):
         # Test the assertion applied to the "start" and "end" parameters.
         with self.assertRaises(AssertionError):
             basket_1 = Basket(df=dfd_test, contracts=self.contracts,
-                              ret="XR_NSA", cry="CRY_NSA", start="January 01 2000",
+                              ret="XR_NSA", cry="CRY_NSA", start="Feb, 30 2000",
                               ewgts=None, blacklist=self.black)
 
         # Test the assertion that the external weight category parameter must receive a
         # string or List where the external weight is present in the dataframe. The below
         # testcase passes in a pd.DataFrame instead.
         with self.assertRaises(AssertionError):
-            dfd_assert = self.dfd[self.dfd['xcats'] == 'FXWBASE_NSA']
+            dfd_assert = self.dfd[self.dfd['xcat'] == 'FXWBASE_NSA']
             basket_1 = Basket(df=dfd_test, contracts=self.contracts,
                               ret="XR_NSA", cry="CRY_NSA",
                               ewgts=dfd_assert, blacklist=self.black)
@@ -295,9 +304,9 @@ class TestAll(unittest.TestCase):
         # contract to validate all the expected categories are present in the List for
         # each respective contract.
         test_categories = [t[6:] for t in test_tickers]
-        unique_categories = list(set(test_categories))
+        unique_categories = sorted(list(set(test_categories)))
         expected_categories = ["XR_NSA", "CRY_NSA", "CRR_NSA", "WBASE_NSA"]
-        self.assertTrue(all(unique_categories == expected_categories))
+        self.assertTrue(unique_categories == sorted(expected_categories))
 
         # Test the aggregation mechanism of involving multiple carry categories in the
         # Basket Class.
@@ -306,10 +315,10 @@ class TestAll(unittest.TestCase):
                           blacklist=self.black)
 
         test_carry_tickers = basket_2.ticks_cry
-        carry_contract = lambda cat: [cat + t for t in self.contracts]
+        carry_contract = lambda cat: [t + cat for t in self.contracts]
         check = list(map(carry_contract, ["CRY_NSA", "CRR_NSA"]))
-        check = chain.from_iterable(check)
-        self.assertTrue(all(test_carry_tickers == check))
+        check = list(chain.from_iterable(check))
+        self.assertTrue(test_carry_tickers == check)
 
     def test_make_basket(self):
         # The main driver method. Contains the majority of the logic controlling the
@@ -322,7 +331,7 @@ class TestAll(unittest.TestCase):
         self.dataframe_generator()
         basket_1 = Basket(df=self.dfd, contracts=self.contracts, ret="XR_NSA",
                           cry=["CRY_NSA", "CRR_NSA"], blacklist=self.black,
-                          ewgt="WBASE_NSA")
+                          ewgts="WBASE_NSA")
 
         # Testing the assertion error on max_weight field: 0 < max_weight <= 1.
         with self.assertRaises(AssertionError):
@@ -352,67 +361,41 @@ class TestAll(unittest.TestCase):
                                  max_weight=0.55, remove_zeros=True,
                                  basket_name="GLB_INV_VALUES")
 
-        # First.
+        # First, check the dictionaries on the instance are populated correctly.
         basket_2 = Basket(df=self.dfd, contracts=self.contracts, ret="XR_NSA",
                           cry=["CRY_NSA", "CRR_NSA"], blacklist=self.black,
-                          ewgt="WBASE_NSA")
+                          ewgts="WBASE_NSA")
         basket_2.make_basket(weight_meth="equal", max_weight=0.6,
                              basket_name="GLB_EQUAL")
+
         baskets = basket_2.dict_retcry
         basket_names = list(baskets.keys())
         self.assertTrue(next(iter(basket_names)) == "GLB_EQUAL")
+        
+        # Secondly, test the dimensions of the concatenated dataframe.
+        # The returned dataframe should have the same number of rows given the basket
+        # return sums all contracts on each timestamp.
+        no_rets = len(self.dfw_ret.index)
+        no_cry = 0
+        for carry in self.dfw_cry:
+            assert isinstance(carry, pd.DataFrame)
+            no_cry += len(carry.index)
+        no_rows = no_rets + no_cry
+        self.assertTrue(no_rows == basket_2.dict_retcry["GLB_EQUAL"].shape[0])
+
+        basket_2.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
+                             max_weight=0.55, remove_zeros=True,
+                             basket_name="GLB_INVERSE")
+        baskets = basket_2.dict_retcry
+        for b in baskets:
+            self.assertTrue(b in ["GLB_EQUAL", "GLB_INVERSE"])
+
+        # Confirm the computed basket values are expected.
 
     def test_return_basket(self):
-
-
-        df_return = basket_performance(dfd_test, contracts=c, ret="XR_NSA", cry=None,
-                                       blacklist=black, weight_meth="equal",
-                                       max_weight=1.0, basket_tik="GLB_ALL",
-                                       return_weights=False)
-
-        weights = Basket.equal_weight(dfw_ret)
-        b_return = dfw_ret.multiply(weights).sum(axis=1).to_numpy()
-        value = np.squeeze(df_return[['value']].to_numpy(), axis=1)
-
-        # Tests the dimensions. The returned dataframe should have the same number of
-        # rows given the basket return sums all contracts on each timestamp.
-        # Only applicable if the parameter "return_weights" is set to zero.
-        self.assertTrue(df_return.shape[0] == dfw_ret.shape[0])
-
-        # Validate the basket's ticker name is GLB_ALL + "ret" if the parameter
-        # "basket_tik" is not defined.
-        self.assertTrue(np.all(df_return["ticker"] == "GLB_ALL" + "_" + "XR_NSA"))
-
-        # Accounts for floating point precision.
-        self.assertTrue(np.all(np.abs(b_return - value) < 0.000001))
-
-        # The below code would require changes is weight_meth = "invsd" given the
-        # removal of rows applied.
-        df_return = basket_performance(dfd_test, contracts=c, ret="XR_NSA", cry=None,
-                                       blacklist=None, weight_meth="equal",
-                                       max_weight=0.3, basket_tik="GLB_ALL",
-                                       return_weights=True)
-
-        # Test the Ticker name.
-        ticker = np.squeeze(df_return[['ticker']].to_numpy(), axis=1)
-        weight_ticker = ticker[dfw_ret.shape[0]:]
-        self.assertEqual(len(set(weight_ticker)), dfw_ret.shape[1])
-        self.assertTrue(all([tick[-3:] == "WGT" for tick in weight_ticker]))
-
-        # Test the concat function.
-        last_return_index = dfw_ret.shape[0]
-        date_column = df_return[['real_date']]
-        first_date = date_column.iloc[0].values
-        concat_date = date_column.iloc[last_return_index].values
-        self.assertEqual(first_date, concat_date)
-
-        # Test that all added weights are <= 1
-        weight_column = df_return[['value']]
-        weight_column = weight_column.iloc[last_return_index:].to_numpy()
-        self.assertTrue(np.all(weight_column <= 1.0))
+        pass
 
 
 if __name__ == "__main__":
 
-    pass
-    # unittest.main()
+    unittest.main()
