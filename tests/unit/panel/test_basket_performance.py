@@ -2,7 +2,6 @@
 import unittest
 import numpy as np
 import pandas as pd
-import random
 import sys
 from tests.simulate import dataframe_basket, construct_df
 from macrosynergy.panel.basket import Basket
@@ -447,13 +446,39 @@ class TestAll(unittest.TestCase):
         basket_1 = Basket(df=self.dfd, contracts=self.contracts, ret="XR_NSA",
                           cry=["CRY_NSA", "CRR_NSA"], blacklist=self.black,
                           ewgts="WBASE_NSA")
-        basket_1.make_basket()
+        basket_1.make_basket(weight_meth="equal", max_weight=0.45,
+                             basket_name="GLB_EQUAL")
         basket_1.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
                              max_weight=0.55, remove_zeros=True,
                              basket_name="GLB_INVERSE")
         weights = [1/6, 1/12, 1/12, 1/6, 1/2]
         basket_1.make_basket(weight_meth="fixed", weights=weights, max_weight=0.55,
                              basket_name="GLB_FIXED")
+
+        # Test the feature that if a basket_name is not specified by the user, default
+        # is equal to None, then all of the computed baskets will be returned. In this
+        # instance that would involve: "GLB_EQUAL", "GLB_INVERSE" & "GLB_FIXED".
+        # Therefore, check the logic.
+        return_df = basket_1.return_basket()
+        tickers = return_df['ticker'].to_numpy()
+        truncate = lambda ticker: "_".join(ticker.split('_')[0:2])
+
+        basket_names = list(set(map(truncate, tickers)))
+        # The usage of the set() data structure will sort the basket names in
+        # alphabetical order. The order stored in the dataframe will correspond to the
+        # order in which make_basket() method is called. Therefore, in the testing,
+        # account for the behaviour of the set().
+        test = ['GLB_EQUAL', 'GLB_FIXED', 'GLB_INVERSE']
+        self.assertTrue(sorted(basket_names) == test)
+
+        # Last check is to confirm that the stacked weight dataframe and basket
+        # performance are defined over the same time-period.
+        basket_equal = basket_1.return_basket(basket_names="GLB_EQUAL")
+        weight_equal = basket_1.return_weights(basket_names="GLB_EQUAL")
+        basket_equal_dates = list(set(basket_equal['real_date']))
+        weight_equal_dates = list(set(weight_equal['real_date']))
+
+        self.assertTrue(basket_equal_dates == weight_equal_dates)
 
 
 if __name__ == "__main__":
