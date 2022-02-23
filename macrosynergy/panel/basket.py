@@ -446,8 +446,8 @@ class Basket(object):
         if self.cry_flag:
             cry_list = []
             for cr in self.cry:
-                dfw_wgs = self.column_manager(df_cat=self.dfws_cry[cr], dfw_wgs=dfw_wgs)
-                dfw_bcry = self.dfws_cry[cr].multiply(dfw_wgs).sum(axis=1)
+                dfw_wgs_copy = self.column_manager(df_cat=self.dfws_cry[cr], dfw_wgs=dfw_wgs)
+                dfw_bcry = self.dfws_cry[cr].multiply(dfw_wgs_copy).sum(axis=1)
                 dfcry = dfw_bcry.to_frame("value").reset_index()
                 basket_cry = basket_name + "_" + cr
                 dfcry = dfcry.assign(ticker=basket_cry)[select]
@@ -456,6 +456,7 @@ class Basket(object):
             store += cry_list
 
         df_retcry = pd.concat(store)
+        df_retcry = df_retcry.reset_index(drop=True)
         self.dict_retcry[basket_name] = df_retcry
         self.dict_wgs[basket_name] = dfw_wgs
 
