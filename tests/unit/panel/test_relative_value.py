@@ -221,7 +221,9 @@ class TestAll(unittest.TestCase):
         range_ = (int(no_rows * 0.25), int(no_rows * 0.75))
 
         random_index = randint(*range_)
+        random_index = 1567
         date = index[random_index]
+        assert date in list(index)
 
         random_row = dfw.iloc[random_index, :]
         random_row_dict = random_row.to_dict()
@@ -238,7 +240,8 @@ class TestAll(unittest.TestCase):
         function_output = dfd_3_pivot.iloc[index_val, :]
         function_output = function_output.to_numpy()
 
-        # self.assertTrue(np.all(computed_values == function_output[0]))
+        function_output = function_output[0]
+        self.assertTrue(np.all(computed_values == function_output))
 
         # Test the division.
         # Computing make_relative_value() on a single category that has been chosen
@@ -258,7 +261,7 @@ class TestAll(unittest.TestCase):
         function_output = dfd_4_pivot.iloc[index_val, :]
         function_output = function_output.to_numpy()
 
-        # self.assertTrue(np.all(computed_values == function_output[0]))
+        self.assertTrue(np.all(computed_values == function_output[0]))
 
 
 if __name__ == '__main__':
