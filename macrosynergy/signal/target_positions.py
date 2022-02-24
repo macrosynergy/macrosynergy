@@ -106,18 +106,16 @@ def cs_unit_returns(df: pd.DataFrame, contract_returns: List[str],
 
     return df_rets
 
-def basket_handler(df: pd.DataFrame, df_mods_w: pd.DataFrame, contracts: List[str],
-                   ret: str, start: str = None, end: str = None):
+def basket_handler(df_mods_w: pd.DataFrame, df_c_wgts: pd.DataFrame,
+                   contracts: List[str]):
     """
     Function designed to compute the target positions for the constituents of a basket.
     The function will return the corresponding basket dataframe of positions.
 
-    :param <pd.DataFrame> df: standardised dataframe.
     :param <pd.DataFrame> df_mods_w: target position dataframe. Will be multiplied by the
         weight dataframe to establish the positions for the basket of constituents.
-    :param <str> ret: postfix denoting the returns in % applied to the contract types.
-    :param <str> start:
-    :param <str> end:
+    :param <pd.DataFrame> df_c_wgts: weight dataframe used to adjust the positions of
+        the basket of contracts.
     :param <dict> contracts: the constituents that make up each basket.
 
     :return <pd.Dataframe>: basket positions weight-adjusted.
@@ -126,12 +124,11 @@ def basket_handler(df: pd.DataFrame, df_mods_w: pd.DataFrame, contracts: List[st
     split = lambda b: b.split('_')[0]
 
     cross_sections = list(map(split, contracts))
-    basket = Basket(df=df, contracts=contracts, ret=ret, cry=None, start=start, end=end,
-                    blacklist=None, wgt=None)
 
-    dfw_wgs = basket.weight_dateframe(weight_meth="equal", weights=None, max_weight=1.0,
-                                      remove_zeros=True)
-    dfw_wgs = dfw_wgs.reindex(sorted(dfw_wgs.columns), axis=1)
+    # Sort the columns to align via cross-sections to conduct the multiplication. The
+    # weight dataframe is formed using the respective contracts, so additional checks are
+    # not required.
+    dfw_wgs = df_c_wgts.reindex(sorted(df_c_wgts.columns), axis=1)
 
     # Reduce to the cross-sections held in the respective basket.
     df_mods_w = df_mods_w[cross_sections]
@@ -208,14 +205,15 @@ def consolidation_driver(data_frames: List[pd.DataFrame], ctypes: List[str]):
     return list(dict_.values()) + reduced_baskets
 
 def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: List[str],
-                     sigrels: List[float], baskets: dict = None, ret: str = 'XR_NSA',
-                     start: str = None, end: str = None,
-                     scale: str = 'prop', min_obs: int = 252, thresh: float = None,
-                     cs_vtarg: float = None, lback_periods: int = 21,
-                     lback_meth: str = 'ma', half_life: int = 11, posname: str = 'POS'):
+                     sigrels: List[float], baskets: dict = None,
+                     df_c_wgts: pd.DataFrame = None, ret: str = 'XR_NSA', start: str = None,
+                     end: str = None, scale: str = 'prop', min_obs: int = 252,
+                     thresh: float = None, cs_vtarg: float = None,
+                     lback_periods: int = 21, lback_meth: str = 'ma',
+                     half_life: int = 11, posname: str = 'POS'):
 
     """
-    Converts signals into contract-specific target positions
+    Converts signals into contract-specific target positions.
 
     :param <pd.Dataframe> df: standardized DataFrame containing at least the following
         columns: 'cid', 'xcats', 'real_date' and 'value'.
@@ -233,6 +231,8 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
         An example would be:
         {'APC_FX' : ['AUD_FX', 'NZD_FX', 'JPY_FX'],
          'APC_EQ' : ['AUD_EQ', 'CNY_EQ', 'INR_EQ', 'JPY_EQ']}
+    :param: <pd.DataFrame> df_c_wgts: weight dataframe used to adjust the positions of
+        the basket of contracts.
     :param <List[float]> sigrels: values that translate the single signal into contract
         type and basket signals in the order defined by keys.
     :param <str> ret: postfix denoting the returns in % associated with contract types.
@@ -307,7 +307,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
     cols = ['cid', 'xcat', 'real_date', 'value']
     assert set(cols) <= set(df.columns), f"df columns must contain {cols}."
 
-    # B. Reduce frame to necessary data
+    # B. Reduce frame to necessary data.
 
     df = df.loc[:, cols]
     contract_returns = [c + ret for c in ctypes]
@@ -332,7 +332,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
         # D.1. Composite signal-related positions as basis for volatility targeting.
 
         df_csurs = cs_unit_returns(dfx, contract_returns=contract_returns,
-                                     sigrels=sigrels)  # Gives cross-section returns.
+                                   sigrels=sigrels)  # Gives cross-section returns.
         df_csurs = df_csurs[cols]
 
         # D.2. Calculate volatility adjustment ratios.
@@ -340,15 +340,14 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
         df_vol = historic_vol(df_csurs, xcat=ret, cids=cids,
                               lback_periods=lback_periods, lback_meth=lback_meth,
                               half_life=half_life, start=start, end=end,
-                              remove_zeros=True,
-                              postfix="")  # Gives unit position vols.
+                              remove_zeros=True, postfix="")  # Gives unit position vols.
 
         dfw_vol = df_vol.pivot(index="real_date", columns="cid", values="value")
         dfw_vol = dfw_vol.sort_index(axis=1)
         dfw_vtr = 100 * cs_vtarg / dfw_vol  # vol-target ratio to be applied.
         use_vtr = True
 
-    # E. Actual position calculation
+    # E. Actual position calculation.
 
     data_frames = []
     ctypes_sigrels = dict(zip(ctypes_baskets, sigrels))
@@ -367,8 +366,8 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
         if k in basket_names:
             contracts = baskets[k]
-            df_mods_copy = basket_handler(df, df_mods_copy, contracts=contracts,
-                                          ret=ret, start=start, end=end)
+            df_mods_copy = basket_handler(df_mods_w=df_mods_copy, df_c_wgts=df_c_wgts,
+                                          contracts=contracts)
 
         # Allows for the signal being applied to the basket constituents on the original
         # dataframe.
@@ -439,9 +438,20 @@ if __name__ == "__main__":
                                    scale='prop', cs_vtarg=None, posname='POS')
 
     # Testcase for both panel and individual basket performance.
+    # Compute the returns on the Basket prior to calling the target positions, and pass
+    # in the corresponding weight dataframe as a parameter. Therefore, the same weights
+    # are involved in the target positions (adjust the positions according to the weight
+    # dataframe).
+    apc_contracts = ['AUD_FX', 'NZD_FX']
+    basket_1 = Basket(df=dfd, contracts=apc_contracts, ret="XR_NSA",
+                      cry=None, blacklist=black)
+    basket_1.make_basket(weight_meth="equal", max_weight=0.55,
+                         basket_name="GLB_EQUAL")
+    df_weight = basket_1.return_weights("GLB_EQUAL")
     position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
                                    ctypes=['FX', 'EQ'],
-                                   baskets={'APC_FX': ['AUD_FX', 'NZD_FX']},
+                                   baskets={'APC_FX': apc_contracts},
+                                   df_c_weights=df_weight,
                                    sigrels=[1, -1, -0.5], ret='XR_NSA',
                                    start='2010-01-01', end='2020-12-31',
                                    scale='prop', cs_vtarg=None, posname='POS')
