@@ -10,7 +10,10 @@ from macrosynergy.panel.historic_vol import flat_std
 from itertools import chain
 import warnings
 
+
 warnings.filterwarnings("ignore")
+
+
 class TestAll(unittest.TestCase):
 
     def dataframe_generator(self):
@@ -84,22 +87,19 @@ class TestAll(unittest.TestCase):
     def test_fixed_weight(self):
 
         self.dataframe_generator()
-        # Pass in GDP figures of the respective cross-sections as weights.
-        # contracts = ['AUD_FX', 'AUD_EQ', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
-        w = [1/6, 1/12, 1/6, 1/2, 1/12]
+        w = [6, 12, 7, 8, 13]
         weights = self.basket.fixed_weight(df_ret=self.dfw_ret, weights=w)
 
         self.assertEqual(self.dfw_ret.shape, weights.shape)
 
         for i in range(weights.shape[0]):
-            ar_row = weights.iloc[i, :].to_numpy()
-            ar_w = np.asarray(w)
-            x1 = np.sum(ar_w[ar_row > 0])  # Sum non-zero base values.
-            # Inverse of the original calculation.
-            x2 = np.sum(ar_row * np.sum(ar_w[ar_row > 0]))  # Sum weighted base values.
-            x1 = round(x1, 4)
-            x2 = round(x2, 4)
-            self.assertTrue(abs(x1 - x2) < 0.0001)
+            nulls = self.dfw_ret.iloc[i, :].isnull()
+            orig_values = np.asarray(w)
+            orig_values[nulls] = 0
+            test_weights = orig_values / np.sum(orig_values)
+            class_weights = weights.iloc[i, :].to_numpy()
+            sum_of_diffs = np.sum(test_weights - class_weights)
+            self.assertAlmostEqual(sum_of_diffs, 0, 4)
 
     def test_inverse_weight(self):
 
