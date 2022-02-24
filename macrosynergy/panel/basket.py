@@ -57,40 +57,39 @@ class Basket(object):
         self.end = self.date_check(end)
         self.dfx = reduce_df_by_ticker(df, start=start, end=end, ticks=self.tickers,
                                        blacklist=blacklist)
-
         self.dict_retcry = {}  # dictionary for collecting basket return/carry dfs.
         self.dict_wgs = {}  # dictionary for collecting basket return/carry dfs.
 
     def store_attributes(self, df: pd.DataFrame, pfx: List[str], pf_name: str):
         """
         Adds multiple attributes to class based on postfixes that denote carry or
-        weight types.
+        external weight types.
 
         :param <pd.DataFrame> df: original, standardised dataframe.
-        :param <List[str]> pfx: carry category postfix.
+        :param <List[str]> pfx: category postfixes involved in the basket calculation.
         :param <str> pf_name: associated name of the postfix "cry" or "wgt".
 
-        Note: These are [1] flags of existence of cary and weight strings in class,
+        Note: These are [1] flags of existence of carry and weight strings in class,
         [2] lists of tickers related to all postfixes, [3] a dictionary of wide time
         series panel dataframes for all postfixes.
         """
 
         pfx_flag = pfx is not None
         self.__dict__[pf_name + "_flag"] = pfx_flag
+        self.__dict__["ticks_" + pf_name] = []
         if pfx_flag:
-            error = "`cry` must be a <str> or a <List[str]>."
+            error = f"'{pf_name}' must be a <str> or a <List[str]>."
             assert isinstance(pfx, (list, str)), error
             pfx = [pfx] if isinstance(pfx, str) else pfx
-
             self.__dict__[pf_name] = pfx
+
             dfws_pfx = {}
             for cat in pfx:
                 ticks = [con + cat for con in self.contracts]
-                self.__dict__["ticks_" + pf_name] = ticks
+                self.__dict__["ticks_" + pf_name] += ticks
                 dfws_pfx[cat] = self.pivot_dataframe(df, ticks)
         else:
             dfws_pfx = None
-            self.__dict__["ticks_" + pf_name] = []
 
         self.__dict__["dfws_" + pf_name] = dfws_pfx
 
@@ -131,7 +130,7 @@ class Basket(object):
     @staticmethod
     def check_weights(weight: pd.DataFrame):
         """
-        Checks if all rows in dataframe add up to roughly 1
+        Checks if all rows in dataframe add up to roughly 1.
 
         :param <pd.DataFrame> weight: weight dataframe.
         """
@@ -327,7 +326,8 @@ class Basket(object):
             message_2 = "List of weights must be equal to the number of contracts."
             assert isinstance(weights, list), message
             assert self.dfw_ret.shape[1] == len(weights), message_2
-            assert all(isinstance(w, (int, float)) for w in weights)
+            message_3 = "Expects a list of floating point values."
+            assert all(isinstance(w, (int, float)) for w in weights), message_3
 
             dfw_wgs = self.fixed_weight(df_ret=self.dfw_ret, weights=weights)
 
@@ -346,7 +346,7 @@ class Basket(object):
             cols = sorted(dfw_wgt.columns)
             dfw_ret = dfw_wgt.reindex(cols, axis=1)
             dfw_wgt = dfw_wgt.reindex(cols, axis=1)
-            dfw_wgs = self.values_weight(dfw_ret, dfw_wgt)
+            dfw_wgs = self.values_weight(dfw_ret, dfw_wgt, weight_meth)
 
         else:
             raise NotImplementedError(f"Weight method unknown {weight_meth}")
@@ -360,6 +360,32 @@ class Basket(object):
 
         if max_weight < 1.0:
             dfw_wgs = self.max_weight_func(weights=dfw_wgs, max_weight=max_weight)
+
+        return dfw_wgs
+
+    @staticmethod
+    def column_manager(df_cat: pd.DataFrame, dfw_wgs: pd.DataFrame):
+        """
+        Will match the column names of the two dataframes involved in the computation:
+        either the return & weight dataframes or the carry & weight dataframes. The
+        pandas multiply operation requires the column names, of both dataframes involved
+        in the binary operation, to be identical.
+
+        :param <pd.DataFrame> df_cat: return or carry dataframe.
+        :param <pd.DataFrame> dfw_wgs: weight dataframe.
+
+        :return <pd.DataFrame> dfw_wgs: modified weight dataframe (column names will map
+            to the other dataframe received).
+        """
+
+        df_cat = df_cat.reindex(sorted(df_cat.columns), axis=1)
+        dfw_wgs = dfw_wgs.reindex(sorted(dfw_wgs.columns), axis=1)
+
+        ret_cols = df_cat.columns
+        weight_cols = dfw_wgs.columns
+
+        if all(ret_cols != weight_cols):
+            dfw_wgs.columns = ret_cols
 
         return dfw_wgs
 
@@ -408,9 +434,10 @@ class Basket(object):
                                     lback_meth=lback_meth, lback_periods=lback_periods,
                                     ewgt=ewgt, max_weight=max_weight,
                                     remove_zeros=remove_zeros)
-
         select = ["ticker", "real_date", "value"]
-        dfw_bret = self.dfw_ret.multiply(dfw_wgs).sum(axis=1)
+
+        dfw_wgs_copy = self.column_manager(df_cat=self.dfw_ret, dfw_wgs=dfw_wgs)
+        dfw_bret = self.dfw_ret.multiply(dfw_wgs_copy).sum(axis=1)
         dfxr = dfw_bret.to_frame("value").reset_index()
         basket_ret = basket_name + "_" + self.ret
         dfxr = dfxr.assign(ticker=basket_ret)[select]
@@ -419,7 +446,8 @@ class Basket(object):
         if self.cry_flag:
             cry_list = []
             for cr in self.cry:
-                dfw_bcry = self.dfws_cry[cr].multiply(dfw_wgs).sum(axis=1)
+                dfw_wgs_copy = self.column_manager(df_cat=self.dfws_cry[cr], dfw_wgs=dfw_wgs)
+                dfw_bcry = self.dfws_cry[cr].multiply(dfw_wgs_copy).sum(axis=1)
                 dfcry = dfw_bcry.to_frame("value").reset_index()
                 basket_cry = basket_name + "_" + cr
                 dfcry = dfcry.assign(ticker=basket_cry)[select]
@@ -428,6 +456,7 @@ class Basket(object):
             store += cry_list
 
         df_retcry = pd.concat(store)
+        df_retcry = df_retcry.reset_index(drop=True)
         self.dict_retcry[basket_name] = df_retcry
         self.dict_wgs[basket_name] = dfw_wgs
 
@@ -476,6 +505,7 @@ class Basket(object):
 
         :return <pd.Dataframe>: standardized DataFrame with basket weights.
         """
+
         if basket_names is None:
             basket_names = list(self.dict_wgs.keys())
 
@@ -544,19 +574,18 @@ if __name__ == "__main__":
     basket_1 = Basket(df=dfd, contracts=contracts_1,
                       ret="XR_NSA", cry=["CRY_NSA", "CRR_NSA"], blacklist=black)
     basket_1.make_basket(weight_meth="equal", max_weight=0.55,
-                         basket_name="GLBEQUAL")
+                         basket_name="GLB_EQUAL")
     basket_1.make_basket(weight_meth="fixed", max_weight=0.55,
                          weights=[1/6, 1/6, 1/6, 1/2],
-                         basket_name="GLBFIXED")
+                         basket_name="GLB_FIXED")
     dfp_1 = basket_1.return_basket()
     dfw_1 = basket_1.return_weights()
 
+    df_basket = basket_1.return_basket("GLB_EQUAL")
+    print(df_basket)
 
-    # df_basket = basket_1.return_basket("GLB_EQUAL")
-    # print(df_basket)
-
-    # df_weight = basket_1.return_weights("GLB_EQUAL")
-    # print(df_weight)
+    df_weight = basket_1.return_weights("GLB_EQUAL")
+    print(df_weight)
 
     # Second test. Zero carries. Inverse weight method.
     # However, call make_basket() method multiple times, using different weighting
@@ -569,21 +598,29 @@ if __name__ == "__main__":
                          max_weight=0.55, remove_zeros=True, basket_name="GLB_INVERSE")
     df_basket_inv = basket_2.return_basket("GLB_INVERSE")
 
-    # basket_2.make_basket(weight_meth="equal", max_weight=0.55, basket_name="GLB_EQUAL")
-    # df_basket_equal = basket_2.return_basket("GLB_EQUAL")
-    # print(df_basket_inv)
-    # print(df_basket_equal)
+    basket_2.make_basket(weight_meth="equal", max_weight=0.55, basket_name="GLB_EQUAL")
+    df_basket_equal = basket_2.return_basket("GLB_EQUAL")
+    print(df_basket_inv)
+    print(df_basket_equal)
 
     # Third test. One carry. Inverse values weight method.
     # Allow for multiple external weight methods being passed in. If multiple external
     # weight categories are involved in the basket calculation, pass all the categories
     # on the instance and call the make_basket() method separately using the respective
     # weight categories.
-    basket_3 = Basket(df=dfd, contracts=contracts_1, ret="XR_NSA", blacklist=black,
-                      ewgts=['FXWBASE_NSA', 'EQWBASE_NSA'])
 
-    basket_3.make_basket(weight_meth="inv_values", ewgt="FXWBASE_NSA",
-                         max_weight=0.55, basket_name="GLB_INV_VALUES")
+    basket_3 = Basket(df=dfd, contracts=contracts_1, ret="XR_NSA", cry=["CRY_NSA"],
+                      blacklist=black, ewgts='WBASE_NSA')
 
-    df_basket_inv_values = basket_3.return_basket("GLB_INV_VALUES")
-    print(df_basket_inv_values)
+    basket_3.make_basket(weight_meth="inv_values", ewgt="WBASE_NSA", max_weight=0.55,
+                         remove_zeros=True, basket_name="GLB_INV_VALUES")
+
+    df_inv_values = basket_3.return_basket("GLB_INV_VALUES")
+    print(df_inv_values)
+    df_weight = basket_3.return_weights("GLB_INV_VALUES")
+    print(df_weight)
+
+    basket_3.make_basket(weight_meth="equal", max_weight=0.55, remove_zeros=True,
+                         basket_name="GLB_EQUAL")
+    df_equal = basket_3.return_basket("GLB_EQUAL")
+    print(df_equal)
