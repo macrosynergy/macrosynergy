@@ -342,11 +342,15 @@ class Basket(object):
         elif weight_meth in ["values", "inv_values"]:
             assert ewgt in self.wgt, f'{ewgt} is not defined on the instance.'
             # Lag by one day to be used as weights.
-            dfw_wgt = self.dfws_wgt[ewgt].shift(1)
-            cols = sorted(dfw_wgt.columns)
-            dfw_ret = dfw_wgt.reindex(cols, axis=1)
-            dfw_wgt = dfw_wgt.reindex(cols, axis=1)
-            dfw_wgs = self.values_weight(dfw_ret, dfw_wgt, weight_meth)
+            try:
+                dfw_wgt = self.dfws_wgt[ewgt].shift(1)
+            except KeyError as e:
+                print(f"Basket not found: {e}.")
+            else:
+                cols = sorted(dfw_wgt.columns)
+                dfw_ret = dfw_wgt.reindex(cols, axis=1)
+                dfw_wgt = dfw_wgt.reindex(cols, axis=1)
+                dfw_wgs = self.values_weight(dfw_ret, dfw_wgt, weight_meth)
 
         else:
             raise NotImplementedError(f"Weight method unknown {weight_meth}")
@@ -430,6 +434,7 @@ class Basket(object):
 
         assert isinstance(weight_meth, str), "`weight_meth` must be string"
 
+        self.__dict__['exo_w_postfix'] = ewgt
         dfw_wgs = self.make_weights(weight_meth=weight_meth, weights=weights,
                                     lback_meth=lback_meth, lback_periods=lback_periods,
                                     ewgt=ewgt, max_weight=max_weight,
@@ -526,7 +531,7 @@ class Basket(object):
                 print(f"Basket not found: {e}.")
             else:
                 if self.wgt_flag:
-                    self.__dict__['w_field'] = self.wgt[0]
+                    self.__dict__['w_field'] = self.exo_w_postfix
                 else:
                     self.__dict__['w_field'] = self.ret
                 cols = list(map(dfw_weight_names, dfw_wgs.columns))
