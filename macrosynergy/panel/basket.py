@@ -517,19 +517,28 @@ class Basket(object):
 
         weight_baskets = []
         select = ['ticker', 'real_date', 'value']
+
+        dfw_weight_names = lambda w_name: w_name[:w_name.find(self.w_field)]
         for b in basket_names:
             try:
                 dfw_wgs = self.dict_wgs[b]
             except KeyError as e:
                 print(f"Basket not found: {e}.")
             else:
-                dfw_wgs.columns.name = "cid"
-                w = dfw_wgs.stack().to_frame("value").reset_index()
+                if self.wgt_flag:
+                    self.__dict__['w_field'] = self.wgt[0]
+                else:
+                    self.__dict__['w_field'] = self.ret
+                cols = list(map(dfw_weight_names, dfw_wgs.columns))
+                dfw_wgs_copy = dfw_wgs.copy()
+                dfw_wgs_copy.columns = cols
+                dfw_wgs_copy.columns.name = "cid"
+                w = dfw_wgs_copy.stack().to_frame("value").reset_index()
                 w = w.sort_values(['real_date'])
                 w = w.rename(columns={'cid': 'ticker'})
                 w = w[select]
                 w = w.loc[w.value > 0, select]
-                w['ticker'] += "_" + b
+                w['ticker'] += "_" + b + "_" + "WGT"
                 weight_baskets.append(w)
 
         return_df = pd.concat(weight_baskets)
