@@ -1,4 +1,4 @@
-from .basket_performance import basket_performance
+from .basket import Basket
 from .category_relations import CategoryRelations
 from .converge_row import ConvergeRow
 from .historic_vol import historic_vol
@@ -12,6 +12,6 @@ from .view_ranges import view_ranges
 from .view_timelines import view_timelines
 
 
-__all__ = ['basket_performance', 'CategoryRelations', 'ConvergeRow', 'historic_vol',
+__all__ = ['Basket', 'CategoryRelations', 'ConvergeRow', 'historic_vol',
            'make_blacklist', 'make_relative_value', 'make_zn_scores', 'panel_calculator',
            'correl_matrix', 'heatmap_grades', 'view_ranges', 'view_timelines']
