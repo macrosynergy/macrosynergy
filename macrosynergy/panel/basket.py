@@ -446,7 +446,8 @@ class Basket(object):
         if self.cry_flag:
             cry_list = []
             for cr in self.cry:
-                dfw_wgs_copy = self.column_manager(df_cat=self.dfws_cry[cr], dfw_wgs=dfw_wgs)
+                dfw_wgs_copy = self.column_manager(df_cat=self.dfws_cry[cr],
+                                                   dfw_wgs=dfw_wgs)
                 dfw_bcry = self.dfws_cry[cr].multiply(dfw_wgs_copy).sum(axis=1)
                 dfcry = dfw_bcry.to_frame("value").reset_index()
                 basket_cry = basket_name + "_" + cr
@@ -528,6 +529,7 @@ class Basket(object):
                 w = w.rename(columns={'cid': 'ticker'})
                 w = w[select]
                 w = w.loc[w.value > 0, select]
+                w['ticker'] += "_" + b
                 weight_baskets.append(w)
 
         return_df = pd.concat(weight_baskets)
