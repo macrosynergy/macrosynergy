@@ -530,7 +530,7 @@ class Basket(object):
             except KeyError as e:
                 print(f"Basket not found: {e}.")
             else:
-                if self.wgt_flag:
+                if self.wgt_flag and self.exo_w_postfix is not None:
                     self.__dict__['w_field'] = self.exo_w_postfix
                 else:
                     self.__dict__['w_field'] = self.ret
@@ -640,3 +640,16 @@ if __name__ == "__main__":
                          basket_name="GLB_EQUAL")
     df_equal = basket_3.return_basket("GLB_EQUAL")
     print(df_equal)
+
+    # Final test.
+    # Tests the condition: "if self.wgt_flag and self.exo_w_postfix is not None".
+    contracts = ['AUD_FX', 'AUD_EQ', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
+    basket_4 = Basket(df=dfd, contracts=contracts, ret="XR_NSA",
+                      cry=["CRY_NSA", "CRR_NSA"], blacklist=black,
+                      ewgts="WBASE_NSA")
+    basket_4.make_basket(weight_meth="values", ewgt="WBASE_NSA", max_weight=0.55,
+                         remove_zeros=True, basket_name="GLB_VALUES")
+
+    basket_4.make_basket(weight_meth="equal", max_weight=0.45,
+                         basket_name="GLB_EQUAL")
+    weight_equal = basket_4.return_weights(basket_names="GLB_EQUAL")
