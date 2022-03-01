@@ -330,6 +330,11 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
         df_c_wgts, baskets = weight_dataframes(df=df, basket_names=basket_names)
         # List of dataframes.
         df_c_wgts = iter(df_c_wgts)
+        # Isolate the panel signals. Hold in a separate data structure.
+        no_panels = len(sigrels) - len(basket_names)
+        panel_sigrels = sigrels[:no_panels]
+    else:
+        panel_sigrels = sigrels
 
     ctypes_baskets = ctypes + basket_names
 
@@ -374,7 +379,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
         # D.1. Composite signal-related positions as basis for volatility targeting.
 
         df_csurs = cs_unit_returns(dfx, contract_returns=contract_returns,
-                                   sigrels=sigrels)  # Gives cross-section returns.
+                                   sigrels=panel_sigrels)  # Gives cross-section returns.
         df_csurs = df_csurs[cols]
 
         # D.2. Calculate volatility adjustment ratios.
@@ -518,7 +523,9 @@ if __name__ == "__main__":
     apc_contracts = ['AUD_EQ', 'NZD_EQ']
     basket_2 = Basket(df=dfd_copy, contracts=west_contracts, ret="XR_NSA",
                       cry=None, blacklist=black)
-    basket_2.make_basket(weight_meth="equal", max_weight=0.55,
+    # Testing misalignment of dates.
+    basket_2.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
+                         max_weight=0.55, remove_zeros=True,
                          basket_name="WST_FX")
     df_weight_1 = basket_2.return_weights("WST_FX")
 
@@ -535,5 +542,5 @@ if __name__ == "__main__":
                                    basket_names=["WST_FX", "APC_EQ"],
                                    sigrels=[1, -1, -0.5, 1.5], ret='XR_NSA',
                                    start='2010-01-01', end='2020-12-31',
-                                   scale='prop', cs_vtarg=None, posname='POS')
+                                   scale='prop', cs_vtarg=3, posname='POS')
     print(position_df)
