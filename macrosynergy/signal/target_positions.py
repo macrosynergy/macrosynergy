@@ -10,6 +10,43 @@ from macrosynergy.panel.basket import Basket
 import random
 
 
+def weight_dataframes(df: pd.DataFrame, basket_names: Union[str, List[str]] = None):
+    """
+    Helper function used to break up the original dataframe and create the wide weight
+    dataframes.
+
+    :param <pd.Dataframe> df: standardized DataFrame.
+    :param <str or List[str]> basket_names: string or list of basket names.
+
+    :return <List[pd.DataFrames], dict>:
+    """
+    if isinstance(basket_names, str): basket_names = [basket_names]
+    xcats = df['xcat'].to_numpy()
+    wgt_indices = lambda index: index.split('_')[-1] == "WGT"
+    boolean = list(map(wgt_indices, xcats))
+
+    r_df = df[boolean]
+    b_column = lambda index: '_'.join(index.split('_')[1:-1])
+
+    r_df['basket_name'] = np.array(map(b_column, r_df['xcat']))
+
+    df_c_wgts = []
+    b_dict = {}
+    contr_func = lambda index: '_'.join(index.split('_')[0:2])
+    for b in basket_names:
+        b_df = r_df[r_df['basket_name'] == b]
+        b_df_copy = b_df.copy()
+        b_df_copy = b_df_copy.drop(["basket_name"], axis=1)
+        column = (b_df['cid'] + "_" + b_df['xcat']).to_numpy()
+        b_df_copy['xcat'] = np.array(map(contr_func, column))
+        b_wgt = b_df_copy.pivot(index="real_date", columns="xcat", values="value")
+        b_wgt = b_wgt.reindex(sorted(b_wgt.columns), axis=1)
+        df_c_wgts.append(b_wgt)
+        contracts = set(b_df_copy['xcat'])
+        b_dict[b] = sorted(list(contracts))
+
+    return df_c_wgts, b_dict
+
 def modify_signals(df: pd.DataFrame, cids: List[str], xcat_sig: str, start: str = None,
                    end: str = None, scale: str = 'prop',  min_obs: int = 252,
                    thresh: float = None):
@@ -122,11 +159,13 @@ def basket_handler(df_mods_w: pd.DataFrame, df_c_wgts: pd.DataFrame,
 
     error_1 = "df_c_wgts expects to receive a pd.DataFrame."
     assert isinstance(df_c_wgts, pd.DataFrame), error_1
-    error_2 = "df_c_wgts expects a standardised pd.DataFrame produced by the Basket" \
-              "Class."
-    assert list(df_c_wgts.columns) == ["ticker", "real_date", "value"], error_2
+    error_2 = "df_c_wgts expects a pivoted pd.DataFrame - each column corresponds to the" \
+              " contract's weight."
+    assert df_c_wgts.index.name == "real_date", error_2
+    error_3 = f"df_c_wgts column names must correspond to the received contract: " \
+              f"{contracts}."
+    assert all(df_c_wgts.columns == contracts), error_3
 
-    df_c_wgts = df_c_wgts.pivot(index="real_date", columns="ticker", values="value")
     split = lambda b: b.split('_')[0]
 
     cross_sections = list(map(split, contracts))
@@ -135,13 +174,6 @@ def basket_handler(df_mods_w: pd.DataFrame, df_c_wgts: pd.DataFrame,
     # weight dataframe is formed using the respective contracts, so additional checks are
     # not required.
     dfw_wgs = df_c_wgts.reindex(sorted(df_c_wgts.columns), axis=1)
-    w_columns = df_c_wgts.columns
-    assert len(contracts) == len(w_columns)
-    # The contract must be defined in the corresponding weight dataframe.
-    weight_columns = ''.join(df_c_wgts.columns)
-    for c in contracts:
-        clause = weight_columns.find(c)
-        assert clause != -1
 
     # Reduce to the cross-sections held in the respective basket.
     df_mods_w = df_mods_w[cross_sections]
@@ -219,42 +251,8 @@ def consolidation_driver(data_frames: List[pd.DataFrame], ctypes: List[str]):
 
     return list(dict_.values()) + reduced_baskets
 
-def weight_dataframes(df: pd.DataFrame, basket_names: Union[str, List[str]] = None):
-    """
-    Helper function used to break up the original dataframe and create the wide weight
-    dataframes.
-
-    :param <pd.Dataframe> df: standardized DataFrame.
-    :param <str or List[str]> basket_names: string or list of basket names.
-
-    :return <List[pd.DataFrames], dict>:
-    """
-    xcats = df['xcat'].to_numpy()
-    wgt_indices = lambda index: index.split('_')[-1] == "WGT"
-    boolean = list(map(wgt_indices, xcats))
-
-    r_df = df[boolean]
-    b_column = lambda index: '_'.join(index.split('_')[1:-1])
-
-    r_df['basket_name'] = np.array(map(b_column, r_df['xcat']))
-
-    df_c_wgts = []
-    b_dict = {}
-    contracts = lambda index: '_'.join(index.split('_')[0:2])
-    for b in basket_names:
-        b_df = r_df[r_df['basket_name'] == b]
-        b_df_copy = b_df.copy()
-        b_df_copy = b_df_copy.drop(["basket_name"], axis=1)
-        column = (b_df['cid'] + "_" + b_df['xcat']).to_numpy()
-        b_df_copy['xcat'] = np.array(map(contracts, column))
-        b_wgt = b_df_copy.pivot(index="real_date", columns="xcat", values="value")
-        df_c_wgts.append(b_wgt)
-        b_dict[b] = list(set(b_df['xcat']))
-
-    return df_c_wgts, b_dict
-
 def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: List[str],
-                     sigrels: List[float], basket_names: Union[str, List[str]] = None,
+                     sigrels: List[float], basket_names: Union[str, List[str]] = [],
                      ret: str = 'XR_NSA', start: str = None,
                      end: str = None, scale: str = 'prop', min_obs: int = 252,
                      thresh: float = None, cs_vtarg: float = None,
@@ -274,7 +272,8 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
         appended. Examples are 'FX' or 'EQ'.
     :param <str or List[str]> basket_names: a string or list containing the name of each
         basket. The weight dataframes will be appended to the main dataframe. Therefore,
-        use the basket name to isolate the corresponding weights.
+        use the basket name to isolate the corresponding weights. The default value for
+        the parameter is an empty list.
     :param <List[float]> sigrels: values that translate the single signal into contract
         type and basket signals in the order defined by keys.
     :param <str> ret: postfix denoting the returns in % associated with contract types.
@@ -327,9 +326,12 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
     # A. Initial checks
 
-    df_c_wgts, baskets = weight_dataframes(df=dfd, basket_names=basket_names)
-    print(df_c_wgts)
-    print(baskets)
+    if basket_names:
+        df_c_wgts, baskets = weight_dataframes(df=df, basket_names=basket_names)
+        # List of dataframes.
+        df_c_wgts = iter(df_c_wgts)
+
+    ctypes_baskets = ctypes + basket_names
 
     categories = set(df['xcat'].unique())
     error_1 = "Signal category missing from the standardised dataframe."
@@ -337,18 +339,9 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
     error_2 = "Volatility Target must be numeric value."
     if cs_vtarg is not None:
         assert isinstance(cs_vtarg, (float, int)), error_2
+
     error_3 = "The number of signal relations must be equal to the number of contracts " \
-              "and and baskets defined in 'ctypes'."
-    if df_c_wgts is not None:
-        error_4 = "pd.DataFrame of basket weights expected."
-        assert isinstance(df_c_wgts, (list, pd.DataFrame)), error_4
-
-    basket_names = []
-    ctypes_baskets = ctypes + basket_names
-    if baskets:
-        basket_names = list(baskets.keys())
-        ctypes_baskets = ctypes + basket_names
-
+              "and, if defined, the number of baskets defined in 'ctypes'."
     clause = len(ctypes_baskets)
     assert len(sigrels) == clause, error_3
     assert isinstance(min_obs, int), "Minimum observation parameter must be an integer."
@@ -400,10 +393,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
     data_frames = []
     ctypes_sigrels = dict(zip(ctypes_baskets, sigrels))
-    if not isinstance(df_c_wgts, list):
-        df_c_wgts = [df_c_wgts]
 
-    df_c_wgts = iter(df_c_wgts)
     for k, v in ctypes_sigrels.items():
 
         # Copy of all modified signals. The single signal is being used to take a
@@ -432,7 +422,9 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
         df_posi = df_posi.sort_values(['cid', 'xcat', 'real_date'])[cols]
         data_frames.append(df_posi)
 
-    if baskets:
+    # Consolidate the positions across the formed panels and baskets (baskets will be a
+    # subset of the panels).
+    if basket_names:
         data_frames = consolidation_driver(data_frames, ctypes)
     df_tpos = pd.concat(data_frames, axis=0, ignore_index=True)
 
@@ -467,30 +459,32 @@ if __name__ == "__main__":
 
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    dfd_copy = dfd.copy()
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
 
     xcat_sig = 'FXXR_NSA'
 
-    # position_df = target_positions(df=dfd, cids=cids,
-                                   # xcat_sig='SIG_NSA',
-                                   # ctypes=['FX', 'EQ'], sigrels=[1, 0.5], ret='XR_NSA',
-                                   # start='2012-01-01', end='2020-10-30',
-                                   # scale='prop', min_obs=252, cs_vtarg=5, posname='POS')
+    position_df = target_positions(df=dfd, cids=cids,
+                                   xcat_sig='SIG_NSA',
+                                   ctypes=['FX', 'EQ'], sigrels=[1, 0.5], ret='XR_NSA',
+                                   start='2012-01-01', end='2020-10-30',
+                                   scale='prop', min_obs=252, cs_vtarg=5, posname='POS')
 
-    # position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
-                                   # ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
-                                   # start='2012-01-01', end='2020-10-30',
-                                   # scale='dig', cs_vtarg=0.1, posname='POS')
+    position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
+                                   ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
+                                   start='2012-01-01', end='2020-10-30',
+                                   scale='dig', cs_vtarg=0.1, posname='POS')
 
     # The secondary contract, EQXR_NSA, is defined over a shorter timeframe. Therefore,
     # on the additional dates, a valid position will be computed using the signal
     # category but a position will not be able to be taken for EQXR_NSA.
-    # position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
-                                   # ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
-                                   # start='2010-01-01', end='2020-12-31',
-                                   # scale='prop', cs_vtarg=None, posname='POS')
+    position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
+                                   ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
+                                   start='2010-01-01', end='2020-12-31',
+                                   scale='prop', cs_vtarg=None, posname='POS')
 
     # Testcase for both panel and individual basket performance.
+
     # Compute the returns on the Basket prior to calling the target positions, and pass
     # in the corresponding weight dataframe as a parameter. Therefore, the same weights
     # are involved in the target positions (adjust the positions according to the weight
@@ -505,9 +499,9 @@ if __name__ == "__main__":
 
     df_weight = df_weight[['cid', 'xcat', 'real_date', 'value']]
     dfd = dfd[['cid', 'xcat', 'real_date', 'value']]
-    dfd = pd.concat([dfd, df_weight])
+    dfd_concat = pd.concat([dfd_copy, df_weight])
 
-    position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
+    position_df = target_positions(df=dfd_concat, cids=cids, xcat_sig='FXXR_NSA',
                                    ctypes=['FX', 'EQ'],
                                    basket_names=["APC_FX"],
                                    sigrels=[1, -1, -0.5], ret='XR_NSA',
@@ -516,31 +510,30 @@ if __name__ == "__main__":
 
     # The final dataframe will have consolidated the basket positions and the panel
     # positions on the intersection of contracts.
-    # print(position_df)
+    print(position_df)
 
-    # The second testcase is multiple contracts which will require the associated number
+    # The second testcase is multiple baskets which will require the associated number
     # of weight dataframes.
     west_contracts = ['GBP_FX', 'USD_FX']
     apc_contracts = ['AUD_EQ', 'NZD_EQ']
-    # basket_2 = Basket(df=dfd, contracts=west_contracts, ret="XR_NSA",
-                      # cry=None, blacklist=black)
-    # basket_2.make_basket(weight_meth="equal", max_weight=0.55,
-                         # basket_name="GLB_EQUAL")
-    # df_weight_1 = basket_2.return_weights("GLB_EQUAL")
+    basket_2 = Basket(df=dfd_copy, contracts=west_contracts, ret="XR_NSA",
+                      cry=None, blacklist=black)
+    basket_2.make_basket(weight_meth="equal", max_weight=0.55,
+                         basket_name="WST_FX")
+    df_weight_1 = basket_2.return_weights("WST_FX")
 
-    # basket_3 = Basket(df=dfd, contracts=apc_contracts, ret="XR_NSA",
-                      # cry=None, blacklist=black)
-    # basket_3.make_basket(weight_meth="equal", max_weight=0.55,
-                         # basket_name="GLB_EQUAL")
-    # df_weight_2 = basket_3.return_weights("GLB_EQUAL")
-    # df_weight = [df_weight_1, df_weight_2]
+    basket_3 = Basket(df=dfd_copy, contracts=apc_contracts, ret="XR_NSA",
+                      cry=None, blacklist=black)
+    basket_3.make_basket(weight_meth="equal", max_weight=0.55,
+                         basket_name="APC_EQ")
+    df_weight_2 = basket_3.return_weights("APC_EQ")
+    df_weight = [df_weight_1, df_weight_2]
+    dfd_concat = pd.concat([dfd_copy] + df_weight)
 
-    # position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
-                                   # ctypes=['FX', 'EQ'],
-                                   # baskets={'WST_FX': west_contracts,
-                                            # 'APC_EQ': apc_contracts},
-                                   # df_c_wgts=df_weight,
-                                   # sigrels=[1, -1, -0.5, 1.5], ret='XR_NSA',
-                                   # start='2010-01-01', end='2020-12-31',
-                                   # scale='prop', cs_vtarg=None, posname='POS')
-    # print(position_df)
+    position_df = target_positions(df=dfd_concat, cids=cids, xcat_sig='FXXR_NSA',
+                                   ctypes=['FX', 'EQ'],
+                                   basket_names=["WST_FX", "APC_EQ"],
+                                   sigrels=[1, -1, -0.5, 1.5], ret='XR_NSA',
+                                   start='2010-01-01', end='2020-12-31',
+                                   scale='prop', cs_vtarg=None, posname='POS')
+    print(position_df)
