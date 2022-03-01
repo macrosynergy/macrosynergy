@@ -521,7 +521,7 @@ class Basket(object):
             basket_names = [basket_names]
 
         weight_baskets = []
-        select = ['ticker', 'real_date', 'value']
+        select = ["cid", "xcat", "real_date", "value"]
 
         dfw_weight_names = lambda w_name: w_name[:w_name.find(self.w_field)]
         for b in basket_names:
@@ -537,13 +537,22 @@ class Basket(object):
                 cols = list(map(dfw_weight_names, dfw_wgs.columns))
                 dfw_wgs_copy = dfw_wgs.copy()
                 dfw_wgs_copy.columns = cols
-                dfw_wgs_copy.columns.name = "cid"
+
+                dfw_wgs_copy.columns.name = "ticker"
                 w = dfw_wgs_copy.stack().to_frame("value").reset_index()
-                w = w.sort_values(['real_date'])
-                w = w.rename(columns={'cid': 'ticker'})
+                cid_func = lambda t: t.split('_')[0]
+                xcat_func = lambda t: t.split('_')[1:]
+
+                cids_w_df = list(map(cid_func, w["ticker"]))
+                w["cid"] = np.array(cids_w_df)
+
+                w = w.sort_values(['cid', 'real_date'])
+                w = w.rename(columns={"ticker": "xcat"})
+                w["xcat"] = np.array(list(map(xcat_func, w["xcat"])))
+
                 w = w[select]
                 w = w.loc[w.value > 0, select]
-                w['ticker'] += "_" + b + "_" + "WGT"
+                w["xcat"] += "_" + b + "_" + "WGT"
                 weight_baskets.append(w)
 
         return_df = pd.concat(weight_baskets)
