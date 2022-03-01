@@ -7,6 +7,7 @@ from macrosynergy.panel.historic_vol import expo_weights, expo_std, flat_std
 from macrosynergy.management.shape_dfs import reduce_df_by_ticker
 from macrosynergy.panel.converge_row import ConvergeRow
 from macrosynergy.management.simulate_quantamental_data import make_qdf
+import matplotlib.pyplot as plt
 
 
 class Basket(object):
@@ -466,6 +467,60 @@ class Basket(object):
         self.dict_retcry[basket_name] = df_retcry
         self.dict_wgs[basket_name] = dfw_wgs
 
+    def weight_visualiser(self, basket_name, start_date: str = None,
+                          end_date: str = None, subplots: bool = True):
+        """
+        Method used to visualise the weights associated with each contract in the basket.
+        The weights assigned to each contract can vary greatly over the respective time
+        period. For instance, if the weighting method chosen for the basket of contracts
+        is "invsd", each contract's weight is predicated on the return series' standard
+        deviation which, especially with an exponential moving average, can change
+        significantly over a short timeframe.
+
+        :param <str> basket_name: single basket name used to isolate the associated
+            weight dataframe.
+        :param <str> start_date: start date to truncate the visualisation period.
+        :param <str> end_date: end date.
+        :param <bool> subplots: controls whether all ticker's are on the same plot, or
+            each ticker is allocated an individual subplot.
+
+        """
+
+        date_conv = lambda d: pd.Timestamp(d).strftime("%Y-%m-%d %X")
+        try:
+            dfw_wgs = self.dict_wgs[basket_name]
+        except KeyError as e:
+            print(f"Basket not found - call make_basket() method first: {e}.")
+        else:
+            if isinstance(start_date, str) and isinstance(end_date, str):
+                self.date_check(start_date)
+                self.date_check(end_date)
+                start_date = date_conv(start_date)
+                end_date = date_conv(end_date)
+            elif isinstance(start_date, str):
+                self.date_check(start_date)
+                start_date = date_conv(start_date)
+                end_date = dfw_wgs.index[-1]
+            elif isinstance(end_date, str):
+                self.date_check(end_date)
+                start_date = dfw_wgs.index[0]
+                end_date = date_conv(end_date)
+            else:
+                start_date = dfw_wgs.index[0]
+                end_date = dfw_wgs.index[-1]
+
+            error_1 = f"{start_date} unavailable in weight dataframe."
+            c = dfw_wgs.index
+            assert start_date in c, error_1
+            error_2 = f"{end_date} unavailable in weight dataframe."
+            assert end_date in c, error_2
+
+            dfw_wgs = dfw_wgs.truncate(before=start_date, after=end_date)
+            dfw_wgs.plot(subplots=subplots, title="Weight Values Timestamp",
+                         legend=True)
+            plt.xlabel('real_date, years')
+            plt.show()
+
     def return_basket(self, basket_names: Union[str, List[str]] = None):
         """
         Return standardized dataframe of basket performance data based on one or more
@@ -493,7 +548,7 @@ class Basket(object):
             try:
                 dfw_retcry = self.dict_retcry[b]
             except KeyError as e:
-                print(f"Basket not found: {e}.")
+                print(f"Basket not found - call make_basket() method first: {e}.")
             else:
                 ret_baskets.append(dfw_retcry)
 
@@ -528,7 +583,7 @@ class Basket(object):
             try:
                 dfw_wgs = self.dict_wgs[b]
             except KeyError as e:
-                print(f"Basket not found: {e}.")
+                print(f"Basket not found - call make_basket() method first: {e}.")
             else:
                 if self.wgt_flag and self.exo_w_postfix is not None:
                     self.__dict__['w_field'] = self.exo_w_postfix
@@ -662,3 +717,15 @@ if __name__ == "__main__":
     basket_4.make_basket(weight_meth="equal", max_weight=0.45,
                          basket_name="GLB_EQUAL")
     weight_equal = basket_4.return_weights(basket_names="GLB_EQUAL")
+
+    basket_4.weight_visualiser("GLB_EQUAL")
+
+    # Testing the visualisation method. Potentially should vary depending on the
+    # associated method.
+    basket_5 = Basket(df=dfd, contracts=contracts_1,
+                      ret="XR_NSA", blacklist=black)
+    basket_5.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
+                         max_weight=0.55, remove_zeros=True, basket_name="GLB_INVERSE")
+    df_basket_inv = basket_5.return_basket("GLB_INVERSE")
+    basket_5.weight_visualiser("GLB_INVERSE", start_date="2020-01-07",
+                               end_date="2020-12-31")
