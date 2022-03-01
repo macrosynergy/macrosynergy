@@ -328,10 +328,8 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
     if basket_names:
         df_c_wgts, baskets = weight_dataframes(df=df, basket_names=basket_names)
-        # List of dataframes.
-        df_c_wgts = iter(df_c_wgts)
-        # Isolate the panel signals. Hold in a separate data structure.
-        no_panels = len(sigrels) - len(basket_names)
+        df_c_wgts = iter(df_c_wgts)  # convert df list  to iterator object
+        no_panels = len(sigrels) - len(basket_names)  # number applications to panels
         panel_sigrels = sigrels[:no_panels]
     else:
         panel_sigrels = sigrels
@@ -469,24 +467,24 @@ if __name__ == "__main__":
 
     xcat_sig = 'FXXR_NSA'
 
-    position_df = target_positions(df=dfd, cids=cids,
-                                   xcat_sig='SIG_NSA',
-                                   ctypes=['FX', 'EQ'], sigrels=[1, 0.5], ret='XR_NSA',
-                                   start='2012-01-01', end='2020-10-30',
-                                   scale='prop', min_obs=252, cs_vtarg=5, posname='POS')
-
-    position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
-                                   ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
-                                   start='2012-01-01', end='2020-10-30',
-                                   scale='dig', cs_vtarg=0.1, posname='POS')
-
-    # The secondary contract, EQXR_NSA, is defined over a shorter timeframe. Therefore,
-    # on the additional dates, a valid position will be computed using the signal
-    # category but a position will not be able to be taken for EQXR_NSA.
-    position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
-                                   ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
-                                   start='2010-01-01', end='2020-12-31',
-                                   scale='prop', cs_vtarg=None, posname='POS')
+    # position_df = target_positions(df=dfd, cids=cids,
+    #                                xcat_sig='SIG_NSA',
+    #                                ctypes=['FX', 'EQ'], sigrels=[1, 0.5], ret='XR_NSA',
+    #                                start='2012-01-01', end='2020-10-30',
+    #                                scale='prop', min_obs=252, cs_vtarg=5, posname='POS')
+    #
+    # position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
+    #                                ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
+    #                                start='2012-01-01', end='2020-10-30',
+    #                                scale='dig', cs_vtarg=0.1, posname='POS')
+    #
+    # # The secondary contract, EQXR_NSA, is defined over a shorter timeframe. Therefore,
+    # # on the additional dates, a valid position will be computed using the signal
+    # # category but a position will not be able to be taken for EQXR_NSA.
+    # position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
+    #                                ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
+    #                                start='2010-01-01', end='2020-12-31',
+    #                                scale='prop', cs_vtarg=None, posname='POS')
 
     # Testcase for both panel and individual basket performance.
 
