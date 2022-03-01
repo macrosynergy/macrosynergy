@@ -537,6 +537,7 @@ class Basket(object):
                 cols = list(map(dfw_weight_names, dfw_wgs.columns))
                 dfw_wgs_copy = dfw_wgs.copy()
                 dfw_wgs_copy.columns = cols
+
                 dfw_wgs_copy.columns.name = "ticker"
                 w = dfw_wgs_copy.stack().to_frame("value").reset_index()
                 cid_func = lambda t: t.split('_')[0]
