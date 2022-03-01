@@ -445,7 +445,7 @@ class TestAll(unittest.TestCase):
         self.dataframe_generator()
         basket_1 = Basket(df=self.dfd, contracts=self.contracts, ret="XR_NSA",
                           cry=["CRY_NSA", "CRR_NSA"], blacklist=self.black,
-                          ewgts="WBASE_NSA")
+                          ewgts=None)
         basket_1.make_basket(weight_meth="equal", max_weight=0.45,
                              basket_name="GLB_EQUAL")
         basket_1.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,

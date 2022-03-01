@@ -342,11 +342,15 @@ class Basket(object):
         elif weight_meth in ["values", "inv_values"]:
             assert ewgt in self.wgt, f'{ewgt} is not defined on the instance.'
             # Lag by one day to be used as weights.
-            dfw_wgt = self.dfws_wgt[ewgt].shift(1)
-            cols = sorted(dfw_wgt.columns)
-            dfw_ret = dfw_wgt.reindex(cols, axis=1)
-            dfw_wgt = dfw_wgt.reindex(cols, axis=1)
-            dfw_wgs = self.values_weight(dfw_ret, dfw_wgt, weight_meth)
+            try:
+                dfw_wgt = self.dfws_wgt[ewgt].shift(1)
+            except KeyError as e:
+                print(f"Basket not found: {e}.")
+            else:
+                cols = sorted(dfw_wgt.columns)
+                dfw_ret = dfw_wgt.reindex(cols, axis=1)
+                dfw_wgt = dfw_wgt.reindex(cols, axis=1)
+                dfw_wgs = self.values_weight(dfw_ret, dfw_wgt, weight_meth)
 
         else:
             raise NotImplementedError(f"Weight method unknown {weight_meth}")
@@ -430,6 +434,7 @@ class Basket(object):
 
         assert isinstance(weight_meth, str), "`weight_meth` must be string"
 
+        self.__dict__['exo_w_postfix'] = ewgt
         dfw_wgs = self.make_weights(weight_meth=weight_meth, weights=weights,
                                     lback_meth=lback_meth, lback_periods=lback_periods,
                                     ewgt=ewgt, max_weight=max_weight,
@@ -446,7 +451,8 @@ class Basket(object):
         if self.cry_flag:
             cry_list = []
             for cr in self.cry:
-                dfw_wgs_copy = self.column_manager(df_cat=self.dfws_cry[cr], dfw_wgs=dfw_wgs)
+                dfw_wgs_copy = self.column_manager(df_cat=self.dfws_cry[cr],
+                                                   dfw_wgs=dfw_wgs)
                 dfw_bcry = self.dfws_cry[cr].multiply(dfw_wgs_copy).sum(axis=1)
                 dfcry = dfw_bcry.to_frame("value").reset_index()
                 basket_cry = basket_name + "_" + cr
@@ -515,19 +521,38 @@ class Basket(object):
             basket_names = [basket_names]
 
         weight_baskets = []
-        select = ['ticker', 'real_date', 'value']
+        select = ["cid", "xcat", "real_date", "value"]
+
+        dfw_weight_names = lambda w_name: w_name[:w_name.find(self.w_field)]
         for b in basket_names:
             try:
                 dfw_wgs = self.dict_wgs[b]
             except KeyError as e:
                 print(f"Basket not found: {e}.")
             else:
-                dfw_wgs.columns.name = "cid"
-                w = dfw_wgs.stack().to_frame("value").reset_index()
-                w = w.sort_values(['real_date'])
-                w = w.rename(columns={'cid': 'ticker'})
+                if self.wgt_flag and self.exo_w_postfix is not None:
+                    self.__dict__['w_field'] = self.exo_w_postfix
+                else:
+                    self.__dict__['w_field'] = self.ret
+                cols = list(map(dfw_weight_names, dfw_wgs.columns))
+                dfw_wgs_copy = dfw_wgs.copy()
+                dfw_wgs_copy.columns = cols
+
+                dfw_wgs_copy.columns.name = "ticker"
+                w = dfw_wgs_copy.stack().to_frame("value").reset_index()
+                cid_func = lambda t: t.split('_')[0]
+                xcat_func = lambda t: t.split('_')[1:]
+
+                cids_w_df = list(map(cid_func, w["ticker"]))
+                w["cid"] = np.array(cids_w_df)
+
+                w = w.sort_values(['cid', 'real_date'])
+                w = w.rename(columns={"ticker": "xcat"})
+                w["xcat"] = np.array(list(map(xcat_func, w["xcat"])))
+
                 w = w[select]
                 w = w.loc[w.value > 0, select]
+                w["xcat"] += "_" + b + "_" + "WGT"
                 weight_baskets.append(w)
 
         return_df = pd.concat(weight_baskets)
@@ -624,3 +649,16 @@ if __name__ == "__main__":
                          basket_name="GLB_EQUAL")
     df_equal = basket_3.return_basket("GLB_EQUAL")
     print(df_equal)
+
+    # Final test.
+    # Tests the condition: "if self.wgt_flag and self.exo_w_postfix is not None".
+    contracts = ['AUD_FX', 'AUD_EQ', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
+    basket_4 = Basket(df=dfd, contracts=contracts, ret="XR_NSA",
+                      cry=["CRY_NSA", "CRR_NSA"], blacklist=black,
+                      ewgts="WBASE_NSA")
+    basket_4.make_basket(weight_meth="values", ewgt="WBASE_NSA", max_weight=0.55,
+                         remove_zeros=True, basket_name="GLB_VALUES")
+
+    basket_4.make_basket(weight_meth="equal", max_weight=0.45,
+                         basket_name="GLB_EQUAL")
+    weight_equal = basket_4.return_weights(basket_names="GLB_EQUAL")
