@@ -140,7 +140,9 @@ def cs_unit_returns(df: pd.DataFrame, contract_returns: List[str],
     df_rets = df_c_rets.stack().to_frame("value").reset_index()
     df_rets['xcat'] = ret
 
-    return df_rets
+    cols = ['cid', 'xcat', 'real_date', 'value']
+
+    return df_rets[cols].sort_values(by=cols[:3])
 
 def basket_handler(df_mods_w: pd.DataFrame, df_c_wgts: pd.DataFrame,
                    contracts: List[str]):
@@ -222,7 +224,7 @@ def consolidation_help(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
 
     return pd.concat(panel_copy), basket_df
 
-def consolidation_driver(data_frames: List[pd.DataFrame], ctypes: List[str]):
+def consolidate_positions(data_frames: List[pd.DataFrame], ctypes: List[str]):
     """
     Method used to consolidate positions if baskets are used. The constituents of a
     basket will be a subset of one of the panels.
@@ -246,6 +248,7 @@ def consolidation_driver(data_frames: List[pd.DataFrame], ctypes: List[str]):
 
         panel_df = dict_[c_type]
         panel_df, basket_df = consolidation_help(panel_df, basket_df=df)
+        # Todo: integrate consolidation_help in this function
         dict_[c_type] = panel_df
         reduced_baskets.append(basket_df)
 
@@ -328,11 +331,9 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
     if basket_names:
         df_c_wgts, baskets = weight_dataframes(df=df, basket_names=basket_names)
-        # List of dataframes.
-        df_c_wgts = iter(df_c_wgts)
-        # Isolate the panel signals. Hold in a separate data structure.
-        no_panels = len(sigrels) - len(basket_names)
-        panel_sigrels = sigrels[:no_panels]
+        df_c_wgts = iter(df_c_wgts)  # convert df list  to iterator object
+        no_panels = len(sigrels) - len(basket_names)  # number applications to panels
+        panel_sigrels = sigrels[:no_panels]  # sigrels only for regular panels
     else:
         panel_sigrels = sigrels
 
@@ -380,7 +381,6 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
         df_csurs = cs_unit_returns(dfx, contract_returns=contract_returns,
                                    sigrels=panel_sigrels)  # Gives cross-section returns.
-        df_csurs = df_csurs[cols]
 
         # D.2. Calculate volatility adjustment ratios.
 
@@ -396,27 +396,26 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
     # E. Actual position calculation.
 
-    data_frames = []
+    df_pos_cons = []
     ctypes_sigrels = dict(zip(ctypes_baskets, sigrels))
 
     for k, v in ctypes_sigrels.items():
 
-        # Copy of all modified signals. The single signal is being used to take a
-        # position in multiple contracts. However, the position taken in each contract
-        # will vary according to the specified signal.
-        df_mods_copy = df_mods_w.copy()
+        df_mods_copy = df_mods_w.copy()  # modified signal signal frame
 
-        if use_vtr:
-            # Apply vtr - scaling factor.
-            dfw_pos_vt = df_mods_copy.multiply(dfw_vtr)
+        if use_vtr:  # apply vol target ratios if required
+            dfw_pos_vt = df_mods_copy.multiply(dfw_vtr)  # scale positions by vol target
             dfw_pos_vt.dropna(how='all', inplace=True)
-            df_mods_copy = dfw_pos_vt
+            df_mods_copy = dfw_pos_vt  # further modified single signal frame
 
-        if k in basket_names:
+        if k in basket_names:  # convert to basket contract signals if basket
             contracts = baskets[k]
-            w_dataframe = next(df_c_wgts)
-            df_mods_copy = basket_handler(df_mods_w=df_mods_copy, df_c_wgts=w_dataframe,
+            df_c_weights = next(df_c_wgts)
+            df_mods_copy = basket_handler(df_mods_w=df_mods_copy, df_c_wgts=df_c_weights,
                                           contracts=contracts)
+            # Todo: the above would be a simple pivot and multiplication
+            # Todo: check if this cannot be done in 3 lines of code without new method
+
 
         # Allows for the signal being applied to the basket constituents on the original
         # dataframe.
@@ -425,13 +424,13 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
         df_posi = df_mods_copy.stack().to_frame("value").reset_index()
         df_posi['xcat'] = k
         df_posi = df_posi.sort_values(['cid', 'xcat', 'real_date'])[cols]
-        data_frames.append(df_posi)
+        df_pos_cons.append(df_posi)
 
     # Consolidate the positions across the formed panels and baskets (baskets will be a
     # subset of the panels).
     if basket_names:
-        data_frames = consolidation_driver(data_frames, ctypes)
-    df_tpos = pd.concat(data_frames, axis=0, ignore_index=True)
+        df_pos_cons = consolidate_positions(df_pos_cons, ctypes)
+    df_tpos = pd.concat(df_pos_cons, axis=0, ignore_index=True)
 
     df_tpos['xcat'] += '_' + posname
     df_tpos['xcat'] = df_tpos['cid'] + '_' + df_tpos['xcat']
@@ -469,24 +468,24 @@ if __name__ == "__main__":
 
     xcat_sig = 'FXXR_NSA'
 
-    position_df = target_positions(df=dfd, cids=cids,
-                                   xcat_sig='SIG_NSA',
-                                   ctypes=['FX', 'EQ'], sigrels=[1, 0.5], ret='XR_NSA',
-                                   start='2012-01-01', end='2020-10-30',
-                                   scale='prop', min_obs=252, cs_vtarg=5, posname='POS')
-
-    position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
-                                   ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
-                                   start='2012-01-01', end='2020-10-30',
-                                   scale='dig', cs_vtarg=0.1, posname='POS')
-
-    # The secondary contract, EQXR_NSA, is defined over a shorter timeframe. Therefore,
-    # on the additional dates, a valid position will be computed using the signal
-    # category but a position will not be able to be taken for EQXR_NSA.
-    position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
-                                   ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
-                                   start='2010-01-01', end='2020-12-31',
-                                   scale='prop', cs_vtarg=None, posname='POS')
+    # position_df = target_positions(df=dfd, cids=cids,
+    #                                xcat_sig='SIG_NSA',
+    #                                ctypes=['FX', 'EQ'], sigrels=[1, 0.5], ret='XR_NSA',
+    #                                start='2012-01-01', end='2020-10-30',
+    #                                scale='prop', min_obs=252, cs_vtarg=5, posname='POS')
+    #
+    # position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
+    #                                ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
+    #                                start='2012-01-01', end='2020-10-30',
+    #                                scale='dig', cs_vtarg=0.1, posname='POS')
+    #
+    # # The secondary contract, EQXR_NSA, is defined over a shorter timeframe. Therefore,
+    # # on the additional dates, a valid position will be computed using the signal
+    # # category but a position will not be able to be taken for EQXR_NSA.
+    # position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
+    #                                ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
+    #                                start='2010-01-01', end='2020-12-31',
+    #                                scale='prop', cs_vtarg=None, posname='POS')
 
     # Testcase for both panel and individual basket performance.
 
@@ -506,12 +505,12 @@ if __name__ == "__main__":
     dfd = dfd[['cid', 'xcat', 'real_date', 'value']]
     dfd_concat = pd.concat([dfd_copy, df_weight])
 
-    position_df = target_positions(df=dfd_concat, cids=cids, xcat_sig='FXXR_NSA',
+    position_df = target_positions(df=dfd_concat, cids=cids, xcat_sig='SIG_NSA',
                                    ctypes=['FX', 'EQ'],
                                    basket_names=["APC_FX"],
                                    sigrels=[1, -1, -0.5], ret='XR_NSA',
                                    start='2010-01-01', end='2020-12-31',
-                                   scale='prop', cs_vtarg=None, posname='POS')
+                                   scale='prop', cs_vtarg=10, posname='POS')
 
     # The final dataframe will have consolidated the basket positions and the panel
     # positions on the intersection of contracts.
