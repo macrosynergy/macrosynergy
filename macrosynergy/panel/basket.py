@@ -9,6 +9,7 @@ from macrosynergy.panel.converge_row import ConvergeRow
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+from seaborn import FacetGrid
 
 
 class Basket(object):
@@ -470,8 +471,8 @@ class Basket(object):
 
     def weight_visualiser(self, basket_name, start_date: str = None,
                           end_date: str = None, subplots: bool = True,
-                          all_tickers: bool = True, single_ticker: str = None,
-                          percentage_change: bool = False):
+                          facet_grid: bool = False, all_tickers: bool = True,
+                          single_ticker: str = None, percentage_change: bool = False):
         """
         Method used to visualise the weights associated with each contract in the basket.
         The weights assigned to each contract can vary greatly over the respective time
@@ -486,6 +487,9 @@ class Basket(object):
         :param <str> end_date: end date.
         :param <bool> subplots: controls whether all ticker's are on the same plot, or
             each ticker is allocated an individual subplot.
+        :param <bool> facet_grid: parameter used to break up the plot into multiple
+            cartesian coordinate systems. If the basket consists of a high number of
+            contracts, using the Facet Grid is recommended.
         :param <bool> all_tickers: all tickers are included in the graphical display.
             If false, the parameter "single_ticker" must be defined. The default is True:
             all tickers will be included.
@@ -536,9 +540,19 @@ class Basket(object):
                 assert single_ticker in dfw_wgs.columns, error_4
                 dfw_wgs = dfw_wgs[[single_ticker]]
 
-            dfw_wgs.plot(subplots=subplots, title="Weight Values Timestamp",
-                         legend=True)
-            plt.xlabel('real_date, years')
+            if facet_grid:
+                df_stack = dfw_wgs.stack().to_frame("value").reset_index()
+                df_stack = df_stack.sort_values(['ticker', 'real_date'])
+                g = FacetGrid(df_stack, col="ticker")
+                g.map(plt.plot, "value")
+                g.add_legend()
+                no_contracts = dfw_wgs.shape[1]
+                equal_value = (1 / no_contracts)
+                g.refline(y=round(equal_value, 3))
+            else:
+                dfw_wgs.plot(subplots=subplots, title="Weight Values Timestamp",
+                             legend=True)
+                plt.xlabel('real_date, years')
 
             date_func = lambda d: pd.Timestamp(d).strftime("%Y-%m-%d")
             if percentage_change:
@@ -755,7 +769,7 @@ if __name__ == "__main__":
                          basket_name="GLB_EQUAL")
     weight_equal = basket_4.return_weights(basket_names="GLB_EQUAL")
 
-    basket_4.weight_visualiser("GLB_EQUAL")
+    basket_4.weight_visualiser("GLB_EQUAL", facet_grid=True)
 
     # Testing the visualisation method. Potentially should vary depending on the
     # associated method.
@@ -765,5 +779,8 @@ if __name__ == "__main__":
                          max_weight=0.55, remove_zeros=True, basket_name="GLB_INVERSE")
     df_basket_inv = basket_5.return_basket("GLB_INVERSE")
     basket_5.weight_visualiser("GLB_INVERSE", start_date="2020-01-07",
-                               end_date="2020-12-31", subplots=True, all_tickers=False,
-                               single_ticker='AUD_FXXR_NSA', percentage_change=True)
+                               end_date="2020-12-31", subplots=True,
+                               all_tickers=False, single_ticker='AUD_FXXR_NSA',
+                               percentage_change=True)
+
+    basket_5.weight_visualiser("GLB_INVERSE", all_tickers=True, facet_grid=True)
