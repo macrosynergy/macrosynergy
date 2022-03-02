@@ -248,7 +248,6 @@ def consolidate_positions(data_frames: List[pd.DataFrame], ctypes: List[str]):
 
         panel_df = dict_[c_type]
         panel_df, basket_df = consolidation_help(panel_df, basket_df=df)
-        # Todo: integrate consolidation_help in this function
         dict_[c_type] = panel_df
         reduced_baskets.append(basket_df)
 
@@ -331,9 +330,9 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
     if basket_names:
         df_c_wgts, baskets = weight_dataframes(df=df, basket_names=basket_names)
-        df_c_wgts = iter(df_c_wgts)  # convert df list  to iterator object
-        no_panels = len(sigrels) - len(basket_names)  # number applications to panels
-        panel_sigrels = sigrels[:no_panels]  # sigrels only for regular panels
+        df_c_wgts = iter(df_c_wgts)
+        no_panels = len(sigrels) - len(basket_names)
+        panel_sigrels = sigrels[:no_panels]  # sigrels only for regular panels.
     else:
         panel_sigrels = sigrels
 
@@ -401,21 +400,18 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
     for k, v in ctypes_sigrels.items():
 
-        df_mods_copy = df_mods_w.copy()  # modified signal signal frame
+        df_mods_copy = df_mods_w.copy()
 
-        if use_vtr:  # apply vol target ratios if required
-            dfw_pos_vt = df_mods_copy.multiply(dfw_vtr)  # scale positions by vol target
+        if use_vtr:
+            dfw_pos_vt = df_mods_copy.multiply(dfw_vtr)
             dfw_pos_vt.dropna(how='all', inplace=True)
-            df_mods_copy = dfw_pos_vt  # further modified single signal frame
+            df_mods_copy = dfw_pos_vt
 
-        if k in basket_names:  # convert to basket contract signals if basket
+        if k in basket_names:
             contracts = baskets[k]
             df_c_weights = next(df_c_wgts)
             df_mods_copy = basket_handler(df_mods_w=df_mods_copy, df_c_wgts=df_c_weights,
                                           contracts=contracts)
-            # Todo: the above would be a simple pivot and multiplication
-            # Todo: check if this cannot be done in 3 lines of code without new method
-
 
         # Allows for the signal being applied to the basket constituents on the original
         # dataframe.
@@ -468,24 +464,24 @@ if __name__ == "__main__":
 
     xcat_sig = 'FXXR_NSA'
 
-    # position_df = target_positions(df=dfd, cids=cids,
-    #                                xcat_sig='SIG_NSA',
-    #                                ctypes=['FX', 'EQ'], sigrels=[1, 0.5], ret='XR_NSA',
-    #                                start='2012-01-01', end='2020-10-30',
-    #                                scale='prop', min_obs=252, cs_vtarg=5, posname='POS')
-    #
-    # position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
-    #                                ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
-    #                                start='2012-01-01', end='2020-10-30',
-    #                                scale='dig', cs_vtarg=0.1, posname='POS')
-    #
-    # # The secondary contract, EQXR_NSA, is defined over a shorter timeframe. Therefore,
-    # # on the additional dates, a valid position will be computed using the signal
-    # # category but a position will not be able to be taken for EQXR_NSA.
-    # position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
-    #                                ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
-    #                                start='2010-01-01', end='2020-12-31',
-    #                                scale='prop', cs_vtarg=None, posname='POS')
+    position_df = target_positions(df=dfd, cids=cids,
+                                   xcat_sig='SIG_NSA',
+                                   ctypes=['FX', 'EQ'], sigrels=[1, 0.5], ret='XR_NSA',
+                                   start='2012-01-01', end='2020-10-30',
+                                   scale='prop', min_obs=252, cs_vtarg=5, posname='POS')
+
+    position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
+                                   ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
+                                   start='2012-01-01', end='2020-10-30',
+                                   scale='dig', cs_vtarg=0.1, posname='POS')
+
+    # The secondary contract, EQXR_NSA, is defined over a shorter timeframe. Therefore,
+    # on the additional dates, a valid position will be computed using the signal
+    # category but a position will not be able to be taken for EQXR_NSA.
+    position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
+                                   ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
+                                   start='2010-01-01', end='2020-12-31',
+                                   scale='prop', cs_vtarg=None, posname='POS')
 
     # Testcase for both panel and individual basket performance.
 
