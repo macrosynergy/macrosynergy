@@ -8,6 +8,7 @@ from macrosynergy.management.shape_dfs import reduce_df_by_ticker
 from macrosynergy.panel.converge_row import ConvergeRow
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 
 
 class Basket(object):
@@ -468,7 +469,9 @@ class Basket(object):
         self.dict_wgs[basket_name] = dfw_wgs
 
     def weight_visualiser(self, basket_name, start_date: str = None,
-                          end_date: str = None, subplots: bool = True):
+                          end_date: str = None, subplots: bool = True,
+                          all_tickers: bool = True, single_ticker: str = None,
+                          percentage_change: bool = False):
         """
         Method used to visualise the weights associated with each contract in the basket.
         The weights assigned to each contract can vary greatly over the respective time
@@ -483,6 +486,15 @@ class Basket(object):
         :param <str> end_date: end date.
         :param <bool> subplots: controls whether all ticker's are on the same plot, or
             each ticker is allocated an individual subplot.
+        :param <bool> all_tickers: all tickers are included in the graphical display.
+            If false, the parameter "single_ticker" must be defined. The default is True:
+            all tickers will be included.
+        :param <str> single_ticker: individual ticker for further, more detailed,
+            analysis.
+        :param <bool> percentage_change: graphical display used to further assimilate the
+            fluctuations in the contract's weight. The graphical display is limited to a
+            single contract. Therefore, pass the ticker into the parameter
+            "single_ticker".
 
         """
 
@@ -516,9 +528,34 @@ class Basket(object):
             assert end_date in c, error_2
 
             dfw_wgs = dfw_wgs.truncate(before=start_date, after=end_date)
+            if not all_tickers:
+                error_3 = "The parameter, 'single_ticker', must be a <str>."
+                assert isinstance(single_ticker, str), error_3
+                error_4 = f"Ticker not present in the weight dataframe. Available " \
+                          f"tickers: {dfw_wgs.columns}."
+                assert single_ticker in dfw_wgs.columns, error_4
+                dfw_wgs = dfw_wgs[[single_ticker]]
+
             dfw_wgs.plot(subplots=subplots, title="Weight Values Timestamp",
                          legend=True)
             plt.xlabel('real_date, years')
+
+            date_func = lambda d: pd.Timestamp(d).strftime("%Y-%m-%d")
+            if percentage_change:
+                error_5 = "Percentage change display is applied to a single ticker. Set " \
+                          "the parameter 'all_tickers' to False."
+                assert dfw_wgs.shape[1] == 1, error_5
+
+                fig, ax = plt.subplots()
+                dfw_pct = dfw_wgs.pct_change(periods=1) * 100
+                n_index = np.array(list(map(date_func, dfw_pct.index)))
+                dfw_pct = dfw_pct.set_index(keys=n_index)
+                dfw_pct.plot(kind='bar', color='coral', ax=ax)
+                ax.xaxis.set_major_locator(mdates.MonthLocator())
+                plt.xticks(rotation=0)
+                ax.set_ylabel("Percentage Change in weight.")
+                ax.legend()
+
             plt.show()
 
     def return_basket(self, basket_names: Union[str, List[str]] = None):
@@ -728,4 +765,5 @@ if __name__ == "__main__":
                          max_weight=0.55, remove_zeros=True, basket_name="GLB_INVERSE")
     df_basket_inv = basket_5.return_basket("GLB_INVERSE")
     basket_5.weight_visualiser("GLB_INVERSE", start_date="2020-01-07",
-                               end_date="2020-12-31")
+                               end_date="2020-12-31", subplots=True, all_tickers=False,
+                               single_ticker='AUD_FXXR_NSA', percentage_change=True)
