@@ -778,9 +778,12 @@ if __name__ == "__main__":
     basket_5.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
                          max_weight=0.55, remove_zeros=True, basket_name="GLB_INVERSE")
     df_basket_inv = basket_5.return_basket("GLB_INVERSE")
+
+    # Examples of the different visualisation options.
     basket_5.weight_visualiser("GLB_INVERSE", start_date="2020-01-07",
-                               end_date="2020-12-31", subplots=True,
+                               end_date="2020-12-31", subplots=False,
                                all_tickers=False, single_ticker='AUD_FXXR_NSA',
                                percentage_change=True)
+    basket_5.weight_visualiser("GLB_INVERSE", subplots=False)
 
     basket_5.weight_visualiser("GLB_INVERSE", all_tickers=True, facet_grid=True)
