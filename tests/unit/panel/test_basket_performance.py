@@ -415,9 +415,13 @@ class TestAll(unittest.TestCase):
         assert index_xr == 1017
 
         weight_row = dfw_wgs.loc[random_index_date]
-        return_row = dfw_ret.loc[random_index_date]
+        weight_row = weight_row.sort_index(axis=0)
+        w_row_array = weight_row.to_numpy()
 
-        manual_calculation = return_row.multiply(weight_row).sum(axis=0)
+        return_row = dfw_ret.loc[random_index_date]
+        return_row = return_row.sort_index(axis=0)
+
+        manual_calculation = return_row.multiply(w_row_array).sum(axis=0)
         manual_value = round(manual_calculation, 5)
         # Test on the return category: 'XR_NSA'.
         basket_xr = basket_df[basket_df['ticker'] == 'GLB_EQUAL_XR_NSA']
@@ -438,6 +442,36 @@ class TestAll(unittest.TestCase):
         index_cry = np.where(basket_cry['real_date'] == random_index_date)[0][0]
         basket_value = round(basket_cry.iloc[index_cry]['value'], 5)
         self.assertTrue(manual_value == basket_value)
+
+    def test_weight_visualiser(self):
+
+        # Will exclusively test the assert statements in the method. The various
+        # visualisation tools require certain parameters to be defined (dependency
+        # between parameters.
+
+        self.dataframe_generator()
+        basket_1 = Basket(df=self.dfd, contracts=self.contracts, ret="XR_NSA",
+                          cry=["CRY_NSA", "CRR_NSA"], blacklist=self.black,
+                          ewgts=None)
+        basket_1.make_basket(weight_meth="equal", max_weight=0.45,
+                             basket_name="GLB_EQUAL")
+        # Pivoted dataframe. The simplest test would be to chose the first dates outside
+        # the defined time-period, index.
+        equal_dfw = basket_1.dict_wgs["GLB_EQUAL"]
+        date_index = equal_dfw.index
+
+        f_date = date_index[0] - pd.Timedelta(days=1)
+        l_date = date_index[-1] + pd.Timedelta(days=1)
+
+        # The method allows the user to truncate the weight dataframe to analyse over a
+        # specific period of time (highly volatile periods etc) by defining the
+        # "start_date" & "end_date" parameters. However, the dates passed must be within
+        # the time-period.
+        with self.assertRaises(AssertionError):
+            # Both the date parameters expect string objects.
+            basket_1.weight_visualiser("GLB_EQUAL", start_date=str(f_date),
+                                       end_date=str(l_date), all_tickers=True,
+                                       percentage_change=False)
 
     def test_return_basket(self):
 
