@@ -3,6 +3,7 @@
 import unittest
 from macrosynergy.signal.target_positions import *
 from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.panel.basket import Basket
 from tests.simulate import make_qdf
 import random
 import pandas as pd
@@ -126,7 +127,8 @@ class TestAll(unittest.TestCase):
         return df_c_ret.loc[date]
 
     def test_cs_unit_returns(self):
-
+        # The method is required for volatility targeting to adjust the respective
+        # positions.
         self.dataframe_generator()
 
         sigrels = [1, -1]
@@ -183,8 +185,42 @@ class TestAll(unittest.TestCase):
         # respective dates will be removed from the return dataframe (used to compute
         # the volatility across the positions).
         first_date = str(dates.iloc[0].strftime("%Y-%m-%d"))
-        print(first_date)
         self.assertTrue(first_date == "2012-01-02")
+
+    def test_basket_handler(self):
+
+        self.dataframe_generator()
+
+        reduced_dfd = reduce_df(df=self.dfd, xcats=self.xcats, cids=self.cids,
+                                blacklist=None)
+        # The positions are computed across the panel (for every cross-section available
+        # for that asset class). However, baskets can also be passed into the function
+        # and the basket of contracts will represent a subset of the panel. Further, each
+        # contract within the basket has a corresponding weight to adjust the position.
+        # Therefore, test that the basket_handler() produces the correct weight-adjusted
+        # positions for the contracts in the basket.
+
+        xcat_sig = 'SIG_NSA'
+        scale = 'prop'
+        df_mods = modify_signals(df=reduced_dfd, cids=self.cids, xcat_sig=xcat_sig,
+                                 scale=scale)
+
+        # The position computed using the signal is used for multiple assets. The only
+        # difference is the signal.
+        df_mods_w = df_mods.pivot(index="real_date", columns="cid", values="value")
+
+        # Create the basket: the basket will be a subset of the cross-sections present in
+        # the panel.
+        apc_contracts = ['AUD_FX', 'NZD_FX']
+        basket_1 = Basket(df=reduced_dfd, contracts=apc_contracts, ret="XR_NSA",
+                          cry=None)
+        basket_1.make_basket(weight_meth="equal", max_weight=0.55,
+                             basket_name="APC_FX")
+        # Required wide, pivoted dataframe.
+        dfw_wgs = basket_1.dict_wgs["APC_FX"]
+
+        df_mods_w = basket_handler(df_mods_w=df_mods_w, df_c_wgts=dfw_wgs,
+                                   contracts=apc_contracts)
 
     def test_target_positions(self):
 
