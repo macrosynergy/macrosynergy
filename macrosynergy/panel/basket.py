@@ -661,6 +661,7 @@ class Basket(object):
             else:
 
                 w = dfw_wgs.stack().to_frame("value").reset_index()
+
                 cid_func = lambda t: t.split('_')[0]
                 xcat_func = lambda t: t.split('_')[1:]
 
