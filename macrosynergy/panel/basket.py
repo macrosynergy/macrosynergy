@@ -7,6 +7,9 @@ from macrosynergy.panel.historic_vol import expo_weights, expo_std, flat_std
 from macrosynergy.management.shape_dfs import reduce_df_by_ticker
 from macrosynergy.panel.converge_row import ConvergeRow
 from macrosynergy.management.simulate_quantamental_data import make_qdf
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from seaborn import FacetGrid
 
 
 class Basket(object):
@@ -393,6 +396,29 @@ class Basket(object):
 
         return dfw_wgs
 
+    def column_weights(self, dfw_wgs: pd.DataFrame):
+        """
+        The weight dataframe is used to compute the basket performance for returns,
+        carries etc. Therefore, with their broad application, the column names of the
+        dataframe should correspond to the ticker postfix of each contract.
+
+        :param <pd.DataFrame> dfw_wgs: weight dataframe.
+
+        :return <pd.DataFrame> dfw_wgs: weight dataframe with updated columns names.
+        """
+
+        dfw_weight_names = lambda w_name: w_name[:w_name.find(self.w_field)]
+        if self.wgt_flag and self.exo_w_postfix is not None:
+            self.__dict__['w_field'] = self.exo_w_postfix
+        else:
+            self.__dict__['w_field'] = self.ret
+
+        cols = list(map(dfw_weight_names, dfw_wgs.columns))
+        dfw_wgs.columns = cols
+        dfw_wgs.columns.name = "ticker"
+
+        return dfw_wgs
+
     def make_basket(self, weight_meth: str = "equal", weights: List[float] = None,
                     lback_meth: str = "xma", lback_periods: int = 21,
                     ewgt: str = None, max_weight: float = 1.0, remove_zeros: bool = True,
@@ -464,7 +490,111 @@ class Basket(object):
         df_retcry = pd.concat(store)
         df_retcry = df_retcry.reset_index(drop=True)
         self.dict_retcry[basket_name] = df_retcry
-        self.dict_wgs[basket_name] = dfw_wgs
+
+        self.dict_wgs[basket_name] = self.column_weights(dfw_wgs)
+
+    def weight_visualiser(self, basket_name, start_date: str = None,
+                          end_date: str = None, subplots: bool = True,
+                          facet_grid: bool = False, all_tickers: bool = True,
+                          single_ticker: str = None, percentage_change: bool = False):
+        """
+        Method used to visualise the weights associated with each contract in the basket.
+        The weights assigned to each contract can vary greatly over the respective time
+        period. For instance, if the weighting method chosen for the basket of contracts
+        is "invsd", each contract's weight is predicated on the return series' standard
+        deviation which, especially with an exponential moving average, can change
+        significantly over a short timeframe.
+
+        :param <str> basket_name: single basket name used to isolate the associated
+            weight dataframe.
+        :param <str> start_date: start date to truncate the visualisation period.
+        :param <str> end_date: end date.
+        :param <bool> subplots: controls whether all ticker's are on the same plot, or
+            each ticker is allocated an individual subplot.
+        :param <bool> facet_grid: parameter used to break up the plot into multiple
+            cartesian coordinate systems. If the basket consists of a high number of
+            contracts, using the Facet Grid is recommended.
+        :param <bool> all_tickers: all tickers are included in the graphical display.
+            If false, the parameter "single_ticker" must be defined. The default is True:
+            all tickers will be included.
+        :param <str> single_ticker: individual ticker for further, more detailed,
+            analysis.
+        :param <bool> percentage_change: graphical display used to further assimilate the
+            fluctuations in the contract's weight. The graphical display is limited to a
+            single contract. Therefore, pass the ticker into the parameter
+            "single_ticker".
+
+        """
+
+        date_conv = lambda d: pd.Timestamp(d).strftime("%Y-%m-%d %X")
+        try:
+            dfw_wgs = self.dict_wgs[basket_name]
+        except KeyError as e:
+            print(f"Basket not found - call make_basket() method first: {e}.")
+        else:
+            if isinstance(start_date, str) and isinstance(end_date, str):
+                self.date_check(start_date)
+                self.date_check(end_date)
+                start_date = date_conv(start_date)
+                end_date = date_conv(end_date)
+            elif isinstance(start_date, str):
+                self.date_check(start_date)
+                start_date = date_conv(start_date)
+                end_date = dfw_wgs.index[-1]
+            elif isinstance(end_date, str):
+                self.date_check(end_date)
+                start_date = dfw_wgs.index[0]
+                end_date = date_conv(end_date)
+            else:
+                start_date = dfw_wgs.index[0]
+                end_date = dfw_wgs.index[-1]
+
+            error_1 = f"{start_date} unavailable in weight dataframe."
+            c = dfw_wgs.index
+            assert start_date in c, error_1
+            error_2 = f"{end_date} unavailable in weight dataframe."
+            assert end_date in c, error_2
+
+            dfw_wgs = dfw_wgs.truncate(before=start_date, after=end_date)
+            if not all_tickers:
+                error_3 = "The parameter, 'single_ticker', must be a <str>."
+                assert isinstance(single_ticker, str), error_3
+                error_4 = f"Ticker not present in the weight dataframe. Available " \
+                          f"tickers: {dfw_wgs.columns}."
+                assert single_ticker in dfw_wgs.columns, error_4
+                dfw_wgs = dfw_wgs[[single_ticker]]
+
+            if facet_grid:
+                df_stack = dfw_wgs.stack().to_frame("value").reset_index()
+                df_stack = df_stack.sort_values(['ticker', 'real_date'])
+                g = FacetGrid(df_stack, col="ticker")
+                g.map(plt.plot, "value")
+                g.add_legend()
+                no_contracts = dfw_wgs.shape[1]
+                equal_value = (1 / no_contracts)
+                g.refline(y=round(equal_value, 3))
+            else:
+                dfw_wgs.plot(subplots=subplots, title="Weight Values Timestamp",
+                             legend=True)
+                plt.xlabel('real_date, years')
+
+            date_func = lambda d: pd.Timestamp(d).strftime("%Y-%m-%d")
+            if percentage_change:
+                error_5 = "Percentage change display is applied to a single ticker. Set " \
+                          "the parameter 'all_tickers' to False."
+                assert dfw_wgs.shape[1] == 1, error_5
+
+                fig, ax = plt.subplots()
+                dfw_pct = dfw_wgs.pct_change(periods=1) * 100
+                n_index = np.array(list(map(date_func, dfw_pct.index)))
+                dfw_pct = dfw_pct.set_index(keys=n_index)
+                dfw_pct.plot(kind='bar', color='coral', ax=ax)
+                ax.xaxis.set_major_locator(mdates.MonthLocator())
+                plt.xticks(rotation=0)
+                ax.set_ylabel("Percentage Change in weight.")
+                ax.legend()
+
+            plt.show()
 
     def return_basket(self, basket_names: Union[str, List[str]] = None):
         """
@@ -493,7 +623,7 @@ class Basket(object):
             try:
                 dfw_retcry = self.dict_retcry[b]
             except KeyError as e:
-                print(f"Basket not found: {e}.")
+                print(f"Basket not found - call make_basket() method first: {e}.")
             else:
                 ret_baskets.append(dfw_retcry)
 
@@ -523,23 +653,15 @@ class Basket(object):
         weight_baskets = []
         select = ["cid", "xcat", "real_date", "value"]
 
-        dfw_weight_names = lambda w_name: w_name[:w_name.find(self.w_field)]
         for b in basket_names:
             try:
                 dfw_wgs = self.dict_wgs[b]
             except KeyError as e:
-                print(f"Basket not found: {e}.")
+                print(f"Basket not found - call make_basket() method first: {e}.")
             else:
-                if self.wgt_flag and self.exo_w_postfix is not None:
-                    self.__dict__['w_field'] = self.exo_w_postfix
-                else:
-                    self.__dict__['w_field'] = self.ret
-                cols = list(map(dfw_weight_names, dfw_wgs.columns))
-                dfw_wgs_copy = dfw_wgs.copy()
-                dfw_wgs_copy.columns = cols
 
-                dfw_wgs_copy.columns.name = "ticker"
-                w = dfw_wgs_copy.stack().to_frame("value").reset_index()
+                w = dfw_wgs.stack().to_frame("value").reset_index()
+
                 cid_func = lambda t: t.split('_')[0]
                 xcat_func = lambda t: t.split('_')[1:]
 
@@ -662,3 +784,22 @@ if __name__ == "__main__":
     basket_4.make_basket(weight_meth="equal", max_weight=0.45,
                          basket_name="GLB_EQUAL")
     weight_equal = basket_4.return_weights(basket_names="GLB_EQUAL")
+
+    basket_4.weight_visualiser("GLB_EQUAL", facet_grid=True)
+
+    # Testing the visualisation method. Potentially should vary depending on the
+    # associated method.
+    basket_5 = Basket(df=dfd, contracts=contracts_1,
+                      ret="XR_NSA", blacklist=black)
+    basket_5.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
+                         max_weight=0.55, remove_zeros=True, basket_name="GLB_INVERSE")
+    df_basket_inv = basket_5.return_basket("GLB_INVERSE")
+
+    # Examples of the different visualisation options.
+    basket_5.weight_visualiser("GLB_INVERSE", start_date="2020-01-07",
+                               end_date="2020-12-31", subplots=False,
+                               all_tickers=False, single_ticker='AUD_FX',
+                               percentage_change=True)
+    basket_5.weight_visualiser("GLB_INVERSE", subplots=False)
+
+    basket_5.weight_visualiser("GLB_INVERSE", all_tickers=True, facet_grid=True)
