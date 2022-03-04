@@ -473,6 +473,38 @@ class TestAll(unittest.TestCase):
                                        end_date=str(l_date), all_tickers=True,
                                        percentage_change=False)
 
+        # The method allows for two options: all the tickers are included in the display
+        # graphic, or only a single ticker is involved. Therefore, if the "all_tickers"
+        # parameter is set to False then the parameter "single_ticker" must be defined
+        # with a ticker present in the weight dataframe.
+        with self.assertRaises(AssertionError):
+            basket_1.weight_visualiser("GLB_EQUAL", start_date=str(f_date),
+                                       end_date=str(l_date), all_tickers=False,
+                                       single_ticker=None,
+                                       percentage_change=False)
+
+        # Check the ticker passed is a ticker included in the contracts.
+        with self.assertRaises(AssertionError):
+            unavailable_ticker = 'GBP_FX'
+            assert unavailable_ticker not in self.contracts
+            basket_1.weight_visualiser("GLB_EQUAL", all_tickers=False,
+                                       single_ticker=unavailable_ticker,
+                                       percentage_change=False)
+
+        # The optionality of percentage change, as one of the display graphics, is only
+        # applied to single tickers. Therefore, if the parameter "percentage_change" is
+        # set to True, "all_tickers" must be set to False and, axiomatically, the
+        # "single_ticker" parameter must be defined to reduce the weight dataframe.
+        with self.assertRaises(AssertionError):
+            basket_1.weight_visualiser("GLB_EQUAL", all_tickers=True,
+                                       percentage_change=True)
+
+        with self.assertRaises(AssertionError):
+            unavailable_ticker = 'GBP_FX'
+            basket_1.weight_visualiser("GLB_EQUAL", all_tickers=False,
+                                       single_ticker=unavailable_ticker,
+                                       percentage_change=True)
+
     def test_return_basket(self):
 
         # Method used to return the computed dataframes.
