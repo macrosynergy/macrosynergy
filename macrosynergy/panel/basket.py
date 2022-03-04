@@ -396,6 +396,29 @@ class Basket(object):
 
         return dfw_wgs
 
+    def column_weights(self, dfw_wgs: pd.DataFrame):
+        """
+        The weight dataframe is used to compute the basket performance for returns,
+        carries etc. Therefore, with their broad application, the column names of the
+        dataframe should correspond to the ticker postfix of each contract.
+
+        :param <pd.DataFrame> dfw_wgs: weight dataframe.
+
+        :return <pd.DataFrame> dfw_wgs: weight dataframe with updated columns names.
+        """
+
+        dfw_weight_names = lambda w_name: w_name[:w_name.find(self.w_field)]
+        if self.wgt_flag and self.exo_w_postfix is not None:
+            self.__dict__['w_field'] = self.exo_w_postfix
+        else:
+            self.__dict__['w_field'] = self.ret
+
+        cols = list(map(dfw_weight_names, dfw_wgs.columns))
+        dfw_wgs.columns = cols
+        dfw_wgs.columns.name = "ticker"
+
+        return dfw_wgs
+
     def make_basket(self, weight_meth: str = "equal", weights: List[float] = None,
                     lback_meth: str = "xma", lback_periods: int = 21,
                     ewgt: str = None, max_weight: float = 1.0, remove_zeros: bool = True,
@@ -467,7 +490,8 @@ class Basket(object):
         df_retcry = pd.concat(store)
         df_retcry = df_retcry.reset_index(drop=True)
         self.dict_retcry[basket_name] = df_retcry
-        self.dict_wgs[basket_name] = dfw_wgs
+
+        self.dict_wgs[basket_name] = self.column_weights(dfw_wgs)
 
     def weight_visualiser(self, basket_name, start_date: str = None,
                           end_date: str = None, subplots: bool = True,
@@ -629,23 +653,14 @@ class Basket(object):
         weight_baskets = []
         select = ["cid", "xcat", "real_date", "value"]
 
-        dfw_weight_names = lambda w_name: w_name[:w_name.find(self.w_field)]
         for b in basket_names:
             try:
                 dfw_wgs = self.dict_wgs[b]
             except KeyError as e:
                 print(f"Basket not found - call make_basket() method first: {e}.")
             else:
-                if self.wgt_flag and self.exo_w_postfix is not None:
-                    self.__dict__['w_field'] = self.exo_w_postfix
-                else:
-                    self.__dict__['w_field'] = self.ret
-                cols = list(map(dfw_weight_names, dfw_wgs.columns))
-                dfw_wgs_copy = dfw_wgs.copy()
-                dfw_wgs_copy.columns = cols
 
-                dfw_wgs_copy.columns.name = "ticker"
-                w = dfw_wgs_copy.stack().to_frame("value").reset_index()
+                w = dfw_wgs.stack().to_frame("value").reset_index()
                 cid_func = lambda t: t.split('_')[0]
                 xcat_func = lambda t: t.split('_')[1:]
 
@@ -782,7 +797,7 @@ if __name__ == "__main__":
     # Examples of the different visualisation options.
     basket_5.weight_visualiser("GLB_INVERSE", start_date="2020-01-07",
                                end_date="2020-12-31", subplots=False,
-                               all_tickers=False, single_ticker='AUD_FXXR_NSA',
+                               all_tickers=False, single_ticker='AUD_FX',
                                percentage_change=True)
     basket_5.weight_visualiser("GLB_INVERSE", subplots=False)
 
