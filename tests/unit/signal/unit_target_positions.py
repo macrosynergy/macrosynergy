@@ -219,8 +219,26 @@ class TestAll(unittest.TestCase):
         # Required wide, pivoted dataframe.
         dfw_wgs = basket_1.dict_wgs["APC_FX"]
 
-        df_mods_w = basket_handler(df_mods_w=df_mods_w, df_c_wgts=dfw_wgs,
-                                   contracts=apc_contracts)
+        df_mods_w_output = basket_handler(df_mods_w=df_mods_w, df_c_wgts=dfw_wgs,
+                                          contracts=apc_contracts)
+
+        # The first test is to confirm that the position dataframe, used for the basket,
+        # contains the same number of contracts, columns, as the basket itself.
+        self.assertTrue(df_mods_w_output.shape[1] == len(apc_contracts))
+
+        # Complete the manual calculation to test the method (weight-adjusted positions).
+        df_mods_w = df_mods_w.reindex(sorted(df_mods_w.columns), axis=1)
+
+        split = lambda b: b.split('_')[0]
+        df_mods_w_basket = df_mods_w[list(map(split, apc_contracts))]
+
+        # Confirm alignment of contracts.
+        dfw_wgs = dfw_wgs.reindex(sorted(dfw_wgs.columns), axis=1)
+        df_mods_w_basket = df_mods_w_basket.multiply(dfw_wgs.to_numpy())
+
+        self.assertTrue(np.all(df_mods_w_basket.index == df_mods_w_basket.index))
+        condition = df_mods_w_output.to_numpy() == df_mods_w_basket.to_numpy()
+        self.assertTrue(np.all(condition))
 
     def test_target_positions(self):
 
