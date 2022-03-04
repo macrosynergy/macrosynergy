@@ -20,7 +20,9 @@ def weight_dataframes(df: pd.DataFrame, basket_names: Union[str, List[str]] = No
 
     :return <List[pd.DataFrames], dict>:
     """
-    if isinstance(basket_names, str): basket_names = [basket_names]
+    if isinstance(basket_names, str):
+        basket_names = [basket_names]
+
     xcats = df['xcat'].to_numpy()
     wgt_indices = lambda index: index.split('_')[-1] == "WGT"
     boolean = list(map(wgt_indices, xcats))
@@ -367,7 +369,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
     df_mods = modify_signals(df=dfx, cids=cids, xcat_sig=xcat_sig,
                              start=start, end=end, scale=scale, min_obs=min_obs,
-                             thresh=thresh)  # (USD 1 per SD or sign)
+                             thresh=thresh)  # (USD 1 per SD or sign).
 
     df_mods_w = df_mods.pivot(index="real_date", columns="cid", values="value")
 
