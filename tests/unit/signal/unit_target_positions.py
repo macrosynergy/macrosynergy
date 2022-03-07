@@ -370,10 +370,14 @@ class TestAll(unittest.TestCase):
         sigrels = [1, -1, -0.5, 1.5]
         west_contracts = ['GBP_FX', 'USD_FX']
         apc_contracts = ['AUD_EQ', 'NZD_EQ']
+        # The signal is used for both panels.
         df_basket_west = self.basket_weight(reduced_dfd, df_mods_w, west_contracts,
                                            basket_name="WST_FX")
         df_basket_apc = self.basket_weight(reduced_dfd, df_mods_w, apc_contracts,
                                            basket_name="APC_EQ")
+        baskets = [df_basket_west, df_basket_apc]
+        b_names = ["WST_FX", "APC_EQ"]
+        dict_ = dict(zip(b_names, baskets))
 
         # Contract Types: FX & EQ.
         df_pos_cons = []
@@ -386,8 +390,25 @@ class TestAll(unittest.TestCase):
             df_posi = df_posi.sort_values(['cid', 'xcat', 'real_date'])
             df_pos_cons.append(df_posi)
 
+        # Two separate loops to make the intention explicit and confirm the logic. The
+        # list, "df_pos_cons", after the iteration, will contain both the panel
+        # dataframes and the basket dataframes.
+        i = 0
+        for k, v in dict_.items():
+            sig = sigrels[i + len(self.ctypes)]
+            v = v * sig
+            df_posi = v.stack().to_frame("value").reset_index()
+            df_posi['xcat'] = k
+            df_posi = df_posi.sort_values(['cid', 'xcat', 'real_date'])
+            df_pos_cons.append(df_posi)
+            i += 1
+
         # Assert the consolidation has occurred correctly across both panels.
-        # df_pos_cons = consolidate_positions(df_pos_cons, self.ctypes)
+        df_pos_cons = consolidate_positions(df_pos_cons, self.ctypes)
+        # The number of dataframes in the returned list should correspond to the number
+        # of panels: the basket's position is added to the panel dataframe given the
+        # basket is a subset of the panel.
+        self.assertTrue(len(df_pos_cons) == len(self.ctypes))
 
     def test_target_positions(self):
 
