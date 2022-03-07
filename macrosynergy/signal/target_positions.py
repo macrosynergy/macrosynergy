@@ -204,19 +204,23 @@ def date_alignment(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
 
     p_dates = panel_df['real_date'].to_numpy()
     b_dates = basket_df['real_date'].to_numpy()
-    if p_dates[0] >= b_dates[0]:
+    if p_dates[0] > b_dates[0]:
         index = np.where(b_dates == p_dates[0])[0]
         basket_df = basket_df.iloc[index[0]:, :]
-    else:
+    elif p_dates[0] < b_dates[0]:
         index = np.where(p_dates == b_dates[0])[0]
         panel_df = panel_df.iloc[index[0]:, :]
+    else:
+        pass
 
-    if p_dates[-1] >= b_dates[-1]:
+    if p_dates[-1] > b_dates[-1]:
         index = np.where(p_dates == b_dates[-1])[0]
         panel_df = panel_df.iloc[:index[0], :]
-    else:
+    elif p_dates[-1] < b_dates[-1]:
         index = np.where(b_dates == p_dates[-1])[0]
         basket_df = basket_df.iloc[:index[0], :]
+    else:
+        pass
 
     return panel_df, basket_df
 
