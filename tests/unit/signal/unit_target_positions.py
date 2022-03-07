@@ -304,12 +304,32 @@ class TestAll(unittest.TestCase):
         # Original positions: based on the panel, so columns will correspond to
         # cross-sections.
         df_mods_w_test_date = df_mods_w.loc[test_date]
+        # Test date for the basket positions.
+        df_basket_pos_test_date = df_basket_pos.loc[test_date]
 
         for c in non_basket_cids:
             logic = test_values[test_values['cid'] == c]['value']
             t_val = df_mods_w_test_date[c]
             logic = float(logic)
             self.assertTrue(abs(t_val - logic) < 0.000001)
+
+        # Consolidate the positions computed for the basket contracts and the respective
+        # panel.
+        for c in contract_cids:
+            logic = test_values[test_values['cid'] == c]['value']
+            logic = float(logic)
+            panel_val = df_mods_w_test_date[c]
+            basket_val = df_basket_pos_test_date[c]
+            # Consolidation operation.
+            test = panel_val + basket_val
+            self.assertTrue(abs(logic - test) < 0.000001)
+
+    def test_consolidate_positions(self):
+
+        self.dataframe_generator()
+        # Conceals the function above and applies the logic to multiple baskets which are
+        # consolidated to multiple panels.
+        # Confirm the application of multiple baskets works.
 
     def test_target_positions(self):
 
