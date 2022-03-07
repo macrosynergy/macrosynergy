@@ -289,7 +289,7 @@ def consolidate_positions(data_frames: List[pd.DataFrame], ctypes: List[str]):
         dict_[c_type] = panel_df
         reduced_baskets.append(basket_df)
 
-    return list(dict_.values()) + reduced_baskets
+    return list(dict_.values())
 
 def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: List[str],
                      sigrels: List[float], basket_names: Union[str, List[str]] = [],
