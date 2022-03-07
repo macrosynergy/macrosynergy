@@ -241,6 +241,34 @@ class TestAll(unittest.TestCase):
         condition = df_mods_w_output.to_numpy() == df_mods_w_basket.to_numpy()
         self.assertTrue(np.all(condition))
 
+    @staticmethod
+    def basket_weight(reduced_dfd, df_mods_w, local_contracts, basket_name):
+        """
+        Method used to produce the weight adjusted positions for a basket. The weighting
+        method chosen for the basket is fixed to inverse of the standard deviation.
+
+        :param <pd.DataFrame> reduced_dfd: standardised dataframe.
+        :param <pd.DataFrame> df_mods_w: target positions across the panel (the signal).
+        :param <List[str]> local_contracts: contracts the basket is defined over.
+        :param <str> basket_name: name of the respective basket.
+
+        :return <pd.DataFrame> df_basket_pos: the weight-adjusted basket positions.
+        """
+
+        basket_1 = Basket(df=reduced_dfd, contracts=local_contracts, ret="XR_NSA",
+                          cry=None)
+        basket_1.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
+                             max_weight=0.55, remove_zeros=True,
+                             basket_name=basket_name)
+        # Pivoted weight dataframe.
+        df_c_wgts = basket_1.dict_wgs[basket_name]
+
+        # Return the weight adjusted target positions for the contract. This will be the
+        # benchmark dataframe being tested.
+        df_basket_pos = basket_handler(df_mods_w=df_mods_w, df_c_wgts=df_c_wgts,
+                                       contracts=local_contracts)
+        return df_basket_pos
+
     def test_consolidation_help(self):
 
         self.dataframe_generator()
@@ -275,24 +303,15 @@ class TestAll(unittest.TestCase):
         contract_cids = list(map(cross_sections, apc_contracts))
         non_basket_cids = [c for c in self.cids if c not in contract_cids]
 
-        basket_1 = Basket(df=reduced_dfd, contracts=apc_contracts, ret="XR_NSA",
-                          cry=None)
-        basket_1.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
-                             max_weight=0.55, remove_zeros=True,
-                             basket_name="GLB_INVERSE")
-        # Pivoted weight dataframe.
-        df_c_wgts = basket_1.dict_wgs["GLB_INVERSE"]
-
-        # Return the weight adjusted target positions for the contract. This will be the
-        # benchmark dataframe being tested.
-        df_basket_pos = basket_handler(df_mods_w=df_mods_w, df_c_wgts=df_c_wgts,
-                                       contracts=apc_contracts)
+        df_basket_pos = self.basket_weight(reduced_dfd, df_mods_w, apc_contracts,
+                                           basket_name="APC_FX")
 
         # Convert both the panel & basket dataframes to standardised dataframes.
         df_basket_stack = df_basket_pos.stack().to_frame("value").reset_index()
         # Test dataframe.
         consolidate_df, basket_df = consolidation_help(panel_df=df_mods,
                                                        basket_df=df_basket_stack)
+        self.assertTrue(basket_df.empty)
 
         # The consolidation will only be applicable on the intersection of contracts.
         # Therefore, check the other contract's positions remain the same.
@@ -328,8 +347,47 @@ class TestAll(unittest.TestCase):
 
         self.dataframe_generator()
         # Conceals the function above and applies the logic to multiple baskets which are
-        # consolidated to multiple panels.
+        # consolidated to the associated number of panels.
         # Confirm the application of multiple baskets works.
+
+        # Required multiple panels and baskets.
+
+        reduced_dfd = reduce_df(df=self.dfd, xcats=self.xcats, cids=self.cids,
+                                blacklist=None)
+
+        # Establish the targeted positions using the modified returns of the signal.
+        xcat_sig = 'SIG_NSA'
+        scale = 'dig'
+        # Modified the signal returns to digital: removes the magnitude of the position,
+        # and exclusively classifies whether to take a long or short position in the
+        # contract.
+        df_mods = modify_signals(df=reduced_dfd, cids=self.cids, xcat_sig=xcat_sig,
+                                 scale=scale)
+        df_mods_w = df_mods.pivot(index="real_date", columns="cid", values="value")
+
+        # The four defined sigrels are used for the two panels FX & EQ, and the baskets
+        # "apc_contracts." and "west_contracts".
+        sigrels = [1, -1, -0.5, 1.5]
+        west_contracts = ['GBP_FX', 'USD_FX']
+        apc_contracts = ['AUD_EQ', 'NZD_EQ']
+        df_basket_west = self.basket_weight(reduced_dfd, df_mods_w, west_contracts,
+                                           basket_name="WST_FX")
+        df_basket_apc = self.basket_weight(reduced_dfd, df_mods_w, apc_contracts,
+                                           basket_name="APC_EQ")
+
+        # Contract Types: FX & EQ.
+        df_pos_cons = []
+        for i, c in enumerate(self.ctypes):
+
+            df_mods_copy = df_mods_w.copy()
+            df_mods_copy *= sigrels[i]
+            df_posi = df_mods_copy.stack().to_frame("value").reset_index()
+            df_posi['xcat'] = c
+            df_posi = df_posi.sort_values(['cid', 'xcat', 'real_date'])
+            df_pos_cons.append(df_posi)
+
+        # Assert the consolidation has occurred correctly across both panels.
+        # df_pos_cons = consolidate_positions(df_pos_cons, self.ctypes)
 
     def test_target_positions(self):
 
