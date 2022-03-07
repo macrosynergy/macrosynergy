@@ -190,6 +190,36 @@ def basket_handler(df_mods_w: pd.DataFrame, df_c_wgts: pd.DataFrame,
 
     return df_mods_w
 
+def date_alignment(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
+    """
+    Method used to align the panel position dataframe and the basket dataframe of
+    weight-adjusted positions to the same timeframe.
+
+    :param <pd.DataFrame> panel_df:
+    :param <pd.DataFrame> basket_df:
+
+    :return <pd.DataFrame, pd.DataFrame> returns the two received dataframes defined over
+        the same period.
+    """
+
+    p_dates = panel_df['real_date'].to_numpy()
+    b_dates = basket_df['real_date'].to_numpy()
+    if p_dates[0] >= b_dates[0]:
+        index = np.where(b_dates == p_dates[0])[0]
+        basket_df = basket_df.iloc[index[0]:, :]
+    else:
+        index = np.where(p_dates == b_dates[0])[0]
+        panel_df = panel_df.iloc[index[0]:, :]
+
+    if p_dates[-1] >= b_dates[-1]:
+        index = np.where(p_dates == b_dates[-1])[0]
+        panel_df = panel_df.iloc[:index[0], :]
+    else:
+        index = np.where(b_dates == p_dates[-1])[0]
+        basket_df = basket_df.iloc[:index[0], :]
+
+    return panel_df, basket_df
+
 def consolidation_help(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
     """
     The function receives a panel dataframe and a basket of cross-sections of the same
@@ -212,7 +242,9 @@ def consolidation_help(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
 
         if cid in basket_cids:
             basket_indices = basket_df['cid'] == cid
-            b_values = basket_df[basket_indices]['value'].to_numpy()
+            basket_rows = basket_df[basket_indices]
+            temp_df, basket_rows = date_alignment(temp_df, basket_rows)
+            b_values = basket_rows['value'].to_numpy()
 
             panel_values = temp_df['value'].to_numpy()
             consolidation = panel_values + b_values
