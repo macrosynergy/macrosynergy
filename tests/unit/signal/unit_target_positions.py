@@ -14,6 +14,7 @@ class TestAll(unittest.TestCase):
     def dataframe_generator(self):
 
         self.__dict__['cids'] = ['AUD', 'GBP', 'NZD', 'USD']
+        # Two meaningful fields and a third contrived category.
         self.__dict__['xcats'] = ['FXXR_NSA', 'EQXR_NSA', 'SIG_NSA']
         self.__dict__['ctypes'] = ['FX', 'EQ']
         self.__dict__['xcat_sig'] = 'FXXR_NSA'
@@ -239,6 +240,42 @@ class TestAll(unittest.TestCase):
         self.assertTrue(np.all(df_mods_w_basket.index == df_mods_w_basket.index))
         condition = df_mods_w_output.to_numpy() == df_mods_w_basket.to_numpy()
         self.assertTrue(np.all(condition))
+
+    def test_consolidation_help(self):
+
+        self.dataframe_generator()
+        # If a basket of contracts are defined, their respective positions will be weight
+        # adjusted. After the weight-adjusted positions are computed for the basket,
+        # consolidate the positions on the shared contracts: intersection between the
+        # panel and respective basket.
+        # Therefore, check whether the above logic is implemented.
+
+        # Further, it is worth noting that the basket should be a subset of the panel:
+        # the panel is the complete set. Therefore, additional assertions are not
+        # required.
+        reduced_dfd = reduce_df(df=self.dfd, xcats=self.xcats, cids=self.cids,
+                                blacklist=None)
+
+        # Establish the targeted positions using the modified returns of the signal.
+        xcat_sig = 'SIG_NSA'
+        scale = 'prop'
+        # "ZN" postfix is the default postfix for "make_zn_scores()". Will return a
+        # standardised dataframe.
+        df_mods = modify_signals(df=reduced_dfd, cids=self.cids, xcat_sig=xcat_sig,
+                                 scale=scale)
+        df_mods_w = df_mods.pivot(index="real_date", columns="cid", values="value")
+
+        apc_contracts = ['AUD_FX', 'NZD_FX']
+        basket_1 = Basket(df=reduced_dfd, contracts=apc_contracts, ret="XR_NSA",
+                          cry=None)
+        basket_1.make_basket(weight_meth="equal", max_weight=0.55,
+                             basket_name="GLB_EQUAL")
+        # Pivoted weight dataframe.
+        df_c_wgts = basket_1.dict_wgs["GLB_EQUAL"]
+
+        # Return the weight adjusted target positions for the contract.
+        df_basket_pos = basket_handler(df_mods_w=df_mods_w, df_c_wgts=df_c_wgts,
+                                       contracts=apc_contracts)
 
     def test_target_positions(self):
 
