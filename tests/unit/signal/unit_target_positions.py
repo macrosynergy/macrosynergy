@@ -259,6 +259,11 @@ class TestAll(unittest.TestCase):
         # Establish the targeted positions using the modified returns of the signal.
         xcat_sig = 'SIG_NSA'
         scale = 'prop'
+
+        # The two defined sigrels are used for the panel FX and the basket
+        # "apc_contracts."
+        sigrels = [1, -1]
+
         # "ZN" postfix is the default postfix for "make_zn_scores()". Will return a
         # standardised dataframe.
         df_mods = modify_signals(df=reduced_dfd, cids=self.cids, xcat_sig=xcat_sig,
@@ -268,14 +273,20 @@ class TestAll(unittest.TestCase):
         apc_contracts = ['AUD_FX', 'NZD_FX']
         basket_1 = Basket(df=reduced_dfd, contracts=apc_contracts, ret="XR_NSA",
                           cry=None)
-        basket_1.make_basket(weight_meth="equal", max_weight=0.55,
-                             basket_name="GLB_EQUAL")
+        basket_1.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
+                             max_weight=0.55, remove_zeros=True,
+                             basket_name="GLB_INVERSE")
         # Pivoted weight dataframe.
-        df_c_wgts = basket_1.dict_wgs["GLB_EQUAL"]
+        df_c_wgts = basket_1.dict_wgs["GLB_INVERSE"]
 
-        # Return the weight adjusted target positions for the contract.
+        # Return the weight adjusted target positions for the contract. This will be the
+        # benchmark dataframe being tested.
         df_basket_pos = basket_handler(df_mods_w=df_mods_w, df_c_wgts=df_c_wgts,
                                        contracts=apc_contracts)
+
+        # Convert both the panel & basket dataframes to standardised dataframes.
+        df_basket_stack = df_basket_pos.stack().to_frame("value").reset_index()
+        consolidate_df = consolidation_help(panel_df=df_mods, basket_df=df_basket_stack)
 
     def test_target_positions(self):
 
