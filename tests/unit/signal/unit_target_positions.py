@@ -270,7 +270,11 @@ class TestAll(unittest.TestCase):
                                  scale=scale)
         df_mods_w = df_mods.pivot(index="real_date", columns="cid", values="value")
 
+        cross_sections = lambda c: c.split('_')[0]
         apc_contracts = ['AUD_FX', 'NZD_FX']
+        contract_cids = list(map(cross_sections, apc_contracts))
+        non_basket_cids = [c for c in self.cids if c not in contract_cids]
+
         basket_1 = Basket(df=reduced_dfd, contracts=apc_contracts, ret="XR_NSA",
                           cry=None)
         basket_1.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
@@ -286,7 +290,26 @@ class TestAll(unittest.TestCase):
 
         # Convert both the panel & basket dataframes to standardised dataframes.
         df_basket_stack = df_basket_pos.stack().to_frame("value").reset_index()
-        consolidate_df = consolidation_help(panel_df=df_mods, basket_df=df_basket_stack)
+        # Test dataframe.
+        consolidate_df, basket_df = consolidation_help(panel_df=df_mods,
+                                                       basket_df=df_basket_stack)
+
+        # The consolidation will only be applicable on the intersection of contracts.
+        # Therefore, check the other contract's positions remain the same.
+        # Analyse on an arbitrary date.
+        test_index = 1000
+        test_date = df_basket_pos.index.to_numpy()[test_index]
+        test_values = consolidate_df[consolidate_df['real_date'] == test_date]
+
+        # Original positions: based on the panel, so columns will correspond to
+        # cross-sections.
+        df_mods_w_test_date = df_mods_w.loc[test_date]
+
+        for c in non_basket_cids:
+            logic = test_values[test_values['cid'] == c]['value']
+            t_val = df_mods_w_test_date[c]
+            logic = float(logic)
+            self.assertTrue(abs(t_val - logic) < 0.000001)
 
     def test_target_positions(self):
 
