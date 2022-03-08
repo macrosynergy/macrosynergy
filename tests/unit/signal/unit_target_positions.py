@@ -13,7 +13,7 @@ class TestAll(unittest.TestCase):
 
     def dataframe_generator(self):
 
-        self.__dict__['cids'] = ['AUD', 'GBP', 'NZD', 'USD']
+        self.__dict__['cids'] = ['AUD', 'GBP', 'JPY', 'NZD', 'USD']
         # Two meaningful fields and a third contrived category.
         self.__dict__['xcats'] = ['FXXR_NSA', 'EQXR_NSA', 'SIG_NSA']
         self.__dict__['ctypes'] = ['FX', 'EQ']
@@ -24,6 +24,7 @@ class TestAll(unittest.TestCase):
 
         df_cids.loc['AUD'] = ['2010-01-01', '2020-12-31', 0, 1]
         df_cids.loc['GBP'] = ['2010-01-01', '2020-12-31', 0, 2]
+        df_cids.loc['JPY'] = ['2010-01-01', '2020-12-31', 0, 5]
         df_cids.loc['NZD'] = ['2010-01-01', '2020-12-31', 0, 3]
         df_cids.loc['USD'] = ['2010-01-01', '2020-12-31', 0, 4]
 
@@ -367,7 +368,7 @@ class TestAll(unittest.TestCase):
         # "apc_contracts." and "west_contracts".
         sigrels = [1, -1, -0.5, 1.5]
         west_contracts = ['GBP_FX', 'USD_FX']
-        apc_contracts = ['AUD_EQ', 'NZD_EQ']
+        apc_contracts = ['AUD_EQ', 'JPY_EQ', 'NZD_EQ']
 
         # The signal panel is used to establish positions in both panels. The two
         # dataframes below are the weight-adjusted target positions for the respective
@@ -380,6 +381,8 @@ class TestAll(unittest.TestCase):
         b_names = ["WST_FX", "APC_EQ"]
         dict_ = dict(zip(b_names, baskets))
 
+        # The below two For Loops will test the workflow of target_positions() which will
+        # complete the operations inside a single loop.
         # Contract Types: FX & EQ.
         df_pos_cons = []
         for i, c in enumerate(self.ctypes):
@@ -443,15 +446,46 @@ class TestAll(unittest.TestCase):
         for k, v in benchmark_dict.items():
             self.assertTrue(abs(v - fx_panel_values[k]) < 0.00001)
 
+        # Repeat the operation above but for the Equity Panel.
+        # The basket's signal is 1.5.
+        df_basket_apc_test = df_basket_apc.loc[test_date]
+        df_basket_apc_test *= 1.5
+        df_basket_apc_test = df_basket_apc_test.to_dict()
+
+        eq_panel = df_pos_cons[1]
+        eq_panel_test = eq_panel[eq_panel['real_date'] == test_date]
+        eq_panel_values = dict(zip(eq_panel_test['cid'], eq_panel_test['value']))
+
+        for k, v in eq_panel_values.items():
+            if k in df_basket_apc_test.keys():
+                eq_panel_values[k] += df_basket_apc_test[k]
+
+        # Check the values against the function cnosolidate_positions().
+        benchmark = eq_output[eq_output['real_date'] == test_date]
+        benchmark_dict = dict(zip(benchmark['cid'], benchmark['value']))
+        for k, v in benchmark_dict.items():
+            self.assertTrue(abs(v - eq_panel_values[k]) < 0.00001)
+
     def test_target_positions(self):
 
+        # The majority of the logic held within target_positions() has already been
+        # tested through the above methods. The remaining operations, following on from
+        # consolidating across the panel & basket, is to concatenate the panel dataframes
+        # into a single dataframe and subsequently add the position name to the category
+        # column.
+        # The workflow and logic has already been examined individually with the
+        # final method dependent on the previous steps being executed correctly.
+
         self.dataframe_generator()
+
+        reduced_dfd = reduce_df(df=self.dfd, xcats=self.xcats, cids=self.cids,
+                                blacklist=None)
 
         with self.assertRaises(AssertionError):
             # Test the assertion that the signal field must be present in the defined
             # dataframe. Will throw an assertion.
             xcat_sig = 'INTGRWTH_NSA'
-            position_df = target_positions(df=self.dfd, cids=self.cids,
+            position_df = target_positions(df=reduced_dfd, cids=self.cids,
                                            xcat_sig=xcat_sig,
                                            ctypes=['FX', 'EQ'], sigrels=[1, -1],
                                            ret='XR_NSA', start='2012-01-01',
@@ -459,10 +493,20 @@ class TestAll(unittest.TestCase):
                                            cs_vtarg=0.1, posname='POS')
 
         with self.assertRaises(AssertionError):
+            # Test the assertion that the volatility target must be a numerical value.
+            xcat_sig = 'FXXR_NSA'
+            sigrels = [-1, 1]
+            output_df = target_positions(df=reduced_dfd, cids=self.cids,
+                                         xcat_sig=xcat_sig, ctypes=self.ctypes,
+                                         sigrels=sigrels, ret='XR_NSA',
+                                         start=None, end='2020-12-31', scale='prop',
+                                         cs_vtarg="1 STD", posname='POS')
+
+        with self.assertRaises(AssertionError):
             # Testing the assertion on the scale parameter: required ['prop', 'dig'].
             # Pass in noise.
             scale = 'vtarg'
-            position_df = target_positions(df=self.dfd, cids=self.cids,
+            position_df = target_positions(df=reduced_dfd, cids=self.cids,
                                            xcat_sig=xcat_sig,
                                            ctypes=['FX', 'EQ'], sigrels=[1, -1],
                                            ret='XR_NSA', start='2012-01-01',
@@ -471,106 +515,45 @@ class TestAll(unittest.TestCase):
 
         with self.assertRaises(AssertionError):
             # Length of "sigrels" and "ctypes" must be the same. The number of "sigrels"
-            # corresponds to the number of "ctypes" defined in the data structure passed
-            # into target_positions().
+            # corresponds to the number of "ctypes" plus the number of baskets.
 
             sigrels = [1, -1, 0.5, 0.25]
             ctypes = ['FX', 'EQ']
-            position_df = target_positions(df=self.dfd, cids=self.cids,
+            position_df = target_positions(df=reduced_dfd, cids=self.cids,
                                            xcat_sig=xcat_sig,
-                                           ctypes=self.ctypes, sigrels=sigrels,
+                                           ctypes=ctypes, sigrels=sigrels,
                                            ret='XR_NSA',  start='2012-01-01',
                                            end='2020-10-30', scale=scale,
                                            cs_vtarg=0.1, posname='POS')
 
-        # In the current test framework there are two contract types, FX & EQ, and the
-        # signal used to subsequently construct a position is FXXR_NSA. If EQXR_NSA is
-        # defined over a shorter timeframe, the position signal must be aligned to its
-        # respective timeframe.
-        # Check the logic matches the above description.
+        with self.assertRaises(AssertionError):
+            # Test the notion that the received dataframe must be a standardised
+            # dataframe with the columns ['cid', 'xcat', 'real_date', 'value'].
+            ctypes = ['FX', 'EQ']
+            sigrels = [-1, 1]
+            temp_df = reduced_dfd[reduced_dfd['xcat'] == 'FX']
+            temp_df = temp_df.pivot(index="real_date", columns="cid", values="value")
+            xcat_sig = 'SIG_NSA'
+            position_df = target_positions(df=temp_df, cids=self.cids,
+                                           xcat_sig=xcat_sig,
+                                           ctypes=ctypes, sigrels=sigrels,
+                                           ret='XR_NSA',  start='2012-01-01',
+                                           end='2020-10-30', scale=scale,
+                                           cs_vtarg=0.1, posname='POS')
 
-        # The returned standardised dataframe will consist of the signal and the
-        # secondary category where the secondary category will be defined over a shorter
-        # time-period.
-        xcat_sig = 'FXXR_NSA'
-        sigrels = [1, -1]
-        output_df = target_positions(df=self.dfd, cids=self.cids,
-                                     xcat_sig=xcat_sig, ctypes=self.ctypes,
-                                     sigrels=sigrels, ret='XR_NSA',
-                                     start='2012-01-01', end='2020-10-30', scale='dig',
-                                     min_obs=0, cs_vtarg=None, posname='POS')
-        # Testing the truncation feature. Concept might appear simple but implementation
-        # is subtle. Isolate the secondary category in the output dataframe. The
-        # dimensions should match.
-        output_df['xcat'] = list(map(lambda str_: str_[4:-4], output_df['xcat']))
-
-        df_eqxr = output_df[output_df['xcat'] == 'EQXR_NSA'].pivot(index="real_date",
-                                                                   columns="cid",
-                                                                   values="value")
-        df_eqxr_input = self.dfd[self.dfd['xcat'] == 'EQXR_NSA'].pivot(index="real_date",
-                                                                       columns="cid",
-                                                                       values="value")
-        # self.assertTrue(df_eqxr.shape == df_eqxr_input.shape)
-
-        # Lastly, check the stacking procedure. In this instance, the output dateframe
-        # should match the input dataframe.
-        # Blacklist is applied after the position signals are established. Therefore, for
-        # any dimensionality comparison, apply the blacklisting to the input dataframe.
-        dfd = reduce_df(df=self.dfd, xcats=self.xcats, cids=self.cids,
-                        start='2012-01-01', end='2020-10-30')
-        # self.assertTrue(output_df.shape == dfd.shape)
-
-        # Test the dimensions of the signal to confirm the differing size of the two
-        # individual dataframes that are concatenated into a single structure. The output
-        # dataframe should match the dimensions of the two respective inputs.
-        df_signal = output_df[output_df['xcat'] == xcat_sig].pivot(index="real_date",
-                                                                   columns="cid",
-                                                                   values="value")
-        df_signal_input = dfd[dfd['xcat'] == xcat_sig].pivot(index="real_date",
-                                                             columns="cid",
-                                                             values="value")
-        # self.assertTrue(df_signal.shape == df_signal_input.shape)
+        xcat_sig = 'SIG_NSA'
+        sigrels = [-1, 1]
 
         # A limited but valid test to determine the logic is correct for the volatility
         # target is to set the value equal to zero, and consequently all the
         # corresponding positions should also be zero. If zero volatility is required,
         # unable to take a position in an asset that has non-zero standard deviation.
-        output_df = target_positions(df=self.dfd, cids=self.cids,
+        output_df = target_positions(df=reduced_dfd, cids=self.cids,
                                      xcat_sig=xcat_sig, ctypes=self.ctypes,
                                      sigrels=sigrels, ret='XR_NSA',
-                                     start='2010-01-01', end='2020-12-31', scale='dig',
+                                     start=None, end='2020-12-31', scale='prop',
                                      cs_vtarg=0.0, posname='POS')
-        # self.assertTrue(np.all(output_df['value'] == 0.0))
-
-        # Final check is if the signal category is defined over the shorter timeframe
-        # both contracts individual position dataframes should match the signal.
-        xcat_sig = 'EQXR_NSA'
-        output_df = target_positions(df=self.dfd, cids=self.cids,
-                                     xcat_sig=xcat_sig, ctypes=self.ctypes,
-                                     sigrels=sigrels, ret='XR_NSA',
-                                     start='2010-01-01', end='2020-12-31', scale='dig',
-                                     cs_vtarg=0.85, posname='POS')
-
-        # Will not be able to compare against the signal's input dimensions because of
-        # the application of volatility targeting and the associated lookback period.
-        output_df['xcat'] = list(map(lambda str_: str_[4:-4], output_df['xcat']))
-        df_signal = output_df[output_df['xcat'] == xcat_sig]
-        df_fxxr = output_df[output_df['xcat'] == 'FXXR_NSA']
-
-        # self.assertTrue(df_signal.shape == df_fxxr.shape)
-
-        dfd = reduce_df(df=self.dfd, xcats=self.xcats, cids=self.cids,
-                        start='2012-01-01', end='2020-10-30', blacklist=None)
-        output_df = target_positions(df=dfd, cids=self.cids,
-                                     xcat_sig='SIG_NSA', ctypes=['FX', 'EQ'],
-                                     sigrels=[1, 0.5], ret='XR_NSA', start='2012-01-01',
-                                     end='2020-10-30', scale='dig',
-                                     cs_vtarg=None, posname='POS')
-        # The signal is defined over the shortest timeframe. Therefore, both categories,
-        # where a position is taken, will have a time index that matches the signal if
-        # volatility targeting is set to None.
-        df_sig = dfd[dfd['xcat'] == 'SIG_NSA']
-        # self.assertTrue((df_sig.shape[0] * 2) == output_df.shape[0])
+        self.assertTrue(np.all(output_df['value'] == 0.0))
 
 
 if __name__ == "__main__":
