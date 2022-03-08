@@ -260,7 +260,7 @@ def consolidation_help(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
         else:
             panel_copy.append(temp_df)
 
-    return pd.concat(panel_copy), basket_df
+    return pd.concat(panel_copy)
 
 def consolidate_positions(data_frames: List[pd.DataFrame], ctypes: List[str]):
     """
@@ -279,15 +279,13 @@ def consolidate_positions(data_frames: List[pd.DataFrame], ctypes: List[str]):
 
     split_2 = lambda b: b.split('_')[1]
     # Iterating exclusively through the basket dataframes.
-    reduced_baskets = []
     for df in df_baskets:
         category = list(map(split_2, df['xcat'].to_numpy()))
         c_type = category[0]
 
         panel_df = dict_[c_type]
-        panel_df, basket_df = consolidation_help(panel_df, basket_df=df)
+        panel_df = consolidation_help(panel_df, basket_df=df)
         dict_[c_type] = panel_df
-        reduced_baskets.append(basket_df)
 
     return list(dict_.values())
 
