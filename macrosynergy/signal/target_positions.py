@@ -374,6 +374,9 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
 
     ctypes_baskets = ctypes + basket_names
 
+    cols = ['cid', 'xcat', 'real_date', 'value']
+    assert set(cols) <= set(df.columns), f"df columns must contain {cols}."
+
     categories = set(df['xcat'].unique())
     error_1 = "Signal category missing from the standardised dataframe."
     assert xcat_sig in categories, error_1
@@ -386,9 +389,6 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
     clause = len(ctypes_baskets)
     assert len(sigrels) == clause, error_3
     assert isinstance(min_obs, int), "Minimum observation parameter must be an integer."
-
-    cols = ['cid', 'xcat', 'real_date', 'value']
-    assert set(cols) <= set(df.columns), f"df columns must contain {cols}."
 
     # B. Reduce frame to necessary data.
 
