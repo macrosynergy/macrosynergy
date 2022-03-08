@@ -541,6 +541,31 @@ class TestAll(unittest.TestCase):
                                            end='2020-10-30', scale=scale,
                                            cs_vtarg=0.1, posname='POS')
 
+        # The only aspect of target_position()'s workflow which is not examined in the
+        # above methods is the application of volatility targeting.
+        # Test on a single category.
+        ctype = self.ctypes[0]  # FX.
+        output_df_vol = target_positions(df=reduced_dfd, cids=self.cids,
+                                     xcat_sig=xcat_sig, ctypes=ctype,
+                                     sigrels=[-1], ret='XR_NSA',
+                                     start=None, end='2020-12-31', scale='prop',
+                                     cs_vtarg=0.4, posname='POS')
+        # Test on a single category without volatility targeting.
+        output_df = target_positions(df=reduced_dfd, cids=self.cids,
+                                     xcat_sig=xcat_sig, ctypes=ctype,
+                                     sigrels=[-1], ret='XR_NSA',
+                                     start=None, end='2020-12-31', scale='prop',
+                                     cs_vtarg=None, posname='POS')
+        # The first aspect to confirm is the application of volatility targeting will
+        # truncate the returned dataframe by the number of cross_sections multiplied by
+        # the lookback period (default is 21, so the first twenty days will not be
+        # populated with volatility values).
+        # By confirming the dimensions of the returned dataframe follow the above logic,
+        # it shows the conditional constructs are being applied correctly.
+        vol_no_rows = output_df_vol.shape[0]
+
+        self.assertTrue(vol_no_rows == output_df.shape[0] - (20 * len(self.cids)))
+
         xcat_sig = 'SIG_NSA'
         sigrels = [-1, 1]
 
