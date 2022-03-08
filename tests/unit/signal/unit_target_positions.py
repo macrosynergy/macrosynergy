@@ -58,6 +58,45 @@ class TestAll(unittest.TestCase):
         self.__dict__['df_pivot'] = dfd_reduced.pivot(index="real_date", columns="cid",
                                                       values="value")
 
+    def test_weight_dataframes(self):
+
+        # The original dataframe target_positions() receives will be a single,
+        # concatenated dataframe which will include the basket weight dataframes if,
+        # axiomatically, baskets are included.
+        # Therefore, the method weight_dataframes() will return the pivoted weight
+        # dataframes and a dictionary of the basket's name and the associated
+        # constituents.
+        self.dataframe_generator()
+        dfd = reduce_df(df=self.dfd, xcats=self.xcats, cids=self.cids,
+                        start=None, end=None, blacklist=None)
+
+        # Make the baskets to append to the standardised dataframe.
+        west_contracts = ['GBP_FX', 'USD_FX']
+        apc_contracts = ['AUD_EQ', 'JPY_EQ', 'NZD_EQ']
+        basket_1 = Basket(df=dfd, contracts=west_contracts, ret="XR_NSA",
+                          cry=None)
+
+        basket_1.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
+                             max_weight=0.55, remove_zeros=True,
+                             basket_name="WST_FX")
+        df_weight_1 = basket_1.return_weights("WST_FX")
+
+        basket_2 = Basket(df=dfd, contracts=apc_contracts, ret="XR_NSA",
+                          cry=None)
+        basket_2.make_basket(weight_meth="equal", max_weight=0.55,
+                             basket_name="APC_EQ")
+        df_weight_2 = basket_2.return_weights("APC_EQ")
+        df_weight = [df_weight_1, df_weight_2]
+        dfd_concat = pd.concat([dfd] + df_weight)
+
+        b_names = ["WST_FX", "APC_EQ"]
+        df_c_wgts, b_dict = weight_dataframes(df=dfd_concat, basket_names=b_names)
+        self.assertTrue(list(b_dict.keys()) == b_names)
+        column_names = [west_contracts, apc_contracts]
+
+        for i, df in enumerate(df_c_wgts):
+            self.assertTrue(list(df.columns) == column_names[i])
+
     def test_unitary_positions(self):
 
         self.dataframe_generator()
@@ -106,18 +145,6 @@ class TestAll(unittest.TestCase):
                                      min_obs=0, thresh=2.5)
 
         self.assertTrue(df_unit_pos.shape == self.dfd_reduced.shape)
-
-    def test_start_end(self):
-
-        self.dataframe_generator()
-        ret = 'XR_NSA'
-        contract_returns = [c + ret for c in self.ctypes]
-
-        # Tractable function - requires few tests. Validate each contract type is held in
-        # the dictionary, and its associated value is a tuple.
-        # durations = start_end(self.dfd, contract_returns)
-
-        # Function removed from source code.
 
     @staticmethod
     def row_return(dfd, date, c_return, sigrel):
@@ -460,7 +487,7 @@ class TestAll(unittest.TestCase):
             if k in df_basket_apc_test.keys():
                 eq_panel_values[k] += df_basket_apc_test[k]
 
-        # Check the values against the function cnosolidate_positions().
+        # Check the values against the function consolidate_positions().
         benchmark = eq_output[eq_output['real_date'] == test_date]
         benchmark_dict = dict(zip(benchmark['cid'], benchmark['value']))
         for k, v in benchmark_dict.items():
