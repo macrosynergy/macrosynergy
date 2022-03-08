@@ -289,8 +289,9 @@ def consolidate_positions(data_frames: List[pd.DataFrame], ctypes: List[str]):
 
     return list(dict_.values())
 
-def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: List[str],
-                     sigrels: List[float], basket_names: Union[str, List[str]] = [],
+def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
+                     ctypes: Union[List[str], str], sigrels: List[float],
+                     basket_names: Union[str, List[str]] = [],
                      ret: str = 'XR_NSA', start: str = None,
                      end: str = None, scale: str = 'prop', min_obs: int = 252,
                      thresh: float = None, cs_vtarg: float = None,
@@ -372,6 +373,8 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str, ctypes: L
     else:
         panel_sigrels = sigrels
 
+    if isinstance(ctypes, str):
+        ctypes = [ctypes]
     ctypes_baskets = ctypes + basket_names
 
     cols = ['cid', 'xcat', 'real_date', 'value']
