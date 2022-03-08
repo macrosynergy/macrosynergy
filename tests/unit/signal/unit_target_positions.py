@@ -309,9 +309,7 @@ class TestAll(unittest.TestCase):
         # Convert both the panel & basket dataframes to standardised dataframes.
         df_basket_stack = df_basket_pos.stack().to_frame("value").reset_index()
         # Test dataframe.
-        consolidate_df, basket_df = consolidation_help(panel_df=df_mods,
-                                                       basket_df=df_basket_stack)
-        self.assertTrue(basket_df.empty)
+        consolidate_df = consolidation_help(panel_df=df_mods, basket_df=df_basket_stack)
 
         # The consolidation will only be applicable on the intersection of contracts.
         # Therefore, check the other contract's positions remain the same.
@@ -370,9 +368,12 @@ class TestAll(unittest.TestCase):
         sigrels = [1, -1, -0.5, 1.5]
         west_contracts = ['GBP_FX', 'USD_FX']
         apc_contracts = ['AUD_EQ', 'NZD_EQ']
-        # The signal is used for both panels.
+
+        # The signal panel is used to establish positions in both panels. The two
+        # dataframes below are the weight-adjusted target positions for the respective
+        # baskets.
         df_basket_west = self.basket_weight(reduced_dfd, df_mods_w, west_contracts,
-                                           basket_name="WST_FX")
+                                            basket_name="WST_FX")
         df_basket_apc = self.basket_weight(reduced_dfd, df_mods_w, apc_contracts,
                                            basket_name="APC_EQ")
         baskets = [df_basket_west, df_basket_apc]
@@ -404,11 +405,43 @@ class TestAll(unittest.TestCase):
             i += 1
 
         # Assert the consolidation has occurred correctly across both panels.
-        df_pos_cons = consolidate_positions(df_pos_cons, self.ctypes)
+        df_pos_cons_output = consolidate_positions(df_pos_cons, self.ctypes)
         # The number of dataframes in the returned list should correspond to the number
         # of panels: the basket's position is added to the panel dataframe given the
         # basket is a subset of the panel.
-        self.assertTrue(len(df_pos_cons) == len(self.ctypes))
+        self.assertTrue(len(df_pos_cons_output) == len(self.ctypes))
+        # Further, the expected category name, "xcat", of the dataframes inside the
+        # returned list should be set to one of the contract types (each basket
+        # dataframe will be subsumed under the panel dataframes: the contracts are the
+        # same, so the positions are aggregated).
+        for df in df_pos_cons_output:
+            test_xcat = ''.join(df['xcat'].unique())
+            self.assertTrue(test_xcat in self.ctypes)
+
+        # Test the consolidation across the baskets.
+        test_index = 1000
+        test_date = df_mods_w.index.to_numpy()[test_index]
+
+        # The basket's signal is -0.5.
+        df_basket_west_test = df_basket_west.loc[test_date]
+        # Basket position for its respective constituents.
+        df_basket_west_test *= -0.5
+        df_basket_west_test = df_basket_west_test.to_dict()
+
+        # Panel position. Sigrel has already been applied.
+        fx_panel = df_pos_cons[0]
+        fx_panel_test = fx_panel[fx_panel['real_date'] == test_date]
+        fx_panel_values = dict(zip(fx_panel_test['cid'], fx_panel_test['value']))
+
+        for k, v in fx_panel_values.items():
+            if k in df_basket_west_test.keys():
+                fx_panel_values[k] += df_basket_west_test[k]
+
+        fx_output, eq_output = df_pos_cons_output
+        benchmark = fx_output[fx_output['real_date'] == test_date]
+        benchmark_dict = dict(zip(benchmark['cid'], benchmark['value']))
+        for k, v in benchmark_dict.items():
+            self.assertTrue(abs(v - fx_panel_values[k]) < 0.00001)
 
     def test_target_positions(self):
 
