@@ -91,9 +91,12 @@ class TestAll(unittest.TestCase):
 
         b_names = ["WST_FX", "APC_EQ"]
         df_c_wgts, b_dict = weight_dataframes(df=dfd_concat, basket_names=b_names)
+        # Confirm the dictionary's keys equates to the name of the two baskets.
         self.assertTrue(list(b_dict.keys()) == b_names)
         column_names = [west_contracts, apc_contracts]
 
+        # Confirm that the columns of the weight dataframe match the constituents of the
+        # associated basket.
         for i, df in enumerate(df_c_wgts):
             self.assertTrue(list(df.columns) == column_names[i])
 
