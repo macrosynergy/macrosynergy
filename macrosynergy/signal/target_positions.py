@@ -49,6 +49,7 @@ def weight_dataframes(df: pd.DataFrame, basket_names: Union[str, List[str]] = No
 
     return df_c_wgts, b_dict
 
+
 def modify_signals(df: pd.DataFrame, cids: List[str], xcat_sig: str, start: str = None,
                    end: str = None, scale: str = 'prop',  min_obs: int = 252,
                    thresh: float = None):
@@ -146,6 +147,7 @@ def cs_unit_returns(df: pd.DataFrame, contract_returns: List[str],
 
     return df_rets[cols].sort_values(by=cols[:3])
 
+
 def basket_handler(df_mods_w: pd.DataFrame, df_c_wgts: pd.DataFrame,
                    contracts: List[str]):
     """
@@ -190,6 +192,7 @@ def basket_handler(df_mods_w: pd.DataFrame, df_c_wgts: pd.DataFrame,
 
     return df_mods_w
 
+
 def date_alignment(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
     """
     Method used to align the panel position dataframe and the basket dataframe of
@@ -223,6 +226,7 @@ def date_alignment(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
         pass
 
     return panel_df, basket_df
+
 
 def consolidation_help(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
     """
@@ -262,6 +266,7 @@ def consolidation_help(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
 
     return pd.concat(panel_copy)
 
+
 def consolidate_positions(data_frames: List[pd.DataFrame], ctypes: List[str]):
     """
     Method used to consolidate positions if baskets are used. The constituents of a
@@ -289,6 +294,7 @@ def consolidate_positions(data_frames: List[pd.DataFrame], ctypes: List[str]):
 
     return list(dict_.values())
 
+
 def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
                      ctypes: Union[List[str], str], sigrels: List[float],
                      basket_names: Union[str, List[str]] = [],
@@ -309,15 +315,15 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
     :param <List[str]> ctypes: contract types that are traded across markets. They should
         correspond to return categories in the dataframe if the `ret` argument is
         appended. Examples are 'FX' or 'EQ'.
-    :param <str or List[str]> basket_names: a string or list containing the name of each
-        basket. The weight dataframes will be appended to the main dataframe. Therefore,
+    :param <str or List[str]> basket_names: single string or list of the names of several
+        baskets. The weight dataframes will be appended to the main dataframe. Therefore,
         use the basket name to isolate the corresponding weights. The default value for
-        the parameter is an empty list.
+        the parameter is an empty list, which mean that no baskets are traded.
     :param <List[float]> sigrels: values that translate the single signal into contract
         type and basket signals in the order defined by keys.
     :param <str> ret: postfix denoting the returns in % associated with contract types.
-        For JPMaQS derivatives return data this is typically "XR_NSA".
-        The returns are necessary for volatility target-based signals.
+        For JPMaQS derivatives return data this is typically "XR_NSA" (default).
+        Returns are required for volatility targeting.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         for which the signal category is available is used.
     :param <str> end: latest date in ISO format. Default is None and latest date
@@ -330,7 +336,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
         [2] Method 'dig' means 'digital' and sets the individual position to either USD1
             long or short, depending on the sign of the signal.
         Note that unit target positions may subsequently be calibrated to meet cross-
-        section volatility targets.
+        section volatility targets using the `cs_targ` argument.
     :param <int> min_obs: the minimum number of observations required to calculate
         zn_scores. Default is 252.
         Note: For the initial minimum period of the signal time series in-sample
@@ -338,17 +344,20 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
     :param <float> thresh: threshold value beyond which zn-scores for proportionate
         position taking are winsorized. The threshold is the maximum absolute
         score value in standard deviations. The minimum is 1 standard deviation.
-    :param <float> cs_vtarg: This allows volatility targeting at the cross-section level.
-        Default is None, but if a value is chosen then for each cross-section a unit
-        position is defined as a position for which the annual return standard deviation
-        is equal to that value.
+    :param <float> cs_vtarg: Value for volatility targeting at the cross-section level.
+        The purpose of this operation is to related signal with risk rather than notional.
+        as opposed to .
+        Default is None and means no volatility targeting.
+        If a value is chosen then for each cross-section a unit position is defined as a
+        position for which the annual return standard deviation is equal to that value.
         For example, a target of 10 and a cross-section signal of 0.5 standard deviations
         would translate into a target position that carries a recent historical
         annualized standard deviation of 5 dollars (or other currency units).
     :param <int>  lback_periods: Number of lookback periods over which volatility is
-        calculated. Default is 21.
+        calculated. Default is 21. Typically this refers to days.
     :param <str> lback_meth: Lookback method to calculate the volatility.
-        Default is "ma". Alternative is "ema", exponential moving average.
+        Default is "ma", which means simple moving average.
+        Alternative is "ema", which means exponential moving average.
     :param <int> half_life: Refers to the half-time for "xma". Default is 11.
     :param <str> posname: postfix added to contract to denote position name.
 
@@ -356,7 +365,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
         in USD, using the columns 'cid', 'xcat', 'real_date' and 'value'.
 
     Note: A target position differs from a signal insofar as it is a dollar amount and
-          determines to what extent size of signal (as opposed to direction) matters.
+          determines to what extent the size of signal (as opposed to direction) matters.
           A target position also differs from an actual position in two ways. First,
           the actual position can only be aligned with the target with some lag. Second,
           the actual position will be affected by other considerations, such as
@@ -480,6 +489,8 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
 
 if __name__ == "__main__":
 
+    # A. Example dataframe
+
     cids = ['AUD', 'GBP', 'NZD', 'USD']
     xcats = ['FXXR_NSA', 'EQXR_NSA', 'SIG_NSA']
 
@@ -501,34 +512,26 @@ if __name__ == "__main__":
     dfd_copy = dfd.copy()
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
 
-    xcat_sig = 'FXXR_NSA'
+    # B. Target positions without basket
 
-    position_df = target_positions(df=dfd, cids=cids,
-                                   xcat_sig='SIG_NSA',
-                                   ctypes=['FX', 'EQ'], sigrels=[1, 0.5], ret='XR_NSA',
-                                   start='2012-01-01', end='2020-10-30',
-                                   scale='prop', min_obs=252, cs_vtarg=5, posname='POS')
+    df1 = target_positions(df=dfd, cids=cids,
+                           xcat_sig='SIG_NSA',
+                           ctypes=['FX', 'EQ'], sigrels=[1, 0.5], ret='XR_NSA',
+                           start='2012-01-01', end='2020-10-30',
+                           scale='prop', min_obs=252, cs_vtarg=5, posname='POS')
 
-    position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
-                                   ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
-                                   start='2012-01-01', end='2020-10-30',
-                                   scale='dig', cs_vtarg=0.1, posname='POS')
+    df2 = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
+                           ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
+                           start='2012-01-01', end='2020-10-30',
+                           scale='dig', cs_vtarg=0.1, posname='POS')
 
-    # The secondary contract, EQXR_NSA, is defined over a shorter timeframe. Therefore,
-    # on the additional dates, a valid position will be computed using the signal
-    # category but a position will not be able to be taken for EQXR_NSA.
-    position_df = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
-                                   ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
-                                   start='2010-01-01', end='2020-12-31',
-                                   scale='prop', cs_vtarg=None, posname='POS')
+    df3 = target_positions(df=dfd, cids=cids, xcat_sig='FXXR_NSA',
+                           ctypes=['FX', 'EQ'], sigrels=[1, -1], ret='XR_NSA',
+                           start='2010-01-01', end='2020-12-31',
+                           scale='prop', cs_vtarg=None, posname='POS')
 
-    # Testcase for both panel and individual basket performance.
+    # C. Target position with one basket
 
-    # Compute the returns on the Basket prior to calling the target positions, and pass
-    # in the corresponding weight dataframe as a parameter. Therefore, the same weights
-    # are involved in the target positions (adjust the positions according to the weight
-    # dataframe).
-    # The first testcase is a single contract.
     apc_contracts = ['AUD_FX', 'NZD_FX']
     basket_1 = Basket(df=dfd, contracts=apc_contracts, ret="XR_NSA",
                       cry=None, blacklist=black)
@@ -540,41 +543,10 @@ if __name__ == "__main__":
     dfd = dfd[['cid', 'xcat', 'real_date', 'value']]
     dfd_concat = pd.concat([dfd_copy, df_weight])
 
-    position_df = target_positions(df=dfd_concat, cids=cids, xcat_sig='SIG_NSA',
-                                   ctypes=['FX', 'EQ'],
-                                   basket_names=["APC_FX"],
-                                   sigrels=[1, -1, -0.5], ret='XR_NSA',
-                                   start='2010-01-01', end='2020-12-31',
-                                   scale='prop', cs_vtarg=10, posname='POS')
+    df4 = target_positions(df=dfd_concat, cids=cids, xcat_sig='SIG_NSA',
+                           ctypes=['FX', 'EQ'],
+                           basket_names=["APC_FX"],
+                           sigrels=[1, -1, -0.5], ret='XR_NSA',
+                           start='2010-01-01', end='2020-12-31',
+                           scale='prop', cs_vtarg=10, posname='POS')
 
-    # The final dataframe will have consolidated the basket positions and the panel
-    # positions on the intersection of contracts.
-    print(position_df)
-
-    # The second testcase is multiple baskets which will require the associated number
-    # of weight dataframes.
-    west_contracts = ['GBP_FX', 'USD_FX']
-    apc_contracts = ['AUD_EQ', 'NZD_EQ']
-    basket_2 = Basket(df=dfd_copy, contracts=west_contracts, ret="XR_NSA",
-                      cry=None, blacklist=black)
-    # Testing misalignment of dates.
-    basket_2.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
-                         max_weight=0.55, remove_zeros=True,
-                         basket_name="WST_FX")
-    df_weight_1 = basket_2.return_weights("WST_FX")
-
-    basket_3 = Basket(df=dfd_copy, contracts=apc_contracts, ret="XR_NSA",
-                      cry=None, blacklist=black)
-    basket_3.make_basket(weight_meth="equal", max_weight=0.55,
-                         basket_name="APC_EQ")
-    df_weight_2 = basket_3.return_weights("APC_EQ")
-    df_weight = [df_weight_1, df_weight_2]
-    dfd_concat = pd.concat([dfd_copy] + df_weight)
-
-    position_df = target_positions(df=dfd_concat, cids=cids, xcat_sig='FXXR_NSA',
-                                   ctypes=['FX', 'EQ'],
-                                   basket_names=["WST_FX", "APC_EQ"],
-                                   sigrels=[1, -1, -0.5, 1.5], ret='XR_NSA',
-                                   start='2010-01-01', end='2020-12-31',
-                                   scale='prop', cs_vtarg=3, posname='POS')
-    print(position_df)

@@ -48,6 +48,8 @@ class Basket(object):
             "`contracts` must be list of strings"
         assert isinstance(ret, str), "`ret`must be a string"
 
+        dfx = df.copy()
+
         self.contracts = contracts
         self.ret = ret
         self.ticks_ret = [con + ret for con in contracts]
@@ -59,7 +61,7 @@ class Basket(object):
         self.tickers = self.ticks_ret + self.ticks_cry + self.ticks_wgt
         self.start = self.date_check(start)
         self.end = self.date_check(end)
-        self.dfx = reduce_df_by_ticker(df, start=start, end=end, ticks=self.tickers,
+        self.dfx = reduce_df_by_ticker(dfx, start=start, end=end, ticks=self.tickers,
                                        blacklist=blacklist)
         self.dict_retcry = {}  # dictionary for collecting basket return/carry dfs.
         self.dict_wgs = {}  # dictionary for collecting basket return/carry dfs.
