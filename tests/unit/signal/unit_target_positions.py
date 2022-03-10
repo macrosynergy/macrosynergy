@@ -9,6 +9,7 @@ import random
 import pandas as pd
 import numpy as np
 
+
 class TestAll(unittest.TestCase):
 
     def dataframe_generator(self):
@@ -120,8 +121,7 @@ class TestAll(unittest.TestCase):
         # deviations or a simple buy / sell recommendation).
         xcat_sig = 'FXXR_NSA'
         df_unit_pos = modify_signals(df=self.dfd, cids=self.cids, xcat_sig=xcat_sig,
-                                     start='2012-01-01', end='2020-10-30', scale='dig',
-                                     thresh=2.5)
+                                     start='2012-01-01', end='2020-10-30', scale='dig')
 
         self.assertTrue(df_unit_pos['xcat'].unique().size == 1)
         self.assertTrue(np.all(df_unit_pos['xcat'] == xcat_sig))
@@ -129,6 +129,8 @@ class TestAll(unittest.TestCase):
         # Digital unitary position can be validated by summing the absolute values of the
         # 'value' column and validating that the summed value equates to the number of
         # rows.
+        # Todo: generalize for dataframe that contains NAs by modifying
+        #  dataframe_generator()
         summation = np.sum(np.abs(df_unit_pos['value']))
         self.assertTrue(summation == df_unit_pos.shape[0])
 
@@ -148,6 +150,8 @@ class TestAll(unittest.TestCase):
                                      min_obs=0, thresh=2.5)
 
         self.assertTrue(df_unit_pos.shape == self.dfd_reduced.shape)
+        # Todo: test if proportionate modified signals have correct expected values
+        # Todo: this test can use make_zn_score() to prepare benchmark
 
     @staticmethod
     def row_return(dfd, date, c_return, sigrel):
@@ -609,6 +613,9 @@ class TestAll(unittest.TestCase):
                                      start=None, end='2020-12-31', scale='prop',
                                      cs_vtarg=0.0, posname='POS')
         self.assertTrue(np.all(output_df['value'] == 0.0))
+
+        # Todo: check if overall target_positions() for `dig` and `prop` produces the expected values
+        # Todo: one example for each type is right
 
 
 if __name__ == "__main__":

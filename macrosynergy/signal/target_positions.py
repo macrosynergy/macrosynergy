@@ -73,6 +73,7 @@ def modify_signals(df: pd.DataFrame, cids: List[str], xcat_sig: str, start: str 
             A 1 SD value translates into a USD1 position in the contract.
         [2] Method 'dig' means 'digital' and sets the individual position to either USD1
             long or short, depending on the sign of the signal.
+            Note that a signal of zero translates into a position of zero.
     :param <int> min_obs: the minimum number of observations required to calculate
         zn_scores. Default is 252.
         Note: For the initial period of the signal time series in-sample
@@ -335,6 +336,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
             This translation may apply winsorization through the `thresh` argument
         [2] Method 'dig' means 'digital' and sets the individual position to either USD1
             long or short, depending on the sign of the signal.
+            Note that a signal of zero translates into a position of zero.
         Note that unit target positions may subsequently be calibrated to meet cross-
         section volatility targets using the `cs_targ` argument.
     :param <int> min_obs: the minimum number of observations required to calculate
@@ -481,7 +483,6 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
     df_tpos = df_tpos[cols]
 
     df_tpos = reduce_df(df=df_tpos, xcats=None, cids=None, start=start, end=end)
-
     df_tpos = df_tpos.sort_values(['cid', 'xcat', 'real_date'])[cols]
 
     return df_tpos.reset_index(drop=True)
