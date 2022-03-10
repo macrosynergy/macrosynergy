@@ -1,6 +1,8 @@
 
 import numpy as np
 import pandas as pd
+import seaborn as sns
+
 import random
 from typing import List, Union
 from macrosynergy.panel.historic_vol import expo_weights, expo_std, flat_std
@@ -9,7 +11,6 @@ from macrosynergy.panel.converge_row import ConvergeRow
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from seaborn import FacetGrid
 
 
 class Basket(object):
@@ -499,24 +500,17 @@ class Basket(object):
                           single_ticker: str = None, percentage_change: bool = False):
         """
         Method used to visualise the weights associated with each contract in the basket.
-        The weights assigned to each contract can vary greatly over the respective time
-        period. For instance, if the weighting method chosen for the basket of contracts
-        is "invsd", each contract's weight is predicated on the return series' standard
-        deviation which, especially with an exponential moving average, can change
-        significantly over a short timeframe.
 
-        :param <str> basket_name: single basket name used to isolate the associated
-            weight dataframe.
-        :param <str> start_date: start date to truncate the visualisation period.
-        :param <str> end_date: end date.
-        :param <bool> subplots: controls whether all ticker's are on the same plot, or
-            each ticker is allocated an individual subplot.
+        :param <str> basket_name: name of basket whose weights are visualized
+        :param <str> start_date: start date of he visualisation period.
+        :param <str> end_date: end date of the visualization period.
+        :param <bool> subplots: contract weights are displayed on different plots (True)
+            or on a single plot (False).
         :param <bool> facet_grid: parameter used to break up the plot into multiple
             cartesian coordinate systems. If the basket consists of a high number of
             contracts, using the Facet Grid is recommended.
-        :param <bool> all_tickers: all tickers are included in the graphical display.
-            If false, the parameter "single_ticker" must be defined. The default is True:
-            all tickers will be included.
+        :param <bool> all_tickers: if True (default) all weights are displayed.
+            If set to False`single-ticker` must be specified.
         :param <str> single_ticker: individual ticker for further, more detailed,
             analysis.
         :param <bool> percentage_change: graphical display used to further assimilate the
@@ -567,12 +561,18 @@ class Basket(object):
             if facet_grid:
                 df_stack = dfw_wgs.stack().to_frame("value").reset_index()
                 df_stack = df_stack.sort_values(['ticker', 'real_date'])
-                g = FacetGrid(df_stack, col="ticker")
-                g.map(plt.plot, "value")
-                g.add_legend()
                 no_contracts = dfw_wgs.shape[1]
+                facet_cols = 4 if no_contracts >=8 else 3
+                fg = sns.FacetGrid(df_stack, col="ticker", col_wrap=facet_cols,
+                                   sharey=True)
+                fg.map_dataframe(sns.lineplot, x='real_date', y='value',
+                                 ci=None)
+
                 equal_value = (1 / no_contracts)
-                g.refline(y=round(equal_value, 3))
+                fg.map(plt.axhline, y=equal_value, linestyle='--', color='gray', lw=0.5)
+                fg.set_axis_labels('', '')  # set axes labels of individual charts
+                fg.set_titles(col_template='{col_name}')  # set individual charts' title
+                fg.fig.suptitle('Contract weights in basket', y=1.02)
             else:
                 dfw_wgs.plot(subplots=subplots, title="Weight Values Timestamp",
                              legend=True)
@@ -715,62 +715,62 @@ if __name__ == "__main__":
 
     contracts_1 = ['AUD_FX', 'GBP_FX', 'NZD_FX', 'USD_EQ']
 
-    # First test. Multiple carries. Equal weight method.
-    # The main aspect to check in the code is that basket performance has been applied to
-    # both the return category and the multiple carry categories.
-    basket_1 = Basket(df=dfd, contracts=contracts_1,
-                      ret="XR_NSA", cry=["CRY_NSA", "CRR_NSA"], blacklist=black)
-    basket_1.make_basket(weight_meth="equal", max_weight=0.55,
-                         basket_name="GLB_EQUAL")
-    basket_1.make_basket(weight_meth="fixed", max_weight=0.55,
-                         weights=[1/6, 1/6, 1/6, 1/2],
-                         basket_name="GLB_FIXED")
-    dfp_1 = basket_1.return_basket()
-    dfw_1 = basket_1.return_weights()
-
-    df_basket = basket_1.return_basket("GLB_EQUAL")
-    print(df_basket)
-
-    df_weight = basket_1.return_weights("GLB_EQUAL")
-    print(df_weight)
-
-    # Second test. Zero carries. Inverse weight method.
-    # However, call make_basket() method multiple times, using different weighting
-    # methods, to understand how the basket's performance varies with different weight
-    # methods. For instance, does limiting the volatility of the basket, over a period of
-    # time, produce lower returns than simply taking an equal weight ?
-    basket_2 = Basket(df=dfd, contracts=contracts_1,
-                      ret="XR_NSA", blacklist=black)
-    basket_2.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
-                         max_weight=0.55, remove_zeros=True, basket_name="GLB_INVERSE")
-    df_basket_inv = basket_2.return_basket("GLB_INVERSE")
-
-    basket_2.make_basket(weight_meth="equal", max_weight=0.55, basket_name="GLB_EQUAL")
-    df_basket_equal = basket_2.return_basket("GLB_EQUAL")
-    print(df_basket_inv)
-    print(df_basket_equal)
-
-    # Third test. One carry. Inverse values weight method.
-    # Allow for multiple external weight methods being passed in. If multiple external
-    # weight categories are involved in the basket calculation, pass all the categories
-    # on the instance and call the make_basket() method separately using the respective
-    # weight categories.
-
-    basket_3 = Basket(df=dfd, contracts=contracts_1, ret="XR_NSA", cry=["CRY_NSA"],
-                      blacklist=black, ewgts='WBASE_NSA')
-
-    basket_3.make_basket(weight_meth="inv_values", ewgt="WBASE_NSA", max_weight=0.55,
-                         remove_zeros=True, basket_name="GLB_INV_VALUES")
-
-    df_inv_values = basket_3.return_basket("GLB_INV_VALUES")
-    print(df_inv_values)
-    df_weight = basket_3.return_weights("GLB_INV_VALUES")
-    print(df_weight)
-
-    basket_3.make_basket(weight_meth="equal", max_weight=0.55, remove_zeros=True,
-                         basket_name="GLB_EQUAL")
-    df_equal = basket_3.return_basket("GLB_EQUAL")
-    print(df_equal)
+    # # First test. Multiple carries. Equal weight method.
+    # # The main aspect to check in the code is that basket performance has been applied to
+    # # both the return category and the multiple carry categories.
+    # basket_1 = Basket(df=dfd, contracts=contracts_1,
+    #                   ret="XR_NSA", cry=["CRY_NSA", "CRR_NSA"], blacklist=black)
+    # basket_1.make_basket(weight_meth="equal", max_weight=0.55,
+    #                      basket_name="GLB_EQUAL")
+    # basket_1.make_basket(weight_meth="fixed", max_weight=0.55,
+    #                      weights=[1/6, 1/6, 1/6, 1/2],
+    #                      basket_name="GLB_FIXED")
+    # dfp_1 = basket_1.return_basket()
+    # dfw_1 = basket_1.return_weights()
+    #
+    # df_basket = basket_1.return_basket("GLB_EQUAL")
+    # print(df_basket)
+    #
+    # df_weight = basket_1.return_weights("GLB_EQUAL")
+    # print(df_weight)
+    #
+    # # Second test. Zero carries. Inverse weight method.
+    # # However, call make_basket() method multiple times, using different weighting
+    # # methods, to understand how the basket's performance varies with different weight
+    # # methods. For instance, does limiting the volatility of the basket, over a period of
+    # # time, produce lower returns than simply taking an equal weight ?
+    # basket_2 = Basket(df=dfd, contracts=contracts_1,
+    #                   ret="XR_NSA", blacklist=black)
+    # basket_2.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
+    #                      max_weight=0.55, remove_zeros=True, basket_name="GLB_INVERSE")
+    # df_basket_inv = basket_2.return_basket("GLB_INVERSE")
+    #
+    # basket_2.make_basket(weight_meth="equal", max_weight=0.55, basket_name="GLB_EQUAL")
+    # df_basket_equal = basket_2.return_basket("GLB_EQUAL")
+    # print(df_basket_inv)
+    # print(df_basket_equal)
+    #
+    # # Third test. One carry. Inverse values weight method.
+    # # Allow for multiple external weight methods being passed in. If multiple external
+    # # weight categories are involved in the basket calculation, pass all the categories
+    # # on the instance and call the make_basket() method separately using the respective
+    # # weight categories.
+    #
+    # basket_3 = Basket(df=dfd, contracts=contracts_1, ret="XR_NSA", cry=["CRY_NSA"],
+    #                   blacklist=black, ewgts='WBASE_NSA')
+    #
+    # basket_3.make_basket(weight_meth="inv_values", ewgt="WBASE_NSA", max_weight=0.55,
+    #                      remove_zeros=True, basket_name="GLB_INV_VALUES")
+    #
+    # df_inv_values = basket_3.return_basket("GLB_INV_VALUES")
+    # print(df_inv_values)
+    # df_weight = basket_3.return_weights("GLB_INV_VALUES")
+    # print(df_weight)
+    #
+    # basket_3.make_basket(weight_meth="equal", max_weight=0.55, remove_zeros=True,
+    #                      basket_name="GLB_EQUAL")
+    # df_equal = basket_3.return_basket("GLB_EQUAL")
+    # print(df_equal)
 
     # Final test.
     # Tests the condition: "if self.wgt_flag and self.exo_w_postfix is not None".
