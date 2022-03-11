@@ -479,7 +479,6 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
     df_tpos = pd.concat(df_pos_cons, axis=0, ignore_index=True)
 
     df_tpos['xcat'] += '_' + posname
-    df_tpos['xcat'] = df_tpos['cid'] + '_' + df_tpos['xcat']
     df_tpos = df_tpos[cols]
 
     df_tpos = reduce_df(df=df_tpos, xcats=None, cids=None, start=start, end=end)
