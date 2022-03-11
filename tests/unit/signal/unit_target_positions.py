@@ -158,8 +158,6 @@ class TestAll(unittest.TestCase):
 
         # Little need to test the application of make_zn_scores(), as the function has
         # its own respective Unit Test but test on the dimensions.
-        # If the minimum number of observations parameter is set to zero,
-        # the dimensions of the reduced dataframe should match the output dataframe.
         df_unit_pos = modify_signals(df=dfd, cids=self.cids, xcat_sig=xcat_sig,
                                      start='2012-01-01', end='2020-10-30', scale='prop',
                                      min_obs=0, thresh=2.5)
@@ -169,10 +167,34 @@ class TestAll(unittest.TestCase):
         # The neutral level is fixed to zero. Further, "pan_weight" is set to one and
         # sequential equals True. Therefore, the neutral level & standard deviation is
         # computed across the panel on a rolling basis.
-        # Lastly, in-sampling parameter
+        # Lastly, set the minimum number of observations to zero to negate the effect of
+        # in-sampling (aim to test the general zn_scores calculation which will use the
+        # rolling standard deviation).
         df_unit_pos = modify_signals(df=dfd, cids=self.cids, xcat_sig=xcat_sig,
                                      start='2012-01-01', end='2020-10-30', scale='prop',
-                                     min_obs=252, thresh=2.5)
+                                     min_obs=0, thresh=5)
+        df_unit_pos_w = df_unit_pos.pivot(index="real_date", columns="cid",
+                                          values="value")
+        output_rows = df_unit_pos_w.iloc[0:5, :]
+
+        # Test on the first five rows.
+        dfd_sig_w = dfd_sig.pivot(index="real_date", columns="cid", values="value")
+        test_rows = dfd_sig_w.iloc[0:5, :]
+        numerator = test_rows - np.zeros(test_rows.shape)
+        std = []
+        for i in range(test_rows.shape[0]):
+            # Rolling standard deviation across the panel (same as the neutral level
+            # across the panel).
+            row = np.abs(numerator).iloc[0:(i + 1)].to_numpy()
+            row = row.reshape(row.shape[0] * row.shape[1])
+            mean = np.mean(row)
+            std.append(mean)
+
+        std = np.array(std)
+        row_vector = std[:, np.newaxis]
+        test_zn_scores = numerator.div(row_vector, axis='rows')
+        condition = test_zn_scores.to_numpy() - output_rows.to_numpy()
+        self.assertTrue(np.all(condition < 0.0001))
 
     @staticmethod
     def row_return(dfd, date, c_return, sigrel):
@@ -635,8 +657,19 @@ class TestAll(unittest.TestCase):
                                      cs_vtarg=0.0, posname='POS')
         self.assertTrue(np.all(output_df['value'] == 0.0))
 
-        # Todo: check if overall target_positions() for `dig` and `prop` produces the expected values
-        # Todo: one example for each type is right
+        # Simple examples to test on the returned target positions.
+        # In this permutation of target_positions, the position value is exclusively
+        # predicated on the zn-score and the associated sigrels. The zn_scores method has
+        # already been tested. Therefore, confirm the application of the sigrel.
+        output_df_2 = target_positions(df=dfd, cids=cids, xcat_sig=xcat_sig,
+                                       ctypes=['FX', 'EQ'], sigrels=[1, -1],
+                                       ret='XR_NSA', start='2010-01-01',
+                                       end='2020-12-31', scale='prop', cs_vtarg=None,
+                                       posname='POS')
+
+        # To test, given 'FX' & 'EQ' have opposing sigrels, add their value and confirm
+        # the addition equates to zero.
+        print(output_df_2)
 
 
 if __name__ == "__main__":

@@ -94,7 +94,7 @@ def modify_signals(df: pd.DataFrame, cids: List[str], xcat_sig: str, start: str 
 
         df_ms = make_zn_scores(df, xcat=xcat_sig, sequential=True, cids=cids,
                                start=start, end=end, neutral='zero', pan_weight=1,
-                               min_obs=min_obs, thresh=thresh)
+                               min_obs=min_obs, iis=True, thresh=thresh)
     else:
 
         df_ms = reduce_df(df=df, xcats=[xcat_sig], cids=cids, start=start, end=end,
