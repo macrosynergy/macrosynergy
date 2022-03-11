@@ -227,11 +227,12 @@ def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fa
                 else:
                     arr_neutral[date_index:, i] = np.repeat(column.median(), df_row_no)
                     arr_neutral[:date_index, i] = np.nan
-        
+
     return arr_neutral
 
 
-def iis_std_panel(dfx: pd.DataFrame, min_obs: int, iis: bool = True):
+def iis_std_panel(dfx: pd.DataFrame, min_obs: int, sequential: bool = True,
+                  iis: bool = True):
     """
     Function designed to compute the standard deviations but accounts for in-sampling
     period. The in-sampling standard deviation will be a fixed value.
@@ -239,24 +240,29 @@ def iis_std_panel(dfx: pd.DataFrame, min_obs: int, iis: bool = True):
     :param <pd.DataFrame> dfx: dataFrame recording the differences from the neutral
         level.
     :param <int> min_obs:
+    :param <bool> sequential:
     :param <bool> iis:
 
     :return <np.ndarray> ar_sds: an array of daily standard deviations.
     """
-    no_dates = dfx.shape[0]
 
-    ar_sds = np.array([dfx.iloc[0:(i + 1), :].stack().abs().mean()
-                       for i in range(no_dates)])
-    if iis:
-        iis_dfx = dfx.iloc[0:min_obs, :]
-        iis_sds = np.array(iis_dfx.stack().abs().mean())
-        ar_sds[:min_obs] = iis_sds
+    no_dates = dfx.shape[0]
+    if sequential:
+
+        ar_sds = np.array([dfx.iloc[0:(i + 1), :].stack().abs().mean()
+                           for i in range(no_dates)])
+        if iis:
+            iis_dfx = dfx.iloc[0:min_obs, :]
+            iis_sds = np.array(iis_dfx.stack().abs().mean())
+            ar_sds[:min_obs] = iis_sds
+    else:
+        ar_sds = np.repeat(dfx.stack().abs().mean(), no_dates)
 
     return ar_sds
 
 
 def iis_std_cross(column: pd.Series, min_obs: int, date_index: int = 0,
-                  iis: bool = True):
+                  sequential: bool = True, iis: bool = True):
     """
     Standard deviation for cross-sectional zn_scores. Will account for the in-sampling
     period.
@@ -266,18 +272,25 @@ def iis_std_cross(column: pd.Series, min_obs: int, date_index: int = 0,
     :param <int> min_obs:
     :param <int> date_index: index of the first realised value for each series. Only
         applicable for cross-sectional zn_scores.
+    :param <bool> sequential:
+    :param <bool> iis:
 
     :return <np.ndarray> ar_sds:
     """
 
     no_dates = column.size
-    ar_sds = np.array([column[0:(j + 1)].abs().mean() for j in range(no_dates)])
+    if sequential:
+        ar_sds = np.array([column[0:(j + 1)].abs().mean() for j in range(no_dates)])
 
-    if iis:
-        iis_end_date = date_index + min_obs
-        iis_column = column[date_index:iis_end_date]
-        iis_sds = np.array(iis_column.abs().mean())
-        ar_sds[date_index: iis_end_date] = iis_sds
+        if iis:
+            iis_end_date = date_index + min_obs
+            iis_column = column[date_index:iis_end_date]
+            iis_sds = np.array(iis_column.abs().mean())
+            ar_sds[date_index: iis_end_date] = iis_sds
+
+    else:
+        sds_value = np.array(column.abs().mean())
+        ar_sds = np.repeat(sds_value, no_dates)
 
     return ar_sds
 
@@ -310,9 +323,13 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         standard deviations) are estimated sequentially with concurrently available
         information only.
     :param <int> min_obs: the minimum number of observations required to calculate
-        zn_scores. Default is 261.
+        zn_scores. Default is 261. The parameter is only applicable if the "sequential"
+        parameter is set to True. Otherwise the neutral level and the standard deviation
+        are both computed in-sample and will include all realised observations.
     :param <bool> iis: if True (default) zn-scores are also calculated for the initial
         sample period defined by min-obs on an in-sample basis to avoid losing history.
+        Further, if sequential is set to False, axiomatically, the parameter does not
+        apply: the entire time-period will be treated as in-sample.
     :param <str> neutral: method to determine neutral level. Default is 'zero'.
         Alternatives are 'mean' and "median".
     :param <float> thresh: threshold value beyond which scores are winsorized,
@@ -349,7 +366,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
         ar_neutral = pan_neutral(dfw, neutral, sequential, min_obs, iis)
         dfx = dfw.sub(ar_neutral, axis='rows')
-        ar_sds = iis_std_panel(dfx, min_obs, iis)
+        ar_sds = iis_std_panel(dfx, min_obs=min_obs, sequential=sequential, iis=iis)
         dfw_zns_pan = dfx.div(ar_sds, axis='rows')
     else:
         dfw_zns_pan = dfw * 0
@@ -365,7 +382,8 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         for i in range(no_cids):
             column = dfx.iloc[:, i]
             date_index = first_value(column)
-            ar_sds[:, i] = iis_std_cross(column, min_obs, date_index, iis)
+            ar_sds[:, i] = iis_std_cross(column, min_obs, date_index,
+                                         sequential=sequential, iis=iis)
         dfw_zns_css = dfx.div(ar_sds, axis='rows')
     else:
         dfw_zns_css = dfw * 0
@@ -420,5 +438,9 @@ if __name__ == "__main__":
                                neutral='mean', pan_weight=1.0, min_obs = 261)
 
     df_cross = make_zn_scores(dfd, 'XR', cids, start="2010-01-04",
-                              sequential=True, min_obs=0, neutral='mean',
+                              sequential=False, neutral='mean',
                               iis=False, thresh=None, pan_weight=0, postfix='ZN')
+
+    df_ms = make_zn_scores(dfd, 'XR', sequential=False, cids=cids,
+                           neutral='zero', pan_weight=1,
+                           min_obs=min_obs, iis=False, thresh=None)
