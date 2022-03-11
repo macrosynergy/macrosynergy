@@ -101,26 +101,27 @@ class TestAll(unittest.TestCase):
         for i, df in enumerate(df_c_wgts):
             self.assertTrue(list(df.columns) == column_names[i])
 
-    def test_unitary_positions(self):
+    def test_modify_signals(self):
 
         self.dataframe_generator()
+        xcat_sig = 'SIG_NSA'
+        dfd = reduce_df(df=self.dfd, xcats=self.xcats, cids=self.cids,
+                        start='2012-01-02', end='2020-10-30',
+                        blacklist=None)
+        dfd = dfd.reset_index(drop=True)
 
         with self.assertRaises(AssertionError):
             # Testing the assertion on the scale parameter: required ['prop', 'dig'].
             # Pass in noise.
             scale = 'vtarg'
-            position_df = target_positions(df=self.dfd, cids=self.cids,
-                                           xcat_sig='FXXR_NSA',
-                                           ctypes=['FX', 'EQ'], sigrels=[1, -1],
-                                           ret='XR_NSA', start='2012-01-01',
-                                           end='2020-10-30', scale=scale,
-                                           cs_vtarg=0.1, posname='POS')
+            df_unit_pos = modify_signals(df=dfd, cids=self.cids, xcat_sig=xcat_sig,
+                                         start='2012-01-01', end='2020-10-30',
+                                         scale=scale)
 
         # Unitary Position function should return a dataframe consisting of a single
         # category, the signal, and the respective dollar position: (in standard
         # deviations or a simple buy / sell recommendation).
-        xcat_sig = 'FXXR_NSA'
-        df_unit_pos = modify_signals(df=self.dfd, cids=self.cids, xcat_sig=xcat_sig,
+        df_unit_pos = modify_signals(df=dfd, cids=self.cids, xcat_sig=xcat_sig,
                                      start='2012-01-01', end='2020-10-30', scale='dig')
 
         self.assertTrue(df_unit_pos['xcat'].unique().size == 1)
@@ -129,29 +130,49 @@ class TestAll(unittest.TestCase):
         # Digital unitary position can be validated by summing the absolute values of the
         # 'value' column and validating that the summed value equates to the number of
         # rows.
-        # Todo: generalize for dataframe that contains NAs by modifying
-        #  dataframe_generator()
         summation = np.sum(np.abs(df_unit_pos['value']))
         self.assertTrue(summation == df_unit_pos.shape[0])
 
-        # Reduce the dataframe & check the logic is correct.
-        condition = np.where(self.dfd_reduced['value'].to_numpy() < 0)[0]
+        # Reduce the dataframe to the signal & check the logic is correct.
+        dfd_sig = dfd[dfd['xcat'] == xcat_sig]
+        dfd_sig = dfd_sig.reset_index(drop=True)
+
+        condition = np.where(dfd_sig['value'].to_numpy() < 0)[0]
         first_negative_index = next(iter(condition))
 
         val_column = df_unit_pos['value'].to_numpy()
         self.assertTrue(val_column[first_negative_index] == -1)
 
+        # Add zeros to the underlying signal's value to represent a contrived blackout
+        # period. The associated position should also be zero: will not go long or short
+        # during a blackout.
+        # The final category in the standardised dataframe will be the signal.
+        dfd_copy = dfd.copy()
+        dfd_copy.iloc[-100:, -1] = 0
+        df_unit_pos_blackout = modify_signals(df=dfd_copy, cids=self.cids,
+                                              xcat_sig=xcat_sig, start='2012-01-01',
+                                              end='2020-10-30', scale='dig')
+        mod_signals = df_unit_pos_blackout['value']
+        no_positions = mod_signals[-100:]
+        self.assertTrue(sum(no_positions) == 0)
+
         # Little need to test the application of make_zn_scores(), as the function has
         # its own respective Unit Test but test on the dimensions.
         # If the minimum number of observations parameter is set to zero,
         # the dimensions of the reduced dataframe should match the output dataframe.
-        df_unit_pos = modify_signals(df=self.dfd, cids=self.cids, xcat_sig=xcat_sig,
+        df_unit_pos = modify_signals(df=dfd, cids=self.cids, xcat_sig=xcat_sig,
                                      start='2012-01-01', end='2020-10-30', scale='prop',
                                      min_obs=0, thresh=2.5)
 
-        self.assertTrue(df_unit_pos.shape == self.dfd_reduced.shape)
-        # Todo: test if proportionate modified signals have correct expected values
-        # Todo: this test can use make_zn_score() to prepare benchmark
+        self.assertTrue(df_unit_pos.shape == dfd_sig.shape)
+
+        # The neutral level is fixed to zero. Further, "pan_weight" is set to one and
+        # sequential equals True. Therefore, the neutral level & standard deviation is
+        # computed across the panel on a rolling basis.
+        # Lastly, in-sampling parameter
+        df_unit_pos = modify_signals(df=dfd, cids=self.cids, xcat_sig=xcat_sig,
+                                     start='2012-01-01', end='2020-10-30', scale='prop',
+                                     min_obs=252, thresh=2.5)
 
     @staticmethod
     def row_return(dfd, date, c_return, sigrel):
