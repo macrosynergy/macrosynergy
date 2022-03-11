@@ -123,6 +123,24 @@ class DataQueryInterface(object):
             print(f'exc_value: {exc_value}')
             print(f'exc_traceback: {exc_traceback}')
 
+    def check_connection(self) -> bool:
+        """
+        Check connect (heartbeat) to DataQuery.
+
+        :return <bool>: success of connection. Check if True (return code 200),
+            and False otherwise.
+        """
+
+        results = self._fetch(endpoint="/services/heartbeat", select='info')
+
+        assert isinstance(results, dict), f"Response from DQ: {results}"
+
+        if int(results["code"]) != 200:
+            msg = f"Message: {results['message']:s}," \
+                  f" Description: {results['description']:s}"
+
+        return int(results["code"]) == 200
+
     @staticmethod
     def server_retry(response: dict, select: str):
         """
