@@ -214,13 +214,14 @@ class TestAll(unittest.TestCase):
         # internal randomness.
         no_rows = dfw_zns_pan.shape[0]
         index = randint(0, no_rows)
+        index = int(no_rows / 2)
 
         zn_scores = df_panel.to_numpy()
         arr_zns_pan = dfw_zns_pan.to_numpy()
         dif = zn_scores[index] - arr_zns_pan[index]
 
         epsilon = 0.000001
-        # self.assertTrue(np.all(np.nan_to_num(dif) < epsilon))
+        self.assertTrue(np.all(np.nan_to_num(dif) < epsilon))
 
         # Test weighting function.
         min_obs = 252
@@ -239,7 +240,7 @@ class TestAll(unittest.TestCase):
         panel_df = panel_df.pivot(index='real_date', columns='cid', values='value')
         df_cross = df_cross.pivot(index='real_date', columns='cid', values='value')
         df_average = df_average.pivot(index='real_date', columns='cid', values='value')
-        index = randint(0, df_average.shape[0])
+        index = int(df_average.shape[0] / 2)
 
         # Drop the first row in the panel data.
         panel_df = panel_df.drop(panel_df.index[[0]])
@@ -252,7 +253,7 @@ class TestAll(unittest.TestCase):
         dif = check_arr[index] - average_arr[index]
         dif = np.nan_to_num(dif)
 
-        # self.assertTrue(np.all(dif < epsilon))
+        self.assertTrue(np.all(dif < epsilon))
 
         # Test the usage of the threshold parameter.
         threshold = 2.35
