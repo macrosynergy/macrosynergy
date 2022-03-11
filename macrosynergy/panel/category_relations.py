@@ -371,19 +371,21 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
 
-    filt1 = (dfd['xcat'] == 'GROWTH') & (dfd['cid'] == 'AUD')  # all AUD GROWTH locations
-    filt2 = (dfd['xcat'] == 'INFL') & (dfd['cid'] == 'NZD')  # all NZD INFL locations
-    dfdx = dfd[~(filt1 | filt2)]  # reduced dataframe
+    # All AUD GROWTH locations.
+    filt1 = (dfd['xcat'] == 'GROWTH') & (dfd['cid'] == 'AUD')
+    filt2 = (dfd['xcat'] == 'INFL') & (dfd['cid'] == 'NZD')  # All NZD INFL locations.
+    # Reduced dataframe.
+    dfdx = dfd[~(filt1 | filt2)]
 
     cidx = ['AUD', 'CAD', 'GBP', 'USD']
 
-    cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'],
-                           cids=cidx, xcat_aggs=['last', 'mean'],
-                           start='2005-01-01', blacklist=black,
-                           years=3)
+    # cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'],
+                           # cids=cidx, xcat_aggs=['last', 'mean'],
+                           # start='2005-01-01', blacklist=black,
+                           # years=3)
 
     cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'], cids=cidx, freq='M',
-                           xcat_aggs=['mean', 'mean'], lag=1,
+                           xcat_aggs=['last', 'mean'], lag=1,
                            start='2000-01-01', years=None, blacklist=black,
                            xcat1_chg=None, xcat_trims=[2, 2])
 
