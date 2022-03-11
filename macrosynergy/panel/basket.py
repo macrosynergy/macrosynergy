@@ -1,6 +1,8 @@
 
 import numpy as np
 import pandas as pd
+import seaborn as sns
+
 import random
 from typing import List, Union
 from macrosynergy.panel.historic_vol import expo_weights, expo_std, flat_std
@@ -9,7 +11,6 @@ from macrosynergy.panel.converge_row import ConvergeRow
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from seaborn import FacetGrid
 
 
 class Basket(object):
@@ -47,6 +48,8 @@ class Basket(object):
             "`contracts` must be list of strings"
         assert isinstance(ret, str), "`ret`must be a string"
 
+        dfx = df.copy()
+
         self.contracts = contracts
         self.ret = ret
         self.ticks_ret = [con + ret for con in contracts]
@@ -58,7 +61,7 @@ class Basket(object):
         self.tickers = self.ticks_ret + self.ticks_cry + self.ticks_wgt
         self.start = self.date_check(start)
         self.end = self.date_check(end)
-        self.dfx = reduce_df_by_ticker(df, start=start, end=end, ticks=self.tickers,
+        self.dfx = reduce_df_by_ticker(dfx, start=start, end=end, ticks=self.tickers,
                                        blacklist=blacklist)
         self.dict_retcry = {}  # dictionary for collecting basket return/carry dfs.
         self.dict_wgs = {}  # dictionary for collecting basket return/carry dfs.
@@ -499,24 +502,17 @@ class Basket(object):
                           single_ticker: str = None, percentage_change: bool = False):
         """
         Method used to visualise the weights associated with each contract in the basket.
-        The weights assigned to each contract can vary greatly over the respective time
-        period. For instance, if the weighting method chosen for the basket of contracts
-        is "invsd", each contract's weight is predicated on the return series' standard
-        deviation which, especially with an exponential moving average, can change
-        significantly over a short timeframe.
 
-        :param <str> basket_name: single basket name used to isolate the associated
-            weight dataframe.
-        :param <str> start_date: start date to truncate the visualisation period.
-        :param <str> end_date: end date.
-        :param <bool> subplots: controls whether all ticker's are on the same plot, or
-            each ticker is allocated an individual subplot.
+        :param <str> basket_name: name of basket whose weights are visualized
+        :param <str> start_date: start date of he visualisation period.
+        :param <str> end_date: end date of the visualization period.
+        :param <bool> subplots: contract weights are displayed on different plots (True)
+            or on a single plot (False).
         :param <bool> facet_grid: parameter used to break up the plot into multiple
             cartesian coordinate systems. If the basket consists of a high number of
             contracts, using the Facet Grid is recommended.
-        :param <bool> all_tickers: all tickers are included in the graphical display.
-            If false, the parameter "single_ticker" must be defined. The default is True:
-            all tickers will be included.
+        :param <bool> all_tickers: if True (default) all weights are displayed.
+            If set to False`single-ticker` must be specified.
         :param <str> single_ticker: individual ticker for further, more detailed,
             analysis.
         :param <bool> percentage_change: graphical display used to further assimilate the
@@ -567,12 +563,18 @@ class Basket(object):
             if facet_grid:
                 df_stack = dfw_wgs.stack().to_frame("value").reset_index()
                 df_stack = df_stack.sort_values(['ticker', 'real_date'])
-                g = FacetGrid(df_stack, col="ticker")
-                g.map(plt.plot, "value")
-                g.add_legend()
                 no_contracts = dfw_wgs.shape[1]
+                facet_cols = 4 if no_contracts >=8 else 3
+                fg = sns.FacetGrid(df_stack, col="ticker", col_wrap=facet_cols,
+                                   sharey=True)
+                fg.map_dataframe(sns.lineplot, x='real_date', y='value',
+                                 ci=None)
+
                 equal_value = (1 / no_contracts)
-                g.refline(y=round(equal_value, 3))
+                fg.map(plt.axhline, y=equal_value, linestyle='--', color='gray', lw=0.5)
+                fg.set_axis_labels('', '')  # set axes labels of individual charts
+                fg.set_titles(col_template='{col_name}')  # set individual charts' title
+                fg.fig.suptitle('Contract weights in basket', y=1.02)
             else:
                 dfw_wgs.plot(subplots=subplots, title="Weight Values Timestamp",
                              legend=True)
