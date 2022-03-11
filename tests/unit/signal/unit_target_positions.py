@@ -661,15 +661,25 @@ class TestAll(unittest.TestCase):
         # In this permutation of target_positions, the position value is exclusively
         # predicated on the zn-score and the associated sigrels. The zn_scores method has
         # already been tested. Therefore, confirm the application of the sigrel.
-        output_df_2 = target_positions(df=dfd, cids=cids, xcat_sig=xcat_sig,
-                                       ctypes=['FX', 'EQ'], sigrels=[1, -1],
-                                       ret='XR_NSA', start='2010-01-01',
-                                       end='2020-12-31', scale='prop', cs_vtarg=None,
+        output_df_2 = target_positions(df=reduced_dfd, cids=self.cids, xcat_sig=xcat_sig,
+                                       ctypes=self.ctypes, sigrels=[1, -1], ret='XR_NSA',
+                                       start='2010-01-01', end='2020-12-31',
+                                       scale='prop', cs_vtarg=None,
                                        posname='POS')
 
         # To test, given 'FX' & 'EQ' have opposing sigrels, add their value and confirm
         # the addition equates to zero.
-        print(output_df_2)
+        split = lambda xc: xc.split('_')[0]
+
+        # Remove the "posname" from the category.
+        output_df_2['xcat'] = np.array(list(map(split, output_df_2['xcat'])))
+        eq = output_df_2[output_df_2['xcat'] == 'EQ']
+        fx = output_df_2[output_df_2['xcat'] == 'FX']
+        eq = eq.pivot(index="real_date", columns="cid", values="value")
+        fx = fx.pivot(index="real_date", columns="cid", values="value")
+
+        test = eq.add(fx)
+        self.assertTrue(np.all(test.to_numpy() < 0.00001))
 
 
 if __name__ == "__main__":
