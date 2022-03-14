@@ -471,6 +471,8 @@ class Basket(object):
         select = ["ticker", "real_date", "value"]
 
         dfw_wgs_copy = self.column_manager(df_cat=self.dfw_ret, dfw_wgs=dfw_wgs)
+        dfw_wgs_copy = dfw_wgs_copy.dropna(axis=0, how='all')
+        
         dfw_bret = self.dfw_ret.multiply(dfw_wgs_copy).sum(axis=1)
         dfxr = dfw_bret.to_frame("value").reset_index()
         basket_ret = basket_name + "_" + self.ret
@@ -709,21 +711,21 @@ if __name__ == "__main__":
     df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
                                                 'sd_mult'])
 
-    df_cids.loc['AUD'] = ['2010-01-01', '2020-12-31', 0, 1]
-    df_cids.loc['GBP'] = ['2011-01-01', '2020-11-30', 0, 2]
-    df_cids.loc['NZD'] = ['2012-01-01', '2020-12-31', 0, 3]
-    df_cids.loc['USD'] = ['2010-01-01', '2020-12-31', 0, 4]
+    df_cids.loc['AUD'] = ['2010-01-01', '2022-03-14', 0, 1]
+    df_cids.loc['GBP'] = ['2011-01-01', '2022-03-14', 0, 2]
+    df_cids.loc['NZD'] = ['2012-01-01', '2022-03-14', 0, 3]
+    df_cids.loc['USD'] = ['2010-01-01', '2022-03-14', 0, 4]
 
     df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
                                                   'sd_mult', 'ar_coef', 'back_coef'])
-    df_xcats.loc['FXXR_NSA'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.2]
-    df_xcats.loc['FXCRY_NSA'] = ['2010-01-01', '2020-12-31', 1, 1, 0.9, 0.2]
-    df_xcats.loc['FXCRR_NSA'] = ['2010-01-01', '2020-12-31', 0.5, 0.8, 0.9, 0.2]
-    df_xcats.loc['EQXR_NSA'] = ['2012-01-01', '2020-12-31', 0.5, 2, 0, 0.2]
-    df_xcats.loc['EQCRY_NSA'] = ['2010-01-01', '2020-12-31', 2, 1.5, 0.9, 0.5]
-    df_xcats.loc['EQCRR_NSA'] = ['2010-01-01', '2020-12-31', 1.5, 1.5, 0.9, 0.5]
-    df_xcats.loc['FXWBASE_NSA'] = ['2010-01-01', '2020-12-31', 1, 1.5, 0.8, 0.5]
-    df_xcats.loc['EQWBASE_NSA'] = ['2010-01-01', '2020-12-31', 1, 1.5, 0.9, 0.5]
+    df_xcats.loc['FXXR_NSA'] = ['2010-01-01', '2022-03-14', 0, 1, 0, 0.2]
+    df_xcats.loc['FXCRY_NSA'] = ['2010-01-01', '2022-03-14', 1, 1, 0.9, 0.2]
+    df_xcats.loc['FXCRR_NSA'] = ['2010-01-01', '2022-03-14', 0.5, 0.8, 0.9, 0.2]
+    df_xcats.loc['EQXR_NSA'] = ['2012-01-01', '2022-03-14', 0.5, 2, 0, 0.2]
+    df_xcats.loc['EQCRY_NSA'] = ['2010-01-01', '2022-03-14', 2, 1.5, 0.9, 0.5]
+    df_xcats.loc['EQCRR_NSA'] = ['2010-01-01', '2022-03-14', 1.5, 1.5, 0.9, 0.5]
+    df_xcats.loc['FXWBASE_NSA'] = ['2010-01-01', '2022-02-01', 1, 1.5, 0.8, 0.5]
+    df_xcats.loc['EQWBASE_NSA'] = ['2010-01-01', '2022-02-01', 1, 1.5, 0.9, 0.5]
 
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
@@ -737,6 +739,8 @@ if __name__ == "__main__":
     # First test. Multiple carries. Equal weight method.
     # The main aspect to check in the code is that basket performance has been applied to
     # both the return category and the multiple carry categories.
+    print("Input dataframe.")
+    print(dfd)
     basket_1 = Basket(df=dfd, contracts=contracts_1,
                       ret="XR_NSA", cry=["CRY_NSA", "CRR_NSA"], blacklist=black)
     basket_1.make_basket(weight_meth="equal", max_weight=0.55,
