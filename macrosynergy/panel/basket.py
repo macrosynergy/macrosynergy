@@ -598,6 +598,30 @@ class Basket(object):
 
             plt.show()
 
+    def column_split(self, df: pd.DataFrame):
+        """
+        Receives a dataframe with the columns 'ticker', 'real_date' and 'value' and
+        returns a standardised dataframe with the columns 'cid', 'xcat', 'real_date' and
+        'value. The 'ticker' column is broken up to produce the two new columns.
+
+        :param <pd.DataFrame> df:
+
+        :return <pd.DataFrame> df: standardised dataframe.
+        """
+        select = ["cid", "xcat", "real_date", "value"]
+
+        cid_func = lambda t: t.split('_')[0]
+        xcat_func = lambda t: '_'.join(t.split('_')[1:])
+
+        cids_w_df = list(map(cid_func, df["ticker"]))
+        df["cid"] = np.array(cids_w_df)
+
+        df = df.rename(columns={"ticker": "xcat"})
+        df["xcat"] = np.array(list(map(xcat_func, df["xcat"])))
+
+        df = df[select]
+        return df
+
     def return_basket(self, basket_names: Union[str, List[str]] = None):
         """
         Return standardized dataframe of basket performance data based on one or more
@@ -627,6 +651,8 @@ class Basket(object):
             except KeyError as e:
                 print(f"Basket not found - call make_basket() method first: {e}.")
             else:
+                dfw_retcry = self.column_split(dfw_retcry)
+                dfw_retcry = dfw_retcry.sort_values(['xcat', 'real_date'])
                 ret_baskets.append(dfw_retcry)
 
         return_df = pd.concat(ret_baskets)
@@ -663,18 +689,9 @@ class Basket(object):
             else:
 
                 w = dfw_wgs.stack().to_frame("value").reset_index()
-
-                cid_func = lambda t: t.split('_')[0]
-                xcat_func = lambda t: t.split('_')[1:]
-
-                cids_w_df = list(map(cid_func, w["ticker"]))
-                w["cid"] = np.array(cids_w_df)
-
+                w = self.column_split(df=w)
                 w = w.sort_values(['cid', 'real_date'])
-                w = w.rename(columns={"ticker": "xcat"})
-                w["xcat"] = np.array(list(map(xcat_func, w["xcat"])))
 
-                w = w[select]
                 w = w.loc[w.value > 0, select]
                 w["xcat"] += "_" + b + "_" + "WGT"
                 weight_baskets.append(w)
@@ -796,6 +813,7 @@ if __name__ == "__main__":
     basket_5.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
                          max_weight=0.55, remove_zeros=True, basket_name="GLB_INVERSE")
     df_basket_inv = basket_5.return_basket("GLB_INVERSE")
+    print(df_basket_inv)
 
     # Examples of the different visualisation options.
     basket_5.weight_visualiser("GLB_INVERSE", start_date="2020-01-07",
