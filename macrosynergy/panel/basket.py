@@ -192,7 +192,7 @@ class Basket(object):
         weight = act_cross.multiply(broadcast)
         cols = weight.columns
         # Zeroes treated as NaNs.
-        weight[cols] = weight[cols].replace({'0': np.nan, 0: np.nan})
+        weight[cols] = weight[cols].replace({0: np.nan})
 
         self.check_weights(weight=weight)
 
@@ -219,7 +219,7 @@ class Basket(object):
         weight = act_cross.multiply(broadcast)
         cols = weight.columns
         # Zeroes treated as NaNs.
-        weight[cols] = weight[cols].replace({'0': np.nan, 0: np.nan})
+        weight[cols] = weight[cols].replace({0: np.nan})
 
         weight_arr = weight.to_numpy()  # convert df to np array.
         weight[weight.columns] = weight_arr / np.sum(weight_arr, axis=1)[:, np.newaxis]
@@ -261,7 +261,7 @@ class Basket(object):
 
         cols = dfwa.columns
         # Zeroes treated as NaNs.
-        dfwa[cols] = dfwa[cols].replace({'0': np.nan, 0: np.nan})
+        dfwa[cols] = dfwa[cols].replace({0: np.nan})
 
         df_isd = 1 / dfwa
         df_wgts = df_isd / df_isd.sum(axis=1).values[:, np.newaxis]
@@ -295,7 +295,7 @@ class Basket(object):
         cols = weights_df.columns
 
         # Zeroes treated as NaNs.
-        weights_df[cols] = weights_df[cols].replace({'0': np.nan, 0: np.nan})
+        weights_df[cols] = weights_df[cols].replace({0: np.nan})
 
         if weight_meth != "values":
             weights_df = 1 / weights_df
