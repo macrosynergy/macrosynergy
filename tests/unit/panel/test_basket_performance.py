@@ -82,7 +82,7 @@ class TestAll(unittest.TestCase):
         for i, row in enumerate(weight_arr):
             # Check the index of each value: weight allocated to non-NaN cross-sections.
             test = bool_arr[i, :] * equal[i]
-            self.assertTrue(np.all(row == test))
+            self.assertTrue(np.all(np.nan_to_num(row) == test))
 
     def test_fixed_weight(self):
 
@@ -98,7 +98,7 @@ class TestAll(unittest.TestCase):
             orig_values[nulls] = 0
             test_weights = orig_values / np.sum(orig_values)
             class_weights = weights.iloc[i, :].to_numpy()
-            sum_of_diffs = np.sum(test_weights - class_weights)
+            sum_of_diffs = np.nansum(test_weights - class_weights)
             self.assertAlmostEqual(sum_of_diffs, 0, 4)
 
     def test_inverse_weight(self):
@@ -275,12 +275,6 @@ class TestAll(unittest.TestCase):
             basket_1 = Basket(df=dfd_test, contracts='AUD_FX',
                               ret="XR_NSA", cry="CRY_NSA", ewgts=None,
                               blacklist=self.black)
-
-        # Test the assertion applied to the "start" and "end" parameters.
-        with self.assertRaises(AssertionError):
-            basket_1 = Basket(df=dfd_test, contracts=self.contracts,
-                              ret="XR_NSA", cry="CRY_NSA", start="Feb, 30 2000",
-                              ewgts=None, blacklist=self.black)
 
         # Test the assertion that the external weight category parameter must receive a
         # string or List where the external weight is present in the dataframe. The below
