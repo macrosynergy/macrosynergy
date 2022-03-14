@@ -526,7 +526,10 @@ class TestAll(unittest.TestCase):
         # instance that would involve: "GLB_EQUAL", "GLB_INVERSE" & "GLB_FIXED".
         # Therefore, check the logic.
         return_df = basket_1.return_basket()
-        tickers = return_df['ticker'].to_numpy()
+        return_df_c = return_df.copy()
+        return_df_c['ticker'] = return_df_c['cid'] + '_' + return_df_c['xcat']
+
+        tickers = return_df_c['ticker'].to_numpy()
         truncate = lambda ticker: "_".join(ticker.split('_')[0:2])
 
         basket_names = list(set(map(truncate, tickers)))
