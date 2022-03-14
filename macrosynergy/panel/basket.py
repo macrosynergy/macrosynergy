@@ -48,12 +48,13 @@ class Basket(object):
             "`contracts` must be list of strings"
         assert isinstance(ret, str), "`ret`must be a string"
 
-        dfx = df.copy()
-
+        df = reduce_df_by_ticker(df, start=start, end=end, ticks=None,
+                                 blacklist=blacklist)
         self.contracts = contracts
         self.ret = ret
         self.ticks_ret = [con + ret for con in contracts]
-        self.dfw_ret = self.pivot_dataframe(df, self.ticks_ret)
+        dfw_ret = self.pivot_dataframe(df, self.ticks_ret)
+        self.dfw_ret = dfw_ret.dropna(axis=0, how='all')
 
         self.store_attributes(df, cry, "cry")
         self.store_attributes(df, ewgts, "wgt")
@@ -61,8 +62,7 @@ class Basket(object):
         self.tickers = self.ticks_ret + self.ticks_cry + self.ticks_wgt
         self.start = self.date_check(start)
         self.end = self.date_check(end)
-        self.dfx = reduce_df_by_ticker(dfx, start=start, end=end, ticks=self.tickers,
-                                       blacklist=blacklist)
+        self.dfx = reduce_df_by_ticker(df, ticks=self.tickers)
         self.dict_retcry = {}  # dictionary for collecting basket return/carry dfs.
         self.dict_wgs = {}  # dictionary for collecting basket return/carry dfs.
 
@@ -190,6 +190,10 @@ class Basket(object):
         broadcast = np.repeat(uniform, df_ret.shape[1], axis=1)
 
         weight = act_cross.multiply(broadcast)
+        cols = weight.columns
+        # Zeroes treated as NaNs.
+        weight[cols] = weight[cols].replace({'0': np.nan, 0: np.nan})
+
         self.check_weights(weight=weight)
 
         return weight
@@ -213,6 +217,10 @@ class Basket(object):
 
         # Replaces weight factors with zeroes if concurrent return unavailable.
         weight = act_cross.multiply(broadcast)
+        cols = weight.columns
+        # Zeroes treated as NaNs.
+        weight[cols] = weight[cols].replace({'0': np.nan, 0: np.nan})
+
         weight_arr = weight.to_numpy()  # convert df to np array.
         weight[weight.columns] = weight_arr / np.sum(weight_arr, axis=1)[:, np.newaxis]
         self.check_weights(weight)
@@ -250,6 +258,10 @@ class Basket(object):
             weights = expo_weights(lback_periods * 2, half_life)
             dfwa = dfw_ret.rolling(window=lback_periods * 2).agg(expo_std, w=weights,
                                                                  remove_zeros=remove_zeros)
+
+        cols = dfwa.columns
+        # Zeroes treated as NaNs.
+        dfwa[cols] = dfwa[cols].replace({'0': np.nan, 0: np.nan})
 
         df_isd = 1 / dfwa
         df_wgts = df_isd / df_isd.sum(axis=1).values[:, np.newaxis]
@@ -471,8 +483,7 @@ class Basket(object):
         select = ["ticker", "real_date", "value"]
 
         dfw_wgs_copy = self.column_manager(df_cat=self.dfw_ret, dfw_wgs=dfw_wgs)
-        dfw_wgs_copy = dfw_wgs_copy.dropna(axis=0, how='all')
-        
+
         dfw_bret = self.dfw_ret.multiply(dfw_wgs_copy).sum(axis=1)
         dfxr = dfw_bret.to_frame("value").reset_index()
         basket_ret = basket_name + "_" + self.ret
@@ -711,17 +722,17 @@ if __name__ == "__main__":
     df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
                                                 'sd_mult'])
 
-    df_cids.loc['AUD'] = ['2010-01-01', '2022-03-14', 0, 1]
-    df_cids.loc['GBP'] = ['2011-01-01', '2022-03-14', 0, 2]
-    df_cids.loc['NZD'] = ['2012-01-01', '2022-03-14', 0, 3]
-    df_cids.loc['USD'] = ['2010-01-01', '2022-03-14', 0, 4]
+    df_cids.loc['AUD'] = ['2000-01-01', '2022-03-14', 0, 1]
+    df_cids.loc['GBP'] = ['2001-01-01', '2022-03-14', 0, 2]
+    df_cids.loc['NZD'] = ['2002-01-01', '2022-03-14', 0, 3]
+    df_cids.loc['USD'] = ['2000-01-01', '2022-03-14', 0, 4]
 
     df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
                                                   'sd_mult', 'ar_coef', 'back_coef'])
     df_xcats.loc['FXXR_NSA'] = ['2010-01-01', '2022-03-14', 0, 1, 0, 0.2]
     df_xcats.loc['FXCRY_NSA'] = ['2010-01-01', '2022-03-14', 1, 1, 0.9, 0.2]
     df_xcats.loc['FXCRR_NSA'] = ['2010-01-01', '2022-03-14', 0.5, 0.8, 0.9, 0.2]
-    df_xcats.loc['EQXR_NSA'] = ['2012-01-01', '2022-03-14', 0.5, 2, 0, 0.2]
+    df_xcats.loc['EQXR_NSA'] = ['2010-01-01', '2022-03-14', 0.5, 2, 0, 0.2]
     df_xcats.loc['EQCRY_NSA'] = ['2010-01-01', '2022-03-14', 2, 1.5, 0.9, 0.5]
     df_xcats.loc['EQCRR_NSA'] = ['2010-01-01', '2022-03-14', 1.5, 1.5, 0.9, 0.5]
     df_xcats.loc['FXWBASE_NSA'] = ['2010-01-01', '2022-02-01', 1, 1.5, 0.8, 0.5]
@@ -730,7 +741,7 @@ if __name__ == "__main__":
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
+    black = {'AUD': ['2010-01-01', '2013-12-31'], 'GBP': ['2010-01-01', '2013-12-31']}
     contracts = ['AUD_FX', 'AUD_EQ', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
     gdp_figures = [17.0, 17.0, 41.0, 9.0, 250.0]
 
@@ -739,19 +750,24 @@ if __name__ == "__main__":
     # First test. Multiple carries. Equal weight method.
     # The main aspect to check in the code is that basket performance has been applied to
     # both the return category and the multiple carry categories.
+    print("Testing.")
     print("Input dataframe.")
     print(dfd)
     basket_1 = Basket(df=dfd, contracts=contracts_1,
                       ret="XR_NSA", cry=["CRY_NSA", "CRR_NSA"], blacklist=black)
     basket_1.make_basket(weight_meth="equal", max_weight=0.55,
                          basket_name="GLB_EQUAL")
+    print(basket_1.dfw_ret)
+    print(basket_1.dict_wgs["GLB_EQUAL"])
     basket_1.make_basket(weight_meth="fixed", max_weight=0.55,
                          weights=[1/6, 1/6, 1/6, 1/2],
                          basket_name="GLB_FIXED")
+    print(basket_1.dict_wgs["GLB_EQUAL"])
     dfp_1 = basket_1.return_basket()
     dfw_1 = basket_1.return_weights()
 
     df_basket = basket_1.return_basket("GLB_EQUAL")
+    print("Output df.")
     print(df_basket)
 
     df_weight = basket_1.return_weights("GLB_EQUAL")
@@ -767,6 +783,8 @@ if __name__ == "__main__":
     basket_2.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
                          max_weight=0.55, remove_zeros=True, basket_name="GLB_INVERSE")
     df_basket_inv = basket_2.return_basket("GLB_INVERSE")
+    print("Inverse.")
+    print(basket_2.dict_wgs["GLB_INVERSE"])
 
     basket_2.make_basket(weight_meth="equal", max_weight=0.55, basket_name="GLB_EQUAL")
     df_basket_equal = basket_2.return_basket("GLB_EQUAL")
@@ -781,9 +799,15 @@ if __name__ == "__main__":
 
     basket_3 = Basket(df=dfd, contracts=contracts_1, ret="XR_NSA", cry=["CRY_NSA"],
                       blacklist=black, ewgts='WBASE_NSA')
+    contracts_1 = ['AUD_FX', 'GBP_FX', 'NZD_FX', 'USD_EQ']
+
+    print(dfd[dfd['xcat'] == 'EQWBASE_NSA'])
+    print(dfd[dfd['xcat'] == 'FXWBASE_NSA'])
 
     basket_3.make_basket(weight_meth="inv_values", ewgt="WBASE_NSA", max_weight=0.55,
                          remove_zeros=True, basket_name="GLB_INV_VALUES")
+    print("External Weights.")
+    print(basket_3.dict_wgs["GLB_INV_VALUES"])
 
     df_inv_values = basket_3.return_basket("GLB_INV_VALUES")
     print(df_inv_values)
