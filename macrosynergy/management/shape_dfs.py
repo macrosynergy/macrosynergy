@@ -96,7 +96,8 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
     :return <pd.Dataframe>: reduced dataframe that also removes duplicates
     """
 
-    dfx = df[df["real_date"] >= pd.to_datetime(start)] if start is not None else df
+    dfx = df.copy()
+    dfx = dfx[dfx["real_date"] >= pd.to_datetime(start)] if start is not None else dfx
     dfx = dfx[dfx["real_date"] <= pd.to_datetime(end)] if end is not None else dfx
 
     if blacklist is not None:  # blacklisting by cross-section
@@ -106,7 +107,7 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
             filt3 = dfx["real_date"] <= pd.to_datetime(value[1])
             dfx = dfx[~(filt1 & filt2 & filt3)]
 
-    dfx["ticker"] = df["cid"] + '_' + df["xcat"]
+    dfx["ticker"] = dfx["cid"] + '_' + dfx["xcat"]
     ticks_in_df = dfx["ticker"].unique()
     if ticks is None:
         ticks = sorted(ticks_in_df)
