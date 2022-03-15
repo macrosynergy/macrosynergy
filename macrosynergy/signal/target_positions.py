@@ -368,6 +368,9 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
 
     Note: A target position differs from a signal insofar as it is a dollar amount and
           determines to what extent the size of signal (as opposed to direction) matters.
+          Further, if the modified signal has a NaN value, the target position will be
+          converted to zero: a position will not be taken given the signal was not
+          available for that respective date.
           A target position also differs from an actual position in two ways. First,
           the actual position can only be aligned with the target with some lag. Second,
           the actual position will be affected by other considerations, such as
