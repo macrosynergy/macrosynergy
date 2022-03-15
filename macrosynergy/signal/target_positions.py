@@ -347,8 +347,7 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
         position taking are winsorized. The threshold is the maximum absolute
         score value in standard deviations. The minimum is 1 standard deviation.
     :param <float> cs_vtarg: Value for volatility targeting at the cross-section level.
-        The purpose of this operation is to related signal with risk rather than notional.
-        as opposed to .
+        The purpose of this operation is to relate signal to risk rather than notional.
         Default is None and means no volatility targeting.
         If a value is chosen then for each cross-section a unit position is defined as a
         position for which the annual return standard deviation is equal to that value.
