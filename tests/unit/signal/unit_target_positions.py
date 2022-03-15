@@ -194,28 +194,40 @@ class TestAll(unittest.TestCase):
 
         # D. Test proportionate signal values.
 
-        # Todo: add one NA and one zero to the start date
+        # Modify the dataframe to include np.nan and zero. Confirm the logic still
+        # stands.
+        dfd_signal_copy = dfd[dfd['xcat'] == xcat_sig]
+        # Change the first two timestamps for Australia signal: [2012-01-02, 2012-01-03].
+        dfd_signal_copy.iloc[0, -1] = 0
+        dfd_signal_copy.iloc[1, -1] = np.nan
+        dfd_fxxr = dfd[dfd['xcat'] == 'FXXR_NSA']
+        dfd_eqxr = dfd[dfd['xcat'] == 'EQXR_NSA']
+        dfd_modified = pd.concat([dfd_fxxr, dfd_eqxr, dfd_signal_copy])
 
-        df_unit_pos = modify_signals(df=dfd, cids=self.cids, xcat_sig=xcat_sig,
+        df_unit_pos = modify_signals(df=dfd_modified, cids=self.cids, xcat_sig=xcat_sig,
                                      start='2012-01-01', end='2020-10-30', scale='prop',
                                      min_obs=0, thresh=2.5)
 
         # Test shape of output dataframe.
-        dfd_sig = dfd[dfd['xcat'] == xcat_sig]
-        self.assertTrue(df_unit_pos.shape == dfd_sig.shape)
+        # Accounts for the NaN value assigned to Australia. When pivoting out the NaN
+        # value will be populated back.
+        self.assertTrue(df_unit_pos.shape[0] == (dfd_signal_copy.shape[0] - 1))
 
-        # Test if proportionate signals have correct values
+        # Test if proportionate signals have correct values.
 
-        df_unit_pos = modify_signals(df=dfd, cids=self.cids, xcat_sig=xcat_sig,
+        df_unit_pos = modify_signals(df=dfd_modified, cids=self.cids, xcat_sig=xcat_sig,
                                      start='2012-01-01', end='2020-10-30', scale='prop',
                                      min_obs=0, thresh=5)
         df_unit_pos_w = df_unit_pos.pivot(index="real_date", columns="cid",
                                           values="value")
         output_rows = df_unit_pos_w.iloc[0:5, :]
 
-        # Test on the first five rows.
-        dfd_sig_w = dfd_sig.pivot(index="real_date", columns="cid", values="value")
+        # Test on the first five rows which will include the inserted zero and np.nan
+        # values.
+        dfd_sig_w = dfd_signal_copy.pivot(index="real_date", columns="cid",
+                                          values="value")
         test_rows = dfd_sig_w.iloc[0:5, :]
+        # The neutral value is zero.
         numerator = test_rows - np.zeros(test_rows.shape)
         std = []
         for i in range(test_rows.shape[0]):
@@ -223,13 +235,15 @@ class TestAll(unittest.TestCase):
             # across the panel).
             row = np.abs(numerator).iloc[0:(i + 1)].to_numpy()
             row = row.reshape(row.shape[0] * row.shape[1])
-            mean = np.mean(row)
+            mean = np.nanmean(row)
             std.append(mean)
 
         std = np.array(std)
         row_vector = std[:, np.newaxis]
         test_zn_scores = numerator.div(row_vector, axis='rows')
         condition = test_zn_scores.to_numpy() - output_rows.to_numpy()
+        # Convert the NaN value to zero for testing purposes only.
+        condition = np.nan_to_num(condition)
         self.assertTrue(np.all(condition < 0.0001))
 
     @staticmethod
