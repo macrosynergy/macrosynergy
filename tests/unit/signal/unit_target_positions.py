@@ -8,7 +8,7 @@ from tests.simulate import make_qdf
 import random
 import pandas as pd
 import numpy as np
-
+import math
 
 class TestAll(unittest.TestCase):
 
@@ -61,7 +61,9 @@ class TestAll(unittest.TestCase):
                                                       values="value")
 
     def test_weight_dataframes(self):
-        """Tests separability and consistency of returns and weights"""
+        """
+        Tests separability and consistency of returns and weights.
+        """
 
         # The original dataframe target_positions() receives will be a single,
         # concatenated dataframe which will include the basket weight dataframes if,
@@ -105,7 +107,9 @@ class TestAll(unittest.TestCase):
             self.assertTrue(list(df.columns) == column_names[i])
 
     def test_modify_signals(self):
-        """Test if unit positions are correct"""
+        """
+        Test if unit positions are correct.
+        """
 
         self.dataframe_generator()
         xcat_sig = 'SIG_NSA'
@@ -116,12 +120,12 @@ class TestAll(unittest.TestCase):
 
         with self.assertRaises(AssertionError):
             # Test that scale parameter outside ['prop', 'dig'] throws assertion error.
-            scale = 'rubbish'
+            scale = 'noise'
             df_unit_pos = modify_signals(df=dfd, cids=self.cids, xcat_sig=xcat_sig,
                                          start='2012-01-01', end='2020-10-30',
                                          scale=scale)
 
-        # A. Test unit positions without zeroes and NAs
+        # A. Test unit positions without zeroes and NAs.
 
         df_unit_pos = modify_signals(df=dfd, cids=self.cids, xcat_sig=xcat_sig,
                                      start='2012-01-01', end='2020-10-30', scale='dig')
@@ -141,9 +145,20 @@ class TestAll(unittest.TestCase):
         val_column = df_unit_pos['value'].to_numpy()
         self.assertTrue(val_column[first_negative_index] == -1)
 
-        # B. Test unit positions with 0s
+        # B. Test unit positions with 0s.
+        # Often a position will only be taken if the signal is outside a predetermined
+        # range. Therefore, say if the value is within one standard deviation of the
+        # neutral level, a position will not be taken as the magnitude of the signal is
+        # not large enough and the subsequent output should be a zero value representing
+        # a modified signal stating a position should not be taken for that timestamp.
+
+        # Further, a distinction between NA and zero must be made. A NA value represents
+        # a signal not being available for that timestamp, so the corresponding modified
+        # signal will also be NA. The modified signal of NA will be converted to a zero
+        # position.
 
         dfd_copy = dfd.copy()
+        # The signal will be the last category in the dataframe.
         dfd_copy.iloc[-100:, -1] = 0
         df_unit_poz = modify_signals(df=dfd_copy, cids=self.cids,
                                      xcat_sig=xcat_sig, start='2012-01-01',
@@ -157,11 +172,27 @@ class TestAll(unittest.TestCase):
         presumed_zeroes = df_unit_poz['value'][-100:]
         self.assertTrue(np.unique(np.abs(presumed_zeroes)) == 0)
 
-        # C. Test unit positions with zeroes and NAs
+        # C. Test unit positions with zeroes and NAs.
+        # Confirm the distinction between the two inputs. Only in target_positions() will
+        # the output be the same (both zero positions).
 
-        # Todo: apply analogous tests to the above (expectings to propagate to NAs)
+        dfd_copy_two = dfd.copy()
+        # Isolate the value column.
+        dfd_copy_two.iloc[-50:, -1] = 0
+        dfd_copy_two.iloc[-100:-51, -1] = np.nan
+        df_unit_poz_two = modify_signals(df=dfd_copy_two, cids=self.cids,
+                                         xcat_sig=xcat_sig, start='2012-01-01',
+                                         end='2020-10-30', scale='dig')
+        presumed_zeroes = df_unit_poz_two['value'][-50:]
+        self.assertTrue(np.unique(presumed_zeroes) == 0)
 
-        # D. Test proportionate signal values
+        # As discussed, the modified signal will be NA given data is not available for
+        # the respective timestamps.
+        presumed_nas = df_unit_poz_two['value'][-100:-51]
+        for nan in presumed_nas:
+            self.assertTrue(math.isnan(nan))
+
+        # D. Test proportionate signal values.
 
         # Todo: add one NA and one zero to the start date
 
@@ -169,7 +200,7 @@ class TestAll(unittest.TestCase):
                                      start='2012-01-01', end='2020-10-30', scale='prop',
                                      min_obs=0, thresh=2.5)
 
-        # Test shape of output dataframe
+        # Test shape of output dataframe.
         dfd_sig = dfd[dfd['xcat'] == xcat_sig]
         self.assertTrue(df_unit_pos.shape == dfd_sig.shape)
 
@@ -200,8 +231,6 @@ class TestAll(unittest.TestCase):
         test_zn_scores = numerator.div(row_vector, axis='rows')
         condition = test_zn_scores.to_numpy() - output_rows.to_numpy()
         self.assertTrue(np.all(condition < 0.0001))
-
-
 
     @staticmethod
     def row_return(dfd, date, c_return, sigrel):
