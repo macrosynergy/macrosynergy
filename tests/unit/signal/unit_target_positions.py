@@ -731,7 +731,33 @@ class TestAll(unittest.TestCase):
         test = eq.add(fx)
         self.assertTrue(np.all(test.to_numpy() < 0.00001))
 
-        # Todo: add test of similar form as line 166, but NAs should have become zeroes
+        reduced_dfd = reduce_df(df=self.dfd, xcats=self.xcats, cids=self.cids,
+                                blacklist=None)
+        # Modify the dataframe to include np.nan and zero in fixed, known positions.
+        # Confirm target_positions will convert the modified signal of NaNs and zeros to
+        # a zero position (a position is not taken).
+        dfd_signal_copy = reduced_dfd[reduced_dfd['xcat'] == xcat_sig]
+        # Change the first two timestamps for Australia signal: [2012-01-02, 2012-01-03].
+        dfd_signal_copy.iloc[0, -1] = 0
+        dfd_signal_copy.iloc[1, -1] = np.nan
+        dfd_fxxr = reduced_dfd[reduced_dfd['xcat'] == 'FXXR_NSA']
+        dfd_eqxr = reduced_dfd[reduced_dfd['xcat'] == 'EQXR_NSA']
+        dfd_modified = pd.concat([dfd_fxxr, dfd_eqxr, dfd_signal_copy])
+        output_df_3 = target_positions(df=dfd_modified, cids=self.cids, xcat_sig=xcat_sig,
+                                       ctypes=self.ctypes, sigrels=[1, -1], ret='XR_NSA',
+                                       start='2010-01-01', end='2020-12-31',
+                                       scale='prop', cs_vtarg=None,
+                                       posname='POS')
+        # Confirm the date '2012-01-03' has a np.nan for Australia in both categories.
+        output_df_eq = output_df_3[output_df_3['xcat'] == "EQ_POS"]
+        output_df_fx = output_df_3[output_df_3['xcat'] == "FX_POS"]
+        output_df_eq_aud = output_df_eq[output_df_eq['cid'] == 'AUD']
+        output_df_fx_aud = output_df_fx[output_df_fx['cid'] == 'AUD']
+
+        # The first two position values should both be equal to zero (the modified signal
+        # was zero and np.nan respectively).
+        self.assertTrue(np.all(np.abs(output_df_eq_aud.iloc[0:2, -1]) == 0.0))
+        self.assertTrue(np.all(np.abs(output_df_fx_aud.iloc[0:2, -1]) == 0.0))
 
 
 if __name__ == "__main__":
