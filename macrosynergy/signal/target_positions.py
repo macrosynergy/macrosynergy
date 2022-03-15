@@ -467,7 +467,8 @@ def target_positions(df: pd.DataFrame, cids: List[str], xcat_sig: str,
         # dataframe.
         df_mods_copy *= v  # modified signal x sigrel = post-VT position.
 
-        df_posi = df_mods_copy.stack().to_frame("value").reset_index()
+        df_posi = df_mods_copy.stack(dropna=False).to_frame("value").reset_index()
+        df_posi = df_posi.fillna(0)
         df_posi['xcat'] = k
         df_posi = df_posi.sort_values(['cid', 'xcat', 'real_date'])[cols]
         df_pos_cons.append(df_posi)
