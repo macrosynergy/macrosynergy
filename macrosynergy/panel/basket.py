@@ -132,6 +132,8 @@ class Basket(object):
                 pd.Timestamp(date_string).strftime("%Y-%m-%d")
             except ValueError:
                 raise AssertionError(date_error)
+            else:
+                return pd.Timestamp(date_string).strftime("%Y-%m-%d")
 
     @staticmethod
     def check_weights(weight: pd.DataFrame):
