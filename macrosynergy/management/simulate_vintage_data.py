@@ -84,20 +84,40 @@ class VintageData:
 
     @staticmethod
     def week_day(rel_date, day):
+
         if day == 0:
             return rel_date - dt.timedelta(days=1)
 
         return rel_date + dt.timedelta(days=1)
 
     def seasonal_adj(self, obs_dates, seas_factors, values):
+        """
+        Method used to seasonally adjust the series. Economic data can vary according to
+        the season.
+
+        :param <List[pd.Timestamps]> obs_dates: observation dates for the series.
+        :param <List[float]> seas_factors: seasonal factors.
+        :param <List[float> values: existing values that have not been seasonally
+            adjusted.
+
+        :return <List[float] values: returns a list of values which have been adjusted
+            seasonally
+        """
         if self.freq == 'W':
-            week = (obs_dates.isocalendar().week - 1).to_numpy().astype(dtype=np.uint8)
+            week_dates = obs_dates.isocalendar().week
+            condition = np.where(week_dates > 52)[0]
+            if condition.size > 0:
+                index = next(iter(condition))
+                week_dates[index] = 52
+
+            week = (week_dates - 1).to_numpy().astype(dtype=np.uint8)
             seasonal = seas_factors[week]
             return values * (1 + (seasonal / 100))
 
         month = (12 / self.af)
         month_freq = (obs_dates.month // month)
         month_freq = month_freq.astype(dtype=np.uint8)
+
         return values * (1 + seas_factors[month_freq - 1] / 100)
 
     def make_grade1(self):
@@ -188,6 +208,14 @@ class VintageData:
         return date
 
     def make_grade2(self):
+        """
+        Method used to construct a dataframe that consists of each respective observation
+        date and the corresponding release date(s) (the release dates are computed using
+        the observation date and the time-period(s) specified in the field
+        "release_lags").
+
+        :return <pd.DataFrame>: Will return the DataFrame with the additional columns.
+        """
         ref_date = self.cutoff - dt.timedelta(self.release_lags[0])
         ref_date = ref_date.replace(day=1)
 
@@ -215,10 +243,18 @@ class VintageData:
         df_gr2['release_date'] = data
         df_gr2['observation_date'] = eop_arr
         df_gr2['ticker'] = self.ticker
+        print(df_gr2)
 
         return self.add_ticker_parts(df_gr2)
 
     def add_ticker_parts(self, df):
+        """
+        Method used to add the associated tickers.
+
+        :param <pd.DataFrame> df: standardised dataframe.
+
+        :return <pd.DataFrame>: Will return the DataFrame with the additional columns.
+        """
         old_cols = list(df.columns)
         add_cols = ['cross_section', 'category_code', 'adjustment', 'transformation']
         ticker_parts = self.ticker.split('_', 3)
@@ -239,21 +275,20 @@ if __name__ == "__main__":
                          seasonal=10, added_dates=6)
 
     dfm1 = vins_m.make_grade1()
-    dfm1 = vins_m.make_grade1_alt()
 
     dfm1.groupby('release_date').agg(['mean', 'count'])
     dfm2 = vins_m.make_grade2()
-    dfm2_alt = vins_m.make_grade2_alt()
     dfmg = vins_m.make_graded(grading=[3, 2.1, 1], upgrades=[12, 24])
 
-    vins_q = VintageData('USD_INDX_SA', release_lags=[3, 20, 25], number_firsts=2, shortest=8, freq='Q',
-                         seasonal = 10, added_dates = 4)
+    vins_q = VintageData('USD_INDX_SA', release_lags=[3, 20, 25], number_firsts=2,
+                         shortest=8, freq='Q', seasonal = 10, added_dates = 4)
     dfq1 = vins_q.make_grade1()
     dfq1.groupby('release_date').agg(['mean', 'count'])
     dfq2 = vins_q.make_grade2()
 
     vins_w = VintageData('USD_INDX_SA', cutoff="2019-06-30", release_lags=[3, 20, 25],
-                         number_firsts=3 * 52, shortest=26, freq='W', seasonal = 10, added_dates = 52)
+                         number_firsts=3 * 52, shortest=26, freq='W', seasonal = 10,
+                         added_dates = 52)
     dfw1 = vins_w.make_grade1()
     dfw1.groupby('release_date').agg(['mean', 'count'])
     dfw2 = vins_w.make_grade2()
