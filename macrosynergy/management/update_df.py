@@ -21,6 +21,11 @@ def category_add(dfd: pd.DataFrame, dfd_add):
     :return <pd.DataFrame>: standardised dataframe with the latest values of the modified
         or newly defined category.
     """
+    cols = ['cid', 'xcat', 'real_date', 'value']
+    error_message = f"Expects a standardised dataframe with columns: {cols}"
+    assert list(dfd.columns) == cols, error_message
+    assert list(dfd_add.columns) == cols, error_message
+
     incumbent_categories = list(dfd['xcat'].unique())
     new_categories = list(dfd_add['xcat'].unique())
     new_cats_copy = new_categories.copy()
