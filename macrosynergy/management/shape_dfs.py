@@ -127,13 +127,15 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                   blacklist: dict = None, years: int = None, freq: str = 'M',
                   lag: int = 0, fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean')):
 
-    """Create custom two-categories dataframe with appropriate frequency and lags
-       suitable for analysis.
+    """
+    Create custom two-categories dataframe with appropriate frequency and lags
+    suitable for analysis.
 
     :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: exactly two extended categories whose relationship is to be
-        analyzed.
+        analyzed. It must be noted that the first category is the explanatory variable
+        and the second category the explained, dependent, variable.
     :param <List[str]> cids: cross sections to be included. Default is all in the
         dataframe.
     :param <str> start: earliest date in ISO 8601 format. Default is None, i.e. earliest
@@ -143,15 +145,16 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     :param <dict> blacklist: cross sections with date ranges that should be excluded from
         the data frame. If one cross section has several blacklist periods append numbers
         to the cross section code.
-    :param <int> years: Number of years over which data are aggregated. Supersedes freq
-        and does not allow lags, Default is None, i.e. no multi-year aggregation.
+    :param <int> years: Number of years over which data are aggregated. Supersedes the
+        "freq" parameter and does not allow lags, Default is None, i.e. no multi-year
+        aggregation.
     :param <str> val: name of column that contains the values of interest. Default is
         'value'.
     :param <str> freq: letter denoting frequency at which the series are to be sampled.
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
-    :param <int> lag: Lag (delay of arrival) of first (explanatory) category in periods
+    :param <int> lag: lag (delay of arrival) of first (explanatory) category in periods
         as set by freq. Default is 0.
-    :param <int> fwin: Forward moving average window of first category. Default is 1,
+    :param <int> fwin: forward moving average window of first category. Default is 1,
         i.e no average.
         Note: This parameter is used mainly for target returns as dependent variables.
     :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for
@@ -163,7 +166,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     assert freq in ['D', 'W', 'M', 'Q', 'A']
     assert not (years is not None) & (lag != 0), 'Lags cannot be applied to year groups.'
     if years is not None:
-        assert isinstance(start, str), 'Year aggregation requires a start date.'
+        assert isinstance(start, str), "Year aggregation requires a start date."
 
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, blacklist, out_all=True)
 
