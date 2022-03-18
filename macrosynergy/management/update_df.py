@@ -88,7 +88,7 @@ if __name__ == "__main__":
                                    blacklist=None, rel_meth='subtract', rel_xcats=None,
                                    postfix='RV')
 
-    dfd_add = update_df(df=dfd, dfd_add=df_1_rv)
+    dfd_add = update_df(df=dfd, df_add=dfd_1_rv)
     print(dfd_add)
 
     dfd_1_rv_blacklist = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=None,
