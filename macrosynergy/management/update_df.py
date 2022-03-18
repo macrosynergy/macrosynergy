@@ -3,7 +3,7 @@ import pandas as pd
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.panel.make_relative_value import make_relative_value
 
-def category_add(dfd: pd.DataFrame, dfd_add):
+def update_df(df: pd.DataFrame, df_add):
     """
     The method has two main purposes. Firstly, if the categories, in the second
     dataframe, are not present in the aggregated dataframe, append the new categories and
@@ -13,8 +13,8 @@ def category_add(dfd: pd.DataFrame, dfd_add):
     changed leading to a renewal of values on a specific category, and subsequently aim
     to update the aggregated dataframe with the latest values.
 
-    :param <pd.DataFrame> dfd: aggregate dataframe used to store all categories.
-    :param <pd.DataFrame> dfd_add: dataframe with the latest values. The categories will
+    :param <pd.DataFrame> df: aggregate dataframe used to store all categories.
+    :param <pd.DataFrame> df_add: dataframe with the latest values. The categories will
         either be appended to the aggregate dataframe, or replace the previously defined
         category.
 
@@ -23,40 +23,40 @@ def category_add(dfd: pd.DataFrame, dfd_add):
     """
     cols = ['cid', 'xcat', 'real_date', 'value']
     error_message = f"Expects a standardised dataframe with columns: {cols}"
-    assert list(dfd.columns) == cols, error_message
-    assert list(dfd_add.columns) == cols, error_message
+    assert list(df.columns) == cols, error_message
+    assert list(df_add.columns) == cols, error_message
 
-    incumbent_categories = list(dfd['xcat'].unique())
-    new_categories = list(dfd_add['xcat'].unique())
+    incumbent_categories = list(df['xcat'].unique())
+    new_categories = list(df_add['xcat'].unique())
     new_cats_copy = new_categories.copy()
 
     add = []
     for new_cat in new_categories:
         if new_cat not in incumbent_categories:
-            temp_df = dfd_add[dfd_add['xcat'] == new_cat]
+            temp_df = df_add[df_add['xcat'] == new_cat]
             add.append(temp_df)
             incumbent_categories.append(new_cat)
             new_cats_copy.remove(new_cat)
         else:
             continue
 
-    dfd = pd.concat([dfd] + add)
+    df = pd.concat([df] + add)
     updated_categories = new_cats_copy
     if updated_categories:
 
         aggregate = []
         for xc in incumbent_categories:
             if xc not in updated_categories:
-                temp_df = dfd[dfd['xcat'] == xc]
+                temp_df = df[df['xcat'] == xc]
                 aggregate.append(temp_df)
 
             else:
-                temp_df = dfd_add[dfd_add['xcat'] == xc]
+                temp_df = df_add[df_add['xcat'] == xc]
                 aggregate.append(temp_df)
 
-        dfd = pd.concat(aggregate)
+        df = pd.concat(aggregate)
 
-    return dfd.reset_index(drop=True)
+    return df.reset_index(drop=True)
 
 
 if __name__ == "__main__":
@@ -88,7 +88,7 @@ if __name__ == "__main__":
                                    blacklist=None, rel_meth='subtract', rel_xcats=None,
                                    postfix='RV')
 
-    dfd_add = category_add(dfd=dfd, dfd_add=dfd_1_rv)
+    dfd_add = update_df(df=dfd, dfd_add=df_1_rv)
     print(dfd_add)
 
     dfd_1_rv_blacklist = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=None,
@@ -96,6 +96,6 @@ if __name__ == "__main__":
                                              rel_xcats=None,
                                              postfix='RV')
 
-    dfd_add_2 = category_add(dfd=dfd_add, dfd_add=dfd_1_rv_blacklist)
+    dfd_add_2 = update_df(df=dfd_add, df_add=dfd_1_rv_blacklist)
     print(dfd_add_2)
 
