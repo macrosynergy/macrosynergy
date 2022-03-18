@@ -2,8 +2,81 @@
 import numpy as np
 import pandas as pd
 from typing import List, Union
+import statsmodels.api as sm
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
+
+
+def refreq_groupby(start_date: pd.Timestamp, end_date: pd.Timestamp, refreq: str = 'm'):
+    """
+    The hedging ratio is re-estimated according to the frequency parameter. Therefore,
+    break up the respective return series, which are defined daily, into the re-estimated
+    frequency paradigm. To achieve this ensure the dates produced fall on business days,
+    and will subsequently be present in the return-series dataframes.
+
+    :param <pd.Timestamp> start_date:
+    :param <pd.Timestamp> end_date:
+    :param <str> refreq:
+
+    return <List[pd.Timestamp]>: List of timestamps where each date is a valid business
+        day, and the gap between each date is delimited by the frequency parameter.
+    """
+
+    dates = pd.date_range(start_date, end_date, freq=refreq)
+    d_copy = list(dates)
+    condition = lambda date: date.dayofweek > 4
+
+    for i, d in enumerate(dates):
+        if condition(d):
+            new_date = d + pd.DateOffset(1)
+            while condition(new_date):
+                new_date += pd.DateOffset(1)
+
+            d_copy.remove(d)
+            d_copy.insert(i, new_date)
+        else:
+            continue
+
+    return d_copy
+
+def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
+                     groups: List[pd.Timestamp], cross_section: str):
+    """
+    The hedging of a contract can be achieved by taking positions across an entire panel.
+    Therefore, compute the hedge ratio for each cross-section across the defined panel.
+    The sample of data used for hedging will increase according to the dates parameter:
+    each date represents an additional number of timestamps where the numeracy is
+    instructed by the "refreq" parameter.
+
+    :param <pd.DataFrame> main_asset: the return series of the asset that is being
+        hedged.
+    :param <pd.Series> hedging_asset: the return series of the asset being used to hedge
+        against the main asset.
+    :param <List[pd.Timestamp]> groups: the dates controlling the frequency of
+        re-estimation.
+    :param <str> cross_section: cross-section responsible for the "hedging_asset" series.
+
+    :return <pd.DataFrame>: returns a dataframe of the hedge ratios for the respective
+        cross-section.
+    """
+
+    hedging_ratio = []
+    main_asset = pd.Series(data=main_asset['value'], index=main_asset['real_date'])
+
+    for d in groups[1:]:
+        evolving_independent = main_asset.loc[:d]
+        hedging_sample = hedging_asset.loc[:d]
+
+        mod = sm.OLS(evolving_independent, hedging_sample)
+        results = mod.fit()
+        hedging_ratio.append(results.rsquared)
+
+    no_dates = len(groups)
+    cid = np.repeat(no_dates, cross_section)
+    dates = np.array(groups)
+    data = np.column_stack((cid, dates, np.array(hedging_ratio)))
+
+    return pd.DataFrame(data=data, columns=['cids', 'real_date', 'value'])
 
 def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                 hedge_return: str = None, start: str = None, end: str = None,
@@ -63,16 +136,16 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                   "parameter expects to define a single series."
     assert len(post_fix) == 2, error_hedge
 
-    xcat_hedge = post_fix[0]
-    cid_hedge = post_fix[1]
+    xcat_hedge = post_fix[1]
+    cid_hedge = post_fix[0]
     available_categories = df['xcat'].unique()
-    xcat_error = f"Category not defined in the dataframe. Available categories are: " \
-                 f"{available_categories}."
+    xcat_error = f"Category, {xcat_hedge}, not defined in the dataframe. Available " \
+                 f"categories are: {available_categories}."
     assert xcat_hedge in available_categories, xcat_error
 
     error_hedging = f"The category used to hedge against the primary asset, {xcat}, is " \
                     f"not defined in the dataframe."
-    assert set(xcats).issubt(available_categories), error_hedging
+    assert set(xcats).issubset(set(available_categories)), error_hedging
 
     refreq_options = ['w', 'm', 'q']
     error_refreq = f"The re-estimation frequency parameter must be one of the following:" \
@@ -80,7 +153,7 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     assert refreq in refreq_options, error_refreq
 
     df_copy = df.copy()
-    hedge_series = reduce_df(df_copy, xcats=xcat_hedge, cids=cid_hedge, start=start,
+    hedge_series = reduce_df(df_copy, xcats=[xcat_hedge], cids=cid_hedge, start=start,
                              end=end, blacklist=blacklist)
 
     if xcat_hedge == xcat:
@@ -90,6 +163,19 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                     blacklist=blacklist)
 
     dfw = dfd.pivot(index='real_date', columns='cid', values='value')
+    dates = dfw.index
+
+    dates = refreq_groupby(start_date=dates[0], end_date=dates[-1],
+                           refreq=refreq)
+
+    # A "rolling" hedge ratio is computed for each cross-section across the defined
+    # panel.
+    aggregate = []
+    for c in cids:
+        series = dfw[c]
+        hedge_data = hedge_calculator(main_asset=hedge_series, hedging_asset=series,
+                                      groups=dates, cross_section=c)
+        aggregate.append(hedge_data)
 
     return dfd
 
@@ -122,6 +208,7 @@ if __name__ == "__main__":
     # S&P500.
     hedge_return = "USD_EQXR"
     df_hedge = hedge_ratio(df=dfd, xcat=xcat_hedge, cids=cids,
-                hedge_return=hedge_return, start='2010-01-01', end='2020-10-30',
-                blacklist=black, meth='ols', oos=True,
-                refreq='m', min_obs=24)
+                           hedge_return=hedge_return, start='2010-01-01',
+                           end='2020-10-30',
+                           blacklist=black, meth='ols', oos=True,
+                           refreq='m', min_obs=24)
