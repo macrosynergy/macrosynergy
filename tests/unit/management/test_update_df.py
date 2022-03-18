@@ -4,7 +4,7 @@ import random
 import numpy as np
 import pandas as pd
 from tests.simulate import make_qdf
-from macrosynergy.management.update_df import category_add
+from macrosynergy.management.update_df import update_df
 from macrosynergy.panel.make_relative_value import make_relative_value
 
 class TestAll(unittest.TestCase):
@@ -35,7 +35,7 @@ class TestAll(unittest.TestCase):
                  'GBP': ['2018-01-01', '2100-01-01']}
         self.__dict__['blacklist'] = black
 
-    def test_category_add(self):
+    def test_update_df(self):
 
         self.dataframe_constructor()
         dfd = self.dfd
@@ -49,7 +49,7 @@ class TestAll(unittest.TestCase):
             dfd_1_rv_growth = dfd_1_rv[dfd_1_rv['xcat'] == 'GROWTHRV']
             dfd_pivot = dfd_1_rv_growth.pivot(index="real_date", columns="cid",
                                               values="value")
-            dfd_add = category_add(dfd=dfd, dfd_add=dfd_pivot)
+            dfd_add = update_df(df=dfd, df_add=dfd_pivot)
 
         # Test the above method by using the in-built make_relative_value() method.
         dfd_1_rv = make_relative_value(self.dfd, xcats=['GROWTH', 'INFL'], cids=None,
@@ -60,7 +60,7 @@ class TestAll(unittest.TestCase):
         # Both categories generated from the make_relative_value() function will not be
         # present in the aggregated dataframe. Therefore, confirm both categories are
         # appended to the existing dataframe.
-        dfd_add = category_add(dfd=dfd, dfd_add=dfd_1_rv)
+        dfd_add = update_df(df=dfd, df_add=dfd_1_rv)
         # First, confirm the expected dimensions.
         self.assertTrue(dfd_add.shape[0] == (dfd.shape[0] + dfd_1_rv.shape[0]))
 
@@ -91,7 +91,7 @@ class TestAll(unittest.TestCase):
                                                  rel_xcats=None,
                                                  postfix='RV')
 
-        dfd_add_2 = category_add(dfd=dfd_add, dfd_add=dfd_2_rv_divide)
+        dfd_add_2 = update_df(df=dfd_add, df_add=dfd_2_rv_divide)
         self.assertTrue(list(set(dfd_add_2['xcat'])) == list(set(dfd_add['xcat'])))
 
         # Confirm the value does not equal the previous value which will be held in the
