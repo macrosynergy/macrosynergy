@@ -90,7 +90,6 @@ def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
 
     hedging_ratio = []
 
-    main_asset = pd.Series(data=main_asset['value'], index=main_asset['real_date'])
     s_date, e_date = date_alignment(main_asset=main_asset, hedging_asset=hedging_asset)
 
     main_asset = main_asset.truncate(before=s_date, after=e_date)
@@ -109,7 +108,7 @@ def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
     dates = np.array(groups)
     data = np.column_stack((cid, dates[1:], np.array(hedging_ratio)))
 
-    return pd.DataFrame(data=data, columns=['cids', 'real_date', 'value'])
+    return pd.DataFrame(data=data, columns=['cid', 'real_date', 'value'])
 
 def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                 hedge_return: str = None, start: str = None, end: str = None,
@@ -200,6 +199,11 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     # hedged and the assets used for hedging.
     hedge_series = reduce_df(df_copy, xcats=[xcat_hedge], cids=cid_hedge, start=dates[0],
                              end=dates[-1], blacklist=blacklist)
+    hedge_series = hedge_series.reset_index(drop=True)
+    values = hedge_series['value'].to_numpy()
+    hedge_series_d = hedge_series['real_date'].to_numpy()
+
+    main_asset = pd.Series(data=values, index=hedge_series_d)
 
     dates = refreq_groupby(start_date=dates[0], end_date=dates[-1],
                            refreq=refreq)
@@ -209,11 +213,14 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     aggregate = []
     for c in cids:
         series = dfw[c]
-        hedge_data = hedge_calculator(main_asset=hedge_series, hedging_asset=series,
+        hedge_data = hedge_calculator(main_asset=main_asset, hedging_asset=series,
                                       groups=dates, cross_section=c)
         aggregate.append(hedge_data)
 
-    return dfd
+    hedge_df = pd.concat(aggregate).reset_index(drop=True)
+    hedge_df['xcat'] = hedge_return
+
+    return hedge_df[cols]
 
 
 if __name__ == "__main__":
@@ -248,3 +255,4 @@ if __name__ == "__main__":
                            end='2020-10-30',
                            blacklist=black, meth='ols', oos=True,
                            refreq='m', min_obs=24)
+    print(df_hedge)
