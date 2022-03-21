@@ -39,8 +39,36 @@ def refreq_groupby(start_date: pd.Timestamp, end_date: pd.Timestamp, refreq: str
 
     return d_copy
 
+def date_alignment(main_asset: pd.Series, hedging_asset: pd.Series):
+    """
+    Method used to align the two Series over the same timestamps: the sample data for the
+    endogenous & exogenous variables must match throughout the re-estimation calculation.
+
+    :param <pd.DataFrame> main_asset: the return series of the asset that is being
+        hedged.
+    :param <pd.Series> hedging_asset: the return series of the asset being used to hedge
+        against the main asset.
+
+    :return <pd.Timestamp, pd.Timestamp>: the shared start and end date across the two
+        series.
+    """
+    ma_dates = main_asset.index
+    ha_dates = hedging_asset.index
+
+    if ma_dates[0] > ha_dates[0]:
+        start_date = ma_dates[0]
+    else:
+        start_date = ha_dates[0]
+
+    if ma_dates[-1] > ha_dates[-1]:
+        end_date = ha_dates[-1]
+    else:
+        end_date = ma_dates[-1]
+
+    return start_date, end_date
+
 def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
-                     groups: List[pd.Timestamp], cross_section: str):
+                     groups: List[pd.Timestamp], cross_section: str,):
     """
     The hedging of a contract can be achieved by taking positions across an entire panel.
     Therefore, compute the hedge ratio for each cross-section across the defined panel.
@@ -61,7 +89,12 @@ def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
     """
 
     hedging_ratio = []
+
     main_asset = pd.Series(data=main_asset['value'], index=main_asset['real_date'])
+    s_date, e_date = date_alignment(main_asset=main_asset, hedging_asset=hedging_asset)
+
+    main_asset = main_asset.truncate(before=s_date, after=e_date)
+    hedging_asset = hedging_asset.truncate(before=s_date, after=e_date)
 
     for d in groups[1:]:
         evolving_independent = main_asset.loc[:d]
@@ -72,9 +105,9 @@ def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
         hedging_ratio.append(results.rsquared)
 
     no_dates = len(groups)
-    cid = np.repeat(no_dates, cross_section)
+    cid = np.repeat(cross_section, (no_dates - 1))
     dates = np.array(groups)
-    data = np.column_stack((cid, dates, np.array(hedging_ratio)))
+    data = np.column_stack((cid, dates[1:], np.array(hedging_ratio)))
 
     return pd.DataFrame(data=data, columns=['cids', 'real_date', 'value'])
 
@@ -152,10 +185,6 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                    f"{refreq_options}."
     assert refreq in refreq_options, error_refreq
 
-    df_copy = df.copy()
-    hedge_series = reduce_df(df_copy, xcats=[xcat_hedge], cids=cid_hedge, start=start,
-                             end=end, blacklist=blacklist)
-
     if xcat_hedge == xcat:
         cids.remove(cid_hedge)
 
@@ -163,7 +192,14 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                     blacklist=blacklist)
 
     dfw = dfd.pivot(index='real_date', columns='cid', values='value')
+    dfw = dfw.dropna(axis=0, how="any")
     dates = dfw.index
+
+    df_copy = df.copy()
+    # Confirms both dataframes will be defined over the same time-period: asset being
+    # hedged and the assets used for hedging.
+    hedge_series = reduce_df(df_copy, xcats=[xcat_hedge], cids=cid_hedge, start=dates[0],
+                             end=dates[-1], blacklist=blacklist)
 
     dates = refreq_groupby(start_date=dates[0], end_date=dates[-1],
                            refreq=refreq)
