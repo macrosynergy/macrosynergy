@@ -101,7 +101,8 @@ def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
 
         mod = sm.OLS(evolving_independent, hedging_sample)
         results = mod.fit()
-        hedging_ratio.append(results.rsquared)
+        coefficient = results.params
+        hedging_ratio.append(coefficient)
 
     no_dates = len(groups)
     cid = np.repeat(cross_section, (no_dates - 1))
@@ -207,10 +208,15 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     values = hedge_series['value'].to_numpy()
     hedge_series_d = hedge_series['real_date'].to_numpy()
 
+    # Given the application above, the main asset can only be defined over a shorter
+    # timeframe which would be the timestamps used for the subsequent code.
     main_asset = pd.Series(data=values, index=hedge_series_d)
 
-    dates = refreq_groupby(start_date=dates[0], end_date=dates[-1],
-                           refreq=refreq)
+    dates_index = pd.date_range(dates[0], dates[-1], freq=refreq)
+    dates_series = pd.Series(data=np.zeros(len(dates_index)), index=dates_index)
+    dates_resample = dates_series.resample(refreq, axis=0).sum()
+    dates_resample = list(dates_resample.index)
+    dates_re = [pd.Timestamp(d) for d in dates_resample]
 
     # A "rolling" hedge ratio is computed for each cross-section across the defined
     # panel.
@@ -218,7 +224,7 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     for c in cids:
         series = dfw[c]
         hedge_data = hedge_calculator(main_asset=main_asset, hedging_asset=series,
-                                      groups=dates, cross_section=c)
+                                      groups=dates_re, cross_section=c)
         aggregate.append(hedge_data)
 
     hedge_df = pd.concat(aggregate).reset_index(drop=True)
@@ -249,7 +255,7 @@ if __name__ == "__main__":
     df_xcats.loc['EQXR'] = ['2010-01-01', '2022-03-14', 0.5, 2, 0, 0.2]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-    black = {'AUD': ['2010-01-01', '2013-12-31'], 'GBP': ['2010-01-01', '2013-12-31']}
+    black = {'AUD': ['2010-01-01', '2014-01-04'], 'GBP': ['2010-01-01', '2013-12-31']}
 
     xcat_hedge = "EQXR"
     # S&P500.
