@@ -175,9 +175,13 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                  f"categories are: {available_categories}."
     assert xcat_hedge in available_categories, xcat_error
 
+    error_xcat = f"The field, xcat, must be a string but received <{type(xcat)}>. Only" \
+                 f" a single category is used to hedge against the main asset."
+    assert isinstance(xcat, str), error_xcat
+
     error_hedging = f"The category used to hedge against the primary asset, {xcat}, is " \
                     f"not defined in the dataframe."
-    assert set(xcats).issubset(set(available_categories)), error_hedging
+    assert xcat in list(available_categories), error_hedging
 
     refreq_options = ['w', 'm', 'q']
     error_refreq = f"The re-estimation frequency parameter must be one of the following:" \
@@ -256,3 +260,15 @@ if __name__ == "__main__":
                            blacklist=black, meth='ols', oos=True,
                            refreq='m', min_obs=24)
     print(df_hedge)
+
+    # Long position in S&P500 or the Nasdeq, and subsequently using US FX to hedge the
+    # long position.
+    xcats = 'FXXR'
+    cids = ['USD']
+    hedge_return = "USD_EQXR"
+    xcat_hedge_two = hedge_ratio(df=dfd, xcat=xcats, cids=cids,
+                                 hedge_return=hedge_return, start='2010-01-01',
+                                 end='2020-10-30',
+                                 blacklist=black, meth='ols', oos=True,
+                                 refreq='m', min_obs=24)
+    print(xcat_hedge_two)
