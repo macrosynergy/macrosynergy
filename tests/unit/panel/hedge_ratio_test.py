@@ -71,4 +71,5 @@ def test_date_index(start_date: pd.Timestamp, end_date: pd.Timestamp, refreq: st
 
 if __name__ == '__main__':
 
-    unittest.main()
+    pass
+    # unittest.main()
