@@ -110,6 +110,7 @@ def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
     cid = np.repeat(cross_section, (no_dates - 1))
     dates = np.array(rdates)
     data = np.column_stack((cid, dates[1:], np.array(hedging_ratio)))
+    # Todo: make sure that coefficinet is applied after the end date of estimation sample
 
     return pd.DataFrame(data=data, columns=['cid', 'real_date', 'value'])
 
@@ -157,9 +158,13 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         (business days).
     :param <str> meth: method to estimate hedge ratio. At present the only method is
         OLS regression.
-    
-    N.B.: A hedge ratio is defined as the sensitivity of the main return with respect
-    to the asset used for hedging.
+
+    :return <pd.Dataframe> df: dataframe with hedge ratios, which are based on estimation
+        of a sample prior to the timestamp of the hedge ratio.
+
+    N.B.: A hedge ratio is the estimated sensitivity of the main return  with respect to
+    the asset used for hedging. The ratio is recorded for the period after the estimation
+    sample up the next update.
     
     """
 
