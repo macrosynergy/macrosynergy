@@ -7,38 +7,6 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 
 
-def refreq_groupby(start_date: pd.Timestamp, end_date: pd.Timestamp, refreq: str = 'm'):
-    """
-    The hedging ratio is re-estimated according to the frequency parameter. Therefore,
-    break up the respective return series, which are defined daily, into the re-estimated
-    frequency paradigm. To achieve this ensure the dates produced fall on business days,
-    and will subsequently be present in the return-series dataframes.
-
-    :param <pd.Timestamp> start_date:
-    :param <pd.Timestamp> end_date:
-    :param <str> refreq:
-
-    return <List[pd.Timestamp]>: List of timestamps where each date is a valid business
-        day, and the gap between each date is delimited by the frequency parameter.
-    """
-
-    dates = pd.date_range(start_date, end_date, freq=refreq)
-    d_copy = list(dates)
-    condition = lambda date: date.dayofweek > 4
-
-    for i, d in enumerate(dates):
-        if condition(d):
-            new_date = d + pd.DateOffset(1)
-            while condition(new_date):
-                new_date += pd.DateOffset(1)
-
-            d_copy.remove(d)
-            d_copy.insert(i, new_date)
-        else:
-            continue
-
-    return d_copy
-
 def date_alignment(main_asset: pd.Series, hedging_asset: pd.Series):
     """
     Method used to align the two Series over the same timestamps: the sample data for the
