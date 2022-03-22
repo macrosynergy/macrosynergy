@@ -39,6 +39,7 @@ def refreq_groupby(start_date: pd.Timestamp, end_date: pd.Timestamp, refreq: str
 
     return d_copy
 
+
 def date_alignment(main_asset: pd.Series, hedging_asset: pd.Series):
     """
     Method used to align the two Series over the same timestamps: the sample data for the
@@ -67,8 +68,9 @@ def date_alignment(main_asset: pd.Series, hedging_asset: pd.Series):
 
     return start_date, end_date
 
+
 def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
-                     groups: List[pd.Timestamp], cross_section: str,):
+                     rdates: List[pd.Timestamp], cross_section: str,):
     """
     The hedging of a contract can be achieved by taking positions across an entire panel.
     Therefore, compute the hedge ratio for each cross-section across the defined panel.
@@ -80,7 +82,7 @@ def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
         hedged.
     :param <pd.Series> hedging_asset: the return series of the asset being used to hedge
         against the main asset.
-    :param <List[pd.Timestamp]> groups: the dates controlling the frequency of
+    :param <List[pd.Timestamp]> rdates the dates controlling the frequency of
         re-estimation.
     :param <str> cross_section: cross-section responsible for the "hedging_asset" series.
 
@@ -95,20 +97,22 @@ def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
     main_asset = main_asset.truncate(before=s_date, after=e_date)
     hedging_asset = hedging_asset.truncate(before=s_date, after=e_date)
 
-    for d in groups[1:]:
-        evolving_independent = main_asset.loc[:d]
-        hedging_sample = hedging_asset.loc[:d]
-
-        mod = sm.OLS(evolving_independent, hedging_sample)
+    for d in rdates[1:]:
+        # Todo: only estimate if d implies observation > minobs
+        Y = main_asset.loc[:d]
+        X = hedging_asset.loc[:d]
+        X = sm.add_constant(X)
+        mod = sm.OLS(Y, X)
         results = mod.fit()
-        hedging_ratio.append(results.rsquared)
+        hedging_ratio.append(results.params)
 
-    no_dates = len(groups)
+    no_dates = len(rdates)
     cid = np.repeat(cross_section, (no_dates - 1))
-    dates = np.array(groups)
+    dates = np.array(rdates)
     data = np.column_stack((cid, dates[1:], np.array(hedging_ratio)))
 
     return pd.DataFrame(data=data, columns=['cid', 'real_date', 'value'])
+
 
 def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                 hedge_return: str = None, start: str = None, end: str = None,
@@ -162,11 +166,14 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     cols = ['cid', 'xcat', 'real_date', 'value']
     assert list(df.columns) == cols, f"Expects a standardised dataframe with columns: " \
                                      f"{cols}."
+    # Todo: cols only need to be subset of columns.
+    #  Added column (tickers) should not be problem because of reduce_df
 
     post_fix = hedge_return.split('_')
     error_hedge = "The expected form of the 'hedge_return' parameter is <cid_xcat>. The" \
                   "parameter expects to define a single series."
     assert len(post_fix) == 2, error_hedge
+    # Todo: this could have >2 list elements (EUR_EQXR_NSA) => ['EUR', 'EQXR', 'NSA']
 
     xcat_hedge = post_fix[1]
     cid_hedge = post_fix[0]
@@ -174,12 +181,13 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     xcat_error = f"Category, {xcat_hedge}, not defined in the dataframe. Available " \
                  f"categories are: {available_categories}."
     assert xcat_hedge in available_categories, xcat_error
+    # Todo: check on ticker, as xcat is not guarantee that required cid is available
 
     error_xcat = f"The field, xcat, must be a string but received <{type(xcat)}>. Only" \
                  f" a single category is used to hedge against the main asset."
     assert isinstance(xcat, str), error_xcat
 
-    error_hedging = f"The category used to hedge against the primary asset, {xcat}, is " \
+    error_hedging = f"The return category used to be hedged, {xcat}, is " \
                     f"not defined in the dataframe."
     assert xcat in list(available_categories), error_hedging
 
@@ -189,13 +197,16 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     assert refreq in refreq_options, error_refreq
 
     if xcat_hedge == xcat:
-        cids.remove(cid_hedge)
+        cids.remove(cid_hedge)  # if hedged is main asset type its cid cannot be hedged
 
     dfd = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end,
                     blacklist=blacklist)
 
     dfw = dfd.pivot(index='real_date', columns='cid', values='value')
     dfw = dfw.dropna(axis=0, how="any")
+    # Todo: show be how = "all" as longest, not shortest series determines hedge activity
+    # Todo: just concat hedge asset series with inner join, so that time index is the
+    #  shorter of hedged and hedging assets
     dates = dfw.index
 
     df_copy = df.copy()
@@ -211,6 +222,8 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
     dates = refreq_groupby(start_date=dates[0], end_date=dates[-1],
                            refreq=refreq)
+    # Todo: methinks the above can be replaced by dates = dfw.asfreq('BM').index
+    #  using {'w': 'W', 'm': 'BM', 'q': 'BQ'}
 
     # A "rolling" hedge ratio is computed for each cross-section across the defined
     # panel.
@@ -218,7 +231,7 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     for c in cids:
         series = dfw[c]
         hedge_data = hedge_calculator(main_asset=main_asset, hedging_asset=series,
-                                      groups=dates, cross_section=c)
+                                      rdates=dates, cross_section=c)
         aggregate.append(hedge_data)
 
     hedge_df = pd.concat(aggregate).reset_index(drop=True)
