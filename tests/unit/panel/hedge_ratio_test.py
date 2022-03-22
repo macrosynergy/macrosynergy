@@ -32,44 +32,46 @@ class TestAll(unittest.TestCase):
         self.__dict__['dfw'] = self.dfd.pivot(index='real_date', columns='cid',
                                               values='value')
 
+    def test_date_index(self, start_date: pd.Timestamp = None,
+                        end_date: pd.Timestamp = None, refreq: str = 'm'):
+        """
+        The hedging ratio is re-estimated according to the frequency parameter. Therefore,
+        break up the respective return series, which are defined daily, into the re-estimated
+        frequency paradigm. To achieve this ensure the dates produced fall on business days,
+        and will subsequently be present in the return-series dataframes (the daily series).
+        The method used, in the source code, to delimit the resampling frequency is
+        pd.resample(), and subsequently use this method to confirm the operation has been
+        applied correctly.
 
-def test_date_index(start_date: pd.Timestamp, end_date: pd.Timestamp, refreq: str = 'm'):
-    """
-    The hedging ratio is re-estimated according to the frequency parameter. Therefore,
-    break up the respective return series, which are defined daily, into the re-estimated
-    frequency paradigm. To achieve this ensure the dates produced fall on business days,
-    and will subsequently be present in the return-series dataframes (the daily series).
-    The method used, in the source code, to delimit the resampling frequency is
-    pd.resample(), and subsequently use this method to confirm the operation has been
-    applied correctly.
+        :param <pd.Timestamp> start_date:
+        :param <pd.Timestamp> end_date:
+        :param <str> refreq:
 
-    :param <pd.Timestamp> start_date:
-    :param <pd.Timestamp> end_date:
-    :param <str> refreq:
+        return <List[pd.Timestamp]>: List of timestamps where each date is a valid business
+            day, and the gap between each date is delimited by the frequency parameter.
+        """
 
-    return <List[pd.Timestamp]>: List of timestamps where each date is a valid business
-        day, and the gap between each date is delimited by the frequency parameter.
-    """
+        start_date = "2000-01-01"
+        end_date = "2020-01-01"
+        
+        dates = pd.date_range(start_date, end_date, freq=refreq)
+        d_copy = list(dates)
+        condition = lambda date: date.dayofweek > 4
 
-    dates = pd.date_range(start_date, end_date, freq=refreq)
-    d_copy = list(dates)
-    condition = lambda date: date.dayofweek > 4
+        for i, d in enumerate(dates):
+            if condition(d):
+                new_date = d + pd.DateOffset(1)
+                while condition(new_date):
+                    new_date += pd.DateOffset(1)
 
-    for i, d in enumerate(dates):
-        if condition(d):
-            new_date = d + pd.DateOffset(1)
-            while condition(new_date):
-                new_date += pd.DateOffset(1)
+                d_copy.remove(d)
+                d_copy.insert(i, new_date)
+            else:
+                continue
 
-            d_copy.remove(d)
-            d_copy.insert(i, new_date)
-        else:
-            continue
-
-    return d_copy
+        return d_copy
 
 
 if __name__ == '__main__':
 
-    pass
-    # unittest.main()
+    unittest.main()
