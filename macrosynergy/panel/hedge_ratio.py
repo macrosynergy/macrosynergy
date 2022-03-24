@@ -61,6 +61,7 @@ def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
 
     hedging_ratio = []
 
+    hedging_asset = hedging_asset[hedging_asset.first_valid_index():]
     s_date, e_date = date_alignment(main_asset=main_asset, hedging_asset=hedging_asset)
 
     main_asset = main_asset.truncate(before=s_date, after=e_date)
@@ -182,10 +183,10 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                     blacklist=blacklist)
 
     dfw = dfd.pivot(index='real_date', columns='cid', values='value')
-    dfw = dfw.dropna(axis=0, how="any")
-    # Todo: show be how = "all" as longest, not shortest series determines hedge activity
-    # Todo: just concat hedge asset series with inner join, so that time index is the
-    #  shorter of hedged and hedging assets
+    # Regardless if certain cross-sections are missing from the panel, still include the
+    # residual series to use as hedging assets.
+    dfw = dfw.dropna(axis=0, how="all")
+
     dates = dfw.index
 
     df_copy = df.copy()
