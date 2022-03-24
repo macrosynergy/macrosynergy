@@ -37,7 +37,7 @@ def date_alignment(main_asset: pd.Series, hedging_asset: pd.Series):
 
 
 def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
-                     rdates: List[pd.Timestamp], cross_section: str,):
+                     rdates: List[pd.Timestamp], cross_section: str, min_obs: int = 24):
     """
     The hedging of a contract can be achieved by taking positions across an entire panel.
     Therefore, compute the hedge ratio for each cross-section across the defined panel.
@@ -49,9 +49,11 @@ def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
         hedged.
     :param <pd.Series> hedging_asset: the return series of the asset being used to hedge
         against the main asset.
-    :param <List[pd.Timestamp]> rdates the dates controlling the frequency of
+    :param <List[pd.Timestamp]> rdates: the dates controlling the frequency of
         re-estimation.
     :param <str> cross_section: cross-section responsible for the "hedging_asset" series.
+    :param <int> min_obs: a hedge ratio will only be computed if the number of days has
+        surpassed the integer held by the parameter.
 
     :return <pd.DataFrame>: returns a dataframe of the hedge ratios for the respective
         cross-section.
@@ -63,21 +65,29 @@ def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
 
     main_asset = main_asset.truncate(before=s_date, after=e_date)
     hedging_asset = hedging_asset.truncate(before=s_date, after=e_date)
+    date_adjustment = lambda computed_date: computed_date + pd.DateOffset(1)
 
-    for d in rdates[1:]:
-        # Todo: only estimate if d implies observation > minobs
-        Y = main_asset.loc[:d]
-        X = hedging_asset.loc[:d]
-        X = sm.add_constant(X)
-        mod = sm.OLS(Y, X)
-        results = mod.fit()
-        hedging_ratio.append(results.params)
+    date_series = main_asset.index
+    min_obs_date = date_series[min_obs]
 
-    no_dates = len(rdates)
-    cid = np.repeat(cross_section, (no_dates - 1))
-    dates = np.array(rdates)
-    data = np.column_stack((cid, dates[1:], np.array(hedging_ratio)))
-    # Todo: make sure that coefficinet is applied after the end date of estimation sample
+    rdates_copy = rdates.copy()
+    for d in rdates:
+        if d > min_obs_date:
+            Y = main_asset.loc[:d]
+            X = hedging_asset.loc[:d]
+            X = sm.add_constant(X)
+            mod = sm.OLS(Y, X)
+            results = mod.fit()
+            hedging_ratio.append(results.params)
+        else:
+            rdates_copy.remove(d)
+
+    no_dates = len(rdates_copy)
+    cid = np.repeat(cross_section, no_dates)
+    dates_hedge = list(map(date_adjustment, rdates_copy))
+
+    dates_hedge = np.array(dates_hedge)
+    data = np.column_stack((cid, dates_hedge, np.array(hedging_ratio)))
 
     return pd.DataFrame(data=data, columns=['cid', 'real_date', 'intercept',
                                             'coefficient'])
@@ -139,22 +149,18 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     cols = ['cid', 'xcat', 'real_date', 'value']
     assert list(df.columns) == cols, f"Expects a standardised dataframe with columns: " \
                                      f"{cols}."
-    # Todo: cols only need to be subset of columns.
-    #  Added column (tickers) should not be problem because of reduce_df
 
     post_fix = hedge_return.split('_')
     error_hedge = "The expected form of the 'hedge_return' parameter is <cid_xcat>. The" \
-                  "parameter expects to define a single series."
-    assert len(post_fix) == 2, error_hedge
-    # Todo: this could have >2 list elements (EUR_EQXR_NSA) => ['EUR', 'EQXR', 'NSA']
+                  " parameter expects to define a single series."
+    assert len(post_fix) == 3, error_hedge
 
-    xcat_hedge = post_fix[1]
+    xcat_hedge = '_'.join(post_fix[1:])
     cid_hedge = post_fix[0]
     available_categories = df['xcat'].unique()
     xcat_error = f"Category, {xcat_hedge}, not defined in the dataframe. Available " \
                  f"categories are: {available_categories}."
     assert xcat_hedge in available_categories, xcat_error
-    # Todo: check on ticker, as xcat is not guarantee that required cid is available
 
     error_xcat = f"The field, xcat, must be a string but received <{type(xcat)}>. Only" \
                  f" a single category is used to hedge against the main asset."
@@ -210,7 +216,7 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     for c in cids:
         series = dfw[c]
         hedge_data = hedge_calculator(main_asset=main_asset, hedging_asset=series,
-                                      rdates=dates_re, cross_section=c)
+                                      rdates=dates_re, cross_section=c, min_obs=min_obs)
         aggregate.append(hedge_data)
 
     hedge_df = pd.concat(aggregate).reset_index(drop=True)
@@ -222,7 +228,7 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
 if __name__ == "__main__":
     cids = ['AUD', 'CAD', 'GBP', 'USD', 'NZD']
-    xcats = ['FXXR', 'GROWTHXR', 'INFLXR', 'EQXR']
+    xcats = ['FXXR_NSA', 'GROWTHXR_NSA', 'INFLXR_NSA', 'EQXR_NSA']
 
     df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
                                                 'sd_mult'])
@@ -236,17 +242,17 @@ if __name__ == "__main__":
     df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
                                                   'sd_mult', 'ar_coef', 'back_coef'])
 
-    df_xcats.loc['FXXR'] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 1]
-    df_xcats.loc['GROWTHXR'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
-    df_xcats.loc['INFLXR'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
-    df_xcats.loc['EQXR'] = ['2010-01-01', '2022-03-14', 0.5, 2, 0, 0.2]
+    df_xcats.loc['FXXR_NSA'] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 1]
+    df_xcats.loc['GROWTHXR_NSA'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
+    df_xcats.loc['INFLXR_NSA'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
+    df_xcats.loc['EQXR_NSA'] = ['2010-01-01', '2022-03-14', 0.5, 2, 0, 0.2]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     black = {'AUD': ['2010-01-01', '2014-01-04'], 'GBP': ['2010-01-01', '2013-12-31']}
 
-    xcat_hedge = "EQXR"
+    xcat_hedge = "EQXR_NSA"
     # S&P500.
-    hedge_return = "USD_EQXR"
+    hedge_return = "USD_EQXR_NSA"
     df_hedge = hedge_ratio(df=dfd, xcat=xcat_hedge, cids=cids,
                            hedge_return=hedge_return, start='2010-01-01',
                            end='2020-10-30',
@@ -256,9 +262,9 @@ if __name__ == "__main__":
 
     # Long position in S&P500 or the Nasdeq, and subsequently using US FX to hedge the
     # long position.
-    xcats = 'FXXR'
+    xcats = 'FXXR_NSA'
     cids = ['USD']
-    hedge_return = "USD_EQXR"
+    hedge_return = "USD_EQXR_NSA"
     xcat_hedge_two = hedge_ratio(df=dfd, xcat=xcats, cids=cids,
                                  hedge_return=hedge_return, start='2010-01-01',
                                  end='2020-10-30',
