@@ -5,7 +5,7 @@ from typing import List, Union
 import statsmodels.api as sm
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
-
+import matplotlib.pyplot as plt
 
 def date_alignment(main_asset: pd.Series, hedging_asset: pd.Series):
     """
@@ -93,7 +93,6 @@ def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
     return pd.DataFrame(data=data, columns=['cid', 'real_date', 'intercept',
                                             'coefficient'])
 
-
 def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                 hedge_return: str = None, start: str = None, end: str = None,
                 blacklist: dict = None, meth: str = 'ols', oos: bool = True,
@@ -138,8 +137,8 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     :param <str> meth: method to estimate hedge ratio. At present the only method is
         OLS regression.
 
-    :return <pd.Dataframe> df: dataframe with hedge ratios, which are based on estimation
-        of a sample prior to the timestamp of the hedge ratio.
+    :return <pd.Dataframe> df: dataframe with hedge ratios which are based on an
+        estimation of a sample prior to the timestamp of the hedge ratio.
 
     N.B.: A hedge ratio is the estimated sensitivity of the main return  with respect to
     the asset used for hedging. The ratio is recorded for the period after the estimation
@@ -221,10 +220,29 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         aggregate.append(hedge_data)
 
     hedge_df = pd.concat(aggregate).reset_index(drop=True)
-    hedge_df['xcat'] = hedge_return
+    hedge_df['xcat'] = xcat
 
     cols = ['cid', 'xcat', 'real_date', 'intercept', 'coefficient']
     return hedge_df[cols]
+
+def hedge_ratio_display(df_hedge: pd.DataFrame, subplots: bool = False):
+    """
+    Method used to visualise the hedging ratios across the panel: assumes a single
+    category is used to hedge the primary asset.
+
+    :param <pd.DataFrame> df_hedge: dataframe with hedge ratios.
+    :param <bool> subplots: matplotlib parameter to determine if each hedging series is
+        displayed on separate subplots.
+
+    """
+
+    hedging_xcat = df_hedge['xcat'].unique()
+    dfw_ratios = df_hedge.pivot(index='real_date', columns='cid', values='coefficient')
+
+    dfw_ratios.plot(subplots=subplots, title="Hedging Ratios.",
+                    legend=True)
+    plt.xlabel('real_date, years')
+    plt.show()
 
 
 if __name__ == "__main__":
@@ -260,6 +278,7 @@ if __name__ == "__main__":
                            blacklist=black, meth='ols', oos=True,
                            refreq='m', min_obs=24)
     print(df_hedge)
+    hedge_ratio_display(df_hedge=df_hedge, subplots=True)
 
     # Long position in S&P500 or the Nasdeq, and subsequently using US FX to hedge the
     # long position.
