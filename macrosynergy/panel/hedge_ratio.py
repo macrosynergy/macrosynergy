@@ -79,7 +79,8 @@ def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
     data = np.column_stack((cid, dates[1:], np.array(hedging_ratio)))
     # Todo: make sure that coefficinet is applied after the end date of estimation sample
 
-    return pd.DataFrame(data=data, columns=['cid', 'real_date', 'value'])
+    return pd.DataFrame(data=data, columns=['cid', 'real_date', 'intercept',
+                                            'coefficient'])
 
 
 def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
@@ -203,19 +204,19 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     dates_resample = list(dates_resample.index)
     dates_re = [pd.Timestamp(d) for d in dates_resample]
 
-
     # A "rolling" hedge ratio is computed for each cross-section across the defined
     # panel.
     aggregate = []
     for c in cids:
         series = dfw[c]
         hedge_data = hedge_calculator(main_asset=main_asset, hedging_asset=series,
-                                      rdates=dates, cross_section=c)
-                                      groups=dates_re, cross_section=c)
+                                      rdates=dates_re, cross_section=c)
+        aggregate.append(hedge_data)
 
     hedge_df = pd.concat(aggregate).reset_index(drop=True)
     hedge_df['xcat'] = hedge_return
 
+    cols = ['cid', 'xcat', 'real_date', 'intercept', 'coefficient']
     return hedge_df[cols]
 
 
