@@ -53,7 +53,7 @@ class TestAll(unittest.TestCase):
 
         start_date = "2000-01-01"
         end_date = "2020-01-01"
-        
+
         dates = pd.date_range(start_date, end_date, freq=refreq)
         d_copy = list(dates)
         condition = lambda date: date.dayofweek > 4
