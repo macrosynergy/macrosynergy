@@ -77,9 +77,11 @@ def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
             Y = main_asset.loc[:d]
             X = hedging_asset.loc[:d]
             X = sm.add_constant(X)
+
             mod = sm.OLS(Y, X)
             results = mod.fit()
-            hedging_ratio.append(results.params)
+            # Isolate the Beta coefficient to use as the hedging component.
+            hedging_ratio.append(results.params[1])
         else:
             rdates_copy.remove(d)
 
@@ -90,13 +92,12 @@ def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
     dates_hedge = np.array(dates_hedge)
     data = np.column_stack((cid, dates_hedge, np.array(hedging_ratio)))
 
-    return pd.DataFrame(data=data, columns=['cid', 'real_date', 'intercept',
-                                            'coefficient'])
+    return pd.DataFrame(data=data, columns=['cid', 'real_date', 'value'])
 
 def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                 hedge_return: str = None, start: str = None, end: str = None,
                 blacklist: dict = None, meth: str = 'ols', oos: bool = True,
-                refreq: str = 'm', min_obs: int = 24):
+                refreq: str = 'm', min_obs: int = 24, hedged_returns: bool = False):
 
     """
     Return dataframe of hedge ratios for one or more return categories.
@@ -107,13 +108,13 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     :param <str> xcat:  extended category denoting the return series for which the
         hedge ratios are calculated. In order to hedge against the main asset, compute
         hedging ratios across the panel. For instance, a possible strategy would be to
-        hedge a range of local equity index positions against the S&P 500. The main asset
+        hedge a range of local equity index positions using the S&P 500. The main asset
         is defined by the parameter "hedge_return": in the above example it would be
-        represented by the postfix USD_EQ.
+        represented by the postfix USD_EQXR_NSA.
     :param <List[str]> cids: cross sections for which hedge ratios are calculated;
         default is all available for the category.
     :param <str> hedge_return: ticker of return of the hedge asset or basket. The
-        parameter represents a single series. For instance, "USD_EQ".
+        parameter represents a single series. For instance, "USD_EQXR_NSA".
     :param <str> start: earliest date in ISO format. Default is None and earliest date in
         df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df is
@@ -136,11 +137,14 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         (business days).
     :param <str> meth: method to estimate hedge ratio. At present the only method is
         OLS regression.
+    :param <bool> hedged_returns: append the hedged returns to the dataframe.
 
-    :return <pd.Dataframe> df: dataframe with hedge ratios which are based on an
-        estimation of a sample prior to the timestamp of the hedge ratio.
+    :return <pd.Dataframe> hedge_df: dataframe with hedge ratios which are based on an
+        estimation of a sample prior to the timestamp of the hedge ratio. Additionally,
+        the dataframe can include the hedged returns if the parameter "hedge_return" is
+        set to True.
 
-    N.B.: A hedge ratio is the estimated sensitivity of the main return  with respect to
+    N.B.: A hedge ratio is the estimated sensitivity of the main return with respect to
     the asset used for hedging. The ratio is recorded for the period after the estimation
     sample up the next update.
     
@@ -191,6 +195,7 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     df_copy = df.copy()
     # Confirms both dataframes will be defined over the same time-period: asset being
     # hedged and the assets used for hedging.
+    # The asset being used to hedge the positions.
     hedge_series = reduce_df(df_copy, xcats=[xcat_hedge], cids=cid_hedge, start=dates[0],
                              end=dates[-1], blacklist=blacklist)
     hedge_series = hedge_series.reset_index(drop=True)
@@ -221,8 +226,43 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
     hedge_df = pd.concat(aggregate).reset_index(drop=True)
     hedge_df['xcat'] = xcat
+    if hedged_returns:
 
-    cols = ['cid', 'xcat', 'real_date', 'intercept', 'coefficient']
+        refreq_buckets = {}
+        previous_date = dates_re[0]
+        for d in dates_re:
+
+            intermediary_series = main_asset.truncate(before=previous_date, after=d)
+            refreq_buckets[d + pd.DateOffset(1)] = intermediary_series
+            previous_date = d
+
+        hedge_pivot = hedge_df.pivot(index='real_date', columns='cid', values='value')
+
+        storage_dict = {}
+        for c in hedge_pivot:
+            series_hedge = hedge_pivot[c]
+            storage = []
+            for k, v in refreq_buckets.items():
+                try:
+                    hedge_value = series_hedge.loc[k]
+                except KeyError:
+                    pass
+                else:
+                    hedged_position = v * hedge_value
+                    storage.append(hedged_position)
+            storage_dict[c] = pd.concat(storage)
+
+        hedged_returns_df = pd.DataFrame.from_dict(storage_dict)
+        hedged_returns_df.index.name = 'real_date'
+        hedged_returns_df.columns.name = 'cid'
+
+        output = dfw - hedged_returns_df
+        df_stack = output.stack().to_frame("value").reset_index()
+        df_stack = df_stack.sort_values(['cid', 'real_date'])
+        df_stack['xcat'] = xcat + "_" + "H"
+        df_stack = df_stack.reset_index(drop=True)
+        hedge_df = hedge_df.append(df_stack)
+
     return hedge_df[cols]
 
 def hedge_ratio_display(df_hedge: pd.DataFrame, subplots: bool = False):
@@ -237,7 +277,7 @@ def hedge_ratio_display(df_hedge: pd.DataFrame, subplots: bool = False):
     """
 
     hedging_xcat = df_hedge['xcat'].unique()
-    dfw_ratios = df_hedge.pivot(index='real_date', columns='cid', values='coefficient')
+    dfw_ratios = df_hedge.pivot(index='real_date', columns='cid', values='value')
 
     dfw_ratios.plot(subplots=subplots, title="Hedging Ratios.",
                     legend=True)
@@ -246,17 +286,21 @@ def hedge_ratio_display(df_hedge: pd.DataFrame, subplots: bool = False):
 
 
 if __name__ == "__main__":
-    cids = ['AUD', 'CAD', 'GBP', 'USD', 'NZD']
+    # Emerging Market Asian countries.
+    cids = ['IDR', 'INR', 'KRW', 'MYR', 'PHP']
+    # Add the US - used as the hedging asset.
+    cids += ['USD']
     xcats = ['FXXR_NSA', 'GROWTHXR_NSA', 'INFLXR_NSA', 'EQXR_NSA']
 
     df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
                                                 'sd_mult'])
 
-    df_cids.loc['AUD'] = ['2010-01-01', '2020-12-31', 0.5, 2]
-    df_cids.loc['CAD'] = ['2011-01-01', '2020-11-30', 0, 1]
-    df_cids.loc['GBP'] = ['2012-01-01', '2020-11-30', -0.2, 0.5]
-    df_cids.loc['USD'] = ['2013-01-01', '2020-09-30', -0.2, 0.5]
-    df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
+    df_cids.loc['IDR'] = ['2010-01-01', '2020-12-31', 0.5, 2]
+    df_cids.loc['INR'] = ['2011-01-01', '2020-11-30', 0, 1]
+    df_cids.loc['KRW'] = ['2012-01-01', '2020-11-30', -0.2, 0.5]
+    df_cids.loc['MYR'] = ['2013-01-01', '2020-09-30', -0.2, 0.5]
+    df_cids.loc['PHP'] = ['2002-01-01', '2020-09-30', -0.1, 2]
+    df_cids.loc['USD'] = ['2000-01-01', '2022-03-14', 0, 1.25]
 
     df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
                                                   'sd_mult', 'ar_coef', 'back_coef'])
@@ -267,7 +311,7 @@ if __name__ == "__main__":
     df_xcats.loc['EQXR_NSA'] = ['2010-01-01', '2022-03-14', 0.5, 2, 0, 0.2]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-    black = {'AUD': ['2010-01-01', '2014-01-04'], 'GBP': ['2010-01-01', '2013-12-31']}
+    black = {'IDR': ['2010-01-01', '2014-01-04'], 'INR': ['2010-01-01', '2013-12-31']}
 
     xcat_hedge = "EQXR_NSA"
     # S&P500.
@@ -276,9 +320,8 @@ if __name__ == "__main__":
                            hedge_return=hedge_return, start='2010-01-01',
                            end='2020-10-30',
                            blacklist=black, meth='ols', oos=True,
-                           refreq='m', min_obs=24)
+                           refreq='m', min_obs=24, hedged_returns=True)
     print(df_hedge)
-    hedge_ratio_display(df_hedge=df_hedge, subplots=True)
 
     # Long position in S&P500 or the Nasdeq, and subsequently using US FX to hedge the
     # long position.
