@@ -94,6 +94,69 @@ def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
 
     return pd.DataFrame(data=data, columns=['cid', 'real_date', 'value'])
 
+def dates_groups(dates_refreq: List[pd.Timestamp], main_asset: pd.Series):
+    """
+    Method used to break up the hedging asset's return series into the re-estimation
+    periods. The method will return a dictionary where the key will be the re-estimation
+    timestamp and the corresponding value will be the preceding returns.
+
+    :param <List[pd.Timestamp]> dates_refreq:
+    :param <pd.Series> main_asset:
+
+    :return <dict>:
+    """
+    refreq_buckets = {}
+
+    previous_date = dates_refreq[0]
+    for d in dates_refreq:
+        intermediary_series = main_asset.truncate(before=previous_date, after=d)
+        refreq_buckets[d + pd.DateOffset(1)] = intermediary_series
+        previous_date = d
+
+    return refreq_buckets
+
+def adjusted_returns(dates_refreq: List[pd.Timestamp], main_asset: pd.Series,
+                     hedge_df: pd.DataFrame, dfw: pd.DataFrame):
+    """
+    Method used to compute the hedge ratio returns on the hedging asset which will
+    subsequently be subtracted from the returns of the position contracts to calculate
+    the adjusted returns (adjusted for the hedged position). For instance, if using US
+    Equity to hedge Australia FX: AUD_FXXR_NSA_H = AUD_FXXR_NSA - HR_AUD * USD_EQXR_NSA.
+
+    :param <List[pd.Timestamps]> dates_refreq: list of dates the hedge ratio is
+        recomputed for each contract being hedged.
+    :param <pd.Series> main_asset: return series of the hedging asset.
+    :param <pd.DataFrame> hedge_df: standardised dataframe with the hedge ratios.
+    :param <pd.DataFrame> dfw: pivoted dataframe of the relevant returns.
+
+    :return <pd.DataFrame> standardised dataframe of adjusted returns.
+    """
+
+    refreq_buckets = dates_groups(dates_refreq=dates_refreq, main_asset=main_asset)
+    hedge_pivot = hedge_df.pivot(index='real_date', columns='cid', values='value')
+
+    storage_dict = {}
+    for c in hedge_pivot:
+        series_hedge = hedge_pivot[c]
+        storage = []
+        for k, v in refreq_buckets.items():
+            try:
+                hedge_value = series_hedge.loc[k]
+            except KeyError:
+                pass
+            else:
+                hedged_position = v * hedge_value
+                storage.append(hedged_position)
+        storage_dict[c] = pd.concat(storage)
+
+    hedged_returns_df = pd.DataFrame.from_dict(storage_dict)
+    hedged_returns_df.index.name = "real_date"
+
+    output = dfw - hedged_returns_df
+    df_stack = output.stack().to_frame("value").reset_index()
+
+    return df_stack.reset_index(drop=True)
+
 def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                 hedge_return: str = None, start: str = None, end: str = None,
                 blacklist: dict = None, meth: str = 'ols', oos: bool = True,
@@ -227,41 +290,11 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     hedge_df = pd.concat(aggregate).reset_index(drop=True)
     hedge_df['xcat'] = xcat
     if hedged_returns:
-
-        refreq_buckets = {}
-        previous_date = dates_re[0]
-        for d in dates_re:
-
-            intermediary_series = main_asset.truncate(before=previous_date, after=d)
-            refreq_buckets[d + pd.DateOffset(1)] = intermediary_series
-            previous_date = d
-
-        hedge_pivot = hedge_df.pivot(index='real_date', columns='cid', values='value')
-
-        storage_dict = {}
-        for c in hedge_pivot:
-            series_hedge = hedge_pivot[c]
-            storage = []
-            for k, v in refreq_buckets.items():
-                try:
-                    hedge_value = series_hedge.loc[k]
-                except KeyError:
-                    pass
-                else:
-                    hedged_position = v * hedge_value
-                    storage.append(hedged_position)
-            storage_dict[c] = pd.concat(storage)
-
-        hedged_returns_df = pd.DataFrame.from_dict(storage_dict)
-        hedged_returns_df.index.name = 'real_date'
-        hedged_returns_df.columns.name = 'cid'
-
-        output = dfw - hedged_returns_df
-        df_stack = output.stack().to_frame("value").reset_index()
-        df_stack = df_stack.sort_values(['cid', 'real_date'])
-        df_stack['xcat'] = xcat + "_" + "H"
-        df_stack = df_stack.reset_index(drop=True)
-        hedge_df = hedge_df.append(df_stack)
+        hedged_return_df = adjusted_returns(dates_refreq=dates_re, main_asset=main_asset,
+                                            hedge_df=hedge_df, dfw=dfw)
+        hedged_return_df = hedged_return_df.sort_values(['cid', 'real_date'])
+        hedged_return_df['xcat'] = xcat + "_" + "H"
+        hedge_df = hedge_df.append(hedged_return_df)
 
     return hedge_df[cols]
 
@@ -276,7 +309,12 @@ def hedge_ratio_display(df_hedge: pd.DataFrame, subplots: bool = False):
 
     """
 
-    hedging_xcat = df_hedge['xcat'].unique()
+    condition = lambda c: c.split('_')[-1] != 'H'
+    # Isolate the hedge ratios. The adjusted returns will have the postfix "H" attached
+    # to the category name.
+    apply = list(map(condition, df_hedge['xcat']))
+    df_hedge = df_hedge[apply]
+
     dfw_ratios = df_hedge.pivot(index='real_date', columns='cid', values='value')
 
     dfw_ratios.plot(subplots=subplots, title="Hedging Ratios.",
@@ -322,6 +360,7 @@ if __name__ == "__main__":
                            blacklist=black, meth='ols', oos=True,
                            refreq='m', min_obs=24, hedged_returns=True)
     print(df_hedge)
+    hedge_ratio_display(df_hedge=df_hedge, subplots=False)
 
     # Long position in S&P500 or the Nasdeq, and subsequently using US FX to hedge the
     # long position.
