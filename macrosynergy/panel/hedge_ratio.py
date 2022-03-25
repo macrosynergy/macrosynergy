@@ -39,11 +39,11 @@ def date_alignment(main_asset: pd.Series, hedging_asset: pd.Series):
 def hedge_calculator(main_asset: pd.DataFrame, hedging_asset: pd.Series,
                      rdates: List[pd.Timestamp], cross_section: str, min_obs: int = 24):
     """
-    The hedging of a contract can be achieved by taking positions across an entire panel.
-    Therefore, compute the hedge ratio for each cross-section across the defined panel.
-    The sample of data used for hedging will increase according to the dates parameter:
-    each date represents an additional number of timestamps where the numeracy is
-    instructed by the "refreq" parameter.
+    Calculate the hedge ratios for each cross-section in the panel being hedged. It is
+    worth noting that the sample of data used for calculating the hedge ratio will
+    increase according to the dates parameter: each date represents an additional number
+    of timestamps where the numeracy of dates added to the sample is instructed by the
+    "refreq" parameter.
 
     :param <pd.DataFrame> main_asset: the return series of the asset that is being
         hedged.
@@ -98,7 +98,9 @@ def dates_groups(dates_refreq: List[pd.Timestamp], main_asset: pd.Series):
     """
     Method used to break up the hedging asset's return series into the re-estimation
     periods. The method will return a dictionary where the key will be the re-estimation
-    timestamp and the corresponding value will be the preceding returns.
+    timestamp and the corresponding value will be the following timestamps until the
+    next re-estimation date. It is the following returns that the hedge ratio is applied
+    to.
 
     :param <List[pd.Timestamp]> dates_refreq:
     :param <pd.Series> main_asset:
@@ -107,11 +109,12 @@ def dates_groups(dates_refreq: List[pd.Timestamp], main_asset: pd.Series):
     """
     refreq_buckets = {}
 
-    previous_date = dates_refreq[0]
-    for d in dates_refreq:
-        intermediary_series = main_asset.truncate(before=previous_date, after=d)
-        refreq_buckets[d + pd.DateOffset(1)] = intermediary_series
-        previous_date = d
+    no_reest_dates = len(dates_refreq)
+    for i, d in enumerate(dates_refreq):
+        if i < (no_reest_dates - 1):
+            intermediary_series = main_asset.truncate(before=d,
+                                                      after=dates_refreq[(i + 1)])
+            refreq_buckets[d + pd.DateOffset(1)] = intermediary_series
 
     return refreq_buckets
 
@@ -155,7 +158,7 @@ def adjusted_returns(dates_refreq: List[pd.Timestamp], main_asset: pd.Series,
     output = dfw - hedged_returns_df
     df_stack = output.stack().to_frame("value").reset_index()
 
-    return df_stack.reset_index(drop=True)
+    return df_stack
 
 def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                 hedge_return: str = None, start: str = None, end: str = None,
@@ -295,6 +298,7 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         hedged_return_df = hedged_return_df.sort_values(['cid', 'real_date'])
         hedged_return_df['xcat'] = xcat + "_" + "H"
         hedge_df = hedge_df.append(hedged_return_df)
+        hedge_df = hedge_df.reset_index(drop=True)
 
     return hedge_df[cols]
 
