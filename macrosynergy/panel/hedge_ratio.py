@@ -260,6 +260,7 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
     rf = {'w': 'W', 'm': 'BM', 'q': 'BQ'}[refreq]
     dates_re = dfw.asfreq(rf).index
+    # Todo: if 'w' is chosen we need to make sure that last day is Fri not Sun
 
     aggregate = []
     for c in cids:
