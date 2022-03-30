@@ -168,7 +168,7 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     """
     Return dataframe of hedge ratios for one or more return categories.
     
-    :param <pd.Dataframe> df: standardized data frame with the following necessary columns:
+    :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
         'cid', 'xcats', 'real_date' and 'value. Will contain all of the data across all
         macroeconomic fields.
     :param <str> xcat:  extended category denoting the return series for which the
