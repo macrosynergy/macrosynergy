@@ -100,13 +100,20 @@ class NaivePnL:
             df_ms = make_zn_scores(self.df, xcat=sig, sequential=True, cids=cids,
                                    neutral=neutral, pan_weight=1,
                                    min_obs=min_obs, iis=iis, thresh=thresh)
+            dfw_ms = df_ms.pivot(index=['cid', 'real_date'], columns='xcat',
+                                 values='value')
 
-            dfw['psig'] = df_ms['value']
+            dfw_ms = dfw_ms.rename(columns={sig + "ZN": 'psig'})
+            dfw = pd.concat([dfw, dfw_ms])
         elif sig_op == 'zn_score_cs':  # zn-score based on cross-sections.
             df_ms = make_zn_scores(self.df, xcat=sig, sequential=True, cids=cids,
                                    neutral=neutral, pan_weight=0,
                                    min_obs=min_obs, iis=iis, thresh=thresh)
-            dfw['psig'] = df_ms['value']
+            dfw_ms = df_ms.pivot(index=['cid', 'real_date'], columns='xcat',
+                                 values='value')
+
+            dfw_ms = dfw_ms.rename(columns={sig + "ZN": 'psig'})
+            dfw = pd.concat([dfw, dfw_ms])
         elif sig_op == 'binary':
             dfw['psig'] = np.sign(dfw[sig])
 
