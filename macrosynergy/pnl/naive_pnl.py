@@ -39,6 +39,7 @@ class NaivePnL:
         self.sigs = sigs
         xcats = [ret] + sigs
         cols = ['cid', 'xcat', 'real_date', 'value']
+        self.cids = cids
         self.df, self.xcats, self.cids = reduce_df(df[cols], xcats, cids, start, end,
                                                    blacklist, out_all=True)
         self.df['real_date'] = pd.to_datetime(self.df['real_date'])
@@ -97,7 +98,7 @@ class NaivePnL:
         dfw = dfx.pivot(index=['cid', 'real_date'], columns='xcat', values='value')
 
         if sig_op == 'zn_score_pan':
-            df_ms = make_zn_scores(self.df, xcat=sig, sequential=True, cids=cids,
+            df_ms = make_zn_scores(self.df, xcat=sig, sequential=True, cids=self.cids,
                                    neutral=neutral, pan_weight=1,
                                    min_obs=min_obs, iis=iis, thresh=thresh)
             df_ms = df_ms.drop('xcat', axis=1)
@@ -107,7 +108,7 @@ class NaivePnL:
                                       values='value')
             dfw = dfw_ms
         elif sig_op == 'zn_score_cs':  # zn-score based on cross-sections.
-            df_ms = make_zn_scores(self.df, xcat=sig, sequential=True, cids=cids,
+            df_ms = make_zn_scores(self.df, xcat=sig, sequential=True, cids=self.cids,
                                    neutral=neutral, pan_weight=0,
                                    min_obs=min_obs, iis=iis, thresh=thresh)
             df_ms = df_ms.drop('xcat', axis=1)
@@ -315,13 +316,17 @@ if __name__ == "__main__":
 
     pnl.make_pnl('CRY', sig_op='zn_score_pan', rebal_freq='monthly',
                  vol_scale=10, rebal_slip=1,
-                 pnl_name='PNL_CRY_PZN')
+                 pnl_name='PNL_CRY_PZN', min_obs=250, thresh=2)
     pnl.make_pnl('CRY', sig_op='binary', rebal_freq='monthly',
                  rebal_slip=1, vol_scale=10,
                  pnl_name='PNL_CRY_DIG')
     pnl.make_pnl('GROWTH', sig_op='zn_score_cs', rebal_freq='monthly',
                  rebal_slip=1, vol_scale=10,
                  pnl_name='PNL_GROWTH_IZN')
+
+    pnl.make_pnl('CRY', sig_op='zn_score_pan', rebal_freq='monthly',
+                 vol_scale=10, rebal_slip=1,
+                 pnl_name='PNL_CRY_PZN', min_obs=250, thresh=1.5)
 
     # Plot PnLs
 
