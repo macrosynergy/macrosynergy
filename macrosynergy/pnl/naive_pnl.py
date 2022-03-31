@@ -94,30 +94,20 @@ class NaivePnL:
         assert rebal_freq in ['daily', 'weekly', 'monthly']
 
         dfx = self.df[self.df['xcat'].isin([self.ret, sig])]
-        dfw = dfx.pivot(index=['cid', 'real_date'], columns='xcat', values='value')
 
-        if sig_op == 'zn_score_pan':
-            df_ms = make_zn_scores(self.df, xcat=sig, sequential=True, cids=cids,
-                                   neutral=neutral, pan_weight=1,
-                                   min_obs=min_obs, iis=iis, thresh=thresh)
-            df_ms = df_ms.drop('xcat', axis=1)
-            df_ms['xcat'] = 'psig'
-            dfx_concat = pd.concat([dfx, df_ms])
-            dfw_ms = dfx_concat.pivot(index=['cid', 'real_date'], columns='xcat',
-                                      values='value')
-            dfw = dfw_ms
-        elif sig_op == 'zn_score_cs':  # zn-score based on cross-sections.
-            df_ms = make_zn_scores(self.df, xcat=sig, sequential=True, cids=cids,
-                                   neutral=neutral, pan_weight=0,
-                                   min_obs=min_obs, iis=iis, thresh=thresh)
-            df_ms = df_ms.drop('xcat', axis=1)
-            df_ms['xcat'] = 'psig'
-            dfx_concat = pd.concat([dfx, df_ms])
-            dfw_ms = dfx_concat.pivot(index=['cid', 'real_date'], columns='xcat',
-                                      values='value')
-            dfw = dfw_ms
-        elif sig_op == 'binary':
+        if sig_op == 'binary':
+            dfw = dfx.pivot(index=['cid', 'real_date'], columns='xcat', values='value')
             dfw['psig'] = np.sign(dfw[sig])
+        else:
+            panw = 1 if sig_op == 'zn_score_pan' else 0
+            df_ms = make_zn_scores(dfx, xcat=sig, sequential=True,
+                                   neutral=neutral, pan_weight=panw,
+                                   min_obs=min_obs, iis=iis, thresh=thresh)
+            df_ms = df_ms.drop('xcat', axis=1)
+            df_ms['xcat'] = 'psig'
+            dfx_concat = pd.concat([dfx, df_ms])
+            dfw = dfx_concat.pivot(index=['cid', 'real_date'], columns='xcat',
+                                   values='value')
 
         # Signal for the following day explains the lag mechanism.
         dfw['psig'] = dfw['psig'].groupby(level=0).shift(1)  # lag explanatory 1 period
