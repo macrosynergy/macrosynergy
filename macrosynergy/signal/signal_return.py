@@ -94,11 +94,11 @@ class SignalReturnRelations:
 
         df_out.loc['Mean', :] = df_out.loc[css, :].mean()
 
-        above50s = statms[0:3]
+        above50s = statms[0:4]
         df_out.loc['PosRatio', above50s] = (df_out.loc[css, above50s] > 0.5).mean()
-        above0s = [statms[i] for i in [3, 5]]
+        above0s = [statms[i] for i in [4, 6]]
         df_out.loc['PosRatio', above0s] = (df_out.loc[css, above0s] > 0).mean()
-        below50s = [statms[i] for i in [4, 6]]
+        below50s = [statms[i] for i in [5, 7]]
         pos_pvals = np.mean(np.array(df_out.loc[css, below50s] < 0.5)
                             * np.array(df_out.loc[css, above0s] > 0), axis=0)
         df_out.loc['PosRatio', below50s] = pos_pvals  # pos corrs with error prob < 50%
