@@ -38,7 +38,8 @@ def date_alignment(unhedged_return: pd.Series, benchmark_return: pd.Series):
 
 
 def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
-                     rdates: List[pd.Timestamp], cross_section: str, min_obs: int = 24):
+                     rdates: List[pd.Timestamp], cross_section: str, meth: str = 'ols',
+                     min_obs: int = 24):
     """
     Calculate the hedge ratios for each cross-section in the panel being hedged. It is
     worth noting that the sample of data used for calculating the hedge ratio will
@@ -54,6 +55,8 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
         re-estimation.
     :param <str> cross_section: cross-section responsible for the "benchmark_return"
         series.
+    :param <str> meth: method to estimate hedge ratio. At present the only method is
+        OLS regression ('ols').
     :param <int> min_obs: a hedge ratio will only be computed if the number of days has
         surpassed the integer held by the parameter.
 
@@ -86,11 +89,14 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
         if d > min_obs_date:
             X = unhedged_return.loc[:d]
             Y = benchmark_return.loc[:d]
-            X = sm.add_constant(X)
+            if meth == 'ols':
+                X = sm.add_constant(X)
 
-            mod = sm.OLS(Y, X)
-            results = mod.fit()
+                mod = sm.OLS(Y, X)
+                results = mod.fit()
             # Isolate the Beta coefficient to use as the hedging component.
+            else:
+                pass
             hedging_ratio.append(results.params[1])
         else:
             rdates_copy.remove(d)
@@ -272,13 +278,18 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
     rf = {'w': 'W', 'm': 'BM', 'q': 'BQ'}[refreq]
     dates_re = dfw.asfreq(rf).index
-    # Todo: if 'w' is chosen we need to make sure that last day is Fri not Sun
+
+    sunday_adjustment = lambda d: d - pd.DateOffset(2)
+    if refreq == 'w':
+        dates_re = list(map(sunday_adjustment, dates_re))
+        dates_re = dates_re[1:]
 
     aggregate = []
     for c in cids:
         xr = dfw[c]
         df_hr = hedge_calculator(unhedged_return=xr, benchmark_return=br,
-                                 rdates=dates_re, cross_section=c, min_obs=min_obs)
+                                 rdates=dates_re, cross_section=c, meth=meth,
+                                 min_obs=min_obs)
         aggregate.append(df_hr)
 
     hedge_df = pd.concat(aggregate).reset_index(drop=True)
@@ -353,7 +364,7 @@ if __name__ == "__main__":
                            benchmark_return=benchmark_return, start='2010-01-01',
                            end='2020-10-30',
                            blacklist=black, meth='ols', oos=True,
-                           refreq='m', min_obs=24, hedged_returns=True)
+                           refreq='w', min_obs=24, hedged_returns=True)
 
     print(df_hedge)
     hedge_ratio_display(df_hedge=df_hedge, subplots=False)
