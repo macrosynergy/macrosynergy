@@ -15,8 +15,8 @@ def date_alignment(unhedged_return: pd.Series, benchmark_return: pd.Series):
 
     :param <pd.DataFrame> unhedged_return: the return series of the asset that is being
         hedged.
-    :param <pd.Series> benchmark_return: the return series of the asset being used to hedge
-        against the main asset.
+    :param <pd.Series> benchmark_return: the return series of the asset being used to
+        hedge against the main asset.
 
     :return <pd.Timestamp, pd.Timestamp>: the shared start and end date across the two
         series.
@@ -48,11 +48,12 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
 
     :param <pd.DataFrame> unhedged_return: the return series of the asset that is being
         hedged.
-    :param <pd.Series> benchmark_return: the return series of the asset being used to hedge
-        against the main asset.
+    :param <pd.Series> benchmark_return: the return series of the asset being used to
+        hedge against the main asset.
     :param <List[pd.Timestamp]> rdates: the dates controlling the frequency of
         re-estimation.
-    :param <str> cross_section: cross-section responsible for the "benchmark_return" series.
+    :param <str> cross_section: cross-section responsible for the "benchmark_return"
+        series.
     :param <int> min_obs: a hedge ratio will only be computed if the number of days has
         surpassed the integer held by the parameter.
 
@@ -62,7 +63,12 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
 
     hedging_ratio = []
 
-    benchmark_return = benchmark_return[benchmark_return.first_valid_index():]
+    br = benchmark_return
+    un_r = unhedged_return
+
+    benchmark_return = br[br.first_valid_index():br.last_valid_index()]
+    unhedged_return = un_r[un_r.first_valid_index():un_r.last_valid_index()]
+
     s_date, e_date = date_alignment(unhedged_return=unhedged_return,
                                     benchmark_return=benchmark_return)
 
@@ -70,14 +76,16 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
     benchmark_return = benchmark_return.truncate(before=s_date, after=e_date)
     date_adjustment = lambda computed_date: computed_date + pd.DateOffset(1)
 
+    # The date series will be adjusted to each cross-section.
     date_series = unhedged_return.index
+    # Access the minimum date from the adjusted series.
     min_obs_date = date_series[min_obs]
 
     rdates_copy = list(rdates.copy())
     for d in rdates:
         if d > min_obs_date:
-            Y = unhedged_return.loc[:d]
-            X = benchmark_return.loc[:d]
+            X = unhedged_return.loc[:d]
+            Y = benchmark_return.loc[:d]
             X = sm.add_constant(X)
 
             mod = sm.OLS(Y, X)
@@ -86,7 +94,6 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
             hedging_ratio.append(results.params[1])
         else:
             rdates_copy.remove(d)
-
 
     no_dates = len(rdates_copy)
     cid = np.repeat(cross_section, no_dates)
@@ -103,7 +110,8 @@ def dates_groups(dates_refreq: List[pd.Timestamp], benchmark_return: pd.Series):
     periods. The method will return a dictionary where the key will be the re-estimation
     timestamp and the corresponding value will be the following timestamps until the
     next re-estimation date. It is the following returns that the hedge ratio is applied
-    to.
+    to: the hedge ratio is calculated using the preceding dates but is applied to the
+    following dates until the next re-estimation period.
 
     :param <List[pd.Timestamp]> dates_refreq:
     :param <pd.Series> benchmark_return:
@@ -116,7 +124,7 @@ def dates_groups(dates_refreq: List[pd.Timestamp], benchmark_return: pd.Series):
     for i, d in enumerate(dates_refreq):
         if i < (no_reest_dates - 1):
             intermediary_series = benchmark_return.truncate(before=d,
-                                                      after=dates_refreq[(i + 1)])
+                                                            after=dates_refreq[(i + 1)])
             refreq_buckets[d + pd.DateOffset(1)] = intermediary_series
 
     return refreq_buckets
@@ -168,7 +176,6 @@ def adjusted_returns(dates_refreq: List[pd.Timestamp], benchmark_return: pd.Seri
 def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                 benchmark_return: str = None, start: str = None, end: str = None,
                 blacklist: dict = None, meth: str = 'ols', oos: bool = True,
-                # Todo: meth and oos not used in function
                 refreq: str = 'm', min_obs: int = 24, hedged_returns: bool = False):
 
     """
@@ -241,9 +248,9 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     assert refreq in refreq_options, error_refreq
 
     if xcat_hedge == xcat:
-        cids.remove(cid_hedge)  # if hedged is main asset type its cid cannot be hedged
-        warnings.warn("One of the returns to be hedged is the hedge return"
-                      "and has been removed from the panel")
+        cids.remove(cid_hedge)
+        warnings.warn("One of the returns to be hedged is the hedge return "
+                      "and has been removed from the panel.")
 
     dfp = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end,
                     blacklist=blacklist)
@@ -341,6 +348,7 @@ if __name__ == "__main__":
                            end='2020-10-30',
                            blacklist=black, meth='ols', oos=True,
                            refreq='m', min_obs=24, hedged_returns=True)
+
     print(df_hedge)
     hedge_ratio_display(df_hedge=df_hedge, subplots=False)
 
