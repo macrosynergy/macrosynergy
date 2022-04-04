@@ -1,5 +1,5 @@
-import warnings
 
+import warnings
 import numpy as np
 import pandas as pd
 from typing import List, Union
@@ -203,10 +203,9 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     :param <str> meth: method to estimate hedge ratio. At present the only method is
         OLS regression ('ols').
     :param <bool> hedged_returns: append the hedged returns to the dataframe.
-
     :return <pd.Dataframe> hedge_df: dataframe with hedge ratios which are based on an
         estimation using prior data at the set re-estimation frequency.
-        Additionally,  the dataframe can include the hedged returns if the parameter
+        Additionally, the dataframe can include the hedged returns if the parameter
         "benchmark_return" has been set to True.
 
     N.B.: A hedge ratio is the estimated sensitivity of the main return with respect to
