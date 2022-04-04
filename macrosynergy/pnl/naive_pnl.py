@@ -7,12 +7,14 @@ from typing import List, Union, Tuple
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.panel.make_zn_scores import make_zn_scores
 
 
 class NaivePnL:
 
-    """Computes and collects illustrative PnLs with limited signal options and
-    disregarding transaction costs
+    """
+    Computes and collects illustrative PnLs with limited signal options and
+    disregarding transaction costs.
 
     :param <pd.Dataframe> df: standardized data frame with the following necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
@@ -48,9 +50,8 @@ class NaivePnL:
                  min_obs: int = 252, iis: bool = True,
                  neutral: str = 'zero', thresh: float = None):
 
-        # Todo: implement the four 'pass through arguments to make_zn_score()
-
-        """Calculate daily PnL and add to the main dataframe of the class instance
+        """
+        Calculate daily PnL and add to the main dataframe of the class instance.
 
         :param <str> sig: name of signal that is the basis for positioning. The signal
             is assumed to be recorded at the end of the day prior to position taking.
@@ -77,18 +78,14 @@ class NaivePnL:
             This for comparative visualization and not out-of-sample. Default is none.
         :param <int> min_obs: the minimum number of observations required to calculate
             zn_scores. Default is 252.
-            # Todo: implement in function
         :param <bool> iis: if True (default) zn-scores are also calculated for the initial
             sample period defined by min-obs, on an in-sample basis, to avoid losing history.
-            # Todo: implement in function
         :param <str> neutral: method to determine neutral level. Default is 'zero'.
             Alternatives are 'mean' and "median".
-            # Todo: implement in function
         :param <float> thresh: threshold value beyond which scores are winsorized,
-            i.e. contained at that threshold. Therefore, the threshold is the maximum absolute
-            score value that the function is allowed to produce. The minimum threshold is 1
-            standard deviation.
-            # Todo: implement in function
+            i.e. contained at that threshold. Therefore, the threshold is the maximum
+            absolute score value that the function is allowed to produce. The minimum
+            threshold is one standard deviation.
 
         """
 
@@ -97,20 +94,20 @@ class NaivePnL:
         assert rebal_freq in ['daily', 'weekly', 'monthly']
 
         dfx = self.df[self.df['xcat'].isin([self.ret, sig])]
-        dfw = dfx.pivot(index=['cid', 'real_date'], columns='xcat', values='value')
 
-        if sig_op == 'zn_score_pan':
-            # Todo: below is in-sample; use make_zn_score() for oos calculation
-            # Todo: pass through min_obs, iss, neutral, thresh
-            sda = dfw[sig].abs().mean()
-            dfw['psig'] = dfw[sig] / sda
-        elif sig_op == 'zn_score_cs':  # zn-score based on
-            # Todo: below is in-sample; use make_zn_score() for oos calculation
-            # Todo: pass through min_obs, iss, neutral, thresh
-            zn_score = lambda x: x / np.nanmean(np.abs(x))
-            dfw['psig'] = dfw[sig].groupby(level=0).apply(zn_score)
-        elif sig_op == 'binary':
+        if sig_op == 'binary':
+            dfw = dfx.pivot(index=['cid', 'real_date'], columns='xcat', values='value')
             dfw['psig'] = np.sign(dfw[sig])
+        else:
+            panw = 1 if sig_op == 'zn_score_pan' else 0
+            df_ms = make_zn_scores(dfx, xcat=sig, sequential=True,
+                                   neutral=neutral, pan_weight=panw,
+                                   min_obs=min_obs, iis=iis, thresh=thresh)
+            df_ms = df_ms.drop('xcat', axis=1)
+            df_ms['xcat'] = 'psig'
+            dfx_concat = pd.concat([dfx, df_ms])
+            dfw = dfx_concat.pivot(index=['cid', 'real_date'], columns='xcat',
+                                   values='value')
 
         # Signal for the following day explains the lag mechanism.
         dfw['psig'] = dfw['psig'].groupby(level=0).shift(1)  # lag explanatory 1 period
@@ -156,8 +153,9 @@ class NaivePnL:
     def plot_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
                   start: str = None, end: str = None, figsize: Tuple = (10, 6)):
 
-        """Plot line chart of cumulative PnLs, single PnL, multiple PnL types per
-        cross section,  or mutiple cross sections per PnL type.
+        """
+        Plot line chart of cumulative PnLs, single PnL, multiple PnL types per
+        cross section, or multiple cross sections per PnL type.
 
         :param <List[str]> pnl_cats: list of PnL categories that should be plotted.
         :param <List[str]> pnl_cids: list of cross sections to be plotted;
@@ -208,7 +206,8 @@ class NaivePnL:
     def evaluate_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
                       start: str = None, end: str = None):
 
-        """Small table of key PnL statistics
+        """
+        Small table of key PnL statistics.
 
         :param <List[str]> pnl_cats: list of PnL categories that should be plotted.
         :param <List[str]> pnl_cids: list of cross sections to be plotted; default is
@@ -251,12 +250,15 @@ class NaivePnL:
         return df
 
     def pnl_names(self):
-        """Print list of names of available PnLs in the class instance"""
+        """
+        Print list of names of available PnLs in the class instance.
+        """
 
         print(self.pnl_names)
 
     def pnl_df(self, pnl_names: List[str] = None,  cs: bool = False):
-        """Return data frame with PnLs
+        """
+        Return dataframe with PnLs.
 
         :param <List[str]> pnl_names: list of names of PnLs to be returned.
             Default is 'ALL'.
