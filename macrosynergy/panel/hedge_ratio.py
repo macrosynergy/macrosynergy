@@ -114,9 +114,12 @@ def dates_groups(dates_refreq: List[pd.Timestamp], benchmark_return: pd.Series):
     following dates until the next re-estimation period.
 
     :param <List[pd.Timestamp]> dates_refreq:
-    :param <pd.Series> benchmark_return:
+    :param <pd.Series> benchmark_return: the return series of the asset being used to
+        hedge against the main asset. Used to compute the hedge ratio multiplied by the
+        respective returns.
 
-    :return <dict>:
+    :return <dict>: the dictionary's keys will be pd.Timestamps and the value will be a
+        truncated pd.Series.
     """
     refreq_buckets = {}
 
@@ -139,7 +142,8 @@ def adjusted_returns(dates_refreq: List[pd.Timestamp], benchmark_return: pd.Seri
 
     :param <List[pd.Timestamps]> dates_refreq: list of dates the hedge ratio is
         recomputed for each contract being hedged.
-    :param <pd.Series> benchmark_return: return series of the hedging asset.
+    :param <pd.Series> benchmark_return: the return series of the asset being used to
+        hedge against the main asset.
     :param <pd.DataFrame> hedge_df: standardised dataframe with the hedge ratios.
     :param <pd.DataFrame> dfw: pivoted dataframe of the relevant returns.
 
@@ -148,6 +152,7 @@ def adjusted_returns(dates_refreq: List[pd.Timestamp], benchmark_return: pd.Seri
 
     refreq_buckets = dates_groups(dates_refreq=dates_refreq,
                                   benchmark_return=benchmark_return)
+    # Hedge ratios across the respective panel: cross-sections included on the category.
     hedge_pivot = hedge_df.pivot(index='real_date', columns='cid', values='value')
 
     storage_dict = {}
@@ -157,6 +162,7 @@ def adjusted_returns(dates_refreq: List[pd.Timestamp], benchmark_return: pd.Seri
         for k, v in refreq_buckets.items():
             try:
                 hedge_value = series_hedge.loc[k]
+            # Asset being hedged might not be available for that particular timestamp.
             except KeyError:
                 pass
             else:
