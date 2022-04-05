@@ -35,13 +35,13 @@ class TestAll(unittest.TestCase):
     def test_date_index(self, start_date: pd.Timestamp = None,
                         end_date: pd.Timestamp = None, refreq: str = 'm'):
         """
-        The hedging ratio is re-estimated according to the frequency parameter. Therefore,
-        break up the respective return series, which are defined daily, into the re-estimated
-        frequency paradigm. To achieve this ensure the dates produced fall on business days,
-        and will subsequently be present in the return-series dataframes (the daily series).
-        The method used, in the source code, to delimit the resampling frequency is
-        pd.resample(), and subsequently use this method to confirm the operation has been
-        applied correctly.
+        The hedging ratio is re-estimated according to the frequency parameter.
+        Therefore, break up the respective return series, which are defined daily, into
+        the re-estimated frequency paradigm. To achieve this ensure the dates produced
+        fall on business days, and will subsequently be present in the return-series
+        dataframes (the daily series). The method used, in the source code, to delimit
+        the resampling frequency is pd.resample(), and subsequently use this method to
+        confirm the operation has been applied correctly.
 
         :param <pd.Timestamp> start_date:
         :param <pd.Timestamp> end_date:
@@ -70,6 +70,70 @@ class TestAll(unittest.TestCase):
                 continue
 
         return d_copy
+
+    def test_adjusted_returns(self, dates_refreq: List[pd.Timestamp],
+                              hedge_df: pd.DataFrame, dfw: pd.DataFrame):
+
+        refreq_buckets = dates_groups(dates_refreq=dates_refreq,
+                                      benchmark_return=benchmark_return)
+        # Hedge ratios across the respective panel: cross-sections included on the
+        # category.
+        hedge_pivot = hedge_df.pivot(index='real_date', columns='cid',
+                                     values='value')
+
+        storage_dict = {}
+        for c in hedge_pivot:
+            series_hedge = hedge_pivot[c]
+            storage = []
+            for k, v in refreq_buckets.items():
+                try:
+                    hedge_value = series_hedge.loc[k]
+                # Asset being hedged might not be available for that timestamp.
+                except KeyError:
+                    pass
+                else:
+                    hedged_position = v * hedge_value
+                    storage.append(hedged_position)
+            storage_dict[c] = pd.concat(storage)
+
+        hedged_returns_df = pd.DataFrame.from_dict(storage_dict)
+        hedged_returns_df.index.name = "real_date"
+
+        output = dfw - hedged_returns_df
+        df_stack = output.stack().to_frame("value").reset_index()
+        df_stack.columns = ['real_date', 'cid', 'value']
+
+        return df_stack
+
+    def dates_groups(self, dates_refreq: List[pd.Timestamp],
+                     benchmark_return: pd.Series):
+        """
+        Method used to break up the hedging asset's return series into the re-estimation
+        periods. The method will return a dictionary where the key will be the re-estimation
+        timestamp and the corresponding value will be the following timestamps until the
+        next re-estimation date. It is the following returns that the hedge ratio is applied
+        to: the hedge ratio is calculated using the preceding dates but is applied to the
+        following dates until the next re-estimation period.
+
+        :param <List[pd.Timestamp]> dates_refreq:
+        :param <pd.Series> benchmark_return: the return series of the asset being used to
+            hedge against the main asset. Used to compute the hedge ratio multiplied by the
+            respective returns.
+
+        :return <dict>: the dictionary's keys will be pd.Timestamps and the value will be a
+            truncated pd.Series.
+        """
+        refreq_buckets = {}
+
+        no_reest_dates = len(dates_refreq)
+        for i, d in enumerate(dates_refreq):
+            if i < (no_reest_dates - 1):
+                intermediary_series = benchmark_return.truncate(before=d,
+                                                                after=dates_refreq[
+                                                                    (i + 1)])
+                refreq_buckets[d + pd.DateOffset(1)] = intermediary_series
+
+        return refreq_buckets
 
 
 if __name__ == '__main__':
