@@ -15,7 +15,7 @@ class TestAll(unittest.TestCase):
         self.__dict__['xcats'] = ['CRY', 'XR']
 
         df_cids = pd.DataFrame(index=self.cids, columns=['earliest', 'latest', 'mean_add',
-                                                    'sd_mult'])
+                                                         'sd_mult'])
         df_cids.loc['AUD', :] = ['2010-01-01', '2020-12-31', 0.5, 2]
         df_cids.loc['CAD', :] = ['2010-01-01', '2020-11-30', 0, 1]
         df_cids.loc['GBP', :] = ['2012-01-01', '2020-11-30', -0.2, 0.5]
@@ -47,8 +47,9 @@ class TestAll(unittest.TestCase):
         :param <pd.Timestamp> end_date:
         :param <str> refreq:
 
-        return <List[pd.Timestamp]>: List of timestamps where each date is a valid business
-            day, and the gap between each date is delimited by the frequency parameter.
+        return <List[pd.Timestamp]>: List of timestamps where each date is a valid
+            business day, and the gap between each date is delimited by the frequency
+            parameter.
         """
 
         start_date = "2000-01-01"
@@ -71,15 +72,18 @@ class TestAll(unittest.TestCase):
 
         return d_copy
 
-    def test_adjusted_returns(self, dates_refreq: List[pd.Timestamp],
-                              hedge_df: pd.DataFrame, dfw: pd.DataFrame):
+    def test_adjusted_returns(self, dates_refreq: List[pd.Timestamp] = [],
+                              hedge_df: pd.DataFrame = pd.DataFrame(),
+                              dfw: pd.DataFrame = pd.DataFrame(),
+                              benchmark_return: pd.Series = None):
 
-        refreq_buckets = dates_groups(dates_refreq=dates_refreq,
-                                      benchmark_return=benchmark_return)
+        refreq_buckets = self.dates_groups(dates_refreq=dates_refreq,
+                                           benchmark_return=benchmark_return)
         # Hedge ratios across the respective panel: cross-sections included on the
         # category.
-        hedge_pivot = hedge_df.pivot(index='real_date', columns='cid',
-                                     values='value')
+        # hedge_pivot = hedge_df.pivot(index='real_date', columns='cid',
+        #                              values='value')
+        hedge_pivot = pd.DataFrame()
 
         storage_dict = {}
         for c in hedge_pivot:
@@ -97,31 +101,26 @@ class TestAll(unittest.TestCase):
             storage_dict[c] = pd.concat(storage)
 
         hedged_returns_df = pd.DataFrame.from_dict(storage_dict)
-        hedged_returns_df.index.name = "real_date"
 
         output = dfw - hedged_returns_df
-        df_stack = output.stack().to_frame("value").reset_index()
-        df_stack.columns = ['real_date', 'cid', 'value']
-
-        return df_stack
 
     def dates_groups(self, dates_refreq: List[pd.Timestamp],
                      benchmark_return: pd.Series):
         """
         Method used to break up the hedging asset's return series into the re-estimation
-        periods. The method will return a dictionary where the key will be the re-estimation
-        timestamp and the corresponding value will be the following timestamps until the
-        next re-estimation date. It is the following returns that the hedge ratio is applied
-        to: the hedge ratio is calculated using the preceding dates but is applied to the
-        following dates until the next re-estimation period.
+        periods. The method will return a dictionary where the key will be the
+        re-estimation timestamp and the corresponding value will be the following
+        timestamps until the next re-estimation date. It is the following returns that
+        the hedge ratio is applied to: the hedge ratio is calculated using the preceding
+        dates but is applied to the following dates until the next re-estimation period.
 
         :param <List[pd.Timestamp]> dates_refreq:
         :param <pd.Series> benchmark_return: the return series of the asset being used to
-            hedge against the main asset. Used to compute the hedge ratio multiplied by the
-            respective returns.
+            hedge against the main asset. Used to compute the hedge ratio multiplied by
+            the respective returns.
 
-        :return <dict>: the dictionary's keys will be pd.Timestamps and the value will be a
-            truncated pd.Series.
+        :return <dict>: the dictionary's keys will be pd.Timestamps and the value will be
+            a truncated pd.Series.
         """
         refreq_buckets = {}
 
