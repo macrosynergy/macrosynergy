@@ -37,6 +37,27 @@ def date_alignment(unhedged_return: pd.Series, benchmark_return: pd.Series):
 
     return start_date, end_date
 
+def date_weekend(rdates: List[pd.Timestamp]):
+    """
+    Adjusts for weekends following the shift by a single day to adjust for when the hedge
+    ratio becomes active.
+
+    :param <List[pd.Timestamp]> rdates: the dates controlling the frequency of
+        re-estimation.
+
+    :return <List[pd.Timestamp]>: date-adjusted list of dates.
+    """
+
+    rdates_copy = []
+    for d in rdates:
+        if d.weekday() == 5:
+            rdates_copy.append(d + pd.DateOffset(2))
+        elif d.weekday() == 6:
+            rdates_copy.append(d + pd.DateOffset(1))
+        else:
+            rdates_copy.append(d)
+
+    return rdates_copy
 
 def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
                      rdates: List[pd.Timestamp], cross_section: str, meth: str = 'ols',
@@ -82,12 +103,16 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
 
     # The date series will be adjusted to each cross-section.
     date_series = unhedged_return.index
+    ur_df = unhedged_return.to_frame(name='returns')
+    ur_df = ur_df.reset_index()
+
     # Access the minimum date from the adjusted series.
     min_obs_date = date_series[min_obs]
 
     rdates_copy = list(rdates.copy())
     for d in rdates:
         if d > min_obs_date:
+            # Inclusive of the re-estimation date.
             X = unhedged_return.loc[:d]
             Y = benchmark_return.loc[:d]
             if meth == 'ols':
@@ -102,19 +127,20 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
         else:
             rdates_copy.remove(d)
 
-    no_dates = len(rdates_copy)
-    cid = np.repeat(cross_section, no_dates)
     dates_hedge = list(map(date_adjustment, rdates_copy))
-    # Todo: ratios must be aligned with date of estimation (last observation) not application
     dates_hedge = np.array(dates_hedge)
-    # Todo: [1] make time series df with ratios at date of estimation
-    # Todo: [2] merge with unhedged_returns time index
-    # Todo: [3] Shift one (working) day forward
-    # Todo: [4] forward-fill the hedge ratios
-    data = np.column_stack((cid, dates_hedge, np.array(hedging_ratio)))
 
+    data = np.column_stack((date_weekend(dates_hedge), np.array(hedging_ratio)))
+    df_hr = pd.DataFrame(data=data, columns=['real_date', 'value'])
 
-    return pd.DataFrame(data=data, columns=['cid', 'real_date', 'value'])
+    df_hr = ur_df.merge(df_hr, on='real_date', how='left')
+
+    df_hr = df_hr.drop('returns', axis=1)
+    df_hr = df_hr.fillna(method='ffill')
+
+    df_hr['cid'] = cross_section
+
+    return df_hr
 
 
 def dates_groups(dates_refreq: List[pd.Timestamp], benchmark_return: pd.Series):
@@ -176,7 +202,7 @@ def adjusted_returns(dates_refreq: List[pd.Timestamp], benchmark_return: pd.Seri
         for k, v in refreq_buckets.items():
             try:
                 hedge_value = series_hedge.loc[k]
-                # Asset being hedged might not be available for that timestamp.
+            # Asset being hedged might not be available for that timestamp.
             except KeyError:
                 pass
             else:
@@ -193,6 +219,41 @@ def adjusted_returns(dates_refreq: List[pd.Timestamp], benchmark_return: pd.Seri
 
     return df_stack
 
+def adjust_returns_alt(benchmark_return: pd.Series, hedge_df: pd.DataFrame,
+                       dfw: pd.DataFrame):
+    """
+    Method used to compute the hedge ratio returns on the hedging asset which will
+    subsequently be subtracted from the returns of the position contracts to calculate
+    the adjusted returns (adjusted for the hedged position). For instance, if using US
+    Equity to hedge Australia FX: AUD_FXXR_NSA_H = AUD_FXXR_NSA - HR_AUD * USD_EQXR_NSA.
+
+    :param <pd.Series> benchmark_return: the return series of the asset being used to
+        hedge against the main asset.
+    :param <pd.DataFrame> hedge_df: standardised dataframe with the hedge ratios.
+    :param <pd.DataFrame> dfw: pivoted dataframe of the relevant returns.
+
+    :return <pd.DataFrame> standardised dataframe of adjusted returns.
+    """
+
+    hedge_pivot = hedge_df.pivot(index='real_date', columns='cid', values='value')
+
+    no_cids = len(hedge_pivot.columns)
+
+    index = benchmark_return.index
+    benchmark_return = np.tile(benchmark_return.to_numpy(), (no_cids, 1))
+    benchmark_return = benchmark_return.transpose()
+    br_df = pd.DataFrame(data=benchmark_return, columns = hedge_pivot.columns,
+                         index=index)
+    print(br_df)
+
+    hedged_returns = hedge_pivot.multiply(br_df)
+    print(hedged_returns)
+    adj_rets = dfw - hedged_returns
+
+    df_stack = adj_rets.stack().to_frame("value").reset_index()
+    df_stack.columns = ['real_date', 'cid', 'value']
+
+    return df_stack
 
 def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                 benchmark_return: str = None, start: str = None, end: str = None,
@@ -290,6 +351,10 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     if refreq == 'w':
         sunday_adjustment = lambda d: d - pd.DateOffset(2)
         dates_re = list(map(sunday_adjustment, dates_re))
+        # If the minimum number of observation dates is set to zero, the hedge ratio will
+        # calculated using the first business day: axiomatically to compute a hedge ratio
+        # realised dates are required. Therefore, exclude the first date from the data
+        # structure.
         dates_re = dates_re[1:]
 
     aggregate = []
@@ -304,18 +369,14 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
     hedge_df['xcat'] = xcat
     if hedged_returns:
-        pass
-        # Todo: pivot hedge ratios dfw_hr
-        # Todo: multiply with benchmark returns
-        # Todo: subtract from unhedged returns to get hedged returns
-        # Todo To do: stack and append hedged returns
 
-        # hedged_return_df = adjusted_returns(dates_refreq=dates_re, benchmark_return=br,
-        #                                     hedge_df=hedge_df, dfw=dfw)
-        # hedged_return_df = hedged_return_df.sort_values(['cid', 'real_date'])
-        # hedged_return_df['xcat'] = xcat + "_" + "H"
-        # hedge_df = hedge_df.append(hedged_return_df)
-        # hedge_df = hedge_df.reset_index(drop=True)
+        hedged_return_df = adjust_returns_alt(hedge_df=hedge_df, dfw=dfw,
+                                              benchmark_return=br)
+
+        hedged_return_df = hedged_return_df.sort_values(['cid', 'real_date'])
+        hedged_return_df['xcat'] = xcat + "_" + "H"
+        hedge_df = hedge_df.append(hedged_return_df)
+        hedge_df = hedge_df.reset_index(drop=True)
 
     return hedge_df[cols]
 
