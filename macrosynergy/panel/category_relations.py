@@ -221,7 +221,9 @@ class CategoryRelations:
                     size: Tuple[float] = (12, 8),
                     xlab: str = None, ylab: str = None, coef_box: str = None,
                     fit_reg: bool = True,
-                    reg_ci: int = 95, reg_order: int = 1, reg_robust: bool = False):
+                    reg_ci: int = 95, reg_order: int = 1, reg_robust: bool = False,
+                    separator: Union[str, int] = None,
+                    title_adj: float = 1):
 
         """
         Display scatterplot and regression line.
@@ -242,39 +244,18 @@ class CategoryRelations:
         :param <str> coef_box: gives location of box of correlation coefficient and
             probability. If None (default), no box is shown. Options are standard,
             i.e. 'upper left', 'lower right' and so forth.
+            This does not work with a separator.
+        :param Union[str, int] separator: allows categorizing the scatter analysis by time
+            period or cross section. In the former case the argument is set to "cids" in
+            the case the argument is set to a year that divides the sample to before
+            (not including) that year and from (including) that year.
+        :param <float> title_adj: parameter that sets top of figure to accommodate title.
+            Default is 1.
         """
         
         sns.set_theme(style="whitegrid")
-        fig, ax = plt.subplots(figsize = size)
-        sns.regplot(data=self.df, x=self.xcats[0], y=self.xcats[1],
-                    ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
-                    scatter_kws={'s': 30, 'alpha': 0.5, 'color': 'lightgray'},
-                    line_kws={'lw': 1})
 
-        if coef_box is not None:
-            data_table = self.corr_probability(coef_box)
-            data_table.scale(0.4, 2.5)
-            data_table.set_fontsize(12)
-
-        if labels:
-            assert self.freq in ['A', 'Q', 'M'], \
-                'Labels only available for monthly or lower frequencies'
-            df_labs = self.df.dropna().index.to_frame(index=False)
-            if self.years is not None:
-                ser_labs = df_labs['cid'] + ' ' + df_labs['real_date']
-            elif self.freq == 'A':
-                ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year.\
-                    astype(str)
-            elif self.freq == 'Q':
-                ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year.\
-                    astype(str) + 'Q' + df_labs['real_date'].dt.quarter.astype(str)
-            elif self.freq == 'M':
-                ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year.\
-                    astype(str) + '-' + df_labs['real_date'].dt.month.astype(str)
-            for i in range(self.df.shape[0]):
-                plt.text(x=self.df[self.xcats[0]][i] + 0,
-                         y=self.df[self.xcats[1]][i] + 0, s=ser_labs[i],
-                         fontdict=dict(color='black', size=8))
+        dfx = self.df.copy()
 
         if title is None and (self.years is None):
             dates = self.df.index.get_level_values('real_date').to_series().\
@@ -284,11 +265,105 @@ class CategoryRelations:
         elif title is None:
             title = f'{self.xcats[0]} and {self.xcats[1]}'
 
-        ax.set_title(title, fontsize = 14)
-        if xlab is not None:
-            ax.set_xlabel(xlab)
-        if ylab is not None:
-            ax.set_ylabel(ylab)
+        if isinstance(separator, int):
+
+            fig, ax = plt.subplots(figsize=size)
+
+            index_years = dfx.index.get_level_values(1).year
+            years_in_df = list(index_years.unique())
+            assert separator in years_in_df, "separator year is not in range"
+            assert separator > np.min(years_in_df), \
+                "separator year must not be first in range"
+            label_set1 = f"before {separator}"
+            label_set2 = f"from {separator}"
+            dfx1 = dfx[index_years < separator]
+            dfx2 = dfx[index_years >= separator]
+
+            sns.regplot(data=dfx1, x=self.xcats[0], y=self.xcats[1],
+                        ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
+                        scatter_kws={'s': 30, 'alpha': 0.5},
+                        label=label_set2,
+                        line_kws={'lw': 1})
+            sns.regplot(data=dfx2, x=self.xcats[0], y=self.xcats[1],
+                        ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
+                        label=label_set2,
+                        scatter_kws={'s': 30, 'alpha': 0.5},
+                        line_kws={'lw': 1})
+            ax.legend()
+            ax.set_title(title, fontsize=14)
+            if xlab is not None:
+                ax.set_xlabel(xlab)
+            if ylab is not None:
+                ax.set_ylabel(ylab)
+
+            # Todo: add coefficient box for sub-samples
+
+        elif separator == "cids":
+
+            index_cids = dfx.index.get_level_values(0)
+            cids_in_df = list(index_cids.unique())
+            n_cids = len(cids_in_df)
+            assert n_cids > 1, "There must be more than one cid to use separator='cids'"
+            dfx['cid'] = index_cids
+            dict_coln = {2: 2, 5: 3, 8: 4, 30: 5}
+            keys_ar = np.array(list(dict_coln.keys()))
+            key = keys_ar[keys_ar <= n_cids][-1]
+            col_number = dict_coln[key]
+            fg = sns.FacetGrid(data=dfx, col='cid', col_wrap=col_number)
+            fg.map(sns.regplot, data=dfx, x=self.xcats[0], y=self.xcats[1],
+                   ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
+                   scatter_kws={'s': 15, 'alpha': 0.5, 'color': 'lightgray'},
+                   line_kws={'lw': 1})
+            fg.set_titles(col_template='{col_name}')
+            fg.fig.suptitle(title, y=title_adj, fontsize=14)
+            if xlab is not None:
+                fg.set_xlabels(xlab)
+            if ylab is not None:
+                fg.set_ylabels(ylab)
+
+            # Todo: add correlation coefficients to subsample plots
+
+        elif separator is None:
+            fig, ax = plt.subplots(figsize=size)
+
+            sns.regplot(data=dfx, x=self.xcats[0], y=self.xcats[1],
+                        ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
+                        scatter_kws={'s': 30, 'alpha': 0.5, 'color': 'lightgray'},
+                        line_kws={'lw': 1})
+
+            if coef_box is not None:
+                data_table = self.corr_probability(coef_box)
+                data_table.scale(0.4, 2.5)
+                data_table.set_fontsize(12)
+
+            if labels:
+                assert self.freq in ['A', 'Q', 'M'], \
+                    'Labels only available for monthly or lower frequencies'
+                df_labs = self.df.dropna().index.to_frame(index=False)
+                if self.years is not None:
+                    ser_labs = df_labs['cid'] + ' ' + df_labs['real_date']
+                elif self.freq == 'A':
+                    ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year. \
+                        astype(str)
+                elif self.freq == 'Q':
+                    ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year. \
+                        astype(str) + 'Q' + df_labs['real_date'].dt.quarter.astype(str)
+                elif self.freq == 'M':
+                    ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year. \
+                        astype(str) + '-' + df_labs['real_date'].dt.month.astype(str)
+                for i in range(self.df.shape[0]):
+                    plt.text(x=self.df[self.xcats[0]][i] + 0,
+                             y=self.df[self.xcats[1]][i] + 0, s=ser_labs[i],
+                             fontdict=dict(color='black', size=8))
+
+            ax.set_title(title, fontsize=14)
+            if xlab is not None:
+                ax.set_xlabel(xlab)
+            if ylab is not None:
+                ax.set_ylabel(ylab)
+
+        else:
+            ValueError("separator must be either a valid year (int) or 'cids' (str)")
             
         plt.show()
 
@@ -376,13 +451,19 @@ if __name__ == "__main__":
     filt2 = (dfd['xcat'] == 'INFL') & (dfd['cid'] == 'NZD')  # All NZD INFL locations.
     # Reduced dataframe.
     dfdx = dfd[~(filt1 | filt2)]
+    dfdx['ERA'] = "before 2010"
+    dfdx.loc[dfdx.real_date.dt.year > 2007, 'ERA'] = "from 2010"
 
     cidx = ['AUD', 'CAD', 'GBP', 'USD']
 
-    # cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'],
-                           # cids=cidx, xcat_aggs=['last', 'mean'],
-                           # start='2005-01-01', blacklist=black,
-                           # years=3)
+    cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'], freq='Q',
+                           cids=cidx, xcat_aggs=['last', 'mean'],
+                           start='2005-01-01', blacklist=black,
+                           years=None)
+    cr.reg_scatter(labels=False, coef_box='upper left', separator='cids',
+                   xlab="GDP growth", ylab="Inflation")
+    cr.reg_scatter(labels=False, coef_box='upper left', separator=2010)
+    # Todo: test a few permutations
 
     cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'], cids=cidx, freq='M',
                            xcat_aggs=['last', 'mean'], lag=1,
