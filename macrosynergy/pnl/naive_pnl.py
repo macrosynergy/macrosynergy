@@ -43,7 +43,7 @@ class NaivePnL:
         self.df, self.xcats, self.cids = reduce_df(df[cols], xcats, cids, start, end,
                                                    blacklist, out_all=True)
         self.df['real_date'] = pd.to_datetime(self.df['real_date'])
-        self.pnl_names = []  # list for PnL names
+        self.pnl_names = []
         self.black = blacklist
 
     def make_pnl(self, sig: str, sig_op: str = 'zn_score_pan',  pnl_name: str = None,
@@ -162,7 +162,8 @@ class NaivePnL:
         self.df = self.df.append(df_pnl[self.df.columns]).reset_index(drop=True)
 
     def plot_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
-                  start: str = None, end: str = None, figsize: Tuple = (10, 6)):
+                  start: str = None, end: str = None, figsize: Tuple = (10, 6),
+                  title: str = "Cumulative naive PnL", xcat_labels: List[str] = None):
 
         """
         Plot line chart of cumulative PnLs, single PnL, multiple PnL types per
@@ -179,12 +180,20 @@ class NaivePnL:
         :param <str> end: latest date in ISO format. Default is None and latest date
             in df is used.
         :param <Tuple> figsize: tuple of plot width and height. Default is (10,6).
+        :param <str> title: allows entering text for a custom chart header.
+        :param <List[str]> xcat_labels: custom labels to be used for the PnLs;
         """
 
         if pnl_cats is None:
             pnl_cats = self.pnl_names
 
         assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
+        error_message = "The number of custom labels must match the defined number of " \
+                        "categories in pnl_cats."
+        if xcat_labels is not None:
+            assert(len(xcat_labels) == len(pnl_cats)), error_message
+        else:
+            xcat_labels = pnl_cats
 
         dfx = reduce_df(self.df, pnl_cats, pnl_cids, start, end, self.black,
                         out_all=False)
@@ -196,6 +205,7 @@ class NaivePnL:
             dfx['cum_value'] = dfx.groupby('xcat').cumsum()
             ax = sns.lineplot(data=dfx, x='real_date', y='cum_value', hue='xcat',
                               estimator=None, lw=1)
+            plt.legend(loc='upper left', labels=xcat_labels)
             leg = ax.axes.get_legend()
             if len(pnl_cats) > 1:
                 leg.set_title('PnL categories for ' + pnl_cids[0])
@@ -208,7 +218,7 @@ class NaivePnL:
             leg = ax.axes.get_legend()
             leg.set_title('Cross sections')
 
-        plt.title('Cumulative naive PnL', fontsize=16)
+        plt.title(title, fontsize=16)
         plt.xlabel('')
         plt.ylabel('% of risk capital, no compounding')
         plt.axhline(y=0, color='black', linestyle='--', lw=1)
@@ -330,6 +340,9 @@ if __name__ == "__main__":
 
     # Plot PnLs
 
+    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN', 'PNL_CRY_DIG', 'PNL_GROWTH_IZN'],
+                  pnl_cids=['ALL'], start='2000-01-01', title="Custom Title.",
+                  xcat_labels=["xcat_1", "xcat_2", "xcat_3"])
     pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN', 'PNL_CRY_DIG', 'PNL_GROWTH_IZN'],
                   pnl_cids=['ALL'], start='2000-01-01')
     pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN'], pnl_cids=['CAD', 'NZD'],
