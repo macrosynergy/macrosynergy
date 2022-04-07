@@ -267,6 +267,9 @@ class CategoryRelations:
 
         if isinstance(separator, int):
 
+            assert self.years is None, \
+                "Separation by years does not work with year groups"
+
             fig, ax = plt.subplots(figsize=size)
 
             index_years = dfx.index.get_level_values(1).year
@@ -282,7 +285,7 @@ class CategoryRelations:
             sns.regplot(data=dfx1, x=self.xcats[0], y=self.xcats[1],
                         ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
                         scatter_kws={'s': 30, 'alpha': 0.5},
-                        label=label_set2,
+                        label=label_set1,
                         line_kws={'lw': 1})
             sns.regplot(data=dfx2, x=self.xcats[0], y=self.xcats[1],
                         ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
@@ -297,6 +300,7 @@ class CategoryRelations:
                 ax.set_ylabel(ylab)
 
             # Todo: add coefficient box for sub-samples
+            # Todo: in separate colors (if possible)
 
         elif separator == "cids":
 
@@ -321,7 +325,8 @@ class CategoryRelations:
             if ylab is not None:
                 fg.set_ylabels(ylab)
 
-            # Todo: add correlation coefficients to subsample plots
+            # Todo: add correlation coefficients (not full box) to subsample plots
+            #  (if possible)
 
         elif separator is None:
             fig, ax = plt.subplots(figsize=size)
@@ -456,14 +461,39 @@ if __name__ == "__main__":
 
     cidx = ['AUD', 'CAD', 'GBP', 'USD']
 
-    cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'], freq='Q',
-                           cids=cidx, xcat_aggs=['last', 'mean'],
+    cr = CategoryRelations(dfdx, xcats=['CRY', 'XR'], freq='Q', lag=1,
+                           cids=cidx, xcat_aggs=['mean', 'sum'],
                            start='2005-01-01', blacklist=black,
                            years=None)
+
+    cr.reg_scatter(labels=False, coef_box='upper left', separator=None,
+                   title="Carry and return",
+                   xlab="Carry", ylab="Return")
     cr.reg_scatter(labels=False, coef_box='upper left', separator='cids',
-                   xlab="GDP growth", ylab="Inflation")
-    cr.reg_scatter(labels=False, coef_box='upper left', separator=2010)
-    # Todo: test a few permutations
+                   title="Carry and return",
+                   xlab="Carry", ylab="Return")
+    cr.reg_scatter(labels=False, coef_box='upper left', separator=2010,
+                   title="Carry and return",
+                   xlab="Carry", ylab="Return")
+
+    cr = CategoryRelations(dfdx, xcats=['CRY', 'XR'], freq='M',
+                           cids=cidx, xcat_aggs=['last', 'mean'],
+                           start='2005-01-01', blacklist=black,
+                           years=3)
+
+    cr.reg_scatter(labels=True, coef_box='upper left', separator=None,
+                   title="Carry and return",
+                   xlab="Carry", ylab="Return")
+    cr.reg_scatter(labels=True, coef_box='upper left', separator='cids',
+                   title="Carry and return",
+                   xlab="Carry", ylab="Return")
+    cr.reg_scatter(labels=True, coef_box='upper left', separator=2010,
+                   title="Carry and return",
+                   xlab="Carry", ylab="Return")
+
+
+
+
 
     cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'], cids=cidx, freq='M',
                            xcat_aggs=['last', 'mean'], lag=1,
