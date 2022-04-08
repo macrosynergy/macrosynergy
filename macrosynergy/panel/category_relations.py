@@ -10,7 +10,7 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import categories_df
 
 
-class CategoryRelations:
+class CategoryRelations(object):
     """Class for analyzing and visualizing two categories across a panel
 
     :param <pd.Dataframe> df: standardized data frame with the necessary columns:
@@ -205,24 +205,33 @@ class CategoryRelations:
         df = df.dropna(axis=0, how='any')
         return df
 
-    def corr_probability(self, coef_box):
+    def corr_probability(self, df_probability, coef_box_loc: str = 'upper left'):
+        """
+        Method used to compute the correlation coefficient and probability statistics. A
+        box containing the figures will be emblazoned on the two-dimensional graphs.
 
-        x = self.df[self.xcats[0]].to_numpy()
-        y = self.df[self.xcats[1]].to_numpy()
+        :param <pd.DataFrame> df_probability: pandas DataFrame containing the dependent
+            and explanatory variables.
+        :param <str> coef_box_loc: location on the graph of the aforementioned box. The
+            default is in the upper left corner.
+
+        """
+
+        x = df_probability[self.xcats[0]].to_numpy()
+        y = df_probability[self.xcats[1]].to_numpy()
         coeff, pval = stats.pearsonr(x, y)
         cpl = [np.round(coeff, 3), np.round(1 - pval, 3)]
         fields = ["Correlation\n coefficient", "Probability\n of significance"]
         data_table = plt.table(cellText=[cpl], colLabels=fields,
-                               cellLoc='center', loc=coef_box)
+                               cellLoc='center', loc=coef_box_loc)
         
         return data_table
 
     def reg_scatter(self, title: str = None, labels: bool = False,
-                    size: Tuple[float] = (12, 8),
-                    xlab: str = None, ylab: str = None, coef_box: str = None,
-                    fit_reg: bool = True,
-                    reg_ci: int = 95, reg_order: int = 1, reg_robust: bool = False,
-                    separator: Union[str, int] = None,
+                    size: Tuple[float] = (12, 8), xlab: str = None, ylab: str = None,
+                    coef_box: bool = True, coef_box_loc: str = None,
+                    fit_reg: bool = True, reg_ci: int = 95, reg_order: int = 1,
+                    reg_robust: bool = False, separator: Union[str, int] = None,
                     title_adj: float = 1):
 
         """
@@ -241,10 +250,13 @@ class CategoryRelations:
         :param <int> reg_order: order of the regression equation. Default is 1 (linear).
         :param <bool> reg_robust: if this will de-weight outliers, which is
             computationally expensive. Default is False.
-        :param <str> coef_box: gives location of box of correlation coefficient and
-            probability. If None (default), no box is shown. Options are standard,
-            i.e. 'upper left', 'lower right' and so forth.
-            This does not work with a separator.
+        :param <bool> coef_box: binary variable delimiting whether the correlation
+            coefficient and probability statistics are included in the graphic. The
+            default value is True: coefficient box included.
+        :param <str> coef_box_loc: gives the location of the box of correlation
+            coefficient and probability. If None (default), the box is shown in the upper
+            left corner. The options are standard, i.e. 'upper left', 'lower right' and
+            so forth. This does not work with a separator.
         :param Union[str, int] separator: allows categorizing the scatter analysis by time
             period or cross section. In the former case the argument is set to "cids" in
             the case the argument is set to a year that divides the sample to before
@@ -267,8 +279,8 @@ class CategoryRelations:
 
         if isinstance(separator, int):
 
-            assert self.years is None, \
-                "Separation by years does not work with year groups"
+            year_error = "Separation by years does not work with year groups."
+            assert self.years is None, year_error
 
             fig, ax = plt.subplots(figsize=size)
 
@@ -292,6 +304,16 @@ class CategoryRelations:
                         label=label_set2,
                         scatter_kws={'s': 30, 'alpha': 0.5},
                         line_kws={'lw': 1})
+            if coef_box:
+                data_table = self.corr_probability(df_probability=dfx1)
+                data_table.scale(0.25, 2.0)
+                data_table.set_fontsize(9)
+
+                data_table = self.corr_probability(df_probability=dfx2,
+                                                   coef_box_loc="lower right")
+                data_table.scale(0.25, 2.0)
+                data_table.set_fontsize(9)
+
             ax.legend()
             ax.set_title(title, fontsize=14)
             if xlab is not None:
@@ -299,17 +321,15 @@ class CategoryRelations:
             if ylab is not None:
                 ax.set_ylabel(ylab)
 
-            # Todo: add coefficient box for sub-samples
-            # Todo: in separate colors (if possible)
-
         elif separator == "cids":
 
             index_cids = dfx.index.get_level_values(0)
             cids_in_df = list(index_cids.unique())
             n_cids = len(cids_in_df)
-            assert n_cids > 1, "There must be more than one cid to use separator='cids'"
+            assert n_cids > 1, "There must be more than one cid to use separator='cids'."
             dfx['cid'] = index_cids
             dict_coln = {2: 2, 5: 3, 8: 4, 30: 5}
+
             keys_ar = np.array(list(dict_coln.keys()))
             key = keys_ar[keys_ar <= n_cids][-1]
             col_number = dict_coln[key]
@@ -318,6 +338,7 @@ class CategoryRelations:
                    ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
                    scatter_kws={'s': 15, 'alpha': 0.5, 'color': 'lightgray'},
                    line_kws={'lw': 1})
+
             fg.set_titles(col_template='{col_name}')
             fg.fig.suptitle(title, y=title_adj, fontsize=14)
             if xlab is not None:
@@ -336,8 +357,9 @@ class CategoryRelations:
                         scatter_kws={'s': 30, 'alpha': 0.5, 'color': 'lightgray'},
                         line_kws={'lw': 1})
 
-            if coef_box is not None:
-                data_table = self.corr_probability(coef_box)
+            if coef_box:
+                data_table = self.corr_probability(df_probability=self.df,
+                                                   coef_box_loc=coef_box_loc)
                 data_table.scale(0.4, 2.5)
                 data_table.set_fontsize(12)
 
@@ -368,7 +390,7 @@ class CategoryRelations:
                 ax.set_ylabel(ylab)
 
         else:
-            ValueError("separator must be either a valid year (int) or 'cids' (str)")
+            ValueError("Separator must be either a valid year <int> or 'cids' <str>.")
             
         plt.show()
 
@@ -376,7 +398,7 @@ class CategoryRelations:
                   height: float = 6, xlab: str = None, ylab: str = None):
 
         """
-        Display jointplot of chosen type, based on seaborn.jointplot().
+        Display joint plot of chosen type, based on seaborn.jointplot().
         The plot will always be square.
 
         :param <str> kind: determines type of relational plot inside the joint plot.
@@ -466,13 +488,13 @@ if __name__ == "__main__":
                            start='2005-01-01', blacklist=black,
                            years=None)
 
-    cr.reg_scatter(labels=False, coef_box='upper left', separator=None,
+    cr.reg_scatter(labels=False, coef_box_loc='upper left', separator=None,
                    title="Carry and return",
                    xlab="Carry", ylab="Return")
-    cr.reg_scatter(labels=False, coef_box='upper left', separator='cids',
+    cr.reg_scatter(labels=False, coef_box_loc='upper left', separator='cids',
                    title="Carry and return",
                    xlab="Carry", ylab="Return")
-    cr.reg_scatter(labels=False, coef_box='upper left', separator=2010,
+    cr.reg_scatter(labels=False, coef_box_loc='upper left', separator=2010,
                    title="Carry and return",
                    xlab="Carry", ylab="Return")
 
@@ -481,32 +503,33 @@ if __name__ == "__main__":
                            start='2005-01-01', blacklist=black,
                            years=3)
 
-    cr.reg_scatter(labels=True, coef_box='upper left', separator=None,
+    cr.reg_scatter(labels=True, coef_box_loc='upper left', separator=None,
                    title="Carry and return",
                    xlab="Carry", ylab="Return")
-    cr.reg_scatter(labels=True, coef_box='upper left', separator='cids',
-                   title="Carry and return",
-                   xlab="Carry", ylab="Return")
-    cr.reg_scatter(labels=True, coef_box='upper left', separator=2010,
+    cr.reg_scatter(labels=True, coef_box_loc='upper left', separator='cids',
                    title="Carry and return",
                    xlab="Carry", ylab="Return")
 
-
-
-
+    cr = CategoryRelations(dfdx, xcats=['CRY', 'XR'], freq='M',
+                           cids=cidx, xcat_aggs=['last', 'mean'],
+                           start='2005-01-01', blacklist=black,
+                           years=None)
+    cr.reg_scatter(labels=True, coef_box_loc='upper left', separator=2010,
+                   title="Carry and Return.",
+                   xlab="Carry", ylab="Return")
 
     cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'], cids=cidx, freq='M',
                            xcat_aggs=['last', 'mean'], lag=1,
                            start='2000-01-01', years=None, blacklist=black,
                            xcat1_chg=None, xcat_trims=[2, 2])
 
-    cr.reg_scatter(labels=False, coef_box='upper left')
+    cr.reg_scatter(labels=False, coef_box_loc='upper left')
     cr.jointplot(kind='hist', xlab='growth', ylab='inflation', height=5)
 
     cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M',
                            xcat_aggs=['mean', 'mean'],
                            start='2000-01-01', years=3, blacklist=black)
 
-    cr.reg_scatter(labels=False, coef_box='lower right',
+    cr.reg_scatter(labels=False, coef_box_loc='lower right',
                    title='Growth and inflation', xlab='Growth', ylab='Inflation')
     cr.jointplot(kind='hist', xlab='growth', ylab='inflation', height=5)
