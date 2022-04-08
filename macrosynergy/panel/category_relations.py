@@ -205,7 +205,8 @@ class CategoryRelations(object):
         df = df.dropna(axis=0, how='any')
         return df
 
-    def corr_probability(self, df_probability, coef_box_loc: str = 'upper left'):
+    def corr_probability(self, df_probability, coef_box_loc: str = 'upper left',
+                         prob_bool: bool = True):
         """
         Method used to compute the correlation coefficient and probability statistics. A
         box containing the figures will be emblazoned on the two-dimensional graphs.
@@ -214,18 +215,41 @@ class CategoryRelations(object):
             and explanatory variables.
         :param <str> coef_box_loc: location on the graph of the aforementioned box. The
             default is in the upper left corner.
+        :param <bool> prob_bool: boolean parameter which determines whether the
+            probability value is included in the table. The default is True.
 
         """
 
         x = df_probability[self.xcats[0]].to_numpy()
         y = df_probability[self.xcats[1]].to_numpy()
         coeff, pval = stats.pearsonr(x, y)
-        cpl = [np.round(coeff, 3), np.round(1 - pval, 3)]
-        fields = ["Correlation\n coefficient", "Probability\n of significance"]
+        if prob_bool:
+            cpl = [np.round(coeff, 3), np.round(1 - pval, 3)]
+            fields = ["Correlation\n coefficient", "Probability\n of significance"]
+        else:
+            cpl = [np.round(coeff, 3)]
+            fields = ["Correlation\n coefficient"]
+
         data_table = plt.table(cellText=[cpl], colLabels=fields,
                                cellLoc='center', loc=coef_box_loc)
         
         return data_table
+
+    def annotate_facet(self, data, **kws):
+        """
+        Method used to annotate each graph within the facet grid. The annotation will
+        exclusively include the correlation coefficient for each individual cross-section
+        defined across the explanatory and dependent variable.
+        """
+
+        x = data[self.xcats[0]].to_numpy()
+        y = data[self.xcats[1]].to_numpy()
+        coeff, pval = stats.pearsonr(x, y)
+
+        cpl = np.round(coeff, 3)
+        fields = "Correlation Coefficient: "
+        ax = plt.gca()
+        ax.text(.04, .1, f"{fields} {cpl}", fontsize=10, transform=ax.transAxes)
 
     def reg_scatter(self, title: str = None, labels: bool = False,
                     size: Tuple[float] = (12, 8), xlab: str = None, ylab: str = None,
@@ -339,15 +363,15 @@ class CategoryRelations(object):
                    scatter_kws={'s': 15, 'alpha': 0.5, 'color': 'lightgray'},
                    line_kws={'lw': 1})
 
+            if coef_box:
+                fg.map_dataframe(self.annotate_facet)
+
             fg.set_titles(col_template='{col_name}')
             fg.fig.suptitle(title, y=title_adj, fontsize=14)
             if xlab is not None:
                 fg.set_xlabels(xlab)
             if ylab is not None:
                 fg.set_ylabels(ylab)
-
-            # Todo: add correlation coefficients (not full box) to subsample plots
-            #  (if possible)
 
         elif separator is None:
             fig, ax = plt.subplots(figsize=size)
