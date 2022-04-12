@@ -205,7 +205,8 @@ class CategoryRelations(object):
         df = df.dropna(axis=0, how='any')
         return df
 
-    def corr_probability(self, df_probability, coef_box_loc: str = 'upper left',
+    def corr_probability(self, df_probability, time_period: str = '',
+                         coef_box_loc: str = 'upper left',
                          prob_bool: bool = True):
         """
         Method used to compute the correlation coefficient and probability statistics. A
@@ -213,19 +214,26 @@ class CategoryRelations(object):
 
         :param <pd.DataFrame> df_probability: pandas DataFrame containing the dependent
             and explanatory variables.
+        :param <str> time_period: indicator used to clarify which time-period the
+            statistics are computed for. For example, before 2010 and after 2010: the two
+            periods experience very different macroeconomic conditions. The default is
+            an empty string.
         :param <str> coef_box_loc: location on the graph of the aforementioned box. The
             default is in the upper left corner.
         :param <bool> prob_bool: boolean parameter which determines whether the
             probability value is included in the table. The default is True.
 
         """
+        time_period_error = f"<str> expected - received {type(time_period)}."
+        assert isinstance(time_period, str), time_period_error
 
         x = df_probability[self.xcats[0]].to_numpy()
         y = df_probability[self.xcats[1]].to_numpy()
         coeff, pval = stats.pearsonr(x, y)
         if prob_bool:
             cpl = [np.round(coeff, 3), np.round(1 - pval, 3)]
-            fields = ["Correlation\n coefficient", "Probability\n of significance"]
+            fields = [f"Correlation\n coefficient {time_period}",
+                      f"Probability\n of significance {time_period}"]
         else:
             cpl = [np.round(coeff, 3)]
             fields = ["Correlation\n coefficient"]
@@ -329,14 +337,16 @@ class CategoryRelations(object):
                         scatter_kws={'s': 30, 'alpha': 0.5},
                         line_kws={'lw': 1})
             if coef_box:
-                data_table = self.corr_probability(df_probability=dfx1)
-                data_table.scale(0.25, 2.0)
-                data_table.set_fontsize(9)
+                data_table = self.corr_probability(df_probability=dfx1,
+                                                   time_period="before 2010.")
+                data_table.scale(0.35, 2.0)
+                data_table.set_fontsize(14)
 
                 data_table = self.corr_probability(df_probability=dfx2,
-                                                   coef_box_loc="lower right")
-                data_table.scale(0.25, 2.0)
-                data_table.set_fontsize(9)
+                                                   coef_box_loc="lower right",
+                                                   time_period="after 2010.")
+                data_table.scale(0.35, 2.0)
+                data_table.set_fontsize(14)
 
             ax.legend()
             ax.set_title(title, fontsize=14)
