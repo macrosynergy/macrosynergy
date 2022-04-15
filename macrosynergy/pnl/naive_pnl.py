@@ -39,10 +39,11 @@ class NaivePnL:
         self.sigs = sigs
         xcats = [ret] + sigs
         cols = ['cid', 'xcat', 'real_date', 'value']
+        self.cids = cids
         self.df, self.xcats, self.cids = reduce_df(df[cols], xcats, cids, start, end,
                                                    blacklist, out_all=True)
         self.df['real_date'] = pd.to_datetime(self.df['real_date'])
-        self.pnl_names = []  # list for PnL names
+        self.pnl_names = []
         self.black = blacklist
 
     def make_pnl(self, sig: str, sig_op: str = 'zn_score_pan',  pnl_name: str = None,
@@ -151,7 +152,8 @@ class NaivePnL:
         self.df = self.df.append(df_pnl[self.df.columns]).reset_index(drop=True)
 
     def plot_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
-                  start: str = None, end: str = None, figsize: Tuple = (10, 6)):
+                  start: str = None, end: str = None, figsize: Tuple = (10, 6),
+                  title: str = "Cumulative naive PnL", xcat_labels: List[str] = None):
 
         """
         Plot line chart of cumulative PnLs, single PnL, multiple PnL types per
@@ -168,12 +170,20 @@ class NaivePnL:
         :param <str> end: latest date in ISO format. Default is None and latest date
             in df is used.
         :param <Tuple> figsize: tuple of plot width and height. Default is (10,6).
+        :param <str> title: allows entering text for a custom chart header.
+        :param <List[str]> xcat_labels: custom labels to be used for the PnLs;
         """
 
         if pnl_cats is None:
             pnl_cats = self.pnl_names
 
         assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
+        error_message = "The number of custom labels must match the defined number of " \
+                        "categories in pnl_cats."
+        if xcat_labels is not None:
+            assert(len(xcat_labels) == len(pnl_cats)), error_message
+        else:
+            xcat_labels = pnl_cats
 
         dfx = reduce_df(self.df, pnl_cats, pnl_cids, start, end, self.black,
                         out_all=False)
@@ -183,8 +193,10 @@ class NaivePnL:
 
         if len(pnl_cids) == 1:
             dfx['cum_value'] = dfx.groupby('xcat').cumsum()
-            ax = sns.lineplot(data=dfx, x='real_date', y='cum_value', hue='xcat',
+            ax = sns.lineplot(data=dfx, x='real_date', y='cum_value',
+                              hue='xcat', hue_order=pnl_cats,
                               estimator=None, lw=1)
+            plt.legend(loc='upper left', labels=xcat_labels)
             leg = ax.axes.get_legend()
             if len(pnl_cats) > 1:
                 leg.set_title('PnL categories for ' + pnl_cids[0])
@@ -197,7 +209,7 @@ class NaivePnL:
             leg = ax.axes.get_legend()
             leg.set_title('Cross sections')
 
-        plt.title('Cumulative naive PnL', fontsize=16)
+        plt.title(title, fontsize=16)
         plt.xlabel('')
         plt.ylabel('% of risk capital, no compounding')
         plt.axhline(y=0, color='black', linestyle='--', lw=1)
@@ -301,11 +313,26 @@ if __name__ == "__main__":
     pnl = NaivePnL(dfd, ret='XR', sigs=['CRY', 'GROWTH', 'INFL'],
                    cids=cids, start='2000-01-01', blacklist=black)
 
-    # Make PnLs
+    # Make and plot PnLs to check correct labelling
 
     pnl.make_pnl('CRY', sig_op='zn_score_pan', rebal_freq='monthly',
+                 vol_scale=5, rebal_slip=1,
+                 pnl_name='PNL_CRY_PZN05', min_obs=250, thresh=2)
+    pnl.make_pnl('CRY', sig_op='zn_score_pan', rebal_freq='monthly',
                  vol_scale=10, rebal_slip=1,
-                 pnl_name='PNL_CRY_PZN')
+                 pnl_name='PNL_CRY_PZN10', min_obs=250, thresh=2)
+    pnl.make_pnl('CRY', sig_op='zn_score_pan', rebal_freq='monthly',
+                 vol_scale=20, rebal_slip=1,
+                 pnl_name='PNL_CRY_PZN20', min_obs=250, thresh=2)
+
+    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN20', 'PNL_CRY_PZN05', 'PNL_CRY_PZN10'],
+                  pnl_cids=['ALL'], start='2000-01-01', title="Custom Title")
+    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN10', 'PNL_CRY_PZN20', 'PNL_CRY_PZN05'],
+                  pnl_cids=['ALL'], start='2000-01-01', title="Custom Title",
+                  xcat_labels=["cry10", "cry20", "cry5"])
+
+    # Make and plot PnLs for other checks
+
     pnl.make_pnl('CRY', sig_op='binary', rebal_freq='monthly',
                  rebal_slip=1, vol_scale=10,
                  pnl_name='PNL_CRY_DIG')
@@ -313,7 +340,9 @@ if __name__ == "__main__":
                  rebal_slip=1, vol_scale=10,
                  pnl_name='PNL_GROWTH_IZN')
 
-    # Plot PnLs
+    pnl.make_pnl('CRY', sig_op='zn_score_pan', rebal_freq='monthly',
+                 vol_scale=10, rebal_slip=1,
+                 pnl_name='PNL_CRY_PZN', min_obs=250, thresh=1.5)
 
     pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN', 'PNL_CRY_DIG', 'PNL_GROWTH_IZN'],
                   pnl_cids=['ALL'], start='2000-01-01')
