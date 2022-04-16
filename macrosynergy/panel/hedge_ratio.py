@@ -100,6 +100,7 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
     unhedged_return = unhedged_return.truncate(before=s_date, after=e_date)
     benchmark_return = benchmark_return.truncate(before=s_date, after=e_date)
     date_adjustment = lambda computed_date: computed_date + pd.DateOffset(1)
+    # Todo: seems incorrect function for lag, as it adds calendar day not trading day
 
     # The date series will be adjusted to each cross-section.
     date_series = unhedged_return.index
@@ -115,22 +116,25 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
             # Inclusive of the re-estimation date.
             X = unhedged_return.loc[:d]
             Y = benchmark_return.loc[:d]
-            if meth == 'ols':
+            if meth == 'ols':  # condition currently redundant but will become relevant
                 X = sm.add_constant(X)
-
                 mod = sm.OLS(Y, X)
                 results = mod.fit()
-            # Isolate the Beta coefficient to use as the hedging component.
-            else:
-                pass
             hedging_ratio.append(results.params[1])
+            # Todo: append slows execution. Pre-allocate spaces in hedge_ratio and fill
         else:
             rdates_copy.remove(d)
+            # Todo: slows execution. Use pre-allocation as suggested above
 
     dates_hedge = list(map(date_adjustment, rdates_copy))
     dates_hedge = np.array(dates_hedge)
-
     data = np.column_stack((date_weekend(dates_hedge), np.array(hedging_ratio)))
+    # Todo: replace custom functions above by safer and shorter pandas solution
+    # Todo: this means
+    #  [1] fill pre-allocated df with estimates on days of estimation (as per above)
+    #  [2] upsample to original businness day frame with asfreq() and 'ffill'
+    #  [3] then use .shift(1)
+
     df_hr = pd.DataFrame(data=data, columns=['real_date', 'value'])
 
     df_hr = ur_df.merge(df_hr, on='real_date', how='left')
@@ -186,37 +190,39 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     
     :param <pd.Dataframe> df: standardized data frame with the necessary columns:
         'cid', 'xcats', 'real_date' and 'value.
-    :param <str> xcat:  extended category denoting the returns of the positions that are
-        to be hedged. Thus, the positions of a panel use a single hedge.
-    :param <List[str]> cids: cross sections of the returns for which hedge ratios are
-        to be calculated. Default is all available for the category.
-    :param <str> benchmark_return: ticker of return of the hedge asset or basket. This is
-        a single series, such as U.S. equity index returns ("USD_EQXR_NSA").
+    :param <str> xcat:  return category based on the type of positions that are
+        to be hedged. Each position of the category's panel uses the same hedge.
+    :param <List[str]> cids: cross-sections of the returns for which hedge ratios are
+        to be calculated. Default is all that are available in the dataframe.
+    :param <str> benchmark_return: ticker of return of the hedge asset or basket.
+        This is a single series, e.g. U.S. equity index returns ("USD_EQXR_NSA").
     :param <str> start: earliest date in ISO format. Default is None: earliest date in
         df is used.
     :param <str> end: latest date in ISO format. Default is None: latest date in df is
         used.
     :param <dict> blacklist: cross-sections with date ranges that should be excluded from
-        the sample of data used for estimating hedge ratios.  The estimated ratios
+        the sample of data used for estimating hedge ratios. The estimated ratios
         during blacklist periods will be set equal to the last valid estimate.
     :param <bool> oos: if True (default) hedge ratios are calculated out-of-sample,
-        i.e. for the period subsequent to the estimation period at the given
+        i.e. for the period following the estimation period at the given
         re-estimation frequency.
-    :param <str> refreq: re-estimation frequency at which hedge ratios are periodically
-        re-estimated. The re-estimation is conducted at the end of the period and
+    :param <str> refreq: re-estimation frequency. This is period after which hedge ratios
+        are re-estimated. The re-estimation is conducted at the end of the period and
         used as hedge ratio for all days of the following period. Re-estimation can have
-        weekly, monthly, and quarterly frequency with the notation 'w', 'm', and 'q'
+        weekly, monthly, and quarterly frequency with the notations 'w', 'm', and 'q'
         respectively. The default frequency is monthly.
     :param <int> min_obs: the minimum number of observations required in order to
         estimate a hedge ratio. The default value is 24 days.
+        The permissible minimum is 10.
     :param <str> meth: method used to estimate hedge ratio. At present the only method is
         OLS regression ('ols').
     :param <bool> hedged_returns: If True the function appends the hedged returns to the
         dataframe of hedge ratios. Default is False.
-    :return <pd.Dataframe> hedge_df: dataframe with hedge ratios which are based on an
-        estimation using prior data at the set re-estimation frequency.
+
+    :return <pd.Dataframe>: dataframe with hedge ratio estimates that update at the
+        chosen re-estimation frequency.
         Additionally, the dataframe can include the hedged returns if the parameter
-        "benchmark_return" has been set to True.
+        `benchmark_return` has been set to True.
 
     N.B.: A hedge ratio is the estimated sensitivity of the main return with respect to
     the asset used for hedging. The ratio is recorded for the period after the estimation
@@ -224,8 +230,10 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     
     """
 
+    # Assertions
+
     cols = ['cid', 'xcat', 'real_date', 'value']
-    assert list(df.columns) == cols, f"Expects a standardised dataframe with columns: " \
+    assert list(df.columns) == cols, f"Requires the columns: " \
                                      f"{cols}."
 
     all_tix = np.unique(df['cid'] + '_' + df['xcat'])
@@ -246,6 +254,8 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                    f"{refreq_options}."
     assert refreq in refreq_options, error_refreq
 
+    # Information on hedge return and potential panel adjustment
+
     post_fix = benchmark_return.split('_')
     xcat_hedge = '_'.join(post_fix[1:])
     cid_hedge = post_fix[0]
@@ -254,29 +264,37 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         warnings.warn(f"Return to be hedged for cross section {cid_hedge} is the hedge "
                       f"return and has been removed from the panel.")
 
+    # Wide time series dataframe of unhedged and benchmark returns
+
+    ## Time series dataframe of unhedged returns
+
     dfp = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end,
                     blacklist=blacklist)
-    dfw = dfp.pivot(index='real_date', columns='cid', values='value')
-    dfw = dfw.dropna(axis=0, how="all")
+    dfp_w = dfp.pivot(index='real_date', columns='cid', values='value')
+    dfp_w = dfp_w.dropna(axis=0, how="all")
+
+    ## Time series dataframe of benchmark return for relevant dates
 
     dfh = reduce_df(df, xcats=[xcat_hedge], cids=cid_hedge,
-                    start=dfw.index[0], end=dfw.index[-1], blacklist=blacklist)
-    hedge = dfh.pivot(index='real_date', columns='cid', values='value')
-    hedge.columns = ['hedge']
-    dfw = pd.merge(dfw, hedge, how='inner', on='real_date')
+                    start=dfp_w.index[0], end=dfp_w.index[-1])
+    dfh_w = dfh.pivot(index='real_date', columns='cid', values='value')
+    dfh_w.columns = ['hedge']
+
+    ## Merge time series and calculate rebalancing dates
+
+    dfw = pd.merge(dfp_w, dfh_w, how='inner', on='real_date')
     br = dfw['hedge']
 
     rf = {'w': 'W', 'm': 'BM', 'q': 'BQ'}[refreq]
     dates_re = dfw.asfreq(rf).index
 
-    if refreq == 'w':
+    if refreq == 'w':  # for weekly frequency use Fridays instead of default Sundays
         sunday_adjustment = lambda d: d - pd.DateOffset(2)
         dates_re = list(map(sunday_adjustment, dates_re))
-        # If the minimum number of observation dates is set to zero, the hedge ratio will
-        # calculated using the first business day: axiomatically to compute a hedge ratio
-        # realised dates are required. Therefore, exclude the first date from the data
-        # structure.
         dates_re = dates_re[1:]
+        # Todo: replace above line by assertion that min_obs >= 10
+
+    # Cross-section-wise hedge ratio estimation
 
     aggregate = []
     for c in cids:
@@ -290,15 +308,15 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
     hedge_df['xcat'] = xcat
     if hedged_returns:
-
         hedged_return_df = adjusted_returns(hedge_df=hedge_df, dfw=dfw,
                                             benchmark_return=br)
-
         hedged_return_df = hedged_return_df.sort_values(['cid', 'real_date'])
         hedged_return_df['xcat'] = xcat + "_" + "H"
         hedge_df = hedge_df.append(hedged_return_df)
         hedge_df = hedge_df.reset_index(drop=True)
 
+    # Todo: the hedge ratios must have different xcat from returns,
+    #  for example appending HR
     return hedge_df[cols]
 
 
