@@ -255,7 +255,7 @@ class CategoryRelations(object):
         coeff, pval = stats.pearsonr(x, y)
 
         cpl = np.round(coeff, 3)
-        fields = "Correlation Coefficient: "
+        fields = "Correlation coefficient: "
         ax = plt.gca()
         ax.text(.04, .1, f"{fields} {cpl}", fontsize=10, transform=ax.transAxes)
 
@@ -337,6 +337,9 @@ class CategoryRelations(object):
                         scatter_kws={'s': 30, 'alpha': 0.5},
                         line_kws={'lw': 1})
             if coef_box:
+                # Todo: create single box with with two rows and simply assign the color
+                #  of the periods to the color of font or background of the numbers,
+                #  with first (oldest) period being in first row.
                 data_table = self.corr_probability(df_probability=dfx1,
                                                    time_period="before 2010.")
                 data_table.scale(0.35, 2.0)
@@ -372,7 +375,9 @@ class CategoryRelations(object):
                    ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
                    scatter_kws={'s': 15, 'alpha': 0.5, 'color': 'lightgray'},
                    line_kws={'lw': 1})
-
+            # Todo: ERROR: this creates the same regplot for all cross sections
+            # Todo: I believe we need a wide dataframe for this. See JPMaQS with
+            #  Seaborn Jupyter notebook, the facet grid section.
             if coef_box:
                 fg.map_dataframe(self.annotate_facet)
 
