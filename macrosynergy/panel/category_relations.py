@@ -370,14 +370,20 @@ class CategoryRelations(object):
             keys_ar = np.array(list(dict_coln.keys()))
             key = keys_ar[keys_ar <= n_cids][-1]
             col_number = dict_coln[key]
-            fg = sns.FacetGrid(data=dfx, col='cid', col_wrap=col_number)
-            fg.map(sns.regplot, data=dfx, x=self.xcats[0], y=self.xcats[1],
-                   ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
+
+            # Convert the dataframe to a standardised dataframe. Three columns: two
+            # categories (dependent & explanatory variable) and the respective
+            # cross-sections. The index will be the date timestamp.
+            dfx_copy = dfx.copy()
+            dfx_copy = dfx_copy.droplevel(0, axis="index")
+            dfx_copy = dfx_copy.reset_index(level=0)
+
+            fg = sns.FacetGrid(data=dfx_copy, col='cid', col_wrap=col_number)
+            fg.map(sns.regplot, self.xcats[0], self.xcats[1], ci=reg_ci, order=reg_order,
+                   robust=reg_robust, fit_reg=fit_reg,
                    scatter_kws={'s': 15, 'alpha': 0.5, 'color': 'lightgray'},
                    line_kws={'lw': 1})
-            # Todo: ERROR: this creates the same regplot for all cross sections
-            # Todo: I believe we need a wide dataframe for this. See JPMaQS with
-            #  Seaborn Jupyter notebook, the facet grid section.
+
             if coef_box:
                 fg.map_dataframe(self.annotate_facet)
 
@@ -528,13 +534,13 @@ if __name__ == "__main__":
                            years=None)
 
     cr.reg_scatter(labels=False, coef_box_loc='upper left', separator=None,
-                   title="Carry and return",
+                   title="Carry and Return",
                    xlab="Carry", ylab="Return")
     cr.reg_scatter(labels=False, coef_box_loc='upper left', separator='cids',
-                   title="Carry and return",
+                   title="Carry and Return",
                    xlab="Carry", ylab="Return")
     cr.reg_scatter(labels=False, coef_box_loc='upper left', separator=2010,
-                   title="Carry and return",
+                   title="Carry and Return",
                    xlab="Carry", ylab="Return")
 
     cr = CategoryRelations(dfdx, xcats=['CRY', 'XR'], freq='M',
@@ -543,10 +549,10 @@ if __name__ == "__main__":
                            years=3)
 
     cr.reg_scatter(labels=True, coef_box_loc='upper left', separator=None,
-                   title="Carry and return",
+                   title="Carry and Return",
                    xlab="Carry", ylab="Return")
     cr.reg_scatter(labels=True, coef_box_loc='upper left', separator='cids',
-                   title="Carry and return",
+                   title="Carry and Return",
                    xlab="Carry", ylab="Return")
 
     cr = CategoryRelations(dfdx, xcats=['CRY', 'XR'], freq='M',
