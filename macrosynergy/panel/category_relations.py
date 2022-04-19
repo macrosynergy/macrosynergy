@@ -266,8 +266,15 @@ class CategoryRelations(object):
         else:
             fields = ["Correlation\n coefficient"]
 
-        data_table = plt.table(cellText=cpl, colLabels=fields,
-                               cellLoc='center', loc=coef_box_loc)
+        if isinstance(df_probability, list) and len(df_probability) == 2:
+            row_headers = ["Before 2010", "After 2010"]
+            rowC = ["lightsteelblue", "lightsalmon"]
+        else:
+            row_headers = None
+            rowC = None
+
+        data_table = plt.table(cellText=cpl, rowLabels=row_headers, rowColours=rowC,
+                               colLabels=fields, cellLoc='center', loc=coef_box_loc)
         
         return data_table
 
@@ -365,9 +372,6 @@ class CategoryRelations(object):
                         scatter_kws={'s': 30, 'alpha': 0.5},
                         line_kws={'lw': 1})
             if coef_box:
-                # Todo: create single box with with two rows and simply assign the color
-                #  of the periods to the color of font or background of the numbers,
-                #  with first (oldest) period being in first row.
                 data_table = self.corr_probability(df_probability=[dfx1, dfx2],
                                                    time_period="")
                 data_table.scale(0.4, 2.5)
