@@ -205,15 +205,47 @@ class CategoryRelations(object):
         df = df.dropna(axis=0, how='any')
         return df
 
+    def corr_prob_calc(self, df_probability: Union[pd.DataFrame, List[pd.DataFrame]],
+                       prob_bool: bool = True):
+        """
+        Method used to compute the correlation coefficient and probability statistics.
+        The method is able to handle multiple dataframes, and will return the
+        corresponding number of statistics held inside a List.
+
+        :param <List[pd.DataFrame] or pd.DataFrame> df_probability: pandas DataFrame
+            containing the dependent and explanatory variables.
+        :param <bool> prob_bool: boolean parameter which determines whether the
+            probability value is included in the table. The default is True.
+
+        :return <List[tuple(float, float)]>:
+        """
+        if isinstance(df_probability, pd.DataFrame):
+            df_probability = [df_probability]
+
+        cpl = []
+        for i, df_i in enumerate(df_probability):
+            x = df_i[self.xcats[0]].to_numpy()
+            y = df_i[self.xcats[1]].to_numpy()
+            coeff, pval = stats.pearsonr(x, y)
+            if prob_bool:
+                row = [np.round(coeff, 3), np.round(1 - pval, 3)]
+            else:
+                row = [np.round(coeff, 3)]
+
+            cpl.append(row)
+        return cpl
+
     def corr_probability(self, df_probability, time_period: str = '',
                          coef_box_loc: str = 'upper left',
                          prob_bool: bool = True):
         """
-        Method used to compute the correlation coefficient and probability statistics. A
-        box containing the figures will be emblazoned on the two-dimensional graphs.
+        Method used to add the computed correlation coefficient and probability
+        statistics to a Matplotlib table. The table containing the figures will be
+        emblazoned on the two-dimensional graphs.
 
-        :param <pd.DataFrame> df_probability: pandas DataFrame containing the dependent
-            and explanatory variables.
+        :param <List[pd.DataFrame] or pd.DataFrame> df_probability: pandas DataFrame
+            containing the dependent and explanatory variables. Able to handle multiple
+            dataframes representing different time-periods of the original series.
         :param <str> time_period: indicator used to clarify which time-period the
             statistics are computed for. For example, before 2010 and after 2010: the two
             periods experience very different macroeconomic conditions. The default is
@@ -227,18 +259,14 @@ class CategoryRelations(object):
         time_period_error = f"<str> expected - received {type(time_period)}."
         assert isinstance(time_period, str), time_period_error
 
-        x = df_probability[self.xcats[0]].to_numpy()
-        y = df_probability[self.xcats[1]].to_numpy()
-        coeff, pval = stats.pearsonr(x, y)
+        cpl = self.corr_prob_calc(df_probability=df_probability, prob_bool=prob_bool)
         if prob_bool:
-            cpl = [np.round(coeff, 3), np.round(1 - pval, 3)]
             fields = [f"Correlation\n coefficient {time_period}",
                       f"Probability\n of significance {time_period}"]
         else:
-            cpl = [np.round(coeff, 3)]
             fields = ["Correlation\n coefficient"]
 
-        data_table = plt.table(cellText=[cpl], colLabels=fields,
+        data_table = plt.table(cellText=cpl, colLabels=fields,
                                cellLoc='center', loc=coef_box_loc)
         
         return data_table
@@ -340,15 +368,9 @@ class CategoryRelations(object):
                 # Todo: create single box with with two rows and simply assign the color
                 #  of the periods to the color of font or background of the numbers,
                 #  with first (oldest) period being in first row.
-                data_table = self.corr_probability(df_probability=dfx1,
-                                                   time_period="before 2010.")
-                data_table.scale(0.35, 2.0)
-                data_table.set_fontsize(14)
-
-                data_table = self.corr_probability(df_probability=dfx2,
-                                                   coef_box_loc="lower right",
-                                                   time_period="after 2010.")
-                data_table.scale(0.35, 2.0)
+                data_table = self.corr_probability(df_probability=[dfx1, dfx2],
+                                                   time_period="")
+                data_table.scale(0.4, 2.5)
                 data_table.set_fontsize(14)
 
             ax.legend()
