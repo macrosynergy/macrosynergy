@@ -134,6 +134,8 @@ class TestAll(unittest.TestCase):
 
         return refreq_buckets
 
+    # Todo: add test of correct hedge ratio by comparing one or more ratio with a
+    #  regression result generated outside the functions.
 
 if __name__ == '__main__':
 
