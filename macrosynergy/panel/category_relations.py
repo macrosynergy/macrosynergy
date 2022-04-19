@@ -268,12 +268,13 @@ class CategoryRelations(object):
 
         if isinstance(df_probability, list) and len(df_probability) == 2:
             row_headers = ["Before 2010", "After 2010"]
-            rowC = ["lightsteelblue", "lightsalmon"]
+            cellC = [["lightsteelblue", "lightsteelblue"],
+                     ["lightsalmon", "lightsalmon"]]
         else:
             row_headers = None
-            rowC = None
+            cellC = None
 
-        data_table = plt.table(cellText=cpl, rowLabels=row_headers, rowColours=rowC,
+        data_table = plt.table(cellText=cpl, cellColours=cellC,
                                colLabels=fields, cellLoc='center', loc=coef_box_loc)
         
         return data_table
