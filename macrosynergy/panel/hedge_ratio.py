@@ -107,7 +107,8 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
     ur_df = unhedged_return.to_frame(name='returns')
     ur_df = ur_df.reset_index()
 
-    # Access the minimum date from the adjusted series.
+    # Access the minimum date from the adjusted series: having aligned the unhedged asset
+    # and the benchmark return. Both series will be defined over the same timestamps.
     min_obs_date = date_series[min_obs]
 
     rdates_copy = list(rdates.copy())
@@ -254,6 +255,10 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                    f"{refreq_options}."
     assert refreq in refreq_options, error_refreq
 
+    min_obs_error = "The number of minimum observations required to compute a hedge " \
+                    "ratio is 10 business days, or two weeks."
+    assert min_obs >= 10, min_obs_error
+
     # Information on hedge return and potential panel adjustment
 
     post_fix = benchmark_return.split('_')
@@ -266,21 +271,21 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
     # Wide time series dataframe of unhedged and benchmark returns
 
-    ## Time series dataframe of unhedged returns
+    # Time series dataframe of unhedged returns.
 
     dfp = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end,
                     blacklist=blacklist)
     dfp_w = dfp.pivot(index='real_date', columns='cid', values='value')
     dfp_w = dfp_w.dropna(axis=0, how="all")
 
-    ## Time series dataframe of benchmark return for relevant dates
+    # Time series dataframe of benchmark return for relevant dates.
 
     dfh = reduce_df(df, xcats=[xcat_hedge], cids=cid_hedge,
                     start=dfp_w.index[0], end=dfp_w.index[-1])
     dfh_w = dfh.pivot(index='real_date', columns='cid', values='value')
     dfh_w.columns = ['hedge']
 
-    ## Merge time series and calculate rebalancing dates
+    # Merge time series and calculate rebalancing dates.
 
     dfw = pd.merge(dfp_w, dfh_w, how='inner', on='real_date')
     br = dfw['hedge']
@@ -291,10 +296,8 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     if refreq == 'w':  # for weekly frequency use Fridays instead of default Sundays
         sunday_adjustment = lambda d: d - pd.DateOffset(2)
         dates_re = list(map(sunday_adjustment, dates_re))
-        dates_re = dates_re[1:]
-        # Todo: replace above line by assertion that min_obs >= 10
 
-    # Cross-section-wise hedge ratio estimation
+    # Cross-section-wise hedge ratio estimation.
 
     aggregate = []
     for c in cids:
@@ -306,17 +309,15 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
     hedge_df = pd.concat(aggregate).reset_index(drop=True)
 
-    hedge_df['xcat'] = xcat
+    hedge_df['xcat'] = xcat + "_H_Ratio"
     if hedged_returns:
         hedged_return_df = adjusted_returns(hedge_df=hedge_df, dfw=dfw,
                                             benchmark_return=br)
         hedged_return_df = hedged_return_df.sort_values(['cid', 'real_date'])
-        hedged_return_df['xcat'] = xcat + "_" + "H"
+        hedged_return_df['xcat'] = xcat + "_" + "H_Return"
         hedge_df = hedge_df.append(hedged_return_df)
         hedge_df = hedge_df.reset_index(drop=True)
 
-    # Todo: the hedge ratios must have different xcat from returns,
-    #  for example appending HR
     return hedge_df[cols]
 
 
@@ -331,7 +332,7 @@ def hedge_ratio_display(df_hedge: pd.DataFrame, subplots: bool = False):
 
     """
 
-    condition = lambda c: c.split('_')[-1] != 'H'
+    condition = lambda c: c.split('_')[-1] != 'Return'
     # Isolate the hedge ratios. The adjusted returns will have the postfix "H" attached
     # to the category name.
     apply = list(map(condition, df_hedge['xcat']))
