@@ -134,7 +134,7 @@ class TestAll(unittest.TestCase):
 
         return refreq_buckets
 
-    def test_date_weekend(self, rdates: List[pd.Timestamp]):
+    def test_date_weekend(self, rdates: List[pd.Timestamp] = []):
         """
         Adjusts for weekends following the shift by a single day to adjust for when the
         hedge ratio becomes active.
