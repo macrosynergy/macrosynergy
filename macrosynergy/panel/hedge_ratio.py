@@ -111,7 +111,13 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
     # and the benchmark return. Both series will be defined over the same timestamps.
     min_obs_date = date_series[min_obs]
 
+    # Storage dataframe.
     rdates_copy = list(rdates.copy())
+    data_column = np.empty(len(rdates))
+    data_column[:] = np.nan
+    hedge_ratio_df = pd.DataFrame(data=data_column, index=rdates,
+                                  columns=['value'])
+
     for d in rdates:
         if d > min_obs_date:
             # Inclusive of the re-estimation date.
@@ -122,10 +128,15 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
                 mod = sm.OLS(Y, X)
                 results = mod.fit()
             hedging_ratio.append(results.params[1])
+            hedge_ratio_df.loc[d] = results.params[1]
             # Todo: append slows execution. Pre-allocate spaces in hedge_ratio and fill
         else:
             rdates_copy.remove(d)
             # Todo: slows execution. Use pre-allocation as suggested above
+
+    hedge_ratio_df = hedge_ratio_df.dropna(axis=0, how='all')
+    hedge_ratio_df.index.name = 'real_date'
+    hedge_ratio_df = hedge_ratio_df.reset_index(level=0)
 
     dates_hedge = list(map(date_adjustment, rdates_copy))
     dates_hedge = np.array(dates_hedge)
@@ -133,15 +144,20 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
     # Todo: replace custom functions above by safer and shorter pandas solution
     # Todo: this means
     #  [1] fill pre-allocated df with estimates on days of estimation (as per above)
-    #  [2] upsample to original businness day frame with asfreq() and 'ffill'
+    #  [2] upsample to original business day frame with asfreq() and 'ffill'
     #  [3] then use .shift(1)
 
     df_hr = pd.DataFrame(data=data, columns=['real_date', 'value'])
 
-    df_hr = ur_df.merge(df_hr, on='real_date', how='left')
+    df_hr = ur_df.merge(hedge_ratio_df, on='real_date', how='left')
 
     df_hr = df_hr.drop('returns', axis=1)
     df_hr = df_hr.fillna(method='ffill')
+
+    df_hr = df_hr.set_index('real_date', drop=True)
+    df_hr = df_hr.shift(1)
+
+    df_hr = df_hr.reset_index(level=0)
 
     df_hr['cid'] = cross_section
 
