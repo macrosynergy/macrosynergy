@@ -37,28 +37,6 @@ def date_alignment(unhedged_return: pd.Series, benchmark_return: pd.Series):
 
     return start_date, end_date
 
-def date_weekend(rdates: List[pd.Timestamp]):
-    """
-    Adjusts for weekends following the shift by a single day to adjust for when the hedge
-    ratio becomes active.
-
-    :param <List[pd.Timestamp]> rdates: the dates controlling the frequency of
-        re-estimation.
-
-    :return <List[pd.Timestamp]>: date-adjusted list of dates.
-    """
-
-    rdates_copy = []
-    for d in rdates:
-        if d.weekday() == 5:
-            rdates_copy.append(d + pd.DateOffset(2))
-        elif d.weekday() == 6:
-            rdates_copy.append(d + pd.DateOffset(1))
-        else:
-            rdates_copy.append(d)
-
-    return rdates_copy
-
 def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
                      rdates: List[pd.Timestamp], cross_section: str, meth: str = 'ols',
                      min_obs: int = 24):
@@ -86,8 +64,6 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
         cross-section.
     """
 
-    hedging_ratio = []
-
     br = benchmark_return
     un_r = unhedged_return
 
@@ -99,8 +75,6 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
 
     unhedged_return = unhedged_return.truncate(before=s_date, after=e_date)
     benchmark_return = benchmark_return.truncate(before=s_date, after=e_date)
-    date_adjustment = lambda computed_date: computed_date + pd.DateOffset(1)
-    # Todo: seems incorrect function for lag, as it adds calendar day not trading day
 
     # The date series will be adjusted to each cross-section.
     date_series = unhedged_return.index
@@ -112,7 +86,6 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
     min_obs_date = date_series[min_obs]
 
     # Storage dataframe.
-    rdates_copy = list(rdates.copy())
     data_column = np.empty(len(rdates))
     data_column[:] = np.nan
     hedge_ratio_df = pd.DataFrame(data=data_column, index=rdates,
@@ -127,27 +100,12 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
                 X = sm.add_constant(X)
                 mod = sm.OLS(Y, X)
                 results = mod.fit()
-            hedging_ratio.append(results.params[1])
+
             hedge_ratio_df.loc[d] = results.params[1]
-            # Todo: append slows execution. Pre-allocate spaces in hedge_ratio and fill
-        else:
-            rdates_copy.remove(d)
-            # Todo: slows execution. Use pre-allocation as suggested above
 
     hedge_ratio_df = hedge_ratio_df.dropna(axis=0, how='all')
     hedge_ratio_df.index.name = 'real_date'
     hedge_ratio_df = hedge_ratio_df.reset_index(level=0)
-
-    dates_hedge = list(map(date_adjustment, rdates_copy))
-    dates_hedge = np.array(dates_hedge)
-    data = np.column_stack((date_weekend(dates_hedge), np.array(hedging_ratio)))
-    # Todo: replace custom functions above by safer and shorter pandas solution
-    # Todo: this means
-    #  [1] fill pre-allocated df with estimates on days of estimation (as per above)
-    #  [2] upsample to original business day frame with asfreq() and 'ffill'
-    #  [3] then use .shift(1)
-
-    df_hr = pd.DataFrame(data=data, columns=['real_date', 'value'])
 
     df_hr = ur_df.merge(hedge_ratio_df, on='real_date', how='left')
 
@@ -157,6 +115,7 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
     df_hr = df_hr.set_index('real_date', drop=True)
     df_hr = df_hr.shift(1)
 
+    # Re-establish the 'real_date' column.
     df_hr = df_hr.reset_index(level=0)
 
     df_hr['cid'] = cross_section
