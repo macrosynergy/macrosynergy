@@ -385,7 +385,7 @@ class CategoryRelations(object):
                 data_table.scale(0.4, 2.5)
                 data_table.set_fontsize(14)
 
-            ax.legend()
+            ax.legend(loc='upper right')
             ax.set_title(title, fontsize=14)
             if xlab is not None:
                 ax.set_xlabel(xlab)
