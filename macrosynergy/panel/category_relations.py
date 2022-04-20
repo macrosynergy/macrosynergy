@@ -205,27 +205,95 @@ class CategoryRelations(object):
         df = df.dropna(axis=0, how='any')
         return df
 
-    def corr_probability(self, df_probability, coef_box_loc: str = 'upper left'):
+    def corr_prob_calc(self, df_probability: Union[pd.DataFrame, List[pd.DataFrame]],
+                       prob_bool: bool = True):
         """
-        Method used to compute the correlation coefficient and probability statistics. A
-        box containing the figures will be emblazoned on the two-dimensional graphs.
+        Method used to compute the correlation coefficient and probability statistics.
+        The method is able to handle multiple dataframes, and will return the
+        corresponding number of statistics held inside a List.
 
-        :param <pd.DataFrame> df_probability: pandas DataFrame containing the dependent
-            and explanatory variables.
+        :param <List[pd.DataFrame] or pd.DataFrame> df_probability: pandas DataFrame
+            containing the dependent and explanatory variables.
+        :param <bool> prob_bool: boolean parameter which determines whether the
+            probability value is included in the table. The default is True.
+
+        :return <List[tuple(float, float)]>:
+        """
+        if isinstance(df_probability, pd.DataFrame):
+            df_probability = [df_probability]
+
+        cpl = []
+        for i, df_i in enumerate(df_probability):
+            x = df_i[self.xcats[0]].to_numpy()
+            y = df_i[self.xcats[1]].to_numpy()
+            coeff, pval = stats.pearsonr(x, y)
+            if prob_bool:
+                row = [np.round(coeff, 3), np.round(1 - pval, 3)]
+            else:
+                row = [np.round(coeff, 3)]
+
+            cpl.append(row)
+        return cpl
+
+    def corr_probability(self, df_probability, time_period: str = '',
+                         coef_box_loc: str = 'upper left',
+                         prob_bool: bool = True):
+        """
+        Method used to add the computed correlation coefficient and probability
+        statistics to a Matplotlib table. The table containing the figures will be
+        emblazoned on the two-dimensional graphs.
+
+        :param <List[pd.DataFrame] or pd.DataFrame> df_probability: pandas DataFrame
+            containing the dependent and explanatory variables. Able to handle multiple
+            dataframes representing different time-periods of the original series.
+        :param <str> time_period: indicator used to clarify which time-period the
+            statistics are computed for. For example, before 2010 and after 2010: the two
+            periods experience very different macroeconomic conditions. The default is
+            an empty string.
         :param <str> coef_box_loc: location on the graph of the aforementioned box. The
             default is in the upper left corner.
+        :param <bool> prob_bool: boolean parameter which determines whether the
+            probability value is included in the table. The default is True.
 
         """
+        time_period_error = f"<str> expected - received {type(time_period)}."
+        assert isinstance(time_period, str), time_period_error
 
-        x = df_probability[self.xcats[0]].to_numpy()
-        y = df_probability[self.xcats[1]].to_numpy()
-        coeff, pval = stats.pearsonr(x, y)
-        cpl = [np.round(coeff, 3), np.round(1 - pval, 3)]
-        fields = ["Correlation\n coefficient", "Probability\n of significance"]
-        data_table = plt.table(cellText=[cpl], colLabels=fields,
-                               cellLoc='center', loc=coef_box_loc)
+        cpl = self.corr_prob_calc(df_probability=df_probability, prob_bool=prob_bool)
+        if prob_bool:
+            fields = [f"Correlation\n coefficient {time_period}",
+                      f"Probability\n of significance {time_period}"]
+        else:
+            fields = ["Correlation\n coefficient"]
+
+        if isinstance(df_probability, list) and len(df_probability) == 2:
+            row_headers = ["Before 2010", "After 2010"]
+            cellC = [["lightsteelblue", "lightsteelblue"],
+                     ["lightsalmon", "lightsalmon"]]
+        else:
+            row_headers = None
+            cellC = None
+
+        data_table = plt.table(cellText=cpl, cellColours=cellC,
+                               colLabels=fields, cellLoc='center', loc=coef_box_loc)
         
         return data_table
+
+    def annotate_facet(self, data, **kws):
+        """
+        Method used to annotate each graph within the facet grid. The annotation will
+        exclusively include the correlation coefficient for each individual cross-section
+        defined across the explanatory and dependent variable.
+        """
+
+        x = data[self.xcats[0]].to_numpy()
+        y = data[self.xcats[1]].to_numpy()
+        coeff, pval = stats.pearsonr(x, y)
+
+        cpl = np.round(coeff, 3)
+        fields = "Correlation coefficient: "
+        ax = plt.gca()
+        ax.text(.04, .1, f"{fields} {cpl}", fontsize=10, transform=ax.transAxes)
 
     def reg_scatter(self, title: str = None, labels: bool = False,
                     size: Tuple[float] = (12, 8), xlab: str = None, ylab: str = None,
@@ -305,14 +373,10 @@ class CategoryRelations(object):
                         scatter_kws={'s': 30, 'alpha': 0.5},
                         line_kws={'lw': 1})
             if coef_box:
-                data_table = self.corr_probability(df_probability=dfx1)
-                data_table.scale(0.25, 2.0)
-                data_table.set_fontsize(9)
-
-                data_table = self.corr_probability(df_probability=dfx2,
-                                                   coef_box_loc="lower right")
-                data_table.scale(0.25, 2.0)
-                data_table.set_fontsize(9)
+                data_table = self.corr_probability(df_probability=[dfx1, dfx2],
+                                                   time_period="")
+                data_table.scale(0.4, 2.5)
+                data_table.set_fontsize(14)
 
             ax.legend()
             ax.set_title(title, fontsize=14)
@@ -333,11 +397,22 @@ class CategoryRelations(object):
             keys_ar = np.array(list(dict_coln.keys()))
             key = keys_ar[keys_ar <= n_cids][-1]
             col_number = dict_coln[key]
-            fg = sns.FacetGrid(data=dfx, col='cid', col_wrap=col_number)
-            fg.map(sns.regplot, data=dfx, x=self.xcats[0], y=self.xcats[1],
-                   ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
+
+            # Convert the dataframe to a standardised dataframe. Three columns: two
+            # categories (dependent & explanatory variable) and the respective
+            # cross-sections. The index will be the date timestamp.
+            dfx_copy = dfx.copy()
+            dfx_copy = dfx_copy.droplevel(0, axis="index")
+            dfx_copy = dfx_copy.reset_index(level=0)
+
+            fg = sns.FacetGrid(data=dfx_copy, col='cid', col_wrap=col_number)
+            fg.map(sns.regplot, self.xcats[0], self.xcats[1], ci=reg_ci, order=reg_order,
+                   robust=reg_robust, fit_reg=fit_reg,
                    scatter_kws={'s': 15, 'alpha': 0.5, 'color': 'lightgray'},
                    line_kws={'lw': 1})
+
+            if coef_box:
+                fg.map_dataframe(self.annotate_facet)
 
             fg.set_titles(col_template='{col_name}')
             fg.fig.suptitle(title, y=title_adj, fontsize=14)
@@ -345,9 +420,6 @@ class CategoryRelations(object):
                 fg.set_xlabels(xlab)
             if ylab is not None:
                 fg.set_ylabels(ylab)
-
-            # Todo: add correlation coefficients (not full box) to subsample plots
-            #  (if possible)
 
         elif separator is None:
             fig, ax = plt.subplots(figsize=size)
@@ -489,13 +561,13 @@ if __name__ == "__main__":
                            years=None)
 
     cr.reg_scatter(labels=False, coef_box_loc='upper left', separator=None,
-                   title="Carry and return",
+                   title="Carry and Return",
                    xlab="Carry", ylab="Return")
     cr.reg_scatter(labels=False, coef_box_loc='upper left', separator='cids',
-                   title="Carry and return",
+                   title="Carry and Return",
                    xlab="Carry", ylab="Return")
     cr.reg_scatter(labels=False, coef_box_loc='upper left', separator=2010,
-                   title="Carry and return",
+                   title="Carry and Return",
                    xlab="Carry", ylab="Return")
 
     cr = CategoryRelations(dfdx, xcats=['CRY', 'XR'], freq='M',
@@ -504,10 +576,10 @@ if __name__ == "__main__":
                            years=3)
 
     cr.reg_scatter(labels=True, coef_box_loc='upper left', separator=None,
-                   title="Carry and return",
+                   title="Carry and Return",
                    xlab="Carry", ylab="Return")
     cr.reg_scatter(labels=True, coef_box_loc='upper left', separator='cids',
-                   title="Carry and return",
+                   title="Carry and Return",
                    xlab="Carry", ylab="Return")
 
     cr = CategoryRelations(dfdx, xcats=['CRY', 'XR'], freq='M',
