@@ -300,7 +300,7 @@ class CategoryRelations(object):
                     coef_box_incl: bool = True, coef_box: str = None,
                     fit_reg: bool = True, reg_ci: int = 95, reg_order: int = 1,
                     reg_robust: bool = False, separator: Union[str, int] = None,
-                    title_adj: float = 1):
+                    title_adj: float = 1, single_chart: bool = False):
 
         """
         Display scatterplot and regression line.
@@ -331,6 +331,10 @@ class CategoryRelations(object):
             (not including) that year and from (including) that year.
         :param <float> title_adj: parameter that sets top of figure to accommodate title.
             Default is 1.
+        :param <bool> single_chart: boolean parameter determining whether the x- and y-
+            labels are only written on a single graph of the Facet Grid (useful if there
+            are numerous charts, and the labels are excessively long). The default is
+            False.
         """
 
         coef_box_error = "Expects a Boolean Object indicating whether to include the " \
@@ -394,6 +398,8 @@ class CategoryRelations(object):
 
         elif separator == "cids":
 
+            assert isinstance(single_chart, bool)
+
             index_cids = dfx.index.get_level_values(0)
             cids_in_df = list(index_cids.unique())
             n_cids = len(cids_in_df)
@@ -423,10 +429,30 @@ class CategoryRelations(object):
 
             fg.set_titles(col_template='{col_name}')
             fg.fig.suptitle(title, y=title_adj, fontsize=14)
-            if xlab is not None:
-                fg.set_xlabels(xlab)
-            if ylab is not None:
-                fg.set_ylabels(ylab)
+
+            if not single_chart:
+                if xlab is not None:
+                    fg.set_xlabels(xlab, clear_inner=True)
+                if ylab is not None:
+                    fg.set_ylabels(ylab)
+            else:
+                error = "Label expected for the respective axis."
+                assert xlab is not None, error
+                assert ylab is not None, error
+                number_of_graphs = len(fg.axes)
+                no_columns = fg._ncol
+                remainder = int(number_of_graphs % no_columns)
+
+                for i in range(number_of_graphs):
+                    fg.axes[i].set_xlabel('')
+                    fg.axes[i].set_ylabel('')
+
+                    if remainder == 0:
+                        fg.axes[no_columns].set_xlabel(xlab)
+                        fg.axes[no_columns].set_ylabel(xlab)
+                    else:
+                        fg.axes[-remainder].set_xlabel(xlab)
+                        fg.axes[-remainder].set_ylabel(xlab)
 
         elif separator is None:
             fig, ax = plt.subplots(figsize=size)
@@ -538,6 +564,7 @@ if __name__ == "__main__":
                            columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
     df_cids.loc['AUD'] = ['2000-01-01', '2020-12-31', 0.1, 1]
     df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
+    df_cids.loc['BRL'] = ['2001-01-01', '2020-11-30', -0.1, 2]
     df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
     df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
     df_cids.loc['USD'] = ['2003-01-01', '2020-12-31', -0.1, 2]
@@ -572,7 +599,8 @@ if __name__ == "__main__":
                    xlab="Carry", ylab="Return")
     cr.reg_scatter(labels=False, coef_box='upper left', separator='cids',
                    title="Carry and Return",
-                   xlab="Carry", ylab="Return")
+                   xlab="Real-time estimated technical growth trend, 3-month MA",
+                   ylab="Return")
     cr.reg_scatter(labels=False, coef_box='upper left', separator=2010,
                    title="Carry and Return",
                    xlab="Carry", ylab="Return")
