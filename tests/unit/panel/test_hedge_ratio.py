@@ -134,8 +134,31 @@ class TestAll(unittest.TestCase):
 
         return refreq_buckets
 
+    def test_date_weekend(self, rdates: List[pd.Timestamp]):
+        """
+        Adjusts for weekends following the shift by a single day to adjust for when the
+        hedge ratio becomes active.
+
+        :param <List[pd.Timestamp]> rdates: the dates controlling the frequency of
+            re-estimation.
+
+        :return <List[pd.Timestamp]>: date-adjusted list of dates.
+        """
+
+        rdates_copy = []
+        for d in rdates:
+            if d.weekday() == 5:
+                rdates_copy.append(d + pd.DateOffset(2))
+            elif d.weekday() == 6:
+                rdates_copy.append(d + pd.DateOffset(1))
+            else:
+                rdates_copy.append(d)
+
+        return rdates_copy
+
     # Todo: add test of correct hedge ratio by comparing one or more ratio with a
     #  regression result generated outside the functions.
+
 
 if __name__ == '__main__':
 
