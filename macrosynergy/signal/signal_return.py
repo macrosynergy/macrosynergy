@@ -63,7 +63,8 @@ class SignalReturnRelations:
             df['year'] = np.array(df.reset_index(level=1)['real_date'].dt.year)
             css = [str(i) for i in df['year'].unique()]
 
-        statms = ['accuracy', 'bal_accuracy', 'pos_recall', 'neg_recall',
+        statms = ['accuracy', 'bal_accuracy',  'pos_sigr', "pos_retr",
+                  'pos_recall', 'neg_recall',
                   'pearson', 'pearson_pval', 'kendall', 'kendall_pval']
         df_out = pd.DataFrame(index=['Panel', 'Mean', 'PosRatio'] + css, columns=statms)
 
@@ -83,6 +84,8 @@ class SignalReturnRelations:
             ret = df_sgs[self.ret]
             df_out.loc[cs, 'accuracy'] = skm.accuracy_score(sig, ret)
             df_out.loc[cs, 'bal_accuracy'] = skm.balanced_accuracy_score(sig, ret)
+            df_out.loc[cs, 'pos_sigr'] = np.mean(sig==1)
+            df_out.loc[cs, "pos_retr"] = np.mean(ret==1)
             df_out.loc[cs, 'pos_recall'] = skm.recall_score(sig, ret, pos_label=1)
             df_out.loc[cs, 'neg_recall'] = skm.recall_score(sig, ret, pos_label=-1)
 
@@ -94,11 +97,11 @@ class SignalReturnRelations:
 
         df_out.loc['Mean', :] = df_out.loc[css, :].mean()
 
-        above50s = statms[0:4]
+        above50s = statms[0:6]
         df_out.loc['PosRatio', above50s] = (df_out.loc[css, above50s] > 0.5).mean()
-        above0s = [statms[i] for i in [4, 6]]
+        above0s = [statms[i] for i in [6, 8]]
         df_out.loc['PosRatio', above0s] = (df_out.loc[css, above0s] > 0).mean()
-        below50s = [statms[i] for i in [5, 7]]
+        below50s = [statms[i] for i in [7, 9]]
         pos_pvals = np.mean(np.array(df_out.loc[css, below50s] < 0.5)
                             * np.array(df_out.loc[css, above0s] > 0), axis=0)
         df_out.loc['PosRatio', below50s] = pos_pvals  # pos corrs with error prob < 50%
@@ -206,6 +209,9 @@ class SignalReturnRelations:
         plt.legend(loc=legend_pos)
         plt.show()
 
+    def summary_table(self):
+        # All ratios for panel, mean cids, mean years, best year/cid, worst year/cid
+        pass
 
 if __name__ == "__main__":
 
@@ -213,18 +219,18 @@ if __name__ == "__main__":
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
     df_cids = pd.DataFrame(index=cids,
                            columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
-    df_cids.loc['AUD',] = ['2000-01-01', '2020-12-31', 0.1, 1]
+    df_cids.loc['AUD',] = ['2000-01-01', '2020-12-31', 0, 1]
     df_cids.loc['CAD',] = ['2001-01-01', '2020-11-30', 0, 1]
     df_cids.loc['GBP',] = ['2002-01-01', '2020-11-30', 0, 2]
-    df_cids.loc['NZD',] = ['2002-01-01', '2020-09-30', -0.1, 2]
+    df_cids.loc['NZD',] = ['2002-01-01', '2020-09-30', 0., 2]
 
     df_xcats = pd.DataFrame(index=xcats,
                             columns=['earliest', 'latest', 'mean_add', 'sd_mult',
                                      'ar_coef', 'back_coef'])
-    df_xcats.loc['XR',] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
-    df_xcats.loc['CRY',] = ['2000-01-01', '2020-10-30', 1, 2, 0.95, 1]
-    df_xcats.loc['GROWTH',] = ['2001-01-01', '2020-10-30', 1, 2, 0.9, 1]
-    df_xcats.loc['INFL',] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
+    df_xcats.loc['XR',] = ['2000-01-01', '2020-12-31', 2, 1, 0, 0.3]
+    df_xcats.loc['CRY',] = ['2000-01-01', '2020-10-30', 0, 2, 0.95, 1]
+    df_xcats.loc['GROWTH',] = ['2001-01-01', '2020-10-30', 0, 2, 0.9, 1]
+    df_xcats.loc['INFL',] = ['2001-01-01', '2020-10-30', 0, 2, 0.8, 0.5]
 
     black = {'AUD': ['2006-01-01', '2015-12-31'], 'GBP': ['2012-01-01', '2100-01-01']}
 
