@@ -38,6 +38,12 @@ class SignalReturnRelations:
                  start: str = None, end: str = None, fwin: int = 1,
                  blacklist: dict = None, freq: str = 'M'):
 
+        self.dic_freq = {'D': 'daily', 'W': 'weekly', 'M': 'monthly',
+                         'Q': 'quarterly', 'A': 'annual'}
+        self.metrics = ['accuracy', 'bal_accuracy', 'pos_sigr', "pos_retr",
+                        'pos_prec', 'neg_prec',
+                        'pearson', 'pearson_pval', 'kendall', 'kendall_pval']
+
         self.df = categories_df(df, [ret, sig], cids, 'value', start=start, end=end,
                                 freq=freq, blacklist=blacklist,
                                 lag=1, fwin=fwin, xcat_aggs=['mean', 'last'])
@@ -47,8 +53,6 @@ class SignalReturnRelations:
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
         self.df_cs = self.panel_relations(cs_type='cids')
         self.df_ys = self.panel_relations(cs_type='years')
-        self.dic_freq = {'D': 'daily', 'W': 'weekly', 'M': 'monthly',
-                         'Q': 'quarterly', 'A': 'annual'}
 
     def panel_relations(self, cs_type: str = 'cids'):
         """Creates a dataframe with information on the signal-return relation
@@ -63,9 +67,7 @@ class SignalReturnRelations:
             df['year'] = np.array(df.reset_index(level=1)['real_date'].dt.year)
             css = [str(i) for i in df['year'].unique()]
 
-        statms = ['accuracy', 'bal_accuracy',  'pos_sigr', "pos_retr",
-                  'pos_recall', 'neg_recall',
-                  'pearson', 'pearson_pval', 'kendall', 'kendall_pval']
+        statms = self.metrics
         df_out = pd.DataFrame(index=['Panel', 'Mean', 'PosRatio'] + css, columns=statms)
 
         for cs in (css + ['Panel']):
@@ -86,8 +88,8 @@ class SignalReturnRelations:
             df_out.loc[cs, 'bal_accuracy'] = skm.balanced_accuracy_score(sig, ret)
             df_out.loc[cs, 'pos_sigr'] = np.mean(sig==1)
             df_out.loc[cs, "pos_retr"] = np.mean(ret==1)
-            df_out.loc[cs, 'pos_recall'] = skm.recall_score(sig, ret, pos_label=1)
-            df_out.loc[cs, 'neg_recall'] = skm.recall_score(sig, ret, pos_label=-1)
+            df_out.loc[cs, 'pos_prec'] = skm.precision_score(ret, sig, pos_label=1)
+            df_out.loc[cs, 'neg_prec'] = skm.precision_score(ret, sig, pos_label=-1)
 
             ret_vals, sig_vals = df_cs[self.ret], df_cs[self.sig]
             df_out.loc[cs, ['kendall', 'kendall_pval']] = stats.kendalltau(ret_vals,
@@ -210,8 +212,13 @@ class SignalReturnRelations:
         plt.show()
 
     def summary_table(self):
-        # All ratios for panel, mean cids, mean years, best year/cid, worst year/cid
-        pass
+        dfys = self.df_ys.round(decimals=3)
+        dfcs = self.df_cs.round(decimals=3)
+        dfsum = dfys.iloc[:3, ].append(dfcs.iloc[1:3, ])
+        dfsum.index = ["Panel", "Mean years", "Positive ratio",
+                       "Mean cids", "Positive ratio"]
+
+        return dfsum
 
 if __name__ == "__main__":
 
@@ -227,7 +234,7 @@ if __name__ == "__main__":
     df_xcats = pd.DataFrame(index=xcats,
                             columns=['earliest', 'latest', 'mean_add', 'sd_mult',
                                      'ar_coef', 'back_coef'])
-    df_xcats.loc['XR',] = ['2000-01-01', '2020-12-31', 2, 1, 0, 0.3]
+    df_xcats.loc['XR',] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
     df_xcats.loc['CRY',] = ['2000-01-01', '2020-10-30', 0, 2, 0.95, 1]
     df_xcats.loc['GROWTH',] = ['2001-01-01', '2020-10-30', 0, 2, 0.9, 1]
     df_xcats.loc['INFL',] = ['2001-01-01', '2020-10-30', 0, 2, 0.8, 0.5]
@@ -237,6 +244,7 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     srr = SignalReturnRelations(dfd, sig='CRY', ret='XR', freq='D', blacklist=black)
+    srr.summary_table()
     srr.correlation_bars(type='cross_section')
     srr.accuracy_bars(type='cross_section')
     df_cs_stats = srr.cross_section_table()
