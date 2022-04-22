@@ -107,7 +107,7 @@ class SignalReturnRelations:
         pos_pvals = np.mean(np.array(df_out.loc[css, below50s] < 0.5)
                             * np.array(df_out.loc[css, above0s] > 0), axis=0)
         df_out.loc['PosRatio', below50s] = pos_pvals  # pos corrs with error prob < 50%
-        return df_out
+        return df_out.astype('float')
 
     def cross_section_table(self):
         """Returns a dataframe with information on the signal-return relation across
