@@ -21,11 +21,39 @@ def negate_interpolation(df: pd.DataFrame, xcats: List[str] = None):
         with values.
     """
 
+    # Will delimit the dates the relationship is analysed over.
     first_date = min(df['real_date'])
     last_date = max(df['real_date'])
 
     complete_dates = pd.date_range(start=first_date, end=last_date, freq='B')
-    print(complete_dates)
+    data = np.empty(shape=(len(complete_dates)))
+    data[:] = np.inf
+    # Inclusive of all the dates the categories are analysed over - will address the
+    # blacklist periods.
+    base_df = pd.DataFrame(index=complete_dates)
+
+    # Apply a left-join with the base dataframe and the individual category dataframe.
+    df_aggregate = []
+    for xcat in xcats:
+        filter_df = df[df['xcat'] == xcat]
+        df_pivot = filter_df.pivot(index='real_date', columns='cid', values='value')
+
+        # Left-join by default.
+        merge_df = base_df.join(df_pivot)
+        merge_df.fillna(np.inf, inplace=True)
+
+        merge_df.columns.name = 'cid'
+        merge_df.index.name = 'real_date'
+        df_out = merge_df.stack().to_frame("value").reset_index()
+        df_out = df_out.sort_values(['cid', 'real_date'])
+
+        df_out['xcat'] = xcat
+        df_aggregate.append(df_out)
+
+    output = pd.concat(df_aggregate).reset_index(drop=True)
+    output = output.replace(np.inf, np.nan)
+
+    return output[['cid', 'xcat', 'real_date', 'value']]
 
 def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
                    intersect: bool = False, val: str = 'value',
@@ -69,7 +97,8 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
 
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True,
                                 intersect=intersect)
-    negate_interpolation(df=df, xcats=xcats)
+    df = negate_interpolation(df=df, xcats=xcats)
+    print(df)
 
     # Handle for blacklist periods. The application of blacklist removes the respective
     # dates from the dataframe which results in the intermediary, missing, dates being
@@ -92,18 +121,21 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
         ax.legend(handles=handles[0:], labels=label)
         ax.set_xlabel("")
         ax.set_ylabel("")
+
         if title is not None:
             plt.title(title)
     else:
         fg = sns.FacetGrid(data=df, col='cid', col_wrap=ncol, sharey=same_y,
                            aspect=aspect, height=height,
                            col_order=cids)
-        fg.map_dataframe(sns.lineplot, x='real_date', y=val, hue='xcat',
+        fg.map_dataframe(sns.lineplot, x='real_date', y=val,
+                         hue=df[val].isna().cumsum(),
                          legend=False,
                          hue_order=xcats, ci=None)
         fg.map(plt.axhline, y=0, c=".5")
         fg.set_titles(col_template='{col_name}')
         fg.set_axis_labels('', '')
+
         if title is not None:
             fg.fig.suptitle(title, fontsize=20)
             fg.fig.subplots_adjust(top=title_adj)
@@ -113,12 +145,13 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
                 labels = fg._legend_data.keys()
             else:
                 labels = xcat_labels
-            fg.fig.legend(handles=handles, labels=labels, loc='lower center',
-                          ncol=3)  # add legend to bottom of figure
-            fg.fig.subplots_adjust(bottom=label_adj,
-                                   top=title_adj)  # lift bottom to respect legend
 
-    if all_xticks:  # add x-axis tick labels to all axes in grid
+            fg.fig.legend(handles=handles, labels=labels,
+                          loc='lower center', ncol=3)
+            fg.fig.subplots_adjust(bottom=label_adj,
+                                   top=title_adj)
+
+    if all_xticks:
         for ax in fg.axes.flatten():
             ax.tick_params(labelbottom=True, pad=0)
 
@@ -132,19 +165,20 @@ if __name__ == "__main__":
     df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
                                                 'sd_mult'])
     df_cids.loc['AUD', ] = ['2010-01-01', '2020-12-31', 0.2, 3]
-    df_cids.loc['CAD', ] = ['2011-01-01', '2020-11-30', 0, 1]
+    df_cids.loc['CAD', ] = ['2010-01-01', '2020-11-30', 0, 1]
     df_cids.loc['GBP', ] = ['2012-01-01', '2020-11-30', 0, 2]
-    df_cids.loc['NZD', ] = ['2012-01-01', '2020-09-30', -0.1, 3]
+    df_cids.loc['NZD', ] = ['2010-01-01', '2020-09-30', -0.1, 3]
 
     df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
                                                   'sd_mult', 'ar_coef', 'back_coef'])
     df_xcats.loc['XR', ] = ['2010-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
-    df_xcats.loc['CRY', ] = ['2012-01-01', '2020-10-30', 1, 2, 0.95, 0.5]
+    df_xcats.loc['CRY', ] = ['2010-01-01', '2020-10-30', 1, 2, 0.95, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfdx = dfd[~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))]
 
-    black = {'AUD': ['2010-01-03', '2013-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
+    black = {'AUD': ['2012-01-06', '2014-12-31'], 'GBP': ['2018-01-01', '2019-01-01'],
+             'NZD': ['2015-01-01', '2015-07-01']}
 
     dfd_reduce = reduce_df(df=dfd, xcats=xcats,  cids=cids, start = '2010-01-01',
                            end = '2020-12-31', blacklist=black)
@@ -157,18 +191,20 @@ if __name__ == "__main__":
     # inactive periods should be excluded from the graphical display.
     view_timelines(dfd_reduce, xcats=['XR', 'CRY'], cids=cids, ncol=2,
                    xcat_labels=['Return', 'Carry'],
-                   title='Carry and return', title_adj=0.9, label_adj=0.1,
+                   title='Carry and Return', title_adj=0.9, label_adj=0.1,
                    aspect=1, height=5)
 
     view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids[0], ncol=1, size=(10, 5),
-                   title='AUD return and carry')
+                   title='AUD Return and Carry')
     view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids[0], ncol=1,
                    xcat_labels=['Return', 'Carry'],
-                   title='AUD return and carry')
+                   title='AUD Return and Carry')
     view_timelines(dfd, xcats=['CRY'], cids=cids, ncol=2, title='Carry')
-    view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids, ncol=2, title='Return and carry',
+    view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids, ncol=2, title='Return and Carry',
                    all_xticks=True)
-    view_timelines(dfd, xcats=['XR'], cids=cids, ncol=2, cumsum=True, same_y=False,
-                   aspect=2)
+
+    # Test the effect of blacklisting on the cumulative function.
+    view_timelines(dfd_reduce, xcats=['XR'], cids=cids, ncol=2, cumsum=True,
+                   same_y=False, aspect=2)
 
     dfd.info()
