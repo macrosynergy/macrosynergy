@@ -4,9 +4,28 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import List, Union, Tuple
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.check_availability import reduce_df
+from macrosynergy.management.simulate_quantamental_data import make_qdf, make_qdf_black
+from macrosynergy.management.shape_dfs import reduce_df
 
+def negate_interpolation(df: pd.DataFrame, xcats: List[str] = None):
+    """
+    Negate Seaborn's default approach to handling missing dates by reinstating the
+    missing dates, blacklist periods, with np.inf values. The values will allow for a
+    discontinuous graph demonstrating that blacklist periods are excluded from analysis.
+
+    :param <pd.Dataframe> df: standardized dataframe with the necessary columns:
+        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+    :param <List[str]> xcats: extended categories to plot. Default is all in dataframe.
+
+    :return <pd.DataFrame>: updated DataFrame with the previously missing dates populated
+        with values.
+    """
+
+    first_date = min(df['real_date'])
+    last_date = max(df['real_date'])
+
+    complete_dates = pd.date_range(start=first_date, end=last_date, freq='B')
+    print(complete_dates)
 
 def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
                    intersect: bool = False, val: str = 'value',
@@ -50,6 +69,13 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
 
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True,
                                 intersect=intersect)
+    negate_interpolation(df=df, xcats=xcats)
+
+    # Handle for blacklist periods. The application of blacklist removes the respective
+    # dates from the dataframe which results in the intermediary, missing, dates being
+    # computed via linear interpolation. This is misleading and is an erroneous
+    # representation of the data: the missing dates should not be populated with values
+    # but instead there should be a break in the graph.
 
     if cumsum:
         df[val] = df.sort_values(['cid', 'xcat', "real_date"])[['cid', 'xcat', val]].\
@@ -73,6 +99,7 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
                            aspect=aspect, height=height,
                            col_order=cids)
         fg.map_dataframe(sns.lineplot, x='real_date', y=val, hue='xcat',
+                         legend=False,
                          hue_order=xcats, ci=None)
         fg.map(plt.axhline, y=0, c=".5")
         fg.set_titles(col_template='{col_name}')
@@ -104,7 +131,7 @@ if __name__ == "__main__":
     xcats = ['XR', 'CRY']
     df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
                                                 'sd_mult'])
-    df_cids.loc['AUD', ] = ['2010-01-01', '2020-12-31', 0.2, 0.2]
+    df_cids.loc['AUD', ] = ['2010-01-01', '2020-12-31', 0.2, 3]
     df_cids.loc['CAD', ] = ['2011-01-01', '2020-11-30', 0, 1]
     df_cids.loc['GBP', ] = ['2012-01-01', '2020-11-30', 0, 2]
     df_cids.loc['NZD', ] = ['2012-01-01', '2020-09-30', -0.1, 3]
@@ -117,10 +144,22 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfdx = dfd[~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))]
 
-    # view_timelines(dfdx, xcats=['XR', 'CRY'], cids=cids, ncol=2,
-    #                xcat_labels=['Return', 'Carry'],
-    #                title='Carry and return', title_adj=0.9, label_adj=0.1,
-    #                aspect=1, height=5)
+    black = {'AUD': ['2010-01-03', '2013-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
+
+    dfd_reduce = reduce_df(df=dfd, xcats=xcats,  cids=cids, start = '2010-01-01',
+                           end = '2020-12-31', blacklist=black)
+    print(dfd_reduce)
+
+    blackout = {'AUD': ('2010-01-03', '2013-12-31'), 'GBP': ('2018-01-01', '2100-01-01')}
+    dfd_black = make_qdf_black(df_cids, df_xcats, blackout=blackout)
+
+    # Test the interpolation that is being applied to populate missing values: ultimately
+    # inactive periods should be excluded from the graphical display.
+    view_timelines(dfd_reduce, xcats=['XR', 'CRY'], cids=cids, ncol=2,
+                   xcat_labels=['Return', 'Carry'],
+                   title='Carry and return', title_adj=0.9, label_adj=0.1,
+                   aspect=1, height=5)
+
     view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids[0], ncol=1, size=(10, 5),
                    title='AUD return and carry')
     view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids[0], ncol=1,
