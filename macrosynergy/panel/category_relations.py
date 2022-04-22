@@ -325,10 +325,10 @@ class CategoryRelations(object):
             and probability. If None (default), the box is shown in the upper left
             corner. The options are standard, i.e. 'upper left', 'lower right' and so
             forth. This does not work with a separator.
-        :param Union[str, int] separator: allows categorizing the scatter analysis by time
-            period or cross section. In the former case the argument is set to "cids" in
-            the case the argument is set to a year that divides the sample to before
-            (not including) that year and from (including) that year.
+        :param <Union[str, int]> separator: allows categorizing the scatter analysis by
+            time period or cross section. In the former case the argument is set to
+            "cids" in the case the argument is set to a year that divides the sample to
+            before (not including) that year and from (including) that year.
         :param <float> title_adj: parameter that sets top of figure to accommodate title.
             Default is 1.
         :param <bool> single_chart: boolean parameter determining whether the x- and y-
