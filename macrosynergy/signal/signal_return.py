@@ -220,6 +220,7 @@ class SignalReturnRelations:
 
         return dfsum
 
+
 if __name__ == "__main__":
 
     cids = ['AUD', 'CAD', 'GBP', 'NZD']
