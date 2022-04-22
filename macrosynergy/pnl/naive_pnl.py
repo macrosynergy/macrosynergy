@@ -134,6 +134,9 @@ class NaivePnL:
 
         df_pnl = dfw.loc[:, ['cid', 'real_date', 'value']]
 
+        # Compute the return across the panel. The returns are still computed daily
+        # regardless of the re-balancing frequency potentially occurring weekly or
+        # monthly.
         df_pnl_all = df_pnl.groupby(['real_date']).sum()
         df_pnl_all = df_pnl_all[df_pnl_all['value'].cumsum() != 0]
         df_pnl_all['cid'] = 'ALL'
@@ -185,13 +188,15 @@ class NaivePnL:
         rebal_merge = r_dates_df.merge(dfw, how='left', on=['real_date', 'cid'])
         rebal_merge = dfw[['real_date', 'cid']].merge(rebal_merge, how='left',
                                                       on=['real_date', 'cid'])
-        sig_series = rebal_merge['psig'].fillna(method='ffill').shift(rebal_slip)
+
+        rebal_merge['psig'] = rebal_merge['psig'].fillna(method='ffill').shift(rebal_slip)
+        sig_series = rebal_merge['psig']
 
         return sig_series
 
     def plot_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
                   start: str = None, end: str = None, figsize: Tuple = (10, 6),
-                  title: str = "Cumulative naive PnL", xcat_labels: List[str] = None):
+                  title: str = "Cumulative Naive PnL", xcat_labels: List[str] = None):
 
         """
         Plot line chart of cumulative PnLs, single PnL, multiple PnL types per
@@ -202,12 +207,11 @@ class NaivePnL:
             default is 'ALL' (global PnL).
             Note: one can only have multiple PnL categories or multiple cross sections,
             not both.
-        :param <str> start: start date in ISO format.
         :param <str> start: earliest date in ISO format. Default is None and earliest
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
             in df is used.
-        :param <Tuple> figsize: tuple of plot width and height. Default is (10,6).
+        :param <tuple> figsize: tuple of plot width and height. Default is (10,6).
         :param <str> title: allows entering text for a custom chart header.
         :param <List[str]> xcat_labels: custom labels to be used for the PnLs;
 
@@ -265,7 +269,6 @@ class NaivePnL:
             'ALL' (global PnL).
             Note: one can only have multiple PnL categories or multiple cross sections,
             not both.
-        :param <str> start: start date in format.
         :param <str> start: earliest date in ISO format. Default is None and earliest
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
