@@ -37,7 +37,8 @@ def date_alignment(unhedged_return: pd.Series, benchmark_return: pd.Series):
 
     return start_date, end_date
 
-def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
+
+def hedge_calculator(unhedged_return: pd.Series, benchmark_return: pd.Series,
                      rdates: List[pd.Timestamp], cross_section: str, meth: str = 'ols',
                      min_obs: int = 24):
     """
@@ -78,8 +79,8 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
 
     # The date series will be adjusted to each cross-section.
     date_series = unhedged_return.index
-    ur_df = unhedged_return.to_frame(name='returns')
-    ur_df = ur_df.reset_index()
+    df_ur = unhedged_return.to_frame(name='returns')
+    df_ur = df_ur.reset_index()
 
     # Access the minimum date from the adjusted series: having aligned the unhedged asset
     # and the benchmark return. Both series will be defined over the same timestamps.
@@ -88,7 +89,7 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
     # Storage dataframe.
     data_column = np.empty(len(rdates))
     data_column[:] = np.nan
-    hedge_ratio_df = pd.DataFrame(data=data_column, index=rdates,
+    df_hrat = pd.DataFrame(data=data_column, index=rdates,
                                   columns=['value'])
 
     for d in rdates:
@@ -101,13 +102,13 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
                 mod = sm.OLS(Y, X)
                 results = mod.fit()
 
-            hedge_ratio_df.loc[d] = results.params[1]
+            df_hrat.loc[d] = results.params[1]
 
-    hedge_ratio_df = hedge_ratio_df.dropna(axis=0, how='all')
-    hedge_ratio_df.index.name = 'real_date'
-    hedge_ratio_df = hedge_ratio_df.reset_index(level=0)
+    df_hrat = df_hrat.dropna(axis=0, how='all')
+    df_hrat.index.name = 'real_date'
+    df_hrat = df_hrat.reset_index(level=0)
 
-    df_hr = ur_df.merge(hedge_ratio_df, on='real_date', how='left')
+    df_hr = df_ur.merge(df_hrat, on='real_date', how='left')
 
     df_hr = df_hr.drop('returns', axis=1)
     df_hr = df_hr.fillna(method='ffill')
@@ -122,7 +123,8 @@ def hedge_calculator(unhedged_return: pd.DataFrame, benchmark_return: pd.Series,
 
     return df_hr
 
-def adjusted_returns(benchmark_return: pd.Series, hedge_df: pd.DataFrame,
+
+def adjusted_returns(benchmark_return: pd.Series, df_hedge: pd.DataFrame,
                      dfw: pd.DataFrame):
     """
     Method used to compute the hedge ratio returns on the hedging asset which will
@@ -132,13 +134,13 @@ def adjusted_returns(benchmark_return: pd.Series, hedge_df: pd.DataFrame,
 
     :param <pd.Series> benchmark_return: the return series of the asset being used to
         hedge against the main asset.
-    :param <pd.DataFrame> hedge_df: standardised dataframe with the hedge ratios.
+    :param <pd.DataFrame> df_hedge: standardised dataframe with the hedge ratios.
     :param <pd.DataFrame> dfw: pivoted dataframe of the relevant returns.
 
     :return <pd.DataFrame> standardised dataframe of adjusted returns.
     """
 
-    hedge_pivot = hedge_df.pivot(index='real_date', columns='cid', values='value')
+    hedge_pivot = df_hedge.pivot(index='real_date', columns='cid', values='value')
 
     no_cids = len(hedge_pivot.columns)
 
@@ -156,6 +158,7 @@ def adjusted_returns(benchmark_return: pd.Series, hedge_df: pd.DataFrame,
 
     return df_stack
 
+
 def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                 benchmark_return: str = None, start: str = None, end: str = None,
                 blacklist: dict = None, meth: str = 'ols', oos: bool = True,
@@ -167,7 +170,8 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     :param <pd.Dataframe> df: standardized data frame with the necessary columns:
         'cid', 'xcats', 'real_date' and 'value.
     :param <str> xcat:  return category based on the type of positions that are
-        to be hedged. Each position of the category's panel uses the same hedge.
+        to be hedged.
+        N.B.: Each cross-section of this category uses the same hedge asset/basket.
     :param <List[str]> cids: cross-sections of the returns for which hedge ratios are
         to be calculated. Default is all that are available in the dataframe.
     :param <str> benchmark_return: ticker of return of the hedge asset or basket.
@@ -246,21 +250,21 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
     # Wide time series dataframe of unhedged and benchmark returns
 
-    # Time series dataframe of unhedged returns.
+    # --- Time series dataframe of unhedged returns.
 
     dfp = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end,
                     blacklist=blacklist)
     dfp_w = dfp.pivot(index='real_date', columns='cid', values='value')
     dfp_w = dfp_w.dropna(axis=0, how="all")
 
-    # Time series dataframe of benchmark return for relevant dates.
+    # --- Time series dataframe of benchmark return for relevant dates.
 
     dfh = reduce_df(df, xcats=[xcat_hedge], cids=cid_hedge,
                     start=dfp_w.index[0], end=dfp_w.index[-1])
     dfh_w = dfh.pivot(index='real_date', columns='cid', values='value')
     dfh_w.columns = ['hedge']
 
-    # Merge time series and calculate rebalancing dates.
+    # --- Merge time series and calculate rebalancing dates.
 
     dfw = pd.merge(dfp_w, dfh_w, how='inner', on='real_date')
     br = dfw['hedge']
@@ -282,18 +286,20 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                                  min_obs=min_obs)
         aggregate.append(df_hr)
 
-    hedge_df = pd.concat(aggregate).reset_index(drop=True)
+    df_hedge = pd.concat(aggregate).reset_index(drop=True)
 
-    hedge_df['xcat'] = xcat + "_H_Ratio"
+    df_hedge['xcat'] = xcat + "_HR"
+    # Todo: allow hedge ratio name (ratio_name) to be set in function; use above as default
     if hedged_returns:
-        hedged_return_df = adjusted_returns(hedge_df=hedge_df, dfw=dfw,
-                                            benchmark_return=br)
-        hedged_return_df = hedged_return_df.sort_values(['cid', 'real_date'])
-        hedged_return_df['xcat'] = xcat + "_" + "H_Return"
-        hedge_df = hedge_df.append(hedged_return_df)
-        hedge_df = hedge_df.reset_index(drop=True)
+        df_hreturn = adjusted_returns(df_hedge=df_hedge, dfw=dfw,
+                                      benchmark_return=br)
+        df_hreturn = df_hreturn.sort_values(['cid', 'real_date'])
+        df_hreturn['xcat'] = xcat + "H"
+        # Todo: allow hedged return name (hr_name) to be set in function. Use above as default
+        df_hedge = df_hedge.append(df_hreturn)
+        df_hedge = df_hedge.reset_index(drop=True)
 
-    return hedge_df[cols]
+    return df_hedge[cols]
 
 
 def hedge_ratio_display(df_hedge: pd.DataFrame, subplots: bool = False):
@@ -307,18 +313,18 @@ def hedge_ratio_display(df_hedge: pd.DataFrame, subplots: bool = False):
 
     """
 
-    condition = lambda c: c.split('_')[-1] != 'Return'
-    # Isolate the hedge ratios. The adjusted returns will have the postfix "H" attached
-    # to the category name.
-    apply = list(map(condition, df_hedge['xcat']))
-    df_hedge = df_hedge[apply]
-
-    dfw_ratios = df_hedge.pivot(index='real_date', columns='cid', values='value')
-
-    dfw_ratios.plot(subplots=subplots, title="Hedging Ratios.",
-                    legend=True)
-    plt.xlabel('real_date, years')
-    plt.show()
+    pass
+    # condition = lambda c: c.split('_')[-1] != 'Return'
+    # # Todo: Return is not a valid string for JPMaQS categories. Instead I added H to xcat
+    # apply = list(map(condition, df_hedge['xcat']))
+    # df_hedge = df_hedge[apply]
+    #
+    # dfw_ratios = df_hedge.pivot(index='real_date', columns='cid', values='value')
+    #
+    # dfw_ratios.plot(subplots=subplots, title="Hedging Ratios.",
+    #                 legend=True)
+    # plt.xlabel('real_date, years')
+    # plt.show()
 
 
 if __name__ == "__main__":
@@ -359,7 +365,7 @@ if __name__ == "__main__":
                            refreq='w', min_obs=24, hedged_returns=True)
 
     print(df_hedge)
-    hedge_ratio_display(df_hedge=df_hedge, subplots=False)
+    # hedge_ratio_display(df_hedge=df_hedge, subplots=False)
 
     # Long position in S&P500 or the Nasdeq, and subsequently using US FX to hedge the
     # long position.
