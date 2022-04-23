@@ -29,6 +29,8 @@ class SignalReturnRelations:
         to the cross section code.
     :param <str> freq: letter denoting frequency at which the series are to be sampled.
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
+    :param <str> agg_sig: aggregation method applied to the signal value in downsampling.
+        The default is "last".
     :param <int> fwin: Forward window of return category in base periods. Default is 1.
         This conceptually corresponds to the holding period of a position in
         accordance with the signal.
@@ -36,7 +38,7 @@ class SignalReturnRelations:
     """
     def __init__(self, df: pd.DataFrame, ret: str, sig: str, cids: List[str] = None,
                  start: str = None, end: str = None, fwin: int = 1,
-                 blacklist: dict = None, freq: str = 'M'):
+                 blacklist: dict = None, agg_sig: str = 'last', freq: str = 'M'):
 
         self.dic_freq = {'D': 'daily', 'W': 'weekly', 'M': 'monthly',
                          'Q': 'quarterly', 'A': 'annual'}
@@ -46,7 +48,7 @@ class SignalReturnRelations:
 
         self.df = categories_df(df, [ret, sig], cids, 'value', start=start, end=end,
                                 freq=freq, blacklist=blacklist,
-                                lag=1, fwin=fwin, xcat_aggs=['mean', 'last'])
+                                lag=1, fwin=fwin, xcat_aggs=['mean', agg_sig])
         self.ret = ret
         self.sig = sig
         self.freq = freq
