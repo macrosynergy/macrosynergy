@@ -29,6 +29,8 @@ class SignalReturnRelations:
         to the cross section code.
     :param <str> freq: letter denoting frequency at which the series are to be sampled.
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
+    :param <str> agg_sig: aggregation method applied to the signal value in downsampling.
+        The default is "last".
     :param <int> fwin: Forward window of return category in base periods. Default is 1.
         This conceptually corresponds to the holding period of a position in
         accordance with the signal.
@@ -36,19 +38,23 @@ class SignalReturnRelations:
     """
     def __init__(self, df: pd.DataFrame, ret: str, sig: str, cids: List[str] = None,
                  start: str = None, end: str = None, fwin: int = 1,
-                 blacklist: dict = None, freq: str = 'M'):
+                 blacklist: dict = None, agg_sig: str = 'last', freq: str = 'M'):
+
+        self.dic_freq = {'D': 'daily', 'W': 'weekly', 'M': 'monthly',
+                         'Q': 'quarterly', 'A': 'annual'}
+        self.metrics = ['accuracy', 'bal_accuracy', 'pos_sigr', "pos_retr",
+                        'pos_prec', 'neg_prec',
+                        'pearson', 'pearson_pval', 'kendall', 'kendall_pval']
 
         self.df = categories_df(df, [ret, sig], cids, 'value', start=start, end=end,
                                 freq=freq, blacklist=blacklist,
-                                lag=1, fwin=fwin, xcat_aggs=['mean', 'last'])
+                                lag=1, fwin=fwin, xcat_aggs=['mean', agg_sig])
         self.ret = ret
         self.sig = sig
         self.freq = freq
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
         self.df_cs = self.panel_relations(cs_type='cids')
         self.df_ys = self.panel_relations(cs_type='years')
-        self.dic_freq = {'D': 'daily', 'W': 'weekly', 'M': 'monthly',
-                         'Q': 'quarterly', 'A': 'annual'}
 
     def panel_relations(self, cs_type: str = 'cids'):
         """Creates a dataframe with information on the signal-return relation
@@ -63,8 +69,7 @@ class SignalReturnRelations:
             df['year'] = np.array(df.reset_index(level=1)['real_date'].dt.year)
             css = [str(i) for i in df['year'].unique()]
 
-        statms = ['accuracy', 'bal_accuracy', 'pos_recall', 'neg_recall',
-                  'pearson', 'pearson_pval', 'kendall', 'kendall_pval']
+        statms = self.metrics
         df_out = pd.DataFrame(index=['Panel', 'Mean', 'PosRatio'] + css, columns=statms)
 
         for cs in (css + ['Panel']):
@@ -83,8 +88,10 @@ class SignalReturnRelations:
             ret = df_sgs[self.ret]
             df_out.loc[cs, 'accuracy'] = skm.accuracy_score(sig, ret)
             df_out.loc[cs, 'bal_accuracy'] = skm.balanced_accuracy_score(sig, ret)
-            df_out.loc[cs, 'pos_recall'] = skm.recall_score(sig, ret, pos_label=1)
-            df_out.loc[cs, 'neg_recall'] = skm.recall_score(sig, ret, pos_label=-1)
+            df_out.loc[cs, 'pos_sigr'] = np.mean(sig==1)
+            df_out.loc[cs, "pos_retr"] = np.mean(ret==1)
+            df_out.loc[cs, 'pos_prec'] = skm.precision_score(ret, sig, pos_label=1)
+            df_out.loc[cs, 'neg_prec'] = skm.precision_score(ret, sig, pos_label=-1)
 
             ret_vals, sig_vals = df_cs[self.ret], df_cs[self.sig]
             df_out.loc[cs, ['kendall', 'kendall_pval']] = stats.kendalltau(ret_vals,
@@ -94,15 +101,15 @@ class SignalReturnRelations:
 
         df_out.loc['Mean', :] = df_out.loc[css, :].mean()
 
-        above50s = statms[0:4]
+        above50s = statms[0:6]
         df_out.loc['PosRatio', above50s] = (df_out.loc[css, above50s] > 0.5).mean()
-        above0s = [statms[i] for i in [4, 6]]
+        above0s = [statms[i] for i in [6, 8]]
         df_out.loc['PosRatio', above0s] = (df_out.loc[css, above0s] > 0).mean()
-        below50s = [statms[i] for i in [5, 7]]
+        below50s = [statms[i] for i in [7, 9]]
         pos_pvals = np.mean(np.array(df_out.loc[css, below50s] < 0.5)
                             * np.array(df_out.loc[css, above0s] > 0), axis=0)
         df_out.loc['PosRatio', below50s] = pos_pvals  # pos corrs with error prob < 50%
-        return df_out
+        return df_out.astype('float')
 
     def cross_section_table(self):
         """Returns a dataframe with information on the signal-return relation across
@@ -206,6 +213,16 @@ class SignalReturnRelations:
         plt.legend(loc=legend_pos)
         plt.show()
 
+    def summary_table(self):
+        """Condensed summary table of signal-return relations"""
+        dfys = self.df_ys.round(decimals=3)
+        dfcs = self.df_cs.round(decimals=3)
+        dfsum = dfys.iloc[:3, ].append(dfcs.iloc[1:3, ])
+        dfsum.index = ["Panel", "Mean years", "Positive ratio",
+                       "Mean cids", "Positive ratio"]
+
+        return dfsum
+
 
 if __name__ == "__main__":
 
@@ -213,24 +230,25 @@ if __name__ == "__main__":
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
     df_cids = pd.DataFrame(index=cids,
                            columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
-    df_cids.loc['AUD',] = ['2000-01-01', '2020-12-31', 0.1, 1]
+    df_cids.loc['AUD',] = ['2000-01-01', '2020-12-31', 0, 1]
     df_cids.loc['CAD',] = ['2001-01-01', '2020-11-30', 0, 1]
     df_cids.loc['GBP',] = ['2002-01-01', '2020-11-30', 0, 2]
-    df_cids.loc['NZD',] = ['2002-01-01', '2020-09-30', -0.1, 2]
+    df_cids.loc['NZD',] = ['2002-01-01', '2020-09-30', 0., 2]
 
     df_xcats = pd.DataFrame(index=xcats,
                             columns=['earliest', 'latest', 'mean_add', 'sd_mult',
                                      'ar_coef', 'back_coef'])
     df_xcats.loc['XR',] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
-    df_xcats.loc['CRY',] = ['2000-01-01', '2020-10-30', 1, 2, 0.95, 1]
-    df_xcats.loc['GROWTH',] = ['2001-01-01', '2020-10-30', 1, 2, 0.9, 1]
-    df_xcats.loc['INFL',] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
+    df_xcats.loc['CRY',] = ['2000-01-01', '2020-10-30', 0, 2, 0.95, 1]
+    df_xcats.loc['GROWTH',] = ['2001-01-01', '2020-10-30', 0, 2, 0.9, 1]
+    df_xcats.loc['INFL',] = ['2001-01-01', '2020-10-30', 0, 2, 0.8, 0.5]
 
     black = {'AUD': ['2006-01-01', '2015-12-31'], 'GBP': ['2012-01-01', '2100-01-01']}
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     srr = SignalReturnRelations(dfd, sig='CRY', ret='XR', freq='D', blacklist=black)
+    srr.summary_table()
     srr.correlation_bars(type='cross_section')
     srr.accuracy_bars(type='cross_section')
     df_cs_stats = srr.cross_section_table()
