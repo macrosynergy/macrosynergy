@@ -48,8 +48,8 @@ class NaivePnL:
 
     def make_pnl(self, sig: str, sig_op: str = 'zn_score_pan', pnl_name: str = None,
                  rebal_freq: str = 'daily', rebal_slip = 0, vol_scale: float = None,
-                 min_obs: int = 252, iis: bool = True, sequential: bool = True,
-                 neutral: str = 'zero', thresh: float = None):
+                 long_only: bool = False, min_obs: int = 252, iis: bool = True,
+                 sequential: bool = True, neutral: str = 'zero', thresh: float = None):
 
         """
         Calculate daily PnL and add to the main dataframe held on an instance of the
@@ -83,6 +83,9 @@ class NaivePnL:
             recorded.
         :param <bool> vol_scale: ex-post scaling of PnL to annualized volatility given.
             This is for comparative visualization and not out-of-sample. Default is none.
+        :param <bool> long_only: if True, the long-only returns will be computed which
+            act as a basis for comparison against the signal-adjusted returns. Default is
+            False.
         :param <int> min_obs: the minimum number of observations required to calculate
             zn_scores. Default is 252.
         :param <bool> iis: if True (default) zn-scores are also calculated for the initial
@@ -125,9 +128,17 @@ class NaivePnL:
         # Signal for the following day explains the lag mechanism.
         dfw['psig'] = dfw['psig'].groupby(level=0).shift(1)
         dfw.reset_index(inplace=True)
+        dfw = dfw.rename_axis(None, axis=1)
+
+        dfw = dfw.sort_values(['cid', 'real_date'])
+
+        if long_only:
+            dfw_long = self.long_only_pnl(dfw=dfw, ret=self.ret)
+            self.__dict__['dfw_long'] = dfw_long.reset_index(drop=True)
 
         if rebal_freq != 'daily':
-            dfw['sig'] = self.rebalancing(dfw=dfw, rebal_freq=rebal_freq)
+            dfw['sig'] = self.rebalancing(dfw=dfw, rebal_freq=rebal_freq,
+                                          rebal_slip=rebal_slip)
         else:
             dfw = dfw.rename({'psig': 'sig'}, axis=1)
         dfw['value'] = dfw[self.ret] * dfw['sig']
@@ -141,6 +152,8 @@ class NaivePnL:
         df_pnl_all = df_pnl_all[df_pnl_all['value'].cumsum() != 0]
         df_pnl_all['cid'] = 'ALL'
         df_pnl_all = df_pnl_all.reset_index()[df_pnl.columns]
+        # Will be inclusive of each individual cross-section's signal-adjusted return and
+        # the aggregated panel return.
         df_pnl = df_pnl.append(df_pnl_all)
 
         if vol_scale is not None:
@@ -157,11 +170,35 @@ class NaivePnL:
         self.df = self.df.append(df_pnl[self.df.columns]).reset_index(drop=True)
 
     @staticmethod
+    def long_only_pnl(dfw: pd.DataFrame, ret: str):
+        """
+        Method used to compute the PnL accrued from simply taking a long-only position in
+        the asset. The return in the asset are not predicated on any exogenous signal.
+
+        :param <pd.DataFrame> dfw:
+        :param <str> ret: return category.
+
+        :return <pd.DataFrame> dfw_long: standardised dataframe containing exclusively
+            the return category, and the long-only panel return.
+        """
+
+        dfw_long = dfw[['cid', 'real_date', ret]]
+        panel_pnl = dfw_long.groupby(['real_date']).sum()
+        panel_pnl = panel_pnl.reset_index(level=0)
+        panel_pnl['cid'] = 'Long_Only_ALL'
+        dfw_long = dfw_long.append(panel_pnl)
+        dfw_long['xcat'] = ret
+        dfw_long = dfw_long.rename(columns={ret: "value"})
+
+        return dfw_long[['cid', 'xcat', 'real_date', 'value']]
+
+    @staticmethod
     def rebalancing(dfw: pd.DataFrame, rebal_freq: str = 'daily', rebal_slip = 0):
         """
-        The signals are calculated daily. However, re-balancing a position can occur more
-        infrequently than daily. Therefore, produce the re-balancing values according to
-        the more infrequent timeline.
+        The signals are calculated daily and for each individual cross-section defined in
+        the panel. However, re-balancing a position can occur more infrequently than
+        daily. Therefore, produce the re-balancing values according to the more
+        infrequent timeline (weekly or monthly).
 
         :param <pd.Dataframe> dfw: DataFrame with each category represented by a column
             and the daily signal is also included with the column name 'psig'.
@@ -182,14 +219,27 @@ class NaivePnL:
             dfw['week'] = dfw['real_date'].dt.week
             rebal_dates = dfw.groupby(['cid', 'year', 'week'])['real_date'].min()
 
+        # Convert the index, 'cid', to a formal column aligned to the re-balancing dates.
         r_dates_df = rebal_dates.reset_index(level=0)
         r_dates_df.reset_index(drop=True, inplace=True)
         dfw = dfw[['real_date', 'psig', 'cid']]
+        # Isolate the required signals on the re-balancing dates. Only concerned with the
+        # respective signal on the re-balancing date. However, the produced dataframe
+        # will only be defined over the re-balancing dates. Therefore, merge the
+        # aforementioned dataframe with the original dataframe such that all business
+        # days are included. The intermediary dates, dates between re-balancing dates,
+        # will initially be populated by NA values. To ensure the signal is used for the
+        # duration between re-balancing dates, forward fill the computed signal over the
+        # associated dates.
+
+        # The signal is computed for each individual cross-section. Therefore, merge on
+        # the real_date and the cross-section.
         rebal_merge = r_dates_df.merge(dfw, how='left', on=['real_date', 'cid'])
         rebal_merge = dfw[['real_date', 'cid']].merge(rebal_merge, how='left',
                                                       on=['real_date', 'cid'])
 
         rebal_merge['psig'] = rebal_merge['psig'].fillna(method='ffill').shift(rebal_slip)
+        rebal_merge = rebal_merge.sort_values(['cid', 'real_date'])
         sig_series = rebal_merge['psig']
 
         return sig_series
@@ -241,6 +291,7 @@ class NaivePnL:
                               estimator=None, lw=1)
             plt.legend(loc='upper left', labels=xcat_labels)
             leg = ax.axes.get_legend()
+
             if len(pnl_cats) > 1:
                 leg.set_title('PnL categories for ' + pnl_cids[0])
             else:
@@ -366,6 +417,7 @@ if __name__ == "__main__":
     pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
                  vol_scale=20, rebal_slip=1,
                  pnl_name='PNL_CRY_PZN20', min_obs=250, thresh=2)
+    print(pnl.df)
 
     pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN20', 'PNL_CRY_PZN05', 'PNL_CRY_PZN10'],
                   pnl_cids=['ALL'], start='2000-01-01', title="Custom Title")
