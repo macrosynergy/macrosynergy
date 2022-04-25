@@ -214,6 +214,7 @@ class SignalReturnRelations:
         plt.show()
 
     def summary_table(self):
+        """Condensed summary table of signal-return relations"""
         dfys = self.df_ys.round(decimals=3)
         dfcs = self.df_cs.round(decimals=3)
         dfsum = dfys.iloc[:3, ].append(dfcs.iloc[1:3, ])
