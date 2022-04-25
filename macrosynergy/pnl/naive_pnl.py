@@ -292,10 +292,15 @@ class NaivePnL:
         no_cids = len(pnl_cids)
 
         if add_long:
+            error_message = "Long-only DataFrame missing. The parameter, 'long_only', " \
+                            "must be set to True when calling make_pnl() method."
+            assert 'dfw_long' in self.__dict__.keys(), error_message
+
             dfw_long = reduce_df(self.dfw_long, xcats=None, cids=pnl_cids,
                                  start=start, end=end, blacklist=self.black,
                                  out_all=False)
-            self.dfw_long['cum_value'] = dfw_long.groupby('cid').cumsum()
+
+            dfw_long['cum_value'] = dfw_long.groupby('cid').cumsum()
 
         sns.set_theme(style='whitegrid', palette='colorblind',
                       rc={'figure.figsize': figsize})
@@ -303,7 +308,7 @@ class NaivePnL:
         if no_cids == 1:
             dfx['cum_value'] = dfx.groupby('xcat').cumsum()
             if add_long:
-                dfx = dfx.append(self.dfw_long)
+                dfx = dfx.append(dfw_long)
                 pnl_cats.append(self.ret)
 
             ax = sns.lineplot(data=dfx, x='real_date', y='cum_value',
@@ -316,8 +321,8 @@ class NaivePnL:
         else:
             dfx['cum_value'] = dfx.groupby('cid').cumsum()
             if add_long:
-                self.dfw_long['cid'] = self.dfw_long['cid'] + '_' + self.dfw_long['xcat']
-                dfx = dfx.append(self.dfw_long)
+                dfw_long['cid'] = dfw_long['cid'] + '_' + dfw_long['xcat']
+                dfx = dfx.append(dfw_long)
 
             ax = sns.lineplot(data=dfx, x='real_date', y='cum_value',
                               hue='cid', estimator=None, lw=1)
@@ -462,13 +467,20 @@ if __name__ == "__main__":
 
     pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN', 'PNL_CRY_DIG', 'PNL_GROWTH_IZN'],
                   pnl_cids=['ALL'], start='2000-01-01')
+
+    # Instantiate a new instance to test the long-only functionality.
+    pnl = NaivePnL(dfd, ret='XR', sigs=['CRY', 'GROWTH', 'INFL'],
+                   cids=cids, start='2000-01-01', blacklist=black)
+    pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
+                 vol_scale=10, long_only=True, rebal_slip=1,
+                 pnl_name='PNL_CRY_PZN', min_obs=250, thresh=1.5)
+
     pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN'], pnl_cids=['CAD', 'NZD'],
-                  start='2000-01-01')
+                  start='2000-01-01', add_long=True)
 
-    # Return evaluation and PnL data frames
-
+    # Return evaluation and PnL DataFrames.
     df_eval = pnl.evaluate_pnls(
-        pnl_cats=['PNL_CRY_PZN', 'PNL_CRY_DIG', 'PNL_GROWTH_IZN'],
+        pnl_cats=['PNL_CRY_PZN'],
         pnl_cids=['ALL'], start='2000-01-01')
     df_pnls = pnl.pnl_df()
     df_pnls.head()
