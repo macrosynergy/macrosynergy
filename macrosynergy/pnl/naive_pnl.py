@@ -79,13 +79,14 @@ class NaivePnL:
             delimited by the frequency chosen.
         :param <str> rebal_slip: re-balancing slippage in days. Default is 1 which
             means that it takes one day to re-balance the position and that the new
-            positions produces PnL from the following day after the signal has been
+            positions produce PnL from the following day after the signal has been
             recorded.
         :param <bool> vol_scale: ex-post scaling of PnL to annualized volatility given.
             This is for comparative visualization and not out-of-sample. Default is none.
         :param <bool> long_only: if True, the long-only returns will be computed which
-            act as a basis for comparison against the signal-adjusted returns. Default is
-            False.
+            act as a basis for comparison against the signal-adjusted returns. Will take
+            a long-only position in the category passed to the parameter 'self.ret'.
+            Default is False.
         :param <int> min_obs: the minimum number of observations required to calculate
             zn_scores. Default is 252.
         :param <bool> iis: if True (default) zn-scores are also calculated for the initial
@@ -173,7 +174,8 @@ class NaivePnL:
     def long_only_pnl(dfw: pd.DataFrame, ret: str, vol_scale: float = None):
         """
         Method used to compute the PnL accrued from simply taking a long-only position in
-        the asset. The return in the asset are not predicated on any exogenous signal.
+        the category, 'self.ret'. The returns from the category are not predicated on any
+        exogenous signal.
 
         :param <pd.DataFrame> dfw:
         :param <str> ret: return category.
@@ -229,6 +231,7 @@ class NaivePnL:
         r_dates_df = rebal_dates.reset_index(level=0)
         r_dates_df.reset_index(drop=True, inplace=True)
         dfw = dfw[['real_date', 'psig', 'cid']]
+
         # Isolate the required signals on the re-balancing dates. Only concerned with the
         # respective signal on the re-balancing date. However, the produced dataframe
         # will only be defined over the re-balancing dates. Therefore, merge the
@@ -272,7 +275,7 @@ class NaivePnL:
             plot. The default is False.
         :param <tuple> figsize: tuple of plot width and height. Default is (10,6).
         :param <str> title: allows entering text for a custom chart header.
-        :param <List[str]> xcat_labels: custom labels to be used for the PnLs;
+        :param <List[str]> xcat_labels: custom labels to be used for the PnLs.
 
         """
 
@@ -299,7 +302,6 @@ class NaivePnL:
             dfw_long = reduce_df(self.dfw_long, xcats=None, cids=pnl_cids,
                                  start=start, end=end, blacklist=self.black,
                                  out_all=False)
-
             dfw_long['cum_value'] = dfw_long.groupby('cid').cumsum()
 
         sns.set_theme(style='whitegrid', palette='colorblind',
@@ -351,7 +353,7 @@ class NaivePnL:
         :param <str> end: latest date in ISO format. Default is None and latest date
             in df is used.
 
-        :return: standardized dataframe with key PnL performance statistics
+        :return <pd.DataFrame>: standardized dataframe with key PnL performance statistics
         """
 
         if pnl_cats is None:
