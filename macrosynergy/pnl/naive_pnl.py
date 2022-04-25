@@ -133,7 +133,7 @@ class NaivePnL:
         dfw = dfw.sort_values(['cid', 'real_date'])
 
         if long_only:
-            dfw_long = self.long_only_pnl(dfw=dfw, ret=self.ret)
+            dfw_long = self.long_only_pnl(dfw=dfw, ret=self.ret, vol_scale=vol_scale)
             self.__dict__['dfw_long'] = dfw_long.reset_index(drop=True)
 
         if rebal_freq != 'daily':
@@ -170,13 +170,15 @@ class NaivePnL:
         self.df = self.df.append(df_pnl[self.df.columns]).reset_index(drop=True)
 
     @staticmethod
-    def long_only_pnl(dfw: pd.DataFrame, ret: str):
+    def long_only_pnl(dfw: pd.DataFrame, ret: str, vol_scale: float = None):
         """
         Method used to compute the PnL accrued from simply taking a long-only position in
         the asset. The return in the asset are not predicated on any exogenous signal.
 
         :param <pd.DataFrame> dfw:
         :param <str> ret: return category.
+        :param <bool> vol_scale: ex-post scaling of PnL to annualized volatility given.
+            This is for comparative visualization and not out-of-sample. Default is none.
 
         :return <pd.DataFrame> dfw_long: standardised dataframe containing exclusively
             the return category, and the long-only panel return.
@@ -185,10 +187,14 @@ class NaivePnL:
         dfw_long = dfw[['cid', 'real_date', ret]]
         panel_pnl = dfw_long.groupby(['real_date']).sum()
         panel_pnl = panel_pnl.reset_index(level=0)
-        panel_pnl['cid'] = 'Long_Only_ALL'
+        panel_pnl['cid'] = 'ALL'
         dfw_long = dfw_long.append(panel_pnl)
         dfw_long['xcat'] = ret
         dfw_long = dfw_long.rename(columns={ret: "value"})
+
+        if vol_scale:
+            leverage = vol_scale * (panel_pnl[ret].std() * np.sqrt(261))**(-1)
+            dfw_long['value'] = dfw_long['value'] * leverage
 
         return dfw_long[['cid', 'xcat', 'real_date', 'value']]
 
@@ -245,8 +251,9 @@ class NaivePnL:
         return sig_series
 
     def plot_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
-                  start: str = None, end: str = None, figsize: Tuple = (10, 6),
-                  title: str = "Cumulative Naive PnL", xcat_labels: List[str] = None):
+                  start: str = None, end: str = None, add_long: bool = False,
+                  figsize: Tuple = (10, 6), title: str = "Cumulative Naive PnL",
+                  xcat_labels: List[str] = None):
 
         """
         Plot line chart of cumulative PnLs, single PnL, multiple PnL types per
@@ -261,6 +268,8 @@ class NaivePnL:
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
             in df is used.
+        :param <bool> add_long: if True, long-only benchmark PnLs will be added to the
+            plot. The default is False.
         :param <tuple> figsize: tuple of plot width and height. Default is (10,6).
         :param <str> title: allows entering text for a custom chart header.
         :param <List[str]> xcat_labels: custom labels to be used for the PnLs;
@@ -280,26 +289,36 @@ class NaivePnL:
 
         dfx = reduce_df(self.df, pnl_cats, pnl_cids, start, end, self.black,
                         out_all=False)
+        no_cids = len(pnl_cids)
+
+        if add_long:
+            dfw_long = reduce_df(self.dfw_long, xcats=None, cids=pnl_cids,
+                                 start=start, end=end, blacklist=self.black,
+                                 out_all=False)
+            self.dfw_long['cum_value'] = dfw_long.groupby('cid').cumsum()
 
         sns.set_theme(style='whitegrid', palette='colorblind',
                       rc={'figure.figsize': figsize})
 
-        if len(pnl_cids) == 1:
+        if no_cids == 1:
             dfx['cum_value'] = dfx.groupby('xcat').cumsum()
+            if add_long: dfx.append(self.dfw_long)
+
             ax = sns.lineplot(data=dfx, x='real_date', y='cum_value',
                               hue='xcat', hue_order=pnl_cats,
                               estimator=None, lw=1)
             plt.legend(loc='upper left', labels=xcat_labels)
             leg = ax.axes.get_legend()
+            leg.set_title('PnL category(s) for ' + pnl_cids[0])
 
-            if len(pnl_cats) > 1:
-                leg.set_title('PnL categories for ' + pnl_cids[0])
-            else:
-                leg.set_title('PnL category for ' + pnl_cids[0])
         else:
             dfx['cum_value'] = dfx.groupby('cid').cumsum()
-            ax = sns.lineplot(data=dfx, x='real_date', y='cum_value', hue='cid',
-                              estimator=None, lw=1)
+            if add_long:
+                self.dfw_long['cid'] = self.dfw_long['cid'] + '_' + self.dfw_long['xcat']
+                dfx = dfx.append(self.dfw_long)
+
+            ax = sns.lineplot(data=dfx, x='real_date', y='cum_value',
+                              hue='cid', estimator=None, lw=1)
             leg = ax.axes.get_legend()
             leg.set_title('Cross Sections')
 
@@ -409,7 +428,7 @@ if __name__ == "__main__":
     # Make and plot PnLs to check correct labelling.
 
     pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
-                 vol_scale=5, rebal_slip=1,
+                 vol_scale=5, long_only=True, rebal_slip=1,
                  pnl_name='PNL_CRY_PZN05', min_obs=250, thresh=2)
     pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
                  vol_scale=10, rebal_slip=1,
