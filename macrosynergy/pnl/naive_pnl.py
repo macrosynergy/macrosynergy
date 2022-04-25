@@ -302,7 +302,9 @@ class NaivePnL:
 
         if no_cids == 1:
             dfx['cum_value'] = dfx.groupby('xcat').cumsum()
-            if add_long: dfx.append(self.dfw_long)
+            if add_long:
+                dfx = dfx.append(self.dfw_long)
+                pnl_cats.append(self.ret)
 
             ax = sns.lineplot(data=dfx, x='real_date', y='cum_value',
                               hue='xcat', hue_order=pnl_cats,
@@ -439,7 +441,8 @@ if __name__ == "__main__":
     print(pnl.df)
 
     pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN20', 'PNL_CRY_PZN05', 'PNL_CRY_PZN10'],
-                  pnl_cids=['ALL'], start='2000-01-01', title="Custom Title")
+                  pnl_cids=['ALL'], start='2000-01-01', add_long=True,
+                  title="Custom Title")
     pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN10', 'PNL_CRY_PZN20', 'PNL_CRY_PZN05'],
                   pnl_cids=['ALL'], start='2000-01-01', title="Custom Title",
                   xcat_labels=["cry10", "cry20", "cry5"])
