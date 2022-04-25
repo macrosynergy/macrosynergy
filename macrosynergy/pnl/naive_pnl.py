@@ -448,6 +448,11 @@ if __name__ == "__main__":
     pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN20', 'PNL_CRY_PZN05', 'PNL_CRY_PZN10'],
                   pnl_cids=['ALL'], start='2000-01-01', add_long=True,
                   title="Custom Title")
+    # Test using long-only parameter in succession but requesting on different
+    # cross-sections.
+    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN20'], pnl_cids=['CAD', 'NZD'],
+                  start='2000-01-01', add_long=True)
+
     pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN10', 'PNL_CRY_PZN20', 'PNL_CRY_PZN05'],
                   pnl_cids=['ALL'], start='2000-01-01', title="Custom Title",
                   xcat_labels=["cry10", "cry20", "cry5"])
