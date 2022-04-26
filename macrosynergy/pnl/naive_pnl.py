@@ -170,6 +170,11 @@ class NaivePnL:
 
         self.df = self.df.append(df_pnl[self.df.columns]).reset_index(drop=True)
 
+    # Todo: make_long_pnl based on long_only_pnl that stores a named long PnL
+    # Todo: it would work just like make_pnl
+    # Todo: take out add_long from plot_pnls, as the long-only can be used
+    #  like any other pnl (except that it is only available for "ALL",)
+
     @staticmethod
     def long_only_pnl(dfw: pd.DataFrame, ret: str, vol_scale: float = None):
         """
@@ -447,7 +452,7 @@ if __name__ == "__main__":
                  pnl_name='PNL_CRY_PZN20', min_obs=250, thresh=2)
     print(pnl.df)
 
-    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN20', 'PNL_CRY_PZN05', 'PNL_CRY_PZN10'],
+    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN10'],
                   pnl_cids=['ALL'], start='2000-01-01', add_long=True,
                   title="Custom Title")
     # Test using long-only parameter in succession but requesting on different
