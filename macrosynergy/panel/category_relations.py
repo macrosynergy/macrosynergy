@@ -297,10 +297,10 @@ class CategoryRelations(object):
 
     def reg_scatter(self, title: str = None, labels: bool = False,
                     size: Tuple[float] = (12, 8), xlab: str = None, ylab: str = None,
-                    coef_box: bool = True, coef_box_loc: str = None,
+                    coef_box_incl: bool = True, coef_box: str = None,
                     fit_reg: bool = True, reg_ci: int = 95, reg_order: int = 1,
                     reg_robust: bool = False, separator: Union[str, int] = None,
-                    title_adj: float = 1):
+                    title_adj: float = 1, single_chart: bool = False):
 
         """
         Display scatterplot and regression line.
@@ -318,23 +318,34 @@ class CategoryRelations(object):
         :param <int> reg_order: order of the regression equation. Default is 1 (linear).
         :param <bool> reg_robust: if this will de-weight outliers, which is
             computationally expensive. Default is False.
-        :param <bool> coef_box: binary variable delimiting whether the correlation
+        :param <bool> coef_box_incl: binary variable delimiting whether the correlation
             coefficient and probability statistics are included in the graphic. The
             default value is True: coefficient box included.
-        :param <str> coef_box_loc: gives the location of the box of correlation
-            coefficient and probability. If None (default), the box is shown in the upper
-            left corner. The options are standard, i.e. 'upper left', 'lower right' and
-            so forth. This does not work with a separator.
+        :param <str> coef_box: gives the location of the box of correlation coefficient
+            and probability. If None (default), the box is shown in the upper left
+            corner. The options are standard, i.e. 'upper left', 'lower right' and so
+            forth. This does not work with a separator.
         :param Union[str, int] separator: allows categorizing the scatter analysis by time
             period or cross section. In the former case the argument is set to "cids" in
             the case the argument is set to a year that divides the sample to before
             (not including) that year and from (including) that year.
         :param <float> title_adj: parameter that sets top of figure to accommodate title.
             Default is 1.
+        :param <bool> single_chart: boolean parameter determining whether the x- and y-
+            labels are only written on a single graph of the Facet Grid (useful if there
+            are numerous charts, and the labels are excessively long). The default is
+            False.
         """
-        
-        sns.set_theme(style="whitegrid")
 
+        coef_box_error = "Expects a Boolean Object indicating whether to include the " \
+                         "correlation coefficient & probability statistics in the graph."
+        assert isinstance(coef_box_incl, bool), coef_box_error
+
+        coef_box_loc_error = "The parameter expects a string used to delimit the " \
+                             "location of the box: 'upper left', 'lower right' etc."
+        assert isinstance(coef_box, str), coef_box_loc_error
+
+        sns.set_theme(style="whitegrid")
         dfx = self.df.copy()
 
         if title is None and (self.years is None):
@@ -378,7 +389,7 @@ class CategoryRelations(object):
                 data_table.scale(0.4, 2.5)
                 data_table.set_fontsize(14)
 
-            ax.legend()
+            ax.legend(loc='upper right')
             ax.set_title(title, fontsize=14)
             if xlab is not None:
                 ax.set_xlabel(xlab)
@@ -386,6 +397,8 @@ class CategoryRelations(object):
                 ax.set_ylabel(ylab)
 
         elif separator == "cids":
+
+            assert isinstance(single_chart, bool)
 
             index_cids = dfx.index.get_level_values(0)
             cids_in_df = list(index_cids.unique())
@@ -416,10 +429,30 @@ class CategoryRelations(object):
 
             fg.set_titles(col_template='{col_name}')
             fg.fig.suptitle(title, y=title_adj, fontsize=14)
-            if xlab is not None:
-                fg.set_xlabels(xlab)
-            if ylab is not None:
-                fg.set_ylabels(ylab)
+
+            if not single_chart:
+                if xlab is not None:
+                    fg.set_xlabels(xlab, clear_inner=True)
+                if ylab is not None:
+                    fg.set_ylabels(ylab)
+            else:
+                error = "Label expected for the respective axis."
+                assert xlab is not None, error
+                assert ylab is not None, error
+                number_of_graphs = len(fg.axes)
+                no_columns = fg._ncol
+                remainder = int(number_of_graphs % no_columns)
+
+                for i in range(number_of_graphs):
+                    fg.axes[i].set_xlabel('')
+                    fg.axes[i].set_ylabel('')
+
+                    if remainder == 0:
+                        fg.axes[no_columns].set_xlabel(xlab)
+                        fg.axes[no_columns].set_ylabel(xlab)
+                    else:
+                        fg.axes[-remainder].set_xlabel(xlab)
+                        fg.axes[-remainder].set_ylabel(xlab)
 
         elif separator is None:
             fig, ax = plt.subplots(figsize=size)
@@ -431,7 +464,7 @@ class CategoryRelations(object):
 
             if coef_box:
                 data_table = self.corr_probability(df_probability=self.df,
-                                                   coef_box_loc=coef_box_loc)
+                                                   coef_box_loc=coef_box)
                 data_table.scale(0.4, 2.5)
                 data_table.set_fontsize(12)
 
@@ -531,6 +564,7 @@ if __name__ == "__main__":
                            columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
     df_cids.loc['AUD'] = ['2000-01-01', '2020-12-31', 0.1, 1]
     df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
+    df_cids.loc['BRL'] = ['2001-01-01', '2020-11-30', -0.1, 2]
     df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
     df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
     df_cids.loc['USD'] = ['2003-01-01', '2020-12-31', -0.1, 2]
@@ -560,13 +594,13 @@ if __name__ == "__main__":
                            start='2005-01-01', blacklist=black,
                            years=None)
 
-    cr.reg_scatter(labels=False, coef_box_loc='upper left', separator=None,
+    cr.reg_scatter(labels=False, coef_box='upper left', separator=None,
                    title="Carry and Return",
                    xlab="Carry", ylab="Return")
-    cr.reg_scatter(labels=False, coef_box_loc='upper left', separator='cids',
+    cr.reg_scatter(labels=False, coef_box='upper left', separator='cids',
                    title="Carry and Return",
-                   xlab="Carry", ylab="Return")
-    cr.reg_scatter(labels=False, coef_box_loc='upper left', separator=2010,
+                   ylab="", xlab="")
+    cr.reg_scatter(labels=False, coef_box='upper left', separator=2010,
                    title="Carry and Return",
                    xlab="Carry", ylab="Return")
 
@@ -575,10 +609,10 @@ if __name__ == "__main__":
                            start='2005-01-01', blacklist=black,
                            years=3)
 
-    cr.reg_scatter(labels=True, coef_box_loc='upper left', separator=None,
+    cr.reg_scatter(labels=True, coef_box='upper right', separator=None,
                    title="Carry and Return",
                    xlab="Carry", ylab="Return")
-    cr.reg_scatter(labels=True, coef_box_loc='upper left', separator='cids',
+    cr.reg_scatter(labels=True, coef_box='upper left', separator='cids',
                    title="Carry and Return",
                    xlab="Carry", ylab="Return")
 
@@ -586,7 +620,7 @@ if __name__ == "__main__":
                            cids=cidx, xcat_aggs=['last', 'mean'],
                            start='2005-01-01', blacklist=black,
                            years=None)
-    cr.reg_scatter(labels=True, coef_box_loc='upper left', separator=2010,
+    cr.reg_scatter(labels=True, coef_box='upper left', separator=2010,
                    title="Carry and Return.",
                    xlab="Carry", ylab="Return")
 
@@ -595,13 +629,13 @@ if __name__ == "__main__":
                            start='2000-01-01', years=None, blacklist=black,
                            xcat1_chg=None, xcat_trims=[2, 2])
 
-    cr.reg_scatter(labels=False, coef_box_loc='upper left')
+    cr.reg_scatter(labels=False, coef_box='upper left')
     cr.jointplot(kind='hist', xlab='growth', ylab='inflation', height=5)
 
     cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M',
                            xcat_aggs=['mean', 'mean'],
                            start='2000-01-01', years=3, blacklist=black)
 
-    cr.reg_scatter(labels=False, coef_box_loc='lower right',
+    cr.reg_scatter(labels=False, coef_box='lower right',
                    title='Growth and inflation', xlab='Growth', ylab='Inflation')
     cr.jointplot(kind='hist', xlab='growth', ylab='inflation', height=5)
