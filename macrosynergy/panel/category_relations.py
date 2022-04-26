@@ -10,7 +10,7 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import categories_df
 
 
-class CategoryRelations:
+class CategoryRelations(object):
     """Class for analyzing and visualizing two categories across a panel
 
     :param <pd.Dataframe> df: standardized data frame with the necessary columns:
@@ -205,23 +205,102 @@ class CategoryRelations:
         df = df.dropna(axis=0, how='any')
         return df
 
-    def corr_probability(self, coef_box):
+    def corr_prob_calc(self, df_probability: Union[pd.DataFrame, List[pd.DataFrame]],
+                       prob_bool: bool = True):
+        """
+        Method used to compute the correlation coefficient and probability statistics.
+        The method is able to handle multiple dataframes, and will return the
+        corresponding number of statistics held inside a List.
 
-        x = self.df[self.xcats[0]].to_numpy()
-        y = self.df[self.xcats[1]].to_numpy()
-        coeff, pval = stats.pearsonr(x, y)
-        cpl = [np.round(coeff, 3), np.round(1 - pval, 3)]
-        fields = ["Correlation\n coefficient", "Probability\n of significance"]
-        data_table = plt.table(cellText=[cpl], colLabels=fields,
-                               cellLoc='center', loc=coef_box)
+        :param <List[pd.DataFrame] or pd.DataFrame> df_probability: pandas DataFrame
+            containing the dependent and explanatory variables.
+        :param <bool> prob_bool: boolean parameter which determines whether the
+            probability value is included in the table. The default is True.
+
+        :return <List[tuple(float, float)]>:
+        """
+        if isinstance(df_probability, pd.DataFrame):
+            df_probability = [df_probability]
+
+        cpl = []
+        for i, df_i in enumerate(df_probability):
+            x = df_i[self.xcats[0]].to_numpy()
+            y = df_i[self.xcats[1]].to_numpy()
+            coeff, pval = stats.pearsonr(x, y)
+            if prob_bool:
+                row = [np.round(coeff, 3), np.round(1 - pval, 3)]
+            else:
+                row = [np.round(coeff, 3)]
+
+            cpl.append(row)
+        return cpl
+
+    def corr_probability(self, df_probability, time_period: str = '',
+                         coef_box_loc: str = 'upper left',
+                         prob_bool: bool = True):
+        """
+        Method used to add the computed correlation coefficient and probability
+        statistics to a Matplotlib table. The table containing the figures will be
+        emblazoned on the two-dimensional graphs.
+
+        :param <List[pd.DataFrame] or pd.DataFrame> df_probability: pandas DataFrame
+            containing the dependent and explanatory variables. Able to handle multiple
+            dataframes representing different time-periods of the original series.
+        :param <str> time_period: indicator used to clarify which time-period the
+            statistics are computed for. For example, before 2010 and after 2010: the two
+            periods experience very different macroeconomic conditions. The default is
+            an empty string.
+        :param <str> coef_box_loc: location on the graph of the aforementioned box. The
+            default is in the upper left corner.
+        :param <bool> prob_bool: boolean parameter which determines whether the
+            probability value is included in the table. The default is True.
+
+        """
+        time_period_error = f"<str> expected - received {type(time_period)}."
+        assert isinstance(time_period, str), time_period_error
+
+        cpl = self.corr_prob_calc(df_probability=df_probability, prob_bool=prob_bool)
+        if prob_bool:
+            fields = [f"Correlation\n coefficient {time_period}",
+                      f"Probability\n of significance {time_period}"]
+        else:
+            fields = ["Correlation\n coefficient"]
+
+        if isinstance(df_probability, list) and len(df_probability) == 2:
+            row_headers = ["Before 2010", "After 2010"]
+            cellC = [["lightsteelblue", "lightsteelblue"],
+                     ["lightsalmon", "lightsalmon"]]
+        else:
+            row_headers = None
+            cellC = None
+
+        data_table = plt.table(cellText=cpl, cellColours=cellC,
+                               colLabels=fields, cellLoc='center', loc=coef_box_loc)
         
         return data_table
 
+    def annotate_facet(self, data, **kws):
+        """
+        Method used to annotate each graph within the facet grid. The annotation will
+        exclusively include the correlation coefficient for each individual cross-section
+        defined across the explanatory and dependent variable.
+        """
+
+        x = data[self.xcats[0]].to_numpy()
+        y = data[self.xcats[1]].to_numpy()
+        coeff, pval = stats.pearsonr(x, y)
+
+        cpl = np.round(coeff, 3)
+        fields = "Correlation coefficient: "
+        ax = plt.gca()
+        ax.text(.04, .1, f"{fields} {cpl}", fontsize=10, transform=ax.transAxes)
+
     def reg_scatter(self, title: str = None, labels: bool = False,
-                    size: Tuple[float] = (12, 8),
-                    xlab: str = None, ylab: str = None, coef_box: str = None,
-                    fit_reg: bool = True,
-                    reg_ci: int = 95, reg_order: int = 1, reg_robust: bool = False):
+                    size: Tuple[float] = (12, 8), xlab: str = None, ylab: str = None,
+                    coef_box_incl: bool = True, coef_box: str = None,
+                    fit_reg: bool = True, reg_ci: int = 95, reg_order: int = 1,
+                    reg_robust: bool = False, separator: Union[str, int] = None,
+                    title_adj: float = 1, single_chart: bool = False):
 
         """
         Display scatterplot and regression line.
@@ -239,42 +318,35 @@ class CategoryRelations:
         :param <int> reg_order: order of the regression equation. Default is 1 (linear).
         :param <bool> reg_robust: if this will de-weight outliers, which is
             computationally expensive. Default is False.
-        :param <str> coef_box: gives location of box of correlation coefficient and
-            probability. If None (default), no box is shown. Options are standard,
-            i.e. 'upper left', 'lower right' and so forth.
+        :param <bool> coef_box_incl: binary variable delimiting whether the correlation
+            coefficient and probability statistics are included in the graphic. The
+            default value is True: coefficient box included.
+        :param <str> coef_box: gives the location of the box of correlation coefficient
+            and probability. If None (default), the box is shown in the upper left
+            corner. The options are standard, i.e. 'upper left', 'lower right' and so
+            forth. This does not work with a separator.
+        :param Union[str, int] separator: allows categorizing the scatter analysis by time
+            period or cross section. In the former case the argument is set to "cids" in
+            the case the argument is set to a year that divides the sample to before
+            (not including) that year and from (including) that year.
+        :param <float> title_adj: parameter that sets top of figure to accommodate title.
+            Default is 1.
+        :param <bool> single_chart: boolean parameter determining whether the x- and y-
+            labels are only written on a single graph of the Facet Grid (useful if there
+            are numerous charts, and the labels are excessively long). The default is
+            False.
         """
-        
+
+        coef_box_error = "Expects a Boolean Object indicating whether to include the " \
+                         "correlation coefficient & probability statistics in the graph."
+        assert isinstance(coef_box_incl, bool), coef_box_error
+
+        coef_box_loc_error = "The parameter expects a string used to delimit the " \
+                             "location of the box: 'upper left', 'lower right' etc."
+        assert isinstance(coef_box, str), coef_box_loc_error
+
         sns.set_theme(style="whitegrid")
-        fig, ax = plt.subplots(figsize = size)
-        sns.regplot(data=self.df, x=self.xcats[0], y=self.xcats[1],
-                    ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
-                    scatter_kws={'s': 30, 'alpha': 0.5, 'color': 'lightgray'},
-                    line_kws={'lw': 1})
-
-        if coef_box is not None:
-            data_table = self.corr_probability(coef_box)
-            data_table.scale(0.4, 2.5)
-            data_table.set_fontsize(12)
-
-        if labels:
-            assert self.freq in ['A', 'Q', 'M'], \
-                'Labels only available for monthly or lower frequencies'
-            df_labs = self.df.dropna().index.to_frame(index=False)
-            if self.years is not None:
-                ser_labs = df_labs['cid'] + ' ' + df_labs['real_date']
-            elif self.freq == 'A':
-                ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year.\
-                    astype(str)
-            elif self.freq == 'Q':
-                ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year.\
-                    astype(str) + 'Q' + df_labs['real_date'].dt.quarter.astype(str)
-            elif self.freq == 'M':
-                ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year.\
-                    astype(str) + '-' + df_labs['real_date'].dt.month.astype(str)
-            for i in range(self.df.shape[0]):
-                plt.text(x=self.df[self.xcats[0]][i] + 0,
-                         y=self.df[self.xcats[1]][i] + 0, s=ser_labs[i],
-                         fontdict=dict(color='black', size=8))
+        dfx = self.df.copy()
 
         if title is None and (self.years is None):
             dates = self.df.index.get_level_values('real_date').to_series().\
@@ -284,11 +356,146 @@ class CategoryRelations:
         elif title is None:
             title = f'{self.xcats[0]} and {self.xcats[1]}'
 
-        ax.set_title(title, fontsize = 14)
-        if xlab is not None:
-            ax.set_xlabel(xlab)
-        if ylab is not None:
-            ax.set_ylabel(ylab)
+        if isinstance(separator, int):
+
+            year_error = "Separation by years does not work with year groups."
+            assert self.years is None, year_error
+
+            fig, ax = plt.subplots(figsize=size)
+
+            index_years = dfx.index.get_level_values(1).year
+            years_in_df = list(index_years.unique())
+            assert separator in years_in_df, "separator year is not in range"
+            assert separator > np.min(years_in_df), \
+                "separator year must not be first in range"
+            label_set1 = f"before {separator}"
+            label_set2 = f"from {separator}"
+            dfx1 = dfx[index_years < separator]
+            dfx2 = dfx[index_years >= separator]
+
+            sns.regplot(data=dfx1, x=self.xcats[0], y=self.xcats[1],
+                        ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
+                        scatter_kws={'s': 30, 'alpha': 0.5},
+                        label=label_set1,
+                        line_kws={'lw': 1})
+            sns.regplot(data=dfx2, x=self.xcats[0], y=self.xcats[1],
+                        ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
+                        label=label_set2,
+                        scatter_kws={'s': 30, 'alpha': 0.5},
+                        line_kws={'lw': 1})
+            if coef_box:
+                data_table = self.corr_probability(df_probability=[dfx1, dfx2],
+                                                   time_period="")
+                data_table.scale(0.4, 2.5)
+                data_table.set_fontsize(14)
+
+            ax.legend(loc='upper right')
+            ax.set_title(title, fontsize=14)
+            if xlab is not None:
+                ax.set_xlabel(xlab)
+            if ylab is not None:
+                ax.set_ylabel(ylab)
+
+        elif separator == "cids":
+
+            assert isinstance(single_chart, bool)
+
+            index_cids = dfx.index.get_level_values(0)
+            cids_in_df = list(index_cids.unique())
+            n_cids = len(cids_in_df)
+            assert n_cids > 1, "There must be more than one cid to use separator='cids'."
+            dfx['cid'] = index_cids
+            dict_coln = {2: 2, 5: 3, 8: 4, 30: 5}
+
+            keys_ar = np.array(list(dict_coln.keys()))
+            key = keys_ar[keys_ar <= n_cids][-1]
+            col_number = dict_coln[key]
+
+            # Convert the dataframe to a standardised dataframe. Three columns: two
+            # categories (dependent & explanatory variable) and the respective
+            # cross-sections. The index will be the date timestamp.
+            dfx_copy = dfx.copy()
+            dfx_copy = dfx_copy.droplevel(0, axis="index")
+            dfx_copy = dfx_copy.reset_index(level=0)
+
+            fg = sns.FacetGrid(data=dfx_copy, col='cid', col_wrap=col_number)
+            fg.map(sns.regplot, self.xcats[0], self.xcats[1], ci=reg_ci, order=reg_order,
+                   robust=reg_robust, fit_reg=fit_reg,
+                   scatter_kws={'s': 15, 'alpha': 0.5, 'color': 'lightgray'},
+                   line_kws={'lw': 1})
+
+            if coef_box:
+                fg.map_dataframe(self.annotate_facet)
+
+            fg.set_titles(col_template='{col_name}')
+            fg.fig.suptitle(title, y=title_adj, fontsize=14)
+
+            if not single_chart:
+                if xlab is not None:
+                    fg.set_xlabels(xlab, clear_inner=True)
+                if ylab is not None:
+                    fg.set_ylabels(ylab)
+            else:
+                error = "Label expected for the respective axis."
+                assert xlab is not None, error
+                assert ylab is not None, error
+                number_of_graphs = len(fg.axes)
+                no_columns = fg._ncol
+                remainder = int(number_of_graphs % no_columns)
+
+                for i in range(number_of_graphs):
+                    fg.axes[i].set_xlabel('')
+                    fg.axes[i].set_ylabel('')
+
+                    if remainder == 0:
+                        fg.axes[no_columns].set_xlabel(xlab)
+                        fg.axes[no_columns].set_ylabel(xlab)
+                    else:
+                        fg.axes[-remainder].set_xlabel(xlab)
+                        fg.axes[-remainder].set_ylabel(xlab)
+
+        elif separator is None:
+            fig, ax = plt.subplots(figsize=size)
+
+            sns.regplot(data=dfx, x=self.xcats[0], y=self.xcats[1],
+                        ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
+                        scatter_kws={'s': 30, 'alpha': 0.5, 'color': 'lightgray'},
+                        line_kws={'lw': 1})
+
+            if coef_box:
+                data_table = self.corr_probability(df_probability=self.df,
+                                                   coef_box_loc=coef_box)
+                data_table.scale(0.4, 2.5)
+                data_table.set_fontsize(12)
+
+            if labels:
+                assert self.freq in ['A', 'Q', 'M'], \
+                    'Labels only available for monthly or lower frequencies'
+                df_labs = self.df.dropna().index.to_frame(index=False)
+                if self.years is not None:
+                    ser_labs = df_labs['cid'] + ' ' + df_labs['real_date']
+                elif self.freq == 'A':
+                    ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year. \
+                        astype(str)
+                elif self.freq == 'Q':
+                    ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year. \
+                        astype(str) + 'Q' + df_labs['real_date'].dt.quarter.astype(str)
+                elif self.freq == 'M':
+                    ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year. \
+                        astype(str) + '-' + df_labs['real_date'].dt.month.astype(str)
+                for i in range(self.df.shape[0]):
+                    plt.text(x=self.df[self.xcats[0]][i] + 0,
+                             y=self.df[self.xcats[1]][i] + 0, s=ser_labs[i],
+                             fontdict=dict(color='black', size=8))
+
+            ax.set_title(title, fontsize=14)
+            if xlab is not None:
+                ax.set_xlabel(xlab)
+            if ylab is not None:
+                ax.set_ylabel(ylab)
+
+        else:
+            ValueError("Separator must be either a valid year <int> or 'cids' <str>.")
             
         plt.show()
 
@@ -296,7 +503,7 @@ class CategoryRelations:
                   height: float = 6, xlab: str = None, ylab: str = None):
 
         """
-        Display jointplot of chosen type, based on seaborn.jointplot().
+        Display joint plot of chosen type, based on seaborn.jointplot().
         The plot will always be square.
 
         :param <str> kind: determines type of relational plot inside the joint plot.
@@ -357,6 +564,7 @@ if __name__ == "__main__":
                            columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
     df_cids.loc['AUD'] = ['2000-01-01', '2020-12-31', 0.1, 1]
     df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
+    df_cids.loc['BRL'] = ['2001-01-01', '2020-11-30', -0.1, 2]
     df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
     df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
     df_cids.loc['USD'] = ['2003-01-01', '2020-12-31', -0.1, 2]
@@ -376,13 +584,45 @@ if __name__ == "__main__":
     filt2 = (dfd['xcat'] == 'INFL') & (dfd['cid'] == 'NZD')  # All NZD INFL locations.
     # Reduced dataframe.
     dfdx = dfd[~(filt1 | filt2)]
+    dfdx['ERA'] = "before 2010"
+    dfdx.loc[dfdx.real_date.dt.year > 2007, 'ERA'] = "from 2010"
 
     cidx = ['AUD', 'CAD', 'GBP', 'USD']
 
-    # cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'],
-                           # cids=cidx, xcat_aggs=['last', 'mean'],
-                           # start='2005-01-01', blacklist=black,
-                           # years=3)
+    cr = CategoryRelations(dfdx, xcats=['CRY', 'XR'], freq='Q', lag=1,
+                           cids=cidx, xcat_aggs=['mean', 'sum'],
+                           start='2005-01-01', blacklist=black,
+                           years=None)
+
+    cr.reg_scatter(labels=False, coef_box='upper left', separator=None,
+                   title="Carry and Return",
+                   xlab="Carry", ylab="Return")
+    cr.reg_scatter(labels=False, coef_box='upper left', separator='cids',
+                   title="Carry and Return",
+                   ylab="", xlab="")
+    cr.reg_scatter(labels=False, coef_box='upper left', separator=2010,
+                   title="Carry and Return",
+                   xlab="Carry", ylab="Return")
+
+    cr = CategoryRelations(dfdx, xcats=['CRY', 'XR'], freq='M',
+                           cids=cidx, xcat_aggs=['last', 'mean'],
+                           start='2005-01-01', blacklist=black,
+                           years=3)
+
+    cr.reg_scatter(labels=True, coef_box='upper right', separator=None,
+                   title="Carry and Return",
+                   xlab="Carry", ylab="Return")
+    cr.reg_scatter(labels=True, coef_box='upper left', separator='cids',
+                   title="Carry and Return",
+                   xlab="Carry", ylab="Return")
+
+    cr = CategoryRelations(dfdx, xcats=['CRY', 'XR'], freq='M',
+                           cids=cidx, xcat_aggs=['last', 'mean'],
+                           start='2005-01-01', blacklist=black,
+                           years=None)
+    cr.reg_scatter(labels=True, coef_box='upper left', separator=2010,
+                   title="Carry and Return.",
+                   xlab="Carry", ylab="Return")
 
     cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'], cids=cidx, freq='M',
                            xcat_aggs=['last', 'mean'], lag=1,

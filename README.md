@@ -11,9 +11,9 @@ Macrosynergy research package.
 
 The package has 4 main modules:
 
-[1] management: simulates, analyzes and reshapes standard quantamental dataframes
+[1] management: simulates, analyses and reshapes standard quantamental dataframes
 [2] panel: analyses and visualizes panels of quantamental data
-[3] signal: transforms quantamental indicators into trading signals and does navive analyses
+[3] signal: transforms quantamental indicators into trading signals and does naive analysis
 [4] pnl: constructs portfolios based on signals, applies risk management and analyses realistic PnLs 
 
 ## Requirements
