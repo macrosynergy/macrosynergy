@@ -135,8 +135,9 @@ def adjusted_returns(benchmark_return: pd.Series, df_hedge: pd.DataFrame,
     """
     Method used to compute the hedge ratio returns on the hedging asset which will
     subsequently be subtracted from the returns of the position contracts to calculate
-    the adjusted returns (adjusted for the hedged position). For instance, if using US
-    Equity to hedge Australia FX: AUD_FXXR_NSA_H = AUD_FXXR_NSA - HR_AUD * USD_EQXR_NSA.
+    the adjusted returns (adjusted for the hedged position) across all cross-sections in
+    the panel. For instance, if using US Equity to hedge Australia FX:
+    AUD_FXXR_NSA_H = AUD_FXXR_NSA - HR_AUD * USD_EQXR_NSA.
 
     :param <pd.Series> benchmark_return: the return series of the asset being used to
         hedge against the main asset.
@@ -151,6 +152,7 @@ def adjusted_returns(benchmark_return: pd.Series, df_hedge: pd.DataFrame,
     no_cids = len(hedge_pivot.columns)
 
     index = benchmark_return.index
+    # Matching the dimensions to the number of assets being hedged.
     benchmark_return = np.tile(benchmark_return.to_numpy(), (no_cids, 1))
     benchmark_return = benchmark_return.transpose()
     br_df = pd.DataFrame(data=benchmark_return, columns = hedge_pivot.columns,
