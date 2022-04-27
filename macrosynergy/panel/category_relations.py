@@ -599,8 +599,7 @@ if __name__ == "__main__":
                    xlab="Carry", ylab="Return")
     cr.reg_scatter(labels=False, coef_box='upper left', separator='cids',
                    title="Carry and Return",
-                   xlab="Real-time estimated technical growth trend, 3-month MA",
-                   ylab="Return")
+                   ylab="", xlab="")
     cr.reg_scatter(labels=False, coef_box='upper left', separator=2010,
                    title="Carry and Return",
                    xlab="Carry", ylab="Return")
