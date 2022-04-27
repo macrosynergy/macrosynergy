@@ -215,7 +215,7 @@ class NaivePnL:
 
         return sig_series
 
-    def make_long_pnl(self, vol_scale: float = None):
+    def make_long_pnl(self, vol_scale: float = None, label: str = None):
         """
         The long-only returns will be computed which act as a basis for comparison
         against the signal-adjusted returns. Will take a long-only position in the
@@ -224,19 +224,24 @@ class NaivePnL:
         :param <bool> vol_scale: ex-post scaling of PnL to annualized volatility given.
             This is for comparative visualization and not out-of-sample, and is applied
             to the long-only position. Default is none.
-
+        :param <str> label: associated label that will be mapped to the long-only
+            DataFrame. The label will be used in the plotting graphic for plot_pnls().
+            If a label is not defined, the default will be the name of the return
+            category.
         """
 
         error_vol = "The volatility scale must be a numerical value."
         assert isinstance(vol_scale, (float, int)), error_vol
 
+        if label is None:
+            label = self.ret
+
+        self.__dict__['label'] = label
+
         dfx = self.df[self.df['xcat'].isin([self.ret])]
 
         dfw_long = self.long_only_pnl(dfw=dfx, ret=self.ret, vol_scale=vol_scale)
         self.__dict__['dfw_long'] = dfw_long.reset_index(drop=True)
-
-        # Todo: take out add_long from plot_pnls, as the long-only can be used
-        #  like any other pnl (except that it is only available for "ALL",)v
 
     @staticmethod
     def long_only_pnl(dfw: pd.DataFrame, ret: str, vol_scale: float = None):
@@ -304,7 +309,8 @@ class NaivePnL:
         if xcat_labels is not None:
             assert(len(xcat_labels) == len(pnl_cats)), error_message
         else:
-            xcat_labels = pnl_cats
+            pnl_cats_c = pnl_cats.copy()
+            xcat_labels = pnl_cats_c
 
         dfx = reduce_df(self.df, pnl_cats, pnl_cids, start, end, self.black,
                         out_all=False)
@@ -328,6 +334,7 @@ class NaivePnL:
             if add_long:
                 dfx = dfx.append(dfw_long)
                 pnl_cats.append(self.ret)
+                xcat_labels.append(self.label)
 
             ax = sns.lineplot(data=dfx, x='real_date', y='cum_value',
                               hue='xcat', hue_order=pnl_cats,
@@ -463,10 +470,18 @@ if __name__ == "__main__":
                  pnl_name='PNL_CRY_PZN20', min_obs=250, thresh=2)
     print(pnl.df)
 
-    pnl.make_long_pnl(vol_scale=20)
+    pnl.make_long_pnl(vol_scale=20, label='Long_Only_XR20')
     # Long-only DataFrame.
-    print(pnl.dfw_long)
+
+    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN20'],
+                  pnl_cids=['ALL'], start='2000-01-01',
+                  add_long=True,
+                  title="Custom Title")
+
+    pnl.make_long_pnl(vol_scale=10, label='Long_Only_XR10')
+    # Long-only DataFrame.
 
     pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN10'],
                   pnl_cids=['ALL'], start='2000-01-01',
+                  add_long=True,
                   title="Custom Title")
