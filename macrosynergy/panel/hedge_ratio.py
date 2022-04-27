@@ -162,7 +162,8 @@ def adjusted_returns(benchmark_return: pd.Series, df_hedge: pd.DataFrame,
 def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                 benchmark_return: str = None, start: str = None, end: str = None,
                 blacklist: dict = None, meth: str = 'ols', oos: bool = True,
-                refreq: str = 'm', min_obs: int = 24, hedged_returns: bool = False):
+                refreq: str = 'm', min_obs: int = 24, hedged_returns: bool = False,
+                ratio_name: str = "_HR", hr_name: str = "H"):
 
     """
     Estimates hedge ratios of a return category with respect to a hedge benchmark.
@@ -198,6 +199,10 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         OLS regression ('ols').
     :param <bool> hedged_returns: If True the function appends the hedged returns to the
         dataframe of hedge ratios. Default is False.
+    :param <str> ratio_name: hedge ratio label that will be appended to the category
+        name. The default is "_HR". For instance, 'xcat' + "_HR".
+    :param <str> hr_name: label used to distinguish the hedged returns in the DataFrame.
+        The label is appended to the category being hedged. The default is "H".
 
     :return <pd.Dataframe>: dataframe with hedge ratio estimates that update at the
         chosen re-estimation frequency.
@@ -264,7 +269,7 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     dfh_w = dfh.pivot(index='real_date', columns='cid', values='value')
     dfh_w.columns = ['hedge']
 
-    # --- Merge time series and calculate rebalancing dates.
+    # --- Merge time series and calculate re-balancing dates.
 
     dfw = pd.merge(dfp_w, dfh_w, how='inner', on='real_date')
     br = dfw['hedge']
@@ -288,21 +293,20 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
     df_hedge = pd.concat(aggregate).reset_index(drop=True)
 
-    df_hedge['xcat'] = xcat + "_HR"
-    # Todo: allow hedge ratio name (ratio_name) to be set in function; use above as default
+    df_hedge['xcat'] = xcat + ratio_name
     if hedged_returns:
         df_hreturn = adjusted_returns(df_hedge=df_hedge, dfw=dfw,
                                       benchmark_return=br)
         df_hreturn = df_hreturn.sort_values(['cid', 'real_date'])
-        df_hreturn['xcat'] = xcat + "H"
-        # Todo: allow hedged return name (hr_name) to be set in function. Use above as default
+        df_hreturn['xcat'] = xcat + "_" + hr_name
         df_hedge = df_hedge.append(df_hreturn)
         df_hedge = df_hedge.reset_index(drop=True)
 
     return df_hedge[cols]
 
 
-def hedge_ratio_display(df_hedge: pd.DataFrame, subplots: bool = False):
+def hedge_ratio_display(df_hedge: pd.DataFrame, subplots: bool = False,
+                        hr_name: str = "H"):
     """
     Method used to visualise the hedging ratios across the panel: assumes a single
     category is used to hedge the primary asset.
@@ -310,21 +314,22 @@ def hedge_ratio_display(df_hedge: pd.DataFrame, subplots: bool = False):
     :param <pd.DataFrame> df_hedge: dataframe with hedge ratios.
     :param <bool> subplots: matplotlib parameter to determine if each hedging series is
         displayed on separate subplots.
+    :param <str> hr_name: label used to distinguish the hedged returns in the DataFrame.
+        Comparable to hedge_ratio() method, the default is "H".
 
     """
 
-    pass
-    # condition = lambda c: c.split('_')[-1] != 'Return'
-    # # Todo: Return is not a valid string for JPMaQS categories. Instead I added H to xcat
-    # apply = list(map(condition, df_hedge['xcat']))
-    # df_hedge = df_hedge[apply]
-    #
-    # dfw_ratios = df_hedge.pivot(index='real_date', columns='cid', values='value')
-    #
-    # dfw_ratios.plot(subplots=subplots, title="Hedging Ratios.",
-    #                 legend=True)
-    # plt.xlabel('real_date, years')
-    # plt.show()
+    condition = lambda c: c.split('_')[-1] != "H"
+
+    apply = list(map(condition, df_hedge['xcat']))
+    df_hedge = df_hedge[apply]
+
+    dfw_ratios = df_hedge.pivot(index='real_date', columns='cid', values='value')
+
+    dfw_ratios.plot(subplots=subplots, title="Hedging Ratios.",
+                    legend=True)
+    plt.xlabel('real_date, years')
+    plt.show()
 
 
 if __name__ == "__main__":
@@ -365,9 +370,9 @@ if __name__ == "__main__":
                            refreq='w', min_obs=24, hedged_returns=True)
 
     print(df_hedge)
-    # hedge_ratio_display(df_hedge=df_hedge, subplots=False)
+    hedge_ratio_display(df_hedge=df_hedge, subplots=False)
 
-    # Long position in S&P500 or the Nasdeq, and subsequently using US FX to hedge the
+    # Long position in S&P500 or the Nasdaq, and subsequently using US FX to hedge the
     # long position.
     xcats = 'FXXR_NSA'
     cids = ['USD']
