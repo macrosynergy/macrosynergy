@@ -77,7 +77,8 @@ def hedge_calculator(unhedged_return: pd.Series, benchmark_return: pd.Series,
     unhedged_return = unhedged_return.truncate(before=s_date, after=e_date)
     benchmark_return = benchmark_return.truncate(before=s_date, after=e_date)
 
-    # The date series will be adjusted to each cross-section.
+    # The date series will be adjusted to each cross-section. Daily dates each return
+    # series is defined over.
     date_series = unhedged_return.index
     df_ur = unhedged_return.to_frame(name='returns')
     df_ur = df_ur.reset_index()
@@ -86,34 +87,39 @@ def hedge_calculator(unhedged_return: pd.Series, benchmark_return: pd.Series,
     # and the benchmark return. Both series will be defined over the same timestamps.
     min_obs_date = date_series[min_obs]
 
-    # Storage dataframe.
+    # Storage dataframe defined over the re-balancing dates.
     data_column = np.empty(len(rdates))
     data_column[:] = np.nan
     df_hrat = pd.DataFrame(data=data_column, index=rdates,
-                                  columns=['value'])
+                           columns=['value'])
 
     for d in rdates:
         if d > min_obs_date:
             # Inclusive of the re-estimation date.
             X = unhedged_return.loc[:d]
             Y = benchmark_return.loc[:d]
-            if meth == 'ols':  # condition currently redundant but will become relevant
+            # Condition currently redundant but will become relevant.
+            if meth == 'ols':
                 X = sm.add_constant(X)
                 mod = sm.OLS(Y, X)
                 results = mod.fit()
 
             df_hrat.loc[d] = results.params[1]
 
+    # Any dates prior to the minimum observation which would be classified by NaN values
+    # remove from the DataFrame.
     df_hrat = df_hrat.dropna(axis=0, how='all')
     df_hrat.index.name = 'real_date'
     df_hrat = df_hrat.reset_index(level=0)
 
+    # Merge to convert to the re-estimation frequency.
     df_hr = df_ur.merge(df_hrat, on='real_date', how='left')
 
     df_hr = df_hr.drop('returns', axis=1)
     df_hr = df_hr.fillna(method='ffill')
 
     df_hr = df_hr.set_index('real_date', drop=True)
+    # Applied after the re-estimation date.
     df_hr = df_hr.shift(1)
 
     # Re-establish the 'real_date' column.
@@ -204,25 +210,25 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     :param <str> hr_name: label used to distinguish the hedged returns in the DataFrame.
         The label is appended to the category being hedged. The default is "H".
 
-    :return <pd.Dataframe>: dataframe with hedge ratio estimates that update at the
+    :return <pd.Dataframe>: DataFrame with hedge ratio estimates that update at the
         chosen re-estimation frequency.
         Additionally, the dataframe can include the hedged returns if the parameter
         `benchmark_return` has been set to True.
 
     N.B.: A hedge ratio is the estimated sensitivity of the main return with respect to
     the asset used for hedging. The ratio is recorded for the period after the estimation
-    sample up the next update.
+    sample up until the next re-estimation date.
     
     """
 
-    # Assertions
+    # Assertions.
 
     cols = ['cid', 'xcat', 'real_date', 'value']
     assert list(df.columns) == cols, f"Requires the columns: " \
                                      f"{cols}."
 
     all_tix = np.unique(df['cid'] + '_' + df['xcat'])
-    bm_error = f"Benchmark return ticker {benchmark_return} is not in the dataframe."
+    bm_error = f"Benchmark return ticker {benchmark_return} is not in the DataFrame."
     assert benchmark_return in all_tix, bm_error
 
     error_xcat = f"The field, xcat, must be a string but received <{type(xcat)}>. Only" \
@@ -243,7 +249,7 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                     "ratio is 10 business days, or two weeks."
     assert min_obs >= 10, min_obs_error
 
-    # Information on hedge return and potential panel adjustment
+    # Information on hedge return and potential panel adjustment.
 
     post_fix = benchmark_return.split('_')
     xcat_hedge = '_'.join(post_fix[1:])
@@ -253,7 +259,7 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         warnings.warn(f"Return to be hedged for cross section {cid_hedge} is the hedge "
                       f"return and has been removed from the panel.")
 
-    # Wide time series dataframe of unhedged and benchmark returns
+    # Wide time series dataframe of unhedged and benchmark returns.
 
     # --- Time series dataframe of unhedged returns.
 
@@ -264,6 +270,7 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
     # --- Time series dataframe of benchmark return for relevant dates.
 
+    # The asset being used as the hedge could only be defined over a shorter time-period.
     dfh = reduce_df(df, xcats=[xcat_hedge], cids=cid_hedge,
                     start=dfp_w.index[0], end=dfp_w.index[-1])
     dfh_w = dfh.pivot(index='real_date', columns='cid', values='value')
@@ -319,7 +326,7 @@ def hedge_ratio_display(df_hedge: pd.DataFrame, subplots: bool = False,
 
     """
 
-    condition = lambda c: c.split('_')[-1] != "H"
+    condition = lambda c: c.split('_')[-1] != hr_name
 
     apply = list(map(condition, df_hedge['xcat']))
     df_hedge = df_hedge[apply]
