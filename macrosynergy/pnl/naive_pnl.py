@@ -236,26 +236,28 @@ class NaivePnL:
         if label is None:
             label = self.ret
 
-        self.__dict__['label'] = label
-
         dfx = self.df[self.df['xcat'].isin([self.ret])]
 
-        dfw_long = self.long_only_pnl(dfw=dfx, ret=self.ret, vol_scale=vol_scale)
-        self.__dict__['dfw_long'] = dfw_long.reset_index(drop=True)
+        dfw_long = self.long_only_pnl(dfw=dfx, vol_scale=vol_scale,
+                                      label=label)
+
+        self.df = self.df.append(dfw_long)
+        self.df = self.df.reset_index(drop=True)
 
     @staticmethod
-    def long_only_pnl(dfw: pd.DataFrame, ret: str, vol_scale: float = None):
+    def long_only_pnl(dfw: pd.DataFrame, vol_scale: float = None, label: str = None):
         """
         Method used to compute the PnL accrued from simply taking a long-only position in
         the category, 'self.ret'. The returns from the category are not predicated on any
         exogenous signal.
 
         :param <pd.DataFrame> dfw:
-        :param <str> ret: return category.
         :param <bool> vol_scale: ex-post scaling of PnL to annualized volatility given.
             This is for comparative visualization and not out-of-sample. Default is none.
+        :param <str> label: associated label that will be mapped to the long-only
+            DataFrame.
 
-        :return <pd.DataFrame> dfw_long: standardised dataframe containing exclusively
+        :return <pd.DataFrame> panel_pnl: standardised dataframe containing exclusively
             the return category, and the long-only panel return.
         """
 
@@ -264,19 +266,17 @@ class NaivePnL:
         panel_pnl = dfw_long.groupby(['real_date']).sum()
         panel_pnl = panel_pnl.reset_index(level=0)
         panel_pnl['cid'] = 'ALL'
-        panel_pnl['xcat'] = 'XR'
-
-        dfw_long = dfw_long.append(panel_pnl)
+        panel_pnl['xcat'] = label
 
         if vol_scale:
             leverage = vol_scale * (panel_pnl['value'].std() * np.sqrt(261)) ** (-1)
-            dfw_long['value'] = dfw_long['value'] * leverage
+            panel_pnl['value'] = panel_pnl['value'] * leverage
 
-        return dfw_long[['cid', 'xcat', 'real_date', 'value']]
+        return panel_pnl[['cid', 'xcat', 'real_date', 'value']]
 
     def plot_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
-                  start: str = None, end: str = None, add_long: bool = False,
-                  figsize: Tuple = (10, 6), title: str = "Cumulative Naive PnL",
+                  start: str = None, end: str = None, figsize: Tuple = (10, 6),
+                  title: str = "Cumulative Naive PnL",
                   xcat_labels: List[str] = None):
 
         """
@@ -292,8 +292,6 @@ class NaivePnL:
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
             in df is used.
-        :param <bool> add_long: if True, long-only benchmark PnLs will be added to the
-            plot. The default is False.
         :param <tuple> figsize: tuple of plot width and height. Default is (10,6).
         :param <str> title: allows entering text for a custom chart header.
         :param <List[str]> xcat_labels: custom labels to be used for the PnLs.
@@ -316,25 +314,11 @@ class NaivePnL:
                         out_all=False)
         no_cids = len(pnl_cids)
 
-        if add_long:
-            error_message = "Long-only DataFrame missing. The parameter, 'long_only', " \
-                            "must be set to True when calling make_pnl() method."
-            assert 'dfw_long' in self.__dict__.keys(), error_message
-
-            dfw_long = reduce_df(self.dfw_long, xcats=None, cids=pnl_cids,
-                                 start=start, end=end, blacklist=self.black,
-                                 out_all=False)
-            dfw_long['cum_value'] = dfw_long.groupby('cid').cumsum()
-
         sns.set_theme(style='whitegrid', palette='colorblind',
                       rc={'figure.figsize': figsize})
 
         if no_cids == 1:
             dfx['cum_value'] = dfx.groupby('xcat').cumsum()
-            if add_long:
-                dfx = dfx.append(dfw_long)
-                pnl_cats.append(self.ret)
-                xcat_labels.append(self.label)
 
             ax = sns.lineplot(data=dfx, x='real_date', y='cum_value',
                               hue='xcat', hue_order=pnl_cats,
@@ -345,9 +329,6 @@ class NaivePnL:
 
         else:
             dfx['cum_value'] = dfx.groupby('cid').cumsum()
-            if add_long:
-                dfw_long['cid'] = dfw_long['cid'] + '_' + dfw_long['xcat']
-                dfx = dfx.append(dfw_long)
 
             ax = sns.lineplot(data=dfx, x='real_date', y='cum_value',
                               hue='cid', estimator=None, lw=1)
@@ -471,17 +452,47 @@ if __name__ == "__main__":
     print(pnl.df)
 
     pnl.make_long_pnl(vol_scale=20, label='Long_Only_XR20')
-    # Long-only DataFrame.
 
-    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN20'],
+    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN20', 'Long_Only_XR20'],
                   pnl_cids=['ALL'], start='2000-01-01',
-                  add_long=True,
                   title="Custom Title")
+
+    # Testing on multiple volatility scales.
+    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN05', 'PNL_CRY_PZN10',
+                            'PNL_CRY_PZN20', 'Long_Only_XR20'],
+                  pnl_cids=['ALL'], start='2000-01-01')
 
     pnl.make_long_pnl(vol_scale=10, label='Long_Only_XR10')
-    # Long-only DataFrame.
 
-    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN10'],
+    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN10', 'Long_Only_XR10'],
                   pnl_cids=['ALL'], start='2000-01-01',
-                  add_long=True,
                   title="Custom Title")
+
+    # Test on the option if the label is omitted from long-only DataFrame.
+    pnl = NaivePnL(dfd, ret='XR', sigs=['CRY', 'GROWTH', 'INFL'],
+                   cids=cids, start='2000-01-01', blacklist=black)
+
+    pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
+                 vol_scale=5, rebal_slip=1, pnl_name='PNL_CRY_PZN05', min_obs=250,
+                 thresh=2)
+    pnl.make_long_pnl(vol_scale=10)
+    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN05', 'XR'],
+                  pnl_cids=['ALL'], start='2000-01-01',
+                  title="Long-Only Comparison")
+
+    # Instantiate a new instance to test the long-only functionality.
+    pnl = NaivePnL(dfd, ret='XR', sigs=['CRY', 'GROWTH', 'INFL'],
+                   cids=cids, start='2000-01-01', blacklist=black)
+
+    pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
+                 vol_scale=10, rebal_slip=1, pnl_name='PNL_CRY_PZN',
+                 min_obs=250, thresh=1.5)
+    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN'], pnl_cids=['CAD', 'NZD'],
+                  start='2000-01-01')
+
+    # Return evaluation and PnL DataFrames.
+    df_eval = pnl.evaluate_pnls(
+        pnl_cats=['PNL_CRY_PZN'],
+        pnl_cids=['ALL'], start='2000-01-01')
+    df_pnls = pnl.pnl_df()
+    df_pnls.head()
