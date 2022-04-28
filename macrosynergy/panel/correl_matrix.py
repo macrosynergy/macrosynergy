@@ -1,4 +1,5 @@
 
+import random
 import pandas as pd
 import numpy as np
 import seaborn as sns
@@ -6,12 +7,14 @@ import scipy.cluster.hierarchy as sch
 from matplotlib import pyplot as plt
 from scipy.spatial.distance import squareform
 from typing import List, Union, Tuple
+
 from macrosynergy.management.check_availability import reduce_df
+from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 
 def correl_matrix_cluster(df: pd.DataFrame, xcats: List[str] = None,
                           cids: List[str] = None, start: str = '2000-01-01',
-                          end: str = None, val: str = 'value',
+                          end: str = None, val: str = 'value', freq: str = None,
                           title: str = None, size: Tuple[float] = (14, 8),
                           max_color: float = None):
     """
@@ -32,6 +35,10 @@ def correl_matrix_cluster(df: pd.DataFrame, xcats: List[str] = None,
         is used.
     :param <str> val: name of column that contains the values of interest. Default is
         'value'.
+    :param <str> freq: frequency option. The parameter provides the option of
+        down-sampling the existing time-series frequency by mean of weekly, monthly or
+        quarterly. Only after the down-sampling will the correlation statistics be
+        calculated.
     :param <str> title: chart heading. If none is given, a default title is used.
     :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default
         is (14, 8).
@@ -43,7 +50,8 @@ def correl_matrix_cluster(df: pd.DataFrame, xcats: List[str] = None,
 
     xcats = xcats if isinstance(xcats, list) else [xcats]
 
-    min_color = None if max_color is None else -max_color  # define minimum of color scale
+    # Define the minimum of colour scale.
+    min_color = None if max_color is None else -max_color
 
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
 
@@ -90,3 +98,27 @@ def correl_matrix_cluster(df: pd.DataFrame, xcats: List[str] = None,
     ax.set_title(title, fontsize=14)
 
     plt.show()
+
+
+if __name__ == "__main__":
+
+    cids = ['AUD', 'CAD', 'GBP', 'USD', 'NZD']
+    xcats = ['XR', 'CRY']
+
+    df_cids = pd.DataFrame(index = cids, columns = ['earliest', 'latest', 'mean_add',
+                                                    'sd_mult'])
+
+    df_cids.loc['AUD'] = ['2010-01-01', '2020-12-31', 0.5, 2]
+    df_cids.loc['CAD'] = ['2011-01-01', '2020-11-30', 0, 1]
+    df_cids.loc['GBP'] = ['2012-01-01', '2020-11-30', -0.2, 0.5]
+    df_cids.loc['USD'] = ['2010-01-01', '2020-12-30', -0.2, 0.5]
+    df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
+    df_cids.loc['EUR'] = ['2002-01-01', '2020-09-30', -0.2, 2]
+
+    df_xcats = pd.DataFrame(index = xcats, columns = ['earliest', 'latest', 'mean_add',
+                                                      'sd_mult', 'ar_coef', 'back_coef'])
+    df_xcats.loc['XR'] = ['2012-01-01', '2020-12-31', 0, 1, 0, 0.3]
+    df_xcats.loc['CRY'] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
+
+    random.seed(2)
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
