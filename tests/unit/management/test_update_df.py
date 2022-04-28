@@ -26,6 +26,7 @@ class TestAll(unittest.TestCase):
                                          'ar_coef', 'back_coef'])
         df_xcats.loc['GROWTH', :] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
         df_xcats.loc['INFL', :] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
+        df_xcats.loc['XR', :] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
 
         random.seed(1)
         np.random.seed(0)
@@ -109,6 +110,69 @@ class TestAll(unittest.TestCase):
 
         value_2 = dfd_2_rv_growth_aud[dfd_2_rv_growth_aud['real_date'] == date]['value']
         self.assertTrue(float(test_2) == float(value_2))
+
+        # The final test is to confirm that the method is able to replace categories
+        # that already exist in the dataframe, with the latest computed values, whilst
+        # adding a new category if it is not already present in the aggregated dataframe.
+        dfd_copy = self.dfd.copy()
+        dfd_3 = make_relative_value(dfd_copy, xcats=['XR', 'GROWTH', 'INFL'], cids=None,
+                                    blacklist=None, basket=None,
+                                    rel_meth='subtract', rel_xcats=None, postfix="RV")
+
+        # DataFrame used for the initial aggregation. The added categories will become
+        # legacy data and removed by the second call of update_df().
+        dfd_copy_2 = self.dfd.copy()
+        dfd_4 = make_relative_value(dfd_copy_2, xcats=['GROWTH', 'INFL'], cids=None,
+                                    blacklist=None, rel_meth='divide', rel_xcats=None,
+                                    postfix='RV')
+        dfd_add_1 = update_df(df=dfd_copy, df_add=dfd_4)
+
+        dfd_add_2 = update_df(df=dfd_add_1, df_add=dfd_3)
+        categories = set(dfd_add_2['xcat'])
+        # Preliminary confirmation that the method will replace the incumbent categories
+        # whilst adding the new category, "XRRV".
+        self.assertTrue(len(categories) == 6)
+
+        # Confirm the old values are not present in the latest dataframe, "dfd_add_2".
+        dfd_1_rv_growth = dfd_4[dfd_4['xcat'] == 'GROWTHRV']
+        dfd_1_rv_growth_aud = dfd_1_rv_growth[dfd_1_rv_growth['cid'] == 'AUD']
+        # Choose a random date.
+        date = list(dfd_pivot.index)[1000]
+
+        incorrect_value = dfd_1_rv_growth_aud[dfd_1_rv_growth_aud['real_date'] == date]
+        incorrect_value = incorrect_value['value']
+        # Isolate the respective date on the output dataframe, "dfd_add_2", and confirm
+        # the value is not equal to the legacy value.
+
+        dfd_add_growth_2 = dfd_add_2[dfd_add_2['xcat'] == 'GROWTHRV']
+        dfd_add_aud_2 = dfd_add_growth_2[dfd_add_growth_2['cid'] == 'AUD']
+
+        test_1 = dfd_add_aud_2[dfd_add_aud_2['real_date'] == date]['value']
+        self.assertTrue(float(test_1) != float(incorrect_value))
+
+        # The latest value will be held in the dataframe, "dfd_3".
+        dfd_1_rv_growth = dfd_3[dfd_3['xcat'] == 'GROWTHRV']
+        dfd_1_rv_growth_aud = dfd_1_rv_growth[dfd_1_rv_growth['cid'] == 'AUD']
+        # Choose a random date.
+        date = list(dfd_pivot.index)[1000]
+
+        value = dfd_1_rv_growth_aud[dfd_1_rv_growth_aud['real_date'] == date]
+        value = value['value']
+        self.assertTrue(float(test_1) == float(value))
+
+        # Confirm the new category's values are correct, "XRRV".
+        dfd_1_rv_xrrv = dfd_3[dfd_3['xcat'] == 'XRRV']
+        dfd_1_rv_xrrv_aud = dfd_1_rv_xrrv[dfd_1_rv_xrrv['cid'] == 'AUD']
+        # Choose a random date.
+        date = list(dfd_pivot.index)[1000]
+        value = dfd_1_rv_xrrv_aud[dfd_1_rv_xrrv_aud['real_date'] == date]
+        value = value['value']
+
+        dfd_add_xrrv_2 = dfd_add_2[dfd_add_2['xcat'] == 'XRRV']
+        dfd_add_aud_2 = dfd_add_xrrv_2[dfd_add_xrrv_2['cid'] == 'AUD']
+        test_2 = dfd_add_aud_2[dfd_add_aud_2['real_date'] == date]['value']
+
+        self.assertTrue(float(test_2) == float(value))
 
 
 if __name__ == '__main__':
