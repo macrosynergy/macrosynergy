@@ -6,6 +6,7 @@ import warnings
 from tests.simulate import make_qdf
 from macrosynergy.panel.hedge_ratio import *
 from macrosynergy.management.shape_dfs import reduce_df
+import math
 
 class TestAll(unittest.TestCase):
 
@@ -117,11 +118,13 @@ class TestAll(unittest.TestCase):
         # Analysis completed using a single cross-section from the panel.
         c = 'KRW'
         xr = self.dfp_w[c]
+        xr = xr.astype(dtype=np.float16)
         # Adjusts for the effect of pivoting.
         xr = xr.dropna(axis=0, how="all")
 
         br = pd.Series(data=self.benchmark_df['value'].to_numpy(),
                        index=self.benchmark_df['real_date'])
+        br = br.astype(dtype=np.float16)
 
         # Apply the .date_alignment() method to establish the start & end date of the
         # re-estimation date series. Confirms the re-estimation frequency has been
@@ -154,6 +157,15 @@ class TestAll(unittest.TestCase):
         # Test both dates are defined during the same month.
         test_min_obs_month = pd.Timestamp(test_min_obs).month
         self.assertTrue(test_min_obs_month == test_date.month)
+
+        # The re-estimated hedge ratio will be computed using realised data up until the
+        # respective date (in the above example, the final business day of the month).
+        # However, the hedge ratio is applied from the following date (the date the
+        # position will change) and to all the intermediary dates up until the next
+        # re-estimation date. Therefore, confirm that the first date in the DataFrame is
+        # a np.nan value representing the shift mechanism.
+        first_value = df_hr['value'].iloc[0]
+        self.assertTrue(math.isnan(first_value))
 
     def test_date_index(self, start_date: pd.Timestamp = None,
                         end_date: pd.Timestamp = None, refreq: str = 'm'):
