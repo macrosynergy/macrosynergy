@@ -167,6 +167,38 @@ class TestAll(unittest.TestCase):
         first_value = df_hr['value'].iloc[0]
         self.assertTrue(math.isnan(first_value))
 
+        # The examination of the hedging mechanism will come through graphical
+        # interpretation.
+
+    def test_adjusted_returns(self):
+        """
+        Method used to compute the hedge ratio returns. The hedge ratio will determine
+        the position taken in the benchmark asset. Therefore, adjust the returns across
+        the panel to account for the short position taken the hedging asset. A simple
+        example of the formula is: IDR_FXXR_NSA_H = IDR_FXXR_NSA - HR_IDR * USD_EQXR_NSA.
+        """
+
+        self.dataframe_construction()
+
+        br = pd.Series(data=self.benchmark_df['value'].to_numpy(),
+                       index=self.benchmark_df['real_date'])
+        br = br.astype(dtype=np.float16)
+
+        # The method, adjusted_returns(), will compute the hedged return across the
+        # entire panel. Call hedge_ratio method and pass the returned DataFrame
+        # separately into adjusted_returns() method.
+
+        br_cat = "USD_EQXR_NSA"
+        df_hedge = hedge_ratio(df=self.dfd, xcat=self.xcats, cids=self.cids,
+                               benchmark_return=br_cat, start='2010-01-01',
+                               end='2020-10-30', blacklist=self.black, meth='ols',
+                               oos=True, refreq='m', min_obs=60,
+                               hedged_returns=False)
+
+        dfw = self.unhedged_df.pivot(index='real_date', columns='cid', values='value')
+
+        df_stack = adjusted_returns(benchmark_return=br, df_hedge=df_hedge, dfw=dfw)
+
     def test_date_index(self, start_date: pd.Timestamp = None,
                         end_date: pd.Timestamp = None, refreq: str = 'm'):
         """
