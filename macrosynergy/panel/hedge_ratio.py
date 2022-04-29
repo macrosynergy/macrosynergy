@@ -112,11 +112,16 @@ def hedge_calculator(unhedged_return: pd.Series, benchmark_return: pd.Series,
     df_hrat.index.name = 'real_date'
     df_hrat = df_hrat.reset_index(level=0)
 
-    # Merge to convert to the re-estimation frequency.
+    # Merge to convert to the re-estimation frequency. The intermediary dates, daily
+    # business days between re-estimation dates, will be populated with np.NaN values.
     df_hr = df_ur.merge(df_hrat, on='real_date', how='left')
 
     df_hr = df_hr.drop('returns', axis=1)
     df_hr = df_hr.fillna(method='ffill')
+    # Accounts for the application of the minimum number of observations required and
+    # merging the two DataFrames. Drop the np.nan values prior to the application of the
+    # shift (able to validate the logic).
+    df_hr = df_hr.dropna(axis=0, how='any')
 
     df_hr = df_hr.set_index('real_date', drop=True)
     # Applied after the re-estimation date.
