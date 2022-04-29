@@ -1,3 +1,4 @@
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -13,8 +14,9 @@ from macrosynergy.management.shape_dfs import categories_df
 
 class SignalReturnRelations:
 
-    """Class for analyzing and visualizing relations between a signal and subsequent
-    returns
+    """
+    Class for analyzing and visualizing relations between a signal and the subsequent
+    returns.
 
     :param <pd.Dataframe> df: standardized data frame with the following necessary
         columns: 'cid', 'xcat', 'real_date' and 'value.
@@ -29,8 +31,8 @@ class SignalReturnRelations:
         to the cross section code.
     :param <str> freq: letter denoting frequency at which the series are to be sampled.
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
-    :param <str> agg_sig: aggregation method applied to the signal value in downsampling.
-        The default is "last".
+    :param <str> agg_sig: aggregation method applied to the signal value in down-
+        sampling. The default is "last".
     :param <int> fwin: Forward window of return category in base periods. Default is 1.
         This conceptually corresponds to the holding period of a position in
         accordance with the signal.
@@ -57,15 +59,18 @@ class SignalReturnRelations:
         self.df_ys = self.panel_relations(cs_type='years')
 
     def panel_relations(self, cs_type: str = 'cids'):
-        """Creates a dataframe with information on the signal-return relation
-        across cids or years and the panel."""
+        """
+        Creates a DataFrame with information on the signal-return relation
+        across cids or years and the panel.
+
+        """
 
         assert cs_type in ['cids', 'years']
+        df = self.df.dropna(how='any')
+
         if cs_type == 'cids':
-            df = self.df.dropna(how='any')
             css = self.cids
         else:
-            df = self.df.dropna(how='any')
             df['year'] = np.array(df.reset_index(level=1)['real_date'].dt.year)
             css = [str(i) for i in df['year'].unique()]
 
@@ -73,9 +78,10 @@ class SignalReturnRelations:
         df_out = pd.DataFrame(index=['Panel', 'Mean', 'PosRatio'] + css, columns=statms)
 
         for cs in (css + ['Panel']):
-            if cs in css:  # row names of cross sections or years
+            # Row names of cross-sections or years.
+            if cs in css:
                 if cs_type == 'cids':
-                    df_cs = df.loc[cs,]
+                    df_cs = df.loc[cs]
                 else:
                     df_cs = df[df['year'] == float(cs)]
             elif cs == 'Panel':
@@ -88,8 +94,8 @@ class SignalReturnRelations:
             ret = df_sgs[self.ret]
             df_out.loc[cs, 'accuracy'] = skm.accuracy_score(sig, ret)
             df_out.loc[cs, 'bal_accuracy'] = skm.balanced_accuracy_score(sig, ret)
-            df_out.loc[cs, 'pos_sigr'] = np.mean(sig==1)
-            df_out.loc[cs, "pos_retr"] = np.mean(ret==1)
+            df_out.loc[cs, 'pos_sigr'] = np.mean(sig == 1)
+            df_out.loc[cs, "pos_retr"] = np.mean(ret == 1)
             df_out.loc[cs, 'pos_prec'] = skm.precision_score(ret, sig, pos_label=1)
             df_out.loc[cs, 'neg_prec'] = skm.precision_score(ret, sig, pos_label=-1)
 
@@ -112,19 +118,25 @@ class SignalReturnRelations:
         return df_out.astype('float')
 
     def cross_section_table(self):
-        """Returns a dataframe with information on the signal-return relation across
-        sections and the panel."""
+        """
+        Returns a dataframe with information on the signal-return relation across
+        sections and the panel.
+        """
+
         return self.df_cs.round(decimals=3)
 
     def yearly_table(self):
-        """Returns dataframe with information on the signal-return relation across years
-        and the panel."""
+        """
+        Returns dataframe with information on the signal-return relation across years
+        and the panel.
+        """
         return self.df_ys.round(decimals=3)
 
     def accuracy_bars(self, type: str = 'cross_section', title: str = None,
                       size: Tuple[float] = None,
                       legend_pos: str = 'best'):
-        """Bars of overall and balanced accuracy
+        """
+        Bars of overall and balanced accuracy
 
         :param <str> type: type of segment over which bars are drawn.
             Must be 'cross_section' (default) or 'years'
@@ -167,7 +179,8 @@ class SignalReturnRelations:
     def correlation_bars(self, type: str = 'cross_section', title: str = None,
                          size: Tuple[float] = None,
                          legend_pos: str = 'best'):
-        """Correlation coefficients and significance
+        """
+        Correlation coefficients and significance.
 
         :param <str> type: type of segment over which bars are drawn. Must be
             'cross_section' (default) or 'years'
@@ -214,7 +227,10 @@ class SignalReturnRelations:
         plt.show()
 
     def summary_table(self):
-        """Condensed summary table of signal-return relations"""
+        """
+        Condensed summary table of signal-return relations.
+        """
+
         dfys = self.df_ys.round(decimals=3)
         dfcs = self.df_cs.round(decimals=3)
         dfsum = dfys.iloc[:3, ].append(dfcs.iloc[1:3, ])
@@ -230,18 +246,18 @@ if __name__ == "__main__":
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
     df_cids = pd.DataFrame(index=cids,
                            columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
-    df_cids.loc['AUD',] = ['2000-01-01', '2020-12-31', 0, 1]
-    df_cids.loc['CAD',] = ['2001-01-01', '2020-11-30', 0, 1]
-    df_cids.loc['GBP',] = ['2002-01-01', '2020-11-30', 0, 2]
-    df_cids.loc['NZD',] = ['2002-01-01', '2020-09-30', 0., 2]
+    df_cids.loc['AUD'] = ['2000-01-01', '2020-12-31', 0, 1]
+    df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
+    df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
+    df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', 0., 2]
 
     df_xcats = pd.DataFrame(index=xcats,
                             columns=['earliest', 'latest', 'mean_add', 'sd_mult',
                                      'ar_coef', 'back_coef'])
-    df_xcats.loc['XR',] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
-    df_xcats.loc['CRY',] = ['2000-01-01', '2020-10-30', 0, 2, 0.95, 1]
-    df_xcats.loc['GROWTH',] = ['2001-01-01', '2020-10-30', 0, 2, 0.9, 1]
-    df_xcats.loc['INFL',] = ['2001-01-01', '2020-10-30', 0, 2, 0.8, 0.5]
+    df_xcats.loc['XR'] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
+    df_xcats.loc['CRY'] = ['2000-01-01', '2020-10-30', 0, 2, 0.95, 1]
+    df_xcats.loc['GROWTH'] = ['2001-01-01', '2020-10-30', 0, 2, 0.9, 1]
+    df_xcats.loc['INFL'] = ['2001-01-01', '2020-10-30', 0, 2, 0.8, 0.5]
 
     black = {'AUD': ['2006-01-01', '2015-12-31'], 'GBP': ['2012-01-01', '2100-01-01']}
 
