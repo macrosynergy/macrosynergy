@@ -325,10 +325,10 @@ class CategoryRelations(object):
             and probability. If None (default), the box is shown in the upper left
             corner. The options are standard, i.e. 'upper left', 'lower right' and so
             forth. This does not work with a separator.
-        :param Union[str, int] separator: allows categorizing the scatter analysis by time
-            period or cross section. In the former case the argument is set to "cids" in
-            the case the argument is set to a year that divides the sample to before
-            (not including) that year and from (including) that year.
+        :param <Union[str, int]> separator: allows categorizing the scatter analysis by
+            time period or cross section. In the former case the argument is set to
+            "cids" in the case the argument is set to a year that divides the sample to
+            before (not including) that year and from (including) that year.
         :param <float> title_adj: parameter that sets top of figure to accommodate title.
             Default is 1.
         :param <bool> single_chart: boolean parameter determining whether the x- and y-
@@ -599,8 +599,7 @@ if __name__ == "__main__":
                    xlab="Carry", ylab="Return")
     cr.reg_scatter(labels=False, coef_box='upper left', separator='cids',
                    title="Carry and Return",
-                   xlab="Real-time estimated technical growth trend, 3-month MA",
-                   ylab="Return")
+                   ylab="", xlab="")
     cr.reg_scatter(labels=False, coef_box='upper left', separator=2010,
                    title="Carry and Return",
                    xlab="Carry", ylab="Return")
