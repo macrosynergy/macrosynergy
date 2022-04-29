@@ -17,7 +17,8 @@ class TestAll(unittest.TestCase):
         cids += ['USD']
 
         self.__dict__['cids'] = cids
-        self.__dict__['xcats'] = ['FXXR_NSA', 'GROWTHXR_NSA', 'INFLXR_NSA', 'EQXR_NSA']
+        xcats = ['FXXR_NSA', 'GROWTHXR_NSA', 'INFLXR_NSA', 'EQXR_NSA']
+        self.__dict__['xcats'] = xcats
 
         df_cids = pd.DataFrame(index=self.cids, columns=['earliest', 'latest', 'mean_add',
                                                          'sd_mult'])
@@ -27,7 +28,7 @@ class TestAll(unittest.TestCase):
         df_cids.loc['KRW'] = ['2012-01-01', '2020-11-30', -0.2, 0.5]
         df_cids.loc['MYR'] = ['2013-01-01', '2020-09-30', -0.2, 0.5]
         df_cids.loc['PHP'] = ['2002-01-01', '2020-09-30', -0.1, 2]
-        df_cids.loc['USD'] = ['2000-01-01', '2022-03-14', 0, 1.25]
+        df_cids.loc['USD'] = ['2000-01-01', '2020-03-20', 0, 1.25]
 
         df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
                                                       'sd_mult', 'ar_coef', 'back_coef'])
@@ -35,7 +36,7 @@ class TestAll(unittest.TestCase):
         df_xcats.loc['FXXR_NSA'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
         df_xcats.loc['GROWTHXR_NSA'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
         df_xcats.loc['INFLXR_NSA'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
-        df_xcats.loc['EQXR_NSA'] = ['2010-01-01', '2022-03-14', 0.5, 2, 0, 0.2]
+        df_xcats.loc['EQXR_NSA'] = ['2000-01-01', '2022-03-14', 0.5, 2, 0, 0.2]
 
         # If the asset being used as the hedge experiences a blackout period, then it is
         # probably not an appropriate asset to use in the hedging strategy.
@@ -57,6 +58,8 @@ class TestAll(unittest.TestCase):
 
         self.__dict__["unhedged_df"] = reduce_df(dfd, xcats=['FXXR_NSA'],
                                                  cids=cids)
+        self.__dict__["dfp_w"] = self.unhedged_df.pivot(index='real_date', columns='cid',
+                                                        values='value')
 
     def test_date_alignment(self):
         """
@@ -64,12 +67,93 @@ class TestAll(unittest.TestCase):
         which can consist of multiple cross-sections, and each cross-section could be
         defined over differing time-series. Therefore, the .date_alignment() method is
         used to ensure the asset being used as the hedge and the asset being hedged are
-        defined over the same timestamps.
-
+        defined over the same timestamps. The method will return the proposed start &
+        end date.
         """
+
+        self.dataframe_construction()
 
         # Verify that two series passed will be aligned after applying the respective
         # method.
+        # Test on MYR_FXXR_NSA against the hedging asset, USD_EQXR_NSA (both are defined
+        # over different time horizons).
+        c = 'MYR'
+        xr = self.dfp_w[c]
+        # Adjusts for the effect of pivoting.
+        xr = xr.dropna(axis=0, how="all")
+
+        br = pd.Series(data=self.benchmark_df['value'],
+                       index=self.benchmark_df['real_date'])
+
+        start_date, end_date = date_alignment(unhedged_return=xr,
+                                              benchmark_return=br)
+        # The latest start date of the two pd.Series.
+        target_start = '2013-01-01'
+        start_date = pd.Timestamp(start_date).strftime("%Y-%m-%d")
+        self.assertTrue(start_date == target_start)
+
+        end_date = pd.Timestamp(end_date).strftime("%Y-%m-%d")
+        target_end = '2020-03-20'
+        self.assertTrue(end_date == target_end)
+
+    def test_hedge_calculator(self):
+        """
+        Method designed to calculate the hedge ratios used across the panel: each cross-
+        section in the panel will have a different sensitivity parameter relative to the
+        benchmark.
+        Further, the frequency in which the hedge ratios are calculated is delimited by
+        the 'refreq' parameter. The sample size of data, number of dates used in the
+        re-estimation, will increase at a rate controlled by the parameter: the hedge
+        ratio will be continuously re-estimated as days pass but will always include all
+        realised timestamps (inclusive of the start_date).
+        """
+
+        self.dataframe_construction()
+
+        # The method returns a standardised DataFrame. Confirm the first date in the
+        # DataFrame is after the minimum observation date. The parameter 'min_obs'
+        # ensures a certain number of days have passed until a hedge ratio is calculated.
+
+        # Analysis completed using a single cross-section from the panel.
+        c = 'KRW'
+        xr = self.dfp_w[c]
+        # Adjusts for the effect of pivoting.
+        xr = xr.dropna(axis=0, how="all")
+
+        br = pd.Series(data=self.benchmark_df['value'].to_numpy(),
+                       index=self.benchmark_df['real_date'])
+
+        # Apply the .date_alignment() method to establish the start & end date of the
+        # re-estimation date series. Confirms the re-estimation frequency has been
+        # correctly applied.
+        # The frequency tested on will be monthly: business month end frequency.
+        start_date, end_date = date_alignment(unhedged_return=xr, benchmark_return=br)
+        dates_re = pd.date_range(start=start_date, end=end_date, freq='BM')
+        str_time = lambda date: pd.Timestamp(str(date))
+        dates_re = list(map(str_time, dates_re))
+
+        min_observation = 50
+        # Produce daily business day date series to determine the date that corresponds
+        # to the specified minimum observation.
+        daily_dates = pd.date_range(start=start_date, end=end_date, freq='B')
+        test_min_obs = daily_dates.to_numpy()[60]
+
+        df_hr = hedge_calculator(unhedged_return=xr, benchmark_return=br,
+                                 rdates=dates_re, cross_section=c, meth='ols',
+                                 min_obs=min_observation)
+        # Confirm the first computed hedge ratio value falls after the minimum
+        # observation date.
+        test_date = df_hr['real_date'].iloc[0]
+        self.assertTrue(test_date > test_min_obs)
+
+        # In the example, the hedge ratio is computed monthly - last business day of the
+        # respective month. Therefore, assuming the minimum observation date does not
+        # fall on the final day of the month, the first date recorded in the returned
+        # DataFrame should be the final business date of the same month as the minimum
+        # observation date. For instance, 23/03/2010 -> 30/03/2010.
+        # Test both dates are defined during the same month.
+        test_min_obs_month = pd.Timestamp(test_min_obs).month
+        self.assertTrue(test_min_obs_month == test_date.month)
 
     def test_date_index(self, start_date: pd.Timestamp = None,
                         end_date: pd.Timestamp = None, refreq: str = 'm'):
