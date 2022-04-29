@@ -5,32 +5,71 @@ import pandas as pd
 import warnings
 from tests.simulate import make_qdf
 from macrosynergy.panel.hedge_ratio import *
-from random import randint
+from macrosynergy.management.shape_dfs import reduce_df
 
 class TestAll(unittest.TestCase):
 
     def dataframe_construction(self):
 
-        self.__dict__['cids'] = ['AUD', 'CAD', 'GBP']
-        self.__dict__['xcats'] = ['CRY', 'XR']
+        # Emerging Market Asian countries.
+        cids = ['IDR', 'INR', 'KRW', 'MYR', 'PHP']
+        # Add the US - used as the hedging asset.
+        cids += ['USD']
+
+        self.__dict__['cids'] = cids
+        self.__dict__['xcats'] = ['FXXR_NSA', 'GROWTHXR_NSA', 'INFLXR_NSA', 'EQXR_NSA']
 
         df_cids = pd.DataFrame(index=self.cids, columns=['earliest', 'latest', 'mean_add',
                                                          'sd_mult'])
-        df_cids.loc['AUD', :] = ['2010-01-01', '2020-12-31', 0.5, 2]
-        df_cids.loc['CAD', :] = ['2010-01-01', '2020-11-30', 0, 1]
-        df_cids.loc['GBP', :] = ['2012-01-01', '2020-11-30', -0.2, 0.5]
 
-        df_xcats = pd.DataFrame(index=self.xcats,
-                                columns=['earliest', 'latest', 'mean_add',
-                                         'sd_mult', 'ar_coef', 'back_coef'])
-        df_xcats.loc['CRY', :] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
-        df_xcats.loc['XR', :] = ['2011-01-01', '2020-12-31', 0, 1, 0, 0.3]
+        df_cids.loc['IDR'] = ['2010-01-01', '2020-12-31', 0.5, 2]
+        df_cids.loc['INR'] = ['2011-01-01', '2020-11-30', 0, 1]
+        df_cids.loc['KRW'] = ['2012-01-01', '2020-11-30', -0.2, 0.5]
+        df_cids.loc['MYR'] = ['2013-01-01', '2020-09-30', -0.2, 0.5]
+        df_cids.loc['PHP'] = ['2002-01-01', '2020-09-30', -0.1, 2]
+        df_cids.loc['USD'] = ['2000-01-01', '2022-03-14', 0, 1.25]
+
+        df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
+                                                      'sd_mult', 'ar_coef', 'back_coef'])
+
+        df_xcats.loc['FXXR_NSA'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
+        df_xcats.loc['GROWTHXR_NSA'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
+        df_xcats.loc['INFLXR_NSA'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
+        df_xcats.loc['EQXR_NSA'] = ['2010-01-01', '2022-03-14', 0.5, 2, 0, 0.2]
+
+        # If the asset being used as the hedge experiences a blackout period, then it is
+        # probably not an appropriate asset to use in the hedging strategy.
+        black = {'IDR': ['2010-01-01', '2012-01-04'],
+                 'INR': ['2010-01-01', '2013-12-31'],
+                 }
+        self.__dict__['blacklist'] = black
 
         # Standard df for tests.
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-        self.__dict__['dfd'] = dfd[dfd['xcat'] == 'CRY']
-        self.__dict__['dfw'] = self.dfd.pivot(index='real_date', columns='cid',
-                                              values='value')
+        self.__dict__['dfd'] = dfd
+
+        # The Unit Test will be based on the hedging strategy: hedge FX returns
+        # (FXXR_NSA) against US Equity, S&P 500, (USD_EQXR_NSA).
+        cid_hedge = 'USD'
+        xcat_hedge = 'EQXR_NSA'
+        self.__dict__['benchmark_df'] = reduce_df(dfd, xcats=[xcat_hedge],
+                                                  cids=cid_hedge)
+
+        self.__dict__["unhedged_df"] = reduce_df(dfd, xcats=['FXXR_NSA'],
+                                                 cids=cids)
+
+    def test_date_alignment(self):
+        """
+        Firstly, hedge_ratio.py will potentially use a single asset to hedge a panel
+        which can consist of multiple cross-sections, and each cross-section could be
+        defined over differing time-series. Therefore, the .date_alignment() method is
+        used to ensure the asset being used as the hedge and the asset being hedged are
+        defined over the same timestamps.
+
+        """
+
+        # Verify that two series passed will be aligned after applying the respective
+        # method.
 
     def test_date_index(self, start_date: pd.Timestamp = None,
                         end_date: pd.Timestamp = None, refreq: str = 'm'):
