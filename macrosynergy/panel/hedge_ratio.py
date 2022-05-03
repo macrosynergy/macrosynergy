@@ -65,6 +65,8 @@ def hedge_calculator(unhedged_return: pd.Series, benchmark_return: pd.Series,
         cross-section.
     """
 
+    benchmark_return = benchmark_return.astype(dtype=np.float32)
+    unhedged_return = unhedged_return.astype(dtype=np.float32)
     br = benchmark_return
     un_r = unhedged_return
 
