@@ -3,6 +3,7 @@ import unittest
 import numpy as np
 import pandas as pd
 import warnings
+import statsmodels.api as sm
 from tests.simulate import make_qdf
 from macrosynergy.panel.hedge_ratio import *
 from macrosynergy.management.shape_dfs import reduce_df
@@ -169,6 +170,24 @@ class TestAll(unittest.TestCase):
 
         # The examination of the hedging mechanism will come through graphical
         # interpretation.
+        # However, test the computed hedge ratio on a "random" re-estimation date to
+        # confirm both return series up until the respective date have been used.
+        # Test date is '2013-03-29'.
+
+        s_date, e_date = date_alignment(unhedged_return=xr, benchmark_return=br)
+        xr = xr.truncate(before=s_date, after=e_date)
+        br = br.truncate(before=s_date, after=e_date)
+
+        X = sm.add_constant(xr.loc[:'2013-03-29'])
+        y = br.loc[:'2013-03-29']
+        mod = sm.OLS(y, X)
+        result = mod.fit().params[1]
+
+        # Test on the next business day given the shift. The hedge ratio computed on the
+        # re-estimation date is applied to the return series on the next business day
+        # after re-estimation.
+        test_value = float(df_hr[df_hr['real_date'] == '2013-04-01']['value'])
+        self.assertTrue(result == test_value)
 
     def test_adjusted_returns(self):
         """
@@ -273,38 +292,6 @@ class TestAll(unittest.TestCase):
                 continue
 
         return d_copy
-
-    def test_adjusted_returns_(self, dates_refreq: List[pd.Timestamp] = [],
-                               hedge_df: pd.DataFrame = pd.DataFrame(),
-                               dfw: pd.DataFrame = pd.DataFrame(),
-                               benchmark_return: pd.Series = None):
-
-        refreq_buckets = self.dates_groups(dates_refreq=dates_refreq,
-                                           benchmark_return=benchmark_return)
-        # Hedge ratios across the respective panel: cross-sections included on the
-        # category.
-        # hedge_pivot = hedge_df.pivot(index='real_date', columns='cid',
-        #                              values='value')
-        hedge_pivot = pd.DataFrame()
-
-        storage_dict = {}
-        for c in hedge_pivot:
-            series_hedge = hedge_pivot[c]
-            storage = []
-            for k, v in refreq_buckets.items():
-                try:
-                    hedge_value = series_hedge.loc[k]
-                # Asset being hedged might not be available for that timestamp.
-                except KeyError:
-                    pass
-                else:
-                    hedged_position = v * hedge_value
-                    storage.append(hedged_position)
-            storage_dict[c] = pd.concat(storage)
-
-        hedged_returns_df = pd.DataFrame.from_dict(storage_dict)
-
-        output = dfw - hedged_returns_df
 
     def dates_groups(self, dates_refreq: List[pd.Timestamp],
                      benchmark_return: pd.Series):
