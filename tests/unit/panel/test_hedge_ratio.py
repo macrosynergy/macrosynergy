@@ -174,8 +174,10 @@ class TestAll(unittest.TestCase):
         """
         Method used to compute the hedge ratio returns. The hedge ratio will determine
         the position taken in the benchmark asset. Therefore, adjust the returns across
-        the panel to account for the short position taken the hedging asset. A simple
-        example of the formula is: IDR_FXXR_NSA_H = IDR_FXXR_NSA - HR_IDR * USD_EQXR_NSA.
+        the panel to account for the short position taken the hedging asset (proportional
+        to the computed sensitivity parameter between the cross-section and the
+        benchmark). A simple example of the formula is:
+        IDR_FXXR_NSA_H = IDR_FXXR_NSA - HR_IDR * USD_EQXR_NSA.
         """
 
         self.dataframe_construction()
@@ -187,17 +189,50 @@ class TestAll(unittest.TestCase):
         # The method, adjusted_returns(), will compute the hedged return across the
         # entire panel. Call hedge_ratio method and pass the returned DataFrame
         # separately into adjusted_returns() method.
+        # The adjusted_returns() method will be called inside the main hedge_ratio()
+        # subroutine if a parameter is set to set to True.
 
         br_cat = "USD_EQXR_NSA"
-        df_hedge = hedge_ratio(df=self.dfd, xcat=self.xcats, cids=self.cids,
+        # Standardised dataframe consisting of exclusively the hedge-ratios.
+        df_hedge = hedge_ratio(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
                                benchmark_return=br_cat, start='2010-01-01',
-                               end='2020-10-30', blacklist=self.black, meth='ols',
+                               end='2020-10-30', blacklist=self.blacklist, meth='ols',
                                oos=True, refreq='m', min_obs=60,
                                hedged_returns=False)
 
         dfw = self.unhedged_df.pivot(index='real_date', columns='cid', values='value')
 
+        # Standardised dataframe of the adjusted returns.
         df_stack = adjusted_returns(benchmark_return=br, df_hedge=df_hedge, dfw=dfw)
+
+        # Choose a "random" date and confirm the values of two cross-sections through
+        # manuel calculation.
+        # "Random" date is "2016-06-01"
+        dates = list(dfw.index)
+        date = dfw.index[len(dates) // 2]
+
+        test_date = df_stack[df_stack['real_date'] == date]
+        # Test on the two cross-sections: 'IDR' & 'INR'.
+        # Hedge Return.
+        INR_HR = float(test_date[test_date['cid'] == 'INR']['value'])
+        IDR_HR = float(test_date[test_date['cid'] == 'IDR']['value'])
+
+        hedge_row = df_hedge[df_hedge['real_date'] == date]
+        INR_H = float(hedge_row[hedge_row['cid'] == 'INR']['value'])
+        IDR_H = float(hedge_row[hedge_row['cid'] == 'IDR']['value'])
+
+        return_row = dfw.loc[date]
+        INR_R = return_row['INR']
+        IDR_R = return_row['IDR']
+
+        br_date = br.loc[date]
+
+        # Manual calculation.
+        INR_return = INR_R - (INR_H * br_date)
+        IDR_return = IDR_R - (IDR_H * br_date)
+
+        self.assertTrue(INR_return == INR_HR)
+        self.assertTrue(IDR_return == IDR_HR)
 
     def test_date_index(self, start_date: pd.Timestamp = None,
                         end_date: pd.Timestamp = None, refreq: str = 'm'):
@@ -239,10 +274,10 @@ class TestAll(unittest.TestCase):
 
         return d_copy
 
-    def test_adjusted_returns(self, dates_refreq: List[pd.Timestamp] = [],
-                              hedge_df: pd.DataFrame = pd.DataFrame(),
-                              dfw: pd.DataFrame = pd.DataFrame(),
-                              benchmark_return: pd.Series = None):
+    def test_adjusted_returns_(self, dates_refreq: List[pd.Timestamp] = [],
+                               hedge_df: pd.DataFrame = pd.DataFrame(),
+                               dfw: pd.DataFrame = pd.DataFrame(),
+                               benchmark_return: pd.Series = None):
 
         refreq_buckets = self.dates_groups(dates_refreq=dates_refreq,
                                            benchmark_return=benchmark_return)
