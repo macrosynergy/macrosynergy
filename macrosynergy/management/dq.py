@@ -123,6 +123,46 @@ class DataQueryInterface(object):
             print(f'exc_value: {exc_value}')
             print(f'exc_traceback: {exc_traceback}')
 
+    def _fetch(self, endpoint: str = "/groups", select: str = "groups",
+               params: dict = None):
+        """
+        Used to test if DataQuery is responding.
+
+        :param <str> endpoint: default '/groups', end-point of DataQuery to be explored.
+        :param <str> select: default 'groups' string with select for within the endpoint.
+        :param <str> params: dictionary of parameters to be passed to request
+
+        :return: list of response from DataQuery
+        :rtype: <list>
+
+        """
+
+        url = self.base_url + endpoint
+        self.last_url = url
+
+        results = []
+        count = 0
+        while True:
+            count += 1
+            with requests.get(url=url, cert=(self.crt, self.key),
+                              headers=self.headers, params=params) as r:
+                self.status_code = r.status_code = r.status_code
+                self.last_response = r.text
+
+                self.last_url = r.url
+
+            response = json.loads(self.last_response)
+
+            assert select in response.keys()
+            results.extend(response[select])
+
+            if isinstance(response["info"], dict):
+                results = response["info"]
+                print(results)
+                break
+
+        return results
+
     def check_connection(self) -> bool:
         """
         Check connect (heartbeat) to DataQuery.
