@@ -253,6 +253,10 @@ class DataQueryInterface(object):
             respective time-series over the defined dates.
         """
 
+        if delay > 0.9999:
+            print("Issue with DataQuery - requests should not be throttled.")
+            raise RuntimeError
+
         no_tickers = len(tickers)
         if not count:
             params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
