@@ -244,12 +244,11 @@ class DataQueryInterface(object):
                         raise RuntimeError("All servers are down.")
 
                 dictionary = response[select][0]['attributes'][0]
-                if not isinstance(dictionary['time-series'], list):
-                    return None
+                error_message = 'FAILED - Error in parsing JSON data'
+                # if dictionary['message'] == error_message:
+                    # pass
 
-                if not select in response.keys():
-                    break
-                else:
+                if select in response.keys():
                     results.extend(response[select])
 
                 if response["links"][1]["next"] is None:
@@ -298,6 +297,7 @@ class DataQueryInterface(object):
             raise RuntimeError
 
         no_tickers = len(tickers)
+        print(f"Number of tickers: {no_tickers}.")
         if not count:
             params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
                        "calendar": calendar, "frequency": frequency, "conversion":
