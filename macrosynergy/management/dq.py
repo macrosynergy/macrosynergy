@@ -245,8 +245,12 @@ class DataQueryInterface(object):
 
                 dictionary = response[select][0]['attributes'][0]
                 error_message = 'FAILED - Error in parsing JSON data'
-                # if dictionary['message'] == error_message:
-                    # pass
+
+                if not isinstance(dictionary['time_series'], list):
+                    return None
+                
+                if dictionary['message'] == error_message:
+                    pass
 
                 if select in response.keys():
                     results.extend(response[select])
