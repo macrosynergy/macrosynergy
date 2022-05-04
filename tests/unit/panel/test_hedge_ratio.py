@@ -284,7 +284,7 @@ class TestAll(unittest.TestCase):
             # The re-estimation frequency can either be weekly, monthly or quarterly:
             # ['w', 'm', 'q']. Set the 'refreq' parameter to an incorrect value.
             df_hedge = hedge_ratio(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
-                                   benchmark_return=test_br, start='2010-01-01',
+                                   benchmark_return=br_cat, start='2010-01-01',
                                    end='2020-10-30', blacklist=self.blacklist,
                                    meth='ols',
                                    oos=True, refreq='b', min_obs=60,
@@ -295,14 +295,43 @@ class TestAll(unittest.TestCase):
         # than 10 business days, two weeks.
         with self.assertRaises(AssertionError):
             df_hedge = hedge_ratio(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
-                                   benchmark_return=test_br, start='2010-01-01',
+                                   benchmark_return=br_cat, start='2010-01-01',
                                    end='2020-10-30', blacklist=self.blacklist,
                                    meth='ols',
-                                   oos=True, refreq='b', min_obs=8,
+                                   oos=True, refreq='w', min_obs=8,
                                    hedged_returns=False)
 
-    # Todo: add test of correct hedge ratio by comparing one or more ratio with a
-    #  regression result generated outside the functions.
+        # Confirm the re-estimation frequency parameter is working correctly. Test on
+        # weekly data where the final day of the week will invariably be the Friday. The
+        # new re-estimation value should be applied from the next business day, the
+        # following Monday.
+        df_hedge = hedge_ratio(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
+                               benchmark_return=br_cat, start='2010-01-01',
+                               end='2020-10-30', blacklist=self.blacklist,
+                               meth='ols',
+                               oos=True, refreq='w', min_obs=24,
+                               hedged_returns=False)
+        # Confirm on a single cross-section.
+        df_hedge_INR = df_hedge[df_hedge['cid'] == 'INR']
+
+        # Test on a random date, 2014-02-14. The date should be a Friday.
+        date = pd.Timestamp('2014-02-14')
+        self.assertTrue(pd.Timestamp(date).dayofweek == 4)
+        df_hedge_INR_val = (df_hedge_INR[df_hedge_INR['real_date'] == date])['value']
+        df_hedge_INR_val = float(df_hedge_INR_val)
+
+        # Confirm the date in the DataFrame is a Monday and the hedge ratio is
+        # re-estimated on the respective date.
+
+        index = np.where(df_hedge_INR['real_date'] == date)
+        index = next(iter(index))[0]
+        next_index = index + 1
+        test_row = df_hedge_INR.iloc[next_index]
+        test_date = test_row['real_date']
+
+        self.assertTrue(pd.Timestamp(test_date).dayofweek == 0)
+        test_value = test_row['value']
+        self.assertTrue(test_value != df_hedge_INR_val)
 
 
 if __name__ == '__main__':
