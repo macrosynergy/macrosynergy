@@ -308,7 +308,7 @@ class DataQueryInterface(object):
             raise RuntimeError(error_delay)
 
         no_tickers = len(tickers)
-        print(f"Number of tickers: {no_tickers}.")
+
         if not count:
             params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
                        "calendar": calendar, "frequency": frequency, "conversion":
