@@ -253,97 +253,53 @@ class TestAll(unittest.TestCase):
         self.assertTrue(INR_return == INR_HR)
         self.assertTrue(IDR_return == IDR_HR)
 
-    def test_date_index(self, start_date: pd.Timestamp = None,
-                        end_date: pd.Timestamp = None, refreq: str = 'm'):
+    def test_hedge_ratio(self):
         """
-        The hedging ratio is re-estimated according to the frequency parameter.
-        Therefore, break up the respective return series, which are defined daily, into
-        the re-estimated frequency paradigm. To achieve this ensure the dates produced
-        fall on business days, and will subsequently be present in the return-series
-        dataframes (the daily series). The method used, in the source code, to delimit
-        the resampling frequency is pd.resample(), and subsequently use this method to
-        confirm the operation has been applied correctly.
-
-        :param <pd.Timestamp> start_date:
-        :param <pd.Timestamp> end_date:
-        :param <str> refreq:
-
-        return <List[pd.Timestamp]>: List of timestamps where each date is a valid
-            business day, and the gap between each date is delimited by the frequency
-            parameter.
+        Estimates hedge ratios with respect to a hedge benchmark. The subroutine also
+        allows for returning hedged returns if the respective parameter is set to True.
+        The method will primarily test the workflow of the function: the logic & source
+        code have been covered by previous Unit Tests.
+        As stated, the main function of the method is to test the efficacy of the
+        assert statements included and the workflow of the main driver function.
         """
 
-        start_date = "2000-01-01"
-        end_date = "2020-01-01"
+        self.dataframe_construction()
+        br_cat = "USD_EQXR_NSA"
 
-        dates = pd.date_range(start_date, end_date, freq=refreq)
-        d_copy = list(dates)
-        condition = lambda date: date.dayofweek > 4
+        with self.assertRaises(AssertionError):
+            # The categories the respective DataFrame is defined over are
+            # ['FXXR_NSA', 'GROWTHXR_NSA', 'INFLXR_NSA', 'EQXR_NSA']. Therefore, choosing
+            # a benchmark of USD intuitive GDP growth will throw an error given the
+            # ticker is not in the database.
+            test_br = "USD_INTRGDP_NSA"
+            df_hedge = hedge_ratio(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
+                                   benchmark_return=test_br, start='2010-01-01',
+                                   end='2020-10-30', blacklist=self.blacklist,
+                                   meth='ols',
+                                   oos=True, refreq='m', min_obs=60,
+                                   hedged_returns=False)
 
-        for i, d in enumerate(dates):
-            if condition(d):
-                new_date = d + pd.DateOffset(1)
-                while condition(new_date):
-                    new_date += pd.DateOffset(1)
+        # Test the re-estimation frequency parameter.
+        with self.assertRaises(AssertionError):
+            # The re-estimation frequency can either be weekly, monthly or quarterly:
+            # ['w', 'm', 'q']. Set the 'refreq' parameter to an incorrect value.
+            df_hedge = hedge_ratio(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
+                                   benchmark_return=test_br, start='2010-01-01',
+                                   end='2020-10-30', blacklist=self.blacklist,
+                                   meth='ols',
+                                   oos=True, refreq='b', min_obs=60,
+                                   hedged_returns=False)
 
-                d_copy.remove(d)
-                d_copy.insert(i, new_date)
-            else:
-                continue
-
-        return d_copy
-
-    def dates_groups(self, dates_refreq: List[pd.Timestamp],
-                     benchmark_return: pd.Series):
-        """
-        Method used to break up the hedging asset's return series into the re-estimation
-        periods. The method will return a dictionary where the key will be the
-        re-estimation timestamp and the corresponding value will be the following
-        timestamps until the next re-estimation date. It is the following returns that
-        the hedge ratio is applied to: the hedge ratio is calculated using the preceding
-        dates but is applied to the following dates until the next re-estimation period.
-
-        :param <List[pd.Timestamp]> dates_refreq:
-        :param <pd.Series> benchmark_return: the return series of the asset being used to
-            hedge against the main asset. Used to compute the hedge ratio multiplied by
-            the respective returns.
-
-        :return <dict>: the dictionary's keys will be pd.Timestamps and the value will be
-            a truncated pd.Series.
-        """
-        refreq_buckets = {}
-
-        no_reest_dates = len(dates_refreq)
-        for i, d in enumerate(dates_refreq):
-            if i < (no_reest_dates - 1):
-                intermediary_series = benchmark_return.truncate(before=d,
-                                                                after=dates_refreq[
-                                                                    (i + 1)])
-                refreq_buckets[d + pd.DateOffset(1)] = intermediary_series
-
-        return refreq_buckets
-
-    def test_date_weekend(self, rdates: List[pd.Timestamp] = []):
-        """
-        Adjusts for weekends following the shift by a single day to adjust for when the
-        hedge ratio becomes active.
-
-        :param <List[pd.Timestamp]> rdates: the dates controlling the frequency of
-            re-estimation.
-
-        :return <List[pd.Timestamp]>: date-adjusted list of dates.
-        """
-
-        rdates_copy = []
-        for d in rdates:
-            if d.weekday() == 5:
-                rdates_copy.append(d + pd.DateOffset(2))
-            elif d.weekday() == 6:
-                rdates_copy.append(d + pd.DateOffset(1))
-            else:
-                rdates_copy.append(d)
-
-        return rdates_copy
+        # The default number of minimum observations required to compute a hedge ratio is
+        # 24. However, if the parameter is defined, the specified number must be greater
+        # than 10 business days, two weeks.
+        with self.assertRaises(AssertionError):
+            df_hedge = hedge_ratio(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
+                                   benchmark_return=test_br, start='2010-01-01',
+                                   end='2020-10-30', blacklist=self.blacklist,
+                                   meth='ols',
+                                   oos=True, refreq='b', min_obs=8,
+                                   hedged_returns=False)
 
     # Todo: add test of correct hedge ratio by comparing one or more ratio with a
     #  regression result generated outside the functions.
