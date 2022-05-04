@@ -343,7 +343,8 @@ class CategoryRelations(object):
 
         coef_box_loc_error = "The parameter expects a string used to delimit the " \
                              "location of the box: 'upper left', 'lower right' etc."
-        assert isinstance(coef_box, str), coef_box_loc_error
+        if coef_box is not None:
+            assert isinstance(coef_box, str), coef_box_loc_error
 
         sns.set_theme(style="whitegrid")
         dfx = self.df.copy()
@@ -593,6 +594,10 @@ if __name__ == "__main__":
                            cids=cidx, xcat_aggs=['mean', 'sum'],
                            start='2005-01-01', blacklist=black,
                            years=None)
+
+    cr.reg_scatter(labels=False, separator=None,
+                   title="Carry and Return",
+                   xlab="Carry", ylab="Return")
 
     cr.reg_scatter(labels=False, coef_box='upper left', separator=None,
                    title="Carry and Return",
