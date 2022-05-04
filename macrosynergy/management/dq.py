@@ -142,12 +142,19 @@ class DataQueryInterface(object):
 
         results = []
         count = 0
+
+        auth_check = lambda string: string.split('-')[1].strip().split('<')[0]
         while True:
             count += 1
             with requests.get(url=url, cert=(self.crt, self.key),
                               headers=self.headers, params=params) as r:
                 self.status_code = r.status_code = r.status_code
                 self.last_response = r.text
+
+                condition = auth_check(self.last_response)
+                error = condition + " - unable to access DataQuery. Password expired."
+                if condition == 'Authentication Failure':
+                    raise RuntimeError(error)
 
                 self.last_url = r.url
 
@@ -245,6 +252,7 @@ class DataQueryInterface(object):
 
                 dictionary = response[select][0]['attributes'][0]
                 error_message = 'FAILED - Error in parsing JSON data'
+                
                 # if dictionary['message'] == error_message:
                     # pass
 
@@ -293,8 +301,8 @@ class DataQueryInterface(object):
         """
 
         if delay > 0.9999:
-            print("Issue with DataQuery - requests should not be throttled.")
-            raise RuntimeError
+            error_delay = "Issue with DataQuery - requests should not be throttled."
+            raise RuntimeError(error_delay)
 
         no_tickers = len(tickers)
         print(f"Number of tickers: {no_tickers}.")
@@ -661,7 +669,9 @@ class DataQueryInterface(object):
     def tickers(self, tickers: list, metrics: list = ['value'],
                 start_date: str='2000-01-01', suppress_warning=False):
         """
-        Returns standardized dataframe of specified base tickers and metric/
+        Returns standardized dataframe of specified base tickers and metric. Will also
+        validate the connection to DataQuery through the api using the method
+        .check_connection().
 
         :param <List[str]> tickers: JPMaQS ticker of form <cid>_<xcat>.
         :param <List[str]> metrics: must choose one or more from 'value', 'eop_lag',
@@ -674,14 +684,18 @@ class DataQueryInterface(object):
             'real_date' and chosen metrics.
         """
 
-        df = self.get_ts_expression(expression=tickers, original_metrics=metrics,
-                                    start_date=start_date,
-                                    suppress_warning=suppress_warning)
+        if self.check_connection():
+            df = self.get_ts_expression(expression=tickers, original_metrics=metrics,
+                                        start_date=start_date,
+                                        suppress_warning=suppress_warning)
 
-        if isinstance(df, pd.DataFrame):
-            df = df.sort_values(['cid', 'xcat', 'real_date']).reset_index(drop=True)
+            if isinstance(df, pd.DataFrame):
+                df = df.sort_values(['cid', 'xcat', 'real_date']).reset_index(drop=True)
 
-        return df
+            return df
+        else:
+            error = "Unable to connect to DataQuery. Reach out to DQ Support."
+            raise ConnectionError(error)
 
     def download(self, tickers=None, xcats=None, cids=None, metrics=['value'],
                  start_date='2000-01-01', suppress_warning=False):
