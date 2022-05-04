@@ -151,10 +151,13 @@ class DataQueryInterface(object):
                 self.status_code = r.status_code = r.status_code
                 self.last_response = r.text
 
-                condition = auth_check(self.last_response)
-                error = condition + " - unable to access DataQuery. Password expired."
-                if condition == 'Authentication Failure':
-                    raise RuntimeError(error)
+                if self.last_response[0] != "{":
+                    condition = auth_check(self.last_response)
+
+                    error = condition + " - unable to access DataQuery. " \
+                                        "Password expired."
+                    if condition == 'Authentication Failure':
+                        raise RuntimeError(error)
 
                 self.last_url = r.url
 
@@ -165,7 +168,7 @@ class DataQueryInterface(object):
 
             if isinstance(response["info"], dict):
                 results = response["info"]
-                print(results)
+                print(results['description'])
                 break
 
         return results
