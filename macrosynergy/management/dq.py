@@ -123,6 +123,56 @@ class DataQueryInterface(object):
             print(f'exc_value: {exc_value}')
             print(f'exc_traceback: {exc_traceback}')
 
+    def _fetch(self, endpoint: str = "/groups", select: str = "groups",
+               params: dict = None):
+        """
+        Used to test if DataQuery is responding.
+
+        :param <str> endpoint: default '/groups', end-point of DataQuery to be explored.
+        :param <str> select: default 'groups' string with select for within the endpoint.
+        :param <str> params: dictionary of parameters to be passed to request
+
+        :return: list of response from DataQuery
+        :rtype: <list>
+
+        """
+
+        url = self.base_url + endpoint
+        self.last_url = url
+
+        results = []
+        count = 0
+
+        auth_check = lambda string: string.split('-')[1].strip().split('<')[0]
+        while True:
+            count += 1
+            with requests.get(url=url, cert=(self.crt, self.key),
+                              headers=self.headers, params=params) as r:
+                self.status_code = r.status_code = r.status_code
+                self.last_response = r.text
+
+                if self.last_response[0] != "{":
+                    condition = auth_check(self.last_response)
+
+                    error = condition + " - unable to access DataQuery. " \
+                                        "Password expired."
+                    if condition == 'Authentication Failure':
+                        raise RuntimeError(error)
+
+                self.last_url = r.url
+
+            response = json.loads(self.last_response)
+
+            assert select in response.keys()
+            results.extend(response[select])
+
+            if isinstance(response["info"], dict):
+                results = response["info"]
+                print(results['description'])
+                break
+
+        return results
+
     def check_connection(self) -> bool:
         """
         Check connect (heartbeat) to DataQuery.
@@ -204,12 +254,12 @@ class DataQueryInterface(object):
                         raise RuntimeError("All servers are down.")
 
                 dictionary = response[select][0]['attributes'][0]
-                if not isinstance(dictionary['time-series'], list):
-                    return None
+                error_message = 'FAILED - Error in parsing JSON data'
+                
+                # if dictionary['message'] == error_message:
+                    # pass
 
-                if not select in response.keys():
-                    break
-                else:
+                if select in response.keys():
                     results.extend(response[select])
 
                 if response["links"][1]["next"] is None:
@@ -253,7 +303,12 @@ class DataQueryInterface(object):
             respective time-series over the defined dates.
         """
 
+        if delay > 0.9999:
+            error_delay = "Issue with DataQuery - requests should not be throttled."
+            raise RuntimeError(error_delay)
+
         no_tickers = len(tickers)
+
         if not count:
             params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
                        "calendar": calendar, "frequency": frequency, "conversion":
@@ -617,7 +672,9 @@ class DataQueryInterface(object):
     def tickers(self, tickers: list, metrics: list = ['value'],
                 start_date: str='2000-01-01', suppress_warning=False):
         """
-        Returns standardized dataframe of specified base tickers and metric/
+        Returns standardized dataframe of specified base tickers and metric. Will also
+        validate the connection to DataQuery through the api using the method
+        .check_connection().
 
         :param <List[str]> tickers: JPMaQS ticker of form <cid>_<xcat>.
         :param <List[str]> metrics: must choose one or more from 'value', 'eop_lag',
@@ -630,14 +687,18 @@ class DataQueryInterface(object):
             'real_date' and chosen metrics.
         """
 
-        df = self.get_ts_expression(expression=tickers, original_metrics=metrics,
-                                    start_date=start_date,
-                                    suppress_warning=suppress_warning)
+        if self.check_connection():
+            df = self.get_ts_expression(expression=tickers, original_metrics=metrics,
+                                        start_date=start_date,
+                                        suppress_warning=suppress_warning)
 
-        if isinstance(df, pd.DataFrame):
-            df = df.sort_values(['cid', 'xcat', 'real_date']).reset_index(drop=True)
+            if isinstance(df, pd.DataFrame):
+                df = df.sort_values(['cid', 'xcat', 'real_date']).reset_index(drop=True)
 
-        return df
+            return df
+        else:
+            error = "Unable to connect to DataQuery. Reach out to DQ Support."
+            raise ConnectionError(error)
 
     def download(self, tickers=None, xcats=None, cids=None, metrics=['value'],
                  start_date='2000-01-01', suppress_warning=False):
