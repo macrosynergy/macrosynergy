@@ -8,6 +8,8 @@ from tests.simulate import make_qdf
 from macrosynergy.panel.hedge_ratio import *
 from macrosynergy.management.shape_dfs import reduce_df
 import math
+import yaml
+from macrosynergy.management.dq import DataQueryInterface
 
 class TestAll(unittest.TestCase):
 
