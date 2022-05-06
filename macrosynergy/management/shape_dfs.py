@@ -174,18 +174,32 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
 
     df_output = []
     if years is None:
-        for i in range(2):
-            dfw = df[df['xcat'] == xcats[i]].pivot(index='real_date', columns='cid',
-                                                   values=val)
-            dfw = dfw.resample(freq).agg(xcat_aggs[i])
-            if (i == 0) and (lag > 0):  # first category (explanatory) is shifted forward
-                dfw = dfw.shift(lag)
-            if (i == 1) and (fwin > 0):
-                dfw = dfw.rolling(window=fwin).mean().shift(1 - fwin)
-            dfx = pd.melt(dfw.reset_index(), id_vars=['real_date'],
-                          value_vars=cids, value_name=val)
-            dfx['xcat'] = xcats[i]
-            df_output.append(dfx[col_names])
+        expln = xcats[0]
+        depnd = xcats[1]
+
+        df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values=val)
+        df_w = df_w.groupby([pd.Grouper(level='cid'),
+                             pd.Grouper(level='real_date', freq=freq)])
+        expln_col = df_w[expln].agg(xcat_aggs[0])
+        depnd_col = df_w[depnd].agg(xcat_aggs[1])
+
+        # Explanatory variable is shifted forward.
+        if lag > 0:
+            # Utilise .groupby() to handle for multi-index Pandas DataFrame.
+            expln_col = expln_col.groupby(level=0).shift(1)
+        if fwin > 0:
+            s = 1 - fwin
+            depnd_col = depnd_col.rolling(window=fwin).mean().shift(s)
+
+        expln_df = expln_col.reset_index()
+        expln_df['xcat'] = expln
+        expln_df = expln_df.rename(columns={expln: "value"})
+
+        depnd_df = depnd_col.reset_index()
+        depnd_df['xcat'] = depnd
+        depnd_df = depnd_df.rename(columns={depnd: "value"})
+        df_output.append(pd.concat([expln_df, depnd_df], ignore_index=True))
+
     else:
         s_year = pd.to_datetime(start).year
         start_year = s_year
@@ -195,6 +209,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         remainder = (e_year - s_year) % years
 
         year_groups = {}
+
         for group in range(grouping):
             value = [i for i in range(s_year, s_year + years)]
             key = f"{s_year} - {s_year + (years - 1)}"
@@ -209,12 +224,14 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         translate_ = lambda year: list_y_groups[int((year % start_year) / years)]
         df['real_date'] = pd.to_datetime(df['real_date'], errors='coerce')
         df['custom_date'] = df['real_date'].dt.year.apply(translate_)
+
         for i in range(2):
             dfx = df[df['xcat'] == xcats[i]]
             dfx = dfx.groupby(['xcat', 'cid', 'custom_date'])
             dfx = dfx.agg(xcat_aggs[i]).reset_index()
+
             if 'real_date' in dfx.columns:
-                dfx = dfx.drop(['real_date'], axis = 1)
+                dfx = dfx.drop(['real_date'], axis=1)
             dfx = dfx.rename(columns={"custom_date": "real_date"})
             df_output.append(dfx[col_names])
 
