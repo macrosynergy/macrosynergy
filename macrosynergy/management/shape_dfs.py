@@ -172,6 +172,10 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
 
     col_names = ['cid', 'xcat', 'real_date', val]
 
+    sum_clause = 'sum' in xcat_aggs
+    if sum_clause:
+        sum_index = xcat_aggs.index('sum')
+
     df_output = []
     if years is None:
         expln = xcats[0]
@@ -180,8 +184,12 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values=val)
         df_w = df_w.groupby([pd.Grouper(level='cid'),
                              pd.Grouper(level='real_date', freq=freq)])
-        expln_col = df_w[expln].agg(xcat_aggs[0])
-        depnd_col = df_w[depnd].agg(xcat_aggs[1])
+        expln_col = df_w[expln].agg(xcat_aggs[0]).astype(dtype=np.float32)
+        depnd_col = df_w[depnd].agg(xcat_aggs[1]).astype(dtype=np.float32)
+        if sum_clause and sum_index:
+            depnd_col = depnd_col.replace({0.0: np.nan})
+        elif sum_clause:
+            expln_col = expln_col.replace({0.0: np.nan})
 
         # Explanatory variable is shifted forward.
         if lag > 0:
@@ -236,6 +244,10 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
             df_output.append(dfx[col_names])
 
     dfc = pd.concat(df_output)
+    # If either of the two variables, explanatory or dependent variable, contain a NaN
+    # value, remove the row: a relationship is not able to be established between a
+    # realised datapoint and a Nan value. Therefore, remove the row from the returned
+    # DataFrame.
     dfc = dfc.pivot(index=('cid', 'real_date'), columns='xcat',
                     values=val).dropna()[xcats]
 
