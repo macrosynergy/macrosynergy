@@ -22,6 +22,8 @@ class SignalReturnRelations:
         columns: 'cid', 'xcat', 'real_date' and 'value.
     :param <str> ret: return category.
     :param <str> sig: signal category.
+    :param <bool> sig_neg: if set to True  puts the signal in negative terms for all
+        analyses. Default is False.
     :param <str> start: earliest date in ISO format. Default is None in which case the
         earliest date in the df will be used.
     :param <str> end: latest date in ISO format. Default is None in which case the
@@ -39,6 +41,7 @@ class SignalReturnRelations:
 
     """
     def __init__(self, df: pd.DataFrame, ret: str, sig: str, cids: List[str] = None,
+                 sig_neg: bool=False,
                  start: str = None, end: str = None, fwin: int = 1,
                  blacklist: dict = None, agg_sig: str = 'last', freq: str = 'M'):
 
@@ -51,8 +54,15 @@ class SignalReturnRelations:
         self.df = categories_df(df, [ret, sig], cids, 'value', start=start, end=end,
                                 freq=freq, blacklist=blacklist,
                                 lag=1, fwin=fwin, xcat_aggs=['mean', agg_sig])
+
+        if sig_neg:
+            self.df.iloc[:, 1] = -1 * self.df.iloc[:, 1]
+            self.sig = sig+"_NEG"
+            self.df.rename(columns={sig:self.sig}, inplace=True)
+        else:
+            self.sig = sig
+
         self.ret = ret
-        self.sig = sig
         self.freq = freq
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
         self.df_cs = self.panel_relations(cs_type='cids')
@@ -265,7 +275,13 @@ if __name__ == "__main__":
 
     srr = SignalReturnRelations(dfd, sig='CRY', ret='XR', freq='D', blacklist=black)
     srr.summary_table()
+    srn = SignalReturnRelations(dfd, sig='CRY', sig_neg=True,
+                                ret='XR', freq='D', blacklist=black)
+    srn.summary_table()
+
     srr.correlation_bars(type='cross_section')
+    srn.correlation_bars(type='cross_section')
+
     srr.accuracy_bars(type='cross_section')
     df_cs_stats = srr.cross_section_table()
     df_ys_stats = srr.yearly_table()
