@@ -11,7 +11,8 @@ from macrosynergy.management.shape_dfs import categories_df
 
 
 class CategoryRelations(object):
-    """Class for analyzing and visualizing two categories across a panel
+    """
+    Class for analyzing and visualizing two categories across a panel.
 
     :param <pd.Dataframe> df: standardized data frame with the necessary columns:
         'cid', 'xcat', 'real_date' and at least one column with values of interest.
@@ -48,7 +49,7 @@ class CategoryRelations(object):
         have been calculated. Default is 1.
     :param <int> fwin: forward moving average window of second category. Default is 1,
         i.e no average.
-        Importantly, for analyses with explanatory and dependent categories, the second
+        Importantly, for analysis with explanatory and dependent categories, the second
         takes the role of the dependent and a forward window means that the dependent
         values average forward into the future.
     :param: <List[float]> xcat_trims: two-element list with maximum absolute values
@@ -65,7 +66,9 @@ class CategoryRelations(object):
                  xcat1_chg: str = None, n_periods: int = 1,
                  xcat_trims: List[float] = [None, None]):
 
-        """Constructs all attributes for the category relationship to be analyzed."""
+        """
+        Constructs all attributes for the category relationship to be analyzed.
+        """
 
         self.xcats = xcats
         self.cids = cids 
@@ -113,7 +116,8 @@ class CategoryRelations(object):
     @classmethod
     def intersection_cids(cls, df, xcats, cids):
         """
-        Returns list of common cids across categories.
+        Returns a list of the common cross-sections across both categories: dependent &
+        explanatory variable.
 
         :return <List[str]>: usable: List of the common cross-sections across the two
             categories.
@@ -303,7 +307,7 @@ class CategoryRelations(object):
                     title_adj: float = 1, single_chart: bool = False):
 
         """
-        Display scatterplot and regression line.
+        Display scatter-plot and regression line.
 
         :param <str> title: title of plot. If None (default) an informative title is
             applied.
@@ -471,20 +475,21 @@ class CategoryRelations(object):
                 data_table.set_fontsize(12)
 
             if labels:
-                assert self.freq in ['A', 'Q', 'M'], \
-                    'Labels only available for monthly or lower frequencies'
+                error_freq = "Labels only available for monthly or lower frequencies."
+                assert self.freq in ['A', 'Q', 'M'], error_freq
+
                 df_labs = self.df.dropna().index.to_frame(index=False)
                 if self.years is not None:
                     ser_labs = df_labs['cid'] + ' ' + df_labs['real_date']
-                elif self.freq == 'A':
-                    ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year. \
-                        astype(str)
-                elif self.freq == 'Q':
-                    ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year. \
-                        astype(str) + 'Q' + df_labs['real_date'].dt.quarter.astype(str)
-                elif self.freq == 'M':
-                    ser_labs = df_labs['cid'] + ' ' + df_labs['real_date'].dt.year. \
-                        astype(str) + '-' + df_labs['real_date'].dt.month.astype(str)
+                else:
+                    ser_labs = df_labs['cid'] + ' '
+                    ser_labs += df_labs['real_date'].dt.year.astype(str)
+                    if self.freq == 'Q':
+                        ser_labs += 'Q' + df_labs['real_date'].dt.quarter.astype(str)
+
+                    elif self.freq == 'M':
+                        ser_labs += '-' + df_labs['real_date'].dt.month.astype(str)
+
                 for i in range(self.df.shape[0]):
 
                     plt.text(x=self.df[self.xcats[0]][i] + 0,
