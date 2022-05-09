@@ -348,6 +348,31 @@ class NaivePnL:
         plt.axhline(y=0, color='black', linestyle='--', lw=1)
         plt.show()
 
+    def signal_display(self, pnl_cats: str, pnl_cids: List[str] = ['ALL'],
+                       start: str = None, end: str = None, time_period: str = 'm'):
+
+        """
+        Method used to analyse the signals across both cross-sections and timestamps. The
+        strength of the respective signals will be displayed on a heatmap where the
+        cross-sections will be defined on the y-axis and time-periods will be on the
+        x-axis. The daily series will be down-sampled to either monthly or quarterly
+        measure.
+
+        :param <str> pnl_cats: list of PnL categories that should be plotted.
+        :param <List[str]> pnl_cids: list of cross sections to be plotted;
+            default is 'ALL' (global PnL).
+            Note: one can only have multiple PnL categories or multiple cross sections,
+            not both.
+        :param <str> start: earliest date in ISO format. Default is None and earliest
+            date in df is used.
+        :param <str> end: latest date in ISO format. Default is None and latest date
+            in df is used.
+        :param <str> time_period: to analyse the signals in the heatmap, the series are
+            down-sampled to either monthly or quarterly. The default is monthly data.
+        """
+
+        pass
+
     def evaluate_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
                       benchmark_correl: str = None, start: str = None, end: str = None):
 
