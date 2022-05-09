@@ -38,6 +38,7 @@ class NaivePnL:
         self.ret = ret
         self.sigs = sigs
         xcats = [ret] + sigs
+
         cols = ['cid', 'xcat', 'real_date', 'value']
         self.cids = cids
         self.df, self.xcats, self.cids = reduce_df(df[cols], xcats, cids, start, end,
@@ -72,7 +73,7 @@ class NaivePnL:
         :param <str> pnl_name: name of the PnL to be generated and stored.
             Default is none, i.e. a default name is given.
             Previously calculated PnLs in the class will be overwritten. This means that
-            if a set of PnLs is to be compared they require custom names.
+            if a set of PnLs is to be compared, each PnL requires a custom name.
         :param <str> rebal_freq: re-balancing frequency for positions according to signal
             must be one of 'daily' (default), 'weekly' or 'monthly'. The re-balancing is
             only concerned with the signal value on the re-balancing date which is
@@ -107,17 +108,21 @@ class NaivePnL:
         dfx = self.df[self.df['xcat'].isin([self.ret, sig])]
 
         if sig_op == 'binary':
+            # Multi-index DataFrame. Each column is a single category. Add an additional
+            # column of the respective signal.
             dfw = dfx.pivot(index=['cid', 'real_date'], columns='xcat', values='value')
             dfw['psig'] = np.sign(dfw[sig])
         else:
             panw = 1 if sig_op == 'zn_score_pan' else 0
             # Utilising the signal to subsequently take a "position" in self.ret.
             # Deviation from the mean as the signal.
+            # Standardised DataFrame containing the zn-scores for the signal category.
             df_ms = make_zn_scores(dfx, xcat=sig, neutral=neutral, pan_weight=panw,
                                    sequential=sequential, min_obs=min_obs, iis=iis,
                                    thresh=thresh)
             df_ms = df_ms.drop('xcat', axis=1)
             df_ms['xcat'] = 'psig'
+            # The DataFrame, dfx, will contain exclusively the return & signal category.
             dfx_concat = pd.concat([dfx, df_ms])
             dfw = dfx_concat.pivot(index=['cid', 'real_date'], columns='xcat',
                                    values='value')
@@ -134,6 +139,7 @@ class NaivePnL:
                                           rebal_slip=rebal_slip)
         else:
             dfw = dfw.rename({'psig': 'sig'}, axis=1)
+        # The signals are generated across the panel.
         dfw['value'] = dfw[self.ret] * dfw['sig']
 
         df_pnl = dfw.loc[:, ['cid', 'real_date', 'value']]
@@ -143,6 +149,7 @@ class NaivePnL:
         # monthly.
         df_pnl_all = df_pnl.groupby(['real_date']).sum()
         df_pnl_all = df_pnl_all[df_pnl_all['value'].cumsum() != 0]
+        # Returns are computed for each cross-section and across the panel.
         df_pnl_all['cid'] = 'ALL'
         df_pnl_all = df_pnl_all.reset_index()[df_pnl.columns]
         # Will be inclusive of each individual cross-section's signal-adjusted return and
@@ -342,7 +349,7 @@ class NaivePnL:
         plt.show()
 
     def evaluate_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
-                      start: str = None, end: str = None):
+                      benchmark_correl: str = None, start: str = None, end: str = None):
 
         """
         Small table of key PnL statistics.
@@ -352,25 +359,63 @@ class NaivePnL:
             'ALL' (global PnL).
             Note: one can only have multiple PnL categories or multiple cross sections,
             not both.
+        :param <str> benchmark_correl: a single (return) ticker that functions as the
+            benchmark for PnL correlation. For instance, U.S equity. The default is None:
+            a correlation with a benchmark will not be included in the returned
+            DataFrame.
         :param <str> start: earliest date in ISO format. Default is None and earliest
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
             in df is used.
 
-        :return <pd.DataFrame>: standardized dataframe with key PnL performance statistics
+        :return <pd.DataFrame>: standardized DataFrame with key PnL performance
+            statistics
         """
 
+        error_cids = "List of cross-sections expected."
+        error_xcats = "List of categories expected."
+        assert isinstance(pnl_cids, list), error_cids
+        assert isinstance(pnl_cats, list), error_xcats
+        assert all([isinstance(elem, str) for elem in pnl_cids]), error_cids
+        assert all([isinstance(elem, str) for elem in pnl_cats]), error_xcats
+
         if pnl_cats is None:
+            # The field, self.pnl_names, is a data structure that stores the name of the
+            # category assigned to PnL values. Each time make_pnl() method is called, the
+            # computed DataFrame will have an associated category established by the
+            # logical method: ('PNL_' + sig) if pnl_name is None else pnl_name. Each
+            # category will be held in the data structure.
             pnl_cats = self.pnl_names
+        else:
+            pnl_error = "Received PnL categories have not been defined."
+            assert set(pnl_cats) <= set(self.pnl_names), pnl_error
 
         assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
+
+        benchmark_bool = True if benchmark_correl is not None else False
+        if benchmark_bool:
+            assert isinstance(benchmark_correl, str), "Parameter expects to receive a " \
+                                                      "ticker."
+            b_correl = benchmark_correl.split('_')
+            b_correl_cid = b_correl[0]
+            b_correl_xcat = '_'.join(b_correl[1:])
+
+            benchmark_error = "Benchmark ticker has not been defined in the DataFrame."
+            assert b_correl_xcat in self.xcats, benchmark_error
+            df_bench = reduce_df(self.df, [b_correl_xcat], b_correl_cid, start, end,
+                                 self.black, out_all=False)
+            df_bench = pd.Series(index=df_bench['real_date'].to_numpy(),
+                                 data=df_bench['value'].to_numpy())
+            df_bench = df_bench.astype(dtype=np.float32)
 
         dfx = reduce_df(self.df, pnl_cats, pnl_cids, start, end, self.black,
                         out_all=False)
 
         groups = 'xcat' if len(pnl_cids) == 1 else 'cid'
-        stats = ['Return (pct ar)', 'St. Dev. (pct ar)', 'Sharpe ratio', 'Sortino ratio',
-                 'Max 21-day draw', 'Max 6-month draw', 'Traded months']
+        stats = ['Return (pct ar)', 'St. Dev. (pct ar)', 'Sharpe Ratio', 'Sortino Ratio',
+                 'Max 21-day draw', 'Max 6-month draw', 'Traded Months']
+        if benchmark_bool:
+            stats.append('Correlation with Benchmark')
 
         dfw = dfx.pivot(index='real_date', columns=groups, values='value')
         df = pd.DataFrame(columns=dfw.columns, index=stats)
@@ -383,6 +428,8 @@ class NaivePnL:
         df.iloc[4, :] = dfw.rolling(21).sum().min()
         df.iloc[5, :] = dfw.rolling(6*21).sum().min()
         df.iloc[6, :] = dfw.resample('M').sum().count()
+        if benchmark_bool:
+            df.iloc[7, :] = dfw.corrwith(df_bench, axis=0, method='pearson')
 
         return df
 
@@ -412,8 +459,8 @@ class NaivePnL:
 
 
 if __name__ == "__main__":
-    cids = ['AUD', 'CAD', 'GBP', 'NZD']
-    xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
+    cids = ['AUD', 'CAD', 'GBP', 'NZD', 'USD']
+    xcats = ['EQXR', 'CRY', 'GROWTH', 'INFL']
 
     cols_1 = ['earliest', 'latest', 'mean_add', 'sd_mult']
     df_cids = pd.DataFrame(index=cids, columns=cols_1)
@@ -421,11 +468,12 @@ if __name__ == "__main__":
     df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
     df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
     df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
+    df_cids.loc['USD'] = ['2001-01-01', '2020-12-31', 0.2, 2]
 
     cols_2 = cols_1 + ['ar_coef', 'back_coef']
 
     df_xcats = pd.DataFrame(index=xcats, columns=cols_2)
-    df_xcats.loc['XR'] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
+    df_xcats.loc['EQXR'] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
     df_xcats.loc['CRY'] = ['2000-01-01', '2020-10-30', 1, 2, 0.95, 1]
     df_xcats.loc['GROWTH'] = ['2001-01-01', '2020-10-30', 1, 2, 0.9, 1]
     df_xcats.loc['INFL'] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
@@ -435,7 +483,7 @@ if __name__ == "__main__":
 
     # Initiate instance.
 
-    pnl = NaivePnL(dfd, ret='XR', sigs=['CRY', 'GROWTH', 'INFL'],
+    pnl = NaivePnL(dfd, ret='EQXR', sigs=['CRY', 'GROWTH', 'INFL'],
                    cids=cids, start='2000-01-01', blacklist=black)
 
     # Make and plot PnLs to check correct labelling.
@@ -451,37 +499,37 @@ if __name__ == "__main__":
                  pnl_name='PNL_CRY_PZN20', min_obs=250, thresh=2)
     print(pnl.df)
 
-    pnl.make_long_pnl(vol_scale=20, label='Long_Only_XR20')
+    pnl.make_long_pnl(vol_scale=20, label='Long_Only_EQXR20')
 
-    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN20', 'Long_Only_XR20'],
+    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN20', 'Long_Only_EQXR20'],
                   pnl_cids=['ALL'], start='2000-01-01',
                   title="Custom Title")
 
     # Testing on multiple volatility scales.
     pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN05', 'PNL_CRY_PZN10',
-                            'PNL_CRY_PZN20', 'Long_Only_XR20'],
+                            'PNL_CRY_PZN20', 'Long_Only_EQXR20'],
                   pnl_cids=['ALL'], start='2000-01-01')
 
-    pnl.make_long_pnl(vol_scale=10, label='Long_Only_XR10')
+    pnl.make_long_pnl(vol_scale=10, label='Long_Only_EQXR10')
 
-    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN10', 'Long_Only_XR10'],
+    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN10', 'Long_Only_EQXR10'],
                   pnl_cids=['ALL'], start='2000-01-01',
                   title="Custom Title")
 
     # Test on the option if the label is omitted from long-only DataFrame.
-    pnl = NaivePnL(dfd, ret='XR', sigs=['CRY', 'GROWTH', 'INFL'],
+    pnl = NaivePnL(dfd, ret='EQXR', sigs=['CRY', 'GROWTH', 'INFL'],
                    cids=cids, start='2000-01-01', blacklist=black)
 
     pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
                  vol_scale=5, rebal_slip=1, pnl_name='PNL_CRY_PZN05', min_obs=250,
                  thresh=2)
     pnl.make_long_pnl(vol_scale=10)
-    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN05', 'XR'],
+    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN05', 'EQXR'],
                   pnl_cids=['ALL'], start='2000-01-01',
                   title="Long-Only Comparison")
 
     # Instantiate a new instance to test the long-only functionality.
-    pnl = NaivePnL(dfd, ret='XR', sigs=['CRY', 'GROWTH', 'INFL'],
+    pnl = NaivePnL(dfd, ret='EQXR', sigs=['CRY', 'GROWTH', 'INFL'],
                    cids=cids, start='2000-01-01', blacklist=black)
 
     pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
@@ -491,8 +539,16 @@ if __name__ == "__main__":
                   start='2000-01-01')
 
     # Return evaluation and PnL DataFrames.
+    benchmark_correl = 'USD_EQXR'
+    cids_subset = ['AUD', 'CAD', 'GBP']
+    # Test the inclusion of benchmark correlation.
     df_eval = pnl.evaluate_pnls(
         pnl_cats=['PNL_CRY_PZN'],
-        pnl_cids=['ALL'], start='2000-01-01')
+        pnl_cids=cids_subset, benchmark_correl=benchmark_correl,
+        start='2000-01-01')
+    # Examine the evaluated DataFrame.
+    print("Evaluated DataFrame.")
+    print(df_eval)
+
     df_pnls = pnl.pnl_df()
     df_pnls.head()
