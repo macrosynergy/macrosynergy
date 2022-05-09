@@ -187,7 +187,8 @@ class NaivePnL:
             according to the re-balancing frequency.
         """
 
-        # The re-balancing days are the first of the respective time-periods.
+        # The re-balancing days are the first of the respective time-periods because of
+        # the shift forward by one day applied earlier in the code.
         dfw['year'] = dfw['real_date'].dt.year
         if rebal_freq == 'monthly':
             dfw['month'] = dfw['real_date'].dt.month
@@ -349,7 +350,8 @@ class NaivePnL:
         plt.show()
 
     def signal_display(self, pnl_cats: str, pnl_cids: List[str] = ['ALL'],
-                       start: str = None, end: str = None, time_period: str = 'm'):
+                       start: str = None, end: str = None, time_period: str = 'm',
+                       title: str = "Cross-sectional Heatmap."):
 
         """
         Method used to analyse the signals across both cross-sections and timestamps. The
@@ -369,9 +371,34 @@ class NaivePnL:
             in df is used.
         :param <str> time_period: to analyse the signals in the heatmap, the series are
             down-sampled to either monthly or quarterly. The default is monthly data.
+        :param <str> title: allows entering text for a custom chart header.
         """
 
-        pass
+        assert isinstance(pnl_cats, str), "The method expects to receive a single " \
+                                          "category name."
+        error_cats = "The PnL passed to 'pnl_cats' parameter is not defined."
+        assert pnl_cats in self.pnl_names, error_cats
+
+        error_time = "Defined time-period must either be monthly, m, or quarterly, q."
+        assert isinstance(time_period, str) and time_period in ['m', 'q'], error_time
+
+        error_cids = f"Cross-sections not present in the DataFrame. Available cids are:" \
+                     f"{self.cids}."
+        assert set(pnl_cids) <= set(self.cids + ['ALL']), error_cids
+
+        dfx = reduce_df(self.df, [pnl_cats], pnl_cids, start, end, self.black,
+                        out_all=False)
+        dfw = dfx.pivot(index='real_date', columns='cid', values='value')
+        dfw = dfw.resample(time_period, axis=0).mean()
+
+        fig, ax = plt.subplots(figsize=(14, 8))
+        dfw = dfw.transpose()
+        dfw.columns = [str(d.strftime('%d-%m-%Y')) for d in dfw.columns]
+        sns.heatmap(dfw, cmap="vlag_r", center=0)
+
+        ax.set(xlabel='Timestamps', ylabel='Cross-sections')
+        ax.set_title(title, fontsize=14)
+        plt.show()
 
     def evaluate_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
                       benchmark_correl: str = None, start: str = None, end: str = None):
@@ -577,3 +604,7 @@ if __name__ == "__main__":
 
     df_pnls = pnl.pnl_df()
     df_pnls.head()
+
+    # Testing signal display.
+    pnl.signal_display(pnl_cats='PNL_CRY_PZN', pnl_cids=['AUD', 'CAD', 'GBP'],
+                       start='2000-01-01', time_period='q')
