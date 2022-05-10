@@ -366,7 +366,8 @@ class NaivePnL:
         strength of the respective signals will be displayed on a heatmap where the
         cross-sections will be defined on the y-axis and time-periods will be on the
         x-axis. The daily series will be down-sampled to either monthly or quarterly
-        measure.
+        measure. The time-period the signals are analysed over can be modified via the
+        'start' & 'end' parameters.
 
         :param <str> pnl_name: name of the respective PnL DataFrame interested in
             displaying the associated signals.
@@ -403,7 +404,7 @@ class NaivePnL:
         if pnl_cids is None:
             pnl_cids = self.cids
         else:
-            assert set(pnl_cids) <= set(self.cids + ['ALL']), error_cids
+            assert set(pnl_cids) <= set(self.cids), error_cids
 
         assert isinstance(x_label, str), f"<str> expected - received {type(x_label)}."
         assert isinstance(y_label, str), f"<str> expected - received {type(y_label)}."
