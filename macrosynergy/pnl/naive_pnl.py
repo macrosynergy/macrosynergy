@@ -351,7 +351,8 @@ class NaivePnL:
 
     def signal_display(self, pnl_cats: str, pnl_cids: List[str] = ['ALL'],
                        start: str = None, end: str = None, time_period: str = 'm',
-                       title: str = "Cross-sectional Heatmap."):
+                       title: str = "Cross-sectional Heatmap.",
+                       x_label: str = "Timestamps", y_label: str = "Cross-sections"):
 
         """
         Method used to analyse the signals across both cross-sections and timestamps. The
@@ -372,6 +373,8 @@ class NaivePnL:
         :param <str> time_period: to analyse the signals in the heatmap, the series are
             down-sampled to either monthly or quarterly. The default is monthly data.
         :param <str> title: allows entering text for a custom chart header.
+        :param <str> x_label: label for the x-axis. Default is "Timestamps".
+        :param <str> y_label: label for the y-axis. Default is "Cross-sections."
         """
 
         assert isinstance(pnl_cats, str), "The method expects to receive a single " \
@@ -386,6 +389,9 @@ class NaivePnL:
                      f"{self.cids}."
         assert set(pnl_cids) <= set(self.cids + ['ALL']), error_cids
 
+        assert isinstance(x_label, str), f"<str> expected - received {type(x_label)}."
+        assert isinstance(y_label, str), f"<str> expected - received {type(y_label)}."
+
         dfx = reduce_df(self.df, [pnl_cats], pnl_cids, start, end, self.black,
                         out_all=False)
         dfw = dfx.pivot(index='real_date', columns='cid', values='value')
@@ -398,6 +404,8 @@ class NaivePnL:
 
         ax.set(xlabel='Timestamps', ylabel='Cross-sections')
         ax.set_title(title, fontsize=14)
+        ax.set(xlabel=x_label, ylabel=y_label)
+
         plt.show()
 
     def evaluate_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
