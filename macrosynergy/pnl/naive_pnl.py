@@ -45,6 +45,7 @@ class NaivePnL:
                                                    blacklist, out_all=True)
         self.df['real_date'] = pd.to_datetime(self.df['real_date'])
         self.pnl_names = []
+        self.signal_df = {}
         self.black = blacklist
 
     def make_pnl(self, sig: str, sig_op: str = 'zn_score_pan', pnl_name: str = None,
@@ -71,7 +72,8 @@ class NaivePnL:
             neutral level and standardization through division by mean absolute value
             (the standard deviation).
         :param <str> pnl_name: name of the PnL to be generated and stored.
-            Default is none, i.e. a default name is given.
+            Default is None, i.e. a default name is given. The default name will be:
+            ('PNL_' + sig).
             Previously calculated PnLs in the class will be overwritten. This means that
             if a set of PnLs is to be compared, each PnL requires a custom name.
         :param <str> rebal_freq: re-balancing frequency for positions according to signal
@@ -139,6 +141,7 @@ class NaivePnL:
                                           rebal_slip=rebal_slip)
         else:
             dfw = dfw.rename({'psig': 'sig'}, axis=1)
+
         # The signals are generated across the panel.
         dfw['value'] = dfw[self.ret] * dfw['sig']
 
@@ -161,6 +164,10 @@ class NaivePnL:
             df_pnl['value'] = df_pnl['value'] * leverage
 
         pnn = ('PNL_' + sig) if pnl_name is None else pnl_name
+        # Populating the signal dictionary is required for the display methods:
+        # self.signal_display() & self.sstrength_plot().
+        self.signal_df[pnn] = dfw.loc[:, ['cid', 'real_date', 'sig']]
+
         df_pnl['xcat'] = pnn
         if pnn in self.pnl_names:
             self.df = self.df[~(self.df['xcat'] == pnn)]
@@ -349,7 +356,7 @@ class NaivePnL:
         plt.axhline(y=0, color='black', linestyle='--', lw=1)
         plt.show()
 
-    def signal_display(self, pnl_cats: str, pnl_cids: List[str] = ['ALL'],
+    def signal_display(self, pnl_name: str, pnl_cids: List[str] = None,
                        start: str = None, end: str = None, time_period: str = 'm',
                        title: str = "Cross-sectional Heatmap.",
                        x_label: str = "Timestamps", y_label: str = "Cross-sections"):
@@ -361,13 +368,17 @@ class NaivePnL:
         x-axis. The daily series will be down-sampled to either monthly or quarterly
         measure.
 
-        :param <str> pnl_cats: list of PnL categories that should be plotted.
-        :param <List[str]> pnl_cids: list of cross sections to be plotted;
-            default is 'ALL' (global PnL).
-            Note: one can only have multiple PnL categories or multiple cross sections,
-            not both.
+        :param <str> pnl_name: name of the respective PnL DataFrame interested in
+            displaying the associated signals.
+            If the 'pnl_name' parameter has not been defined, the default mechanism is
+            ('PNL_' + sig). Otherwise pass in the used 'pnl_name'.
+        :param <List[str]> pnl_cids: list of cross-sections used in signal heatmap;
+            default is all the cross-sections passed to the field 'self.cids'.
+            Otherwise, any combination of cross-sections would be valid assuming the
+            combination is a subset of 'self.cids'.
         :param <str> start: earliest date in ISO format. Default is None and earliest
-            date in df is used.
+            date in df is used. Allows for modifying the time-horizon the signals are
+            analysed over.
         :param <str> end: latest date in ISO format. Default is None and latest date
             in df is used.
         :param <str> time_period: to analyse the signals in the heatmap, the series are
@@ -377,24 +388,37 @@ class NaivePnL:
         :param <str> y_label: label for the y-axis. Default is "Cross-sections."
         """
 
-        assert isinstance(pnl_cats, str), "The method expects to receive a single " \
-                                          "category name."
-        error_cats = "The PnL passed to 'pnl_cats' parameter is not defined."
-        assert pnl_cats in self.pnl_names, error_cats
+        assert isinstance(pnl_name, str), "The method expects to receive a single " \
+                                          "PnL name."
+        error_cats = f"The PnL passed to 'pnl_name' parameter is not defined. The " \
+                     f"possible options are {print(self.pnl_names)}."
+        assert pnl_name in self.pnl_names, error_cats
 
         error_time = "Defined time-period must either be monthly, m, or quarterly, q."
         assert isinstance(time_period, str) and time_period in ['m', 'q'], error_time
 
         error_cids = f"Cross-sections not present in the DataFrame. Available cids are:" \
                      f"{self.cids}."
-        assert set(pnl_cids) <= set(self.cids + ['ALL']), error_cids
+
+        if pnl_cids is None:
+            pnl_cids = self.cids
+        else:
+            assert set(pnl_cids) <= set(self.cids + ['ALL']), error_cids
 
         assert isinstance(x_label, str), f"<str> expected - received {type(x_label)}."
         assert isinstance(y_label, str), f"<str> expected - received {type(y_label)}."
 
-        dfx = reduce_df(self.df, [pnl_cats], pnl_cids, start, end, self.black,
-                        out_all=False)
-        dfw = dfx.pivot(index='real_date', columns='cid', values='value')
+        dfx = self.signal_df[pnl_name]
+        dfw = dfx.pivot(index='real_date', columns='cid', values='sig')
+        dfw = dfw[pnl_cids]
+
+        if start is None:
+            start = dfw.index[0]
+        elif end is None:
+            end = dfw.index[-1]
+
+        dfw = dfw.truncate(before=start, after=end)
+
         dfw = dfw.resample(time_period, axis=0).mean()
 
         fig, ax = plt.subplots(figsize=(14, 8))
@@ -407,6 +431,14 @@ class NaivePnL:
         ax.set(xlabel=x_label, ylabel=y_label)
 
         plt.show()
+
+    def sstrength_plot(self):
+        """
+        Method used to display the direction and strength of the aggregate signal, signal
+        across the entire panel, as a bar chat.
+        """
+
+        pass
 
     def evaluate_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
                       benchmark_correl: str = None, start: str = None, end: str = None):
@@ -614,5 +646,5 @@ if __name__ == "__main__":
     df_pnls.head()
 
     # Testing signal display.
-    pnl.signal_display(pnl_cats='PNL_CRY_PZN', pnl_cids=['AUD', 'CAD', 'GBP'],
+    pnl.signal_display(pnl_name='PNL_CRY_PZN', pnl_cids=['AUD', 'CAD', 'GBP'],
                        start='2000-01-01', time_period='q')
