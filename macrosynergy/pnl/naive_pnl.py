@@ -1,7 +1,9 @@
+
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 
 from typing import List, Union, Tuple
 
@@ -362,8 +364,10 @@ class NaivePnL:
                        x_label: str = "", y_label: str = ""):
 
         """
-        Visualize signals across sections and time with a heatmap.
-
+        Method used to analyse the signals across both cross-sections and timestamps.
+        The daily series will be down-sampled to either monthly or quarterly measure.
+        The time-period the signals are analysed over can be modified via the
+        'start' & 'end' parameters.
 
         :param <str> pnl_name: name of the respective PnL DataFrame interested in
             displaying the associated signals.
@@ -432,10 +436,13 @@ class NaivePnL:
                        metric: str = "direction", title: str = "Directional Bar Chart.",
                        x_label: str = "", y_label: str = ""):
         """
-        Display direction and strength of aggregate signal
+        Method used to display the direction and strength of the aggregate signal, signal
+        across the entire panel, as a bar chat. The method allows for visually
+        understanding the overall direction of the aggregate signal but also gaining
+        insight into the proportional exposure to the respective signal by measuring the
+        absolute value, the size of the signal.
 
         :param <str> pnl_name: name of the PnL whose signals are to be visualized.
-        # Todo: there can be no default.
         :param <str> frequency: frequency at which the signal is visualized. Default is
             monthly ('m'). The alternative is quarterly ('q').
         :param <str> metric: the type of signal value. Default is "direction".
@@ -474,14 +481,27 @@ class NaivePnL:
                                  index=index)
 
         df_signal = df_signal.reset_index(level=0)
-        df_signal = df_signal.rename({'index': 'real_date'}, axis='columns')
-        dates = [str(pd.Timestamp(d).strftime('%d-%m-%Y'))
-                 for d in df_signal['real_date']]
-        df_signal['real_date'] = np.array(dates)
+        df_signal = df_signal.rename({'index': ''}, axis='columns')
+        dates = [pd.Timestamp(d) for d in df_signal['']]
+        df_signal[''] = np.array(dates)
 
-        df_signal.plot(kind='bar', x='real_date', y='aggregate_signal', xlabel=x_label,
-                       ylabel=y_label, title=title)
-        # Todo: this does not work for the x-axis label. You need a time series df.
+        plt.style.use('ggplot')
+
+        fig, ax = plt.subplots()
+        df_signal.plot.bar(x='', y='aggregate_signal', ax=ax)
+
+        ticklabels = [''] * len(df_signal)
+        skip = len(df_signal) // 12
+        ticklabels[::skip] = df_signal[''].iloc[::skip].dt.strftime('%Y-%m-%d')
+        ax.xaxis.set_major_formatter(mticker.FixedFormatter(ticklabels))
+        fig.autofmt_xdate()
+
+        def fmt(x, pos=0, max_i=len(ticklabels) - 1):
+            i = int(x)
+            i = 0 if i < 0 else max_i if i > max_i else i
+            return dates[i]
+
+        ax.fmt_xdata = fmt
         plt.show()
 
     def evaluate_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
@@ -614,7 +634,7 @@ if __name__ == "__main__":
     df_xcats.loc['GROWTH'] = ['2001-01-01', '2020-10-30', 1, 2, 0.9, 1]
     df_xcats.loc['INFL'] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
-    black = {'AUD': ['2006-01-01', '2015-12-31'], 'GBP': ['2012-01-01', '2100-01-01']}
+    black = {'AUD': ['2006-01-01', '2015-12-31'], 'GBP': ['2022-01-01', '2100-01-01']}
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     # Initiate instance.
@@ -666,7 +686,7 @@ if __name__ == "__main__":
 
     # Instantiate a new instance to test the long-only functionality.
     pnl = NaivePnL(dfd, ret='EQXR', sigs=['CRY', 'GROWTH', 'INFL'],
-                   cids=cids, start='2000-01-01', blacklist=black)
+                   cids=cids, start='2015-01-01', blacklist=black)
 
     pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
                  vol_scale=10, rebal_slip=1, pnl_name='PNL_CRY_PZN',
@@ -691,7 +711,7 @@ if __name__ == "__main__":
 
     # Testing signal display.
     pnl.signal_display(pnl_name='PNL_CRY_PZN', pnl_cids=['AUD', 'CAD', 'GBP'],
-                       start='2000-01-01', frequency='m')
+                       frequency='m')
 
     # Testing signal strength display method.
     # Directional.
