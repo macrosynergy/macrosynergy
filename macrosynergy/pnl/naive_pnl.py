@@ -167,7 +167,6 @@ class NaivePnL:
 
         pnn = ('PNL_' + sig) if pnl_name is None else pnl_name
         # Populating the signal dictionary is required for the display methods:
-        # self.signal_display() & self.sstrength_plot().
         self.signal_df[pnn] = dfw.loc[:, ['cid', 'real_date', 'sig']]
 
         df_pnl['xcat'] = pnn
@@ -358,32 +357,24 @@ class NaivePnL:
         plt.axhline(y=0, color='black', linestyle='--', lw=1)
         plt.show()
 
-    def signal_display(self, pnl_name: str, pnl_cids: List[str] = None,
-                       start: str = None, end: str = None, frequency: str = 'm',
-                       title: str = "Cross-sectional Heatmap.",
+    def signal_heatmap(self, pnl_name: str, pnl_cids: List[str] = None,
+                       start: str = None, end: str = None, freq: str = 'm',
+                       title: str = "Average applied signal values",
                        x_label: str = "", y_label: str = ""):
 
         """
-        Method used to analyse the signals across both cross-sections and timestamps.
-        The daily series will be down-sampled to either monthly or quarterly measure.
-        The time-period the signals are analysed over can be modified via the
-        'start' & 'end' parameters.
+        Display heatmap of signals across times and cross-sections.
 
-        :param <str> pnl_name: name of the respective PnL DataFrame interested in
-            displaying the associated signals.
-            If the 'pnl_name' parameter has not been defined, the default mechanism is
-            ('PNL_' + sig). Otherwise pass in the used 'pnl_name'.
-        :param <List[str]> pnl_cids: list of cross-sections used in signal heatmap;
-            default is all the cross-sections passed to the field 'self.cids'.
-            Otherwise, any combination of cross-sections would be valid assuming the
-            combination is a subset of 'self.cids'.
+        :param <str> pnl_name: name of naive PnL whose signals are displayed.
+            N.B.: Signal is here is the value that actually determines
+            the concurrent PnL.
+        :param <List[str]> pnl_cids: cross-sections. Default is all available.
         :param <str> start: earliest date in ISO format. Default is None and earliest
-            date in df is used. Allows for modifying the time-horizon the signals are
-            analysed over.
+            date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
             in df is used.
-        :param <str> frequency: to analyse the signals in the heatmap, the series are
-            down-sampled to either monthly or quarterly. The default is monthly data.
+        :param <str> freq: frequency for which signal average is displayed.
+            Default is monthly ('m'). The only alternative is quarterly ('q').
         :param <str> title: allows entering text for a custom chart header.
         :param <str> x_label: label for the x-axis. Default is None.
         :param <str> y_label: label for the y-axis. Default is None.
@@ -395,10 +386,10 @@ class NaivePnL:
                      f"possible options are {print(self.pnl_names)}."
         assert pnl_name in self.pnl_names, error_cats
 
-        error_time = "Defined time-period must either be monthly, m, or quarterly, q."
-        assert isinstance(frequency, str) and frequency in ['m', 'q'], error_time
+        error_time = "Defined time-period must be monthly ('m') or quarterly ('q')"
+        assert isinstance(freq, str) and freq in ['m', 'q'], error_time
 
-        error_cids = f"Cross-sections not present in the DataFrame. Available cids are:" \
+        error_cids = f"Cross-sections not available. Available cids are:" \
                      f"{self.cids}."
 
         if pnl_cids is None:
@@ -420,7 +411,7 @@ class NaivePnL:
 
         dfw = dfw.truncate(before=start, after=end)
 
-        dfw = dfw.resample(frequency, axis=0).mean()
+        dfw = dfw.resample(freq, axis=0).mean()
 
         fig, ax = plt.subplots(figsize=(14, 8))
         dfw = dfw.transpose()
@@ -432,18 +423,18 @@ class NaivePnL:
 
         plt.show()
 
-    def sstrength_plot(self, pnl_name: str, frequency: str = 'm',
+    def agg_signal_bars(self, pnl_name: str, freq: str = 'm',
                        metric: str = "direction", title: str = "Directional Bar Chart.",
-                       x_label: str = "", y_label: str = ""):
+                       y_label: str = ""):
+        # Todo: implement title and y-label arguments.
+        # Todo: remove legend box
         """
-        Method used to display the direction and strength of the aggregate signal, signal
-        across the entire panel, as a bar chat. The method allows for visually
-        understanding the overall direction of the aggregate signal but also gaining
-        insight into the proportional exposure to the respective signal by measuring the
-        absolute value, the size of the signal.
+        Display aggregate signal strength and - potentially - direction.
 
         :param <str> pnl_name: name of the PnL whose signals are to be visualized.
-        :param <str> frequency: frequency at which the signal is visualized. Default is
+            N.B.: Signal is here is the value that actually determines
+            the concurrent PnL.
+        :param <str> freq: frequency at which the signal is visualized. Default is
             monthly ('m'). The alternative is quarterly ('q').
         :param <str> metric: the type of signal value. Default is "direction".
             Alternative is "strength".
@@ -460,7 +451,7 @@ class NaivePnL:
         assert pnl_name in self.pnl_names, error_cats
 
         error_time = "Defined time-period must either be monthly, m, or quarterly, q."
-        assert isinstance(frequency, str) and frequency in ['m', 'q'], error_time
+        assert isinstance(freq, str) and freq in ['m', 'q'], error_time
 
         metric_error = "The metric must either be 'direction' or 'strength'."
         assert metric in ['direction', 'strength'], metric_error
@@ -472,7 +463,7 @@ class NaivePnL:
         if metric == "strength":
             dfw = dfw.abs()
 
-        dfw = dfw.resample(frequency, axis=0).mean()
+        dfw = dfw.resample(freq, axis=0).mean()
         # Sum across the timestamps to compute the aggregate signal according to the
         # down-sampling frequency.
         df_s = dfw.sum(axis=1)
@@ -511,14 +502,16 @@ class NaivePnL:
         Small table of key PnL statistics.
 
         :param <List[str]> pnl_cats: list of PnL categories that should be plotted.
-        :param <List[str]> pnl_cids: list of cross sections to be plotted; default is
+        :param <List[str]> pnl_cids: list of cross-sections to be plotted; default is
             'ALL' (global PnL).
-            Note: one can only have multiple PnL categories or multiple cross sections,
+            Note: one can only have multiple PnL categories or multiple cross-sections,
             not both.
         :param <str> benchmark_correl: a single (return) ticker that functions as the
             benchmark for PnL correlation. For instance, U.S equity. The default is None:
             a correlation with a benchmark will not be included in the returned
             DataFrame.
+            # Todo: benchmarks: list of tickers of returns whose correlation is shown
+            # Todo: implement for multiple benchmarks
         :param <str> start: earliest date in ISO format. Default is None and earliest
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
@@ -563,6 +556,7 @@ class NaivePnL:
             df_bench = pd.Series(index=df_bench['real_date'].to_numpy(),
                                  data=df_bench['value'].to_numpy())
             df_bench = df_bench.astype(dtype=np.float32)
+            # Todo: 547-557 should be a single dataframe slice
 
         dfx = reduce_df(self.df, pnl_cats, pnl_cids, start, end, self.black,
                         out_all=False)
@@ -572,6 +566,8 @@ class NaivePnL:
                  'Max 21-day draw', 'Max 6-month draw', 'Traded Months']
         if benchmark_bool:
             stats.append('Correlation with Benchmark')
+            # Todo: Must say f"{<bm_ticker>} cor"
+            # Todo: 'Traded months should be last in table'
 
         dfw = dfx.pivot(index='real_date', columns=groups, values='value')
         df = pd.DataFrame(columns=dfw.columns, index=stats)
@@ -586,6 +582,7 @@ class NaivePnL:
         df.iloc[6, :] = dfw.resample('M').sum().count()
         if benchmark_bool:
             df.iloc[7, :] = dfw.corrwith(df_bench, axis=0, method='pearson')
+            # Todo: must be able to add multiple correlators
 
         return df
 
@@ -686,7 +683,7 @@ if __name__ == "__main__":
 
     # Instantiate a new instance to test the long-only functionality.
     pnl = NaivePnL(dfd, ret='EQXR', sigs=['CRY', 'GROWTH', 'INFL'],
-                   cids=cids, start='2015-01-01', blacklist=black)
+                   cids=cids, start='2000-01-01', blacklist=black)
 
     pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
                  vol_scale=10, rebal_slip=1, pnl_name='PNL_CRY_PZN',
@@ -700,7 +697,7 @@ if __name__ == "__main__":
     # Test the inclusion of benchmark correlation.
     df_eval = pnl.evaluate_pnls(
         pnl_cats=['PNL_CRY_PZN'],
-        pnl_cids=cids_subset, benchmark_correl=benchmark_correl,
+        pnl_cids=cids_subset, # benchmark_correl=benchmark_correl,
         start='2000-01-01')
     # Examine the evaluated DataFrame.
     print("Evaluated DataFrame.")
@@ -710,11 +707,11 @@ if __name__ == "__main__":
     df_pnls.head()
 
     # Testing signal display.
-    pnl.signal_display(pnl_name='PNL_CRY_PZN', pnl_cids=['AUD', 'CAD', 'GBP'],
-                       frequency='m')
+    pnl.signal_heatmap(pnl_name='PNL_CRY_PZN', pnl_cids=['AUD', 'CAD', 'GBP'],
+                       freq='m', title="Average signal values")
 
     # Testing signal strength display method.
     # Directional.
-    pnl.sstrength_plot(pnl_name='PNL_CRY_PZN', metric='direction', frequency='m')
+    pnl.agg_signal_bars(pnl_name='PNL_CRY_PZN', metric='direction', freq='m')
     # Magnitude.
-    pnl.sstrength_plot(pnl_name='PNL_CRY_PZN', metric='strength', frequency='q')
+    pnl.agg_signal_bars(pnl_name='PNL_CRY_PZN', metric='strength', freq='q')
