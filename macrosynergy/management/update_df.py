@@ -33,7 +33,7 @@ def update_df(df: pd.DataFrame, df_add):
 
     if len(append_condition) == len(incumbent_categories + new_categories):
         df = pd.concat([df, df_add])
-        
+
     elif sorted(list(intersect)) == sorted(new_categories):
         retain = [c for c in incumbent_categories if c not in intersect]
         df = df[df['xcat'].isin(retain)]
