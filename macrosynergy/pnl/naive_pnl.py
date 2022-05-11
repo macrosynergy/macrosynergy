@@ -357,17 +357,13 @@ class NaivePnL:
         plt.show()
 
     def signal_display(self, pnl_name: str, pnl_cids: List[str] = None,
-                       start: str = None, end: str = None, time_period: str = 'm',
+                       start: str = None, end: str = None, frequency: str = 'm',
                        title: str = "Cross-sectional Heatmap.",
-                       x_label: str = "Timestamps", y_label: str = "Cross-sections"):
+                       x_label: str = "", y_label: str = ""):
 
         """
-        Method used to analyse the signals across both cross-sections and timestamps. The
-        strength of the respective signals will be displayed on a heatmap where the
-        cross-sections will be defined on the y-axis and time-periods will be on the
-        x-axis. The daily series will be down-sampled to either monthly or quarterly
-        measure. The time-period the signals are analysed over can be modified via the
-        'start' & 'end' parameters.
+        Visualize signals across sections and time with a heatmap.
+
 
         :param <str> pnl_name: name of the respective PnL DataFrame interested in
             displaying the associated signals.
@@ -382,11 +378,11 @@ class NaivePnL:
             analysed over.
         :param <str> end: latest date in ISO format. Default is None and latest date
             in df is used.
-        :param <str> time_period: to analyse the signals in the heatmap, the series are
+        :param <str> frequency: to analyse the signals in the heatmap, the series are
             down-sampled to either monthly or quarterly. The default is monthly data.
         :param <str> title: allows entering text for a custom chart header.
-        :param <str> x_label: label for the x-axis. Default is "Timestamps".
-        :param <str> y_label: label for the y-axis. Default is "Cross-sections."
+        :param <str> x_label: label for the x-axis. Default is None.
+        :param <str> y_label: label for the y-axis. Default is None.
         """
 
         assert isinstance(pnl_name, str), "The method expects to receive a single " \
@@ -396,7 +392,7 @@ class NaivePnL:
         assert pnl_name in self.pnl_names, error_cats
 
         error_time = "Defined time-period must either be monthly, m, or quarterly, q."
-        assert isinstance(time_period, str) and time_period in ['m', 'q'], error_time
+        assert isinstance(frequency, str) and frequency in ['m', 'q'], error_time
 
         error_cids = f"Cross-sections not present in the DataFrame. Available cids are:" \
                      f"{self.cids}."
@@ -420,42 +416,33 @@ class NaivePnL:
 
         dfw = dfw.truncate(before=start, after=end)
 
-        dfw = dfw.resample(time_period, axis=0).mean()
+        dfw = dfw.resample(frequency, axis=0).mean()
 
         fig, ax = plt.subplots(figsize=(14, 8))
         dfw = dfw.transpose()
         dfw.columns = [str(d.strftime('%d-%m-%Y')) for d in dfw.columns]
         sns.heatmap(dfw, cmap="vlag_r", center=0)
 
-        ax.set(xlabel='Timestamps', ylabel='Cross-sections')
-        ax.set_title(title, fontsize=14)
         ax.set(xlabel=x_label, ylabel=y_label)
+        ax.set_title(title, fontsize=14)
 
         plt.show()
 
-    def sstrength_plot(self, pnl_name: str, time_period: str = 'm',
+    def sstrength_plot(self, pnl_name: str, frequency: str = 'm',
                        metric: str = "direction", title: str = "Directional Bar Chart.",
-                       x_label: str = "Timestamps", y_label: str = "Aggregate Signal"):
+                       x_label: str = "", y_label: str = ""):
         """
-        Method used to display the direction and strength of the aggregate signal, signal
-        across the entire panel, as a bar chat. The method allows for visually
-        understanding the overall direction of the aggregate signal but also gaining
-        insight into the proportional exposure to the respective signal by measuring the
-        absolute value, the size of the signal.
+        Display direction and strength of aggregate signal
 
-        :param <str> pnl_name: name of the respective PnL DataFrame interested in
-            further understanding the signals used.
-            If the 'pnl_name' parameter has not been defined, the default mechanism is
-            ('PNL_' + sig). Otherwise pass in the used 'pnl_name'.
-        :param <str> time_period: to analyse the signals, the series are down-sampled to
-            either monthly or quarterly. The default is monthly data.
-        :param <str> metric: the displayed signals will either be the intrinsic values to
-            understand the directional movement, or the absolute values to assimilate the
-            risk exposure to the respective signal. Default is "direction". Alternative
-            is "strength".
+        :param <str> pnl_name: name of the PnL whose signals are to be visualized.
+        # Todo: there can be no default.
+        :param <str> frequency: frequency at which the signal is visualized. Default is
+            monthly ('m'). The alternative is quarterly ('q').
+        :param <str> metric: the type of signal value. Default is "direction".
+            Alternative is "strength".
         :param <str> title: allows entering text for a custom chart header.
-        :param <str> x_label: label for the x-axis. Default is "Timestamps".
-        :param <str> y_label: label for the y-axis. Default is "Cross-sections."
+        :param <str> x_label: label for the x-axis. Default is None.
+        :param <str> y_label: label for the y-axis. Default is None.
 
         """
 
@@ -466,7 +453,7 @@ class NaivePnL:
         assert pnl_name in self.pnl_names, error_cats
 
         error_time = "Defined time-period must either be monthly, m, or quarterly, q."
-        assert isinstance(time_period, str) and time_period in ['m', 'q'], error_time
+        assert isinstance(frequency, str) and frequency in ['m', 'q'], error_time
 
         metric_error = "The metric must either be 'direction' or 'strength'."
         assert metric in ['direction', 'strength'], metric_error
@@ -478,7 +465,7 @@ class NaivePnL:
         if metric == "strength":
             dfw = dfw.abs()
 
-        dfw = dfw.resample(time_period, axis=0).mean()
+        dfw = dfw.resample(frequency, axis=0).mean()
         # Sum across the timestamps to compute the aggregate signal according to the
         # down-sampling frequency.
         df_s = dfw.sum(axis=1)
@@ -494,6 +481,7 @@ class NaivePnL:
 
         df_signal.plot(kind='bar', x='real_date', y='aggregate_signal', xlabel=x_label,
                        ylabel=y_label, title=title)
+        # Todo: this does not work for the x-axis label. You need a time series df.
         plt.show()
 
     def evaluate_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
@@ -703,10 +691,10 @@ if __name__ == "__main__":
 
     # Testing signal display.
     pnl.signal_display(pnl_name='PNL_CRY_PZN', pnl_cids=['AUD', 'CAD', 'GBP'],
-                       start='2000-01-01', time_period='q')
+                       start='2000-01-01', frequency='m')
 
     # Testing signal strength display method.
     # Directional.
-    pnl.sstrength_plot(pnl_name='PNL_CRY_PZN', metric='direction', time_period='q')
+    pnl.sstrength_plot(pnl_name='PNL_CRY_PZN', metric='direction', frequency='m')
     # Magnitude.
-    pnl.sstrength_plot(pnl_name='PNL_CRY_PZN', metric='strength', time_period='q')
+    pnl.sstrength_plot(pnl_name='PNL_CRY_PZN', metric='strength', frequency='q')
