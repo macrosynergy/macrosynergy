@@ -388,9 +388,10 @@ class CategoryRelations(object):
                         label=label_set2,
                         scatter_kws={'s': 30, 'alpha': 0.5},
                         line_kws={'lw': 1})
-            if coef_box:
+            if coef_box_incl:
                 data_table = self.corr_probability(df_probability=[dfx1, dfx2],
-                                                   time_period="")
+                                                   time_period="",
+                                                   coef_box_loc=coef_box)
                 data_table.scale(0.4, 2.5)
                 data_table.set_fontsize(14)
 
@@ -429,7 +430,7 @@ class CategoryRelations(object):
                    scatter_kws={'s': 15, 'alpha': 0.5, 'color': 'lightgray'},
                    line_kws={'lw': 1})
 
-            if coef_box:
+            if coef_box_incl:
                 fg.map_dataframe(self.annotate_facet)
 
             fg.set_titles(col_template='{col_name}')
@@ -467,7 +468,7 @@ class CategoryRelations(object):
                         scatter_kws={'s': 30, 'alpha': 0.5, 'color': 'lightgray'},
                         line_kws={'lw': 1})
 
-            if coef_box:
+            if coef_box_incl:
                 data_table = self.corr_probability(df_probability=self.df,
                                                    coef_box_loc=coef_box)
                 data_table.scale(0.4, 2.5)
@@ -490,6 +491,7 @@ class CategoryRelations(object):
                         ser_labs += '-' + df_labs['real_date'].dt.month.astype(str)
 
                 for i in range(self.df.shape[0]):
+
                     plt.text(x=self.df[self.xcats[0]][i] + 0,
                              y=self.df[self.xcats[1]][i] + 0, s=ser_labs[i],
                              fontdict=dict(color='black', size=8))
@@ -630,8 +632,8 @@ if __name__ == "__main__":
                            cids=cidx, xcat_aggs=['last', 'mean'],
                            start='2005-01-01', blacklist=black,
                            years=None)
-    cr.reg_scatter(labels=True, coef_box='upper left', separator=2010,
-                   title="Carry and Return.",
+    cr.reg_scatter(labels=True, coef_box='upper right', separator=2010,
+                   title="Test Mechanism.",
                    xlab="Carry", ylab="Return")
 
     cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'], cids=cidx, freq='M',
@@ -647,5 +649,5 @@ if __name__ == "__main__":
                            start='2000-01-01', years=3, blacklist=black)
 
     cr.reg_scatter(labels=False, coef_box='lower right',
-                   title='Growth and inflation', xlab='Growth', ylab='Inflation')
+                   title='Growth and Inflation', xlab='Growth', ylab='Inflation')
     cr.jointplot(kind='hist', xlab='growth', ylab='inflation', height=5)

@@ -6,13 +6,14 @@ import pandas as pd
 from tests.simulate import make_qdf
 from macrosynergy.management.update_df import update_df
 from macrosynergy.panel.make_relative_value import make_relative_value
+from itertools import groupby
 
 class TestAll(unittest.TestCase):
 
     def dataframe_constructor(self):
 
         self.__dict__['cids'] = ['AUD', 'CAD', 'GBP', 'NZD']
-        self.__dict__['xcats'] = ['GROWTH', 'INFL']
+        self.__dict__['xcats'] = ['GROWTH', 'INFL', 'XR']
 
         df_cids = pd.DataFrame(index=self.cids,
                                columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
@@ -125,6 +126,7 @@ class TestAll(unittest.TestCase):
         dfd_4 = make_relative_value(dfd_copy_2, xcats=['GROWTH', 'INFL'], cids=None,
                                     blacklist=None, rel_meth='divide', rel_xcats=None,
                                     postfix='RV')
+        # Aggregate the two DataFrames.
         dfd_add_1 = update_df(df=dfd_copy, df_add=dfd_4)
 
         dfd_add_2 = update_df(df=dfd_add_1, df_add=dfd_3)
