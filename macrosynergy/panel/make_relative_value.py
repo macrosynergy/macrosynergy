@@ -11,10 +11,10 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
                         rel_meth: str = 'subtract', rel_xcats: List[str] = None,
                         postfix: str = 'R'):
     """
-    Returns dataframe with values relative to a basket average of cross-sections
+    Returns a DataFrame with values relative to a basket average of cross-sections
     based on either subtraction of the basket (default) or division by the basket.
 
-    :param <pd.DataFrame> df:  standardized data frame with the following necessary
+    :param <pd.DataFrame> df:  standardized DataFrame with the following necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
     :param <List[str]> xcats: all extended categories for which relative values are to
         be calculated.
@@ -29,7 +29,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
     :param <List[str]> basket: cross-sections to be used for the relative value
         benchmark. The default is every cross-section in the chosen list that is
         available in the dataframe over the respective time-period.
-        However, the basked can be reduced to a valid subset of the available
+        However, the basket can be reduced to a valid subset of the available
         cross-sections.
     :param <bool> complete_cross: Boolean parameter that outlines whether each category
         is required to have the full set of cross-sections held by the basket parameter.
@@ -52,19 +52,29 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
     assert rel_meth in ['subtract', 'divide'], "rel_meth must be 'subtract' or 'divide'," \
                                                "and not {rel_meth}."
 
-    assert isinstance(xcats, list) or isinstance(xcats, str), "List of categories " \
-                                                              "expected, or a single" \
-                                                              "category passed as a " \
-                                                              "string object."
+    xcat_error = "List of categories expected, or a single category passed as a string " \
+                 "object."
+    assert isinstance(xcats, (list, str)), xcat_error
+    assert isinstance(rel_xcats, (list, str)), "List of addenda expected, or a single " \
+                                               "addendum passed as a string."
+
+    error_type = "If a single, or multiple, category(s) is passed to 'xcats', then the " \
+                 "corresponding number of addenda."
+    assert type(xcats) == type(rel_xcats), error_type
     if isinstance(xcats, str):
         xcats = [xcats]
+        rel_xcats = [rel_xcats]
+
+    error_length = "The number of relative value addenda must equal the number of " \
+                   "categories received."
+    assert len(xcats) == len(rel_xcats), error_length
 
     if cids is None:
         cids = list(df['cid'].unique())
 
     if basket is not None:
         miss = set(basket) - set(cids)
-        assert len(miss) == 0, f"The basket elements {miss} are not in specified or " \
+        assert len(miss) == 0, f"The basket elements {miss} are not specified or " \
                                f"are not available cross-sections."
     else:
         basket = cids  # Default basket is all available cross-sections.
@@ -86,7 +96,10 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
     intersection_function = lambda l_1, l_2: sorted(list(set(l_1) & set(l_2)))
 
+    storage = [df_out]
     # Implicit assumption that both categories are defined over the same cross-sections.
+    # Achieved by the reduce_df() subroutine will unify the cross-sections both
+    # categories are defined over.
     for i, xcat in enumerate(available_xcats):
 
         df_xcat = dfx[dfx['xcat'] == xcat]
@@ -99,11 +112,12 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         clause = len(intersection)
         missing_cids = list(set(basket) - set(intersection))
         if clause != len(basket) and complete_cross:
-            print(f"The category, {xcat}, is missing {missing_cids} which are included in"
-                  f" the basket {basket}. Therefore, the category will be excluded from "
-                  "the returned dataframe.")
+            print(f"The category, {xcat}, is missing {missing_cids} which are included "
+                  f"in the basket {basket}. Therefore, the category will be excluded "
+                  f"from the returned DataFrame.")
             continue
 
+        # Must be a valid subset of the available cross-sections.
         elif clause != len(basket):
             print(f"The category, {xcat}, is missing {missing_cids}. "
                   f"The new basket will be {intersection}.")
@@ -121,12 +135,14 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         else:
             # Relative value is mapped against a single cross-section.
             bm = dfb.set_index('real_date')['value']
+
         dfw = dfx_xcat.pivot(index='real_date', columns='cid', values='value')
 
         # Taking an average and computing the relative value is only justified if the
         # number of cross-sections, for the respective date, exceeds one. Therefore, if
-        # any rows have only a single cross-section, remove the dates from the dataframe.
+        # any rows have only a single cross-section, remove the dates from the DataFrame.
         dfw = dfw[dfw.count(axis=1) > 1]
+        # The time-index will be delimited by the respective category.
         dfa = pd.merge(dfw, bm, how='left', left_index=True, right_index=True)
 
         if rel_meth == 'subtract':
@@ -143,10 +159,9 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         else:
             df_new['xcat'] = rel_xcats[i]
 
-        df_new = df_new.sort_values(['cid', 'real_date'])[col_names]
-        df_out = df_out.append(df_new)
+        storage.append(df_new.sort_values(['cid', 'real_date'])[col_names])
 
-    return df_out.reset_index(drop=True)
+    return pd.concat(storage).reset_index(drop=True)
 
 
 if __name__ == "__main__":
