@@ -745,15 +745,6 @@ if __name__ == "__main__":
         pnl_cats=['PNL_CRY_PZN', 'PNL_CRY_PZN05', "Long"],
         pnl_cids=cids_subset, benchmark_correl=benchmark_correl,
         start='2000-01-01')
-    print("Evaluated DataFrame.")
-    print(df_eval)
-
-    benchmark_correl = ['USD_EQXR', 'EUR_EQXR']
-    df_eval = pnl.evaluate_pnls(
-        pnl_cats=['PNL_CRY_PZN', 'PNL_CRY_PZN05', "Long"],
-        pnl_cids=cids_subset, benchmark_correl=benchmark_correl,
-        start='2000-01-01')
-    print("Evaluated DataFrame.")
     print(df_eval)
 
     df_pnls = pnl.pnl_df()
