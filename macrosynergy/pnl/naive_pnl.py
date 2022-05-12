@@ -258,6 +258,10 @@ class NaivePnL:
                                       label=label)
 
         self.df = self.df.append(dfw_long)
+
+        if label not in self.pnl_names:
+            self.pnl_names = self.pnl_names + [label]
+
         self.df = self.df.reset_index(drop=True)
 
     @staticmethod
@@ -586,7 +590,7 @@ class NaivePnL:
 
         return df
 
-    def pnl_names(self):
+    def PnL_names(self):
         """
         Print list of names of available PnLs in the class instance.
         """
@@ -688,16 +692,20 @@ if __name__ == "__main__":
     pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
                  vol_scale=10, rebal_slip=1, pnl_name='PNL_CRY_PZN',
                  min_obs=250, thresh=1.5)
-    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN'], pnl_cids=['CAD', 'NZD'],
-                  start='2000-01-01')
+
+    pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
+                 vol_scale=5, rebal_slip=1, pnl_name='PNL_CRY_PZN05',
+                 min_obs=250, thresh=2)
+
+    pnl.make_long_pnl(vol_scale=10, label="Long")
 
     # Return evaluation and PnL DataFrames.
     benchmark_correl = 'USD_EQXR'
-    cids_subset = ['AUD', 'CAD', 'GBP']
+    cids_subset = ['ALL']
     # Test the inclusion of benchmark correlation.
     df_eval = pnl.evaluate_pnls(
-        pnl_cats=['PNL_CRY_PZN'],
-        pnl_cids=cids_subset, # benchmark_correl=benchmark_correl,
+        pnl_cats=['PNL_CRY_PZN', 'PNL_CRY_PZN05', "Long"],
+        pnl_cids=cids_subset,
         start='2000-01-01')
     # Examine the evaluated DataFrame.
     print("Evaluated DataFrame.")
