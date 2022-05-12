@@ -55,19 +55,24 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
     xcat_error = "List of categories expected, or a single category passed as a string " \
                  "object."
     assert isinstance(xcats, (list, str)), xcat_error
-    assert isinstance(rel_xcats, (list, str)), "List of addenda expected, or a single " \
-                                               "addendum passed as a string."
+    if rel_xcats is not None:
+        assert isinstance(rel_xcats, (list, str)), "List of addenda expected, or a " \
+                                                   "single addendum passed as a string."
 
-    error_type = "If a single, or multiple, category(s) is passed to 'xcats', then the " \
-                 "corresponding number of addenda."
-    assert type(xcats) == type(rel_xcats), error_type
-    if isinstance(xcats, str):
+        error_type = "If a single, or multiple, category(s) is passed to 'xcats', then " \
+                     "the corresponding number of addenda."
+        assert type(xcats) == type(rel_xcats), error_type
+
+        if isinstance(xcats, str):
+            xcats = [xcats]
+            rel_xcats = [rel_xcats]
+
+        error_length = "The number of relative value addenda must equal the number of " \
+                       "categories received."
+        assert len(xcats) == len(rel_xcats), error_length
+
+    elif rel_xcats is None and isinstance(xcats, str):
         xcats = [xcats]
-        rel_xcats = [rel_xcats]
-
-    error_length = "The number of relative value addenda must equal the number of " \
-                   "categories received."
-    assert len(xcats) == len(rel_xcats), error_length
 
     if cids is None:
         cids = list(df['cid'].unique())
