@@ -110,7 +110,7 @@ class NaivePnL:
 
         if sig_op == 'binary':
             dfw = dfx.pivot(index=['cid', 'real_date'], columns='xcat', values='value')
-            dfw['psig'] = np.sign(dfw[sig])  # add signs of raw signals to 2-index df
+            dfw['psig'] = np.sign(dfw[sig])
         else:
             panw = 1 if sig_op == 'zn_score_pan' else 0
             df_ms = make_zn_scores(dfx, xcat=sig, neutral=neutral, pan_weight=panw,
@@ -123,7 +123,8 @@ class NaivePnL:
             dfw = dfx_concat.pivot(index=['cid', 'real_date'], columns='xcat',
                                    values='value')
 
-        dfw['psig'] = dfw['psig'].groupby(level=0).shift(1)  # natural minimum lag
+        # Multi-index DataFrame with a natural minimum lag applied.
+        dfw['psig'] = dfw['psig'].groupby(level=0).shift(1)
         dfw.reset_index(inplace=True)
         dfw = dfw.rename_axis(None, axis=1)
 
@@ -185,13 +186,10 @@ class NaivePnL:
         :return <pd.Series>: will return a pd.Series containing the associated signals
             according to the re-balancing frequency.
         """
-        # Todo: this should be just three lines:
-        #  [1] Downsample with resample to appropriate frequncy
-        #  [2] Re-upsample to daily with reindex (using old index) and ffill
-        #  [3] implement slip with simple .shift()
 
         # The re-balancing days are the first of the respective time-periods because of
-        # the shift forward by one day applied earlier in the code.
+        # the shift forward by one day applied earlier in the code. Therefore, only
+        # concerned with the minimum date of each re-balance period.
         dfw['year'] = dfw['real_date'].dt.year
         if rebal_freq == 'monthly':
             dfw['month'] = dfw['real_date'].dt.month
@@ -731,11 +729,7 @@ if __name__ == "__main__":
     pnl.make_long_pnl(vol_scale=10, label="Long")
 
     # Return evaluation and PnL DataFrames.
-<<<<<<< HEAD
     benchmark_correl = ['USD_EQXR', 'EUR_EQXR', 'AUD_EQXR']
-=======
-
->>>>>>> bb640454191195d7325fce8a05d1cfc8c285ff79
     cids_subset = ['ALL']
     # Test the inclusion of a single benchmark correlation.
     df_eval = pnl.evaluate_pnls(
