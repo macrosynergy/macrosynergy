@@ -22,7 +22,7 @@ class NaivePnL:
         columns: 'cid', 'xcat', 'real_date' and 'value'.
     :param <str> ret: return category.
     :param <List[str]> sigs: signal categories.
-    :param <List[str]> cids: cross sections to be considered. Default is all in the
+    :param <List[str]> cids: cross sections that are traded. Default is all in the
         dataframe.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         in df is used.
@@ -56,10 +56,9 @@ class NaivePnL:
                  neutral: str = 'zero', thresh: float = None):
 
         """
-        Calculate daily PnL and add to the main dataframe held on an instance of the
-        Class.
+        Calculate daily PnL and add to class instance.
 
-        :param <str> sig: name of signal that is the basis for positioning. The signal
+        :param <str> sig: name of raw signal that is basis for positioning. The signal
             is assumed to be recorded at the end of the day prior to position taking.
         :param <str> sig_op: signal transformation options; must be one of
             'zn_score_pan', 'zn_score_cs', or 'binary'. The default is 'zn_score_pan'.
@@ -71,27 +70,25 @@ class NaivePnL:
             'binary': transforms signals into uniform long/shorts (1/-1) across all
             sections.
             N.B.: zn-score here means standardized score with zero being the natural
-            neutral level and standardization through division by mean absolute value
-            (the standard deviation).
+            neutral level and standardization through division by mean absolute value.
         :param <str> pnl_name: name of the PnL to be generated and stored.
             Default is None, i.e. a default name is given. The default name will be:
             ('PNL_' + sig).
             Previously calculated PnLs in the class will be overwritten. This means that
-            if a set of PnLs is to be compared, each PnL requires a custom name.
+            if a set of PnLs is to be compared, each PnL requires a distinct name.
         :param <str> rebal_freq: re-balancing frequency for positions according to signal
             must be one of 'daily' (default), 'weekly' or 'monthly'. The re-balancing is
             only concerned with the signal value on the re-balancing date which is
             delimited by the frequency chosen.
         :param <str> rebal_slip: re-balancing slippage in days. Default is 1 which
             means that it takes one day to re-balance the position and that the new
-            positions produce PnL from the following day after the signal has been
-            recorded.
+            positions produce PnL from the second day after the signal has been recorded.
         :param <bool> vol_scale: ex-post scaling of PnL to annualized volatility given.
             This is for comparative visualization and not out-of-sample. Default is none.
         :param <int> min_obs: the minimum number of observations required to calculate
             zn_scores. Default is 252.
         :param <bool> iis: if True (default) zn-scores are also calculated for the initial
-            sample period defined by min-obs, on an in-sample basis, to avoid losing
+            sample period defined by min_obs, on an in-sample basis, to avoid losing
             history.
         :param <bool> sequential: if True (default) score parameters (neutral level and
             standard deviations) are estimated sequentially with concurrently available
@@ -101,7 +98,7 @@ class NaivePnL:
         :param <float> thresh: threshold value beyond which scores are winsorized,
             i.e. contained at that threshold. Therefore, the threshold is the maximum
             absolute score value that the function is allowed to produce. The minimum
-            threshold is one standard deviation.
+            threshold is one standard deviation. Default is no threshold.
 
         """
 
@@ -109,18 +106,13 @@ class NaivePnL:
         assert sig_op in ['zn_score_pan', 'zn_score_cs', 'binary']
         assert rebal_freq in ['daily', 'weekly', 'monthly']
 
-        dfx = self.df[self.df['xcat'].isin([self.ret, sig])]
+        dfx = self.df[self.df['xcat'].isin([self.ret, sig])]  # extract relevant xcats
 
         if sig_op == 'binary':
-            # Multi-index DataFrame. Each column is a single category. Add an additional
-            # column of the respective signal.
             dfw = dfx.pivot(index=['cid', 'real_date'], columns='xcat', values='value')
-            dfw['psig'] = np.sign(dfw[sig])
+            dfw['psig'] = np.sign(dfw[sig])  # add signs of raw signals to 2-index df
         else:
             panw = 1 if sig_op == 'zn_score_pan' else 0
-            # Utilising the signal to subsequently take a "position" in self.ret.
-            # Deviation from the mean as the signal.
-            # Standardised DataFrame containing the zn-scores for the signal category.
             df_ms = make_zn_scores(dfx, xcat=sig, neutral=neutral, pan_weight=panw,
                                    sequential=sequential, min_obs=min_obs, iis=iis,
                                    thresh=thresh)
@@ -131,8 +123,7 @@ class NaivePnL:
             dfw = dfx_concat.pivot(index=['cid', 'real_date'], columns='xcat',
                                    values='value')
 
-        # Signal for the following day explains the lag mechanism.
-        dfw['psig'] = dfw['psig'].groupby(level=0).shift(1)
+        dfw['psig'] = dfw['psig'].groupby(level=0).shift(1)  # natural minimum lag
         dfw.reset_index(inplace=True)
         dfw = dfw.rename_axis(None, axis=1)
 
@@ -194,6 +185,10 @@ class NaivePnL:
         :return <pd.Series>: will return a pd.Series containing the associated signals
             according to the re-balancing frequency.
         """
+        # Todo: this should be just three lines:
+        #  [1] Downsample with resample to appropriate frequncy
+        #  [2] Re-upsample to daily with reindex (using old index) and ffill
+        #  [3] implement slip with simple .shift()
 
         # The re-balancing days are the first of the respective time-periods because of
         # the shift forward by one day applied earlier in the code.
@@ -500,13 +495,13 @@ class NaivePnL:
         ax.fmt_xdata = fmt
         plt.show()
 
-    def bm_dataframes(self, benchmark_correl: str = None, start: str = None,
+    def bm_dataframes(self, bms: str = None, start: str = None,
                       end: str = None):
         """
         Helper function used to produce the associated benchmark DataFrames. Will store
         each pd.Series in a dictionary.
 
-        :param <List[str]> benchmark_correl: a possible list of (return) tickers or
+        :param <List[str]> bms: a possible list of (return) tickers or
             single ticker that functions as the benchmark for PnL correlation.
         :param <str> start: earliest date in ISO format.
         :param <str> end: latest date in ISO format.
@@ -517,11 +512,11 @@ class NaivePnL:
 
         bm_error = "Parameter expects to receive a single ticker or a list of " \
                    "tickers."
-        assert isinstance(benchmark_correl, (list, str)), bm_error
+        assert isinstance(bms, (list, str)), bm_error
 
         b_correl_cids = []
         b_correl_xcats = []
-        for bm in benchmark_correl:
+        for bm in bms:
             print(bm)
             b_correl = bm.split('_')
             b_correl_cids.append(b_correl[0])
@@ -538,7 +533,7 @@ class NaivePnL:
         for xcat_bm, cid_bm in tickers:
             temp_df = df_bench[df_bench['xcat'] == xcat_bm]
             temp_df = temp_df[temp_df['cid'] == cid_bm]
-            t = benchmark_correl[i]
+            t = bms[i]
             t_series = pd.Series(index=temp_df['real_date'].to_numpy(),
                                  data=temp_df['value'].to_numpy())
             bm_dict[t] = t_series.astype(dtype=np.float32)
@@ -547,7 +542,7 @@ class NaivePnL:
         return bm_dict
 
     def evaluate_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
-                      benchmark_correl: str = None, start: str = None, end: str = None):
+                      bms: str = None, start: str = None, end: str = None):
 
         """
         Small table of key PnL statistics.
@@ -557,10 +552,8 @@ class NaivePnL:
             'ALL' (global PnL).
             Note: one can only have multiple PnL categories or multiple cross-sections,
             not both.
-        :param <List[str]> benchmark_correl: a possible list of (return) tickers or
-            single ticker that functions as the benchmark for PnL correlation.
-            For instance, U.S equity. The default is None: a correlation with a benchmark
-            will not be included in the returned DataFrame.
+        :param <List[str]> bms: list of benchmark tickers for which correlations are
+            displayed.
         :param <str> start: earliest date in ISO format. Default is None and earliest
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
@@ -590,11 +583,11 @@ class NaivePnL:
 
         assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
 
-        benchmark_bool = True if benchmark_correl is not None else False
+        benchmark_bool = True if bms is not None else False
         if benchmark_bool:
-            c = isinstance(benchmark_correl, str)
-            benchmark_correl = [benchmark_correl] if c else benchmark_correl
-            bm_dict = self.bm_dataframes(benchmark_correl=benchmark_correl, start=start,
+            c = isinstance(bms, str)
+            bms = [bms] if c else bms
+            bm_dict = self.bm_dataframes(bms=bms, start=start,
                                          end=end)
 
         dfx = reduce_df(self.df, pnl_cats, pnl_cids, start, end, self.black,
@@ -605,8 +598,8 @@ class NaivePnL:
                  'Max 21-day draw', 'Max 6-month draw', 'Traded Months']
 
         if benchmark_bool:
-            for i, bm in enumerate(benchmark_correl):
-                stats.insert(len(stats) - 1, f"<{bm}> Cor.")
+            for i, bm in enumerate(bms):
+                stats.insert(len(stats) - 1, f"{bm} correl")
 
         dfw = dfx.pivot(index='real_date', columns=groups, values='value')
         df = pd.DataFrame(columns=dfw.columns, index=stats)
@@ -619,9 +612,9 @@ class NaivePnL:
         df.iloc[4, :] = dfw.rolling(21).sum().min()
         df.iloc[5, :] = dfw.rolling(6*21).sum().min()
         if benchmark_bool:
-            for i, bm in enumerate(benchmark_correl):
+            for i, bm in enumerate(bms):
                 df.iloc[6 + i, :] = dfw.corrwith(bm_dict[bm], axis=0, method='pearson')
-            df.iloc[6 + len(benchmark_correl), :] = dfw.resample('M').sum().count()
+            df.iloc[6 + len(bms), :] = dfw.resample('M').sum().count()
         else:
             df.iloc[6, :] = dfw.resample('M').sum().count()
 
@@ -738,13 +731,16 @@ if __name__ == "__main__":
     pnl.make_long_pnl(vol_scale=10, label="Long")
 
     # Return evaluation and PnL DataFrames.
+<<<<<<< HEAD
     benchmark_correl = ['USD_EQXR', 'EUR_EQXR', 'AUD_EQXR']
+=======
+
+>>>>>>> bb640454191195d7325fce8a05d1cfc8c285ff79
     cids_subset = ['ALL']
     # Test the inclusion of a single benchmark correlation.
     df_eval = pnl.evaluate_pnls(
         pnl_cats=['PNL_CRY_PZN', 'PNL_CRY_PZN05', "Long"],
-        pnl_cids=cids_subset, benchmark_correl=benchmark_correl,
-        start='2000-01-01')
+        pnl_cids=cids_subset, bms=["USD_EQXR", "EUR_EQXR"])
     print(df_eval)
 
     df_pnls = pnl.pnl_df()
