@@ -11,15 +11,14 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
                         rel_meth: str = 'subtract', rel_xcats: List[str] = None,
                         postfix: str = 'R'):
     """
-    Returns a DataFrame with values relative to a basket average of cross-sections
-    based on either subtraction of the basket (default) or division by the basket.
+    Returns panel of relative values versus an average of cross-sections.
 
-    :param <pd.DataFrame> df:  standardized DataFrame with the following necessary
+    :param <pd.DataFrame> df:  standardized JPMaQS dataframe with the necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
     :param <List[str]> xcats: all extended categories for which relative values are to
         be calculated.
     :param <List[str]> cids: cross-sections for which relative values are calculated.
-        Default is every cross-section available for each respective category.
+        Default is all cross-section available for the respective category.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         for which the respective category is available is used.
     :param <str> end: latest date in ISO format. Default is None and latest date for
@@ -39,8 +38,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         updated to basket = ['GBP', 'NZD'] for that respective category.
     :param <str> rel_meth: method for calculating relative value. Default is 'subtract'.
         Alternative is 'divide'.
-    :param <List[str]> rel_xcats: addendum to extended category name to indicate relative
-        value used.
+    :param <List[str]> rel_xcats: extended category name of the relative values.
     :param <str> postfix: acronym to be appended to 'xcat' string to give the name for
         relative value category. Only applies if rel_xcats is None. Default is 'R'
 
@@ -49,38 +47,32 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
     """
 
-    assert rel_meth in ['subtract', 'divide'], "rel_meth must be 'subtract' or 'divide'," \
-                                               "and not {rel_meth}."
+    assert rel_meth in ['subtract', 'divide'], "rel_meth must be 'subtract' or 'divide'"
 
-    xcat_error = "List of categories expected, or a single category passed as a string " \
-                 "object."
+    xcat_error = "List of categories or single single category string expected "
     assert isinstance(xcats, (list, str)), xcat_error
-    if rel_xcats is not None:
-        assert isinstance(rel_xcats, (list, str)), "List of addenda expected, or a " \
-                                                   "single addendum passed as a string."
 
-        error_type = "If a single, or multiple, category(s) is passed to 'xcats', then " \
-                     "the corresponding number of addenda."
-        assert type(xcats) == type(rel_xcats), error_type
-
-        if isinstance(xcats, str):
-            xcats = [xcats]
-            rel_xcats = [rel_xcats]
-
-        error_length = "The number of relative value addenda must equal the number of " \
-                       "categories received."
-        assert len(xcats) == len(rel_xcats), error_length
-
-    elif rel_xcats is None and isinstance(xcats, str):
+    if isinstance(xcats, str):
         xcats = [xcats]
 
+    if rel_xcats is not None:
+        assert isinstance(rel_xcats, (list, str)),\
+            "List of strings or single string expected for `rel_xcats`"
+
+        if isinstance(rel_xcats, str):
+            rel_xcats = [rel_xcats]
+
+        error_length = "`rel_xcats` must have the same number as `xcats`"
+        assert len(xcats) == len(rel_xcats), error_length
+
     if cids is None:
-        cids = list(df['cid'].unique())
+        cids = list(df['cid'].unique())  # Todo: should be based on dfx not df
 
     if basket is not None:
         miss = set(basket) - set(cids)
         assert len(miss) == 0, f"The basket elements {miss} are not specified or " \
-                               f"are not available cross-sections."
+                               f"are not available."
+        # Todo: should be based on dfx not df
     else:
         basket = cids  # Default basket is all available cross-sections.
 
@@ -88,16 +80,12 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
     # Host dataframe.
     df_out = pd.DataFrame(columns=col_names)
 
-    # Reduce the dataframe to the defined categories.
-    # If the categories passed to the parameter "xcats" are not present in the dataframe,
-    # the below function will classify their absence in the console, and return the
-    # reduced dataframe on the categories which are available in the received dataframe.
     dfx = reduce_df(df, xcats, cids, start, end, blacklist,
                     out_all=False)
     available_xcats = dfx['xcat'].unique()
 
     if len(cids) == len(basket) == 1:
-        return df_out
+        return df_out  # Todo: not relative values. cids==1 is non-sensical, disallow!
 
     intersection_function = lambda l_1, l_2: sorted(list(set(l_1) & set(l_2)))
 
