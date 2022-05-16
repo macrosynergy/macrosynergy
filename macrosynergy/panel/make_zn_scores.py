@@ -3,6 +3,7 @@ import pandas as pd
 from typing import List
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
+import time
 
 
 def func_executor(df: pd.DataFrame, neutral: str, n: int):
@@ -79,8 +80,11 @@ def pan_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fals
             ar_neutral[:min_obs] = np.nan
         elif sequential and iis:
             iis_neutral = np.repeat(df.iloc[0:min_obs].stack().median(), min_obs)
+
+            start = time.time()
             os_neutral = func_executor(df=df, neutral=neutral,
                                        n=no_rows)
+            print(f"Time taken for functional executor: {time.time() - start}")
             os_neutral = os_neutral[min_obs:]
             ar_neutral = np.concatenate([iis_neutral, os_neutral])
         else:  
