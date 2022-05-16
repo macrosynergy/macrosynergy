@@ -738,7 +738,7 @@ if __name__ == "__main__":
     pnl.make_long_pnl(vol_scale=10, label="Long")
 
     # Return evaluation and PnL DataFrames.
-    benchmark_correl = 'USD_EQXR'
+    benchmark_correl = ['USD_EQXR', 'EUR_EQXR', 'AUD_EQXR']
     cids_subset = ['ALL']
     # Test the inclusion of a single benchmark correlation.
     df_eval = pnl.evaluate_pnls(
