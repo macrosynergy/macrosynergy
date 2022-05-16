@@ -1,6 +1,5 @@
 """Convergence of rows for max weight"""
 import numpy as np
-import warnings
 
 class ConvergeRow(object):
     """
@@ -9,12 +8,12 @@ class ConvergeRow(object):
     the excess evenly across all cross-sections.
     """
 
-    def __init__(self, row, max_weight, margin=0.001, max_loops=25):
+    def __init__(self, weights, max_weight, margin=0.001, max_loops=25):
         """
         Class's Constructor.
 
         :param <np.ndarray> row: Array of weights.
-        :param <Float> max_weight: Maximum weight.
+        :param <Float> max_weight: Maximum that a weight can be.
         :param <Float> margin: Margin of error allowed in the convergence to within the
                                 upper-bound, "max_weight".
         :param <Integer> max_loops: Controls the accuracy: in theory, the greater the
@@ -24,45 +23,55 @@ class ConvergeRow(object):
                                     the less likely the maximum number of loops permitted
                                     will be exceeded.
         """
-        self.row = row
+        self.weights = weights
         self.max_weight = max_weight
-        self.flag = (1 / np.sum(self.row > 0)) <= self.max_weight
         self.margin = margin
         self.max_loops = max_loops
 
     @classmethod
-    def application(cls, row, max_weight):
-
-        cr = ConvergeRow(row=row, max_weight=max_weight)
-        if cr.flag:  # if enough non-nan values in row
-            cr.distribute_simple()
-        else:  # apply equal weights to all non-nan cases
-            cr.row = (cr.row > 0) / np.sum(cr.row > 0)
-            cr.row[cr.row == 0.0] = np.nan
-
-        return cr.row
-
-    def distribute_simple(self):
+    def application(cls, weights: np.ndarray, max_weight: float) -> np.ndarray:
         """
-        Initiates an indefinite While Loop until the weights converge below the
-        (max_weight + margin). Will evenly redistribute the excess weight across all
-        active cross-sections, and will compute the maximum weight, the number of cross-
-        sections above the threshold and the excess weight dynamically: through each
-        iteration.
+        Given weights and the maximum that the weight can be, it returns the new
+        computes the new distribution of weights.
+        """
+        cr = ConvergeRow(weights, max_weight)
+        cr.compute_new_weights()
+        return cr.weights
 
+    def compute_new_weights(self):
+        if self.able_to_dynamically_redistribute_excess_weights():
+            self.dynamically_redistribute_excess_weights()
+        else:
+            self.equally_redistribute_excess_weights()
+
+    def able_to_dynamically_redistribute_excess_weights(self) -> bool:
+        """
+        Checks to see if we are able to dynamically redistribute excess weights
+        of the active cross-sections of weights.
+        """
+        return (1 / np.sum(self.weights > 0)) <= self.max_weight
+
+    def dynamically_redistribute_excess_weights(self):
+        """
+        Dynamically redistributes excess weight across the active cross-sections of the weights 
+        until the weights are within the tolerance or the maximum loops has occured.
         """
 
-        count = 0
-        close_enough = False
-        ar_weights = self.row.copy()
-
-        while (count <= self.max_loops) and (not close_enough):
-            count += 1
-            excesses = ar_weights - (self.max_weight + self.margin)
+        for _ in range(self.max_loops):
+            excesses = self.weights - (self.max_weight + self.margin)
             excesses[excesses <= 0] = 0
-            ar_weights = (ar_weights - excesses) + np.nanmean(excesses)
+            self.weights = (self.weights - excesses) + np.nanmean(excesses)
 
-            if np.max(ar_weights) <= (self.max_weight + self.margin):
-                close_enough = True
+            if self.within_tolerance():
+                break
 
-        self.row = ar_weights
+    def within_tolerance(self) -> bool:
+        return np.max(self.weights) <= (self.max_weight + self.margin)
+
+    def equally_redistribute_excess_weights(self):
+        """
+        Redistributes active cross-section of weights equally i.e.
+        [0.3, 0.7, -0.1] -> [0.5, 0.5, -0.1] 
+        """
+        self.weights = (self.weights > 0) / np.sum(self.weights > 0)
+        self.weights[self.weights == 0.0] = np.nan
