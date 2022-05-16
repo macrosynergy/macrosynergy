@@ -39,19 +39,19 @@ class ConvergeRow(object):
         return cr.weights
 
     def compute_new_weights(self):
-        if self.able_to_dynamically_redistribute_excess_weights():
-            self.dynamically_redistribute_excess_weights()
+        if self.able_to_distribute_excess_weight():
+            self.distribute_excess_weight()
         else:
-            self.equally_redistribute_excess_weights()
+            self.equally_redistribute_weights()
 
-    def able_to_dynamically_redistribute_excess_weights(self) -> bool:
+    def able_to_distribute_excess_weight(self) -> bool:
         """
         Checks to see if we are able to dynamically redistribute excess weights
         of the active cross-sections of weights.
         """
         return (1 / np.sum(self.weights > 0)) <= self.max_weight
 
-    def dynamically_redistribute_excess_weights(self):
+    def distribute_excess_weight(self):
         """
         Dynamically redistributes excess weight across the active cross-sections of the weights 
         until the weights are within the tolerance or the maximum loops has occured.
@@ -68,7 +68,7 @@ class ConvergeRow(object):
     def within_tolerance(self) -> bool:
         return np.max(self.weights) <= (self.max_weight + self.margin)
 
-    def equally_redistribute_excess_weights(self):
+    def equally_redistribute_weights(self):
         """
         Redistributes active cross-section of weights equally i.e.
         [0.3, 0.7, -0.1] -> [0.5, 0.5, -0.1] 
