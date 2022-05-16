@@ -70,13 +70,17 @@ class TestAll(unittest.TestCase):
         # The first aspect of the code to validate is if the dataframe is reduced to a
         # single cross-section, and the basket is axiomatically limited to a single cross
         # section as well, the notion of computing the relative value is not appropriate.
-        # Therefore, the returned dataframe, from the function, will be empty simply
-        # because its functionality is not applicable.
-        dfd_1 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=['AUD'],
-                                    blacklist=None, basket=['AUD'],
-                                    rel_meth='subtract', rel_xcats=None, postfix='RV')
+        # Therefore, the code should throw a runtime error given it is being used
+        # incorrectly.
+        with self.assertRaises(RuntimeError) as context:
+            make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=['AUD'],
+                                blacklist=None, basket=['AUD'],
+                                rel_meth='subtract', rel_xcats=None, postfix='RV')
+            run_error = "Computing the relative value on a single cross-section using a " \
+                        "basket consisting exclusively of the aforementioned " \
+                        "cross-section is an incorrect usage of the function."
 
-        self.assertTrue(dfd_1.empty)
+            self.assertTrue(run_error in context.exception)
 
         # First part of the logic to validate is the stacking mechanism, and subsequent
         # dimensions of the returned dataframe. Once the reduction is accounted for, the
