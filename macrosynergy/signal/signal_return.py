@@ -239,6 +239,49 @@ class SignalReturnRelations:
     def summary_table(self):
         """
         Condensed summary table of signal-return relations.
+        N.B.:
+        The interpretation of the columns is generally as follows:
+
+        accuracy refers accuracy for binary classification, i.e. positive or negative
+            return, and gives the ratio of correct prediction of the sign of returns
+            to all predictions.
+        bal_accuracy refers to balanced accuracy. This is the average of the ratios of
+            correctly detected positive returns and correctly detected negative returns.
+            The denominators here are the total of actual positive and negative returns
+            cases. Technically, this is the average of sensitivity and specificity.
+        pos_sigr is the ratio of positive signals to all predictions. It indicates the
+            long bias of the signal.
+        pos_retr is the ratio of positive returns to all observed returns. It indicates
+            the positive bias of the returns.
+        pos_prec means positive precision, i.e. the ratio of correct positive return
+            predictions to all positive predictions. It indicates how well the positive
+            predictions of the signal have fared. Generally, good positive precision is
+            easy to accomplish if the ratio of positive returns has been high.
+        neg_prec means negative precision, i.e. the ratio of correct negative return
+            predictions to all negative predictions. It indicates how well the negative
+            predictions of the signal have fared. Generally, good positive precision is
+            hard to accomplish if the ratio of positive returns has been high.
+        pearson is the Pearson correlation coefficient between signal and subsequent
+            return.
+        pearson_pval is the probability that the (positive) correlation has been
+            accidental, assuming that returns are independently distributed. This
+            statistic would be invalid for forward moving averages.
+        kendall is the Kendall correlation coefficient between signal and subsequent
+            return.
+        kendall_pval is the probability that the (positive) correlation has been
+            accidental, assuming that returns are independently distributed. This
+            statistic would be invalid for forward moving averages.
+
+        The rows have the following meaning:
+
+        Panel refers to the the whole panel of cross sections and sample period,
+            excluding unavailable and blacklisted periods.
+        Mean years is the mean of the statistic across all years.
+        Mean cids is the mean of the statistic across all sections.
+        Positive ratio is the ratio of positive years or cross sections for which the
+            statistic was above its "neutral" level, i.e. above 0.5 for classification
+            ratios and positive correlation probabilities and above 0 for the
+            correlation coefficients.
         """
 
         dfys = self.df_ys.round(decimals=3)
