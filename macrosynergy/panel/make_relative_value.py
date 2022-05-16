@@ -56,25 +56,14 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         xcats = [xcats]
 
     if rel_xcats is not None:
-        assert isinstance(rel_xcats, (list, str)),\
-            "List of strings or single string expected for `rel_xcats`"
+        error_rel_xcat = "List of strings or single string expected for `rel_xcats`."
+        assert isinstance(rel_xcats, (list, str)), error_rel_xcat
 
         if isinstance(rel_xcats, str):
             rel_xcats = [rel_xcats]
 
-        error_length = "`rel_xcats` must have the same number as `xcats`"
+        error_length = "`rel_xcats` must have the same number of elements as `xcats`."
         assert len(xcats) == len(rel_xcats), error_length
-
-    if cids is None:
-        cids = list(df['cid'].unique())  # Todo: should be based on dfx not df
-
-    if basket is not None:
-        miss = set(basket) - set(cids)
-        assert len(miss) == 0, f"The basket elements {miss} are not specified or " \
-                               f"are not available."
-        # Todo: should be based on dfx not df
-    else:
-        basket = cids  # Default basket is all available cross-sections.
 
     col_names = ['cid', 'xcat', 'real_date', 'value']
     # Host dataframe.
@@ -82,10 +71,23 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
     dfx = reduce_df(df, xcats, cids, start, end, blacklist,
                     out_all=False)
+    if cids is None:
+        cids = list(dfx['cid'].unique())
+
+    if basket is not None:
+        miss = set(basket) - set(cids)
+        assert len(miss) == 0, f"The basket elements {miss} are not specified or " \
+                               f"are not available."
+    else:
+        basket = cids  # Default basket is all available cross-sections.
+
     available_xcats = dfx['xcat'].unique()
 
     if len(cids) == len(basket) == 1:
-        return df_out  # Todo: not relative values. cids==1 is non-sensical, disallow!
+        run_error = "Computing the relative value on a single cross-section using a " \
+                    "basket consisting exclusively of the aforementioned cross-section " \
+                    "is an incorrect usage of the function."
+        raise RuntimeError(run_error)
 
     intersection_function = lambda l_1, l_2: sorted(list(set(l_1) & set(l_2)))
 
@@ -104,6 +106,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         intersection = intersection_function(basket, available_cids)
         clause = len(intersection)
         missing_cids = list(set(basket) - set(intersection))
+
         if clause != len(basket) and complete_cross:
             print(f"The category, {xcat}, is missing {missing_cids} which are included "
                   f"in the basket {basket}. Therefore, the category will be excluded "
@@ -208,9 +211,11 @@ if __name__ == "__main__":
                                 blacklist=None,  basket=['AUD'],
                                 rel_meth='subtract', rel_xcats=None, postfix='RV')
 
-    dfd_5 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=['AUD'],
+    dfd_5 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=['AUD', 'CAD'],
                                 blacklist=None,  basket=['AUD'],
-                                rel_meth='subtract', rel_xcats=None, postfix='RV')
+                                rel_meth='divide', rel_xcats=['GROWTH_D', 'INFL_D'],
+                                postfix=None)
+    print(dfd_5)
 
     # Testing for complete-cross parameter.
     xcats = ['XR', 'CRY']
