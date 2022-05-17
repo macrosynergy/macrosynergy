@@ -2,7 +2,9 @@
 
 import pandas as pd
 import math
+import numpy as np
 import orderedstructs
+from itertools import accumulate
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 # Able to handle for NaN values which will invariably be present in the pivoted
@@ -49,6 +51,9 @@ def rolling_median_with_nan(dfw: pd.DataFrame):
             # to determine the median index.
             non_nan += 1
 
+            # Inserting a value into a Skip List will occur in log(n) time. The data
+            # structure will continuously store the data in sorted order which
+            # subsequently avoids continuous re-ordering.
             skip_list.insert(float(value))
 
             if (count % no_columns) == 0:
@@ -69,6 +74,41 @@ def rolling_median_with_nan(dfw: pd.DataFrame):
                 ret.append(median)
         else:
             continue
+
+    return ret
+
+def rolling_mean_with_nan(dfw: pd.DataFrame):
+    """
+    Computes a rolling median of a vector of floats and returns the results. NaNs will be
+    consumed.
+
+    :param <pd.Dataframe> dfw: "wide" dataframe with time index and cross-sections as
+        columns.
+
+    :return <List[float] ret: a list containing the median values. The number of computed
+        median values held inside the list will correspond to the number of timestamps
+        the series is defined over.
+    """
+
+    data = dfw.to_numpy()
+
+    no_rows = dfw.shape[0]
+    no_columns = dfw.shape[1]
+    no_elements = no_rows * no_columns
+
+    one_dimension_arr = data.reshape(no_elements)
+    rolling_summation = [np.nansum(one_dimension_arr[0:(no_columns * i)])
+                         for i in range(1, no_rows + 1)]
+
+    # Determine the number of active cross-sections per timestamp. Required for computing
+    # the rolling mean.
+    data_arr = data
+    # Sum across the rows.
+    active_cross = np.sum(~np.isnan(data_arr), axis=1)
+    rolling_active_cross = list(accumulate(active_cross))
+
+    mean_calc = lambda m, d: m / d
+    ret = list(map(mean_calc, rolling_summation, rolling_active_cross))
 
     return ret
 
@@ -103,3 +143,5 @@ if __name__ == "__main__":
     no_rows = dfw.shape[0]
 
     ret_median = rolling_median_with_nan(dfw)
+
+    ret_mean = rolling_mean_with_nan(dfw)
