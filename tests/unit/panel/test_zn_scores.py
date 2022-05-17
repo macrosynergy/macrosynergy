@@ -52,7 +52,9 @@ class TestAll(unittest.TestCase):
         self.assertEqual(ar_neutral[self.dfw.shape[0]-1], self.dfw.stack().mean())
 
         ar_neutral = pan_neutral(self.dfw, neutral='mean', sequential=True)
-        self.assertEqual(ar_neutral[999], self.dfw.iloc[0:1000, :].stack().mean())
+        val = round(ar_neutral[999], 4)
+        benchmark = self.dfw.iloc[0:1000, :].stack().mean()
+        self.assertEqual(val, round(benchmark, 4))
 
         ar_neutral = pan_neutral(self.dfw, neutral='median', sequential=False)
         # Check first value equal to panel median.
@@ -60,8 +62,11 @@ class TestAll(unittest.TestCase):
         # Check last value equal to panel median.
         self.assertEqual(ar_neutral[self.dfw.shape[0]-1], self.dfw.stack().median())
 
-        ar_neutral = pan_neutral(self.dfw, neutral='median', sequential=True)
-        self.assertEqual(ar_neutral[999], self.dfw.iloc[0:1000, :].stack().median())
+        ar_neutral = pan_neutral(self.dfw, neutral='median', sequential=True,
+                                 min_obs=261, iis=False)
+        val = ar_neutral[999]
+        median_benchmark = self.dfw.iloc[0:1000, :].stack().median()
+        self.assertEqual(val, median_benchmark)
 
         # Check the application of the in-sampling procedure.
         # The first testcase set the in-sample to False and the expected values for the
