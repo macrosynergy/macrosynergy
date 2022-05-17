@@ -1,10 +1,8 @@
-import numpy as np
-import pandas as pd
-from typing import List
-from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.shape_dfs import reduce_df
-import time
 
+from typing import List
+from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.panel.logarithmic_insertion import *
+import time
 
 def func_executor(df: pd.DataFrame, neutral: str, n: int):
     """
@@ -59,15 +57,16 @@ def pan_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fals
 
     if neutral == 'mean':
         if sequential and not iis:
-            ar_neutral = func_executor(df=df, neutral=neutral,
-                                       n=no_rows)
+            ar_neutral = rolling_mean_with_nan(dfw=df)
+
             ar_neutral[:min_obs] = np.nan
 
         elif sequential and iis:
             iis_neutral = np.repeat(df.iloc[0:min_obs].stack().mean(),
                                     min_obs)
-            os_neutral = func_executor(df=df, neutral=neutral,
-                                       n=no_rows)
+
+            os_neutral = rolling_mean_with_nan(dfw=df)
+
             os_neutral = os_neutral[min_obs:]
             ar_neutral = np.concatenate([iis_neutral, os_neutral])
         else:  
@@ -75,15 +74,14 @@ def pan_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fals
 
     elif neutral == 'median':  
         if sequential and not iis:
-            ar_neutral = func_executor(df=df, neutral=neutral,
-                                       n=no_rows)
+            ar_neutral = rolling_median_with_nan(dfw=df)
             ar_neutral[:min_obs] = np.nan
+
         elif sequential and iis:
             iis_neutral = np.repeat(df.iloc[0:min_obs].stack().median(), min_obs)
 
             start = time.time()
-            os_neutral = func_executor(df=df, neutral=neutral,
-                                       n=no_rows)
+            os_neutral = rolling_median_with_nan(dfw=df)
             print(f"Time taken for functional executor: {time.time() - start}")
             os_neutral = os_neutral[min_obs:]
             ar_neutral = np.concatenate([iis_neutral, os_neutral])
@@ -99,7 +97,7 @@ def first_value(column: pd.Series):
     """
     Returns the integer index at which the series' first realised value occurs.
 
-    :param: < pd.Series > column:
+    :param: <pd.Series> column:
 
     return <int> first_index:
     """
