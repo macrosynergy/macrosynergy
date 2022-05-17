@@ -52,7 +52,9 @@ class SkipList(object):
         # Additional field incorporated specifically for determining the median element.
         self.size = 0
 
-    # Equivalent to the Binomial Distribution: sequence of Bernoulli Random Variables.
+    # Equivalent to the Geometric Distribution: sequence of Bernoulli Random Variables.
+    # The number of rows until success where success is measured as the value not being
+    # held on row i (stored on every row from the base until i - 1).
     def randomLevel(self):
         lvl = 0
         # Imposing an upper bound on the number of possible levels which, in a purely
