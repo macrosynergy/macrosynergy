@@ -12,7 +12,7 @@ class ConvergeRow(object):
         """
         Class's Constructor.
 
-        :param <np.ndarray> row: Array of weights.
+        :param <np.ndarray> weights: Array of weights.
         :param <Float> max_weight: Maximum that a weight can be.
         :param <Float> margin: Margin of error allowed in the convergence to within the
                                 upper-bound, "max_weight".
