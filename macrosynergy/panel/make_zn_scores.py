@@ -80,9 +80,7 @@ def pan_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fals
         elif sequential and iis:
             iis_neutral = np.repeat(df.iloc[0:min_obs].stack().median(), min_obs)
 
-            start = time.time()
             os_neutral = rolling_median_with_nan(dfw=df)
-            print(f"Time taken for functional executor: {time.time() - start}")
             os_neutral = os_neutral[min_obs:]
             ar_neutral = np.concatenate([iis_neutral, os_neutral])
         else:  
@@ -107,7 +105,6 @@ def first_value(column: pd.Series):
     date_index = next(iter(np.where(index == date)[0]))
 
     return date_index
-
 
 def index_info(df_row_no: int, column: pd.Series, min_obs: int):
     """
