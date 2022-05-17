@@ -1,3 +1,4 @@
+
 import random
 import pandas as pd
 import numpy as np
@@ -18,7 +19,7 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
                   title: str = None, size: Tuple[float] = (14, 8),
                   max_color: float = None):
     """
-    Visualize correlation across categories or cross-sections of panels
+    Visualize correlation across categories or cross-sections of panels.
 
     :param <pd.Dataframe> df: standardized JPMaQS dataframe with the necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
@@ -36,7 +37,7 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
         'value'.
     :param <str> freq: frequency option. Per default the correlations are calculated
         based on the native frequency of the datetimes in 'real_date', which is business
-        daily. Downsampling options include weekly ('W'), monthly ('M'), or quarterly
+        daily. Down-sampling options include weekly ('W'), monthly ('M'), or quarterly
         ('Q') mean.
     :param <bool> cluster: if True the series in the correlation matrix are reordered
         by hierarchical clustering. Default is False.
@@ -97,7 +98,8 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
         columns = [corr.columns.tolist()[i] for i in list((np.argsort(ind)))]
         corr = corr.loc[columns, columns]
 
-    mask = np.triu(np.ones_like(corr, dtype=bool))  # mask for upper triangle.
+    # Mask for the upper triangle.
+    mask = np.triu(np.ones_like(corr, dtype=bool))
 
     fig, ax = plt.subplots(figsize=size)
     sns.heatmap(corr, mask=mask, cmap='vlag_r', center=0, vmin=min_color, vmax=max_color,
@@ -110,18 +112,20 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
 
 if __name__ == "__main__":
 
-    # Un-clustered correlation matrices
+    # Un-clustered correlation matrices.
 
     random.seed(1)
     cids = ['AUD', 'CAD', 'GBP', 'NZD']
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
-    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
+    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest',
+                                                'mean_add', 'sd_mult'])
     df_cids.loc['AUD', ] = ['2010-01-01', '2020-12-31', 0.1, 1]
     df_cids.loc['CAD', ] = ['2011-01-01', '2020-11-30', 0, 1]
     df_cids.loc['GBP', ] = ['2012-01-01', '2020-11-30', 0, 2]
     df_cids.loc['NZD', ] = ['2012-01-01', '2020-09-30', -0.1, 2]
 
-    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef'])
+    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
+                                                  'sd_mult', 'ar_coef', 'back_coef'])
     df_xcats.loc['XR', ] = ['2010-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
     df_xcats.loc['CRY', ] = ['2011-01-01', '2020-10-30', 1, 2, 0.95, 0.5]
     df_xcats.loc['GROWTH', ] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
@@ -133,7 +137,7 @@ if __name__ == "__main__":
     correl_matrix(dfd, xcats=xcats[0], cids=cids, title='Correlation')
     correl_matrix(dfd, xcats=xcats, cids=cids, freq="Q")
 
-    # Clustered correlation matrices
+    # Clustered correlation matrices.
 
     random.seed(1)
     cids = ['AUD', 'CAD', 'GBP', 'USD', 'NZD', 'EUR']
