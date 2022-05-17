@@ -56,26 +56,27 @@ def rolling_median_with_nan(dfw: pd.DataFrame):
             # subsequently avoids continuous re-ordering.
             skip_list.insert(float(value))
 
-            if (count % no_columns) == 0:
+        if (count % no_columns) == 0:
 
-                odd_index = non_nan // 2
-                median_odd = skip_list.at(odd_index)
+            odd_index = non_nan // 2
+            median_odd = skip_list.at(odd_index)
 
-                if (non_nan % 2) == 0:
+            if (non_nan % 2) == 0:
 
-                    even_index = odd_index - 1
-                    median_even = skip_list.at(even_index)
-                    median = (median_odd + median_even) / 2
+                even_index = odd_index - 1
+                median_even = skip_list.at(even_index)
+                median = (median_odd + median_even) / 2
 
-                else:
-                    median = median_odd
+            else:
+                median = median_odd
 
-                count = 0
-                ret.append(median)
+            count = 0
+            ret.append(median)
+
         else:
             continue
 
-    return ret
+    return np.array(ret)
 
 def rolling_mean_with_nan(dfw: pd.DataFrame):
     """
@@ -110,7 +111,7 @@ def rolling_mean_with_nan(dfw: pd.DataFrame):
     mean_calc = lambda m, d: m / d
     ret = list(map(mean_calc, rolling_summation, rolling_active_cross))
 
-    return ret
+    return np.array(ret)
 
 
 if __name__ == "__main__":
