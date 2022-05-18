@@ -2,7 +2,6 @@
 from typing import List
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.panel.logarithmic_insertion import *
-import time
 
 def func_executor(df: pd.DataFrame, neutral: str, n: int):
     """
@@ -236,7 +235,7 @@ def iis_std_panel(dfx: pd.DataFrame, min_obs: int, sequential: bool = True,
     Function designed to compute the standard deviations but accounts for in-sampling
     period. The in-sampling standard deviation will be a fixed value.
 
-    :param <pd.DataFrame> dfx: dataFrame recording the differences from the neutral
+    :param <pd.DataFrame> dfx: DataFrame recording the differences from the neutral
         level.
     :param <int> min_obs:
     :param <bool> sequential:
@@ -248,6 +247,11 @@ def iis_std_panel(dfx: pd.DataFrame, min_obs: int, sequential: bool = True,
     no_dates = dfx.shape[0]
     if sequential:
 
+        # Each data point in the DataFrame is measuring the distance from neutral level
+        # where the neutral level is computed on a rolling basis (computed across the
+        # panel for each preceding date).
+        # Therefore, take the absolute values and subsequently calculate the average
+        # across the panel (inclusive of all previous dates).
         ar_sds = np.array([dfx.iloc[0:(i + 1), :].stack().abs().mean()
                            for i in range(no_dates)])
         if iis:
