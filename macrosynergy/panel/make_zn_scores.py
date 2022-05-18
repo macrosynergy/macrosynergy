@@ -121,6 +121,7 @@ def index_info(df_row_no: int, column: pd.Series, min_obs: int):
     """
 
     date_index = first_value(column)
+    # Number of "active" dates for the cross-section's series.
     df_row_no -= date_index
     first_date = date_index + min_obs
 
@@ -166,9 +167,8 @@ def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fa
     """
     Compute neutral values of return series individually for all cross-sections.
 
-    :param <pd.Dataframe> df: original DataFrame with the pivot function applied on the
-        cross-sections. The DataFrame's columns will naturally consist of each
-        cross-section's return series.
+    :param <pd.Dataframe> df: pivoted DataFrame. The DataFrame's columns will naturally
+        consist of each cross-section's return series.
     :param <str> neutral: method to determine neutral level. Default is 'zero'.
         Alternatives are 'mean' and "median".
     :param <bool> sequential: if True (default) score parameters (neutral level and
@@ -252,8 +252,7 @@ def iis_std_panel(dfx: pd.DataFrame, min_obs: int, sequential: bool = True,
         # panel for each preceding date).
         # Therefore, take the absolute values and subsequently calculate the average
         # across the panel (inclusive of all previous dates).
-        ar_sds = np.array([dfx.iloc[0:(i + 1), :].stack().abs().mean()
-                           for i in range(no_dates)])
+        ar_sds = rolling_mean_with_nan(dfw=dfx, absolute=True)
         if iis:
             iis_dfx = dfx.iloc[0:min_obs, :]
             iis_sds = np.array(iis_dfx.stack().abs().mean())
@@ -283,6 +282,12 @@ def iis_std_cross(column: pd.Series, min_obs: int, date_index: int = 0,
 
     no_dates = column.size
     if sequential:
+        # The absolute difference from the neutral level, and subsequently compute the
+        # rolling standard deviation.
+        # The in-built pandas method, applied to a pd.Series, will only compute the
+        # standard deviation from the active dates onwards. The preceding dates will
+        # remain NaN values allowing the array to match the dimensions of the original
+        # pivoted DataFrame.
         ar_sds = np.array([column[0:(j + 1)].abs().mean() for j in range(no_dates)])
 
         if iis:
@@ -301,7 +306,7 @@ def iis_std_cross(column: pd.Series, min_obs: int, date_index: int = 0,
 def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
                    start: str = None, end: str = None, blacklist: dict = None,
                    sequential: bool = True, min_obs: int = 261,  iis: bool = True,
-                   neutral: str = 'zero', thresh: float = None,
+                   neutral: str = 'zero', est_freq: str = 'd', thresh: float = None,
                    pan_weight: float = 1, postfix: str = 'ZN'):
 
     """
@@ -335,6 +340,10 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         apply: the entire time-period will be treated as in-sample.
     :param <str> neutral: method to determine neutral level. Default is 'zero'.
         Alternatives are 'mean' and "median".
+    :param <str> est_freq: used to control the frequency at which the neutral level and
+        standard deviation are calculated. The intermediary dates will be populated using
+        a forward fill. The options are weekly, monthly & quarterly "w", "m", "q".
+        Default is daily, "d".
     :param <float> thresh: threshold value beyond which scores are winsorized,
         i.e. contained at that threshold. The threshold is the maximum absolute
         score value that the function is allowed to produce. The minimum threshold is 1
@@ -354,13 +363,24 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         assert thresh > 1, "The 'thresh' parameter must be larger than 1."
     assert 0 <= pan_weight <= 1, "The 'pan_weight' parameter must be between 0 and 1."
     assert isinstance(iis, bool), "Boolean Object required."
-    assert isinstance(min_obs, int) and min_obs >= 0, "Minimum observations must be a " \
-                                                      "non-negative Integer value."
+
+    error_min = "Minimum observations must be a non-negative Integer value."
+    assert isinstance(min_obs, int) and min_obs >= 0, error_min
+
+    frequencies = ["d", "w", "m", "q"]
+    error_freq = f"String Object required and must be one of the available frequencies: " \
+                 f"{frequencies}."
+    assert isinstance(est_freq, str) and est_freq in frequencies, error_freq
+    pd_freq = dict(zip(frequencies[1:], ['W-Fri', 'BM', 'BQ']))
 
     df = df.loc[:, ['cid', 'xcat', 'real_date', 'value']]
     df = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end,
                    blacklist=blacklist)
     dfw = df.pivot(index='real_date', columns='cid', values='value')
+    dates_dfw = pd.DataFrame(data=None, index=dfw.index)
+
+    if est_freq != "d":
+        dfw = dfw.resample(pd_freq[est_freq], axis=0, convention='end').last()
 
     no_dates = dfw.shape[0]
     cross_sections = dfw.columns
@@ -390,6 +410,17 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         dfw_zns_css = dfx.div(ar_sds, axis='rows')
     else:
         dfw_zns_css = dfw * 0
+
+    # Forward fill to account for the down-sampling after the zn_scores have been
+    # computed.
+    if est_freq != "d":
+        dfw_zns_pan = dates_dfw.merge(dfw_zns_pan, how='left', on=['real_date'])
+        dfw_zns_css = dates_dfw.merge(dfw_zns_css, how='left', on=['real_date'])
+
+        dfw_zns_css = dfw_zns_css.fillna(method='ffill')
+        dfw_zns_pan = dfw_zns_pan.fillna(method='ffill')
+        dfw_zns_pan.columns.name = 'cid'
+        dfw_zns_css.columns.name = 'cid'
 
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
     dfw_zns = dfw_zns.dropna(axis=0, how='all')
@@ -445,5 +476,6 @@ if __name__ == "__main__":
                               iis=False, thresh=None, pan_weight=0, postfix='ZN')
 
     df_ms = make_zn_scores(dfd, 'XR', sequential=False, cids=cids,
-                           neutral='zero', pan_weight=1,
+                           neutral='zero', pan_weight=1, est_freq = 'q',
                            min_obs=min_obs, iis=False, thresh=None)
+    print(df_ms)
