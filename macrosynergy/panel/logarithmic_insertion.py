@@ -78,13 +78,15 @@ def rolling_median_with_nan(dfw: pd.DataFrame):
 
     return np.array(ret)
 
-def rolling_mean_with_nan(dfw: pd.DataFrame):
+def rolling_mean_with_nan(dfw: pd.DataFrame, absolute: bool = False):
     """
     Computes a rolling median of a vector of floats and returns the results. NaNs will be
     consumed.
 
     :param <pd.Dataframe> dfw: "wide" dataframe with time index and cross-sections as
         columns.
+    :param <bool> absolute: if True, the rolling mean will be computed on the magnitude
+        of each value. Default is False.
 
     :return <List[float] ret: a list containing the median values. The number of computed
         median values held inside the list will correspond to the number of timestamps
@@ -98,6 +100,9 @@ def rolling_mean_with_nan(dfw: pd.DataFrame):
     no_elements = no_rows * no_columns
 
     one_dimension_arr = data.reshape(no_elements)
+    if absolute:
+        one_dimension_arr = np.absolute(one_dimension_arr)
+
     rolling_summation = [np.nansum(one_dimension_arr[0:(no_columns * i)])
                          for i in range(1, no_rows + 1)]
 
@@ -136,7 +141,6 @@ if __name__ == "__main__":
     df_xcats.loc['GROWTH'] = ['2012-01-01', '2022-02-01', 1, 2, 0.9, 1]
     df_xcats.loc['INFL'] = ['2013-01-01', '2022-02-01', 1, 2, 0.8, 0.5]
 
-    print("Uses Ralph's make_qdf() function.")
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfd_xr = dfd[dfd['xcat'] == 'XR']
 
