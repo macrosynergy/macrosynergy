@@ -82,7 +82,7 @@ class SignalReturnRelations:
             css = self.cids
         else:
             df['year'] = np.array(df.reset_index(level=1)['real_date'].dt.year)
-            css = [str(i) for i in df['year'].unique()]
+            css = [str(i) for i in np.sort(df['year'].unique())]
 
         statms = self.metrics
         df_out = pd.DataFrame(index=['Panel', 'Mean', 'PosRatio'] + css, columns=statms)
