@@ -35,7 +35,7 @@ def rolling_mean_with_nan(dfw: pd.DataFrame, absolute: bool = False):
 
     # Determine the number of active cross-sections per timestamp. Required for computing
     # the rolling mean.
-    data_arr = data
+    data_arr = data.astype(dtype=np.float32)
     # Sum across the rows.
     active_cross = np.sum(~np.isnan(data_arr), axis=1)
     rolling_active_cross = list(accumulate(active_cross))
