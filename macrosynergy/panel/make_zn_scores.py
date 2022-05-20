@@ -1,7 +1,10 @@
 
+import numpy as np
+import pandas as pd
 from typing import List
 from macrosynergy.management.shape_dfs import reduce_df
-from macrosynergy.panel.logarithmic_insertion import *
+from macrosynergy.panel.rolling_statistics import rolling_mean_with_nan
+from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 def func_executor(df: pd.DataFrame, neutral: str, n: int):
     """
@@ -71,15 +74,20 @@ def pan_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fals
         else:  
             ar_neutral = np.repeat(df.stack().mean(), no_rows)
 
+    # The median neutral level is primarily used if the sample set of data is exposed
+    # heavily to outliers. In such instances, the mean statistic will misrepresent the
+    # sample of data.
     elif neutral == 'median':  
         if sequential and not iis:
-            ar_neutral = rolling_median_with_nan(dfw=df)
+            ar_neutral = func_executor(df=df, neutral=neutral,
+                                       n=no_rows)
             ar_neutral[:min_obs] = np.nan
 
         elif sequential and iis:
             iis_neutral = np.repeat(df.iloc[0:min_obs].stack().median(), min_obs)
 
-            os_neutral = rolling_median_with_nan(dfw=df)
+            os_neutral = func_executor(df=df, neutral=neutral,
+                                       n=no_rows)
             os_neutral = os_neutral[min_obs:]
             ar_neutral = np.concatenate([iis_neutral, os_neutral])
         else:  
