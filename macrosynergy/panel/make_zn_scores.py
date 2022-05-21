@@ -4,7 +4,9 @@ import pandas as pd
 from typing import List
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.panel.rolling_statistics import rolling_mean_with_nan
+# Todo: do not use and remove from package
 from macrosynergy.management.simulate_quantamental_data import make_qdf
+
 
 def func_executor(df: pd.DataFrame, neutral: str, n: int):
     """
@@ -26,50 +28,57 @@ def pan_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fals
                 min_obs: int = 261, iis: bool = False):
 
     """
-    Compute neutral values of return series based on a panel, i.e. all cross-sections in
-    the DataFrame. The two approaches to calculation are either a rolling neutral value
-    or an entire in-sample value.
-    Additionally, if the "iis" parameter is set to True, the number of days outlined by
-    "min_obs" will be calculated in sample (single neutral value for the time period)
-    whilst the remaining days are calculated on a rolling basis. However, if False, and
-    "sequential" equals True, the rolling neutral value will be calculated from the start
-    date.
-    NB: It is worth noting that the evolving neutral level, if the "sequential" parameter
-        is set to True, will be computed using the available cross-sections on the
-        respective date. The code will not adjust for an incomplete set of cross-sections
-        on each date. For instance, if the first 100 days only have 3 cross-sections with
-        realised values out of the 4 defined, the rolling mean will be calculated using
-        the available subset.
+    Compute neutral values of return series based on a panel.
 
     :param <pd.Dataframe> df: "wide" dataframe with time index and cross section columns.
+        It must have the frequency at which values are re-estimated.
     :param <str> neutral: method to determine neutral level. Default is 'zero'.
         Alternatives are 'mean' and "median".
     :param <bool> sequential: if True (default) score parameters (neutral level and
         standard deviations) are estimated sequentially with cumulative concurrently
         available information only. If False one neutral value will be calculated for
         the whole panel.
-    :param <int> min_obs:
-    :param <bool> iis:
+    :param <int> min_obs: minimum required observations in days.
+    :param <bool> iis: if set to True, the number of days outlined by
+    "min_obs" will be calculated in sample (single neutral value for the time period)
+    whilst the remaining days are calculated on a rolling basis. However, if False, and
+    "sequential" equals True, the rolling neutral value will be calculated from the start
+    date.
 
     :return <np.ndarray> arr_neutral: row-wise neutral statistic. A single value produced
         per row. Therefore, a one-dimensional array will be returned whose length matches
         the row dimension of the dataframe df.
+
+
+    NB: It is worth noting that the evolving neutral level, if the "sequential" parameter
+        is set to True, will be computed using the available cross-sections on the
+        respective date. The code will not adjust for an incomplete set of cross-sections
+        on each date. For instance, if the first 100 days only have 3 cross-sections with
+        realised values out of the 4 defined, the rolling mean will be calculated using
+        the available subset.
     """
     no_rows = df.shape[0]
 
     if neutral == 'mean':
         if sequential and not iis:
             ar_neutral = rolling_mean_with_nan(dfw=df)
-
+            # Todo: incorrect, use pandas df.expanding.mean()
             ar_neutral[:min_obs] = np.nan
+            # Todo: incorrect as min_obs is defined on days, while dfw could be weeks
+            #  or months.
+            # Todo: calculate earliest date based on days (timedelta) and use
 
         elif sequential and iis:
             iis_neutral = np.repeat(df.iloc[0:min_obs].stack().mean(),
                                     min_obs)
 
             os_neutral = rolling_mean_with_nan(dfw=df)
+            # Todo: incorrect, use pandas df.expanding.mean()
 
             os_neutral = os_neutral[min_obs:]
+            # Todo: incorrect as min_obs is defined on days, while dfw could be weeks
+            #  or months.
+            # Todo: calculate earliest date based on days (timedelta) and use
             ar_neutral = np.concatenate([iis_neutral, os_neutral])
         else:  
             ar_neutral = np.repeat(df.stack().mean(), no_rows)
@@ -81,6 +90,7 @@ def pan_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fals
         if sequential and not iis:
             ar_neutral = func_executor(df=df, neutral=neutral,
                                        n=no_rows)
+            # Todo: use pandas df.expanding.median()
             ar_neutral[:min_obs] = np.nan
 
         elif sequential and iis:
@@ -88,7 +98,13 @@ def pan_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fals
 
             os_neutral = func_executor(df=df, neutral=neutral,
                                        n=no_rows)
+            # Todo: use pandas df.expanding.median()
+
             os_neutral = os_neutral[min_obs:]
+            # Todo: incorrect as min_obs is defined on days, while dfw could be weeks
+            #  or months.
+            # Todo: calculate earliest date based on days (timedelta) and use
+
             ar_neutral = np.concatenate([iis_neutral, os_neutral])
         else:  
             ar_neutral = np.repeat(df.stack().median(), df.shape[0])
@@ -112,6 +128,7 @@ def first_value(column: pd.Series):
     date_index = next(iter(np.where(index == date)[0]))
 
     return date_index
+
 
 def index_info(df_row_no: int, column: pd.Series, min_obs: int):
     """
@@ -172,6 +189,8 @@ def in_sampling(column: pd.Series, neutral: str, active_days: int,
 
 def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = False,
                   min_obs: int = 261, iis: bool = False):
+    # Todo: min_obs is used incorrectly, i.e. as days, even though df may not be days
+    # Todo: should not be a separate functions from pan_neutral
     """
     Compute neutral values of return series individually for all cross-sections.
 
@@ -248,6 +267,7 @@ def iis_std_panel(dfx: pd.DataFrame, min_obs: int, sequential: bool = True,
     :param <int> min_obs:
     :param <bool> sequential:
     :param <bool> iis:
+    # Todo: documentation missing
 
     :return <np.ndarray> ar_sds: an array of daily standard deviations.
     """
@@ -261,6 +281,7 @@ def iis_std_panel(dfx: pd.DataFrame, min_obs: int, sequential: bool = True,
         # Therefore, take the absolute values and subsequently calculate the average
         # across the panel (inclusive of all previous dates).
         ar_sds = rolling_mean_with_nan(dfw=dfx, absolute=True)
+        # Todo: use pandas df.abs.expanding.mean() or similar
         if iis:
             iis_dfx = dfx.iloc[0:min_obs, :]
             iis_sds = np.array(iis_dfx.stack().abs().mean())
@@ -320,7 +341,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     """
     Computes z-scores for a panel around a neutral level ("zn scores").
     
-    :param <pd.Dataframe> df: standardized data frame with following necessary columns:
+    :param <pd.Dataframe> df: standardized JPMaQS dataframe with the necessary columns:
         'cid', 'xcat', 'real_date' and 'value'.
     :param <str> xcat:  extended category for which the zn_score is calculated.
     :param <List[str]> cids: cross sections for which zn_scores are calculated; default
@@ -330,28 +351,28 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     :param <str> end: latest date in ISO format. Default is None and latest date in df is
         used.
     :param <dict> blacklist: cross sections with date ranges that should be excluded from
-        the calculation of zn-scores. This means it is inputs that are blacklisted.
+        the calculation of zn-scores.
         This means that not only are there no zn-score values calculated for these
         periods, but also that they are not used for the coring of other periods.
-        N.B.: If one cross section has several blacklist periods append numbers
-        to the cross-section code.
+        N.B.: The argument is a dictionary with cross-sections as keys and tuples of
+        start and end dates of the blacklist periods in ISO formats as values.
+        If one cross section has multiple blacklist periods, numbers are added to the
+        keys (i.e. TRY_1, TRY_2, etc.)
     :param <bool> sequential: if True (default) score parameters (neutral level and
         standard deviations) are estimated sequentially with concurrently available
         information only.
     :param <int> min_obs: the minimum number of observations required to calculate
         zn_scores. Default is 261. The parameter is only applicable if the "sequential"
         parameter is set to True. Otherwise the neutral level and the standard deviation
-        are both computed in-sample and will include all realised observations.
+        are both computed in-sample and will use the full sample.
     :param <bool> iis: if True (default) zn-scores are also calculated for the initial
         sample period defined by min-obs on an in-sample basis to avoid losing history.
-        Further, if sequential is set to False, axiomatically, the parameter does not
-        apply: the entire time-period will be treated as in-sample.
+        This is irrelevant if sequential is set to False.
     :param <str> neutral: method to determine neutral level. Default is 'zero'.
         Alternatives are 'mean' and "median".
-    :param <str> est_freq: used to control the frequency at which the neutral level and
-        standard deviation are calculated. The intermediary dates will be populated using
-        a forward fill. The options are weekly, monthly & quarterly "w", "m", "q".
-        Default is daily, "d".
+    :param <str> est_freq: the frequency at which standard deviations or means are
+        are re-estimated. The options are weekly, monthly & quarterly "w", "m", "q".
+        Default is daily, "d". Re-estimation is performed at period end.
     :param <float> thresh: threshold value beyond which scores are winsorized,
         i.e. contained at that threshold. The threshold is the maximum absolute
         score value that the function is allowed to produce. The minimum threshold is 1
@@ -405,6 +426,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     if pan_weight < 1:
 
         arr_neutral = cross_neutral(dfw, neutral, sequential, min_obs, iis)
+        # Todo: should be same function as pan_neutral.
         dfx = dfw.sub(arr_neutral, axis='rows')
 
         no_cids = len(cross_sections)
@@ -477,7 +499,7 @@ if __name__ == "__main__":
                             min_obs=min_obs, iis=False)
 
     df_output = make_zn_scores(dfd, xcat='XR', sequential=False, cids=cids, iis=True,
-                               neutral='mean', pan_weight=1.0, min_obs = 261)
+                               neutral='mean', pan_weight=1.0, min_obs=261)
 
     df_cross = make_zn_scores(dfd, 'XR', cids, start="2010-01-04",
                               sequential=False, neutral='mean',
