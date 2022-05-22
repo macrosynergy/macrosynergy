@@ -410,6 +410,8 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
     if est_freq != "d":
         dfw = dfw.resample(pd_freq[est_freq], axis=0, convention='end').last()
+        # Todo: Fatal bug. This means subsequent applications of pen_neutral etc.
+        #  are based on the downsampled dataframe. All means/SDs are incorrect.
 
     no_dates = dfw.shape[0]
     cross_sections = dfw.columns
