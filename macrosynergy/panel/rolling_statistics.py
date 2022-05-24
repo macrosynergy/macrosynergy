@@ -20,6 +20,11 @@ def rolling_mean_with_nan(dfw: pd.DataFrame, absolute: bool = False):
         the series is defined over.
     """
 
+    assert isinstance(dfw, pd.DataFrame), "Method expects to receive a pd.DataFrame."
+    error_index = "The index of the DataFrame must be timestamps."
+    assert all([isinstance(d, pd.Timestamp) for d in dfw.index]), error_index
+    assert isinstance(absolute, bool), "Boolean value expected."
+
     data = dfw.to_numpy()
 
     no_rows = dfw.shape[0]
