@@ -35,6 +35,8 @@ def func_executor(df: pd.DataFrame, neutral: str, n: int,
     elif neutral == "mean":
         # If daily frequency, utilise the computationally faster algorithm.
         ar_neutral = rolling_mean_with_nan(dfw=df)
+        # Todo: a rolling statistic is incorrect and we cannot have another level
+        #   of custom function (4x nested). Please use panda's .expanding().mean()
     else:
         ar_neutral = np.array([df.loc[f_date:d, :].stack().median()
                                for d in dates_iter])
@@ -42,6 +44,8 @@ def func_executor(df: pd.DataFrame, neutral: str, n: int,
     neutral_df = pd.DataFrame(data=ar_neutral, index=dates_iter)
     if not daily:
         neutral_df = neutral_df.fillna(method='ffill')
+        # Todo: Bug: Nothing to fill as this is the downsampled df, not the daily df
+        # Todo: I thing you need: neural_df = neutral_df.reindex(df.index).ffill()
 
     return neutral_df
 
@@ -156,6 +160,7 @@ def index_info(df_row_no: int, column: pd.Series, min_obs: int):
 
     return df_row_no, first_date, date_index
 
+
 def in_sample(neutral: str, iis_period: pd.Series):
     """
     Helper function for in-sampling.
@@ -173,6 +178,7 @@ def in_sample(neutral: str, iis_period: pd.Series):
         neutral_iis = iis_period.median()
 
     return float(neutral_iis)
+
 
 def neutral_calc(column: pd.Series, dates_iter: List[pd.Timestamp], iis: bool,
                  neutral: str, date_index: int, min_obs: int, cid: str):
@@ -226,6 +232,7 @@ def neutral_calc(column: pd.Series, dates_iter: List[pd.Timestamp], iis: bool,
     neutral_df.columns = [cid]
     return neutral_df
 
+
 def in_sample_series(column: pd.Series, neutral: str, no_timestamps: int,
                      date_index: int, cid: str):
     """
@@ -253,6 +260,7 @@ def in_sample_series(column: pd.Series, neutral: str, no_timestamps: int,
     neutral_df.columns = [cid]
 
     return neutral_df
+
 
 def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', est_freq: str = 'd',
                   sequential: bool = False, min_obs: int = 261, iis: bool = False):
@@ -411,6 +419,7 @@ def iis_std_cross(column: pd.Series, dates_iter: List[pd.Timestamp], cid: str,
     sds_df.columns = [cid]
     return sds_df
 
+
 def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
                    start: str = None, end: str = None, blacklist: dict = None,
                    sequential: bool = True, min_obs: int = 261,  iis: bool = True,
@@ -559,6 +568,10 @@ if __name__ == "__main__":
     
     print("Uses Ralph's make_qdf() function.")
     dfd = make_qdf(df_cids, df_xcats, back_ar = 0.75)
+
+    df_output = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=True,
+                               neutral='mean', pan_weight=1.0, min_obs=261,
+                               est_freq="m")
 
     filt1 = dfd['xcat'] == 'XR'
     dfd = dfd[filt1]
