@@ -2,36 +2,59 @@
 import numpy as np
 import pandas as pd
 from typing import List
+from itertools import filterfalse
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.panel.rolling_statistics import rolling_mean_with_nan
-# Todo: do not use and remove from package
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 
-def func_executor(df: pd.DataFrame, neutral: str, n: int):
+def func_executor(df: pd.DataFrame, neutral: str, n: int,
+                  dates_iter: List[pd.Timestamp]):
     """
-    Function used to clean up the repetitive code in the below methods. Will produce the
-    evolving neutral level.
+    Used to calculate the expanding neutral level.
 
     :param <pd.DataFrame> df:
     :param <str> neutral:
     :param <int> n: number of dates the neutral level is computed over.
+    :param <List[pd.Timestamps]> dates_iter:
+
+    return <pd.DataFrame>: DataFrame containing the neutral level populated daily.
     """
 
-    if neutral == "mean":
-        return np.array([df.iloc[0:(i + 1), :].stack().mean() for i in range(n)])
+    daily = n == len(dates_iter)
+    # Inclusive of the first date and respective intervals.
+    f_date = dates_iter[0]
+
+    if neutral == "mean" and not daily:
+        # If down-sampling, the neutral level will still be computed using daily data but
+        # the calculation will occur at the stated estimation frequency using all of the
+        # preceding business dates. It is imperative to include the daily data to capture
+        # the asset's variance.
+        ar_neutral = np.array([df.loc[f_date:d, :].stack().mean()
+                               for d in dates_iter])
+    elif neutral == "mean":
+        # If daily frequency, utilise the computationally faster algorithm.
+        ar_neutral = rolling_mean_with_nan(dfw=df)
     else:
-        return np.array([df.iloc[0:(i + 1), :].stack().median() for i in range(n)])
+        ar_neutral = np.array([df.loc[f_date:d, :].stack().median()
+                               for d in dates_iter])
+
+    neutral_df = pd.DataFrame(data=ar_neutral, index=dates_iter)
+    if not daily:
+        neutral_df = neutral_df.fillna(method='ffill')
+
+    return neutral_df
 
 
-def pan_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = False,
-                min_obs: int = 261, iis: bool = False):
+def pan_neutral(df: pd.DataFrame, dates_iter: List[pd.Timestamp], neutral: str = 'zero',
+                sequential: bool = False, min_obs: int = 261, iis: bool = False):
 
     """
     Compute neutral values of return series based on a panel.
 
-    :param <pd.Dataframe> df: "wide" dataframe with time index and cross section columns.
-        It must have the frequency at which values are re-estimated.
+    :param <pd.Dataframe> df: "wide" DataFrame.
+    :param <List[pd.Timestamp]> dates_iter: controls the frequency of the neutral &
+        standard deviation calculations.
     :param <str> neutral: method to determine neutral level. Default is 'zero'.
         Alternatives are 'mean' and "median".
     :param <bool> sequential: if True (default) score parameters (neutral level and
@@ -39,16 +62,15 @@ def pan_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fals
         available information only. If False one neutral value will be calculated for
         the whole panel.
     :param <int> min_obs: minimum required observations in days.
-    :param <bool> iis: if set to True, the number of days outlined by
-    "min_obs" will be calculated in sample (single neutral value for the time period)
-    whilst the remaining days are calculated on a rolling basis. However, if False, and
-    "sequential" equals True, the rolling neutral value will be calculated from the start
-    date.
+    :param <bool> iis: if set to True, the number of days outlined by "min_obs" will be
+        calculated in sample (single neutral value for the time period) whilst the
+        remaining days are calculated on a rolling basis. However, if False,
+        and "sequential" equals True, the rolling neutral value will be calculated from
+        the start date.
 
     :return <np.ndarray> arr_neutral: row-wise neutral statistic. A single value produced
         per row. Therefore, a one-dimensional array will be returned whose length matches
         the row dimension of the dataframe df.
-
 
     NB: It is worth noting that the evolving neutral level, if the "sequential" parameter
         is set to True, will be computed using the available cross-sections on the
@@ -61,57 +83,40 @@ def pan_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fals
 
     if neutral == 'mean':
         if sequential and not iis:
-            ar_neutral = rolling_mean_with_nan(dfw=df)
-            # Todo: incorrect, use pandas df.expanding.mean()
-            ar_neutral[:min_obs] = np.nan
-            # Todo: incorrect as min_obs is defined on days, while dfw could be weeks
-            #  or months.
-            # Todo: calculate earliest date based on days (timedelta) and use
+
+            neutral_df = func_executor(df=df, neutral=neutral, n=no_rows,
+                                       dates_iter=dates_iter)
+            neutral_df.iloc[0:min_obs] = np.nan
 
         elif sequential and iis:
-            iis_neutral = np.repeat(df.iloc[0:min_obs].stack().mean(),
-                                    min_obs)
-
-            os_neutral = rolling_mean_with_nan(dfw=df)
-            # Todo: incorrect, use pandas df.expanding.mean()
-
-            os_neutral = os_neutral[min_obs:]
-            # Todo: incorrect as min_obs is defined on days, while dfw could be weeks
-            #  or months.
-            # Todo: calculate earliest date based on days (timedelta) and use
-            ar_neutral = np.concatenate([iis_neutral, os_neutral])
+            neutral_df = func_executor(df=df, neutral=neutral, n=no_rows,
+                                       dates_iter=dates_iter)
+            neutral_df.iloc[0:min_obs] = df.iloc[0:min_obs].stack().mean()
         else:  
-            ar_neutral = np.repeat(df.stack().mean(), no_rows)
+            neutral_df = pd.DataFrame(data=np.repeat(df.stack().mean(), no_rows),
+                                      index=df.index)
 
     # The median neutral level is primarily used if the sample set of data is exposed
     # heavily to outliers. In such instances, the mean statistic will misrepresent the
     # sample of data.
     elif neutral == 'median':  
         if sequential and not iis:
-            ar_neutral = func_executor(df=df, neutral=neutral,
-                                       n=no_rows)
-            # Todo: use pandas df.expanding.median()
-            ar_neutral[:min_obs] = np.nan
+            neutral_df = func_executor(df=df, neutral=neutral, n=no_rows,
+                                       dates_iter=dates_iter)
+            neutral_df.iloc[0:min_obs] = np.nan
 
         elif sequential and iis:
-            iis_neutral = np.repeat(df.iloc[0:min_obs].stack().median(), min_obs)
-
-            os_neutral = func_executor(df=df, neutral=neutral,
-                                       n=no_rows)
-            # Todo: use pandas df.expanding.median()
-
-            os_neutral = os_neutral[min_obs:]
-            # Todo: incorrect as min_obs is defined on days, while dfw could be weeks
-            #  or months.
-            # Todo: calculate earliest date based on days (timedelta) and use
-
-            ar_neutral = np.concatenate([iis_neutral, os_neutral])
+            neutral_df = func_executor(df=df, neutral=neutral, n=no_rows,
+                                       dates_iter=dates_iter)
+            neutral_df.iloc[0:min_obs] = df.iloc[0:min_obs].stack().mean()
         else:  
-            ar_neutral = np.repeat(df.stack().median(), df.shape[0])
+            neutral_df = pd.DataFrame(data=np.repeat(df.stack().median(), no_rows),
+                                      index=df.index)
     else:
-        ar_neutral = np.zeros(df.shape[0])
+        neutral_df = pd.DataFrame(data=np.zeros(no_rows), index=df.index)
 
-    return ar_neutral
+    neutral_df.columns = ['value']
+    return neutral_df
 
 
 def first_value(column: pd.Series):
@@ -152,45 +157,106 @@ def index_info(df_row_no: int, column: pd.Series, min_obs: int):
 
     return df_row_no, first_date, date_index
 
+def in_sample(neutral: str, iis_period: pd.Series):
+    """
+    Helper function for in-sampling.
 
-def in_sampling(column: pd.Series, neutral: str, active_days: int,
-                date_index: int, min_obs: int):
+    :param <str> neutral:
+    :param <pd.Series> iis_period: in-sampling period - a single neutral value for the
+        entire period.
+
+    :return <float> single in-sampling return.
+    """
+
+    if neutral == "mean":
+        neutral_iis = iis_period.mean()
+    else:
+        neutral_iis = iis_period.median()
+
+    return float(neutral_iis)
+
+def neutral_calc(column: pd.Series, dates_iter: List[pd.Timestamp], iis: bool,
+                 neutral: str, date_index: int, min_obs: int, cid: str):
     """
     To prevent loss of information, calculate the first minimum number of observation
     days using an in-sampling technique (time-series data is realised, and subsequently
     not computed on a rolling basis).
 
     :param <pd.Series> column: individual cross-section's time-series data.
+    :param <List[pd.Timestamp]> dates_iter: controls the frequency of the neutral &
+        standard deviation calculations.
+    :param <bool> iis:
     :param <str> neutral:
-    :param <int> active_days: number of active days the cross-section is defined over.
     :param <int> date_index: index of the first active trading day.
     :param <int> min_obs:
+    :param <str> cid: associated cross-section
+
+    :return <pd.DataFrame> computed neutral levels.
+    """
+
+    column_r = column[date_index:]
+    first_date = column_r.index[0]
+
+    r_dates = list(filterfalse(lambda d: d < first_date, dates_iter))
+    ur_dates = [d for d in dates_iter if d not in r_dates]
+
+    iis_period = column_r.iloc[:min_obs]
+    if neutral == "mean":
+        os_neutral = np.array([column_r.loc[first_date:d].mean()
+                               for d in r_dates])
+    else:
+        os_neutral = np.array([column.loc[dates_iter[0]:d].median()
+                               for d in r_dates])
+
+    undefined = np.empty(len(ur_dates))
+    undefined[:] = np.nan
+    ar_neutral = np.concatenate([undefined, os_neutral])
+    neutral_df = pd.DataFrame(data=ar_neutral, index=(ur_dates + r_dates))
+    neutral_df.index.name = 'real_date'
+    dates_df = pd.DataFrame(index=column.index)
+
+    neutral_df = dates_df.merge(neutral_df, how='left', on='real_date')
+    neutral_df = neutral_df.fillna(method='ffill')
+
+    iis_end = (date_index + min_obs)
+    if iis:
+        neutral_df.iloc[date_index: iis_end] = in_sample(neutral, iis_period)
+    else:
+        neutral_df.iloc[date_index: iis_end] = np.nan
+
+    neutral_df.columns = [cid]
+    return neutral_df
+
+def in_sample_series(column: pd.Series, neutral: str, no_timestamps: int,
+                     date_index: int, cid: str):
+    """
+    The return series' neutral level is calculated exclusively in-sample.
+
+    :param <pd.Series> column: individual cross-section's time-series data including any
+        preceding unrealised timestamps.
+    :param <str> neutral:
+    :param <int> no_timestamps: number of realised dates the cross-section is defined
+        over.
+    :param <int> date_index: index of the first realised return.
+    :param <str> cid: associated cross-section.
 
     """
 
-    iis_period = column.iloc[:min_obs]
-    if neutral == "mean":
-        neutral_iis = iis_period.mean()
-        os_neutral = np.array([column.iloc[0:(i + 1)].mean()
-                               for i in range(active_days)])
+    column_r = column[date_index:]
+    if neutral == 'mean':
+        ar_neutral = np.repeat(column_r.mean(), no_timestamps)
     else:
-        neutral_iis = iis_period.median()
-        os_neutral = np.array([column.iloc[0:(i + 1)].median()
-                               for i in range(active_days)])
+        ar_neutral = np.repeat(column_r.median(), no_timestamps)
+    undefined = np.empty(date_index)
+    undefined[:] = np.nan
+    ar_neutral = np.concatenate([undefined, ar_neutral], axis=0)
+    neutral_df = pd.DataFrame(data=ar_neutral, index=column.index)
+    neutral_df.columns = [cid]
 
-    iis_neutral = np.repeat(neutral_iis, min_obs)
-    os_neutral = os_neutral[min_obs:]
-    prior_to_first = np.empty(date_index)
-    prior_to_first[:] = np.nan
-    arr = np.concatenate([prior_to_first, iis_neutral, os_neutral])
+    return neutral_df
 
-    return arr
-
-
-def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = False,
-                  min_obs: int = 261, iis: bool = False):
-    # Todo: min_obs is used incorrectly, i.e. as days, even though df may not be days
-    # Todo: should not be a separate functions from pan_neutral
+def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', est_freq: str = 'd',
+                  sequential: bool = False, min_obs: int = 261, iis: bool = False):
     """
     Compute neutral values of return series individually for all cross-sections.
 
@@ -198,78 +264,80 @@ def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', sequential: bool = Fa
         consist of each cross-section's return series.
     :param <str> neutral: method to determine neutral level. Default is 'zero'.
         Alternatives are 'mean' and "median".
+    :param <str> est_freq: the frequency at which standard deviations or means are
+        are re-estimated.
     :param <bool> sequential: if True (default) score parameters (neutral level and
         standard deviations) are estimated sequentially using the preceding dates'
         realised returns. If False one neutral value will be calculated for the
-        whole panel.
+        whole cross-section.
     :param <int> min_obs:
     :param <bool> iis:
 
-    :return <np.ndarray> arr_neutral: column-wise neutral statistic. Same dimensions as
+    :return <pd.DataFrame> pd_neutral: column-wise neutral statistic. Same dimensions as
         the received DataFrame.
-    """   
-    cross_sections = df.columns
-    no_dates = df.shape[0]
-    no_cids = len(cross_sections)
-    arr_neutral = np.zeros((no_dates, no_cids))
+    """
+
+    dates_iter = pd.date_range(start=df.index[0], end=df.index[-1], freq=est_freq)
 
     if neutral != 'zero':
-        for i, cross in enumerate(cross_sections):
+        pd_neutral = pd.DataFrame(index=df.index)
+        for i, cross in enumerate(df.columns):
 
             column = df.iloc[:, i]
-            original_index_no = no_dates
+            original_index_no = df.shape[0]
             df_row_no, first_date, date_index = index_info(original_index_no, column,
                                                            min_obs=min_obs)
-            column = column[date_index:]
             if neutral == "mean":
                 if sequential and not iis:
-                    mean_arr = np.array([column[0:(j + 1)].mean()
-                                         for j in range(df_row_no)])
-
-                    arr_neutral[date_index:, i] = mean_arr
-                    arr_neutral[:date_index, i] = np.nan
-                    arr_neutral[date_index:(date_index + min_obs), i] = np.nan
-
+                    neutral_df = neutral_calc(column=column, dates_iter=dates_iter,
+                                              iis=iis, neutral=neutral,
+                                              date_index=date_index, min_obs=min_obs,
+                                              cid=cross)
                 elif sequential and iis:
-                    arr_neutral[:, i] = in_sampling(column, neutral, df_row_no,
-                                                    date_index, min_obs)
+                    neutral_df = neutral_calc(column=column, dates_iter=dates_iter,
+                                              iis=iis, neutral=neutral,
+                                              date_index=date_index, min_obs=min_obs,
+                                              cid=cross)
                 else:
-                    arr_neutral[date_index:, i] = np.repeat(column.mean(), df_row_no)
-                    arr_neutral[:date_index, i] = np.nan
+                    neutral_df = in_sample_series(column, neutral, df_row_no, date_index,
+                                                  cross)
             else:
                 if sequential and not iis:
-
-                    median_arr = np.array([column[0:(j + 1)].median()
-                                           for j in range(df_row_no)])
-
-                    arr_neutral[date_index:, i] = median_arr
-                    arr_neutral[:date_index, i] = np.nan
-                    arr_neutral[date_index:(date_index + min_obs), i] = np.nan
-
+                    neutral_df = neutral_calc(column=column, dates_iter=dates_iter,
+                                              iis=iis, neutral=neutral,
+                                              date_index=date_index, min_obs=min_obs,
+                                              cid=cross)
                 elif sequential and iis:
-                    arr_neutral[:, i] = in_sampling(column, neutral, df_row_no,
-                                                    date_index, min_obs)
+                    neutral_df = neutral_calc(column=column, dates_iter=dates_iter,
+                                              iis=iis, neutral=neutral,
+                                              date_index=date_index, min_obs=min_obs,
+                                              cid=cross)
                 else:
-                    arr_neutral[date_index:, i] = np.repeat(column.median(), df_row_no)
-                    arr_neutral[:date_index, i] = np.nan
+                    neutral_df = in_sample_series(column, neutral, df_row_no, date_index,
+                                                  cross)
+            pd_neutral = pd_neutral.join(neutral_df, on='real_date', how='left')
+    else:
+        pd_neutral = pd.DataFrame(data=np.zeros(df.shape), index=df.index,
+                                  columns=df.columns)
 
-    return arr_neutral
+    return pd_neutral
 
 
-def iis_std_panel(dfx: pd.DataFrame, min_obs: int, sequential: bool = True,
-                  iis: bool = True):
+def iis_std_panel(dfx: pd.DataFrame, dates_iter: List[pd.Timestamp], min_obs: int,
+                  sequential: bool = True, iis: bool = True):
     """
     Function designed to compute the standard deviations but accounts for in-sampling
     period. The in-sampling standard deviation will be a fixed value.
 
     :param <pd.DataFrame> dfx: DataFrame recording the differences from the neutral
         level.
+    :param <List[pd.Timestamp]> dates_iter: controls the frequency of the neutral &
+        standard deviation calculations.
     :param <int> min_obs:
     :param <bool> sequential:
     :param <bool> iis:
-    # Todo: documentation missing
 
-    :return <np.ndarray> ar_sds: an array of daily standard deviations.
+    :return <pd.DataFrame> df_sds: a DataFrame of daily standard deviations.
     """
 
     no_dates = dfx.shape[0]
@@ -280,36 +348,45 @@ def iis_std_panel(dfx: pd.DataFrame, min_obs: int, sequential: bool = True,
         # panel for each preceding date).
         # Therefore, take the absolute values and subsequently calculate the average
         # across the panel (inclusive of all previous dates).
-        ar_sds = rolling_mean_with_nan(dfw=dfx, absolute=True)
-        # Todo: use pandas df.abs.expanding.mean() or similar
+        df_sds = func_executor(df=dfx.abs(), neutral='mean', n=dfx.shape[0],
+                               dates_iter=dates_iter)
         if iis:
             iis_dfx = dfx.iloc[0:min_obs, :]
             iis_sds = np.array(iis_dfx.stack().abs().mean())
-            ar_sds[:min_obs] = iis_sds
+            df_sds.iloc[0:min_obs] = iis_sds
     else:
-        ar_sds = np.repeat(dfx.stack().abs().mean(), no_dates)
+        df_sds = pd.DataFrame(np.repeat(dfx.stack().abs().mean(), no_dates),
+                              index=dfx.index)
 
-    return ar_sds
+    df_sds.columns = ['value']
+    return df_sds
 
 
-def iis_std_cross(column: pd.Series, min_obs: int, date_index: int = 0,
-                  sequential: bool = True, iis: bool = True):
+def iis_std_cross(column: pd.Series, dates_iter: List[pd.Timestamp], cid: str,
+                  min_obs: int, date_index: int = 0, sequential: bool = True,
+                  iis: bool = True):
     """
     Standard deviation for cross-sectional zn_scores. Will account for the in-sampling
     period.
 
     :param <pd.Series> column: individual cross-section's deviation from the respective
         cross-section's neutral level.
+    :param <List[pd.Timestamp]> dates_iter: controls the frequency of the neutral &
+        standard deviation calculations.
+    :param <str> cid: associated cross-section.
     :param <int> min_obs:
     :param <int> date_index: index of the first realised value for each series. Only
         applicable for cross-sectional zn_scores.
     :param <bool> sequential:
     :param <bool> iis:
 
-    :return <np.ndarray> ar_sds:
+    :return <pd.DataFrame> sds_df:
     """
 
+    # Inclusive of undefined dates.
+    daily = column.size == len(dates_iter)
     no_dates = column.size
+
     if sequential:
         # The absolute difference from the neutral level, and subsequently compute the
         # rolling standard deviation.
@@ -317,20 +394,23 @@ def iis_std_cross(column: pd.Series, min_obs: int, date_index: int = 0,
         # standard deviation from the active dates onwards. The preceding dates will
         # remain NaN values allowing the array to match the dimensions of the original
         # pivoted DataFrame.
-        ar_sds = np.array([column[0:(j + 1)].abs().mean() for j in range(no_dates)])
+        ar_sds = np.array([column.loc[column.index[0]:d].abs().mean()
+                           for d in dates_iter])
+        sds_df = pd.DataFrame(data=ar_sds, index=dates_iter)
+        if not daily:
+            sds_df = sds_df.fillna(method='ffill')
 
         if iis:
             iis_end_date = date_index + min_obs
             iis_column = column[date_index:iis_end_date]
-            iis_sds = np.array(iis_column.abs().mean())
-            ar_sds[date_index: iis_end_date] = iis_sds
+            sds_df.iloc[date_index: iis_end_date] = iis_column.abs().mean()
 
     else:
         sds_value = np.array(column.abs().mean())
-        ar_sds = np.repeat(sds_value, no_dates)
+        sds_df = pd.DataFrame(data=np.repeat(sds_value, no_dates), index=column.index)
 
-    return ar_sds
-
+    sds_df.columns = [cid]
+    return sds_df
 
 def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
                    start: str = None, end: str = None, blacklist: dict = None,
@@ -341,7 +421,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     """
     Computes z-scores for a panel around a neutral level ("zn scores").
     
-    :param <pd.Dataframe> df: standardized JPMaQS dataframe with the necessary columns:
+    :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
         'cid', 'xcat', 'real_date' and 'value'.
     :param <str> xcat:  extended category for which the zn_score is calculated.
     :param <List[str]> cids: cross sections for which zn_scores are calculated; default
@@ -350,10 +430,10 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df is
         used.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from
+    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
         the calculation of zn-scores.
         This means that not only are there no zn-score values calculated for these
-        periods, but also that they are not used for the coring of other periods.
+        periods, but also that they are not used for the scoring of other periods.
         N.B.: The argument is a dictionary with cross-sections as keys and tuples of
         start and end dates of the blacklist periods in ISO formats as values.
         If one cross section has multiple blacklist periods, numbers are added to the
@@ -400,59 +480,47 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     error_freq = f"String Object required and must be one of the available frequencies: " \
                  f"{frequencies}."
     assert isinstance(est_freq, str) and est_freq in frequencies, error_freq
-    pd_freq = dict(zip(frequencies[1:], ['W-Fri', 'BM', 'BQ']))
+    pd_freq = dict(zip(frequencies, ['B', 'W-Fri', 'BM', 'BQ']))
 
     df = df.loc[:, ['cid', 'xcat', 'real_date', 'value']]
     df = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end,
                    blacklist=blacklist)
+    s_date = min(df['real_date'])
+    e_date = max(df['real_date'])
+    dates_iter = pd.date_range(start=s_date, end=e_date, freq=pd_freq[est_freq])
+
     dfw = df.pivot(index='real_date', columns='cid', values='value')
-    dates_dfw = pd.DataFrame(data=None, index=dfw.index)
-
-    if est_freq != "d":
-        dfw = dfw.resample(pd_freq[est_freq], axis=0, convention='end').last()
-        # Todo: Fatal bug. This means subsequent applications of pen_neutral etc.
-        #  are based on the downsampled dataframe. All means/SDs are incorrect.
-
-    no_dates = dfw.shape[0]
     cross_sections = dfw.columns
 
     if pan_weight > 0:
 
-        ar_neutral = pan_neutral(dfw, neutral, sequential, min_obs, iis)
-        dfx = dfw.sub(ar_neutral, axis='rows')
-        ar_sds = iis_std_panel(dfx, min_obs=min_obs, sequential=sequential, iis=iis)
-        dfw_zns_pan = dfx.div(ar_sds, axis='rows')
+        df_neutral = pan_neutral(dfw, dates_iter, neutral, sequential, min_obs, iis)
+        dfx = dfw.sub(df_neutral['value'], axis='rows')
+        ar_sds = iis_std_panel(dfx, min_obs=min_obs, sequential=sequential, iis=iis,
+                               dates_iter=dates_iter)
+        dfw_zns_pan = dfx.div(ar_sds['value'], axis='rows')
     else:
         dfw_zns_pan = dfw * 0
 
     if pan_weight < 1:
 
-        arr_neutral = cross_neutral(dfw, neutral, sequential, min_obs, iis)
-        # Todo: should be same function as pan_neutral.
+        arr_neutral = cross_neutral(dfw, neutral, est_freq, sequential, min_obs, iis)
         dfx = dfw.sub(arr_neutral, axis='rows')
+        pd_sds = pd.DataFrame(index=dfx.index)
 
-        no_cids = len(cross_sections)
-        ar_sds = np.empty((no_dates, no_cids))
-
-        for i in range(no_cids):
+        for i, c in enumerate(cross_sections):
             column = dfx.iloc[:, i]
             date_index = first_value(column)
-            ar_sds[:, i] = iis_std_cross(column, min_obs, date_index,
-                                         sequential=sequential, iis=iis)
-        dfw_zns_css = dfx.div(ar_sds, axis='rows')
+            std_cross = iis_std_cross(column=column, dates_iter=dates_iter, cid=c,
+                                      min_obs=min_obs, date_index=date_index,
+                                      sequential=sequential,
+                                      iis=iis)
+            pd_sds = pd_sds.join(std_cross, on='real_date', how='left')
+
+        dfw_zns_css = dfx.div(pd_sds, axis='rows')
+
     else:
         dfw_zns_css = dfw * 0
-
-    # Forward fill to account for the down-sampling after the zn_scores have been
-    # computed.
-    if est_freq != "d":
-        dfw_zns_pan = dates_dfw.merge(dfw_zns_pan, how='left', on=['real_date'])
-        dfw_zns_css = dates_dfw.merge(dfw_zns_css, how='left', on=['real_date'])
-
-        dfw_zns_css = dfw_zns_css.fillna(method='ffill')
-        dfw_zns_pan = dfw_zns_pan.fillna(method='ffill')
-        dfw_zns_pan.columns.name = 'cid'
-        dfw_zns_css.columns.name = 'cid'
 
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
     dfw_zns = dfw_zns.dropna(axis=0, how='all')
@@ -497,17 +565,6 @@ if __name__ == "__main__":
     dfd = dfd[filt1]
     dfw = dfd.pivot(index='real_date', columns='cid', values='value')
     min_obs = 251
-    ar_mean = cross_neutral(dfw, neutral='mean', sequential=True,
+    df_mean = cross_neutral(dfw, neutral='mean', est_freq='m', sequential=True,
                             min_obs=min_obs, iis=False)
-
-    df_output = make_zn_scores(dfd, xcat='XR', sequential=False, cids=cids, iis=True,
-                               neutral='mean', pan_weight=1.0, min_obs=261)
-
-    df_cross = make_zn_scores(dfd, 'XR', cids, start="2010-01-04",
-                              sequential=False, neutral='mean',
-                              iis=False, thresh=None, pan_weight=0, postfix='ZN')
-
-    df_ms = make_zn_scores(dfd, 'XR', sequential=False, cids=cids,
-                           neutral='zero', pan_weight=1, est_freq = 'q',
-                           min_obs=min_obs, iis=False, thresh=None)
-    print(df_ms)
+    print(df_mean)
