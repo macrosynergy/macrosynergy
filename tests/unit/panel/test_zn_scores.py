@@ -36,56 +36,67 @@ class TestAll(unittest.TestCase):
         self.__dict__['dfw'] = self.dfd.pivot(index='real_date', columns='cid',
                                               values='value')
 
+        daily_dates = pd.date_range(start='2010-01-01', end='2020-10-30', freq='B')
+        self.__dict__['dates_iter'] = daily_dates
+
     def test_pan_neutral(self):
 
         self.dataframe_construction()
 
-        ar_neutral = pan_neutral(self.dfw, neutral='mean', sequential=True)
-        self.assertIsInstance(ar_neutral, np.ndarray)  # Check type of output.
+        df_neutral = pan_neutral(df=self.dfw, dates_iter=self.dates_iter, neutral='mean',
+                                 sequential=True)
+        self.assertIsInstance(df_neutral, pd.DataFrame)  # Check type of output.
         # Test length of neutral array.
-        self.assertTrue(self.dfw.shape[0] == len(ar_neutral))
+        self.assertTrue(self.dfw.shape[0] == df_neutral.shape[0])
 
-        ar_neutral = pan_neutral(self.dfw, neutral='mean', sequential=False)
+        df_neutral = pan_neutral(self.dfw, dates_iter=self.dates_iter, neutral='mean',
+                                 sequential=False)
         # Check first value equal to panel mean.
-        self.assertEqual(ar_neutral[0], self.dfw.stack().mean())
+        self.assertEqual(float(df_neutral.iloc[0]), self.dfw.stack().mean())
         # Check also last value equal to panel mean.
-        self.assertEqual(ar_neutral[self.dfw.shape[0]-1], self.dfw.stack().mean())
+        last_val = float(df_neutral.iloc[self.dfw.shape[0] - 1])
+        self.assertEqual(last_val, self.dfw.stack().mean())
 
-        ar_neutral = pan_neutral(self.dfw, neutral='mean', sequential=True)
-        val = round(ar_neutral[999], 4)
+        df_neutral = pan_neutral(self.dfw, dates_iter=self.dates_iter, neutral='mean',
+                                 sequential=True)
+        val = round(float(df_neutral.iloc[999]), 4)
         benchmark = self.dfw.iloc[0:1000, :].stack().mean()
         self.assertEqual(val, round(benchmark, 4))
 
-        ar_neutral = pan_neutral(self.dfw, neutral='median', sequential=False)
+        df_neutral = pan_neutral(self.dfw, dates_iter=self.dates_iter, neutral='median',
+                                 sequential=False)
         # Check first value equal to panel median.
-        self.assertEqual(ar_neutral[0], self.dfw.stack().median())
+        self.assertEqual(float(df_neutral.iloc[0]), self.dfw.stack().median())
         # Check last value equal to panel median.
-        self.assertEqual(ar_neutral[self.dfw.shape[0]-1], self.dfw.stack().median())
+        last_val = float(df_neutral.iloc[self.dfw.shape[0] - 1])
+        self.assertEqual(last_val,
+                         self.dfw.stack().median())
 
-        ar_neutral = pan_neutral(self.dfw, neutral='median', sequential=True,
-                                 min_obs=261, iis=False)
-        val = ar_neutral[999]
+        df_neutral = pan_neutral(self.dfw, dates_iter=self.dates_iter, neutral='median',
+                                 sequential=True, min_obs=261, iis=False)
+        val = float(df_neutral.iloc[999])
         median_benchmark = self.dfw.iloc[0:1000, :].stack().median()
         self.assertEqual(val, median_benchmark)
 
         # Check the application of the in-sampling procedure.
         # The first testcase set the in-sample to False and the expected values for the
         # first minimum number of observation days should be equal to np.nan.
-        ar_neutral = pan_neutral(self.dfw, neutral='mean', sequential=True,
-                                 min_obs=261, iis=False)
-        self.assertTrue(all(np.nan_to_num(ar_neutral[:261]) == 0.0))
+        df_neutral = pan_neutral(self.dfw, dates_iter=self.dates_iter, neutral='mean',
+                                 sequential=True, min_obs=261, iis=False)
+        self.assertTrue(all(np.nan_to_num(df_neutral.iloc[:261]) == 0.0))
 
         # Check the inclusion of the in-sampling data being included in the returned
         # Array. The first minimum number observations, for the neutral level, will all
         # be the same value.
-        ar_neutral = pan_neutral(self.dfw, neutral='mean', sequential=True,
-                                 min_obs=261, iis=True)
-        self.assertTrue(all(ar_neutral[:261] == ar_neutral[0]))
+        df_neutral = pan_neutral(self.dfw, dates_iter=self.dates_iter, neutral='mean',
+                                 sequential=True, min_obs=261, iis=True)
+        self.assertTrue(all(df_neutral.iloc[:261] == df_neutral.iloc[0]))
 
         # Check the above for the application of 'median' as the neutral level.
-        ar_neutral = pan_neutral(self.dfw, neutral='median', sequential=True,
-                                 min_obs=261, iis=True)
-        self.assertTrue(all(ar_neutral[:261] == ar_neutral[0]))
+        # Unable to check for equality on np.nan values.
+        df_neutral = pan_neutral(self.dfw, dates_iter=self.dates_iter, neutral='median',
+                                 sequential=True, min_obs=261, iis=True)
+        self.assertTrue(all(df_neutral.iloc[:261] == df_neutral.iloc[0]))
 
     @staticmethod
     def valid_index(column):
@@ -107,16 +118,16 @@ class TestAll(unittest.TestCase):
 
         self.dataframe_construction()
 
-        arr_neutral = cross_neutral(self.dfw, 'mean', False)
-        self.assertIsInstance(arr_neutral, np.ndarray)
+        df_neutral = cross_neutral(df=self.dfw, neutral='mean', sequential=False)
+        self.assertIsInstance(df_neutral, pd.DataFrame)
 
         df_shape = self.dfw.shape
-        self.assertEqual(df_shape, arr_neutral.shape)
+        self.assertEqual(df_shape, df_neutral.shape)
 
         epsilon = 0.0001
 
-        ar_mean = cross_neutral(self.dfw, neutral='mean', sequential=False)
-        ar_median = cross_neutral(self.dfw, neutral='median', sequential=False)
+        df_mean = cross_neutral(self.dfw, neutral='mean', sequential=False)
+        df_median = cross_neutral(self.dfw, neutral='median', sequential=False)
 
         # Arbitrarily chosen index to test the logic.
         index = 411
@@ -126,7 +137,7 @@ class TestAll(unittest.TestCase):
             column = np.squeeze(column, axis=1)
             column = self.handle_nan(column)
 
-            mean_col = self.handle_nan(ar_mean[:, i])
+            mean_col = self.handle_nan(df_mean.iloc[:, i])
             
             mean = np.sum(column) / len(column)
             dif = np.abs(mean_col - mean)
@@ -134,7 +145,7 @@ class TestAll(unittest.TestCase):
             self.assertTrue(np.nan_to_num(dif[index]) < epsilon)
 
             median = np.median(column)
-            median_col = self.handle_nan(ar_median[:, i])
+            median_col = self.handle_nan(df_median.iloc[:, i])
             median_col = list(set(median_col))
             self.assertTrue(len(median_col) == 1)
 
@@ -144,14 +155,14 @@ class TestAll(unittest.TestCase):
             # self.assertTrue(dif < epsilon)
 
         min_obs = 261
-        ar_mean = cross_neutral(self.dfw, neutral='mean', sequential=True,
+        df_mean = cross_neutral(self.dfw, neutral='mean', sequential=True,
                                 min_obs=min_obs, iis=False)
-        ar_median = cross_neutral(self.dfw, neutral='median', sequential=True,
+        df_median = cross_neutral(self.dfw, neutral='median', sequential=True,
                                   min_obs=min_obs, iis=True)
         cross_sections = list(self.dfw.columns)
 
         for i, cid in enumerate(cross_sections):
-            column_mean = ar_mean[:, i]
+            column_mean = df_mean.iloc[:, i]
 
             series_mean = pd.Series(data=column_mean)
             mean_index = self.valid_index(series_mean)
@@ -164,11 +175,11 @@ class TestAll(unittest.TestCase):
             cum_mean = column.expanding(min_periods=(min_obs + 1)).mean()
             cum_mean = self.handle_nan(cum_mean[cid].to_numpy())
 
-            dif = self.handle_nan(ar_mean[:, i]) - cum_mean
+            dif = self.handle_nan(df_mean.iloc[:, i]) - cum_mean
             # Check correct cumulative means.
             self.assertTrue(np.nan_to_num(dif[index]) < epsilon)
 
-            iis_period = ar_median[date_index:(date_index + min_obs), i]
+            iis_period = df_median.iloc[date_index:(date_index + min_obs), i]
             first_val_iis = iis_period[0]
             self.assertTrue(np.all(iis_period == first_val_iis))
 
@@ -206,9 +217,9 @@ class TestAll(unittest.TestCase):
                                   thresh=None, postfix='ZN')
 
         df_panel = df_panel.pivot(index='real_date', columns='cid', values='value')
-        ar_neutral = pan_neutral(self.dfw, neutral='mean', sequential=True,
-                                 min_obs=0, iis=False)
-        dfx = self.dfw.sub(ar_neutral, axis='rows')
+        df_neutral = pan_neutral(self.dfw, dates_iter=self.dates_iter, neutral='mean',
+                                 sequential=True, min_obs=0, iis=False)
+        dfx = self.dfw.sub(df_neutral['value'], axis='rows')
         
         ar_sds = np.array([dfx.iloc[0:(i + 1), :].stack().abs().mean()
                            for i in range(dfx.shape[0])])
