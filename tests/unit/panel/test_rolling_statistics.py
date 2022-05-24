@@ -57,6 +57,19 @@ class TestAll(unittest.TestCase):
         bm_expanding = self.dfw.mean(axis=1)
         bm_expanding = bm_expanding.expanding(min_periods=1).mean()
 
+        # Test on another category to confirm the logic.
+        dfd_cry = self.dfd[self.dfd['xcat'] == 'CRY']
+        dfw_cry = dfd_cry.pivot(index='real_date', columns='cid', values='value')
+
+        ar_neutral = rolling_mean_with_nan(dfw=dfw_cry)
+        benchmark_pandas_cry = [dfw_cry.iloc[0:(i + 1), :].stack().mean()
+                                for i in range(self.no_timestamps)]
+
+        self.assertTrue(len(ar_neutral) == len(benchmark_pandas_cry))
+        for i, elem in enumerate(ar_neutral):
+            bm_elem_cry = round(benchmark_pandas_cry[i], 4)
+            self.assertTrue(round(elem, 4) == bm_elem_cry)
+
 
 if __name__ == '__main__':
 
