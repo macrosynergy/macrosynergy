@@ -68,9 +68,8 @@ def pan_neutral(df: pd.DataFrame, dates_iter: List[pd.Timestamp], neutral: str =
         and "sequential" equals True, the rolling neutral value will be calculated from
         the start date.
 
-    :return <np.ndarray> arr_neutral: row-wise neutral statistic. A single value produced
-        per row. Therefore, a one-dimensional array will be returned whose length matches
-        the row dimension of the dataframe df.
+    :return <pd.DataFrame> neutral_df: row-wise neutral statistic. A single value
+        produced per timestamp.
 
     NB: It is worth noting that the evolving neutral level, if the "sequential" parameter
         is set to True, will be computed using the available cross-sections on the
