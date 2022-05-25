@@ -9,7 +9,7 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 
 def func_executor(df: pd.DataFrame, neutral: str, n: int,
-                  dates_iter: List[pd.Timestamp]):
+                  dates_iter: List[pd.Timestamp], min_obs: int = 261):
     """
     Used to calculate the expanding neutral level.
 
@@ -17,6 +17,7 @@ def func_executor(df: pd.DataFrame, neutral: str, n: int,
     :param <str> neutral:
     :param <int> n: number of dates the neutral level is computed over.
     :param <List[pd.Timestamps]> dates_iter:
+    :param <int> min_obs:
 
     return <pd.DataFrame>: DataFrame containing the neutral level populated daily.
     """
@@ -36,6 +37,8 @@ def func_executor(df: pd.DataFrame, neutral: str, n: int,
     elif neutral == "mean":
         # If daily frequency, utilise the computationally faster algorithm.
         ar_neutral = rolling_mean_with_nan(dfw=df)
+        # In-sampling period.
+        ar_neutral[:min_obs] = np.nan
     else:
         ar_neutral = np.array([df.loc[f_date:d, :].stack().median()
                                for d in dates_iter])
@@ -98,12 +101,11 @@ def pan_neutral(df: pd.DataFrame, dates_iter: List[pd.Timestamp], neutral: str =
         elif sequential and iis:
             neutral_df = func_executor(df=df, neutral=neutral, n=no_rows,
                                        dates_iter=dates_iter)
-            # Convert to a one-dimensional DataFrame to facilitate pd.apply() method
-            # to calculate in-sampling period. The pd.stack() feature removes the
-            # unrealised cross-sections.
-            iis_period = pd.DataFrame(df.iloc[0:min_obs].stack().to_numpy())
-            iis_val = iis_period.apply(func_dict[neutral])
-            neutral_df.iloc[0:min_obs] = float(iis_val)
+            # The back-fill mechanism will use the next valid observation to fill the
+            # gap. The aforementioned observation date's calculation will be inclusive of
+            # the entire in-sampling period. Therefore, use the calculation to populate
+            # the in-sampling period.
+            neutral_df = neutral_df.fillna(method='backfill')
         else:
             iis_period = pd.DataFrame(df.stack().to_numpy())
             neutral_val = iis_period.apply(func_dict[neutral])
