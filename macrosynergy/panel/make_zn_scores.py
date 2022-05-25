@@ -24,6 +24,7 @@ def func_executor(df: pd.DataFrame, neutral: str, n: int,
     daily = n == len(dates_iter)
     # Inclusive of the first date and respective intervals.
     f_date = dates_iter[0]
+    dates_df = pd.DataFrame(index=df.index)
 
     if neutral == "mean" and not daily:
         # If down-sampling, the neutral level will still be computed using daily data but
@@ -35,17 +36,16 @@ def func_executor(df: pd.DataFrame, neutral: str, n: int,
     elif neutral == "mean":
         # If daily frequency, utilise the computationally faster algorithm.
         ar_neutral = rolling_mean_with_nan(dfw=df)
-        # Todo: a rolling statistic is incorrect and we cannot have another level
-        #   of custom function (4x nested). Please use panda's .expanding().mean()
     else:
         ar_neutral = np.array([df.loc[f_date:d, :].stack().median()
                                for d in dates_iter])
 
     neutral_df = pd.DataFrame(data=ar_neutral, index=dates_iter)
+    neutral_df.index.name = 'real_date'
+    neutral_df.columns = ['value']
     if not daily:
+        neutral_df = dates_df.merge(neutral_df, how='left', on='real_date')
         neutral_df = neutral_df.fillna(method='ffill')
-        # Todo: Bug: Nothing to fill as this is the downsampled df, not the daily df
-        # Todo: I thing you need: neural_df = neutral_df.reindex(df.index).ffill()
 
     return neutral_df
 
@@ -83,27 +83,14 @@ def pan_neutral(df: pd.DataFrame, dates_iter: List[pd.Timestamp], neutral: str =
         the available subset.
     """
     no_rows = df.shape[0]
-
-    if neutral == 'mean':
-        if sequential and not iis:
-
-            neutral_df = func_executor(df=df, neutral=neutral, n=no_rows,
-                                       dates_iter=dates_iter)
-            neutral_df.iloc[0:min_obs] = np.nan
-
-        elif sequential and iis:
-            neutral_df = func_executor(df=df, neutral=neutral, n=no_rows,
-                                       dates_iter=dates_iter)
-            neutral_df.iloc[0:min_obs] = df.iloc[0:min_obs].stack().mean()
-        else:  
-            neutral_df = pd.DataFrame(data=np.repeat(df.stack().mean(), no_rows),
-                                      index=df.index)
+    func_dict = {'mean': np.mean, 'median': np.median}
 
     # The median neutral level is primarily used if the sample set of data is exposed
     # heavily to outliers. In such instances, the mean statistic will misrepresent the
     # sample of data.
-    elif neutral == 'median':  
+    if neutral in func_dict.keys():
         if sequential and not iis:
+
             neutral_df = func_executor(df=df, neutral=neutral, n=no_rows,
                                        dates_iter=dates_iter)
             neutral_df.iloc[0:min_obs] = np.nan
@@ -111,10 +98,18 @@ def pan_neutral(df: pd.DataFrame, dates_iter: List[pd.Timestamp], neutral: str =
         elif sequential and iis:
             neutral_df = func_executor(df=df, neutral=neutral, n=no_rows,
                                        dates_iter=dates_iter)
-            neutral_df.iloc[0:min_obs] = df.iloc[0:min_obs].stack().mean()
-        else:  
-            neutral_df = pd.DataFrame(data=np.repeat(df.stack().median(), no_rows),
-                                      index=df.index)
+            # Convert to a one-dimensional DataFrame to facilitate pd.apply() method
+            # to calculate in-sampling period. The pd.stack() feature removes the
+            # unrealised cross-sections.
+            iis_period = pd.DataFrame(df.iloc[0:min_obs].stack().to_numpy())
+            iis_val = iis_period.apply(func_dict[neutral])
+            neutral_df.iloc[0:min_obs] = float(iis_val)
+        else:
+            iis_period = pd.DataFrame(df.stack().to_numpy())
+            neutral_val = iis_period.apply(func_dict[neutral])
+            neutral_arr = np.repeat(float(neutral_val), no_rows)
+            neutral_df = pd.DataFrame(data=neutral_arr, index=df.index)
+
     else:
         neutral_df = pd.DataFrame(data=np.zeros(no_rows), index=df.index)
 
@@ -475,7 +470,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         'cid', 'xcat', 'real_date' and 'value'.
     """
 
-    assert neutral in ['median', 'zero', 'mean']
+    assert neutral in ["mean", "median", "zero"]
     if thresh is not None:
         assert thresh > 1, "The 'thresh' parameter must be larger than 1."
     assert 0 <= pan_weight <= 1, "The 'pan_weight' parameter must be between 0 and 1."
@@ -579,4 +574,12 @@ if __name__ == "__main__":
     min_obs = 251
     df_mean = cross_neutral(dfw, neutral='mean', est_freq='m', sequential=True,
                             min_obs=min_obs, iis=False)
-    print(df_mean)
+
+    daily_dates = pd.date_range(start='2010-01-01', end='2020-10-30', freq='m')
+
+    df_mean = pan_neutral(df=dfw, dates_iter=daily_dates, neutral='mean',
+                          sequential=True, min_obs=261, iis=True)
+
+    df_output = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=True,
+                               neutral='mean', pan_weight=1.0, min_obs=261,
+                               est_freq="d")
