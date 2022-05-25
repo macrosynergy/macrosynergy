@@ -6,6 +6,7 @@ import warnings
 from tests.simulate import make_qdf
 from macrosynergy.panel.make_zn_scores import *
 from random import randint
+from itertools import groupby
 
 
 with warnings.catch_warnings():
@@ -120,6 +121,17 @@ class TestAll(unittest.TestCase):
                                  sequential=True, min_obs=261, iis=True)
         self.assertTrue(all(df_neutral.iloc[:261] == df_neutral.iloc[0]))
 
+    @staticmethod
+    def dates_iterator(df, est_freq):
+        """
+        Method used to produce the dates data structure.
+        """
+
+        s_date = min(df['real_date'])
+        e_date = max(df['real_date'])
+        dates_iter = pd.date_range(start=s_date, end=e_date, freq=est_freq)
+        return dates_iter
+
     def test_downsampling(self):
         """
         Often there is little value added from computing the neutral level and standard
@@ -133,6 +145,8 @@ class TestAll(unittest.TestCase):
         self.dataframe_construction()
 
         df = self.dfd
+        df_copy = df.copy()
+
         df['real_date'] = pd.to_datetime(df['real_date'], errors='coerce')
         df['year'] = df['real_date'].dt.year
         # Test on monthly down-sampling to ensure the expanding window is still being
@@ -141,16 +155,39 @@ class TestAll(unittest.TestCase):
         # trend.
 
         df['month'] = df['real_date'].dt.month
-        dfw = df.pivot(index=['year', 'month', 'real_date'], columns='cid',
-                       values='value')
+        dfw_multidx = df.pivot(index=['year', 'month', 'real_date'], columns='cid',
+                               values='value')
 
         # Test on the 'mean' neutral level.
         test = []
         aggregate = np.empty(0)
-        for date, new_df in dfw.groupby(level=[0, 1]):
+        for date, new_df in dfw_multidx.groupby(level=[0, 1]):
             new_arr = new_df.stack().to_numpy()
             aggregate = np.concatenate([aggregate, new_arr])
             test.append(np.mean(aggregate))
+
+        dfw = df_copy.pivot(index='real_date', columns='cid', values='value')
+        dates_iter = self.dates_iterator(df_copy, est_freq='BM')
+        # Test against the existing solution.
+        # The below method will return a one-dimensional DataFrame hosting the neutral
+        # values produced from the expanding window. The DataFrame will be daily values
+        # and, if down-sampling has been applied, the intermediary dates between
+        # re-estimation dates will be populated by forward filling technique.
+        # Therefore, the number of unique neutral values will correspond to the number of
+        # re-estimation dates.
+        df_mean = pan_neutral(df=dfw, dates_iter=dates_iter, neutral='mean',
+                              sequential=True, min_obs=261, iis=True)
+        bm_values = df_mean['value'].to_numpy()
+        # Avoid using a set which orders the data.
+        bm_values = [k for k, g in groupby(bm_values)]
+
+        # Assert there are the same number of re-estimation dates.
+        self.assertTrue(len(bm_values) == len(test))
+
+        # Confirm the expanding neutral calculations are correct.
+        for i, bm_val in enumerate(bm_values):
+            condition = abs(bm_val - test[i]) < 0.001
+            self.assertTrue(condition)
 
     @staticmethod
     def valid_index(column):
