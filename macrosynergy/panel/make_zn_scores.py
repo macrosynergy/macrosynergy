@@ -274,7 +274,7 @@ def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', est_freq: str = 'd',
                                           cid=cross)
             else:
                 neutral_df = in_sample_series(column, neutral, df_row_no, date_index,
-                                                  cross)
+                                              cross)
             pd_neutral = pd_neutral.join(neutral_df, on='real_date', how='left')
     else:
         pd_neutral = pd.DataFrame(data=np.zeros(df.shape), index=df.index,
