@@ -52,7 +52,7 @@ class TestAll(unittest.TestCase):
         iis_period = pd.DataFrame(dfw.iloc[0:min_obs].stack().to_numpy())
         iis_val = iis_period.apply(self.func_dict[neutral])
 
-        return float(iis_val)
+        return round(float(iis_val), 4)
 
     def test_pan_neutral(self):
 
@@ -107,11 +107,10 @@ class TestAll(unittest.TestCase):
                                  sequential=True, min_obs=261, iis=True)
         self.assertTrue(all(df_neutral.iloc[:261] == df_neutral.iloc[0]))
 
-        one_dec = lambda v: float("{:.1f}".format(v))
         test_val = self.in_sampling(dfw=self.dfw, neutral='mean', min_obs=261)
         test_data = df_neutral.iloc[:261].to_numpy().reshape(261)
 
-        bm_vals = [one_dec(v) for v in test_data]
+        bm_vals = [round(v, 4) for v in test_data]
         for v in bm_vals:
             self.assertTrue(abs(v - test_val) < 0.1)
 
