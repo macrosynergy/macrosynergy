@@ -120,6 +120,37 @@ class TestAll(unittest.TestCase):
                                  sequential=True, min_obs=261, iis=True)
         self.assertTrue(all(df_neutral.iloc[:261] == df_neutral.iloc[0]))
 
+    def test_downsampling(self):
+        """
+        Often there is little value added from computing the neutral level and standard
+        deviation on a daily basis. The calculations are computationally intensive and
+        the change over a daily period will, in most instances, be inconsequential. For
+        the neutral level or standard deviation to have a significant change, especially
+        as the days pass, the return series must have experienced a sustained period of
+        inverted returns. A reversal in the underlying trend will normally manifest
+        after a number of days have elapsed.
+        """
+        self.dataframe_construction()
+
+        df = self.dfd
+        df['year'] = df['real_date'].dt.year
+        # Test on monthly down-sampling to ensure the expanding window is still being
+        # applied correctly but on a monthly basis. Each statistic, computed on the lower
+        # frequency, will use all of the preceding days data to capture the underlying
+        # trend.
+
+        df['month'] = df['real_date'].dt.month
+        dfw = df.pivot(index=['year', 'month', 'real_date'], columns='cid',
+                       values='value')
+
+        # Test on the 'mean' neutral level.
+        test = []
+        aggregate = np.empty(0)
+        for date, new_df in dfw.groupby(level=[0, 1]):
+            new_arr = new_df.stack().to_numpy()
+            aggregate = np.concatenate([aggregate, new_arr])
+            test.append(np.mean(aggregate))
+
     @staticmethod
     def valid_index(column):
 
