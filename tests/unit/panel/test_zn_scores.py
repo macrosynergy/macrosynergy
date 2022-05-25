@@ -133,6 +133,7 @@ class TestAll(unittest.TestCase):
         self.dataframe_construction()
 
         df = self.dfd
+        df['real_date'] = pd.to_datetime(df['real_date'], errors='coerce')
         df['year'] = df['real_date'].dt.year
         # Test on monthly down-sampling to ensure the expanding window is still being
         # applied correctly but on a monthly basis. Each statistic, computed on the lower
