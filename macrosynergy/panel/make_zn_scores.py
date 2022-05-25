@@ -117,38 +117,26 @@ def pan_neutral(df: pd.DataFrame, dates_iter: List[pd.Timestamp], neutral: str =
     return neutral_df
 
 
-def first_value(column: pd.Series):
-    """
-    Returns the integer index at which the series' first realised value occurs.
-
-    :param: <pd.Series> column:
-
-    return <int> first_index:
-    """
-
-    index = column.index
-    date = column.first_valid_index()
-    date_index = next(iter(np.where(index == date)[0]))
-
-    return date_index
-
-
 def index_info(df_row_no: int, column: pd.Series, min_obs: int):
     """
     Method used to determine the first date where the cross-section has a realised value.
     Will vary across the panel.
 
-    :param <int> df_row_no: the number of rows defined in the original pivoted dataframe.
+    :param: <pd.Series> column: individual cross-section's data-series.
+    :param: <int> min_obs:
+    :param: <int> df_row_no: the number of rows defined in the original pivoted dataframe.
         The number of rows the dataframe is defined over corresponds to the first and
         last date across the panel. Therefore, certain cross-sections will have NaN
         values if there series do not align.
-    :param: <pd.Series> column: individual cross-section's data-series.
-    :param: <int> min_obs:
 
     :return <int>:
     """
 
-    date_index = first_value(column)
+    index = column.index
+    date = column.first_valid_index()
+    # Integer index at which the series' first realised value occurs.
+    date_index = next(iter(np.where(index == date)[0]))
+
     # Number of "active" dates for the cross-section's series.
     df_row_no -= date_index
     first_date = date_index + min_obs
@@ -156,24 +144,38 @@ def index_info(df_row_no: int, column: pd.Series, min_obs: int):
     return df_row_no, first_date, date_index
 
 
-def in_sample(neutral: str, iis_period: pd.Series):
+def in_sample_series(column: pd.Series, neutral: str, no_timestamps: int,
+                     date_index: int, cid: str):
     """
-    Helper function for in-sampling.
+    The return series' neutral level is calculated exclusively in-sample.
 
+    :param <pd.Series> column: individual cross-section's time-series data including any
+        preceding unrealised timestamps.
     :param <str> neutral:
-    :param <pd.Series> iis_period: in-sampling period - a single neutral value for the
-        entire period.
+    :param <int> no_timestamps: number of realised dates the cross-section is defined
+        over.
+    :param <int> date_index: index of the first realised return.
+    :param <str> cid: associated cross-section.
 
-    :return <float> single in-sampling return.
     """
 
-    if neutral == "mean":
-        neutral_iis = iis_period.mean()
-    else:
-        neutral_iis = iis_period.median()
+    func_dict = {'mean': np.mean, 'median': np.median}
+    column_r = column[date_index:]
 
-    return float(neutral_iis)
+    # Isolate the realised returns for each cross-section and host the return series in
+    # a pd.DataFrame to utilise the pd.apply() method.
+    df_realised = pd.DataFrame(data=column_r.to_numpy(), index=column_r.index)
+    n_val = df_realised.apply(func_dict[neutral])
+    ar_neutral = np.repeat(float(n_val), no_timestamps)
 
+    undefined = np.empty(date_index)
+    undefined[:] = np.nan
+
+    ar_neutral = np.concatenate([undefined, ar_neutral], axis=0)
+    neutral_df = pd.DataFrame(data=ar_neutral, index=column.index)
+    neutral_df.columns = [cid]
+
+    return neutral_df
 
 def neutral_calc(column: pd.Series, dates_iter: List[pd.Timestamp], iis: bool,
                  neutral: str, date_index: int, min_obs: int, cid: str):
@@ -194,19 +196,17 @@ def neutral_calc(column: pd.Series, dates_iter: List[pd.Timestamp], iis: bool,
     :return <pd.DataFrame> computed neutral levels.
     """
 
+    func_dict = {'mean': np.mean, 'median': np.median}
     column_r = column[date_index:]
+    df_realised = pd.DataFrame(data=column_r.to_numpy(), index=column_r.index)
     first_date = column_r.index[0]
 
     r_dates = list(filterfalse(lambda d: d < first_date, dates_iter))
     ur_dates = [d for d in dates_iter if d not in r_dates]
 
     iis_period = column_r.iloc[:min_obs]
-    if neutral == "mean":
-        os_neutral = np.array([column_r.loc[first_date:d].mean()
-                               for d in r_dates])
-    else:
-        os_neutral = np.array([column.loc[dates_iter[0]:d].median()
-                               for d in r_dates])
+    os_neutral = np.array([float(df_realised.loc[first_date:d].apply(func_dict[neutral]))
+                           for d in r_dates])
 
     undefined = np.empty(len(ur_dates))
     undefined[:] = np.nan
@@ -220,38 +220,12 @@ def neutral_calc(column: pd.Series, dates_iter: List[pd.Timestamp], iis: bool,
 
     iis_end = (date_index + min_obs)
     if iis:
-        neutral_df.iloc[date_index: iis_end] = in_sample(neutral, iis_period)
+        iis_df = pd.DataFrame(data=iis_period)
+        neutral_iis = iis_df.apply(func_dict[neutral])
+        neutral_df.iloc[date_index: iis_end] = float(neutral_iis)
     else:
         neutral_df.iloc[date_index: iis_end] = np.nan
 
-    neutral_df.columns = [cid]
-    return neutral_df
-
-
-def in_sample_series(column: pd.Series, neutral: str, no_timestamps: int,
-                     date_index: int, cid: str):
-    """
-    The return series' neutral level is calculated exclusively in-sample.
-
-    :param <pd.Series> column: individual cross-section's time-series data including any
-        preceding unrealised timestamps.
-    :param <str> neutral:
-    :param <int> no_timestamps: number of realised dates the cross-section is defined
-        over.
-    :param <int> date_index: index of the first realised return.
-    :param <str> cid: associated cross-section.
-
-    """
-
-    column_r = column[date_index:]
-    if neutral == 'mean':
-        ar_neutral = np.repeat(column_r.mean(), no_timestamps)
-    else:
-        ar_neutral = np.repeat(column_r.median(), no_timestamps)
-    undefined = np.empty(date_index)
-    undefined[:] = np.nan
-    ar_neutral = np.concatenate([undefined, ar_neutral], axis=0)
-    neutral_df = pd.DataFrame(data=ar_neutral, index=column.index)
     neutral_df.columns = [cid]
 
     return neutral_df
@@ -289,33 +263,13 @@ def cross_neutral(df: pd.DataFrame, neutral: str = 'zero', est_freq: str = 'd',
             original_index_no = df.shape[0]
             df_row_no, first_date, date_index = index_info(original_index_no, column,
                                                            min_obs=min_obs)
-            if neutral == "mean":
-                if sequential and not iis:
-                    neutral_df = neutral_calc(column=column, dates_iter=dates_iter,
-                                              iis=iis, neutral=neutral,
-                                              date_index=date_index, min_obs=min_obs,
-                                              cid=cross)
-                elif sequential and iis:
-                    neutral_df = neutral_calc(column=column, dates_iter=dates_iter,
-                                              iis=iis, neutral=neutral,
-                                              date_index=date_index, min_obs=min_obs,
-                                              cid=cross)
-                else:
-                    neutral_df = in_sample_series(column, neutral, df_row_no, date_index,
-                                                  cross)
+            if sequential:
+                neutral_df = neutral_calc(column=column, dates_iter=dates_iter,
+                                          iis=iis, neutral=neutral,
+                                          date_index=date_index, min_obs=min_obs,
+                                          cid=cross)
             else:
-                if sequential and not iis:
-                    neutral_df = neutral_calc(column=column, dates_iter=dates_iter,
-                                              iis=iis, neutral=neutral,
-                                              date_index=date_index, min_obs=min_obs,
-                                              cid=cross)
-                elif sequential and iis:
-                    neutral_df = neutral_calc(column=column, dates_iter=dates_iter,
-                                              iis=iis, neutral=neutral,
-                                              date_index=date_index, min_obs=min_obs,
-                                              cid=cross)
-                else:
-                    neutral_df = in_sample_series(column, neutral, df_row_no, date_index,
+                neutral_df = in_sample_series(column, neutral, df_row_no, date_index,
                                                   cross)
             pd_neutral = pd_neutral.join(neutral_df, on='real_date', how='left')
     else:
@@ -365,8 +319,7 @@ def iis_std_panel(dfx: pd.DataFrame, dates_iter: List[pd.Timestamp], min_obs: in
 
 
 def iis_std_cross(column: pd.Series, dates_iter: List[pd.Timestamp], cid: str,
-                  min_obs: int, date_index: int = 0, sequential: bool = True,
-                  iis: bool = True):
+                  min_obs: int, sequential: bool = True, iis: bool = True):
     """
     Standard deviation for cross-sectional zn_scores. Will account for the in-sampling
     period.
@@ -377,13 +330,16 @@ def iis_std_cross(column: pd.Series, dates_iter: List[pd.Timestamp], cid: str,
         standard deviation calculations.
     :param <str> cid: associated cross-section.
     :param <int> min_obs:
-    :param <int> date_index: index of the first realised value for each series. Only
-        applicable for cross-sectional zn_scores.
     :param <bool> sequential:
     :param <bool> iis:
 
     :return <pd.DataFrame> sds_df:
     """
+
+    index = column.index
+    date = column.first_valid_index()
+    # Integer index at which the series' first realised value occurs.
+    date_index = next(iter(np.where(index == date)[0]))
 
     # Inclusive of undefined dates.
     daily = column.size == len(dates_iter)
@@ -513,10 +469,8 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
         for i, c in enumerate(cross_sections):
             column = dfx.iloc[:, i]
-            date_index = first_value(column)
             std_cross = iis_std_cross(column=column, dates_iter=dates_iter, cid=c,
-                                      min_obs=min_obs, date_index=date_index,
-                                      sequential=sequential,
+                                      min_obs=min_obs, sequential=sequential,
                                       iis=iis)
             pd_sds = pd_sds.join(std_cross, on='real_date', how='left')
 
