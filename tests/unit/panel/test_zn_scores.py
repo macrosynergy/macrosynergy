@@ -38,6 +38,21 @@ class TestAll(unittest.TestCase):
 
         daily_dates = pd.date_range(start='2010-01-01', end='2020-10-30', freq='B')
         self.__dict__['dates_iter'] = daily_dates
+        self.__dict__['func_dict'] = {'mean': np.mean, 'median': np.median}
+
+    def in_sampling(self, dfw, neutral, min_obs):
+        """
+        Used to test the application of pandas in-built back-fill mechanism.
+        """
+        self.dataframe_construction()
+
+        # Convert to a one-dimensional DataFrame to facilitate pd.apply() method
+        # to calculate in-sampling period. The pd.stack() feature removes the
+        # unrealised cross-sections.
+        iis_period = pd.DataFrame(dfw.iloc[0:min_obs].stack().to_numpy())
+        iis_val = iis_period.apply(self.func_dict[neutral])
+
+        return float(iis_val)
 
     def test_pan_neutral(self):
 
@@ -45,7 +60,7 @@ class TestAll(unittest.TestCase):
 
         df_neutral = pan_neutral(df=self.dfw, dates_iter=self.dates_iter, neutral='mean',
                                  sequential=True)
-        self.assertIsInstance(df_neutral, pd.DataFrame)  # Check type of output.
+        self.assertIsInstance(df_neutral, pd.DataFrame)
         # Test length of neutral array.
         self.assertTrue(self.dfw.shape[0] == df_neutral.shape[0])
 
@@ -91,6 +106,14 @@ class TestAll(unittest.TestCase):
         df_neutral = pan_neutral(self.dfw, dates_iter=self.dates_iter, neutral='mean',
                                  sequential=True, min_obs=261, iis=True)
         self.assertTrue(all(df_neutral.iloc[:261] == df_neutral.iloc[0]))
+
+        one_dec = lambda v: float("{:.1f}".format(v))
+        test_val = self.in_sampling(dfw=self.dfw, neutral='mean', min_obs=261)
+        test_data = df_neutral.iloc[:261].to_numpy().reshape(261)
+
+        bm_vals = [one_dec(v) for v in test_data]
+        for v in bm_vals:
+            self.assertTrue(abs(v - test_val) < 0.1)
 
         # Check the above for the application of 'median' as the neutral level.
         # Unable to check for equality on np.nan values.
