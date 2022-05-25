@@ -189,6 +189,9 @@ class TestAll(unittest.TestCase):
             condition = abs(bm_val - test[i]) < 0.001
             self.assertTrue(condition)
 
+        # The above logic also concurrently tests computing the standard deviation on a
+        # down-sampled series. Uses the same method.
+
     @staticmethod
     def valid_index(column):
 
@@ -274,14 +277,46 @@ class TestAll(unittest.TestCase):
             first_val_iis = iis_period[0]
             self.assertTrue(np.all(iis_period == first_val_iis))
 
+    def test_cross_down_sampling(self):
+        """
+        Neutral level is computed on a cross-sectional basis.
+        """
+        self.dataframe_construction()
+
+        # Test the method neutral_calc() which is the associated helper function used for
+        # individual cross-sections.
+
+        df = self.dfd
+        dfw = self.dfw
+        # Isolate an individual cross-section's return series.
+        cross_series = dfw['AUD']
+        date_index = self.valid_index(column=cross_series)
+
+        # Test on quarterly data.
+        dates_iter = self.dates_iterator(df, est_freq='BQ')
+        neutral_df = neutral_calc(column=cross_series, dates_iter=dates_iter, iis=True,
+                                  neutral='mean', date_index=date_index, min_obs=261,
+                                  cid='AUD')
+        # Choose a random re-estimation date and confirm the corresponding re-estimated
+        # value is equivalent to in-sampling.
+        random_date = dates_iter[len(dates_iter) // 2]
+        test_series = cross_series.loc[:random_date]
+        test_value = np.mean(test_series.to_numpy())
+
+        benchmark_value = float(neutral_df.loc[random_date])
+        self.assertTrue(np.abs(test_value - benchmark_value) < 0.001)
+
+        # Confirm the dates, over the next quarter, are the same as the value referenced
+        # above.
+
     def test_zn_scores(self):
 
         self.dataframe_construction()
 
         with self.assertRaises(AssertionError):
             # Test catching neutral value error.
-            df = make_zn_scores(self.dfd, 'XR', self.cids, sequential=False, neutral='std',
-                                thresh=1.5, postfix='ZN')
+            df = make_zn_scores(self.dfd, 'XR', self.cids, sequential=False,
+                                neutral='std', thresh=1.5, postfix='ZN')
         with self.assertRaises(AssertionError):
             # Test catching non-valid thresh value.
             df = make_zn_scores(self.dfd, 'XR', self.cids, sequential=False,
