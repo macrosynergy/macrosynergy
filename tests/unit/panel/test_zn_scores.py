@@ -299,7 +299,8 @@ class TestAll(unittest.TestCase):
                                   cid='AUD')
         # Choose a random re-estimation date and confirm the corresponding re-estimated
         # value is equivalent to in-sampling.
-        random_date = dates_iter[len(dates_iter) // 2]
+        random_index = len(dates_iter) // 2
+        random_date = dates_iter[random_index]
         test_series = cross_series.loc[:random_date]
         test_value = np.mean(test_series.to_numpy())
 
@@ -308,6 +309,14 @@ class TestAll(unittest.TestCase):
 
         # Confirm the dates, over the next quarter, are the same as the value referenced
         # above.
+        next_index = random_index + 1
+        next_date_quarter = dates_iter[next_index]
+        benchmark_quarter = neutral_df.loc[random_date:next_date_quarter].to_numpy()
+        benchmark_quarter = benchmark_quarter.reshape(len(benchmark_quarter))
+
+        # Exclude the next re-estimation date where the neutral level changes.
+        for bm_elem in benchmark_quarter[:-1]:
+            self.assertTrue(np.abs(test_value - bm_elem) < 0.001)
 
     def test_zn_scores(self):
 
