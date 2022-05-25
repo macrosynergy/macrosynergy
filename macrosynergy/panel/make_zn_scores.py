@@ -23,8 +23,10 @@ def func_executor(df: pd.DataFrame, neutral: str, n: int,
     """
 
     daily = n == len(dates_iter)
-    # Inclusive of the first date and respective intervals.
-    f_date = dates_iter[0]
+    # Inclusive of the first date of the DataFrame and respective intervals. The
+    # "dates_iter" data structure, depending on the frequency, will start on the first
+    # re-estimation date as opposed to the first realised date.
+    f_date = df.index[0]
     dates_df = pd.DataFrame(index=df.index)
 
     if neutral == "mean" and not daily:
@@ -516,8 +518,7 @@ if __name__ == "__main__":
     df_xcats.loc['CRY'] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
     df_xcats.loc['GROWTH'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
     df_xcats.loc['INFL'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
-    
-    print("Uses Ralph's make_qdf() function.")
+
     dfd = make_qdf(df_cids, df_xcats, back_ar = 0.75)
 
     df_output = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=True,
