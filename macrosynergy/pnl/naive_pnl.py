@@ -21,7 +21,10 @@ class NaivePnL:
     :param <pd.Dataframe> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
     :param <str> ret: return category.
-    :param <List[str]> sigs: signal categories.
+    :param <List[str]> sigs: signal categories. Able to pass in multiple possible signals
+        to the Class' constructor and their respective vintages will be held on the
+        instance's DataFrame. The signals can subsequently be referenced through the
+        self.make_pnl() method which receives a single signal per call.
     :param <List[str]> cids: cross sections that are traded. Default is all in the
         dataframe.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
@@ -106,12 +109,19 @@ class NaivePnL:
 
         """
 
-        assert sig in self.sigs
-        assert sig_op in ['zn_score_pan', 'zn_score_cs', 'binary']
-        assert rebal_freq in ['daily', 'weekly', 'monthly']
+        error_sig = f"Signal category missing from the options defined on the class: " \
+                    f"{self.sigs}. "
+        assert sig in self.sigs, error_sig
+        sig_options = ['zn_score_pan', 'zn_score_cs', 'binary']
+        error_sig_method = f"The signal transformation method, {sig_op}, is not one of " \
+                           f"the options specified: {sig_options}."
+        assert sig_op in sig_options, error_sig_method
+        freq_params = ['daily', 'weekly', 'monthly']
+        freq_error = f"Re-balancing frequency must be one of: {freq_params}."
+        assert rebal_freq in freq_params, freq_error
 
-        # DataFrame consisting exclusively of the two categories: the return category and
-        # associated signal category.
+        # DataFrame consisting exclusively of the two types of categories: the return
+        # category and associated signal category.
         dfx = self.df[self.df['xcat'].isin([self.ret, sig])]
 
         if sig_op == 'binary':
@@ -126,7 +136,8 @@ class NaivePnL:
             # re-balancing frequencies match.
             df_ms = make_zn_scores(dfx, xcat=sig, neutral=neutral, pan_weight=panw,
                                    sequential=sequential, min_obs=min_obs, iis=iis,
-                                   est_freq=rebal_freq[0], thresh=thresh)
+                                   thresh=thresh)
+            # est_freq = rebal_freq[0]
             df_ms = df_ms.drop('xcat', axis=1)
             df_ms['xcat'] = 'psig'
 
@@ -532,6 +543,9 @@ class NaivePnL:
 
         benchmark_error = "Benchmark ticker has not been defined in the DataFrame."
         assert set(b_correl_xcats).issubset(self.xcats), benchmark_error
+        bm_error_cid = "Cross-sections used for the benchmark correlation statistics " \
+                       "are not present in the DataFrame."
+        assert set(b_correl_cids).issubset(self.cids), bm_error_cid
 
         df_bench = reduce_df(self.df, b_correl_xcats, b_correl_cids, start, end,
                              self.black, out_all=False)
@@ -550,7 +564,7 @@ class NaivePnL:
         return bm_dict
 
     def evaluate_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
-                      bms: str = None, start: str = None, end: str = None):
+                      bms: Union[str, List[str]] = None, start: str = None, end: str = None):
 
         """
         Small table of key PnL statistics.
@@ -560,8 +574,8 @@ class NaivePnL:
             'ALL' (global PnL).
             Note: one can only have multiple PnL categories or multiple cross-sections,
             not both.
-        :param <List[str]> bms: list of benchmark tickers for which correlations are
-            displayed.
+        :param <Union[str, List[str]]> bms: list of benchmark tickers for which
+            correlations are displayed.
         :param <str> start: earliest date in ISO format. Default is None and earliest
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
