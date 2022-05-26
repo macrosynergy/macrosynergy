@@ -368,7 +368,8 @@ class NaivePnL:
     def signal_heatmap(self, pnl_name: str, pnl_cids: List[str] = None,
                        start: str = None, end: str = None, freq: str = 'm',
                        title: str = "Average applied signal values",
-                       x_label: str = "", y_label: str = ""):
+                       x_label: str = "", y_label: str = "",
+                       figsize: (float, float) = None):
 
         """
         Display heatmap of signals across times and cross-sections.
@@ -386,12 +387,14 @@ class NaivePnL:
         :param <str> title: allows entering text for a custom chart header.
         :param <str> x_label: label for the x-axis. Default is None.
         :param <str> y_label: label for the y-axis. Default is None.
+        :param <(float, float)> figsize: width and height in inches.
+            Default is (14, number of cross sections).
         """
 
         assert isinstance(pnl_name, str), "The method expects to receive a single " \
                                           "PnL name."
         error_cats = f"The PnL passed to 'pnl_name' parameter is not defined. The " \
-                     f"possible options are {print(self.pnl_names)}."
+                     f"possible options are {self.pnl_names}."
         assert pnl_name in self.pnl_names, error_cats
 
         error_time = "Defined time-period must be monthly ('m') or quarterly ('q')"
@@ -421,12 +424,16 @@ class NaivePnL:
 
         dfw = dfw.resample(freq, axis=0).mean()
 
-        fig, ax = plt.subplots(figsize=(14, 8))
+        if figsize is None:
+            figsize = (14, len(pnl_cids))
+
+        fig, ax = plt.subplots(figsize=figsize)
         dfw = dfw.transpose()
         dfw.columns = [str(d.strftime('%d-%m-%Y')) for d in dfw.columns]
         sns.heatmap(dfw, cmap="vlag_r", center=0)
 
         ax.set(xlabel=x_label, ylabel=y_label)
+        ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
         ax.set_title(title, fontsize=14)
 
         plt.show()
@@ -452,7 +459,7 @@ class NaivePnL:
         assert isinstance(pnl_name, str), "The method expects to receive a single " \
                                           "PnL name."
         error_cats = f"The PnL passed to 'pnl_name' parameter is not defined. The " \
-                     f"possible options are {print(self.pnl_names)}."
+                     f"possible options are {self.pnl_names}."
         assert pnl_name in self.pnl_names, error_cats
 
         error_time = "Defined time-period must either be monthly, m, or quarterly, q."
