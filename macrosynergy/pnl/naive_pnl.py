@@ -43,6 +43,8 @@ class NaivePnL:
 
         cols = ['cid', 'xcat', 'real_date', 'value']
         self.cids = cids
+        # Aggregator DataFrame. Hosts all computed DataFrames in a single structure on an
+        # instance.
         self.df, self.xcats, self.cids = reduce_df(df[cols], xcats, cids, start, end,
                                                    blacklist, out_all=True)
         self.df['real_date'] = pd.to_datetime(self.df['real_date'])
@@ -80,6 +82,8 @@ class NaivePnL:
             must be one of 'daily' (default), 'weekly' or 'monthly'. The re-balancing is
             only concerned with the signal value on the re-balancing date which is
             delimited by the frequency chosen.
+            Additionally, the re-balancing frequency will be applied to make_zn_scores()
+            if used as the method to produce the raw signals.
         :param <str> rebal_slip: re-balancing slippage in days. Default is 1 which
             means that it takes one day to re-balance the position and that the new
             positions produce PnL from the second day after the signal has been recorded.
@@ -106,19 +110,26 @@ class NaivePnL:
         assert sig_op in ['zn_score_pan', 'zn_score_cs', 'binary']
         assert rebal_freq in ['daily', 'weekly', 'monthly']
 
-        dfx = self.df[self.df['xcat'].isin([self.ret, sig])]  # extract relevant xcats
+        # DataFrame consisting exclusively of the two categories: the return category and
+        # associated signal category.
+        dfx = self.df[self.df['xcat'].isin([self.ret, sig])]
 
         if sig_op == 'binary':
             dfw = dfx.pivot(index=['cid', 'real_date'], columns='xcat', values='value')
             dfw['psig'] = np.sign(dfw[sig])
         else:
             panw = 1 if sig_op == 'zn_score_pan' else 0
+            # The re-estimation frequency for the neutral level and standard deviation
+            # will be the same as the re-balancing frequency. For instance, if the
+            # neutral level is computed weekly, a material change in the signal will only
+            # manifest along a similar timeline. Therefore, re-estimation and
+            # re-balancing frequencies match.
             df_ms = make_zn_scores(dfx, xcat=sig, neutral=neutral, pan_weight=panw,
                                    sequential=sequential, min_obs=min_obs, iis=iis,
-                                   thresh=thresh)
+                                   est_freq=rebal_freq[0], thresh=thresh)
             df_ms = df_ms.drop('xcat', axis=1)
             df_ms['xcat'] = 'psig'
-            # The DataFrame, dfx, will contain exclusively the return & signal category.
+
             dfx_concat = pd.concat([dfx, df_ms])
             dfw = dfx_concat.pivot(index=['cid', 'real_date'], columns='xcat',
                                    values='value')
@@ -515,7 +526,6 @@ class NaivePnL:
         b_correl_cids = []
         b_correl_xcats = []
         for bm in bms:
-            print(bm)
             b_correl = bm.split('_')
             b_correl_cids.append(b_correl[0])
             b_correl_xcats.append('_'.join(b_correl[1:]))
