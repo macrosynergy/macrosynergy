@@ -11,7 +11,7 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 def func_executor(df: pd.DataFrame, neutral: str, n: int,
                   dates_iter: List[pd.Timestamp], min_obs: int = 261):
     """
-    Used to calculate the expanding neutral level.
+    Used to calculate the expanding neutral level or standard deviation across a panel.
 
     :param <pd.DataFrame> df:
     :param <str> neutral:
@@ -25,8 +25,9 @@ def func_executor(df: pd.DataFrame, neutral: str, n: int,
     daily = n == len(dates_iter)
     # Inclusive of the first date of the DataFrame and respective intervals. The
     # "dates_iter" data structure, depending on the frequency, will start on the first
-    # re-estimation date as opposed to the first realised date.
+    # re-estimation date as opposed to the first realised date of the return series.
     f_date = df.index[0]
+    # Daily dates DataFrame. Used if down-sampling has been applied.
     dates_df = pd.DataFrame(index=df.index)
 
     if neutral == "mean" and not daily:
@@ -124,14 +125,14 @@ def pan_neutral(df: pd.DataFrame, dates_iter: List[pd.Timestamp], neutral: str =
 def index_info(df_row_no: int, column: pd.Series, min_obs: int):
     """
     Method used to determine the first date where the cross-section has a realised value.
-    Will vary across the panel.
+    Will vary across the panel for each cross-section.
 
     :param: <pd.Series> column: individual cross-section's data-series.
     :param: <int> min_obs:
     :param: <int> df_row_no: the number of rows defined in the original pivoted dataframe.
         The number of rows the dataframe is defined over corresponds to the first and
         last date across the panel. Therefore, certain cross-sections will have NaN
-        values if there series do not align.
+        values if their series do not align.
 
     :return <int>:
     """
