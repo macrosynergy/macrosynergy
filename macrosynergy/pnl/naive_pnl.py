@@ -568,7 +568,31 @@ class NaivePnL:
             bm_dict[t] = t_series.astype(dtype=np.float32)
             i += 1
 
-        return bm_dict
+        self.__dict__['bm_dict'] = bm_dict
+
+    def add_bm(self, bm_series: pd.Series, bm_ticker: str):
+        """
+        Method used to add exogenous benchmark tickers which can be used to compute the
+        correlation with the PnL strategies. If exogenous tickers are required, the
+        method should be called prior to the self.evaluate_pnls() method.
+
+        :param <pd.Series> bm_series: a pd.Series consisting exclusively of a single
+            ticker's vintage.
+        :param <str> bm_ticker: the associated ticker. The ticker will be used to
+            reference the return series in the correlation calculation.
+
+        """
+
+        pd_error = "Expects to receive a pd.Series of the associated ticker."
+        assert isinstance(bm_series, pd.Series), pd_error
+        index_error = "The index of the pd.Series must be type <pd.Timestamp>."
+        assert bm_series.index.dtypes == pd.Timestamp, index_error
+        ticker_type = f"Received ticker, {bm_ticker}, must be a string."
+        assert isinstance(ticker_type, str), ticker_type
+
+        bm_series = bm_series.astype(dtype=np.float32)
+
+        self.__dict__[bm_ticker] = bm_series
 
     def evaluate_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
                       bms: Union[str, List[str]] = None, start: str = None, end: str = None):
@@ -616,8 +640,7 @@ class NaivePnL:
         if benchmark_bool:
             c = isinstance(bms, str)
             bms = [bms] if c else bms
-            bm_dict = self.bm_dataframes(bms=bms, start=start,
-                                         end=end)
+            self.bm_dataframes(bms=bms, start=start, end=end)
 
         dfx = reduce_df(self.df, pnl_cats, pnl_cids, start, end, self.black,
                         out_all=False)
@@ -642,7 +665,8 @@ class NaivePnL:
         df.iloc[5, :] = dfw.rolling(6*21).sum().min()
         if benchmark_bool:
             for i, bm in enumerate(bms):
-                df.iloc[6 + i, :] = dfw.corrwith(bm_dict[bm], axis=0, method='pearson')
+                df.iloc[6 + i, :] = dfw.corrwith(self.bm_dict[bm], axis=0,
+                                                 method='pearson')
             df.iloc[6 + len(bms), :] = dfw.resample('M').sum().count()
         else:
             df.iloc[6, :] = dfw.resample('M').sum().count()
