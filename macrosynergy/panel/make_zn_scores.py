@@ -4,7 +4,7 @@ import pandas as pd
 from typing import List
 from itertools import filterfalse
 from macrosynergy.management.shape_dfs import reduce_df
-from macrosynergy.panel.rolling_statistics import rolling_mean_with_nan
+from macrosynergy.panel.expanding_statistics import expanding_mean_with_nan
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 
@@ -38,7 +38,7 @@ def func_executor(df: pd.DataFrame, neutral: str, n: int,
                                for d in dates_iter])
     elif neutral == "mean":
         # If daily frequency, utilise the computationally faster algorithm.
-        ar_neutral = rolling_mean_with_nan(dfw=df)
+        ar_neutral = expanding_mean_with_nan(dfw=df)
         # In-sampling period.
         ar_neutral[:min_obs] = np.nan
     else:
@@ -184,9 +184,8 @@ def in_sample_series(column: pd.Series, neutral: str, no_timestamps: int,
 def neutral_calc(column: pd.Series, dates_iter: List[pd.Timestamp], iis: bool,
                  neutral: str, date_index: int, min_obs: int, cid: str):
     """
-    To prevent loss of information, calculate the first minimum number of observation
-    days using an in-sampling technique (time-series data is realised, and subsequently
-    not computed on a rolling basis).
+    Helper function to compute the cross-sectional expanding neutral values. Will adjust
+    for down-sampling.
 
     :param <pd.Series> column: individual cross-section's time-series data.
     :param <List[pd.Timestamp]> dates_iter: controls the frequency of the neutral &
@@ -223,6 +222,8 @@ def neutral_calc(column: pd.Series, dates_iter: List[pd.Timestamp], iis: bool,
     neutral_df = neutral_df.fillna(method='ffill')
 
     iis_end = (date_index + min_obs)
+    # To prevent loss of information, calculate the first minimum number of observation
+    # days using an in-sampling technique.
     if iis:
         iis_df = pd.DataFrame(data=iis_period)
         neutral_iis = iis_df.apply(func_dict[neutral])

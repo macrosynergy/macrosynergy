@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import pandas as pd
 from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.panel.rolling_statistics import rolling_mean_with_nan
+from macrosynergy.panel.expanding_statistics import expanding_mean_with_nan
 
 class TestAll(unittest.TestCase):
 
@@ -43,7 +43,7 @@ class TestAll(unittest.TestCase):
 
         self.dataframe_generator()
 
-        ar_neutral = rolling_mean_with_nan(dfw=self.dfw)
+        ar_neutral = expanding_mean_with_nan(dfw=self.dfw)
 
         benchmark_pandas = [self.dfw.iloc[0:(i + 1), :].stack().mean()
                             for i in range(self.no_timestamps)]
@@ -61,7 +61,7 @@ class TestAll(unittest.TestCase):
         dfd_cry = self.dfd[self.dfd['xcat'] == 'CRY']
         dfw_cry = dfd_cry.pivot(index='real_date', columns='cid', values='value')
 
-        ar_neutral = rolling_mean_with_nan(dfw=dfw_cry)
+        ar_neutral = expanding_mean_with_nan(dfw=dfw_cry)
         benchmark_pandas_cry = [dfw_cry.iloc[0:(i + 1), :].stack().mean()
                                 for i in range(self.no_timestamps)]
 

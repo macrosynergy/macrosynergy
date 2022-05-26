@@ -5,7 +5,7 @@ import numpy as np
 from itertools import accumulate
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
-def rolling_mean_with_nan(dfw: pd.DataFrame, absolute: bool = False):
+def expanding_mean_with_nan(dfw: pd.DataFrame, absolute: bool = False):
     """
     Computes a rolling median of a vector of floats and returns the results. NaNs will be
     consumed.
@@ -79,4 +79,4 @@ if __name__ == "__main__":
     dfw = dfd_xr.pivot(index='real_date', columns='cid', values='value')
     no_rows = dfw.shape[0]
 
-    ret_mean = rolling_mean_with_nan(dfw)
+    ret_mean = expanding_mean_with_nan(dfw)
