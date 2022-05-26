@@ -54,6 +54,8 @@ class NaivePnL:
         self.pnl_names = []
         self.signal_df = {}
         self.black = blacklist
+        self.bm_dict = {}
+        self.exogenous_bm = []
 
     def make_pnl(self, sig: str, sig_op: str = 'zn_score_pan', pnl_name: str = None,
                  rebal_freq: str = 'daily', rebal_slip = 0, vol_scale: float = None,
@@ -557,7 +559,6 @@ class NaivePnL:
         df_bench = reduce_df(self.df, b_correl_xcats, b_correl_cids, start, end,
                              self.black, out_all=False)
         tickers = tuple(zip(b_correl_xcats, b_correl_cids))
-        bm_dict = {}
         i = 0
         for xcat_bm, cid_bm in tickers:
             temp_df = df_bench[df_bench['xcat'] == xcat_bm]
@@ -565,10 +566,8 @@ class NaivePnL:
             t = bms[i]
             t_series = pd.Series(index=temp_df['real_date'].to_numpy(),
                                  data=temp_df['value'].to_numpy())
-            bm_dict[t] = t_series.astype(dtype=np.float32)
+            self.bm_dict[t] = t_series.astype(dtype=np.float32)
             i += 1
-
-        self.__dict__['bm_dict'] = bm_dict
 
     def add_bm(self, bm_series: pd.Series, bm_ticker: str):
         """
@@ -592,10 +591,12 @@ class NaivePnL:
 
         bm_series = bm_series.astype(dtype=np.float32)
 
-        self.__dict__[bm_ticker] = bm_series
+        self.bm_dict[bm_ticker] = bm_series
+        self.exogenous_bm.append(bm_ticker)
 
     def evaluate_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
-                      bms: Union[str, List[str]] = None, start: str = None, end: str = None):
+                      bms: Union[str, List[str]] = None, start: str = None,
+                      end: str = None):
 
         """
         Small table of key PnL statistics.
@@ -640,7 +641,9 @@ class NaivePnL:
         if benchmark_bool:
             c = isinstance(bms, str)
             bms = [bms] if c else bms
-            self.bm_dataframes(bms=bms, start=start, end=end)
+            bms_copy = list(set(bms) - set(self.exogenous_bm))
+            
+            self.bm_dataframes(bms=bms_copy, start=start, end=end)
 
         dfx = reduce_df(self.df, pnl_cats, pnl_cids, start, end, self.black,
                         out_all=False)
