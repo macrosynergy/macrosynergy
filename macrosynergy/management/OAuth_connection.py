@@ -2,20 +2,15 @@
 """
 DataQuery Interfaces and API wrappers.
 """
-from oauthlib.oauth2 import BackendApplicationClient
-from requests_oauthlib import OAuth2Session
+import requests
 import json
-import logging
 from typing import Union
 # The functools module is for higher-order functions: functions that act on or return
 # other functions.
 from functools import partial
+from datetime import datetime
 
-logger = logging.getLogger(__name__)
-
-BASE_URL = "https://api-developer.jpmorgan.com/research/dataquery-authe/api/v2/"
-
-class DataQueryWebAPI(object):
+class DataQueryOAuth(object):
     """
     DataQuery REST web API class
 
@@ -29,9 +24,10 @@ class DataQueryWebAPI(object):
     :param <str> client_secret: string with client secret, password.
     """
 
-    def __init__(self, client_id: str, client_secret: str, token: str):
-        logger.info("Establish connection to DataQuery Web API")
-        self.__is_connected: bool = False
+    def __init__(self, client_id: str, client_secret: str):
+
+        url = "https://api-developer.jpmorgan.com/research/dataquery-authe/api/v2/"
+        self.BASE_URL = url
 
         self.__token_url = "https://authe.jpmchase.com/as/token.oauth2"
         self.__dq_api_resource_id = 'JPMC:URI:RS-06785-DataQueryExternalApi-PROD'
@@ -45,80 +41,58 @@ class DataQueryWebAPI(object):
 
         self.client_secret: str = client_secret
 
-        self.mb_api = self._create_api()
-        if not self.mb_api.authorized:
-            self._renew_token()
+        self.last_response = None
 
-    def _set_is_connected(self, connected: bool):
-        self.__is_connected = connected
+    def _get_token(self):
 
-    def is_connected(self):
-        return self.__is_connected
+        json = requests.post(url=self.__token_url,
+                proxies= {},
+                data={'grant_type': 'client_credentials', 'client_id': self.client_id,
+                      'client_secret': self.client_secret,
+                      'aud': self.__dq_api_resource_id}).json()
 
-    def _create_api(self):
-        client = BackendApplicationClient(client_id=self.client_id)
-        mb_api = OAuth2Session(client=client)
-        return mb_api
+        _stored_token = {'created_at': datetime.now(),
+                         'access_token': json['access_token'],
+                         'expires_in': json['expires_in']}
 
-    def _renew_token(self):
-        self.mb_api.fetch_token(
-            token_url=self.__token_url,
-            client_id=self.client_id,
-            client_secret=self.client_secret,
-            aud=self.__dq_api_resource_id
-        )
-        self._set_is_connected(connected=self.mb_api.authorized)
+        return json['access_token']
 
-    def _fetch(self, request: str, method: str = "POST",
+    def get_dq_api_result(self, url, params: dict = None):
+        """
+        Method used exclusively to request data from the API.
+        """
+        r = requests.get(url=url, params=params,
+                         headers={'Authorization': 'Bearer ' + self._get_token()},
+                         proxies={})
+
+        return r
+
+    def _fetch(self, endpoint: str = "/groups", select: str = "groups",
                payload: Union[list, dict] = None, params: dict = None):
         """
+        Used to test if DataQuery is responding.
 
-        :param <str> request: string with request elements and parameters.
-        :param <str> method: default 'GET', either 'GET' or 'POST' http methods.
+        :param <str> endpoint: default '/groups', end-point of DataQuery to be explored.
+        :param <str> select:
         :param <list/dict> payload: default None, defines payload for a 'POST' method.
+        :param <dict> params:
 
         :return: list with response from DataQuery Web API.
-        :rtype: <list[dict]>
+        :rtype: <list>
         """
 
-        assert isinstance(request, str), f"request of unknown type {type(request)}: {request}"
+        results = []
+        url = self.BASE_URL + endpoint
+        r = self.get_dq_api_result(self, url=url, params=params)
 
-        assert isinstance(
-            method, str
-        ), f"method of unknown type {type(method)}: {method}"
+        self.last_response = r.text
+        response = json.loads(self.last_response)
 
-        # Helper method that will request new access token if required
-        url = BASE_URL + request
+        assert select in response.keys()
+        results.extend(response[select])
 
-        # This is typically the first time when we do not yet have a token
-        if not self.mb_api.authorized:
-            self._renew_token()
+        if isinstance(response["info"], dict):
+            results = response["info"]
+            print(results['description'])
 
-        if method == "GET":
-            call_url = self.mb_api.get
-
-        elif method == "POST":
-            headers = {"Content-Type": "application/json"}
-            call_url = partial(self.mb_api.post, headers=headers, params=params,
-                               data=json.dumps(payload))
-        else:
-            raise NotImplementedError(f"Unknown method; {method:s}")
-
-        try:
-            r = call_url(url)
-        except:
-            self._renew_token()
-            r = call_url(url)
-
-        if r.status_code == 401:
-            # If authorization failed, it is likely that the token has expired.
-            # Get a new one and try again.
-            self._renew_token()
-            r = call_url(url)
-
-        error_status = f"Status code {r.status_code} for request {request:s}"
-        assert (r.status_code == 200), error_status
-
-        json_data = json.loads(r.content)
-
-        return json_data
+        return results
