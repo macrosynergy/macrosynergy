@@ -27,7 +27,7 @@ class DataQueryOAuth(object):
     def __init__(self, client_id: str, client_secret: str):
 
         url = "https://api-developer.jpmorgan.com/research/dataquery-authe/api/v2/"
-        self.BASE_URL = url
+        self.base_url = url
 
         self.__token_url = "https://authe.jpmchase.com/as/token.oauth2"
         self.__dq_api_resource_id = 'JPMC:URI:RS-06785-DataQueryExternalApi-PROD'
@@ -82,8 +82,8 @@ class DataQueryOAuth(object):
         """
 
         results = []
-        url = self.BASE_URL + endpoint
-        r = self.get_dq_api_result(self, url=url, params=params)
+        url = self.base_url + endpoint
+        r = self.get_dq_api_result(url=url, params=params)
 
         self.last_response = r.text
         response = json.loads(self.last_response)
