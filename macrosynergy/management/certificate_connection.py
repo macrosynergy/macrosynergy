@@ -62,7 +62,7 @@ class DataQueryCert(object):
         """
         Method used exclusively to request data from the API.
         """
-        r = requests.get(url=url, cert=(self.crt, self.access.key),
+        r = requests.get(url=url, cert=(self.crt, self.key),
                          headers=self.headers, params=params)
 
         return r
