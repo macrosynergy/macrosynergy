@@ -576,7 +576,7 @@ class NaivePnL:
         method should be called prior to the self.evaluate_pnls() method.
 
         :param <pd.Series> bm_series: a pd.Series consisting exclusively of a single
-            ticker's vintage.
+            ticker's vintage. The index will be the corresponding timestamps.
         :param <str> bm_ticker: the associated ticker. The ticker will be used to
             reference the return series in the correlation calculation.
 
@@ -584,8 +584,8 @@ class NaivePnL:
 
         pd_error = "Expects to receive a pd.Series of the associated ticker."
         assert isinstance(bm_series, pd.Series), pd_error
-        index_error = "The index of the pd.Series must be type <pd.Timestamp>."
-        assert bm_series.index.dtypes == pd.Timestamp, index_error
+        index_error = "The index of the pd.Series must be type <pd.DatetimeIndex>."
+        assert type(bm_series.index) == pd.DatetimeIndex, index_error
         ticker_type = f"Received ticker, {bm_ticker}, must be a string."
         assert isinstance(ticker_type, str), ticker_type
 
@@ -641,8 +641,10 @@ class NaivePnL:
         if benchmark_bool:
             c = isinstance(bms, str)
             bms = [bms] if c else bms
+            # Remove the exogenous tickers from the data structure: already included in
+            # the dictionary.
             bms_copy = list(set(bms) - set(self.exogenous_bm))
-            
+
             self.bm_dataframes(bms=bms_copy, start=start, end=end)
 
         dfx = reduce_df(self.df, pnl_cats, pnl_cids, start, end, self.black,
