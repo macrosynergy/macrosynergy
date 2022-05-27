@@ -5,28 +5,19 @@ Interface to the JP Morgan DataQuery and how to interact with the API.
 Requires a API login (username + password) as well as a certified certificate
 and private key to verify the request.
 """
-import requests
-import base64
+
 from typing import List
 import json
 import pandas as pd
 import numpy as np
-import os
 from math import ceil, floor
 from collections import defaultdict
 import warnings
 import concurrent.futures
 import time
 from itertools import chain
-
-BASE_URL = "https://platform.jpmorgan.com/research/dataquery/api/v2"
-
-DQ_ERROR_MSG = {
-    204: "Content requested unavailable.",
-    400: "Request but it was malformed or invalid.",
-    401: "The user has not successfully authenticated with the service.",
-    500: "There was an internal server error."
-}
+from macrosynergy.management.OAuth_connection import DataQueryOAuth
+from macrosynergy.management.certificate_connection import DataQueryCert
 
 
 class DataQueryInterface(object):
@@ -52,15 +43,6 @@ class DataQueryInterface(object):
       - InstrumentsResponse: "instruments"
       - GroupsResponse: "groups"
 
-    :param <str> username: username for login to REST API for
-        JP Morgan DataQuery.
-    :param <str> password: password
-    :param <str> crt: string with location of public certificate
-    :param <str> key: string with private key location
-    :param <str> base_url: string with base URL for DataQuery (entry point)
-        usually platform.jpmorgan.com
-    :param <bool> date_all: default False,
-        if True download all history of data.
     :param <bool> debug: boolean,
         if True run the interface in debugging mode.
     :param <bool> concurrent: run the requests concurrently.
@@ -71,46 +53,31 @@ class DataQueryInterface(object):
     source_name = "DataQuery"
     __name__ = f"{source_name:s}Interface"
 
-    def __init__(self, username: str,
-                 password: str,
-                 crt: str = "api_macrosynergy_com.crt",
-                 key: str = "api_macrosynergy_com.key",
-                 base_url: str = BASE_URL,
-                 date_all: bool = False,
+    def __init__(self, oauth: bool = False,
                  debug: bool = False,
                  concurrent: bool = True,
-                 thread_handler: int = 20):
+                 thread_handler: int = 20,
+                 **kwargs):
 
-        assert isinstance(username, str),\
-            f"username must be a <str> and not {type(username)}: {username}"
-
-        assert isinstance(password, str), \
-            f"password must be a <str> and not {type(password)}: {password}"
-        self.auth = base64.b64encode(bytes(f'{username:s}:{password:s}',
-                                           "utf-8")).decode('ascii')
-        self.headers = {"Authorization": f"Basic {self.auth:s}"}
-
-        if base_url is None:
-            base_url = BASE_URL
-
-        self.base_url = base_url
-
-        # Key and certificate
-        if not (isinstance(key, str) and os.path.exists(key)):
-            msg = f"key file, {key}, must be a <str> and exists as a file"
-            raise ValueError(msg)
-        self.key = key
-
-        if not (isinstance(crt, str) and os.path.exists(crt)):
-            msg = f"crt file, {crt}, must be a <str> and exists as a file"
-            raise ValueError(msg)
-        self.crt = crt
+        if oauth:
+            client_id = kwargs.pop('client_id')
+            client_secret = kwargs.pop('client_secret')
+            access = DataQueryOAuth(client_id=client_id,
+                                    client_secret=client_secret)
+            self.access = access
+        else:
+            username = kwargs.pop('username')
+            password = kwargs.pop('password')
+            crt = kwargs.pop('crt')
+            key = kwargs.pop('key')
+            access = DataQueryCert(username=username, password=password,
+                                   crt=crt, key=key)
+            self.access = access
 
         self.debug = debug
         self.last_url = None
         self.status_code = None
         self.last_response = None
-        self.date_all = date_all
         self.concurrent = concurrent
         self.thread_handler = thread_handler
 
@@ -123,56 +90,6 @@ class DataQueryInterface(object):
             print(f'exc_value: {exc_value}')
             print(f'exc_traceback: {exc_traceback}')
 
-    def _fetch(self, endpoint: str = "/groups", select: str = "groups",
-               params: dict = None):
-        """
-        Used to test if DataQuery is responding.
-
-        :param <str> endpoint: default '/groups', end-point of DataQuery to be explored.
-        :param <str> select: default 'groups' string with select for within the endpoint.
-        :param <str> params: dictionary of parameters to be passed to request
-
-        :return: list of response from DataQuery
-        :rtype: <list>
-
-        """
-
-        url = self.base_url + endpoint
-        self.last_url = url
-
-        results = []
-        count = 0
-
-        auth_check = lambda string: string.split('-')[1].strip().split('<')[0]
-        while True:
-            count += 1
-            with requests.get(url=url, cert=(self.crt, self.key),
-                              headers=self.headers, params=params) as r:
-                self.status_code = r.status_code = r.status_code
-                self.last_response = r.text
-
-                if self.last_response[0] != "{":
-                    condition = auth_check(self.last_response)
-
-                    error = condition + " - unable to access DataQuery. " \
-                                        "Password expired."
-                    if condition == 'Authentication Failure':
-                        raise RuntimeError(error)
-
-                self.last_url = r.url
-
-            response = json.loads(self.last_response)
-
-            assert select in response.keys()
-            results.extend(response[select])
-
-            if isinstance(response["info"], dict):
-                results = response["info"]
-                print(results['description'])
-                break
-
-        return results
-
     def check_connection(self) -> bool:
         """
         Check connect (heartbeat) to DataQuery.
@@ -180,8 +97,8 @@ class DataQueryInterface(object):
         :return <bool>: success of connection. Check if True (return code 200),
             and False otherwise.
         """
-
-        results = self._fetch(endpoint="/services/heartbeat", select='info')
+        results = self.access._fetch(endpoint="/services/heartbeat",
+                                     select='info')
 
         assert isinstance(results, dict), f"Response from DQ: {results}"
 
@@ -236,8 +153,10 @@ class DataQueryInterface(object):
 
         while clause(counter):
             try:
-                r = requests.get(url=url, cert=(self.crt, self.key),
-                                headers=self.headers, params=params)
+                # The required fields will already be instantiated on the instance of the
+                # Class.
+                r = self.access.get_dq_api_result(self, url=url,
+                                                  params=params)
             except ConnectionResetError:
                 counter += 1
                 time.sleep(0.05)
@@ -252,12 +171,6 @@ class DataQueryInterface(object):
                     count += 1
                     if count > 5:
                         raise RuntimeError("All servers are down.")
-
-                dictionary = response[select][0]['attributes'][0]
-                error_message = 'FAILED - Error in parsing JSON data'
-                
-                # if dictionary['message'] == error_message:
-                    # pass
 
                 if select in response.keys():
                     results.extend(response[select])
