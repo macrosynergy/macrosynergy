@@ -144,7 +144,9 @@ class DataQueryInterface(object):
         return <dict>: singular dictionary obtaining maximum 20 elements.
         """
 
-        url = self.base_url + endpoint
+        # The url is instantiated on the ancillary Classes as it depends on the DQ access
+        # method chosen.
+        url = self.access.base_url + endpoint
         select = "instruments"
 
         results = []
@@ -155,7 +157,7 @@ class DataQueryInterface(object):
             try:
                 # The required fields will already be instantiated on the instance of the
                 # Class.
-                r = self.access.get_dq_api_result(self, url=url,
+                r = self.access.get_dq_api_result(url=url,
                                                   params=params)
             except ConnectionResetError:
                 counter += 1
