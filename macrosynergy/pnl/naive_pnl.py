@@ -529,6 +529,7 @@ class NaivePnL:
         """
         Helper function used to produce the associated benchmark DataFrames. Will store
         each pd.Series in a dictionary.
+        # Todo: not needed, remove
 
         :param <List[str]> bms: a possible list of (return) tickers or
             single ticker that functions as the benchmark for PnL correlation.
@@ -571,12 +572,11 @@ class NaivePnL:
 
     def add_bm(self, bm_series: pd.Series, bm_ticker: str):
         """
-        Method used to add exogenous benchmark tickers which can be used to compute the
-        correlation with the PnL strategies. If exogenous tickers are required, the
-        method should be called prior to the self.evaluate_pnls() method.
+        Add benchmark return series from a JPMaQS dataframe
 
         :param <pd.Series> bm_series: a pd.Series consisting exclusively of a single
             ticker's vintage. The index will be the corresponding timestamps.
+            # Todo: must be JPMaQS dataframe
         :param <str> bm_ticker: the associated ticker. The ticker will be used to
             reference the return series in the correlation calculation.
 
@@ -588,6 +588,11 @@ class NaivePnL:
         assert type(bm_series.index) == pd.DatetimeIndex, index_error
         ticker_type = f"Received ticker, {bm_ticker}, must be a string."
         assert isinstance(ticker_type, str), ticker_type
+
+        # Todo: you need [1] separate cid and xcat based on ticker
+        #  [2] extract the benchmark series based on cid/xcat
+        #  [3] convert to time series dataframe and add to main df
+        #  [4] check if all this cannot be done at initialization
 
         bm_series = bm_series.astype(dtype=np.float32)
 
