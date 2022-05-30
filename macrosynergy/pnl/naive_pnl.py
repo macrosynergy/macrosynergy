@@ -618,7 +618,10 @@ class NaivePnL:
         """
 
         if bms == None:
-            self.bm_bool = False
+            # Workflow is not disrupted and all benchmarks are excluded. Uses a locally
+            # defined variable such that other calls on the same instance are not
+            # disrupted.
+            bms = []
         elif bms == 'all':
             bms = list(self.bm_dict.keys())
 
@@ -682,7 +685,7 @@ class NaivePnL:
         stats = ['Return (pct ar)', 'St. Dev. (pct ar)', 'Sharpe Ratio', 'Sortino Ratio',
                  'Max 21-day draw', 'Max 6-month draw', 'Traded Months']
 
-        bms = self.__bms_eval(bms)
+        bms = self.__bm_eval(bms)
         if self.bm_bool:
             bm_error = "Benchmark parameter, 'bms', must be a string or a List of " \
                        "strings."
