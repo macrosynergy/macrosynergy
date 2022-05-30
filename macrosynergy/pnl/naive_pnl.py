@@ -67,9 +67,6 @@ class NaivePnL:
         if self.bm_bool:
             c = isinstance(bms, str)
             bms = [bms] if c else bms
-            # Remove the exogenous tickers from the data structure: already included in
-            # the dictionary.
-            bms_copy = list(set(bms) - set(self.exogenous_bm))
 
             self.add_bm(bms=bms, start=start, end=end)
 
@@ -86,12 +83,14 @@ class NaivePnL:
         """
 
         dfd = self.dfd
-        cross_sections = list(dfd['cids'].unique())
-        xcats = list(dfd['xcats'].unique())
+        cross_sections = list(dfd['cid'].unique())
+        xcats = list(dfd['xcat'].unique())
 
-        underscore = lambda x: '_' + x
-        xcats = list(map(underscore, xcats))
+        merge_cid_xcat = lambda t: t[0] + '_' + t[1]
         ticker_sample = product(cross_sections, xcats)
+        ticker_sample = list(map(merge_cid_xcat, ticker_sample))
+
+        ticker_sample = set(ticker_sample)
 
         # Assert that the tickers are present in the standardised DataFrame that is
         # passed into the Class' constructor.
@@ -105,7 +104,8 @@ class NaivePnL:
                        end: str = None):
         """
         Helper function used to produce the associated benchmark DataFrames. Will store
-        each pd.Series in a dictionary.
+        each pd.Series in a dictionary. The method will be a private method, and
+        subsequently inaccessible from any instance.
 
         :param <List[str]> bms: a possible list of (return) tickers or
             single ticker that functions as the benchmark for PnL correlation.
@@ -633,7 +633,7 @@ class NaivePnL:
         """
 
         error_cids = "List of cross-sections expected."
-        error_xcats = "List of categories expected."
+        error_xcats = "List of PnL categories expected."
         assert isinstance(pnl_cids, list), error_cids
         assert isinstance(pnl_cats, list), error_xcats
         assert all([isinstance(elem, str) for elem in pnl_cids]), error_cids
@@ -647,8 +647,11 @@ class NaivePnL:
             # category will be held in the data structure.
             pnl_cats = self.pnl_names
         else:
-            pnl_error = "Received PnL categories have not been defined."
-            assert set(pnl_cats) <= set(self.pnl_names), pnl_error
+            if not set(pnl_cats) <= set(self.pnl_names):
+                missing = [pnl for pnl in pnl_cats if pnl not in self.pnl_names]
+                pnl_error = f"Received PnL categories have not been defined. The PnL " \
+                            f"category(s) which has not been defined is: {missing}."
+                raise ValueError(pnl_error)
 
         assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
 
