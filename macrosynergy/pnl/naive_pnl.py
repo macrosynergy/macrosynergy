@@ -28,7 +28,7 @@ class NaivePnL:
         self.make_pnl() method which receives a single signal per call.
     :param <List[str]> cids: cross sections that are traded. Default is all in the
         dataframe.
-    :param <Union[str, List[str]]> bms: list of benchmark tickers for which
+    :param <str, List[str]> bms: list of benchmark tickers for which
         correlations are displayed against PnL strategies.
         If there are not any benchmarks defined on the Class' instance, then the
         parameter, 'bms', in the method self.evaluate_pnls() becomes obsolete.
@@ -607,8 +607,25 @@ class NaivePnL:
         ax.fmt_xdata = fmt
         plt.show()
 
+    def __bm_eval(self, bms: Union[str, List[str]] = 'all'):
+        """
+        Helper function for evaluating the benchmarks. If the default argument is used,
+        all possible benchmarks are included in the evaluation table.
+
+        :param <str, List[str]> bms:
+
+        :return <str, List[str]> panel_pnl:
+        """
+
+        if bms == None:
+            self.bm_bool = False
+        elif bms == 'all':
+            bms = list(self.bm_dict.keys())
+
+        return bms
+
     def evaluate_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
-                      bms: Union[str, List[str]] = None, start: str = None,
+                      bms: Union[str, List[str]] = 'all', start: str = None,
                       end: str = None):
 
         """
@@ -619,10 +636,13 @@ class NaivePnL:
             'ALL' (global PnL).
             Note: one can only have multiple PnL categories or multiple cross-sections,
             not both.
-        :param <Union[str, List[str]]> bms: list of benchmark tickers for which
-            correlations are displayed.
-            The tickers passed to the parameter must be a subset of those passed in when
-            instantiating the Class.
+        :param <str, List[str]> bms: list of benchmark tickers for which
+            correlations are displayed. The tickers passed to the parameter must be a
+            valid subset of those passed in when instantiating the Class.
+            The default is 'all': all defined benchmarks on the instance will be included
+            in the evaluate PnL table.
+            To avoid the inclusion of any benchmarks, if defined, set the parameter equal
+            to None.
         :param <str> start: earliest date in ISO format. Default is None and earliest
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
@@ -662,6 +682,7 @@ class NaivePnL:
         stats = ['Return (pct ar)', 'St. Dev. (pct ar)', 'Sharpe Ratio', 'Sortino Ratio',
                  'Max 21-day draw', 'Max 6-month draw', 'Traded Months']
 
+        bms = self.__bms_eval(bms)
         if self.bm_bool:
             bm_error = "Benchmark parameter, 'bms', must be a string or a List of " \
                        "strings."
