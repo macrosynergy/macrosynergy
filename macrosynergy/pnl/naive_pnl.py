@@ -4,6 +4,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+from itertools import product
 
 from typing import List, Union, Tuple
 
@@ -27,6 +28,10 @@ class NaivePnL:
         self.make_pnl() method which receives a single signal per call.
     :param <List[str]> cids: cross sections that are traded. Default is all in the
         dataframe.
+    :param <Union[str, List[str]]> bms: list of benchmark tickers for which
+        correlations are displayed against PnL strategies.
+        If there are not any benchmarks defined on the Class' instance, then the
+        parameter, 'bms', in the method self.evaluate_pnls() becomes obsolete.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df
@@ -36,10 +41,11 @@ class NaivePnL:
 
     """
     def __init__(self, df: pd.DataFrame, ret: str, sigs: List[str],
-                 cids: List[str] = None,
+                 cids: List[str] = None, bms: Union[str, List[str]] = None,
                  start: str = None, end: str = None,
                  blacklist: dict = None):
 
+        self.dfd = df
         self.ret = ret
         self.sigs = sigs
         xcats = [ret] + sigs
@@ -55,7 +61,84 @@ class NaivePnL:
         self.signal_df = {}
         self.black = blacklist
         self.bm_dict = {}
-        self.exogenous_bm = []
+        self.bms = bms
+
+        self.bm_bool = True if bms is not None else False
+        if self.bm_bool:
+            c = isinstance(bms, str)
+            bms = [bms] if c else bms
+            # Remove the exogenous tickers from the data structure: already included in
+            # the dictionary.
+            bms_copy = list(set(bms) - set(self.exogenous_bm))
+
+            self.add_bm(bms=bms, start=start, end=end)
+
+    def add_bm(self, bms: List[str], start: str = None, end: str = None):
+        """
+        Method used to add benchmark tickers which can be used to compute the
+        correlation with the PnL strategies.
+
+        :param <List[str]> bms: a possible list of (return) tickers or
+            single ticker that functions as the benchmark for PnL correlation.
+        :param <str> start:
+        :param <str> end:
+
+        """
+
+        dfd = self.dfd
+        cross_sections = list(dfd['cids'].unique())
+        xcats = list(dfd['xcats'].unique())
+
+        underscore = lambda x: '_' + x
+        xcats = list(map(underscore, xcats))
+        ticker_sample = product(cross_sections, xcats)
+
+        # Assert that the tickers are present in the standardised DataFrame that is
+        # passed into the Class' constructor.
+        error_ticker = f"Tickers passed in, {bms}, are not defined on the JPMaQS " \
+                       f"DataFrame passed to the Class."
+        assert set(bms).issubset(ticker_sample), error_ticker
+
+        self.__bm_dataframes(bms=bms, start=start, end=end)
+
+    def __bm_dataframes(self, bms: List[str] = None, start: str = None,
+                       end: str = None):
+        """
+        Helper function used to produce the associated benchmark DataFrames. Will store
+        each pd.Series in a dictionary.
+
+        :param <List[str]> bms: a possible list of (return) tickers or
+            single ticker that functions as the benchmark for PnL correlation.
+        :param <str> start: earliest date in ISO format.
+        :param <str> end: latest date in ISO format.
+
+        :return <dict>: dictionary containing pd.Series for the respective benchmark
+            tickers.
+        """
+
+        bm_error = "Parameter expects to receive a single ticker or a list of " \
+                   "tickers."
+        assert isinstance(bms, (list, str)), bm_error
+
+        b_correl_cids = []
+        b_correl_xcats = []
+        for bm in bms:
+            b_correl = bm.split('_')
+            b_correl_cids.append(b_correl[0])
+            b_correl_xcats.append('_'.join(b_correl[1:]))
+
+        df_bench = reduce_df(self.dfd, b_correl_xcats, b_correl_cids, start, end,
+                             self.black, out_all=False)
+        tickers = tuple(zip(b_correl_xcats, b_correl_cids))
+        i = 0
+        for xcat_bm, cid_bm in tickers:
+            temp_df = df_bench[df_bench['xcat'] == xcat_bm]
+            temp_df = temp_df[temp_df['cid'] == cid_bm]
+            t = bms[i]
+            t_series = pd.Series(index=temp_df['real_date'].to_numpy(),
+                                 data=temp_df['value'].to_numpy())
+            self.bm_dict[t] = t_series.astype(dtype=np.float32)
+            i += 1
 
     def make_pnl(self, sig: str, sig_op: str = 'zn_score_pan', pnl_name: str = None,
                  rebal_freq: str = 'daily', rebal_slip = 0, vol_scale: float = None,
@@ -524,76 +607,6 @@ class NaivePnL:
         ax.fmt_xdata = fmt
         plt.show()
 
-    def bm_dataframes(self, bms: str = None, start: str = None,
-                      end: str = None):
-        """
-        Helper function used to produce the associated benchmark DataFrames. Will store
-        each pd.Series in a dictionary.
-
-        :param <List[str]> bms: a possible list of (return) tickers or
-            single ticker that functions as the benchmark for PnL correlation.
-        :param <str> start: earliest date in ISO format.
-        :param <str> end: latest date in ISO format.
-
-        :return <dict>: dictionary containing pd.Series for the respective benchmark
-            tickers.
-        """
-
-        bm_error = "Parameter expects to receive a single ticker or a list of " \
-                   "tickers."
-        assert isinstance(bms, (list, str)), bm_error
-
-        b_correl_cids = []
-        b_correl_xcats = []
-        for bm in bms:
-            b_correl = bm.split('_')
-            b_correl_cids.append(b_correl[0])
-            b_correl_xcats.append('_'.join(b_correl[1:]))
-
-        benchmark_error = "Benchmark ticker has not been defined in the DataFrame."
-        assert set(b_correl_xcats).issubset(self.xcats), benchmark_error
-        bm_error_cid = "Cross-sections used for the benchmark correlation statistics " \
-                       "are not present in the DataFrame."
-        assert set(b_correl_cids).issubset(self.cids), bm_error_cid
-
-        df_bench = reduce_df(self.df, b_correl_xcats, b_correl_cids, start, end,
-                             self.black, out_all=False)
-        tickers = tuple(zip(b_correl_xcats, b_correl_cids))
-        i = 0
-        for xcat_bm, cid_bm in tickers:
-            temp_df = df_bench[df_bench['xcat'] == xcat_bm]
-            temp_df = temp_df[temp_df['cid'] == cid_bm]
-            t = bms[i]
-            t_series = pd.Series(index=temp_df['real_date'].to_numpy(),
-                                 data=temp_df['value'].to_numpy())
-            self.bm_dict[t] = t_series.astype(dtype=np.float32)
-            i += 1
-
-    def add_bm(self, bm_series: pd.Series, bm_ticker: str):
-        """
-        Method used to add exogenous benchmark tickers which can be used to compute the
-        correlation with the PnL strategies. If exogenous tickers are required, the
-        method should be called prior to the self.evaluate_pnls() method.
-
-        :param <pd.Series> bm_series: a pd.Series consisting exclusively of a single
-            ticker's vintage. The index will be the corresponding timestamps.
-        :param <str> bm_ticker: the associated ticker. The ticker will be used to
-            reference the return series in the correlation calculation.
-
-        """
-
-        pd_error = "Expects to receive a pd.Series of the associated ticker."
-        assert isinstance(bm_series, pd.Series), pd_error
-        index_error = "The index of the pd.Series must be type <pd.DatetimeIndex>."
-        assert type(bm_series.index) == pd.DatetimeIndex, index_error
-        ticker_type = f"Received ticker, {bm_ticker}, must be a string."
-        assert isinstance(ticker_type, str), ticker_type
-
-        bm_series = bm_series.astype(dtype=np.float32)
-
-        self.bm_dict[bm_ticker] = bm_series
-        self.exogenous_bm.append(bm_ticker)
-
     def evaluate_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
                       bms: Union[str, List[str]] = None, start: str = None,
                       end: str = None):
@@ -608,6 +621,8 @@ class NaivePnL:
             not both.
         :param <Union[str, List[str]]> bms: list of benchmark tickers for which
             correlations are displayed.
+            The tickers passed to the parameter must be a subset of those passed in when
+            instantiating the Class.
         :param <str> start: earliest date in ISO format. Default is None and earliest
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
@@ -637,16 +652,6 @@ class NaivePnL:
 
         assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
 
-        benchmark_bool = True if bms is not None else False
-        if benchmark_bool:
-            c = isinstance(bms, str)
-            bms = [bms] if c else bms
-            # Remove the exogenous tickers from the data structure: already included in
-            # the dictionary.
-            bms_copy = list(set(bms) - set(self.exogenous_bm))
-
-            self.bm_dataframes(bms=bms_copy, start=start, end=end)
-
         dfx = reduce_df(self.df, pnl_cats, pnl_cids, start, end, self.black,
                         out_all=False)
 
@@ -654,7 +659,18 @@ class NaivePnL:
         stats = ['Return (pct ar)', 'St. Dev. (pct ar)', 'Sharpe Ratio', 'Sortino Ratio',
                  'Max 21-day draw', 'Max 6-month draw', 'Traded Months']
 
-        if benchmark_bool:
+        if self.bm_bool:
+            bm_error = "Benchmark parameter, 'bms', must be a string or a List of " \
+                       "strings."
+            assert isinstance(bms, (str, list)), bm_error
+            c = isinstance(bms, str)
+            bms = [bms] if c else bms
+
+            possible_bms = set(self.bm_dict.keys())
+            bm_ticker_error = f"The benchmark ticker(s) passed are not in the sample of " \
+                              f"possible tickers: {self.bms}."
+            assert set(bms).issubset(possible_bms), bm_ticker_error
+
             for i, bm in enumerate(bms):
                 stats.insert(len(stats) - 1, f"{bm} correl")
 
@@ -668,7 +684,7 @@ class NaivePnL:
         df.iloc[3, :] = df.iloc[0, :] / dsd
         df.iloc[4, :] = dfw.rolling(21).sum().min()
         df.iloc[5, :] = dfw.rolling(6*21).sum().min()
-        if benchmark_bool:
+        if self.bm_bool:
             for i, bm in enumerate(bms):
                 df.iloc[6 + i, :] = dfw.corrwith(self.bm_dict[bm], axis=0,
                                                  method='pearson')
