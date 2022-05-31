@@ -60,7 +60,7 @@ class DataQueryOAuth(object):
             ) as r:
                 json = r.json()
 
-                _stored_token = {'created_at': datetime.datetime.now(),
+                _stored_token = {'created_at': datetime.now(),
                                  'access_token': json['access_token'],
                                  'expires_in': json['expires_in']}
 
