@@ -5,10 +5,11 @@ DataQuery Interfaces and API wrappers.
 import requests
 import json
 from typing import Union
-# The functools module is for higher-order functions: functions that act on or return
-# other functions.
-from functools import partial
 from datetime import datetime
+
+BASE_URL = "https://api-developer.jpmorgan.com/research/dataquery-authe/api/v2/"
+TOKEN_URL = "https://authe.jpmchase.com/as/token.oauth2"
+DQ_RESOURCE_ID = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
 
 class DataQueryOAuth(object):
     """
@@ -24,13 +25,13 @@ class DataQueryOAuth(object):
     :param <str> client_secret: string with client secret, password.
     """
 
-    def __init__(self, client_id: str, client_secret: str):
+    def __init__(self, client_id: str, client_secret: str, url: str = BASE_URL,
+                 token_url: str = TOKEN_URL, dq_resource_id: str = DQ_RESOURCE_ID):
 
-        url = "https://api-developer.jpmorgan.com/research/dataquery-authe/api/v2/"
         self.base_url = url
 
-        self.__token_url = "https://authe.jpmchase.com/as/token.oauth2"
-        self.__dq_api_resource_id = 'JPMC:URI:RS-06785-DataQueryExternalApi-PROD'
+        self.__token_url = token_url
+        self.__dq_api_resource_id = dq_resource_id
 
         id_error = f"client_id argument must be a string and not <{type(client_id)}>."
         assert isinstance(client_id, str), id_error
@@ -45,11 +46,12 @@ class DataQueryOAuth(object):
 
     def _get_token(self):
 
-        json = requests.post(url=self.__token_url,
+        with requests.post(url=self.__token_url,
                 proxies= {},
                 data={'grant_type': 'client_credentials', 'client_id': self.client_id,
                       'client_secret': self.client_secret,
-                      'aud': self.__dq_api_resource_id}).json()
+                      'aud': self.__dq_api_resource_id}) as r:
+            json = r.json()
 
         _stored_token = {'created_at': datetime.now(),
                          'access_token': json['access_token'],
@@ -61,9 +63,10 @@ class DataQueryOAuth(object):
         """
         Method used exclusively to request data from the API.
         """
-        r = requests.get(url=url, params=params,
+        with requests.get(url=url, params=params,
                          headers={'Authorization': 'Bearer ' + self._get_token()},
-                         proxies={})
+                         proxies={}) as r:
+            self.last_response = r.text
 
         return r
 
