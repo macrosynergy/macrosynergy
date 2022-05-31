@@ -4,6 +4,8 @@ import os
 import requests
 import json
 
+BASE_URL = "https://platform.jpmorgan.com/research/dataquery/api/v2"
+
 class DataQueryCert(object):
     """
     DataQuery REST web API class
@@ -24,7 +26,8 @@ class DataQueryCert(object):
     def __init__(self, username: str,
                  password: str,
                  crt: str = "api_macrosynergy_com.crt",
-                 key: str = "api_macrosynergy_com.key"):
+                 key: str = "api_macrosynergy_com.key",
+                 base_url: str = BASE_URL):
 
         u_error = f"username must be a <str> and not <{type(username)}>."
         assert isinstance(username, str), u_error
@@ -35,7 +38,7 @@ class DataQueryCert(object):
                                            "utf-8")).decode('ascii')
         self.headers = {"Authorization": f"Basic {self.auth:s}"}
 
-        self.base_url = "https://platform.jpmorgan.com/research/dataquery/api/v2"
+        self.base_url = base_url
 
         # Key and Certificate.
         self.key = self.valid_path(key, "key")
