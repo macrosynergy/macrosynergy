@@ -10,6 +10,7 @@ from datetime import datetime
 BASE_URL = "https://api-developer.jpmorgan.com/research/dataquery-authe/api/v2/"
 TOKEN_URL = "https://authe.jpmchase.com/as/token.oauth2"
 DQ_RESOURCE_ID = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
+_stored_token = None
 
 class DataQueryOAuth(object):
     """
@@ -46,18 +47,24 @@ class DataQueryOAuth(object):
 
     def _get_token(self):
 
-        with requests.post(url=self.__token_url,
-                proxies= {},
+        global _stored_token
+
+        if _stored_token is None or ((datetime.now() - _stored_token[
+            'created_at']).total_seconds() / 60) >= (_stored_token['expires_in'] - 1):
+            with requests.post(
+                url=self.__token_url,
+                proxies={},
                 data={'grant_type': 'client_credentials', 'client_id': self.client_id,
                       'client_secret': self.client_secret,
-                      'aud': self.__dq_api_resource_id}) as r:
-            json = r.json()
+                      'aud': self.__dq_api_resource_id}
+            ) as r:
+                json = r.json()
 
-        _stored_token = {'created_at': datetime.now(),
-                         'access_token': json['access_token'],
-                         'expires_in': json['expires_in']}
+                _stored_token = {'created_at': datetime.datetime.now(),
+                                 'access_token': json['access_token'],
+                                 'expires_in': json['expires_in']}
 
-        return json['access_token']
+        return _stored_token['access_token']
 
     def get_dq_api_result(self, url, params: dict = None):
         """
