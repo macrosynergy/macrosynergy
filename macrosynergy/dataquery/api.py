@@ -10,6 +10,7 @@ import concurrent.futures
 import time
 from itertools import chain
 from typing import Optional
+import requests
 from .auth import CertAuth, OAuth
 
 
@@ -66,35 +67,20 @@ class Interface(object):
             )
 
     def check_connection(self) -> bool:
-        """Check connect (heartbeat) to DataQuery.
-
-        :return <bool>: success of connection. Check if True (return code 200),
-            and False otherwise.
-        """
-        results = self.access._fetch(endpoint="/services/heartbeat",
-                                     select='info')
-
-        assert isinstance(results, dict), f"Response from DQ: {results}"
-
-        if int(results["code"]) != 200:
-            raise ConnectionError(
-                f"Message: {results['message']:s},"
-                f" Description: {results['description']:s}"
-            )
-
-        return int(results["code"]) == 200
-
-    def check_connection_new(self) -> bool:
         """Check connect (heartbeat) to DataQuery"""
-        r = self.access.get_dq_api_result(
+        r: requests.Response = self.access.get_dq_api_result(
             url=self.access.base_url + "/services/heartbeat"
         )
-        self.status_code = r.status_code
-        self.last_response = r.text
+
         # TODO additional authentication responses...
         if r.status_code == 401:
             raise RuntimeError(
                 f"Ahtentication error - unable to access DataQuery: {r.text}")
+        elif self.access.last_response[0] != "{":
+            # Authentication check
+            condition: str = self.last_response.split('-')[1].strip().split('<')[0]
+            if condition == 'Authentication Failure':
+                raise RuntimeError(condition + " - unable to access DataQuery. Password expired.")
 
         assert r.ok, f"Access issue status code {r.status_code} for {r.text}"
 
@@ -157,16 +143,14 @@ class Interface(object):
             try:
                 # The required fields will already be instantiated on the instance of the
                 # Class.
-                r = self.access.get_dq_api_result(url=url,
-                                                  params=params)
+                r = self.access.get_dq_api_result(url=url, params=params)
             except ConnectionResetError:
                 counter += 1
                 time.sleep(0.05)
                 print(f"Server error: will retry. Attempt number: {counter}.")
                 continue
             else:
-                last_response = r.text
-                response = json.loads(last_response)
+                response = r.json()
 
                 count = 0
                 while not self.server_retry(response, select):
@@ -180,7 +164,7 @@ class Interface(object):
                 if response["links"][1]["next"] is None:
                     break
 
-                url = f"{self.base_url:s}{response['links'][1]['next']:s}"
+                url = f"{self.access.base_url:s}{response['links'][1]['next']:s}"
                 params = {}
 
         if isinstance(results, list):

@@ -2,14 +2,13 @@
 import base64
 import os
 import requests
-import json
-from typing import Union, Optional
+from typing import Optional, Dict
 from datetime import datetime
 
-OAUTH_BASE_URL = "https://api-developer.jpmorgan.com/research/dataquery-authe/api/v2/"
-OAUTH_TOKEN_URL = "https://authe.jpmchase.com/as/token.oauth2"
-OAUTH_DQ_RESOURCE_ID = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
-CERT_BASE_URL = "https://platform.jpmorgan.com/research/dataquery/api/v2"
+OAUTH_BASE_URL: str = "https://api-developer.jpmorgan.com/research/dataquery-authe/api/v2/"
+OAUTH_TOKEN_URL: str = "https://authe.jpmchase.com/as/token.oauth2"
+OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
+CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 
 
 class CertAuth(object):
@@ -42,90 +41,47 @@ class CertAuth(object):
             f"password must be a <str> and not <{type(password)}>."
         )
 
-        self.auth = base64.b64encode(
+        self.auth: str = base64.b64encode(
             bytes(f'{username:s}:{password:s}', "utf-8")
         ).decode('ascii')
 
-        self.headers = {"Authorization": f"Basic {self.auth:s}"}
-        self.base_url = base_url
+        self.headers: Dict[str, str] = {"Authorization": f"Basic {self.auth:s}"}
+        self.base_url: str = base_url
 
         # Key and Certificate.
-        self.key = self.valid_path(key, "key")
-        self.crt = self.valid_path(crt, "crt")
-        self.last_response = None
+        self.key: str = self.valid_path(key, "key")
+        self.crt: str = self.valid_path(crt, "crt")
+
+        # For debugging purposes save last request response
+        self.status_code: Optional[int] = None
+        self.last_response: Optional[str] = None
+        self.last_url: Optional[str] = None
 
     @staticmethod
-    def valid_path(directory: str, file_type: str):
-        """
-        Validates the key & certificate exist in the referenced directory.
-        """
-        error_type = file_type + " file must be a <str>."
-        assert isinstance(directory, str), error_type
+    def valid_path(directory: str, file_type: str) -> Optional[str]:
+        """Validates the key & certificate exist in the referenced directory."""
+        assert isinstance(directory, str), f"{file_type:s} file must be a <str> not {directory}{type(directory)})."
 
-        try:
-            os.path.exists(directory)
-        except OSError as err:
-            print("OS error: {0}".format(err))
-        else:
-            return directory
+        if not os.path.exists(directory) and os.path.isfile(directory):
+            # TODO should this not raise an error (exception)?
+            print(f"Not a valid file path on the system: {directory} - return None")
+            return None
 
-    def get_dq_api_result(self, url: str, params: dict = None):
-        """
-        Method used exclusively to request data from the API.
-        """
-        r = requests.get(
+        return directory
+
+    def get_dq_api_result(self, url: str, params: dict = None) -> requests.Response:
+        """Method used exclusively to request data from the API."""
+        with requests.get(
             url=url,
             cert=(self.crt, self.key),
             headers=self.headers,
             params=params
-        )
+        ) as r:
+            self.status_code: int = r.status_code
+            self.last_response: str = r.text
+            self.last_url: str = r.url
 
         return r
-
-    def _fetch(self, endpoint: str = "/groups", select: str = "groups",
-               params: dict = None):
-        """
-        Used to test if DataQuery is responding.
-
-        :param <str> endpoint: default '/groups', end-point of DataQuery to be explored.
-        :param <str> select: default 'groups' string with select for within the endpoint.
-        :param <str> params: dictionary of parameters to be passed to request
-
-        :return: list of response from DataQuery
-        :rtype: <list>
-
-        """
-
-        url = self.base_url + endpoint
-        self.last_url = url
-
-        results = []
-
-        auth_check = lambda string: string.split('-')[1].strip().split('<')[0]
-
-        r = self.get_dq_api_result(url=url, params=params)
-        self.status_code = r.status_code
-        self.last_response = r.text
-
-        if self.last_response[0] != "{":
-            condition = auth_check(self.last_response)
-
-            error = condition + " - unable to access DataQuery. Password expired."
-            if condition == 'Authentication Failure':
-                raise RuntimeError(error)
-
-        self.last_url = r.url
-
-        response = json.loads(self.last_response)
-
-        assert select in response.keys()
-        results.extend(response[select])
-
-        if isinstance(response["info"], dict):
-            results = response["info"]
-            print(results['description'])
-
-        return results
 
 
 class OAuth(object):
@@ -161,8 +117,12 @@ class OAuth(object):
         )
 
         self.client_secret: str = client_secret
-        self.last_response: Optional[str] = None
         self._stored_token: Optional[dict] = None
+
+        # For debugging purposes save last request response
+        self.status_code: Optional[int] = None
+        self.last_response: Optional[str] = None
+        self.last_url: Optional[str] = None
 
     def _valid_token(self) -> bool:
         if self._stored_token is None:
@@ -200,7 +160,7 @@ class OAuth(object):
 
         return self._stored_token['access_token']
 
-    def get_dq_api_result(self, url, params: dict = None):
+    def get_dq_api_result(self, url: str, params: dict = None):
         """Method used exclusively to request data from the API."""
         with requests.get(
                 url=url,
@@ -208,35 +168,8 @@ class OAuth(object):
                 headers={'Authorization': 'Bearer ' + self._get_token()},
                 proxies={}
         ) as r:
-            self.last_response = r.text
+            self.last_response: str = r.text
+            self.status_code: int = r.status_code
+            self.last_url: str = r.url
 
         return r
-
-    def _fetch(self, endpoint: str = "/groups", select: str = "groups",
-               payload: Union[list, dict] = None, params: dict = None):
-        """Used to test if DataQuery is responding.
-
-        :param <str> endpoint: default '/groups', end-point of DataQuery to be explored.
-        :param <str> select:
-        :param <list/dict> payload: default None, defines payload for a 'POST' method.
-        :param <dict> params:
-
-        :return: list with response from DataQuery Web API.
-        :rtype: <list>
-        """
-
-        results = []
-        url = self.base_url + endpoint
-        r = self.get_dq_api_result(url=url, params=params)
-
-        self.last_response = r.text
-        response = json.loads(self.last_response)
-
-        assert select in response.keys()
-        results.extend(response[select])
-
-        if isinstance(response["info"], dict):
-            results = response["info"]
-            print(results['description'])
-
-        return results
