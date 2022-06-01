@@ -1,10 +1,5 @@
-
-"""
-DataQuery Interface.
-"""
-
+"""DataQuery Interface."""
 from typing import List
-import json
 import pandas as pd
 import numpy as np
 from math import ceil, floor
@@ -13,101 +8,96 @@ import warnings
 import concurrent.futures
 import time
 from itertools import chain
-from macrosynergy.dataquery.oauth import OAuth
-from macrosynergy.dataquery.cert_auth import CertAuth
+from typing import Optional
+import requests
+from .auth import CertAuth, OAuth
 
 
 class Interface(object):
-    """
-    Initiate the object DataQueryInterface.
-
-    ©JP Morgan
-
-    Authentication:
-      1. Client authentication through 2-way SSL.
-      2. User authentication (HTTP basic).
-
-    The URL http://www.jpmm.com points to https://markets.jpmorgan.com
-
-    JP Morgan DataQuery API is based on the OpenAPI standard
-    (https://en.wikipedia.org/wiki/OpenAPI_Specification)
-    which is build on Swagger (https://swagger.io/docs/).
-
-    Data models for returns:
-      - TimeSeriesResponse: "instruments"
-      - FiltersResponse: "filters"
-      - AttributesResponse: "instruments"
-      - InstrumentsResponse: "instruments"
-      - GroupsResponse: "groups"
+    """API Interface to ©JP Morgan DataQuery
 
     :param <bool> debug: boolean,
         if True run the interface in debugging mode.
     :param <bool> concurrent: run the requests concurrently.
+    :param <int> thread_handler: count of threads for downloading from DQ.
+    :param <str> client_id: optional argument required for OAuth authentication
+    :param <str> client_secret: optional argument required for OAuth authentication
 
-    :return: None
     """
-    source_code = "JPMDQ"
-    source_name = "DataQuery"
-    __name__ = f"{source_name:s}Interface"
 
-    def __init__(self, oauth: bool = False,
-                 debug: bool = False,
-                 concurrent: bool = True,
-                 thread_handler: int = 20,
-                 **kwargs):
+    def __init__(
+            self,
+            oauth: bool = False,
+            debug: bool = False,
+            concurrent: bool = True,
+            thread_handler: int = 20,
+            **kwargs
+    ):
 
         if oauth:
-            client_id = kwargs.pop('client_id')
-            client_secret = kwargs.pop('client_secret')
-            access = OAuth(client_id=client_id,
-                           client_secret=client_secret)
-            self.access = access
+            self.access: OAuth = OAuth(
+                client_id=kwargs.pop('client_id'),
+                client_secret=kwargs.pop('client_secret')
+            )
         else:
-            username = kwargs.pop('username')
-            password = kwargs.pop('password')
-            crt = kwargs.pop('crt')
-            key = kwargs.pop('key')
-            access = CertAuth(username=username, password=password,
-                              crt=crt, key=key)
-            self.access = access
+            self.access: CertAuth = CertAuth(
+                username=kwargs.pop('username'),
+                password=kwargs.pop('password'),
+                crt=kwargs.pop('crt'),
+                key=kwargs.pop('key')
+            )
 
-        self.debug = debug
-        self.last_url = None
-        self.status_code = None
-        self.last_response = None
-        self.concurrent = concurrent
-        self.thread_handler = thread_handler
+        self.debug: bool = debug
+        self.last_url: Optional[str] = None
+        self.status_code: Optional[int] = None
+        self.last_response: Optional[str] = None
+        self.concurrent: bool = concurrent
+        self.thread_handler: int = thread_handler
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         if exc_type:
-            print(f'exc_type: {exc_type}')
-            print(f'exc_value: {exc_value}')
-            print(f'exc_traceback: {exc_traceback}')
+            print(f'Execution {exc_type} with value (exc_value):\n{exc_value}')
 
     def check_connection(self) -> bool:
-        """
-        Check connect (heartbeat) to DataQuery.
+        """Check connect (heartbeat) to DataQuery"""
+        r: requests.Response = self.access.get_dq_api_result(
+            url=self.access.base_url + "/services/heartbeat"
+        )
 
-        :return <bool>: success of connection. Check if True (return code 200),
-            and False otherwise.
-        """
-        results = self.access._fetch(endpoint="/services/heartbeat",
-                                     select='info')
+        # TODO additional authentication responses...
+        if r.status_code == 401:
+            raise RuntimeError(
+                f"Authentication error - unable to access DataQuery:\n{r.text}"
+            )
+        elif self.access.last_response[0] != "{":
+            # TODO deprecated check if deprecated and already caught by the above 401
+            # Authentication check
+            condition: str = self.last_response.split('-')[1].strip().split('<')[0]
+            if condition == 'Authentication Failure':
+                raise RuntimeError(
+                    condition + " - unable to access DataQuery. Password expired."
+                )
 
-        assert isinstance(results, dict), f"Response from DQ: {results}"
+        assert r.ok, f"Access issue status code {r.status_code} for {r.text}"
+
+        response: dict = r.json()
+        results: dict = response["info"]
 
         if int(results["code"]) != 200:
-            msg = f"Message: {results['message']:s}," \
-                  f" Description: {results['description']:s}"
+            print(
+                f"DataQuery response {results['message']:s}"
+                f" with description: {results['description']:s}"
+            )
 
         return int(results["code"]) == 200
 
     @staticmethod
     def server_retry(response: dict, select: str):
-        """
+        """Server retry
+
         DQ requests are powered by four servers. Therefore, if a single server is failing
         try the remaining three servers for a request. In theory, trying the sample space
         of servers should invariably result in a successful request: assuming all four
@@ -128,7 +118,7 @@ class Interface(object):
         else:
             return True
 
-    def _fetch_threading(self, endpoint, params: dict):
+    def _fetch_threading(self, endpoint, params: dict, server_count: int = 5):
         """
         Method responsible for requesting Tickers from the API. Able to pass in 20
         Tickers in a single request. If there is a request failure, the function will
@@ -137,6 +127,7 @@ class Interface(object):
 
         :param <str> endpoint:
         :param <dict> params: dictionary containing the required parameters.
+        :param <int> server_count: count of servers to be retried.
 
         return <dict>: singular dictionary obtaining maximum 20 elements.
         """
@@ -148,22 +139,18 @@ class Interface(object):
 
         results = []
         counter = 0
-        clause = lambda counter: (counter <= 5)
-
-        while clause(counter):
+        while counter <= server_count:
             try:
                 # The required fields will already be instantiated on the instance of the
                 # Class.
-                r = self.access.get_dq_api_result(url=url,
-                                                  params=params)
+                r = self.access.get_dq_api_result(url=url, params=params)
             except ConnectionResetError:
                 counter += 1
                 time.sleep(0.05)
                 print(f"Server error: will retry. Attempt number: {counter}.")
                 continue
             else:
-                last_response = r.text
-                response = json.loads(last_response)
+                response = r.json()
 
                 count = 0
                 while not self.server_retry(response, select):
@@ -177,7 +164,7 @@ class Interface(object):
                 if response["links"][1]["next"] is None:
                     break
 
-                url = f"{self.base_url:s}{response['links'][1]['next']:s}"
+                url = f"{self.access.base_url:s}{response['links'][1]['next']:s}"
                 params = {}
 
         if isinstance(results, list):
@@ -259,7 +246,7 @@ class Interface(object):
                     for f in concurrent.futures.as_completed(output):
                         try:
                             response = f.result()
-                            if f.__dict__['_result'] == None:
+                            if f.__dict__['_result'] is None:
                                 return None
 
                         except ValueError:
