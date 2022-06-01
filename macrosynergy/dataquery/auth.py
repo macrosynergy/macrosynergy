@@ -60,7 +60,9 @@ class CertAuth(object):
     @staticmethod
     def valid_path(directory: str, file_type: str) -> Optional[str]:
         """Validates the key & certificate exist in the referenced directory."""
-        assert isinstance(directory, str), f"{file_type:s} file must be a <str> not {directory}{type(directory)})."
+        assert isinstance(directory, str), (
+            f"{file_type:s} file must be a <str> not {directory}{type(directory)})."
+        )
 
         if not os.path.exists(directory) and os.path.isfile(directory):
             # TODO should this not raise an error (exception)?
@@ -129,8 +131,8 @@ class OAuth(object):
             return False
 
         created: datetime = self._stored_token['created_at']
-        expires: datetime = self._stored_token['expires_in']
-        if (datetime.now() - created).total_seconds() / 60 >= expires - 1:
+        expires: int = self._stored_token['expires_in']  # Minutes
+        if (datetime.now() - created).total_seconds() / 60 >= (expires - 1):
             return False
 
         return True

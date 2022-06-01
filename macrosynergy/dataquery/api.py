@@ -1,6 +1,5 @@
 """DataQuery Interface."""
 from typing import List
-import json
 import pandas as pd
 import numpy as np
 from math import ceil, floor
@@ -60,11 +59,7 @@ class Interface(object):
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         if exc_type:
-            raise RuntimeError(
-                f'exc_type: {exc_type},'
-                f' exc_value: {exc_value},'
-                f' exc_traceback: {exc_traceback}'
-            )
+            print(f'Execution {exc_type} with value (exc_value):\n{exc_value}')
 
     def check_connection(self) -> bool:
         """Check connect (heartbeat) to DataQuery"""
@@ -75,16 +70,21 @@ class Interface(object):
         # TODO additional authentication responses...
         if r.status_code == 401:
             raise RuntimeError(
-                f"Ahtentication error - unable to access DataQuery: {r.text}")
+                f"Authentication error - unable to access DataQuery:\n{r.text}"
+            )
         elif self.access.last_response[0] != "{":
+            # TODO deprecated check if deprecated and already caught by the above 401
             # Authentication check
             condition: str = self.last_response.split('-')[1].strip().split('<')[0]
             if condition == 'Authentication Failure':
-                raise RuntimeError(condition + " - unable to access DataQuery. Password expired.")
+                raise RuntimeError(
+                    condition + " - unable to access DataQuery. Password expired."
+                )
 
         assert r.ok, f"Access issue status code {r.status_code} for {r.text}"
 
-        results = r.json()
+        response: dict = r.json()
+        results: dict = response["info"]
 
         if int(results["code"]) != 200:
             print(
@@ -246,7 +246,7 @@ class Interface(object):
                     for f in concurrent.futures.as_completed(output):
                         try:
                             response = f.result()
-                            if f.__dict__['_result'] == None:
+                            if f.__dict__['_result'] is None:
                                 return None
 
                         except ValueError:
