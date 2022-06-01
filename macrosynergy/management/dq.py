@@ -1,4 +1,4 @@
-
+"""Old DataQuery Interface path"""
 import warnings
 from macrosynergy.dataquery.api import Interface as DataQueryInterface
 
