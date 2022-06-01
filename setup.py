@@ -5,7 +5,6 @@ import subprocess
 import warnings
 from pathlib import Path
 
-
 DOCLINES = (__doc__ or '').split("\n")
 
 path = Path(__file__).parent
@@ -14,7 +13,6 @@ with open(os.path.join(path, "README.md"), "r") as f:
 
 if sys.version_info[:2] < (3, 6):
     raise RuntimeError("Python version >= 3.6 required.")
-
 
 CLASSIFIERS = """\
 Intended Audience :: Science/Research
@@ -36,7 +34,7 @@ Operating System :: MacOS
 
 MAJOR = 0
 MINOR = 0
-MICRO = 11
+MICRO = 12
 ISRELEASED = True
 VERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
 

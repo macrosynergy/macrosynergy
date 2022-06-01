@@ -96,7 +96,8 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
     :return <pd.Dataframe>: reduced dataframe that also removes duplicates
     """
 
-    dfx = df[df["real_date"] >= pd.to_datetime(start)] if start is not None else df
+    dfx = df.copy()
+    dfx = dfx[dfx["real_date"] >= pd.to_datetime(start)] if start is not None else dfx
     dfx = dfx[dfx["real_date"] <= pd.to_datetime(end)] if end is not None else dfx
 
     if blacklist is not None:  # blacklisting by cross-section
@@ -106,7 +107,7 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
             filt3 = dfx["real_date"] <= pd.to_datetime(value[1])
             dfx = dfx[~(filt1 & filt2 & filt3)]
 
-    dfx["ticker"] = df["cid"] + '_' + df["xcat"]
+    dfx["ticker"] = dfx["cid"] + '_' + dfx["xcat"]
     ticks_in_df = dfx["ticker"].unique()
     if ticks is None:
         ticks = sorted(ticks_in_df)
@@ -126,13 +127,15 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                   blacklist: dict = None, years: int = None, freq: str = 'M',
                   lag: int = 0, fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean')):
 
-    """Create custom two-categories dataframe with appropriate frequency and lags
-       suitable for analysis.
+    """
+    Create custom two-categories dataframe with appropriate frequency and lags
+    suitable for analysis.
 
     :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: exactly two extended categories whose relationship is to be
-        analyzed.
+        analyzed. It must be noted that the first category is the explanatory variable
+        and the second category the explained, dependent, variable.
     :param <List[str]> cids: cross sections to be included. Default is all in the
         dataframe.
     :param <str> start: earliest date in ISO 8601 format. Default is None, i.e. earliest
@@ -142,15 +145,16 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     :param <dict> blacklist: cross sections with date ranges that should be excluded from
         the data frame. If one cross section has several blacklist periods append numbers
         to the cross section code.
-    :param <int> years: Number of years over which data are aggregated. Supersedes freq
-        and does not allow lags, Default is None, i.e. no multi-year aggregation.
+    :param <int> years: Number of years over which data are aggregated. Supersedes the
+        "freq" parameter and does not allow lags, Default is None, i.e. no multi-year
+        aggregation.
     :param <str> val: name of column that contains the values of interest. Default is
         'value'.
     :param <str> freq: letter denoting frequency at which the series are to be sampled.
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
-    :param <int> lag: Lag (delay of arrival) of first (explanatory) category in periods
+    :param <int> lag: lag (delay of arrival) of first (explanatory) category in periods
         as set by freq. Default is 0.
-    :param <int> fwin: Forward moving average window of first category. Default is 1,
+    :param <int> fwin: forward moving average window of first category. Default is 1,
         i.e no average.
         Note: This parameter is used mainly for target returns as dependent variables.
     :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for
@@ -162,26 +166,48 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     assert freq in ['D', 'W', 'M', 'Q', 'A']
     assert not (years is not None) & (lag != 0), 'Lags cannot be applied to year groups.'
     if years is not None:
-        assert isinstance(start, str), 'Year aggregation requires a start date.'
+        assert isinstance(start, str), "Year aggregation requires a start date."
 
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, blacklist, out_all=True)
 
     col_names = ['cid', 'xcat', 'real_date', val]
 
+    sum_clause = 'sum' in xcat_aggs
+    if sum_clause:
+        sum_index = xcat_aggs.index('sum')
+
     df_output = []
     if years is None:
-        for i in range(2):
-            dfw = df[df['xcat'] == xcats[i]].pivot(index='real_date', columns='cid',
-                                                   values=val)
-            dfw = dfw.resample(freq).agg(xcat_aggs[i])
-            if (i == 0) and (lag > 0):  # first category (explanatory) is shifted forward
-                dfw = dfw.shift(lag)
-            if (i == 1) and (fwin > 0):
-                dfw = dfw.rolling(window=fwin).mean().shift(1 - fwin)
-            dfx = pd.melt(dfw.reset_index(), id_vars=['real_date'],
-                          value_vars=cids, value_name=val)
-            dfx['xcat'] = xcats[i]
-            df_output.append(dfx[col_names])
+        expln = xcats[0]
+        depnd = xcats[1]
+
+        df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values=val)
+        df_w = df_w.groupby([pd.Grouper(level='cid'),
+                             pd.Grouper(level='real_date', freq=freq)])
+        expln_col = df_w[expln].agg(xcat_aggs[0]).astype(dtype=np.float32)
+        depnd_col = df_w[depnd].agg(xcat_aggs[1]).astype(dtype=np.float32)
+        if sum_clause and sum_index:
+            depnd_col = depnd_col.replace({0.0: np.nan})
+        elif sum_clause:
+            expln_col = expln_col.replace({0.0: np.nan})
+
+        # Explanatory variable is shifted forward.
+        if lag > 0:
+            # Utilise .groupby() to handle for multi-index Pandas DataFrame.
+            expln_col = expln_col.groupby(level=0).shift(1)
+        if fwin > 0:
+            s = 1 - fwin
+            depnd_col = depnd_col.rolling(window=fwin).mean().shift(s)
+
+        expln_df = expln_col.reset_index()
+        expln_df['xcat'] = expln
+        expln_df = expln_df.rename(columns={expln: "value"})
+
+        depnd_df = depnd_col.reset_index()
+        depnd_df['xcat'] = depnd
+        depnd_df = depnd_df.rename(columns={depnd: "value"})
+        df_output.append(pd.concat([expln_df, depnd_df], ignore_index=True))
+
     else:
         s_year = pd.to_datetime(start).year
         start_year = s_year
@@ -191,6 +217,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         remainder = (e_year - s_year) % years
 
         year_groups = {}
+
         for group in range(grouping):
             value = [i for i in range(s_year, s_year + years)]
             key = f"{s_year} - {s_year + (years - 1)}"
@@ -205,14 +232,22 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         translate_ = lambda year: list_y_groups[int((year % start_year) / years)]
         df['real_date'] = pd.to_datetime(df['real_date'], errors='coerce')
         df['custom_date'] = df['real_date'].dt.year.apply(translate_)
+
         for i in range(2):
             dfx = df[df['xcat'] == xcats[i]]
-            dfx = dfx.groupby(['xcat', 'cid',
-                               'custom_date']).agg(xcat_aggs[i]).reset_index()
+            dfx = dfx.groupby(['xcat', 'cid', 'custom_date'])
+            dfx = dfx.agg(xcat_aggs[i]).reset_index()
+
+            if 'real_date' in dfx.columns:
+                dfx = dfx.drop(['real_date'], axis=1)
             dfx = dfx.rename(columns={"custom_date": "real_date"})
             df_output.append(dfx[col_names])
 
     dfc = pd.concat(df_output)
+    # If either of the two variables, explanatory or dependent variable, contain a NaN
+    # value, remove the row: a relationship is not able to be established between a
+    # realised datapoint and a Nan value. Therefore, remove the row from the returned
+    # DataFrame.
     dfc = dfc.pivot(index=('cid', 'real_date'), columns='xcat',
                     values=val).dropna()[xcats]
 

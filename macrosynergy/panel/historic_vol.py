@@ -138,7 +138,7 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
     df_out['xcat'] = xcat + postfix
 
-    return df_out[df.columns]
+    return df_out[df.columns].sort_values(['cid', 'xcat', 'real_date'])
 
 
 if __name__ == "__main__":
