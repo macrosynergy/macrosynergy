@@ -29,7 +29,7 @@ def heatmap_grades(df: pd.DataFrame, xcats:  List[str],  cids: List[str] = None,
 
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
     df = df[['xcat', 'cid', 'real_date', grade]]
-    df[grade] = df[grade].astype(float).round()
+    df[grade] = df[grade].astype(float).round(2)
 
     df_ags = df.groupby(['xcat', 'cid']).mean().reset_index().\
         pivot(index='xcat', columns='cid', values=grade)

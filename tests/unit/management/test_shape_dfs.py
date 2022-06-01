@@ -137,14 +137,13 @@ class TestAll(unittest.TestCase):
         start_bucket = int(floor(s_year - start) / years)
 
         self.dfd['real_date'] = pd.to_datetime(self.dfd['real_date'], errors='coerce')
-        # dfc = categories_df(dfd, xcats=['XR', 'CRY'], cids=['CAD'],
-                            # freq='M', lag=0, xcat_aggs=['mean', 'mean'],
-                            # start='2000-01-01', years=years)
+        dfc = categories_df(dfd, xcats=['XR', 'CRY'], cids=['CAD'],
+                            freq='M', lag=0, xcat_aggs=['mean', 'mean'],
+                            start='2000-01-01', years=years)
 
         realised_buckets = no_buckets - start_bucket
-        # filter_df = dfc.loc['CAD', :]
-
-        # self.assertTrue(realised_buckets == filter_df.shape[0])
+        filter_df = dfc.loc['CAD', :]
+        self.assertTrue(realised_buckets == filter_df.shape[0])
 
         # Apply the same logic but to a different testcase.
         years = 4
@@ -153,14 +152,33 @@ class TestAll(unittest.TestCase):
         # Adjust for the formal start date.
         start_bucket = int(floor(s_year - start) / years)
 
-        # dfc = categories_df(dfd, xcats=['XR', 'CRY'], cids=['CAD'],
-                            # freq='M', lag=0, xcat_aggs=['mean', 'mean'],
-                            # start='2000-01-01', years=years)
+        dfc = categories_df(dfd, xcats=['XR', 'CRY'], cids=['CAD'],
+                            freq='M', lag=0, xcat_aggs=['mean', 'mean'],
+                            start='2000-01-01', years=years)
 
         realised_buckets = no_buckets - start_bucket
-        # filter_df = dfc.loc['CAD', :]
+        filter_df = dfc.loc['CAD', :]
+        self.assertTrue(realised_buckets == filter_df.shape[0])
 
-        # self.assertTrue(realised_buckets == filter_df.shape[0])
+        # Test the aggregator parameter 'last': as the name suggests, 'last' will isolate
+        # the terminal value of each time-period. Therefore, check the returned value, in
+        # the dataframe, confirms the above logic.
+        dfc = categories_df(self.dfd, xcats=['XR', 'CRY'],
+                            cids=['AUD', 'CAD'], xcat_aggs=['last', 'mean'],
+                            start='2005-01-01', years=6)
+
+        # Manual check.
+        reduced_df = self.dfd[self.dfd['xcat'] == 'XR']
+        reduced_df = reduced_df[reduced_df['real_date'] == '2016-12-30']
+        aud = reduced_df[reduced_df['cid'] == 'AUD']
+        cad = reduced_df[reduced_df['cid'] == 'CAD']
+        aud = aud['value'].to_numpy()[0]
+        cad = cad['value'].to_numpy()[0]
+
+        aud_xr = dfc.iloc[0][0]
+        cad_xr = dfc.iloc[2][0]
+        self.assertTrue(aud == aud_xr)
+        self.assertTrue(cad == cad_xr)
 
     def test_categories_df_lags(self):
         self.dataframe_constructor()
