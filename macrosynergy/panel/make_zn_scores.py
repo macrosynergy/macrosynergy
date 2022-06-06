@@ -2,9 +2,7 @@
 import numpy as np
 import pandas as pd
 from typing import List
-from itertools import filterfalse
 from macrosynergy.management.shape_dfs import reduce_df
-from macrosynergy.panel.expanding_statistics import expanding_mean_with_nan
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 
@@ -33,6 +31,11 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
 
     df.dropna(axis=0, how='all', inplace=True)
     df_out = pd.DataFrame(np.nan, index=df.index, columns=['value'])
+    # An adjustment for individual series' first realised value is not required given the
+    # returned DataFrame will be subtracted from the original DataFrame. The original
+    # DataFrame will implicitly host this information through NaN values such that when
+    # the arithmetic operation is made, the falsified values will be displaced by NaN
+    # values.
     first_date = df.index[min_obs]
 
     if stat == "zero":
@@ -40,7 +43,7 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
         df_out["value"] = 0
 
     elif not sequential:
-
+        # The entire series is treated as in-sample.
         statval = df.stack().apply(stat)
         df_out["value"] = statval
 
@@ -151,7 +154,8 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         df_neutral = expanding_stat(dfw, dates_iter, stat=neutral, sequential=sequential,
                                     min_obs=min_obs, iis=iis)
         dfx = dfw.sub(df_neutral['value'], axis=0)
-        df_mabs = expanding_stat(dfx.abs(), dates_iter, stat="mean", sequential=sequential,
+        df_mabs = expanding_stat(dfx.abs(), dates_iter, stat="mean",
+                                 sequential=sequential,
                                  min_obs=min_obs, iis=iis)
         dfw_zns_pan = dfx.div(df_mabs['value'], axis='rows')
 
@@ -159,7 +163,9 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
         for i, cid in enumerate(cross_sections):
 
-            dfi = dfw.iloc[:, [i]]
+            dfi = pd.DataFrame(data=dfw.iloc[:, i].to_numpy(),
+                               index=dfw.index,
+                               columns=[cid])
             df_neutral = expanding_stat(dfi, dates_iter, stat=neutral,
                                         sequential=sequential,
                                         min_obs=min_obs, iis=iis)
@@ -175,7 +181,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     if thresh is not None:
         dfw_zns.clip(lower=-thresh, upper=thresh, inplace=True)
 
-    # --- Reformating for output
+    # --- Reformatting of output into standardised DataFrame.
 
     df_out = dfw_zns.stack().to_frame("value").reset_index()
     df_out['xcat'] = xcat + postfix
@@ -209,15 +215,22 @@ if __name__ == "__main__":
 
     dfd = make_qdf(df_cids, df_xcats, back_ar = 0.75)
 
+    # Monthly: panel + cross.
     dfzm = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=True,
                           neutral='mean', pan_weight=0.95, min_obs=261,
                           est_freq="m")
+
+    # Weekly: panel + cross.
     dfzw = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=False,
                           neutral='mean', pan_weight=0.5, min_obs=261,
                           est_freq="w")
+
+    # Daily: panel. Neutral and standard deviation will be computed daily.
     dfzd = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=True,
                           neutral='mean', pan_weight=1.0, min_obs=261,
                           est_freq="d")
+
+    # Daily: cross.
     dfzd = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=True,
-                          neutral='mean', pan_weight=0, min_obs=261,
+                          neutral='mean', pan_weight=0.5, min_obs=261,
                           est_freq="d")
