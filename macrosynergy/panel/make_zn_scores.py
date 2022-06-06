@@ -2,6 +2,7 @@
 import numpy as np
 import pandas as pd
 from typing import List
+from itertools import groupby
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
@@ -52,7 +53,7 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
 
     else:
 
-        dates = dates_iter[dates_iter > first_realised_date]
+        dates = dates_iter[dates_iter >= first_realised_date]
         for date in dates:
             df_out.loc[date, "value"] = df.loc[first_date:date].stack().apply(stat)
         df_out = df_out.fillna(method='ffill')
@@ -217,21 +218,35 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar = 0.75)
 
     # Monthly: panel + cross.
-    dfzm = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=True,
-                          neutral='mean', pan_weight=0.95, min_obs=261,
-                          est_freq="m")
+    # dfzm = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=True,
+                          # neutral='mean', pan_weight=0.95, min_obs=261,
+                          # est_freq="m")
 
     # Weekly: panel + cross.
-    dfzw = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=False,
-                          neutral='mean', pan_weight=0.5, min_obs=261,
-                          est_freq="w")
+    # dfzw = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=False,
+                          # neutral='mean', pan_weight=0.5, min_obs=261,
+                          # est_freq="w")
 
     # Daily: panel. Neutral and standard deviation will be computed daily.
-    dfzd = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=True,
-                          neutral='mean', pan_weight=1.0, min_obs=261,
-                          est_freq="d")
+    # dfzd = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=True,
+                          # neutral='mean', pan_weight=1.0, min_obs=261,
+                          # est_freq="d")
 
     # Daily: cross.
-    dfzd = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=True,
-                          neutral='mean', pan_weight=0.5, min_obs=261,
-                          est_freq="d")
+    # dfzd = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=True,
+                          # neutral='mean', pan_weight=0.5, min_obs=261,
+                          # est_freq="d")
+
+    s_date = min(dfd['real_date'])
+    e_date = max(dfd['real_date'])
+    dates_iter = pd.date_range(start=s_date, end=e_date, freq='BQ')
+    dfd = dfd[dfd['xcat'] == 'CRY']
+    dfw = dfd.pivot(index='real_date', columns='cid', values='value')
+
+    df_mean = expanding_stat(df=dfw, dates_iter=dates_iter, stat='mean',
+                             sequential=True, min_obs=261, iis=False)
+    print(len(df_mean['value'].unique()))
+    bm_values = [k for k, g in groupby(df_mean.to_numpy())]
+
+    print(len(bm_values))
+    print(len(dates_iter))
