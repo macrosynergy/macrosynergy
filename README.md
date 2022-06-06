@@ -37,7 +37,6 @@ together with your OAuth authentication credentials:
 import pandas as pd
 from macrosynergy.dataquery import api
 
-print("\nTest connection and data download for OAuth")
 with api.Interface(
         oauth=True,
         client_id="<dq_client_id>",
@@ -56,7 +55,6 @@ Alternatively, you can also the certificate and private key pair, to access Data
 import pandas as pd
 from macrosynergy.dataquery import api
 
-print("\nRepeat for certificate")
 with api.Interface(
         oauth=False,
         username="<dq_username>",
