@@ -1,6 +1,7 @@
 import unittest
 import os
 import pandas as pd
+import datetime
 from macrosynergy.dataquery.api import Interface
 
 
@@ -28,7 +29,10 @@ class TestDataQueryOAuth(unittest.TestCase):
             client_id=os.getenv("DQ_CLIENT_ID"),
             client_secret=os.getenv("DQ_CLIENT_SECRET")
         ) as dq:
-            data = dq.download(tickers="EUR_FXXR_NSA", start_date="2022-01-01")
+            data = dq.download(
+                tickers="EUR_FXXR_NSA",
+                start_date=(datetime.date.today() - datetime.timedelta(days=10)).isoformat()
+            )
         self.assertIsInstance(data, pd.DataFrame)
 
         self.assertFalse(data.empty)
