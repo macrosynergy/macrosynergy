@@ -257,6 +257,9 @@ class TestAll(unittest.TestCase):
         df_mean = self.cross_neutral(stat='mean', sequential=False, iis=False)
         # Arbitrarily chosen index to test the logic.
         index = 411
+        # Testing the cross-neutral level if sequential equals False. The entire series
+        # will have a single neutral level (all handled as in-sample). Therefore, isolate
+        # the column and calculate the mean adjusting for NaN values.
         for i, cross in enumerate(self.cids):
 
             mean = np.nanmean(self.dfw[cross].to_numpy())
@@ -268,14 +271,19 @@ class TestAll(unittest.TestCase):
             self.assertTrue(np.nan_to_num(dif[index]) < epsilon)
 
         df_median = self.cross_neutral(stat='median', sequential=False, iis=False)
+        # Again, same logic as above. Test the cross-sectional median value when the
+        # sequential parameter is set to False.
         for i, cross in enumerate(self.cids):
 
             median = np.nanmedian(self.dfw[cross].to_numpy())
-            median_col = self.handle_nan(df_median.iloc[:, i])
-            median_col = list(set(median_col))
-            self.assertTrue(len(median_col) == 1)
 
-            value = median_col[0]
+            median_cross = df_median.loc[:, cross]
+            median_cross.dropna(axis=0, how='any', inplace=True)
+            median_value = median_cross.unique()
+
+            self.assertTrue(len(median_value) == 1)
+
+            value = float(median_cross.iloc[0])
             dif = np.abs(median - value)
             # Test if function median is correct.
             self.assertTrue(dif < epsilon)
@@ -284,7 +292,10 @@ class TestAll(unittest.TestCase):
         df_mean = self.cross_neutral(stat='mean', sequential=True,
                                      iis=False)
         cross_sections = list(self.dfw.columns)
-
+        # Test the cross-sectional expanding mean calculated on a daily basis. To
+        # validate the logic used in make_zn_scores() use pd.expanding().mean() on each
+        # individual series. The rolling neutral level in make_zn_scores() is calculated
+        # through an iterative loop.
         for i, cid in enumerate(cross_sections):
 
             column_mean = df_mean.loc[:, cid].to_numpy()
