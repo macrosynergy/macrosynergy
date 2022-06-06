@@ -176,7 +176,11 @@ class TestAll(unittest.TestCase):
         # Therefore, the number of unique neutral values will correspond to the number of
         # re-estimation dates.
         df_mean = expanding_stat(df=dfw, dates_iter=dates_iter, stat='mean',
-                                 sequential=True, min_obs=261, iis=True)
+                                 sequential=True, min_obs=0, iis=False)
+        # Remove any NaN values when validating the logic. Exclusively check the values
+        # computed on each re-estimation date.
+        df_mean.dropna(axis=0, how='all', inplace=True)
+
         bm_values = df_mean['value'].to_numpy()
         # Avoid using a Set which orders the data. The itertools.groupby() method makes
         # an iterator that returns consecutive keys and groups from the iterable.
@@ -229,10 +233,12 @@ class TestAll(unittest.TestCase):
         dfw_zns_css = self.dfw * 0
         for i, cid in enumerate(self.cids):
             # pd.core.DataFrame.
-            dfi = self.dfw.iloc[:, [i]]
+            dfi = self.dfw.loc[:, cid]
+            dfi = pd.DataFrame(data=dfi.to_numpy(), index=dfi.index,
+                               columns=[cid])
             df_neutral = expanding_stat(dfi, dates_iter=self.dates_iter, stat=stat,
                                         sequential=sequential, iis=iis)
-            dfw_zns_css.iloc[:, i] = df_neutral
+            dfw_zns_css.loc[:, cid] = df_neutral
 
         return dfw_zns_css
 
@@ -248,24 +254,23 @@ class TestAll(unittest.TestCase):
 
         epsilon = 0.0001
 
-        df_mean = self.cross_neutral(stat='mean', sequential=False, iis=True)
-        df_median = self.cross_neutral(stat='median', sequential=False, iis=True)
-
+        df_mean = self.cross_neutral(stat='mean', sequential=False, iis=False)
         # Arbitrarily chosen index to test the logic.
         index = 411
         for i, cross in enumerate(self.cids):
 
-            column = self.dfw[[cross]].to_numpy()
-            column = np.squeeze(column, axis=1)
-            mean_col = df_mean.iloc[:, i]
+            mean = np.nanmean(self.dfw[cross].to_numpy())
+            mean_col = df_mean.loc[:, cross]
 
             # Will exclude NaN values from the calculation.
-            mean = np.nansum(column)
             dif = np.abs(mean_col - mean)
             # Test if function mean is correct.
             self.assertTrue(np.nan_to_num(dif[index]) < epsilon)
 
-            median = np.nanmedian(column)
+        df_median = self.cross_neutral(stat='median', sequential=False, iis=False)
+        for i, cross in enumerate(self.cids):
+
+            median = np.nanmedian(self.dfw[cross].to_numpy())
             median_col = self.handle_nan(df_median.iloc[:, i])
             median_col = list(set(median_col))
             self.assertTrue(len(median_col) == 1)
@@ -278,31 +283,21 @@ class TestAll(unittest.TestCase):
         min_obs = 261
         df_mean = self.cross_neutral(stat='mean', sequential=True,
                                      iis=False)
-        df_median = self.cross_neutral(stat='median', sequential=True,
-                                       iis=True)
         cross_sections = list(self.dfw.columns)
 
         for i, cid in enumerate(cross_sections):
-            column_mean = df_mean.iloc[:, i]
 
-            series_mean = pd.Series(data=column_mean)
-            mean_index = self.valid_index(series_mean)
-            column = self.dfw.iloc[:, i]
+            column_mean = df_mean.loc[:, cid].to_numpy()
+            column_mean = self.handle_nan(column_mean)
 
-            date_index = self.valid_index(column)
-            self.assertTrue(mean_index == (date_index + min_obs))
-
-            column = self.dfw[[cid]]
+            column = self.dfw.loc[:, cid]
             cum_mean = column.expanding(min_periods=(min_obs + 1)).mean()
-            cum_mean = self.handle_nan(cum_mean[cid].to_numpy())
+            cum_mean = cum_mean.to_numpy()
+            test_arr = self.handle_nan(cum_mean)
 
-            dif = self.handle_nan(df_mean.iloc[:, i]) - cum_mean
+            dif = column_mean - test_arr
             # Check correct cumulative means.
             self.assertTrue(np.nan_to_num(dif[index]) < epsilon)
-
-            iis_period = df_median.iloc[date_index:(date_index + min_obs), i]
-            first_val_iis = iis_period[0]
-            self.assertTrue(np.all(iis_period == first_val_iis))
 
     def test_cross_down_sampling(self):
         """
