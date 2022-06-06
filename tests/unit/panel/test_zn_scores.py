@@ -418,13 +418,13 @@ class TestAll(unittest.TestCase):
         # Test weighting function.
         panel_df = make_zn_scores(dfd, 'CRY', self.cids, start="2010-01-04",
                                   sequential=False, min_obs=0, neutral='mean',
-                                  iis=False, thresh=None, pan_weight=0.75, postfix='ZN')
+                                  iis=True, thresh=None, pan_weight=0.75, postfix='ZN')
         df_cross = make_zn_scores(dfd, 'CRY', self.cids, start="2010-01-04",
                                   sequential=False, min_obs=0, neutral='mean',
-                                  iis=False, thresh=None, pan_weight=0.25, postfix='ZN')
+                                  iis=True, thresh=None, pan_weight=0.25, postfix='ZN')
 
         df_average = make_zn_scores(dfd, 'CRY', self.cids, start="2010-01-04",
-                                    sequential=False, min_obs=0, iis=False,
+                                    sequential=False, min_obs=0, iis=True,
                                     neutral='mean', thresh=None, pan_weight=0.5,
                                     postfix='ZN')
 
