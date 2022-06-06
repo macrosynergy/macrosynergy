@@ -458,7 +458,7 @@ class Interface(object):
     def valid_ticker(self, _dict, suppress_warning):
         """
         Iterates through each Ticker and determines whether the Ticker is held in the
-        DataBase or not. The validation mechanism will isolate each column, in all the
+        Database or not. The validation mechanism will isolate each column, in all the
         Tickers held in the dictionary, where the columns reflect the metrics passed,
         and validates that each value is not a NoneType Object. If all values are
         NoneType Objects, the Ticker is not valid, and it will be popped from the
@@ -482,7 +482,7 @@ class Interface(object):
                     condition = self.column_check(v, i)
                     if not condition:
                         if self.debug:
-                            warnings.warn("Error has occurred in the DataBase.")
+                            warnings.warn("Error has occurred in the Database.")
 
                 if not suppress_warning:
                     print(f"The ticker, {k}), does not exist in the Database.")
@@ -490,7 +490,7 @@ class Interface(object):
             else:
                 continue
 
-        print(f"Number of missing time-series from the DataBase: {ticker_missing}.")
+        print(f"Number of missing time-series from the Database: {ticker_missing}.")
         return dict_copy
 
     @staticmethod
