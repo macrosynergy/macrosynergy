@@ -175,7 +175,8 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
             df_mabs = expanding_stat(dfx.abs(), dates_iter, stat="mean",
                                      sequential=sequential,
                                      min_obs=min_obs, iis=iis)
-            dfw_zns_css.iloc[:, i] = dfx.div(df_mabs['value'], axis='rows')
+            arr_mabs = df_mabs['value'].to_numpy()
+            dfw_zns_css.iloc[:, i] = dfx.div(arr_mabs, axis='rows')
 
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
     dfw_zns = dfw_zns.dropna(axis=0, how='all')
@@ -219,12 +220,12 @@ if __name__ == "__main__":
 
     # Monthly: panel + cross.
     dfzm = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=True,
-                          neutral='mean', pan_weight=0.95, min_obs=261,
+                          neutral='mean', pan_weight=1.0, min_obs=261,
                           est_freq="m")
 
     # Weekly: panel + cross.
     dfzw = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=False,
-                          neutral='mean', pan_weight=0.5, min_obs=261,
+                          neutral='mean', pan_weight=1.0, min_obs=261,
                           est_freq="w")
 
     # Daily: panel. Neutral and standard deviation will be computed daily.
@@ -234,5 +235,9 @@ if __name__ == "__main__":
 
     # Daily: cross.
     dfzd = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=True,
-                          neutral='mean', pan_weight=0.5, min_obs=261,
+                          neutral='mean', pan_weight=1.0, min_obs=261,
                           est_freq="d")
+
+    panel_df = make_zn_scores(dfd, 'CRY', cids, start="2010-01-04",
+                              sequential=False, min_obs=0, neutral='mean',
+                              iis=False, thresh=None, pan_weight=0.75, postfix='ZN')
