@@ -36,20 +36,23 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
     # DataFrame will implicitly host this information through NaN values such that when
     # the arithmetic operation is made, the falsified values will be displaced by NaN
     # values.
-    first_date = df.index[min_obs]
+    # Inclusive of all available data.
+    first_date = df.index[0]
+    first_realised_date = df.index[min_obs]
 
     if stat == "zero":
 
         df_out["value"] = 0
 
     elif not sequential:
-        # The entire series is treated as in-sample.
+        # The entire series is treated as in-sample. Will automatically handle NaN
+        # values.
         statval = df.stack().apply(stat)
         df_out["value"] = statval
 
     else:
 
-        dates = dates_iter[dates_iter > first_date]
+        dates = dates_iter[dates_iter > first_realised_date]
         for date in dates:
             df_out.loc[date, "value"] = df.loc[first_date:date].stack().apply(stat)
         df_out = df_out.fillna(method='ffill')
@@ -163,9 +166,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
         for i, cid in enumerate(cross_sections):
 
-            dfi = pd.DataFrame(data=dfw.iloc[:, i].to_numpy(),
-                               index=dfw.index,
-                               columns=[cid])
+            dfi = dfw.iloc[:, [i]]
             df_neutral = expanding_stat(dfi, dates_iter, stat=neutral,
                                         sequential=sequential,
                                         min_obs=min_obs, iis=iis)
