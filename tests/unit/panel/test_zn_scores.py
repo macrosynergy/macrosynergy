@@ -283,7 +283,8 @@ class TestAll(unittest.TestCase):
 
             # self.assertTrue(len(median_value) == 1)
 
-            value = float(median_cross.iloc[0])
+            # Choose a random index to confirm the value.
+            value = float(median_cross.iloc[1000])
             dif = np.abs(median - value)
             # Test if function median is correct.
             self.assertTrue(dif < epsilon)
