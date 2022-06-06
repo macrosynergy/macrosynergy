@@ -413,15 +413,17 @@ class TestAll(unittest.TestCase):
         epsilon = 0.000001
         self.assertTrue(np.all(np.nan_to_num(dif) < epsilon))
 
+        self.dataframe_construction()
+        dfd = self.dfd[list(self.dfd.columns[~self.dfd.columns.duplicated()])]
         # Test weighting function.
-        panel_df = make_zn_scores(self.dfd, 'CRY', self.cids, start="2010-01-04",
+        panel_df = make_zn_scores(dfd, 'CRY', self.cids, start="2010-01-04",
                                   sequential=False, min_obs=0, neutral='mean',
                                   iis=False, thresh=None, pan_weight=0.75, postfix='ZN')
-        df_cross = make_zn_scores(self.dfd, 'CRY', self.cids, start="2010-01-04",
+        df_cross = make_zn_scores(dfd, 'CRY', self.cids, start="2010-01-04",
                                   sequential=False, min_obs=0, neutral='mean',
                                   iis=False, thresh=None, pan_weight=0.25, postfix='ZN')
 
-        df_average = make_zn_scores(self.dfd, 'CRY', self.cids, start="2010-01-04",
+        df_average = make_zn_scores(dfd, 'CRY', self.cids, start="2010-01-04",
                                     sequential=False, min_obs=0, iis=False,
                                     neutral='mean', thresh=None, pan_weight=0.5,
                                     postfix='ZN')
