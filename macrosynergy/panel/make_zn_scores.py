@@ -191,7 +191,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     col_names = ['cid', 'xcat', 'real_date', 'value']
     df_out = df_out.sort_values(['cid', 'real_date'])[col_names]
 
-    return df_out[df.columns]
+    return df_out[df.columns].reset_index(drop=True)
 
 
 if __name__ == "__main__":
