@@ -2,13 +2,59 @@
 import base64
 import os
 import requests
-from typing import Optional, Dict
+from typing import Optional, Dict, Tuple
 from datetime import datetime
 
 OAUTH_BASE_URL: str = "https://api-developer.jpmorgan.com/research/dataquery-authe/api/v2/"
 OAUTH_TOKEN_URL: str = "https://authe.jpmchase.com/as/token.oauth2"
 OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
+
+
+def valid_response(r: requests.Response) -> dict:
+    # TODO additional authentication responses...
+    if r.status_code == 401:
+        raise RuntimeError(
+            f"Authentication error - unable to access DataQuery:\n{r.text}"
+        )
+
+    elif r.text[0] != "{":
+        # TODO deprecated check if deprecated and already caught by the above 401
+        # Authentication check
+        condition: str = r.text.split('-')[1].strip().split('<')[0]
+        if condition == 'Authentication Failure':
+            raise RuntimeError(
+                condition + " - unable to access DataQuery. Password expired."
+            )
+
+    assert r.ok, f"Access issue status code {r.status_code} for {r.text}"
+
+    return r.json()
+
+
+def dq_request(
+        url: str,
+        headers: dict = None,
+        params: dict = None,
+        method: str = "get",
+        cert: Optional[Tuple[str, str]] = None,
+        **kwargs
+) -> Tuple[dict, str, str]:
+    assert method in ("get", "post"), f"Unknown request method {method} not in ('get', 'post')"
+
+    with requests.request(
+            method=method,
+            url=url,
+            cert=cert,
+            headers=headers,
+            params=params,
+            **kwargs,
+    ) as r:
+        text: str = r.text
+        last_url: str = r.url
+        js: dict = valid_response(r=r)
+
+    return js, text, last_url
 
 
 class CertAuth(object):
@@ -71,19 +117,16 @@ class CertAuth(object):
 
         return directory
 
-    def get_dq_api_result(self, url: str, params: dict = None) -> requests.Response:
+    def get_dq_api_result(self, url: str, params: dict = None) -> dict:
         """Method used exclusively to request data from the API."""
-        with requests.get(
+        js, self.last_response, self.last_url = dq_request(
             url=url,
             cert=(self.crt, self.key),
             headers=self.headers,
             params=params
-        ) as r:
-            self.status_code: int = r.status_code
-            self.last_response: str = r.text
-            self.last_url: str = r.url
+        )
 
-        return r
+        return js
 
 
 class OAuth(object):
@@ -141,18 +184,17 @@ class OAuth(object):
         if self._valid_token():
             return self._stored_token['access_token']
 
-        with requests.post(
-                url=self.__token_url,
-                proxies={},
-                data={
-                    'grant_type': 'client_credentials',
-                    'client_id': self.client_id,
-                    'client_secret': self.client_secret,
-                    'aud': self.__dq_api_resource_id
-                }
-        ) as r:
-            assert r.ok
-            js: dict = r.json()
+        js, self.last_response, self.last_url = dq_request(
+            url=self.__token_url,
+            data={
+                'grant_type': 'client_credentials',
+                'client_id': self.client_id,
+                'client_secret': self.client_secret,
+                'aud': self.__dq_api_resource_id
+            },
+            proxies={},
+            method="post",
+        )
 
         self._stored_token: dict = {
             'created_at': datetime.now(),
@@ -162,16 +204,13 @@ class OAuth(object):
 
         return self._stored_token['access_token']
 
-    def get_dq_api_result(self, url: str, params: dict = None):
+    def get_dq_api_result(self, url: str, params: dict = None) -> dict:
         """Method used exclusively to request data from the API."""
-        with requests.get(
-                url=url,
-                params=params,
-                headers={'Authorization': 'Bearer ' + self._get_token()},
-                proxies={}
-        ) as r:
-            self.last_response: str = r.text
-            self.status_code: int = r.status_code
-            self.last_url: str = r.url
+        js, self.last_response, self.last_url = dq_request(
+            url=url,
+            params=params,
+            headers={'Authorization': 'Bearer ' + self._get_token()},
+            proxies={}
+        )
 
-        return r
+        return js

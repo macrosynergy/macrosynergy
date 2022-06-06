@@ -63,29 +63,9 @@ class Interface(object):
 
     def check_connection(self) -> bool:
         """Check connect (heartbeat) to DataQuery"""
-        r: requests.Response = self.access.get_dq_api_result(
-            url=self.access.base_url + "/services/heartbeat"
-        )
+        js: dict = self.access.get_dq_api_result(url=self.access.base_url + "/services/heartbeat")
 
-        # TODO additional authentication responses...
-        if r.status_code == 401:
-            raise RuntimeError(
-                f"Authentication error - unable to access DataQuery:\n{r.text}"
-            )
-        elif self.access.last_response[0] != "{":
-            # TODO deprecated check if deprecated and already caught by the above 401
-            # Authentication check
-            condition: str = self.last_response.split('-')[1].strip().split('<')[0]
-            if condition == 'Authentication Failure':
-                raise RuntimeError(
-                    condition + " - unable to access DataQuery. Password expired."
-                )
-
-        assert r.ok, f"Access issue status code {r.status_code} for {r.text}"
-
-        response: dict = r.json()
-        results: dict = response["info"]
-
+        results: dict = js["info"]
         if int(results["code"]) != 200:
             print(
                 f"DataQuery response {results['message']:s}"
@@ -143,29 +123,27 @@ class Interface(object):
             try:
                 # The required fields will already be instantiated on the instance of the
                 # Class.
-                r = self.access.get_dq_api_result(url=url, params=params)
+                response: dict = self.access.get_dq_api_result(url=url, params=params)
             except ConnectionResetError:
                 counter += 1
                 time.sleep(0.05)
                 print(f"Server error: will retry. Attempt number: {counter}.")
                 continue
-            else:
-                response = r.json()
 
-                count = 0
-                while not self.server_retry(response, select):
-                    count += 1
-                    if count > 5:
-                        raise RuntimeError("All servers are down.")
+            count = 0
+            while not self.server_retry(response, select):
+                count += 1
+                if count > 5:
+                    raise RuntimeError("All servers are down.")
 
-                if select in response.keys():
-                    results.extend(response[select])
+            if select in response.keys():
+                results.extend(response[select])
 
-                if response["links"][1]["next"] is None:
-                    break
+            if response["links"][1]["next"] is None:
+                break
 
-                url = f"{self.access.base_url:s}{response['links'][1]['next']:s}"
-                params = {}
+            url = f"{self.access.base_url:s}{response['links'][1]['next']:s}"
+            params = {}
 
         if isinstance(results, list):
             return results
