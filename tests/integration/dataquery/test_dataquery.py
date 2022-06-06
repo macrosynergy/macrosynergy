@@ -7,8 +7,8 @@ class TestDataQuery(unittest.TestCase):
     def test_connection(self):
         with Interface(
             oauth=True,
-            client_id=os.getenv("dq_client_id"),
-            client_secret=os.getenv("dq_client_secret")
+            client_id=os.getenv("DQ_CLIENT_ID"),
+            client_secret=os.getenv("DQ_CLIENT_SECRET")
         ) as dq:
             self.assertTrue(dq.check_connection())
 
