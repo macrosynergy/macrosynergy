@@ -422,6 +422,7 @@ class TestAll(unittest.TestCase):
         self.assertTrue(np.all(np.nan_to_num(dif) < epsilon))
 
         self.dataframe_construction()
+        dfd = self.dfd
         # Test weighting function.
         panel_df = make_zn_scores(dfd, 'CRY', self.cids, start="2010-01-04",
                                   sequential=False, min_obs=0, neutral='mean',
