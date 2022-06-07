@@ -47,7 +47,7 @@ class TestAll(unittest.TestCase):
         # Convert to a one-dimensional DataFrame to facilitate pd.apply() method
         # to calculate in-sampling period. The pd.stack() feature removes the
         # unrealised cross-sections.
-        iis_period = pd.DataFrame(dfw.iloc[0:min_obs].stack().to_numpy())
+        iis_period = pd.DataFrame(dfw.iloc[0:(min_obs + 1)].stack().to_numpy())
         iis_val = iis_period.apply(self.func_dict[neutral])
 
         return round(float(iis_val), 4)
@@ -66,6 +66,8 @@ class TestAll(unittest.TestCase):
         # Test length of neutral DataFrame.
         self.assertTrue(self.dfw.shape[0] == df_neutral.shape[0])
 
+        # --- Sequential equal False, Mean & Median: all in-sample.
+
         df_neutral = expanding_stat(self.dfw, dates_iter=self.dates_iter, stat='mean',
                                     sequential=False)
         # Check first value equal to panel mean.
@@ -75,6 +77,15 @@ class TestAll(unittest.TestCase):
         last_val = float(df_neutral.iloc[self.dfw.shape[0] - 1])
         self.assertEqual(last_val, self.dfw.stack().mean())
 
+        df_neutral = expanding_stat(self.dfw, dates_iter=self.dates_iter,
+                                    stat='median', sequential=False)
+        self.assertEqual(float(df_neutral.iloc[0]), self.dfw.stack().median())
+
+        last_val = float(df_neutral.iloc[self.dfw.shape[0] - 1])
+        self.assertEqual(last_val, self.dfw.stack().median())
+
+        # --- Sequential equal True, iis = False.
+
         # Choose a random index, 999, and confirm the computed value.
         df_neutral = expanding_stat(self.dfw, dates_iter=self.dates_iter, stat='mean',
                                     sequential=True, iis=False)
@@ -82,22 +93,15 @@ class TestAll(unittest.TestCase):
         benchmark = self.dfw.iloc[0:1000, :].stack().mean()
         self.assertEqual(val, round(benchmark, 4))
 
-        df_neutral = expanding_stat(self.dfw, dates_iter=self.dates_iter,
-                                    stat='median', sequential=False)
-        # Check first value equal to panel median.
-        self.assertEqual(float(df_neutral.iloc[0]), self.dfw.stack().median())
-        # Check last value equal to panel median.
-        last_val = float(df_neutral.iloc[self.dfw.shape[0] - 1])
-        self.assertEqual(last_val,
-                         self.dfw.stack().median())
-
         # Again, test on a random index, 999.
         df_neutral = expanding_stat(self.dfw, dates_iter=self.dates_iter,
-                                    stat='median',
-                                    sequential=True, min_obs=261, iis=False)
+                                    stat='median', sequential=True, min_obs=261,
+                                    iis=False)
         val = float(df_neutral.iloc[999])
         median_benchmark = self.dfw.iloc[0:1000, :].stack().median()
         self.assertEqual(val, median_benchmark)
+
+        # --- iis = True. Confirm in-sampling method.
 
         # Check the inclusion of the in-sampling data being included in the returned
         # DataFrame. The first minimum number observations, for the neutral level, will
@@ -111,7 +115,7 @@ class TestAll(unittest.TestCase):
 
         bm_vals = [round(v, 4) for v in test_data]
         for v in bm_vals:
-            self.assertTrue(abs(v - test_val) < 0.1)
+            self.assertTrue(abs(v - test_val) < 0.0001)
 
         # Check the above for the application of 'median' as the neutral level.
         # Unable to check for equality on np.nan values.
@@ -144,6 +148,8 @@ class TestAll(unittest.TestCase):
         """
         self.dataframe_construction()
 
+        # --- Down-sampling pan-neutral, monthly.
+
         df = self.dfd
         df_copy = df.copy()
 
@@ -161,6 +167,7 @@ class TestAll(unittest.TestCase):
         # Test on the 'mean' neutral level.
         test = []
         aggregate = np.empty(0)
+        # Group the DataFrames monthly.
         for date, new_df in dfw_multidx.groupby(level=[0, 1]):
             new_arr = new_df.stack().to_numpy()
             aggregate = np.concatenate([aggregate, new_arr])
@@ -253,6 +260,7 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df_shape, df_neutral.shape)
 
         epsilon = 0.0001
+        # --- Cross-neutral mean, sequential equal False.
 
         df_mean = self.cross_neutral(stat='mean', sequential=False, iis=False)
         # Arbitrarily chosen index to test the logic.
@@ -270,6 +278,8 @@ class TestAll(unittest.TestCase):
             # Test if function mean is correct.
             self.assertTrue(np.nan_to_num(dif[index]) < epsilon)
 
+        # --- Cross-neutral median, sequential equal False.
+
         df_median = self.cross_neutral(stat='median', sequential=False, iis=False)
         # Again, same logic as above. Test the cross-sectional median value when the
         # sequential parameter is set to False.
@@ -281,14 +291,16 @@ class TestAll(unittest.TestCase):
             median_cross.dropna(axis=0, how='any', inplace=True)
             median_value = median_cross.unique()
 
-            # self.assertTrue(len(median_value) == 1)
+            self.assertTrue(len(median_value) == 1)
 
             # Choose a random index to confirm the value.
-            # Logic removed because of unknown bug on GitHub.
-            # value = float(median_cross.iloc[1000])
-            # dif = np.abs(median - value)
+            value = float(median_cross.iloc[1000])
+            dif = np.abs(median - value)
             # Test if function median is correct.
-            # self.assertTrue(dif < epsilon)
+            self.assertTrue(dif < epsilon)
+
+        # --- Cross-neutral mean, sequential equal True. Use pandas in-built
+        # pd.expanding() method to validate the expanding window.
 
         min_obs = 261
         df_mean = self.cross_neutral(stat='mean', sequential=True,
@@ -403,13 +415,13 @@ class TestAll(unittest.TestCase):
 
         zn_scores = df_panel.to_numpy()
         arr_zns_pan = dfw_zns_pan.to_numpy()
+        # Confirm the values on a random index.
         dif = zn_scores[index] - arr_zns_pan[index]
 
         epsilon = 0.000001
         self.assertTrue(np.all(np.nan_to_num(dif) < epsilon))
 
         self.dataframe_construction()
-        dfd = self.dfd[list(self.dfd.columns[~self.dfd.columns.duplicated()])]
         # Test weighting function.
         panel_df = make_zn_scores(dfd, 'CRY', self.cids, start="2010-01-04",
                                   sequential=False, min_obs=0, neutral='mean',
