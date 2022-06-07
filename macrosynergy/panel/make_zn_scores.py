@@ -71,6 +71,7 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
         if iis:
             df_out = df_out.fillna(method="bfill")
 
+    df_out.columns.name = 'cid'
     return df_out
 
 def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
@@ -184,7 +185,8 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
             df_mabs = expanding_stat(dfx.abs(), dates_iter, stat="mean",
                                      sequential=sequential,
                                      min_obs=min_obs, iis=iis)
-            dfw_zns_css.iloc[:, i] = dfx / df_mabs.values
+            zns_css_arr = np.divide(dfx.to_numpy(), df_mabs.to_numpy())
+            dfw_zns_css.iloc[:, i] = zns_css_arr
 
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
     dfw_zns = dfw_zns.dropna(axis=0, how='all')
