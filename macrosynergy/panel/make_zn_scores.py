@@ -174,17 +174,21 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
     if pan_weight < 1:
 
-        for i, cid in enumerate(cross_sections):
+        for cid in cross_sections:
+            dfi = dfw[cid]
 
-            dfi = dfw.iloc[:, [i]]
-            df_neutral = expanding_stat(dfi, dates_iter, stat=neutral,
+            df_neutral = expanding_stat(dfi.to_frame(name=cid), dates_iter, stat=neutral,
                                         sequential=sequential,
                                         min_obs=min_obs, iis=iis)
-            dfx = dfi.sub(df_neutral['value'], axis=0)
-            df_mabs = expanding_stat(dfx.abs(), dates_iter, stat="mean",
-                                     sequential=sequential,
+            dfx = dfi - df_neutral['value']
+
+            df_mabs = expanding_stat(dfx.abs().to_frame(name=cid), dates_iter,
+                                     stat="mean", sequential=sequential,
                                      min_obs=min_obs, iis=iis)
-            dfw_zns_css.iloc[:, i] = dfx / df_mabs.values
+            df_zn = dfx / df_mabs["value"]
+
+            assert df_zn.shape[0] > 0, f"df_zn time-series is null for {cid}:\n{df_zn}"
+            dfw_zns_css.loc[df_zn.index, cid] = df_zn
 
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
     dfw_zns = dfw_zns.dropna(axis=0, how='all')
