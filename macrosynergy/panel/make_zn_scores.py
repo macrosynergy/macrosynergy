@@ -11,7 +11,7 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
                    min_obs: int = 261, iis: bool = True):
 
     """
-    Compute statistic based on an expanding sample
+    Compute statistic based on an expanding sample.
 
     :param <pd.Dataframe> df: Daily-frequency time series DataFrame.
     :param <pd.DatetimeIndex> dates_iter: controls the frequency of the neutral &
