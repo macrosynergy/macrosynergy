@@ -1,4 +1,3 @@
-
 import numpy as np
 import pandas as pd
 from typing import List
@@ -72,6 +71,57 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
             df_out = df_out.fillna(method="bfill")
 
     return df_out
+
+
+def time_series_z_szore(
+        dfi: pd.DataFrame,
+        cid: str,
+        dates_iter: pd.DatetimeIndex,
+        neutral: str = "zero",
+        sequential: bool = True,
+        min_obs: int = 261,
+        iis: bool = True
+) -> pd.DataFrame:
+    """Time series (sequentially) estimated z-score
+
+    Apply z-score for specific timeseries of a cross-section around neutral level.
+
+    :param dfi: pd.DataFrame,
+    :param cid: str,
+    :param dates_iter: pd.DatetimeIndex,
+    :param neutral: str = "zero",
+    :param sequential: bool = True,
+    :param min_obs: int = 261,
+    :param iis: bool = True
+    :returns: DataFrame with neutral ZN scores
+    """
+
+    # Calculate the neutral level
+    df_neutral: pd.DataFrame = expanding_stat(
+        dfi,
+        dates_iter,
+        stat=neutral,
+        sequential=sequential,
+        min_obs=min_obs,
+        iis=iis
+    )
+
+    # Subtract neutral level from input data-frame
+    dfx: pd.DataFrame = (dfi[cid] - df_neutral["value"]).to_frame(cid)
+
+    # Calculate volatility adjustment
+    df_mabs: pd.DataFrame = expanding_stat(
+        dfx.abs(),
+        dates_iter,
+        stat="mean",
+        sequential=sequential,
+        min_obs=min_obs,
+        iis=iis
+    )
+
+    # Return Z-scored time series.
+    return (dfx[cid] / df_mabs["value"]).to_frame(name=cid)
+
 
 def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
                    start: str = None, end: str = None, blacklist: dict = None,
@@ -173,19 +223,21 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         dfw_zns_pan = dfx.div(df_mabs['value'], axis='rows')
 
     if pan_weight < 1:
-
-        for i, cid in enumerate(cross_sections):
-
-            dfi = dfw.iloc[:, [i]]
-            df_neutral = expanding_stat(dfi, dates_iter, stat=neutral,
-                                        sequential=sequential,
-                                        min_obs=min_obs, iis=iis)
-            dfx = dfi.sub(df_neutral['value'], axis=0)
-            df_mabs = expanding_stat(dfx.abs(), dates_iter, stat="mean",
-                                     sequential=sequential,
-                                     min_obs=min_obs, iis=iis)
-            arr_mabs = df_mabs['value'].to_numpy()
-            dfw_zns_css.iloc[:, i] = dfx.div(arr_mabs, axis='rows')
+        dfw_zns_css = pd.concat(
+            [
+                time_series_z_szore(
+                    dfi=dfw[[c]].copy(),
+                    cid=c,
+                    dates_iter=dates_iter,
+                    neutral=neutral,
+                    sequential=sequential,
+                    min_obs=min_obs,
+                    iis=iis
+                )
+                for c in cross_sections
+            ],
+            axis=1
+        )
 
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
     dfw_zns = dfw_zns.dropna(axis=0, how='all')
