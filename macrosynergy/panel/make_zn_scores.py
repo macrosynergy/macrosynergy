@@ -2,7 +2,6 @@
 import numpy as np
 import pandas as pd
 from typing import List
-from itertools import groupby
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
@@ -30,16 +29,19 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
     :return: Time series dataframe of the chosen statistic across all columns
     """
 
-    df.dropna(axis=0, how='all', inplace=True)
     df_out = pd.DataFrame(np.nan, index=df.index, columns=['value'])
     # An adjustment for individual series' first realised value is not required given the
     # returned DataFrame will be subtracted from the original DataFrame. The original
     # DataFrame will implicitly host this information through NaN values such that when
-    # the arithmetic operation is made, the falsified values will be displaced by NaN
+    # the arithmetic operation is made, any falsified values will be displaced by NaN
     # values.
-    # Inclusive of all available data.
+
+    condition = df.index == df.first_valid_index()
+    f_index = next(iter(np.where(condition)))[0]
     first_date = df.index[0]
-    first_realised_date = df.index[min_obs]
+
+    # Adjust for individual cross-sections' series commencing at different dates.
+    first_realised_date = df.index[(f_index + min_obs)]
 
     if stat == "zero":
 
@@ -55,14 +57,21 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
 
         dates = dates_iter[dates_iter >= first_realised_date]
         for date in dates:
-            df_out.loc[date, "value"] = df.loc[first_date:date].stack().apply(stat)
+            # The try statement is required to handle time intervals which do not have
+            # any realised values. The stack operation will return an empty list instead
+            # of a floating point value which precludes it being inserted in the output
+            # DataFrame.
+            try:
+                df_out.loc[date, "value"] = df.loc[first_date:date].stack().apply(stat)
+            except ValueError:
+                pass
+
         df_out = df_out.fillna(method='ffill')
 
         if iis:
             df_out = df_out.fillna(method="bfill")
 
     return df_out
-
 
 def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
                    start: str = None, end: str = None, blacklist: dict = None,
@@ -220,12 +229,12 @@ if __name__ == "__main__":
 
     # Monthly: panel + cross.
     dfzm = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=True,
-                          neutral='mean', pan_weight=1.0, min_obs=261,
+                          neutral='mean', pan_weight=0.75, min_obs=261,
                           est_freq="m")
 
     # Weekly: panel + cross.
     dfzw = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=False,
-                          neutral='mean', pan_weight=1.0, min_obs=261,
+                          neutral='mean', pan_weight=0.5, min_obs=261,
                           est_freq="w")
 
     # Daily: panel. Neutral and standard deviation will be computed daily.
@@ -235,9 +244,9 @@ if __name__ == "__main__":
 
     # Daily: cross.
     dfzd = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=True,
-                          neutral='mean', pan_weight=1.0, min_obs=261,
+                          neutral='mean', pan_weight=0.0, min_obs=261,
                           est_freq="d")
 
     panel_df = make_zn_scores(dfd, 'CRY', cids, start="2010-01-04",
                               sequential=False, min_obs=0, neutral='mean',
-                              iis=False, thresh=None, pan_weight=0.75, postfix='ZN')
+                              iis=True, thresh=None, pan_weight=0.75, postfix='ZN')
