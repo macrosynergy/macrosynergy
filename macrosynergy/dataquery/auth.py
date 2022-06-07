@@ -1,4 +1,4 @@
-"""Authentication classes for DataQuery of OAuth and CertAuth"""
+"""Authentication classes for DataQuery of OAuth and CertAuth."""
 import base64
 import os
 import requests
@@ -12,35 +12,33 @@ CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 
 
 def valid_response(r: requests.Response) -> dict:
-    # TODO additional authentication responses...
+
     if r.status_code == 401:
         raise RuntimeError(
             f"Authentication error - unable to access DataQuery:\n{r.text}"
         )
 
     elif r.text[0] != "{":
-        # TODO deprecated check if deprecated and already caught by the above 401
-        # Authentication check
+
+        # Authentication check.
         condition: str = r.text.split('-')[1].strip().split('<')[0]
         if condition == 'Authentication Failure':
             raise RuntimeError(
                 condition + " - unable to access DataQuery. Password expired."
             )
 
-    assert r.ok, f"Access issue status code {r.status_code} for {r.text}"
+    assert r.ok, f"Access issue status code {r.status_code} for {r.text}."
 
     return r.json()
 
 
-def dq_request(
-        url: str,
-        headers: dict = None,
-        params: dict = None,
-        method: str = "get",
-        cert: Optional[Tuple[str, str]] = None,
-        **kwargs
-) -> Tuple[dict, str, str]:
-    assert method in ("get", "post"), f"Unknown request method {method} not in ('get', 'post')"
+def dq_request(url: str, headers: dict = None, params: dict = None,
+               method: str = "get", cert: Optional[Tuple[str, str]] = None,
+               **kwargs
+               ) -> Tuple[dict, str, str]:
+
+    request_error = f"Unknown request method {method} not in ('get', 'post')."
+    assert method in ("get", "post"), request_error
 
     with requests.request(
             method=method,
@@ -58,11 +56,12 @@ def dq_request(
 
 
 class CertAuth(object):
-    """Certificate Authentication
+    """
+    Certificate Authentication
 
     Class used to access DataQuery via certificate and private key. To access the API
-    login both username & password are required as well as a certified certificate
-    and private key to verify the request.
+    login both username % password are required as well as a certified certificate and
+    private key to verify the request.
 
     :param <str> username: username for login to REST API for JP Morgan DataQuery.
     :param <str> password: password.
@@ -70,22 +69,16 @@ class CertAuth(object):
     :param <str> key: string with private key location.
     """
 
-    def __init__(
-            self,
-            username: str,
-            password: str,
-            crt: str = "api_macrosynergy_com.crt",
-            key: str = "api_macrosynergy_com.key",
-            base_url: str = CERT_BASE_URL
-    ):
+    def __init__(self, username: str, password: str,
+                 crt: str = "api_macrosynergy_com.crt",
+                 key: str = "api_macrosynergy_com.key",
+                 base_url: str = CERT_BASE_URL):
 
-        assert isinstance(username, str), (
-            f"username must be a <str> and not <{type(username)}>."
-        )
+        error_user = f"username must be a <str> and not <{type(username)}>."
+        assert isinstance(username, str), error_user
 
-        assert isinstance(password, str), (
-            f"password must be a <str> and not <{type(password)}>."
-        )
+        error_password = f"password must be a <str> and not <{type(password)}>."
+        assert isinstance(password, str), error_password
 
         self.auth: str = base64.b64encode(
             bytes(f'{username:s}:{password:s}', "utf-8")
@@ -98,27 +91,37 @@ class CertAuth(object):
         self.key: str = self.valid_path(key, "key")
         self.crt: str = self.valid_path(crt, "crt")
 
-        # For debugging purposes save last request response
+        # For debugging purposes save last request response.
         self.status_code: Optional[int] = None
         self.last_response: Optional[str] = None
         self.last_url: Optional[str] = None
 
     @staticmethod
     def valid_path(directory: str, file_type: str) -> Optional[str]:
-        """Validates the key & certificate exist in the referenced directory."""
-        assert isinstance(directory, str), (
-            f"{file_type:s} file must be a <str> not {directory}{type(directory)})."
-        )
+        """
+        Validates the key & certificate exist in the referenced directory.
 
-        if not os.path.exists(directory) and os.path.isfile(directory):
-            # TODO should this not raise an error (exception)?
+        :param <str> directory: directory hosting the respective files.
+        :param <str> file_type: parameter used to distinguish between the certificate or
+            key being received.
+
+        """
+        dir_error = f"{file_type:s} file must be a <str> not <{type(directory)}>."
+        assert isinstance(directory, str), dir_error
+
+        try:
+            os.path.exists(directory) and os.path.isfile(directory)
+        except OSError as error:
+            print(error)
             print(f"Not a valid file path on the system: {directory} - return None")
             return None
-
-        return directory
+        else:
+            return directory
 
     def get_dq_api_result(self, url: str, params: dict = None) -> dict:
-        """Method used exclusively to request data from the API."""
+        """
+        Method used exclusively to request data from the API.
+        """
         js, self.last_response, self.last_url = dq_request(
             url=url,
             cert=(self.crt, self.key),
@@ -130,7 +133,8 @@ class CertAuth(object):
 
 
 class OAuth(object):
-    """Accessing DataQuery via OAuth.
+    """
+    Accessing DataQuery via OAuth.
 
     :param <str> client_id: string with client id, username.
     :param <str> client_secret: string with client secret, password.
@@ -152,60 +156,61 @@ class OAuth(object):
         self.__token_url: str = token_url
         self.__dq_api_resource_id: str = dq_resource_id
 
-        assert isinstance(client_id, str), (
-            f"client_id argument must be a string and not <{type(client_id)}>."
-        )
+        id_error = f"client_id argument must be a <str> and not <{type(client_id)}>."
+        assert isinstance(client_id, str), id_error
         self.client_id: str = client_id
 
-        assert isinstance(client_secret, str), (
-            f"client_secret must be a str and not <{type(client_secret)}>."
-        )
+        secret_error = f"client_secret must be a str and not <{type(client_secret)}>."
+        assert isinstance(client_secret, str), secret_error
 
         self.client_secret: str = client_secret
         self._stored_token: Optional[dict] = None
+        self.data = {'grant_type': 'client_credentials',
+                      'client_id': self.client_id,
+                      'client_secret': self.client_secret,
+                      'aud': self.__dq_api_resource_id}
 
-        # For debugging purposes save last request response
+        # For debugging purposes save last request response.
         self.status_code: Optional[int] = None
         self.last_response: Optional[str] = None
         self.last_url: Optional[str] = None
 
-    def _valid_token(self) -> bool:
-        if self._stored_token is None:
-            return False
-
+    def _active_token(self) -> bool:
         created: datetime = self._stored_token['created_at']
-        expires: int = self._stored_token['expires_in']  # Minutes
-        if (datetime.now() - created).total_seconds() / 60 >= (expires - 1):
-            return False
+        expires: int = self._stored_token['expires_in']
 
-        return True
+        return (datetime.now() - created).total_seconds() / 60 >= (expires - 1)
+
+    def _valid_token(self) -> bool:
+
+        v_token = True
+        if self._stored_token is None and self._active_token():
+            v_token = False
+
+        return v_token
 
     def _get_token(self) -> str:
-        if self._valid_token():
-            return self._stored_token['access_token']
 
-        js, self.last_response, self.last_url = dq_request(
-            url=self.__token_url,
-            data={
-                'grant_type': 'client_credentials',
-                'client_id': self.client_id,
-                'client_secret': self.client_secret,
-                'aud': self.__dq_api_resource_id
-            },
-            proxies={},
-            method="post",
-        )
+        if not self._valid_token():
 
-        self._stored_token: dict = {
-            'created_at': datetime.now(),
-            'access_token': js['access_token'],
-            'expires_in': js['expires_in']
-        }
+            js, self.last_response, self.last_url = dq_request(
+                url=self.__token_url,
+                data=self.data,
+                proxies={},
+                method="post")
+            self._stored_token: dict = {
+                'created_at': datetime.now(),
+                'access_token': js['access_token'],
+                'expires_in': js['expires_in']
+            }
 
         return self._stored_token['access_token']
 
     def get_dq_api_result(self, url: str, params: dict = None) -> dict:
-        """Method used exclusively to request data from the API."""
+        """
+        Method used exclusively to request data from the API.
+        """
+
         js, self.last_response, self.last_url = dq_request(
             url=url,
             params=params,
