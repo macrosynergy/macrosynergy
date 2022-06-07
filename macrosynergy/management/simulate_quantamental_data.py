@@ -51,7 +51,7 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
     :return <pd.DataFrame>: basic quantamental dataframe according to specifications.
     """
     qdf_cols = ['cid', 'xcat', 'real_date', 'value']
-    df_out = pd.DataFrame(columns=qdf_cols)
+    df_list = []
 
     if any(df_xcats['back_coef'] != 0):
 
@@ -91,9 +91,9 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
                                   back_coef * df_back.loc[df_add['real_date'],
                                                           'value'].reset_index(drop=True)
 
-            df_out = df_out.append(df_add)
+            df_list.append(df_add)
 
-    return df_out.reset_index(drop=True)
+    return pd.concat(df_list).reset_index(drop=True)
 
 def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict):
     """
