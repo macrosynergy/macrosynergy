@@ -184,8 +184,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
             df_mabs = expanding_stat(dfx.abs(), dates_iter, stat="mean",
                                      sequential=sequential,
                                      min_obs=min_obs, iis=iis)
-            arr_mabs = df_mabs['value'].to_numpy()
-            dfw_zns_css.iloc[:, i] = dfx.div(arr_mabs, axis='rows')
+            dfw_zns_css.iloc[:, i] = dfx / df_mabs.values
 
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
     dfw_zns = dfw_zns.dropna(axis=0, how='all')
