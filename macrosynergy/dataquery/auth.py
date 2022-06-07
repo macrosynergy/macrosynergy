@@ -184,7 +184,7 @@ class OAuth(object):
     def _valid_token(self) -> bool:
 
         v_token = True
-        if self._stored_token is None and self._active_token():
+        if self._stored_token is None or self._active_token():
             v_token = False
 
         return v_token
