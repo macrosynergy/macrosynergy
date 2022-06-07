@@ -5,7 +5,6 @@ from typing import List
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
-
 def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
                    stat: str = 'mean', sequential: bool = True,
                    min_obs: int = 261, iis: bool = True):
@@ -36,12 +35,12 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
     # the arithmetic operation is made, any falsified values will be displaced by NaN
     # values.
 
-    condition = df.index == df.first_valid_index()
-    f_index = next(iter(np.where(condition)))[0]
-    first_date = df.index[0]
-
+    first_observation = df.dropna(axis=0, how='all').index[0]
     # Adjust for individual cross-sections' series commencing at different dates.
-    first_realised_date = df.index[(f_index + min_obs)]
+    first_estimation = df.dropna(axis=0, how='all').index[min_obs]
+
+    obs_index = next(iter(np.where(df.index == first_observation)))[0]
+    est_index = next(iter(np.where(df.index == first_estimation)))[0]
 
     if stat == "zero":
 
@@ -55,21 +54,18 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
 
     else:
 
-        dates = dates_iter[dates_iter >= first_realised_date]
+        dates = dates_iter[dates_iter >= first_estimation]
         for date in dates:
             # The try statement is required to handle time intervals which do not have
             # any realised values. The stack operation will return an empty list instead
             # of a floating point value which precludes it being inserted in the output
             # DataFrame.
-            try:
-                df_out.loc[date, "value"] = df.loc[first_date:date].stack().apply(stat)
-            except ValueError:
-                pass
+            df_out.loc[date, "value"] = df.loc[first_observation:date].stack().apply(stat)
 
         df_out = df_out.fillna(method='ffill')
 
         if iis:
-            df_out = df_out.fillna(method="bfill")
+            df_out = df_out.fillna(method="bfill", limit=(est_index - obs_index))
 
     df_out.columns.name = 'cid'
     return df_out
