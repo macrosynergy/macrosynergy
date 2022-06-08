@@ -29,7 +29,7 @@ class TestDataQueryInterface(unittest.TestCase):
     def base_directory():
         cwd = os.getcwd()
         cwd_list = str(cwd).split('/')
-        base_dir = '/'.join(cwd_list[:cwd_list.index('repos')])
+        base_dir = '/'.join(cwd_list[:cwd_list.index('macrosynergy')])
         return base_dir
 
     @staticmethod
@@ -49,7 +49,7 @@ class TestDataQueryInterface(unittest.TestCase):
         self.client_secret = s
 
         self.base_dir = self.base_directory()
-        self.path = "/repos/macrosynergy/tests/unit/dataquery/cert_files"
+        self.path = "/macrosynergy/tests/unit/dataquery/cert_files"
 
         # Certificate & key connection.
         with open(self.base_dir + self.path + "/config.yml", 'r') as f:
@@ -153,9 +153,42 @@ class TestDataQueryInterface(unittest.TestCase):
         test_ticker = []
         for elem in final_output:
             jpm_expression = elem["attributes"][0]['expression']
-            test_ticker.append(jpm_expression.split(',')[1])
+            test_ticker.append(jpm_expression)
 
         self.assertTrue(len(self.expression) == len(test_ticker))
+
+        test_ticker = sorted(test_ticker)
+        condition = test_ticker == sorted(self.expression)
+        self.assertTrue(condition)
+
+        self.__dict__['final_output'] = final_output
+
+    def test_isolate_timeseries(self):
+
+        self.test_request()
+
+        dq = api.Interface(username=self.cf["dq"]["username"],
+                           password=self.cf["dq"]["password"],
+                           crt=self.crt,
+                           key=self.key)
+
+        final_output = self.final_output
+
+        # The method, .isolate_timeseries(), will receive the returned dictionary from
+        # the ._request() method and return a dictionary where the keys are the tickers
+        # and the values are stacked DataFrames where each column represents the metrics
+        # that have been requested.
+        results_dict, output_dict, s_list = dq.isolate_timeseries(final_output,
+                                                                  ['value', 'grading'],
+                                                                  False, False)
+
+        self.assertTrue(len(results_dict.keys()) == len(self.tickers))
+
+        ticker_trunc = lambda t: t.split(',')[1]
+        test_keys = list(map(ticker_trunc, results_dict.keys()))
+
+        test_keys = sorted(test_keys)
+        self.assertTrue(test_keys == sorted(self.tickers))
 
 
 if __name__ == '__main__':
