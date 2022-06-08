@@ -5,8 +5,10 @@ from macrosynergy.dataquery.auth import OAuth, CertAuth
 from datetime import datetime
 from pandas import Timestamp
 from pandas.tseries.offsets import BDay
+from typing import List
 import unittest
 import yaml
+import os
 
 class TestDataQueryInterface(unittest.TestCase):
 
@@ -23,33 +25,55 @@ class TestDataQueryInterface(unittest.TestCase):
 
         return str(new_date.strftime('%Y-%m-%d'))
 
-    def constructor(self):
+    @staticmethod
+    def base_directory():
+        cwd = os.getcwd()
+        cwd_list = str(cwd).split('/')
+        base_dir = '/'.join(cwd_list[:cwd_list.index('repos')])
+        return base_dir
+
+    @staticmethod
+    def jpmaqs_indicators(metrics, tickers):
+
+        dq_tix = []
+        for metric in metrics:
+            dq_tix += ["DB(JPMAQS," + tick + f",{metric})" for tick in tickers]
+
+        return dq_tix
+
+    def constructor(self, metrics: List[str] = ['value']):
 
         # Auth Connection.
-        self.__dict__['client_id'] = "e5qY4ZXMUQOZ0tVK"
+        self.client_id = "e5qY4ZXMUQOZ0tVK"
         s = "sug9OVlfem54ep7blgbknzc3Xj5aqko4el71pyf09t6mcbdmax8lzZlsKZ5oUvY2j4qQjjhrtxevgMn"
-        self.__dict__['client_secret'] = s
+        self.client_secret = s
+
+        self.base_dir = self.base_directory()
+        self.path = "/repos/macrosynergy/tests/unit/dataquery/cert_files"
 
         # Certificate & key connection.
-        with open("../../../config.yml", 'r') as f:
+        with open(self.base_dir + self.path + "/config.yml", 'r') as f:
             cf = yaml.load(f, Loader=yaml.FullLoader)
             self.cf = cf
 
-        self.__dict__['endpoint'] = "/expressions/time-series"
-        self.__dict__['params'] = {"format": "JSON", "start-date": self.s_date_calc(),
-                                   "end-date": None, "calendar": "CAL_ALLDAYS",
-                                   "frequency": "FREQ_DAY",
-                                   "conversion": "CONV_LASTBUS_ABS",
-                                   "nan_treatment": "NA_NOTHING",
-                                   "data": "NO_REFERENCE_DATA"}
+        self.crt = self.base_dir + self.path + "/api_macrosynergy_com.crt"
+        self.key = self.base_dir + self.path + "/api_macrosynergy_com.key"
 
-        cids_dmca = ['AUD', 'CAD', 'CHF', 'EUR', 'GBP']
-        xcats = ['EQXR_NSA']
-        metric = ['value']
-        self.__dict__['tickers'] = [cid + '_' + xcat for xcat in xcats
-                                    for cid in cids_dmca]
-        expression = ["DB(JPMAQS," + tick + f",{metric})" for tick in self.tickers]
-        self.__dict__["expression"] = expression
+        self.endpoint = "/expressions/time-series"
+        self.params = {"format": "JSON", "start-date": self.s_date_calc(),
+                       "end-date": None, "calendar": "CAL_ALLDAYS",
+                       "frequency": "FREQ_DAY",
+                       "conversion": "CONV_LASTBUS_ABS",
+                       "nan_treatment": "NA_NOTHING",
+                       "data": "NO_REFERENCE_DATA"}
+
+        cids_dmca = ['AUD', 'CAD', 'CHF', 'EUR', 'GBP', 'JPY']
+        xcats = ['EQXR_NSA', 'FXXR_NSA']
+        self.metrics = metrics
+        self.tickers = [cid + '_' + xcat for xcat in xcats for cid in cids_dmca]
+
+        self.expression = self.jpmaqs_indicators(metrics=metrics,
+                                                 tickers=self.tickers)
 
     def test_oauth_condition(self):
 
@@ -67,8 +91,8 @@ class TestDataQueryInterface(unittest.TestCase):
         # Default is to use the Certificates / Keys: oauth = False.
         dq_access = api.Interface(username=self.cf["dq"]["username"],
                                   password=self.cf["dq"]["password"],
-                                  crt="../../../api_macrosynergy_com.crt",
-                                  key="../../../api_macrosynergy_com.key")
+                                  crt=self.crt,
+                                  key=self.key)
 
         self.assertTrue(isinstance(dq_access.access, CertAuth))
 
@@ -82,8 +106,8 @@ class TestDataQueryInterface(unittest.TestCase):
 
         dq = api.Interface(username=self.cf["dq"]["username"],
                            password=self.cf["dq"]["password"],
-                           crt="../../../api_macrosynergy_com.crt",
-                           key="../../../api_macrosynergy_com.key")
+                           crt=self.crt,
+                           key=self.key)
 
         results = dq._fetch_threading(endpoint=self.endpoint,
                                       params=params)
@@ -107,6 +131,31 @@ class TestDataQueryInterface(unittest.TestCase):
         # Confirm the application of the start_date parameter.
         first_date = self.s_date_calc()
         self.assertTrue(first_date == next(iter(set(date_checker))))
+
+    def test_request(self):
+
+        # Test the threading functionality on a request larger than 20 tickers. Each
+        # thread can only be split across multiple threads.
+        self.constructor(metrics=['value', 'grading'])
+
+        dq = api.Interface(username=self.cf["dq"]["username"],
+                           password=self.cf["dq"]["password"],
+                           crt=self.crt,
+                           key=self.key)
+
+        final_output = dq._request(endpoint=self.endpoint, tickers=self.expression,
+                                   params={}, delay=0.3, start_date=self.s_date_calc())
+
+        # Confirm the usage of threading, splitting the requests over multiple threads,
+        # does not lead to any data leakages: all JPMaQS indicators are present in the
+        # return dictionary.
+
+        test_ticker = []
+        for elem in final_output:
+            jpm_expression = elem["attributes"][0]['expression']
+            test_ticker.append(jpm_expression.split(',')[1])
+
+        self.assertTrue(len(self.expression) == len(test_ticker))
 
 
 if __name__ == '__main__':
