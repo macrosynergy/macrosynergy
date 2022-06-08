@@ -6,6 +6,7 @@ from datetime import datetime
 from pandas import Timestamp
 from pandas.tseries.offsets import BDay
 from typing import List
+import numpy as np
 import unittest
 import yaml
 import os
@@ -30,7 +31,11 @@ class TestDataQueryInterface(unittest.TestCase):
         cwd = os.getcwd()
         cwd_list = str(cwd).split('/')
         # Distinguish between running locally or on GitHub.
-        base_dir = '/'.join(cwd_list[:cwd_list.index('tests')])
+        try:
+            base_dir = '/'.join(cwd_list[:cwd_list.index('tests')])
+        except OSError:
+            base_dir = ''
+
         return base_dir
 
     def path_finder(self, file):
@@ -55,8 +60,8 @@ class TestDataQueryInterface(unittest.TestCase):
     def constructor(self, metrics: List[str] = ['value']):
 
         # Auth Connection.
-        self.client_id = "e5qY4ZXMUQOZ0tVK"
-        s = "sug9OVlfem54ep7blgbknzc3Xj5aqko4el71pyf09t6mcbdmax8lzZlsKZ5oUvY2j4qQjjhrtxevgMn"
+        self.client_id = ""
+        s = ""
         self.client_secret = s
 
         self.base_dir = self.base_directory()
@@ -195,6 +200,7 @@ class TestDataQueryInterface(unittest.TestCase):
         results_dict, output_dict, s_list = dq.isolate_timeseries(final_output,
                                                                   ['value', 'grading'],
                                                                   False, False)
+        self.__dict__['results_dict'] = results_dict
 
         self.assertTrue(len(results_dict.keys()) == len(self.tickers))
 
@@ -206,6 +212,43 @@ class TestDataQueryInterface(unittest.TestCase):
 
         first_ticker = next(iter(results_dict.keys()))
         self.assertTrue(results_dict[first_ticker].shape[1] == 3)
+
+    def test_valid_ticker(self):
+
+        self.test_isolate_timeseries()
+
+        dq = api.Interface(username=self.cf["dq"]["username"],
+                           password=self.cf["dq"]["password"],
+                           crt=self.crt,
+                           key=self.key)
+
+        # The method, self.valid_ticker(), is used to delimit if each ticker has a valid
+        # time-series. To determine if a time-series is valid, pass through each date and
+        # confirm that the associated value is not a NoneType. If all dates contain NaN
+        # values, exclude the ticker from the DataFrame. For instance, USD_FXXR_NSA would
+        # be removed.
+
+        # All tickers held in the dictionary are valid tickers. Therefore, confirm the
+        # keys for the two dictionary, received & returned, match.
+        results_dict = dq.valid_ticker(self.results_dict,
+                                       suppress_warning=True)
+        self.assertTrue(len(results_dict.keys()) == len(self.results_dict.keys()))
+
+        test = sorted(list(results_dict.keys()))
+        benchmark = sorted(list(self.results_dict.keys()))
+        self.assertTrue(test == benchmark)
+
+        # Add a ticker that does not have a "valid" time-series and will subsequently be
+        # removed. Confirm the series has been removed from the dictionary.
+        f_ticker = next(iter(results_dict.keys()))
+        shape = results_dict[f_ticker].shape
+        data = np.array([None] * (shape[0] * shape[1]))
+
+        results_dict['DB(JPMAQS,USD_FXXR_NSA'] = data.reshape(shape)
+        results_dict_USD = dq.valid_ticker(self.results_dict,
+                                           suppress_warning=True)
+        # Ticker should be removed from the dictionary.
+        self.assertTrue('DB(JPMAQS,USD_FXXR_NSA' not in results_dict_USD.keys())
 
 
 if __name__ == '__main__':
