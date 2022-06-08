@@ -29,8 +29,19 @@ class TestDataQueryInterface(unittest.TestCase):
     def base_directory():
         cwd = os.getcwd()
         cwd_list = str(cwd).split('/')
-        base_dir = '/'.join(cwd_list[:cwd_list.index('macrosynergy')])
+        # Distinguish between running locally or on GitHub.
+        base_dir = '/'.join(cwd_list[:cwd_list.index('tests')])
         return base_dir
+
+    def path_finder(self, file):
+
+        path_bool = os.path.exists(self.base_dir + '/' + self.path + file)
+        if not path_bool:
+            cert_path = self.path + file
+        else:
+            cert_path = self.base_dir + '/' + self.path + file
+
+        return cert_path
 
     @staticmethod
     def jpmaqs_indicators(metrics, tickers):
@@ -49,15 +60,16 @@ class TestDataQueryInterface(unittest.TestCase):
         self.client_secret = s
 
         self.base_dir = self.base_directory()
-        self.path = "/macrosynergy/tests/unit/dataquery/cert_files"
+        self.path = "tests/unit/dataquery/cert_files"
 
         # Certificate & key connection.
-        with open(self.base_dir + self.path + "/config.yml", 'r') as f:
+        conf_path = self.path_finder("/config.yml")
+        with open(conf_path, 'r') as f:
             cf = yaml.load(f, Loader=yaml.FullLoader)
             self.cf = cf
 
-        self.crt = self.base_dir + self.path + "/api_macrosynergy_com.crt"
-        self.key = self.base_dir + self.path + "/api_macrosynergy_com.key"
+        self.crt = self.path_finder("/api_macrosynergy_com.crt")
+        self.key = self.path_finder("/api_macrosynergy_com.key")
 
         self.endpoint = "/expressions/time-series"
         self.params = {"format": "JSON", "start-date": self.s_date_calc(),
@@ -178,6 +190,8 @@ class TestDataQueryInterface(unittest.TestCase):
         # the ._request() method and return a dictionary where the keys are the tickers
         # and the values are stacked DataFrames where each column represents the metrics
         # that have been requested.
+        # Therefore, assert that the dictionary contains the expected tickers and that
+        # each value is a three-dimensional DataFrame: real_date, value, grade.
         results_dict, output_dict, s_list = dq.isolate_timeseries(final_output,
                                                                   ['value', 'grading'],
                                                                   False, False)
@@ -189,6 +203,9 @@ class TestDataQueryInterface(unittest.TestCase):
 
         test_keys = sorted(test_keys)
         self.assertTrue(test_keys == sorted(self.tickers))
+
+        first_ticker = next(iter(results_dict.keys()))
+        self.assertTrue(results_dict[first_ticker].shape[1] == 3)
 
 
 if __name__ == '__main__':
