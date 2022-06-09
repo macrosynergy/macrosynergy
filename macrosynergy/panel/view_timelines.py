@@ -14,7 +14,8 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
                    ncol: int = 3, same_y: bool = True, all_xticks: bool = False,
                    title: str = None, title_adj: float = 0.95,
                    xcat_labels: List[str] = None, label_adj: float = 0.05,
-                   size: Tuple[float] = (12, 7), aspect: float = 1.7, height: float = 3):
+                   cross_average: str = None, size: Tuple[float] = (12, 7),
+                   aspect: float = 1.7, height: float = 3):
 
     """Displays a facet grid of time line charts of one or more categories.
 
@@ -41,6 +42,10 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
         labels will be identical to extended categories.
     :param <float> label_adj: parameter that sets bottom of figure to fit the label.
         Default is 0.05.
+    :param <str> cross_average: possible defined category to compute, and subsequently
+        plot, a cross-average timeline (based on the available cross-sections) on each
+        facet axis. The function only allows for the cross-sectional mean to be
+        calculated and plotted on a single category. The default is None.
     :param <Tuple[float]> size: two-element tuple setting width/height of single cross
         section plot. Default is (12, 7). This is irrelevant for facet grid.
     :param <float> aspect: width-height ratio for plots in facet. Default is 1.7.
@@ -78,6 +83,30 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
         fg.map_dataframe(sns.lineplot, x='real_date', y=val,
                          hue='xcat', hue_order=xcats, ci=None)
 
+        if cross_average is not None:
+
+            error = f"<str> expected - received {type(cross_average)}."
+            assert isinstance(cross_average, str), error
+            average_error = f"The xcat received, {cross_average}, for the " \
+                            f"cross-sectional average must be present in xcats: {xcats}."
+            assert cross_average in xcats, average_error
+
+            axes = fg.axes.flatten()
+
+            df_average = df[df['xcat'] == cross_average]
+            dfw_average = df_average.pivot(index='real_date', columns='cid',
+                                           values='value')
+            cross_mean = dfw_average.mean(axis=1)
+            cross_mean = pd.DataFrame(data=cross_mean.to_numpy(),
+                                      index=cross_mean.index,
+                                      columns=['average'])
+            cross_mean = cross_mean.reset_index(level=0)
+            for ax in axes:
+                sns.lineplot(data=cross_mean, x='real_date', y='average', color='red',
+                             ax=ax, label=f"cross-sectional average on {cross_average}.")
+
+            handles, labels = ax.get_legend_handles_labels()
+
         fg.map(plt.axhline, y=0, c=".5")
         fg.set_titles(col_template='{col_name}')
         fg.set_axis_labels('', '')
@@ -92,6 +121,8 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
                 labels = fg._legend_data.keys()
             else:
                 labels = xcat_labels
+
+        if len(xcats) > 1 or cross_average is not None:
             fg.fig.legend(handles=handles, labels=labels,
                           loc='lower center', ncol=3)
             fg.fig.subplots_adjust(bottom=label_adj,
@@ -133,10 +164,12 @@ if __name__ == "__main__":
                    xcat_labels=['Return', 'Carry', 'Inflation'],
                    title='AUD Return, Carry & Inflation')
 
-    view_timelines(dfd, xcats=['CRY'], cids=cids, ncol=2, title='Carry')
+    view_timelines(dfd, xcats=['CRY'], cids=cids, ncol=2, title='Carry',
+                   cross_average='CRY')
 
     view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids, ncol=2,
-                   title='Return and Carry', all_xticks=True)
+                   title='Return and Carry', all_xticks=True,
+                   cross_average='CRY')
 
     view_timelines(dfd, xcats=['XR'], cids=cids, ncol=2,
                    cumsum=True, same_y=False, aspect=2)
