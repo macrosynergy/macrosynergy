@@ -6,10 +6,10 @@ from datetime import datetime
 from pandas import Timestamp
 from pandas.tseries.offsets import BDay
 from typing import List
-import numpy as np
+from unittest import mock
+from random import random
 import unittest
-import yaml
-import os
+import numpy as np
 
 class TestDataQueryInterface(unittest.TestCase):
 
@@ -27,29 +27,10 @@ class TestDataQueryInterface(unittest.TestCase):
         return str(new_date.strftime('%Y-%m-%d'))
 
     @staticmethod
-    def base_directory():
-        cwd = os.getcwd()
-        cwd_list = str(cwd).split('/')
-        # Distinguish between running locally or on GitHub.
-        try:
-            base_dir = '/'.join(cwd_list[:cwd_list.index('tests')])
-        except OSError:
-            base_dir = ''
-
-        return base_dir
-
-    def path_finder(self, file):
-
-        path_bool = os.path.exists(self.base_dir + '/' + self.path + file)
-        if not path_bool:
-            cert_path = self.path + file
-        else:
-            cert_path = self.base_dir + '/' + self.path + file
-
-        return cert_path
-
-    @staticmethod
     def jpmaqs_indicators(metrics, tickers):
+        """
+        Functionality taken from api.Interface().
+        """
 
         dq_tix = []
         for metric in metrics:
@@ -57,24 +38,50 @@ class TestDataQueryInterface(unittest.TestCase):
 
         return dq_tix
 
+    @staticmethod
+    def jpmaqs_value(elem: str):
+        """
+        Used to produce a value or grade for the associated ticker.
+
+        :param <str> elem: ticker.
+        """
+        ticker_split = elem.split(',')
+        if ticker_split[-1][:-1] == 'grading':
+            value = 1.0
+        else:
+            value = random()
+        return value
+
+    def dq_request(self, dq_expressions: List[str]):
+        """
+        Contrived request method to replicate output from DataQuery. Will replicate the
+        form of a JPMaQS expression from DataQuery which all subsequently be used to
+        test methods held in the api.Interface() Class.
+        """
+        aggregator = []
+        for i, elem in enumerate(dq_expressions):
+            elem_dict = {'item': (i + 1), 'group': None,
+                         'attributes': [{'expression': elem, 'label': None,
+                                         'attribute-id': None, 'attribute-name': None,
+                                         'time-series': [['20220607',
+                                                          self.jpmaqs_value(elem)]]}],
+                         'instrument-id': None, 'instrument-name': None}
+            aggregator.append(elem_dict)
+
+        return aggregator
+
     def constructor(self, metrics: List[str] = ['value']):
 
         # Auth Connection.
-        self.client_id = ""
-        s = ""
-        self.client_secret = s
-
-        self.base_dir = self.base_directory()
-        self.path = "tests/unit/dataquery/cert_files"
+        self.client_id = "client1"
+        self.client_secret = "123"
 
         # Certificate & key connection.
-        conf_path = self.path_finder("/config.yml")
-        with open(conf_path, 'r') as f:
-            cf = yaml.load(f, Loader=yaml.FullLoader)
-            self.cf = cf
+        self.username = "user1"
+        self.password = "123"
 
-        self.crt = self.path_finder("/api_macrosynergy_com.crt")
-        self.key = self.path_finder("/api_macrosynergy_com.key")
+        self.crt = "/api_macrosynergy_com.crt"
+        self.key = "/api_macrosynergy_com.key"
 
         self.endpoint = "/expressions/time-series"
         self.params = {"format": "JSON", "start-date": self.s_date_calc(),
@@ -92,114 +99,93 @@ class TestDataQueryInterface(unittest.TestCase):
         self.expression = self.jpmaqs_indicators(metrics=metrics,
                                                  tickers=self.tickers)
 
-    def test_oauth_condition(self):
+    @mock.patch("macrosynergy.dataquery.auth.OAuth",
+                return_value=OAuth)
+    def test_oauth_condition(self, mock_check_oauth):
 
         self.constructor()
-
         # Accessing DataQuery can be achieved via two methods: OAuth or Certificates /
         # Keys. To handle for the idiosyncrasies of the two access methods, split the
         # methods across individual Classes. The usage of each Class is controlled by the
         # parameter "oauth".
+        # First check is that the DataQuery instance is using an OAuth Object if the
+        # parameter "oauth" is set to to True.
         dq_access = api.Interface(oauth=True,
                                   client_id=self.client_id,
                                   client_secret=self.client_secret)
-        self.assertTrue(isinstance(dq_access.access, OAuth))
+        self.assertTrue(dq_access.check_access())
 
-        # Default is to use the Certificates / Keys: oauth = False.
-        dq_access = api.Interface(username=self.cf["dq"]["username"],
-                                  password=self.cf["dq"]["password"],
-                                  crt=self.crt,
-                                  key=self.key)
-
-        self.assertTrue(isinstance(dq_access.access, CertAuth))
-
-    def test_fetch_threading(self):
+    @mock.patch("macrosynergy.dataquery.api.Interface.check_access",
+                return_value=CertAuth)
+    def test_certauth_condition(self, mock_check_certauth):
 
         self.constructor()
 
-        # Instantiate a local variable.
-        params = self.params
-        params["expressions"] = self.expression
+        # Second check is that the DataQuery instance is using an CertAuth Object if the
+        # parameter "oauth" is set to to False. The DataQuery Class's default is to use
+        # certificate / keys.
+        dq_access = api.Interface(username=self.username,
+                                  password=self.password,
+                                  crt=self.crt,
+                                  key=self.key)
+        self.assertTrue(dq_access.check_access())
 
-        dq = api.Interface(username=self.cf["dq"]["username"],
-                           password=self.cf["dq"]["password"],
-                           crt=self.crt,
-                           key=self.key)
+    @mock.patch("macrosynergy.dataquery.auth.OAuth.get_dq_api_result",
+               return_value={"info": {"code": 200}})
+    def test_check_connection(self, mock_p_request):
+        # If the connection to DataQuery is working, the response code will invariably be
+        # 200. Therefore, use the Interface Object's method to check DataQuery
+        # connections.
 
-        results = dq._fetch_threading(endpoint=self.endpoint,
-                                      params=params)
+        self.constructor()
 
-        # Confirm the included tickers.
-        test_ticker = []
-        date_checker = []
-        for elem in results:
-            jpm_expression = elem["attributes"][0]['expression']
-            f_date = elem["attributes"][0]['time-series'][0][0]
-            f_date = str(Timestamp(f_date).strftime('%Y-%m-%d'))
-            date_checker.append(f_date)
-            test_ticker.append(jpm_expression.split(',')[1])
+        with api.Interface(client_id=self.client_id,
+                          client_secret=self.client_secret,
+                          oauth=True) as dq:
+            self.assertTrue(dq.check_connection())
+            mock_p_request.assert_called_with(url=dq.access.base_url +
+                                                  "/services/heartbeat")
 
-        self.assertTrue(len(self.tickers) == len(test_ticker))
+        mock_p_request.assert_called_once()
 
-        test_ticker = sorted(test_ticker)
-        condition = test_ticker == sorted(self.tickers)
-        self.assertTrue(condition)
+    @mock.patch("macrosynergy.dataquery.auth.OAuth.get_dq_api_result",
+               return_value={"info": {"code": 400}})
+    def test_check_connection_fail(self, mock_p_fail):
 
-        # Confirm the application of the start_date parameter.
-        first_date = self.s_date_calc()
-        self.assertTrue(first_date == next(iter(set(date_checker))))
+        # Opposite of above method: if the connection to DataQuery fails, the error code
+        # will be 400.
 
-    def test_request(self):
+        self.constructor()
 
-        # Test the threading functionality on a request larger than 20 tickers. Each
-        # thread can only be split across multiple threads.
-        self.constructor(metrics=['value', 'grading'])
+        with api.Interface(client_id=self.client_id,
+                           client_secret=self.client_secret,
+                           oauth=True) as dq:
+            # Method returns a Boolean. In this instance, the method should return False
+            # (unable to connect).
+            self.assertTrue(not dq.check_connection())
+            mock_p_fail.assert_called_with(url=dq.access.base_url +
+                                               "/services/heartbeat")
 
-        dq = api.Interface(username=self.cf["dq"]["username"],
-                           password=self.cf["dq"]["password"],
-                           crt=self.crt,
-                           key=self.key)
-
-        final_output = dq._request(endpoint=self.endpoint, tickers=self.expression,
-                                   params={}, delay=0.3, start_date=self.s_date_calc())
-
-        # Confirm the usage of threading, splitting the requests over multiple threads,
-        # does not lead to any data leakages: all JPMaQS indicators are present in the
-        # return dictionary.
-
-        test_ticker = []
-        for elem in final_output:
-            jpm_expression = elem["attributes"][0]['expression']
-            test_ticker.append(jpm_expression)
-
-        self.assertTrue(len(self.expression) == len(test_ticker))
-
-        test_ticker = sorted(test_ticker)
-        condition = test_ticker == sorted(self.expression)
-        self.assertTrue(condition)
-
-        self.__dict__['final_output'] = final_output
+        mock_p_fail.assert_called_once()
 
     def test_isolate_timeseries(self):
 
-        self.test_request()
+        self.constructor(metrics=['value', 'grading'])
 
-        dq = api.Interface(username=self.cf["dq"]["username"],
-                           password=self.cf["dq"]["password"],
-                           crt=self.crt,
-                           key=self.key)
-
-        final_output = self.final_output
+        final_output = self.dq_request(dq_expressions=self.expression)
 
         # The method, .isolate_timeseries(), will receive the returned dictionary from
         # the ._request() method and return a dictionary where the keys are the tickers
         # and the values are stacked DataFrames where each column represents the metrics
         # that have been requested.
+
         # Therefore, assert that the dictionary contains the expected tickers and that
         # each value is a three-dimensional DataFrame: real_date, value, grade.
-        results_dict, output_dict, s_list = dq.isolate_timeseries(final_output,
-                                                                  ['value', 'grading'],
-                                                                  False, False)
+        results_dict, output_dict, s_list = api.Interface.isolate_timeseries(
+                                                                            final_output,
+                                                                            ['value', 'grading'],
+                                                                            False, False
+                                                                            )
         self.__dict__['results_dict'] = results_dict
 
         self.assertTrue(len(results_dict.keys()) == len(self.tickers))
@@ -215,12 +201,9 @@ class TestDataQueryInterface(unittest.TestCase):
 
     def test_valid_ticker(self):
 
+        # Call test_isolate_timeseries() to obtain the dictionary produced from the
+        # associated method, isolate_timeseries().
         self.test_isolate_timeseries()
-
-        dq = api.Interface(username=self.cf["dq"]["username"],
-                           password=self.cf["dq"]["password"],
-                           crt=self.crt,
-                           key=self.key)
 
         # The method, self.valid_ticker(), is used to delimit if each ticker has a valid
         # time-series. To determine if a time-series is valid, pass through each date and
@@ -230,8 +213,9 @@ class TestDataQueryInterface(unittest.TestCase):
 
         # All tickers held in the dictionary are valid tickers. Therefore, confirm the
         # keys for the two dictionary, received & returned, match.
-        results_dict = dq.valid_ticker(self.results_dict,
-                                       suppress_warning=True)
+        results_dict = api.Interface.valid_ticker(_dict=self.results_dict,
+                                                  suppress_warning=True,
+                                                  debug=False)
         self.assertTrue(len(results_dict.keys()) == len(self.results_dict.keys()))
 
         test = sorted(list(results_dict.keys()))
@@ -242,11 +226,13 @@ class TestDataQueryInterface(unittest.TestCase):
         # removed. Confirm the series has been removed from the dictionary.
         f_ticker = next(iter(results_dict.keys()))
         shape = results_dict[f_ticker].shape
+        # Again, as described above, a series is not valid if all values are NoneType.
         data = np.array([None] * (shape[0] * shape[1]))
 
         results_dict['DB(JPMAQS,USD_FXXR_NSA'] = data.reshape(shape)
-        results_dict_USD = dq.valid_ticker(self.results_dict,
-                                           suppress_warning=True)
+        results_dict_USD = api.Interface.valid_ticker(self.results_dict,
+                                                      suppress_warning=True,
+                                                      debug=False)
         # Ticker should be removed from the dictionary.
         self.assertTrue('DB(JPMAQS,USD_FXXR_NSA' not in results_dict_USD.keys())
 
