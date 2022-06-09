@@ -16,12 +16,12 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
                    xcat_labels: List[str] = None, label_adj: float = 0.05,
                    size: Tuple[float] = (12, 7), aspect: float = 1.7, height: float = 3):
 
-    """Displays a facet grid of time line charts of one or more categories
+    """Displays a facet grid of time line charts of one or more categories.
 
     :param <pd.Dataframe> df: standardized dataframe with the necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
-    :param <List[str]> xcats: extended categories to plot. Default is all in dataframe.
-    :param <List[str]> cids: cross sections to plot. Default is all in dataframe.
+    :param <List[str]> xcats: extended categories to plot. Default is all in DataFrame.
+    :param <List[str]> cids: cross sections to plot. Default is all in DataFrame.
         If this contains only one cross section a single line chart is created.
     :param <bool> intersect: if True only retains cids that are available for all xcats.
         Default is False.
@@ -37,8 +37,8 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
     :param <str> title: chart heading. Default is no title.
     :param <float> title_adj: parameter that sets top of figure to accommodate title.
         Default is 0.95.
-    :param <List[str]> xcat_labels: labels to be used for xcats if not identical to
-        extended categories.
+    :param <List[str]> xcat_labels: labels to be used for xcats. If not defined, the
+        labels will be identical to extended categories.
     :param <float> label_adj: parameter that sets bottom of figure to fit the label.
         Default is 0.05.
     :param <Tuple[float]> size: two-element tuple setting width/height of single cross
@@ -48,50 +48,57 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
 
     """
 
-    df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True,
-                                intersect=intersect)
+    df, xcats, cids = reduce_df(df, xcats, cids, start, end,
+                                out_all=True, intersect=intersect)
 
     if cumsum:
-        df[val] = df.sort_values(['cid', 'xcat', "real_date"])[['cid', 'xcat', val]].\
-            groupby(['cid', 'xcat']).cumsum()
+        df[val] = df.sort_values(['cid', 'xcat',
+                                  "real_date"])[['cid', 'xcat',
+                                                 val]].groupby(['cid', 'xcat']).cumsum()
 
     sns.set(style='darkgrid')
     if len(cids) == 1:
         sns.set(rc={'figure.figsize': size})
-        ax = sns.lineplot(data=df, x='real_date', y=val, hue='xcat', ci=None,
-                          sizes=size)
+        ax = sns.lineplot(data=df, x='real_date', y=val,
+                          hue='xcat', ci=None, sizes=size)
+
         plt.axhline(y=0, c=".5")
         handles, labels = ax.get_legend_handles_labels()
         label = labels[0:] if xcat_labels is None else xcat_labels
         ax.legend(handles=handles[0:], labels=label)
         ax.set_xlabel("")
         ax.set_ylabel("")
+
         if title is not None:
             plt.title(title)
     else:
-        fg = sns.FacetGrid(data=df, col='cid', col_wrap=ncol, sharey=same_y,
-                           aspect=aspect, height=height,
-                           col_order=cids)
-        fg.map_dataframe(sns.lineplot, x='real_date', y=val, hue='xcat',
-                         hue_order=xcats, ci=None)
+        fg = sns.FacetGrid(data=df, col='cid', col_wrap=ncol,
+                           sharey=same_y, aspect=aspect,
+                           height=height, col_order=cids)
+        fg.map_dataframe(sns.lineplot, x='real_date', y=val,
+                         hue='xcat', hue_order=xcats, ci=None)
+
         fg.map(plt.axhline, y=0, c=".5")
         fg.set_titles(col_template='{col_name}')
         fg.set_axis_labels('', '')
+
         if title is not None:
             fg.fig.suptitle(title, fontsize=20)
             fg.fig.subplots_adjust(top=title_adj)
+
         if len(xcats) > 1:
             handles = fg._legend_data.values()
             if xcat_labels is None:
                 labels = fg._legend_data.keys()
             else:
                 labels = xcat_labels
-            fg.fig.legend(handles=handles, labels=labels, loc='lower center',
-                          ncol=3)  # add legend to bottom of figure
+            fg.fig.legend(handles=handles, labels=labels,
+                          loc='lower center', ncol=3)
             fg.fig.subplots_adjust(bottom=label_adj,
-                                   top=title_adj)  # lift bottom to respect legend
+                                   top=title_adj)
 
-    if all_xticks:  # add x-axis tick labels to all axes in grid
+    # Add x-axis tick labels to all axes in grid.
+    if all_xticks:
         for ax in fg.axes.flatten():
             ax.tick_params(labelbottom=True, pad=0)
 
@@ -101,7 +108,7 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
 if __name__ == "__main__":
 
     cids = ['AUD', 'CAD', 'GBP', 'NZD']
-    xcats = ['XR', 'CRY']
+    xcats = ['XR', 'CRY', 'INFL']
     df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
                                                 'sd_mult'])
     df_cids.loc['AUD', ] = ['2010-01-01', '2020-12-31', 0.2, 0.2]
@@ -111,25 +118,27 @@ if __name__ == "__main__":
 
     df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
                                                   'sd_mult', 'ar_coef', 'back_coef'])
+
     df_xcats.loc['XR', ] = ['2010-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
-    df_xcats.loc['CRY', ] = ['2012-01-01', '2020-10-30', 1, 2, 0.95, 0.5]
+    df_xcats.loc['INFL', ] = ['2015-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
+    df_xcats.loc['CRY', ] = ['2013-01-01', '2020-10-30', 1, 2, 0.95, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfdx = dfd[~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))]
 
-    # view_timelines(dfdx, xcats=['XR', 'CRY'], cids=cids, ncol=2,
-    #                xcat_labels=['Return', 'Carry'],
-    #                title='Carry and return', title_adj=0.9, label_adj=0.1,
-    #                aspect=1, height=5)
-    view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids[0], ncol=1, size=(10, 5),
-                   title='AUD return and carry')
-    view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids[0], ncol=1,
-                   xcat_labels=['Return', 'Carry'],
-                   title='AUD return and carry')
+    view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids[0],
+                   size=(10, 5), title='AUD return and carry')
+
+    view_timelines(dfd, xcats=['XR', 'CRY', 'INFL'], cids=cids[0],
+                   xcat_labels=['Return', 'Carry', 'Inflation'],
+                   title='AUD Return, Carry & Inflation')
+
     view_timelines(dfd, xcats=['CRY'], cids=cids, ncol=2, title='Carry')
-    view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids, ncol=2, title='Return and carry',
-                   all_xticks=True)
-    view_timelines(dfd, xcats=['XR'], cids=cids, ncol=2, cumsum=True, same_y=False,
-                   aspect=2)
+
+    view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids, ncol=2,
+                   title='Return and Carry', all_xticks=True)
+
+    view_timelines(dfd, xcats=['XR'], cids=cids, ncol=2,
+                   cumsum=True, same_y=False, aspect=2)
 
     dfd.info()
