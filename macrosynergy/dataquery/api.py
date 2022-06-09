@@ -9,7 +9,6 @@ import concurrent.futures
 import time
 from itertools import chain
 from typing import Optional
-import requests
 from .auth import CertAuth, OAuth
 
 
@@ -61,6 +60,14 @@ class Interface(object):
         if exc_type:
             print(f'Execution {exc_type} with value (exc_value):\n{exc_value}')
 
+    def check_access(self):
+        """
+        Method to validate the Class used to access DataQuery. The access Class will be
+        controlled by the oauth parameter.
+        """
+
+        return self.access
+
     def check_connection(self) -> bool:
         """
         Check connection (heartbeat) to DataQuery.
@@ -69,12 +76,6 @@ class Interface(object):
         js: dict = self.access.get_dq_api_result(url=self.access.base_url + endpoint)
 
         results: dict = js["info"]
-
-        if int(results["code"]) != 200:
-            print(
-                f"DataQuery response {results['message']:s}"
-                f" with description: {results['description']:s}"
-            )
 
         return int(results["code"]) == 200
 
@@ -345,7 +346,7 @@ class Interface(object):
                                                              sequential=sequential)
             results_dict = {**results_dict, **r_dict}
 
-        results_dict = self.valid_ticker(results_dict, suppress_warning)
+        results_dict = self.valid_ticker(results_dict, suppress_warning, self.debug)
 
         results_copy = results_dict.copy()
         try:
@@ -460,7 +461,8 @@ class Interface(object):
 
         return condition
 
-    def valid_ticker(self, _dict, suppress_warning):
+    @classmethod
+    def valid_ticker(cls, _dict, suppress_warning, debug):
         """
         Iterates through each Ticker and determines whether the Ticker is held in the
         Database or not. The validation mechanism will isolate each column, in all the
@@ -471,6 +473,7 @@ class Interface(object):
 
         :param <dict> _dict:
         :param <bool> suppress_warning:
+        :param <bool> debug:
 
         :return: <dict> dict_copy.
         """
@@ -480,13 +483,13 @@ class Interface(object):
         for k, v in _dict.items():
             no_cols = v.shape[1]
 
-            condition = self.column_check(v, 1)
+            condition = cls.column_check(v, 1)
             if condition:
                 ticker_missing += 1
                 for i in range(2, no_cols):
-                    condition = self.column_check(v, i)
+                    condition = cls.column_check(v, i)
                     if not condition:
-                        if self.debug:
+                        if debug:
                             warnings.warn("Error has occurred in the Database.")
 
                 if not suppress_warning:
