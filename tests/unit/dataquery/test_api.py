@@ -29,7 +29,8 @@ class TestDataQueryInterface(unittest.TestCase):
     @staticmethod
     def jpmaqs_indicators(metrics, tickers):
         """
-        Functionality taken from api.Interface().
+        Functionality taken from api.Interface(). Will be implicitly tested by methods
+        below.
         """
 
         dq_tix = []
@@ -41,7 +42,9 @@ class TestDataQueryInterface(unittest.TestCase):
     @staticmethod
     def jpmaqs_value(elem: str):
         """
-        Used to produce a value or grade for the associated ticker.
+        Used to produce a value or grade for the associated ticker. If the metric is
+        grade, the function will return 1.0 and if value, the function returns a random
+        number between (0, 1).
 
         :param <str> elem: ticker.
         """
@@ -55,7 +58,7 @@ class TestDataQueryInterface(unittest.TestCase):
     def dq_request(self, dq_expressions: List[str]):
         """
         Contrived request method to replicate output from DataQuery. Will replicate the
-        form of a JPMaQS expression from DataQuery which all subsequently be used to
+        form of a JPMaQS expression from DataQuery which will subsequently be used to
         test methods held in the api.Interface() Class.
         """
         aggregator = []
@@ -172,6 +175,8 @@ class TestDataQueryInterface(unittest.TestCase):
 
         self.constructor(metrics=['value', 'grading'])
 
+        # First replicate the api.Interface()._request() method using the associated
+        # JPMaQS expression.
         final_output = self.dq_request(dq_expressions=self.expression)
 
         # The method, .isolate_timeseries(), will receive the returned dictionary from
@@ -236,6 +241,39 @@ class TestDataQueryInterface(unittest.TestCase):
         # Ticker should be removed from the dictionary.
         self.assertTrue('DB(JPMAQS,USD_FXXR_NSA' not in results_dict_USD.keys())
 
+    def test_dataframe_wrapper(self):
+
+        # After the time-series have been isolated for each ticker and all the tickers
+        # have been validated, aggregate the results, still held in a dictionary, into
+        # a single DataFrame where the columns will be the passed metrics, 'value' &
+        # 'grading' plus the standardised JPMaQS columns: 'cid', 'xcat', 'real_date'.
+
+        # The method api.Interface.valid_ticker() is not required given each ticker will
+        # be valid by design.
+        self.test_isolate_timeseries()
+
+        results_dict = self.results_dict
+        trial_df = api.Interface.dataframe_wrapper(_dict=results_dict, no_metrics=2,
+                                                   original_metrics=['value', 'grading'])
+
+        # Confirm the dictionary is a standardised DataFrame plus the respective metrics
+        # passed.
+        expected_columns = ['cid', 'xcat', 'real_date', 'value', 'grading']
+        self.assertTrue(sorted(list(trial_df.columns)) == sorted(expected_columns))
+
+        # Next confirm that tickers held in the DataFrame are the complete set: i.e all
+        # the tickers defined in the constructor. All tickers are valid. Therefore,
+        # confirm there is not any inadvertent leakage from constructing the DataFrame
+        # and all tickers are included.
+
+        tickers_df = list(trial_df['cid'] + '_' + trial_df['xcat'])
+        self.assertTrue(sorted(tickers_df) == sorted(self.tickers))
+
+        # Given the constructed nature of the DataFrame, confirm all values in the
+        # 'grading' column are equal to 1.0.
+        # Confirms the columns have the expected values.
+        grades_test = np.all(trial_df['grading'] == 1.0)
+        self.assertTrue(grades_test)
 
 if __name__ == '__main__':
     unittest.main()
