@@ -14,7 +14,7 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
                   cids: List[str] = None, start: str = '2000-01-01',
                   end: str = None, val: str = 'value', freq: str = None,
-                  cluster: bool = False,
+                  cluster: bool = False, lags: List[int] = None,
                   title: str = None, size: Tuple[float] = (14, 8),
                   max_color: float = None):
     """
@@ -40,6 +40,12 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
         ('Q') mean.
     :param <bool> cluster: if True the series in the correlation matrix are reordered
         by hierarchical clustering. Default is False.
+    :param <List[int]> lags: allows for looking at lagged correlation between a set of
+        features & targets.
+        The parameter requires passing the number of lags corresponding to the numeracy
+        of cross-sections, if modelling on a single category, or categories if the number
+        of categories is greater than one. If a feature is not being lagged, pass in
+        zero.
     :param <str> title: chart heading. If none is given, a default title is used.
     :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default
         is (14, 8).
@@ -68,6 +74,12 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
 
     if len(xcats) == 1:
         df_w = df.pivot(index='real_date', columns='cid', values=val)
+
+        if lags is not None:
+            lag_cross = "The number of defined lags must match the number of " \
+                        "cross-sections the correlation matrix is defined over."
+            assert len(lags) == len(cids), lag_cross
+
         if freq is not None:
             df_w = df_w.resample(freq).mean()
 
