@@ -360,7 +360,63 @@ class Interface(object):
                                           original_metrics)
 
     @staticmethod
-    def isolate_timeseries(list_, metrics, debug, sequential):
+    def array_construction(metrics: List[str], output_dict: dict, no_rows: int,
+                           debug: bool, sequential: bool):
+        """
+        Helper function that will pass through the dictionary and aggregate each
+        time-series stored in the interior dictionary. Will return a single dictionary
+        where the keys are the tickers and the values are the aggregated time-series.
+
+        :param <List[str]> metrics: metrics requested from the API.
+        :param <dict> output_dict: nested dictionary where the keys are the tickers and
+            the value is itself a dictionary. The interior dictionary's keys will be the
+            associated metrics and the values will be their respective time-series.
+        :param <int> no_rows: number of timestamps the series is defined over.
+        :param <bool> debug: used to understand any underlying issue.
+        :param <bool> sequential: if series are not returned, potentially the fault of
+            the threading mechanism, isolate each Ticker and run sequentially.
+
+        """
+
+        modified_dict = {}
+        d_frame_order = ['real_date'] + metrics
+
+        ticker_list = []
+        for k, v in output_dict.items():
+
+            arr = np.empty(shape=(no_rows, len(d_frame_order)), dtype=object)
+            clause = True
+            for i, metric in enumerate(d_frame_order):
+                try:
+                    arr[:, i] = v[metric]
+                except KeyError:
+                    if debug:
+                        print(f"The ticker, {k[3:]}, is missing the metric '{metric}' "
+                              f"whilst the requests are running concurrently - will "
+                              f"check the API sequentially.")
+
+                    temp_list = [k + ',' + m + ')' for m in metrics]
+                    ticker_list += temp_list
+                    if sequential:
+                        if 'value' in v.keys():
+                            arr[:, i] = np.nan
+                        else:
+                            print(f"The ticker, {k[3:]}, is missing from the API after "
+                                  f"running sequentially - will not be in the returned "
+                                  f"dataframe.")
+                            clause = False
+                            break
+                    else:
+                        break
+
+            if clause:
+                modified_dict[k] = arr
+
+        return modified_dict, ticker_list
+
+
+    def isolate_timeseries(self, list_, metrics: List[str],
+                           debug: bool, sequential: bool):
         """
         Isolates the metrics, across all categories & cross-sections, held in the List,
         and concatenates the time-series, column-wise, into a single structure, and
@@ -370,11 +426,11 @@ class Interface(object):
         for each Ticker. If not, will run the Tickers sequentially to confirm the issue
         is not ascribed to multithreading overloading the load balancer.
 
-        :param list_: returned from DataQuery.
-        :param metrics: metrics requested from the API.
-        :param debug: used to understand any underlying issue.
-        :param sequential: if series are not returned, potentially the fault of the
-            threading mechanism, isolate each Ticker and run sequentially.
+        :param <List[dict]> list_: returned from DataQuery.
+        :param <List[str]> metrics: metrics requested from the API.
+        :param <bool> debug: used to understand any underlying issue.
+        :param <bool> sequential: if series are not returned, potentially the fault of
+            the threading mechanism, isolate each Ticker and run sequentially.
 
         :return: <dict> modified_dict.
         """
@@ -410,39 +466,11 @@ class Interface(object):
         t_dict = next(iter(output_dict_c.values()))
         no_rows = next(iter(t_dict.values())).size
 
-        modified_dict = {}
-        d_frame_order = ['real_date'] + metrics
-
-        ticker_list = []
-        for k, v in output_dict.items():
-
-            arr = np.empty(shape=(no_rows, len(d_frame_order)), dtype=object)
-            clause = True
-            for i, metric in enumerate(d_frame_order):
-                try:
-                    arr[:, i] = v[metric]
-                except KeyError:
-                    if debug:
-                        print(f"The ticker, {k[3:]}, is missing the metric '{metric}' "
-                              f"whilst the requests are running concurrently - will "
-                              f"check the API sequentially.")
-
-                    temp_list = [k + ',' + m + ')' for m in metrics]
-                    ticker_list += temp_list
-                    if sequential:
-                        if 'value' in v.keys():
-                            arr[:, i] = np.nan
-                        else:
-                            print(f"The ticker, {k[3:]}, is missing from the API after "
-                                  f"running sequentially - will not be in the returned "
-                                  f"dataframe.")
-                            clause = False
-                            break
-                    else:
-                        break
-
-            if clause:
-                modified_dict[k] = arr
+        modified_dict, ticker_list = self.array_construction(metrics=metrics,
+                                                             output_dict=output_dict,
+                                                             no_rows=no_rows,
+                                                             debug=debug,
+                                                             sequential=sequential)
 
         return modified_dict, output_dict, ticker_list
 
