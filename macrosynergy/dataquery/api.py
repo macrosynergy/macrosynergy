@@ -414,7 +414,6 @@ class Interface(object):
 
         return modified_dict, ticker_list
 
-
     def isolate_timeseries(self, list_, metrics: List[str],
                            debug: bool, sequential: bool):
         """
