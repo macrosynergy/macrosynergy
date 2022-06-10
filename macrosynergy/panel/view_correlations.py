@@ -67,18 +67,13 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
 
     min_color = None if max_color is None else -max_color
 
-    df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
+    df, xcats_post, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
 
     s_date = df['real_date'].min().strftime('%Y-%m-%d')
     e_date = df['real_date'].max().strftime('%Y-%m-%d')
 
     if len(xcats) == 1:
         df_w = df.pivot(index='real_date', columns='cid', values=val)
-
-        if lags is not None:
-            lag_cross = "The number of defined lags must match the number of " \
-                        "cross-sections the correlation matrix is defined over."
-            assert len(lags) == len(cids), lag_cross
 
         if freq is not None:
             df_w = df_w.resample(freq).mean()
@@ -88,7 +83,24 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
                     f'{e_date}'
 
     else:
+
         df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values=val)
+
+        if lags is not None:
+            lag_xcats = "The number of defined lags must match the number of " \
+                        "categories the correlation matrix is defined over."
+            assert len(lags) == len(xcats), lag_xcats
+
+            lag_xcat = dict(zip(xcats, lags))
+            i = 1
+            for xcat, shift in lag_xcat.items():
+
+                # Handle for multi-index DataFrame. The interior index represents the
+                # timestamps.
+                df_w[xcat] = df_w.groupby(level=0)[xcat].shift(shift)
+                df_w = df_w.rename(columns={xcat: xcat + f"_L{i}"})
+                i += 1
+
         if freq is not None:
             df_w = df_w.groupby([pd.Grouper(level='cid'),
                                  pd.Grouper(level='real_date', freq=freq)]
@@ -156,14 +168,17 @@ if __name__ == "__main__":
                                                   'sd_mult', 'ar_coef', 'back_coef'])
     df_xcats.loc['XR', ] = ['2010-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
     df_xcats.loc['CRY', ] = ['2011-01-01', '2020-10-30', 1, 2, 0.95, 0.5]
-    df_xcats.loc['GROWTH', ] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
-    df_xcats.loc['INFL', ] = ['2011-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
+    df_xcats.loc['GROWTH', ] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
+    df_xcats.loc['INFL', ] = ['2010-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    correl_matrix(dfd, xcats=xcats, cids=cids, max_color=0.1)
+    # Lag inflation by 60 business days - 3 months.
+    correl_matrix(dfd, xcats=['GROWTH', 'INFL'], cids=cids,
+                  lags= [0, 60], max_color=0.1)
     correl_matrix(dfd, xcats=xcats[0], cids=cids, title='Correlation')
-    correl_matrix(dfd, xcats=xcats, cids=cids, freq="Q")
+    correl_matrix(dfd, xcats=xcats, cids=cids,
+                  lags=[0, 0, 60, 0], freq="Q")
 
     # Clustered correlation matrices.
 
