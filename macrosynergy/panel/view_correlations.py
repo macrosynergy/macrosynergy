@@ -5,7 +5,6 @@ import numpy as np
 import seaborn as sns
 import scipy.cluster.hierarchy as sch
 from matplotlib import pyplot as plt
-from scipy.spatial.distance import squareform
 from typing import List, Union, Tuple
 
 from macrosynergy.management.check_availability import reduce_df
@@ -48,8 +47,8 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
         coefficients for color scale. Default is none. If a value is given it applies
         symmetrically to positive and negative values.
 
-    N.B:. The function displays the heatmap of a correlation matrix across categories
-    (if more than one has been assigned to 'xcats' or cross sections.
+    N.B:. The function displays the heatmap of a correlation matrix across categories or
+    cross-sections (depending on which parameter has received multiple elements).
     """
 
     if freq is not None:
@@ -91,19 +90,27 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
     corr = df_w.corr()
 
     if cluster:
-
+        # Pairwise distances between observations in n-dimensional space.
         d = sch.distance.pdist(corr)
+        # Perform hierarchical / agglomerative clustering. The clustering method used is
+        # Farthest Point Algorithm.
         L = sch.linkage(d, method='complete')
+        print(L)
         ind = sch.fcluster(L, 0.5 * d.max(), 'distance')
         columns = [corr.columns.tolist()[i] for i in list((np.argsort(ind)))]
         corr = corr.loc[columns, columns]
 
     # Mask for the upper triangle.
+    # Return a copy of an array with the elements below the k-th diagonal zeroed. The
+    # mask is implemented because correlation coefficients are symmetric.
     mask = np.triu(np.ones_like(corr, dtype=bool))
 
     fig, ax = plt.subplots(figsize=size)
-    sns.heatmap(corr, mask=mask, cmap='vlag_r', center=0, vmin=min_color, vmax=max_color,
-                square=False, linewidths=.5, cbar_kws={"shrink": .5})
+    sns.heatmap(corr, mask=mask, cmap='vlag_r', center=0,
+                vmin=min_color, vmax=max_color,
+                square=False, linewidths=.5,
+                cbar_kws={"shrink": .5})
+
     ax.set(xlabel='', ylabel='')
     ax.set_title(title, fontsize=14)
 
