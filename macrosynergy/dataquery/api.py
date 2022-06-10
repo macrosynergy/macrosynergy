@@ -414,7 +414,8 @@ class Interface(object):
 
         return modified_dict, ticker_list
 
-    def isolate_timeseries(self, list_, metrics: List[str],
+    @classmethod
+    def isolate_timeseries(cls, list_, metrics: List[str],
                            debug: bool, sequential: bool):
         """
         Isolates the metrics, across all categories & cross-sections, held in the List,
@@ -465,11 +466,11 @@ class Interface(object):
         t_dict = next(iter(output_dict_c.values()))
         no_rows = next(iter(t_dict.values())).size
 
-        modified_dict, ticker_list = self.array_construction(metrics=metrics,
-                                                             output_dict=output_dict,
-                                                             no_rows=no_rows,
-                                                             debug=debug,
-                                                             sequential=sequential)
+        modified_dict, ticker_list = cls.array_construction(metrics=metrics,
+                                                            output_dict=output_dict,
+                                                            no_rows=no_rows,
+                                                            debug=debug,
+                                                            sequential=sequential)
 
         return modified_dict, output_dict, ticker_list
 
