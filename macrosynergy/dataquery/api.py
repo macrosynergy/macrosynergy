@@ -8,15 +8,18 @@ import warnings
 import concurrent.futures
 import time
 from itertools import chain
-from typing import Optional
+import logging
 from .auth import CertAuth, OAuth
+
+logger = logging.getLogger(__name__)
 
 
 class Interface(object):
     """API Interface to ©JP Morgan DataQuery
 
-    :param <bool> debug: boolean,
-        if True run the interface in debugging mode.
+    :param <bool> oauth: default True, authentication mechanism for DataQuery of either
+        OAuth (when True) or Certificate based (if False).
+    :param <bool> debug: boolean, if True run the interface in debugging mode.
     :param <bool> concurrent: run the requests concurrently.
     :param <int> thread_handler: count of threads for downloading from DQ.
     :param <str> client_id: optional argument required for OAuth authentication
@@ -34,11 +37,13 @@ class Interface(object):
     ):
 
         if oauth:
+            logger.debug("Initiate OAuth authentication access")
             self.access: OAuth = OAuth(
                 client_id=kwargs.pop('client_id'),
                 client_secret=kwargs.pop('client_secret')
             )
         else:
+            logger.debug("Initiate Certificate authentication access")
             self.access: CertAuth = CertAuth(
                 username=kwargs.pop('username'),
                 password=kwargs.pop('password'),
@@ -47,9 +52,6 @@ class Interface(object):
             )
 
         self.debug: bool = debug
-        self.last_url: Optional[str] = None
-        self.status_code: Optional[int] = None
-        self.last_response: Optional[str] = None
         self.concurrent: bool = concurrent
         self.thread_handler: int = thread_handler
 
@@ -58,7 +60,7 @@ class Interface(object):
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         if exc_type:
-            print(f'Execution {exc_type} with value (exc_value):\n{exc_value}')
+            logger.error(f'Execution {exc_type} with value ({exc_value}):\n{exc_value}')
 
     def check_access(self):
         """
@@ -137,6 +139,7 @@ class Interface(object):
                 continue
 
             count = 0
+            # TODO aren't we currently just processing the same message again and again?
             while not self.server_retry(response, select):
                 count += 1
                 if count > 5:
@@ -144,6 +147,7 @@ class Interface(object):
 
             if select in response.keys():
                 results.extend(response[select])
+            # TODO what if "select" is not in response keys?
 
             if response["links"][1]["next"] is None:
                 break
@@ -151,6 +155,7 @@ class Interface(object):
             url = f"{self.access.base_url:s}{response['links'][1]['next']:s}"
             params = {}
 
+        # TODO will currently always be true...
         if isinstance(results, list):
             return results
         else:
@@ -167,7 +172,7 @@ class Interface(object):
         concurrently. Able to request data sequentially if required or server overload.
 
         :param <str> endpoint: url.
-        :param <List[str]> tickers: List of Tickers.
+        :param <List[str]> tickers: List of Tickers (DataQuery expressions).
         :param <dict> params: dictionary of required parameters for request.
         :param <Integer> delay: each release of a thread requires a delay (roughly 200
             milliseconds) to prevent overwhelming DataQuery. Computed dynamically if DQ
@@ -186,6 +191,7 @@ class Interface(object):
             respective time-series over the defined dates.
         """
 
+        # TODO default delay is None!
         if delay > 0.9999:
             error_delay = "Issue with DataQuery - requests should not be throttled."
             raise RuntimeError(error_delay)
