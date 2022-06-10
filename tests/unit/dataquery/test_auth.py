@@ -33,5 +33,5 @@ class TestOAuth(unittest.TestCase):
         self.assertFalse(oauth._valid_token())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
