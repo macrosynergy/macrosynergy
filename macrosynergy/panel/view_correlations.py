@@ -90,12 +90,21 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
     corr = df_w.corr()
 
     if cluster:
-        # Pairwise distances between observations in n-dimensional space.
+        # Pairwise distances between observations in n-dimensional space. If y is a 1-D
+        # condensed distance matrix, then y must be a nCk sized vector (k = 2, pairwise).
         d = sch.distance.pdist(corr)
         # Perform hierarchical / agglomerative clustering. The clustering method used is
         # Farthest Point Algorithm.
         L = sch.linkage(d, method='complete')
-        print(L)
+        # Returns an (n - 1) by four matrix. The first two columns represent the "nodes"
+        # being merged. The third column is the euclidean distance between the "nodes"
+        # being merged and the fourth column equates to the number of original
+        # observations in the newly formed cluster.
+        # The second parameter is the distance threshold, t, which will determine the
+        # "number" of clusters. If the distance threshold is too small, none of the data
+        # points will form a cluster, so n different clusters are returned.
+        # If there are any clusters, the categories contained in the cluster will be
+        # adjacent.
         ind = sch.fcluster(L, 0.5 * d.max(), 'distance')
         columns = [corr.columns.tolist()[i] for i in list((np.argsort(ind)))]
         corr = corr.loc[columns, columns]
