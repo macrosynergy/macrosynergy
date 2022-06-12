@@ -86,7 +86,7 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
         df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values=val)
 
         if lags is not None:
-            # Todo: lags must be applied after freq
+            # Todo: lags must be applied after freq has been set
             message = "The number of defined lags must match the number of " \
                         "categories the correlation matrix is defined over."
             assert len(lags) == len(xcats), message
