@@ -12,10 +12,9 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 
 def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
-                  cids: List[str] = None, lags: List[int] = None,
-                  start: str = '2000-01-01', end: str = None, val: str = 'value',
-                  freq: str = None,
-                  cluster: bool = False,
+                  cids: List[str] = None, start: str = '2000-01-01',
+                  end: str = None, val: str = 'value', freq: str = None,
+                  cluster: bool = False, lags: List[int] = None,
                   title: str = None, size: Tuple[float] = (14, 8),
                   max_color: float = None):
     """
@@ -29,10 +28,6 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
         correlation coefficients across categories are displayed.
     :param <List[str]> cids: cross sections to be correlated. Default is all in the
         dataframe.
-    :param <List[int]> lags: optional list of lags applied to the extended categories.
-        The period to which lag refers is daily or as
-        Default is None, which means that no category is being lagged
-        The list must have the same length as xcats.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df
@@ -45,6 +40,12 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
         ('Q') mean.
     :param <bool> cluster: if True the series in the correlation matrix are reordered
         by hierarchical clustering. Default is False.
+    :param <List[int]> lags: allows for looking at lagged correlation between a set of
+        features & targets.
+        The parameter requires passing the number of lags corresponding to the numeracy
+        of cross-sections, if modelling on a single category, or categories if the number
+        of categories is greater than one. If a feature is not being lagged, pass in
+        zero.
     :param <str> title: chart heading. If none is given, a default title is used.
     :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default
         is (14, 8).
@@ -86,10 +87,9 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
         df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values=val)
 
         if lags is not None:
-            # Todo: lags must be applied after freq
-            message = "The number of defined lags must match the number of " \
+            lag_xcats = "The number of defined lags must match the number of " \
                         "categories the correlation matrix is defined over."
-            assert len(lags) == len(xcats), message
+            assert len(lags) == len(xcats), lag_xcats
 
             lag_xcat = dict(zip(xcats, lags))
             i = 1
@@ -175,7 +175,7 @@ if __name__ == "__main__":
 
     # Lag inflation by 60 business days - 3 months.
     correl_matrix(dfd, xcats=['GROWTH', 'INFL'], cids=cids,
-                  lags=[2, 1], max_color=0.1)
+                  lags= [0, 60], max_color=0.1)
     correl_matrix(dfd, xcats=xcats[0], cids=cids, title='Correlation')
     correl_matrix(dfd, xcats=xcats, cids=cids,
                   lags=[0, 0, 60, 0], freq="Q")
@@ -216,7 +216,6 @@ if __name__ == "__main__":
 
     start = '2012-01-01'
     end = '2020-09-30'
-
     correl_matrix(df=dfd, xcats='XR', cids=cids, start=start, end=end,
                   val='value', freq=None, cluster=True,
                   title='Correlation Matrix', size=(14, 8), max_color=None)
