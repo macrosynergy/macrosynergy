@@ -44,10 +44,9 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
     :param <bool> cluster: if True the series in the correlation matrix are reordered
         by hierarchical clustering. Default is False.
     :param <dict> lags: optional dictionary of lags applied to respective categories.
-        The key will be the category and the value will represent the lag factor. If a
-        category has multiple lags applied, pass in a list of lag values. Additionally,
-        if the original time-series is to be included in the correlation matrix, pass in
-        zero for the lag.
+        The key will be the category and the value is the lag or lags. If a
+        category has multiple lags applied, pass in a list of lag values.
+        N.B.: Lags can include a 0 if the original should also be correlated.
     :param <str> title: chart heading. If none is given, a default title is used.
     :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default
         is (14, 8).
@@ -111,10 +110,12 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
                 i = 1
                 if isinstance(shift, int):
                     lag_copy[xcat + f"_L{i}"] = shift
+                    #Todo: incorrect the lag number should be shift not i
                     xcat_tracker[xcat].append(xcat + f"_L{i}")
                 else:
                     no_lags = len(shift)
                     xcat_temp = [xcat + f"_L{i + j}" for j in range(no_lags)]
+                    #Todo: incorrect: the lag number is given by shift
                     # Merge the two dictionaries.
                     lag_copy = {**lag_copy, **dict(zip(xcat_temp, shift))}
                     xcat_tracker[xcat].extend(xcat_temp)
@@ -209,13 +210,13 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     # Lag inflation by 60 business days - 3 months.
-    lag_dict = {'INFL': [0, 60]}
+    lag_dict = {'INFL': [0, 1, 2, 5]}
     correl_matrix(dfd, xcats=['INFL', 'GROWTH'], cids=cids,
                   lags= lag_dict, max_color=0.1)
     # Down-sample to monthly frequency and then apply the lags. Multiple lags applied to
     # single cross-section.
-    lag_dict = {'INFL': [1, 2], 'CRY': 3}
-    correl_matrix(dfd, xcats=['INFL', 'CRY', 'GROWTH'], cids=cids, freq='M',
+    lag_dict = {'INFL': [1, 2, 3], 'CRY': [1, 2, 3]}
+    correl_matrix(dfd, xcats=['INFL', 'CRY', 'GROWTH'], cids=cids, freq='Q',
                   lags= lag_dict, max_color=0.1)
 
     # Clustered correlation matrices. Test hierarchical clustering.
