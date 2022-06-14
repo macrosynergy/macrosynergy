@@ -1,11 +1,13 @@
 
 import random
+import itertools
 import pandas as pd
 import numpy as np
 import seaborn as sns
 import scipy.cluster.hierarchy as sch
 from matplotlib import pyplot as plt
 from typing import List, Union, Tuple
+from collections import defaultdict
 
 from macrosynergy.management.check_availability import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
@@ -25,7 +27,8 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
     :param <List[str]> xcats: extended categories to be correlated. Default is all in the
         dataframe. If xcats contains only one category the correlation coefficients
         across cross sections are displayed. If xcats contains more than one category the
-        correlation coefficients across categories are displayed.
+        correlation coefficients across categories are displayed. Additionally, the order
+        of the xcats received will be mirrored in the correlation matrix.
     :param <List[str]> cids: cross sections to be correlated. Default is all in the
         dataframe.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
@@ -103,15 +106,18 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
             # Modify the dictionary to adjust for single categories having multiple lags.
             # The respective lags will be held inside a list.
             lag_copy = {}
+            xcat_tracker = defaultdict(list)
             for xcat, shift in lags.items():
                 i = 1
                 if isinstance(shift, int):
                     lag_copy[xcat + f"_L{i}"] = shift
+                    xcat_tracker[xcat].append(xcat + f"_L{i}")
                 else:
                     no_lags = len(shift)
                     xcat_temp = [xcat + f"_L{i + j}" for j in range(no_lags)]
                     # Merge the two dictionaries.
                     lag_copy = {**lag_copy, **dict(zip(xcat_temp, shift))}
+                    xcat_tracker[xcat].extend(xcat_temp)
 
             df_w_copy = df_w.copy()
             for xcat, shift in lag_copy.items():
@@ -129,10 +135,12 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
                 # lag).
                 df_w[xcat] = df_w.groupby(level=0)[xcat].shift(shift)
 
-        # Order the correlation matrix such that targets and features move left-to-right.
-        # Assumes lags are applied to the features.
-        order = list(set(xcats) - set(lags.keys())) + list(lag_copy.keys())
+        # Order the correlation DataFrame to reflect the order of the categories
+        # parameter.
+        order = [[x] if x not in xcat_tracker.keys() else xcat_tracker[x] for x in xcats]
+        order = list(itertools.chain(*order))
         df_w = df_w[order]
+
         if title is None:
             title = f'Cross-category correlation from {s_date} to {e_date}'
 
@@ -202,12 +210,12 @@ if __name__ == "__main__":
 
     # Lag inflation by 60 business days - 3 months.
     lag_dict = {'INFL': [0, 60]}
-    correl_matrix(dfd, xcats=['GROWTH', 'INFL'], cids=cids,
+    correl_matrix(dfd, xcats=['INFL', 'GROWTH'], cids=cids,
                   lags= lag_dict, max_color=0.1)
     # Down-sample to monthly frequency and then apply the lags. Multiple lags applied to
     # single cross-section.
     lag_dict = {'INFL': [1, 2], 'CRY': 3}
-    correl_matrix(dfd, xcats=['GROWTH', 'INFL', 'CRY'], cids=cids, freq='M',
+    correl_matrix(dfd, xcats=['INFL', 'CRY', 'GROWTH'], cids=cids, freq='M',
                   lags= lag_dict, max_color=0.1)
 
     # Clustered correlation matrices. Test hierarchical clustering.
