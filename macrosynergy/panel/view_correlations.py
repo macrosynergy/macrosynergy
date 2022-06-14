@@ -86,6 +86,13 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
 
         df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values=val)
 
+        # Down-sample according to the passed frequency.
+        if freq is not None:
+            df_w = df_w.groupby([pd.Grouper(level='cid'),
+                                 pd.Grouper(level='real_date', freq=freq)]
+                                ).mean()
+
+        # Apply the lag mechanism, to the respective categories, after the down-sampling.
         if lags is not None:
             lag_xcats = "The number of defined lags must match the number of " \
                         "categories the correlation matrix is defined over."
@@ -100,11 +107,6 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
                 df_w[xcat] = df_w.groupby(level=0)[xcat].shift(shift)
                 df_w = df_w.rename(columns={xcat: xcat + f"_L{i}"})
                 i += 1
-
-        if freq is not None:
-            df_w = df_w.groupby([pd.Grouper(level='cid'),
-                                 pd.Grouper(level='real_date', freq=freq)]
-                                ).mean()
 
         if title is None:
             title = f'Cross-category correlation from {s_date} to {e_date}'
@@ -176,7 +178,10 @@ if __name__ == "__main__":
     # Lag inflation by 60 business days - 3 months.
     correl_matrix(dfd, xcats=['GROWTH', 'INFL'], cids=cids,
                   lags= [0, 60], max_color=0.1)
-    correl_matrix(dfd, xcats=xcats[0], cids=cids, title='Correlation')
+    # Down-sample to monthly frequency and then apply the lags.
+    correl_matrix(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M',
+                  lags= [0, 3], max_color=0.1)
+
     correl_matrix(dfd, xcats=xcats, cids=cids,
                   lags=[0, 0, 60, 0], freq="Q")
 
