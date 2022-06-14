@@ -66,7 +66,7 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
 
     min_color = None if max_color is None else -max_color
 
-    df, xcats_post, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
+    df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
 
     s_date = df['real_date'].min().strftime('%Y-%m-%d')
     e_date = df['real_date'].max().strftime('%Y-%m-%d')
@@ -93,12 +93,11 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
 
         # Apply the lag mechanism, to the respective categories, after the down-sampling.
         if lags is not None:
-
             lag_type = "The lag data structure must be of type <dict>."
             assert isinstance(lags, dict), lag_type
 
             lag_xcats = f"The categories referenced in the lagged dictionary must be " \
-                        f"present in the defined DataFrame, {xcats_post}."
+                        f"present in the defined DataFrame, {xcats}."
             assert set(lags.keys()).issubset(set(xcats)), lag_xcats
 
             # Modify the dictionary to adjust for single categories having multiple lags.
@@ -130,6 +129,10 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
                 # lag).
                 df_w[xcat] = df_w.groupby(level=0)[xcat].shift(shift)
 
+        # Order the correlation matrix such that targets and features move left-to-right.
+        # Assumes lags are applied to the features.
+        order = list(set(xcats) - set(lags.keys())) + list(lag_copy.keys())
+        df_w = df_w[order]
         if title is None:
             title = f'Cross-category correlation from {s_date} to {e_date}'
 
