@@ -1,3 +1,4 @@
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -5,7 +6,6 @@ import seaborn as sns
 from typing import List, Union, Tuple
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
-# Todo: triggers error in test run, related to DQ interface
 from macrosynergy.management.check_availability import reduce_df
 
 
@@ -46,20 +46,19 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
     :param <bool> cs_mean: if True this adds a line of cross-sectional averages to
         the line charts. This is only allowed for function calls with a single
         category. Default is False.
-    possible defined category to compute, and subsequently
-        plot, a cross-average timeline (based on the available cross-sections) on each
-        facet axis. The function only allows for the cross-sectional mean to be
-        calculated and plotted on a single category. The default is None.
     :param <Tuple[float]> size: two-element tuple setting width/height of single cross
         section plot. Default is (12, 7). This is irrelevant for facet grid.
     :param <float> aspect: width-height ratio for plots in facet. Default is 1.7.
     :param <float> height: height of plots in facet. Default is 3.
 
     """
-    
-    error = "cs_mean can only be set to True of there is a single category"
-    assert (not cs_mean or len(xcats) == 1), error
-    # Todo: check if this is safe
+
+    cs_mean_error = f"cs_mean parameter must be a Boolean Object."
+    assert isinstance(cs_mean, bool), cs_mean_error
+    error = f"cs_mean can only be set to True if a single category is passed. The " \
+            f"received categories are {xcats}."
+    if cs_mean:
+        assert (len(xcats) == 1), error
 
     df, xcats, cids = reduce_df(df, xcats, cids, start, end,
                                 out_all=True, intersect=intersect)
@@ -85,6 +84,8 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
         if title is not None:
             plt.title(title)
     else:
+        # Utilise a Facet Grid for instances where a large number of cross-sections are
+        # defined & plotted. Otherwise the line chart becomes too congested.
         fg = sns.FacetGrid(data=df, col='cid', col_wrap=ncol,
                            sharey=same_y, aspect=aspect,
                            height=height, col_order=cids)
@@ -92,12 +93,10 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
                          hue='xcat', hue_order=xcats, ci=None)
 
         if cs_mean:
-            # Todo: check if below runs reliably, as it could not be run
-
             axes = fg.axes.flatten()
 
             dfw = df.pivot(index='real_date', columns='cid',
-                                           values='value')
+                           values='value')
             cross_mean = dfw.mean(axis=1)
             cross_mean = pd.DataFrame(data=cross_mean.to_numpy(),
                                       index=cross_mean.index,
@@ -159,16 +158,15 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfdx = dfd[~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))]
 
-    # view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids[0],
-    #                size=(10, 5), title='AUD return and carry')
-    #
+    view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids[0],
+                   size=(10, 5), title='AUD Return and Carry')
+
     view_timelines(dfd, xcats=['XR', 'CRY', 'INFL'], cids=cids[0],
                    xcat_labels=['Return', 'Carry', 'Inflation'],
                    title='AUD Return, Carry & Inflation')
 
     view_timelines(dfd, xcats=['CRY'], cids=cids, ncol=2, title='Carry',
                    cs_mean=True)
-
 
     view_timelines(dfd, xcats=['XR'], cids=cids, ncol=2,
                    cumsum=True, same_y=False, aspect=2)
