@@ -45,7 +45,8 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
         by hierarchical clustering. Default is False.
     :param <dict> lags: optional dictionary of lags applied to respective categories.
         The key will be the category and the value is the lag or lags. If a
-        category has multiple lags applied, pass in a list of lag values.
+        category has multiple lags applied, pass in a list of lag values. The lag factor
+        will be appended to the category name in the correlation matrix.
         N.B.: Lags can include a 0 if the original should also be correlated.
     :param <str> title: chart heading. If none is given, a default title is used.
     :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default
@@ -107,27 +108,28 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
             lag_copy = {}
             xcat_tracker = defaultdict(list)
             for xcat, shift in lags.items():
-                i = 1
                 if isinstance(shift, int):
-                    lag_copy[xcat + f"_L{i}"] = shift
-                    #Todo: incorrect the lag number should be shift not i
-                    xcat_tracker[xcat].append(xcat + f"_L{i}")
+                    lag_copy[xcat + f"_L{shift}"] = shift
+                    xcat_tracker[xcat].append(xcat + f"_L{shift}")
                 else:
-                    no_lags = len(shift)
-                    xcat_temp = [xcat + f"_L{i + j}" for j in range(no_lags)]
-                    #Todo: incorrect: the lag number is given by shift
+                    xcat_temp = [xcat + f"_L{s}" for s in shift]
                     # Merge the two dictionaries.
                     lag_copy = {**lag_copy, **dict(zip(xcat_temp, shift))}
                     xcat_tracker[xcat].extend(xcat_temp)
 
             df_w_copy = df_w.copy()
+            # Handle for multi-index DataFrame. The interior index represents the
+            # timestamps.
             for xcat, shift in lag_copy.items():
-                # Handle for multi-index DataFrame. The interior index represents the
-                # timestamps.
+
                 category = xcat[:-3]
-                if int(xcat[-1]) > 1:
-                    # Duplicate the column if multiple lags on the same category. Always
-                    # access the series from the original DataFrame.
+                clause = isinstance(lags[category], list)
+                first_lag = category in df_w.columns
+
+                if clause and not first_lag:
+                    # Duplicate the column if multiple lags on the same category and the
+                    # category's first lag has already been implemented. Always access
+                    # the series from the original DataFrame.
                     df_w[xcat] = df_w_copy[category]
                 else:
                     # Otherwise, modify the name.
@@ -137,7 +139,7 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
                 df_w[xcat] = df_w.groupby(level=0)[xcat].shift(shift)
 
         # Order the correlation DataFrame to reflect the order of the categories
-        # parameter.
+        # parameter. Will replace the official category name with the lag appended name.
         order = [[x] if x not in xcat_tracker.keys() else xcat_tracker[x] for x in xcats]
         order = list(itertools.chain(*order))
         df_w = df_w[order]
