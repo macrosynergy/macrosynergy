@@ -14,32 +14,6 @@ import numpy as np
 class TestDataQueryInterface(unittest.TestCase):
 
     @staticmethod
-    def s_date_calc():
-        """
-        Dynamic calculation of the start date.
-        """
-        day = datetime.today().strftime('%Y-%m-%d')
-        day = str(day)
-        day = Timestamp(day)
-        # Subtract a business week from today's date.
-        new_date = day - BDay(5)
-
-        return str(new_date.strftime('%Y-%m-%d'))
-
-    @staticmethod
-    def jpmaqs_indicators(metrics, tickers):
-        """
-        Functionality taken from api.Interface(). Will be implicitly tested by methods
-        below.
-        """
-
-        dq_tix = []
-        for metric in metrics:
-            dq_tix += ["DB(JPMAQS," + tick + f",{metric})" for tick in tickers]
-
-        return dq_tix
-
-    @staticmethod
     def jpmaqs_value(elem: str):
         """
         Used to produce a value or grade for the associated ticker. If the metric is
@@ -73,40 +47,10 @@ class TestDataQueryInterface(unittest.TestCase):
 
         return aggregator
 
-    def constructor(self, metrics: List[str] = ['value']):
-
-        # Auth Connection.
-        self.client_id = "client1"
-        self.client_secret = "123"
-
-        # Certificate & key connection.
-        self.username = "user1"
-        self.password = "123"
-
-        self.crt = "/api_macrosynergy_com.crt"
-        self.key = "/api_macrosynergy_com.key"
-
-        self.endpoint = "/expressions/time-series"
-        self.params = {"format": "JSON", "start-date": self.s_date_calc(),
-                       "end-date": None, "calendar": "CAL_ALLDAYS",
-                       "frequency": "FREQ_DAY",
-                       "conversion": "CONV_LASTBUS_ABS",
-                       "nan_treatment": "NA_NOTHING",
-                       "data": "NO_REFERENCE_DATA"}
-
-        cids_dmca = ['AUD', 'CAD', 'CHF', 'EUR', 'GBP', 'JPY']
-        xcats = ['EQXR_NSA', 'FXXR_NSA']
-        self.metrics = metrics
-        self.tickers = [cid + '_' + xcat for xcat in xcats for cid in cids_dmca]
-
-        self.expression = self.jpmaqs_indicators(metrics=metrics,
-                                                 tickers=self.tickers)
-
     @mock.patch("macrosynergy.dataquery.auth.OAuth",
                 return_value=OAuth)
     def test_oauth_condition(self, mock_check_oauth):
 
-        self.constructor()
         # Accessing DataQuery can be achieved via two methods: OAuth or Certificates /
         # Keys. To handle for the idiosyncrasies of the two access methods, split the
         # methods across individual Classes. The usage of each Class is controlled by the
@@ -114,23 +58,21 @@ class TestDataQueryInterface(unittest.TestCase):
         # First check is that the DataQuery instance is using an OAuth Object if the
         # parameter "oauth" is set to to True.
         dq_access = api.Interface(oauth=True,
-                                  client_id=self.client_id,
-                                  client_secret=self.client_secret)
+                                  client_id="client1",
+                                  client_secret="123")
         self.assertTrue(dq_access.check_access())
 
     @mock.patch("macrosynergy.dataquery.api.Interface.check_access",
                 return_value=CertAuth)
     def test_certauth_condition(self, mock_check_certauth):
 
-        self.constructor()
-
         # Second check is that the DataQuery instance is using an CertAuth Object if the
         # parameter "oauth" is set to to False. The DataQuery Class's default is to use
         # certificate / keys.
-        dq_access = api.Interface(username=self.username,
-                                  password=self.password,
-                                  crt=self.crt,
-                                  key=self.key)
+        dq_access = api.Interface(username="user1",
+                                  password="123",
+                                  crt="/api_macrosynergy_com.crt",
+                                  key="/api_macrosynergy_com.key")
         self.assertTrue(dq_access.check_access())
 
     @mock.patch("macrosynergy.dataquery.auth.OAuth.get_dq_api_result",
@@ -140,10 +82,8 @@ class TestDataQueryInterface(unittest.TestCase):
         # 200. Therefore, use the Interface Object's method to check DataQuery
         # connections.
 
-        self.constructor()
-
-        with api.Interface(client_id=self.client_id,
-                          client_secret=self.client_secret,
+        with api.Interface(client_id="client1",
+                          client_secret="123",
                           oauth=True) as dq:
             self.assertTrue(dq.check_connection())
             mock_p_request.assert_called_with(url=dq.access.base_url +
@@ -158,10 +98,8 @@ class TestDataQueryInterface(unittest.TestCase):
         # Opposite of above method: if the connection to DataQuery fails, the error code
         # will be 400.
 
-        self.constructor()
-
-        with api.Interface(client_id=self.client_id,
-                           client_secret=self.client_secret,
+        with api.Interface(client_id="client1",
+                           client_secret="123",
                            oauth=True) as dq:
             # Method returns a Boolean. In this instance, the method should return False
             # (unable to connect).
@@ -173,11 +111,16 @@ class TestDataQueryInterface(unittest.TestCase):
 
     def test_isolate_timeseries(self):
 
-        self.constructor(metrics=['value', 'grading'])
+        cids_dmca = ['AUD', 'CAD', 'CHF', 'EUR', 'GBP', 'JPY']
+        xcats = ['EQXR_NSA', 'FXXR_NSA']
+
+        tickers = [cid + '_' + xcat for xcat in xcats for cid in cids_dmca]
 
         # First replicate the api.Interface()._request() method using the associated
         # JPMaQS expression.
-        final_output = self.dq_request(dq_expressions=self.expression)
+        expression = api.Interface.jpmaqs_indicators(metrics=['value', 'grading'],
+                                                     tickers=tickers)
+        final_output = self.dq_request(dq_expressions=expression)
 
         # The method, .isolate_timeseries(), will receive the returned dictionary from
         # the ._request() method and return a dictionary where the keys are the tickers
@@ -193,13 +136,13 @@ class TestDataQueryInterface(unittest.TestCase):
                                                                             )
         self.__dict__['results_dict'] = results_dict
 
-        self.assertTrue(len(results_dict.keys()) == len(self.tickers))
+        self.assertTrue(len(results_dict.keys()) == len(tickers))
 
         ticker_trunc = lambda t: t.split(',')[1]
         test_keys = list(map(ticker_trunc, results_dict.keys()))
 
         test_keys = sorted(test_keys)
-        self.assertTrue(test_keys == sorted(self.tickers))
+        self.assertTrue(test_keys == sorted(tickers))
 
         first_ticker = next(iter(results_dict.keys()))
         self.assertTrue(results_dict[first_ticker].shape[1] == 3)
@@ -243,6 +186,11 @@ class TestDataQueryInterface(unittest.TestCase):
 
     def test_dataframe_wrapper(self):
 
+        cids_dmca = ['AUD', 'CAD', 'CHF', 'EUR', 'GBP', 'JPY']
+        xcats = ['EQXR_NSA', 'FXXR_NSA']
+
+        tickers = [cid + '_' + xcat for xcat in xcats for cid in cids_dmca]
+
         # After the time-series have been isolated for each ticker and all the tickers
         # have been validated, aggregate the results, still held in a dictionary, into
         # a single DataFrame where the columns will be the passed metrics, 'value' &
@@ -267,13 +215,14 @@ class TestDataQueryInterface(unittest.TestCase):
         # and all tickers are included.
 
         tickers_df = list(trial_df['cid'] + '_' + trial_df['xcat'])
-        self.assertTrue(sorted(tickers_df) == sorted(self.tickers))
+        self.assertTrue(sorted(tickers_df) == sorted(tickers))
 
         # Given the constructed nature of the DataFrame, confirm all values in the
         # 'grading' column are equal to 1.0.
         # Confirms the columns have the expected values.
         grades_test = np.all(trial_df['grading'] == 1.0)
         self.assertTrue(grades_test)
+
 
 if __name__ == '__main__':
     unittest.main()
