@@ -3,9 +3,21 @@ import numpy as np
 import pandas as pd
 from typing import List, Union, Tuple
 import random
-
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
+def difference(list_1: List[str], list_2: List[str]):
+    """
+    Helper method used to display possible missing categories or cross-sections.
+
+    :param <List[str]> list_1: first list.
+    :param <List[str]> list_2: second list.
+
+    """
+
+    missing = sorted(set(list_1) - set(list_2))
+    if len(missing) > 0:
+        list_1 = [elem for elem in list_1 if elem not in missing]
+    return list_1
 
 def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
               start: str = None, end: str = None, blacklist: dict = None,
@@ -48,10 +60,7 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
     if xcats is None:
         xcats = sorted(xcats_in_df)
     else:
-        missing = sorted(set(xcats) - set(xcats_in_df))
-        if len(missing) > 0:
-            print(f"Missing categories: {missing}.")
-            xcats.remove(missing)
+        xcats = difference(xcats, xcats_in_df)
 
     dfx = dfx[dfx['xcat'].isin(xcats)]
 
@@ -66,10 +75,8 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
         cids = sorted(cids_in_df)
     else:
         cids = [cids] if isinstance(cids, str) else cids
-        missing = sorted(set(cids) - set(cids_in_df))
+        cids = difference(cids, cids_in_df)
 
-        if len(missing) > 0:
-            print(f'Missing cross sections: {missing}')
         cids = set(cids).intersection(cids_in_df)
         dfx = dfx[dfx['cid'].isin(cids)]
 
@@ -77,7 +84,6 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
         return dfx.drop_duplicates(), xcats, sorted(list(cids))
     else:
         return dfx.drop_duplicates()
-
 
 def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str = None,
                         end: str = None, blacklist: dict = None):
@@ -113,10 +119,7 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
     if ticks is None:
         ticks = sorted(ticks_in_df)
     else:
-        missing = sorted(set(ticks) - set(ticks_in_df))
-        if len(missing) > 0:
-            print(f'Missing tickers: {missing}')
-            ticks.remove(missing)
+        ticks = difference(ticks, ticks_in_df)
 
     dfx = dfx[dfx["ticker"].isin(ticks)]
 
