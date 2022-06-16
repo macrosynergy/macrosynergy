@@ -100,7 +100,8 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
     dfx = dfx[dfx["real_date"] >= pd.to_datetime(start)] if start is not None else dfx
     dfx = dfx[dfx["real_date"] <= pd.to_datetime(end)] if end is not None else dfx
 
-    if blacklist is not None:  # blacklisting by cross-section
+    # Blacklisting by cross-section.
+    if blacklist is not None:
         for key, value in blacklist.items():
             filt1 = dfx["cid"] == key[:3]
             filt2 = dfx["real_date"] >= pd.to_datetime(value[0])
@@ -121,6 +122,26 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
 
     return dfx.drop_duplicates()
 
+def aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
+    """
+    Helper method to down-sample each category in the DataFrame by aggregating over the
+    intermediary dates according to a prescribed method.
+
+    :param <List[str]> dfx: standardised DataFrame defined exclusively on a single
+        category.
+    :param <List[str]> xcat_agg: associated aggregation method for the respective
+        category.
+
+    """
+
+    dfx = dfx.groupby(['xcat', 'cid', 'custom_date'])
+    dfx = dfx.agg(xcat_agg).reset_index()
+
+    if 'real_date' in dfx.columns:
+        dfx = dfx.drop(['real_date'], axis=1)
+    dfx = dfx.rename(columns={"custom_date": "real_date"})
+
+    return dfx
 
 def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                   val: str = 'value', start: str = None, end: str = None,
@@ -233,15 +254,10 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         df['real_date'] = pd.to_datetime(df['real_date'], errors='coerce')
         df['custom_date'] = df['real_date'].dt.year.apply(translate_)
 
-        for i in range(2):
-            dfx = df[df['xcat'] == xcats[i]]
-            dfx = dfx.groupby(['xcat', 'cid', 'custom_date'])
-            dfx = dfx.agg(xcat_aggs[i]).reset_index()
-
-            if 'real_date' in dfx.columns:
-                dfx = dfx.drop(['real_date'], axis=1)
-            dfx = dfx.rename(columns={"custom_date": "real_date"})
-            df_output.append(dfx[col_names])
+        dfx_list = [df[df['xcat'] == xcats[0]],
+                    df[df['xcat'] == xcats[1]]]
+        df_agg = list(map(aggregation_helper, dfx_list, xcat_aggs))
+        df_output.extend([d[col_names] for d in df_agg])
 
     dfc = pd.concat(df_output)
     # If either of the two variables, explanatory or dependent variable, contain a NaN
