@@ -293,6 +293,18 @@ class Interface(object):
 
         return delay
 
+    @classmethod
+    def jpmaqs_indicators(cls, metrics, tickers):
+        """
+        Functionality used to convert tickers into formal JPMaQS expressions.
+        """
+
+        dq_tix = []
+        for metric in metrics:
+            dq_tix += ["DB(JPMAQS," + tick + f",{metric})" for tick in tickers]
+
+        return dq_tix
+
     def get_ts_expression(self, expression, original_metrics, suppress_warning,
                           **kwargs):
         """
@@ -312,10 +324,9 @@ class Interface(object):
                 f"Incorrect metric passed: {metric}."
 
         unique_tix = list(set(expression))
-        dq_tix = []
-        for metric in original_metrics:
-            dq_tix += ["DB(JPMAQS," + tick + f",{metric})" for tick in unique_tix]
 
+        dq_tix = self.jpmaqs_indicators(metrics=original_metrics,
+                                        tickers=unique_tix)
         expression = dq_tix
 
         c_delay = self.delay_compute(len(dq_tix))
