@@ -67,6 +67,9 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
 
     xcats = xcats if isinstance(xcats, list) else [xcats]
 
+    if max_color is not None:
+        assert isinstance(max_color, float), "Parameter max_color must be type <float>."
+
     min_color = None if max_color is None else -max_color
 
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
