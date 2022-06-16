@@ -1,3 +1,4 @@
+
 import numpy as np
 import pandas as pd
 from typing import List, Union, Tuple
@@ -10,7 +11,7 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
               start: str = None, end: str = None, blacklist: dict = None,
               out_all: bool = False, intersect: bool = False):
     """
-    Filter dataframe by xcats and cids and notify about missing xcats and cids.
+    Filter DataFrame by xcats and cids and notify about missing xcats and cids.
 
     :param <pd.Dataframe> df: standardized dataframe with the necessary columns:
         'cid', 'xcats', 'real_date'.
@@ -29,8 +30,8 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
     :param <bool> intersect: if True only retains cids that are available for all xcats.
         Default is False.
 
-    :return <pd.Dataframe>: reduced dataframe that also removes duplicates or
-        (for out_all True) dataframe and available and selected xcats and cids.
+    :return <pd.Dataframe>: reduced DataFrame that also removes duplicates or
+        (for out_all True) DataFrame and available and selected xcats and cids.
     """
 
     dfx = df[df['real_date'] >= pd.to_datetime(start)] if start is not None else df
@@ -55,26 +56,25 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
     dfx = dfx[dfx['xcat'].isin(xcats)]
 
     if intersect:
-        df_uns = dfx.groupby('xcat')['cid'].unique()
-        cids_in_df = list(df_uns[0])
-        for i in range(1, len(df_uns)):
-            cids_in_df = [cid for cid in df_uns[i] if cid in cids_in_df]
+        df_uns = dict(dfx.groupby('xcat')['cid'].unique())
+        df_uns = {k: set(v) for k, v in df_uns.items()}
+        cids_in_df = list(set.intersection(*list(df_uns.values())))
     else:
         cids_in_df = dfx['cid'].unique()
 
     if cids is None:
         cids = sorted(cids_in_df)
     else:
-        if not isinstance(cids, list):
-           cids = [cids]
+        cids = [cids] if isinstance(cids, str) else cids
         missing = sorted(set(cids) - set(cids_in_df))
+
         if len(missing) > 0:
             print(f'Missing cross sections: {missing}')
-        cids = sorted(list(set(cids).intersection(set(cids_in_df))))
+        cids = set(cids).intersection(cids_in_df)
         dfx = dfx[dfx['cid'].isin(cids)]
 
     if out_all:
-        return dfx.drop_duplicates(), xcats, cids
+        return dfx.drop_duplicates(), xcats, sorted(list(cids))
     else:
         return dfx.drop_duplicates()
 
@@ -85,13 +85,13 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
     Filter dataframe by xcats and cids and notify about missing xcats and cids
 
     :param <pd.Dataframe> df: standardized dataframe with the following columns:
-                              'cid', 'xcats', 'real_date'.
+        'cid', 'xcats', 'real_date'.
     :param <List[str]> ticks: tickers (cross sections + base categories)
     :param <str> start: string in ISO 8601 representing earliest date. Default is None.
     :param <str> end: string ISO 8601 representing the latest date. Default is None.
     :param <dict> blacklist: cross sections with date ranges that should be excluded from
-                             the dataframe. If one cross section has several blacklist
-                             periods append numbers to the cross section code.
+        the dataframe. If one cross section has several blacklist periods append numbers
+        to the cross section code.
 
     :return <pd.Dataframe>: reduced dataframe that also removes duplicates
     """
