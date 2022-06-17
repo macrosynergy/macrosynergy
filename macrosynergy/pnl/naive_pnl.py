@@ -4,11 +4,9 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
-from itertools import product
-import warnings
 
 from typing import List, Union, Tuple
-
+from itertools import product
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.update_df import update_df
@@ -53,9 +51,11 @@ class NaivePnL:
         xcats = [ret] + sigs
 
         cols = ['cid', 'xcat', 'real_date', 'value']
-        self.cids = cids
         self.df, self.xcats, self.cids = reduce_df(df[cols], xcats, cids, start, end,
                                                    blacklist, out_all=True)
+        ticker_func = lambda t: t[0] + "_" + t[1]
+        self.tickers = list(map(ticker_func, product(self.cids, self.xcats)))
+
         self.df['real_date'] = pd.to_datetime(self.df['real_date'])
         self.pnl_names = []
         self.signal_df = {}
@@ -73,13 +73,18 @@ class NaivePnL:
         :param <List[str]> bms: benchmark return tickers
         """
 
+        add_bm_list = []
         for bm in bms:
             cid, xcat = bm.split("_", 1)
             dfa = self.dfd[(self.dfd['cid'] == cid) & (self.dfd['xcat'] == xcat)]
             if dfa.shape[0] == 0:
-                warnings.warn(f"{bm} has no observations in the DataFrame.")
+                print(f"{bm} has no observations in the DataFrame.")
+            elif bm not in self.tickers:
+                add_bm_list.append(dfa)
             else:
-                self.df = update_df(self.df, dfa)
+                pass
+
+        self.df = pd.concat([self.df] + add_bm_list)
 
     def make_pnl(self, sig: str, sig_op: str = 'zn_score_pan', pnl_name: str = None,
                  rebal_freq: str = 'daily', rebal_slip = 0, vol_scale: float = None,
@@ -563,12 +568,12 @@ class NaivePnL:
             cid, xcat = bm.split("_", 1)
             dfa = self.df[(self.df['cid'] == cid) & (self.df['xcat'] == xcat)]
             if dfa.shape[0] == 0:
-                warnings.warn(f"{bm} has no observations in the dataframe")
+                print(f"{bm} has no observations in the DataFrame.")
             else:
                 stats.insert(len(stats) - 1, f"{bm} correl")
-                dfa['xcat'] = dfa['cid'] + "_" + dfa['xcat']
-                self.bm_dict[bm] = dfa.pivot(index='real_date', columns='xcat',
-                                             values='value')
+                dfa['xcat'] = bm
+                self._bm_dict[bm] = dfa.pivot(index='real_date', columns='xcat',
+                                              values='value').squeeze(axis=0)
         return stats
 
     def evaluate_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
@@ -626,7 +631,7 @@ class NaivePnL:
                  'Max 21-day draw', 'Max 6-month draw', 'Traded Months']
 
         if isinstance(bms, (str, list)):
-            stats = self._benchmark_series()
+            stats = self._benchmark_series(bms=bms, stats=stats)
 
         dfw = dfx.pivot(index='real_date', columns=groups, values='value')
         df = pd.DataFrame(columns=dfw.columns, index=stats)
@@ -641,8 +646,10 @@ class NaivePnL:
         df.iloc[5, :] = dfw.rolling(6*21).sum().min()
         if len(list_for_dfbm) > 0:
             for i, bm in enumerate(list_for_dfbm):
-                df.iloc[6 + i, :] = dfw.corrwith(self.bm_dict[bm], axis=0,
-                                                 method='pearson')
+                correlation = dfw.corrwith(self._bm_dict[bm], axis=0,
+                                           method='pearson')
+                df.iloc[6 + i, :] = correlation
+            self._bm_dict = {}
         df.iloc[6 + len(list_for_dfbm), :] = dfw.resample('M').sum().count()
 
         return df
@@ -699,9 +706,10 @@ if __name__ == "__main__":
 
     # Initiate instance.
 
-    pnl = NaivePnL(dfd, ret='EQXR', sigs=['CRY', 'GROWTH', 'INFL'],
+    pnl = NaivePnL(
+                   dfd, ret='EQXR', sigs=['CRY', 'GROWTH', 'INFL'],
                    cids=cids, start='2000-01-01', blacklist=black,
-                   bms=['USD_DUXR', 'EUR_DUXR'])
+                   )
 
     # Make and plot PnLs to check correct labelling.
 
@@ -723,11 +731,16 @@ if __name__ == "__main__":
 
     # Instantiate a new instance to test the long-only functionality.
     pnl = NaivePnL(dfd, ret='EQXR', sigs=['CRY', 'GROWTH', 'INFL'],
-                   cids=cids, start='2000-01-01', blacklist=black)
+                   cids=cids, start='2000-01-01', blacklist=black,
+                   bms=["EUR_EQXR", "USD_EQXR"])
 
     pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
                  vol_scale=5, rebal_slip=1, pnl_name='PNL_CRY_PZN05',
                  min_obs=250, thresh=2)
+
+    pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
+                 vol_scale=5, rebal_slip=1, pnl_name='PNL_CRY_PZN',
+                 min_obs=250, thresh=2.5)
 
     pnl.make_long_pnl(vol_scale=10, label="Long")
 
@@ -736,5 +749,7 @@ if __name__ == "__main__":
     # Test the inclusion of a single benchmark correlation.
     df_eval = pnl.evaluate_pnls(
         pnl_cats=['PNL_CRY_PZN', 'PNL_CRY_PZN05', "Long"],
-        pnl_cids=cids_subset, bms=["USD_EQXR", "EUR_EQXR"])
+        pnl_cids=cids_subset, bms=["USD_EQXR", "EUR_EQXR"]
+    )
+
     print(df_eval)
