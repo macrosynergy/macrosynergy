@@ -721,40 +721,9 @@ if __name__ == "__main__":
                   pnl_cids=['ALL'], start='2000-01-01',
                   title="Custom Title")
 
-    df_eval = pnl.evaluate_pnls(
-        pnl_cats=['PNL_CRY_PZN20', 'Long_Only_EQXR20'],
-        pnl_cids=["ALL"], bms=["USD_EQXR", "EUR_DUXR"])
-
-    # Testing on multiple volatility scales.
-    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN05', 'PNL_CRY_PZN10',
-                            'PNL_CRY_PZN20', 'Long_Only_EQXR20'],
-                  pnl_cids=['ALL'], start='2000-01-01')
-
-    pnl.make_long_pnl(vol_scale=10, label='Long_Only_EQXR10')
-
-    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN10', 'Long_Only_EQXR10'],
-                  pnl_cids=['ALL'], start='2000-01-01',
-                  title="Custom Title")
-
-    # Test on the option if the label is omitted from long-only DataFrame.
-    pnl = NaivePnL(dfd, ret='EQXR', sigs=['CRY', 'GROWTH', 'INFL'],
-                   cids=cids, start='2000-01-01', blacklist=black)
-
-    pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
-                 vol_scale=5, rebal_slip=1, pnl_name='PNL_CRY_PZN05', min_obs=250,
-                 thresh=2)
-    pnl.make_long_pnl(vol_scale=10)
-    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN05', 'EQXR'],
-                  pnl_cids=['ALL'], start='2000-01-01',
-                  title="Long-Only Comparison")
-
     # Instantiate a new instance to test the long-only functionality.
     pnl = NaivePnL(dfd, ret='EQXR', sigs=['CRY', 'GROWTH', 'INFL'],
                    cids=cids, start='2000-01-01', blacklist=black)
-
-    pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
-                 vol_scale=10, rebal_slip=1, pnl_name='PNL_CRY_PZN',
-                 min_obs=250, thresh=1.5)
 
     pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
                  vol_scale=5, rebal_slip=1, pnl_name='PNL_CRY_PZN05',
@@ -769,17 +738,3 @@ if __name__ == "__main__":
         pnl_cats=['PNL_CRY_PZN', 'PNL_CRY_PZN05', "Long"],
         pnl_cids=cids_subset, bms=["USD_EQXR", "EUR_EQXR"])
     print(df_eval)
-
-    df_pnls = pnl.pnl_df()
-    df_pnls.head()
-
-    # Testing signal display.
-    pnl.signal_heatmap(pnl_name='PNL_CRY_PZN', pnl_cids=['AUD', 'CAD', 'GBP'],
-                       freq='m', title="Average signal values")
-
-    # Testing signal strength display method.
-    # Directional.
-    pnl.agg_signal_bars(pnl_name='PNL_CRY_PZN', metric='direction', freq='m')
-    # Magnitude.
-    pnl.agg_signal_bars(pnl_name='PNL_CRY_PZN', metric='strength', freq='q',
-                        title='Absolute Value', y_label="Time Horizon")
