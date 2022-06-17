@@ -645,8 +645,10 @@ class NaivePnL:
         df.iloc[4, :] = dfw.rolling(21).sum().min()
         df.iloc[5, :] = dfw.rolling(6*21).sum().min()
         if len(list_for_dfbm) > 0:
+            bm_df = pd.concat(list(self._bm_dict.values()),
+                              axis=1)
             for i, bm in enumerate(list_for_dfbm):
-                correlation = dfw.corrwith(self._bm_dict[bm], axis=0,
+                correlation = dfw.corrwith(bm_df.iloc[:, i], axis=0,
                                            method='pearson')
                 df.iloc[6 + i, :] = correlation
             self._bm_dict = {}
@@ -703,31 +705,6 @@ if __name__ == "__main__":
 
     black = {'AUD': ['2006-01-01', '2015-12-31'], 'GBP': ['2022-01-01', '2100-01-01']}
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-
-    # Initiate instance.
-
-    pnl = NaivePnL(
-                   dfd, ret='EQXR', sigs=['CRY', 'GROWTH', 'INFL'],
-                   cids=cids, start='2000-01-01', blacklist=black,
-                   )
-
-    # Make and plot PnLs to check correct labelling.
-
-    pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
-                 vol_scale=5, rebal_slip=1, pnl_name='PNL_CRY_PZN05', min_obs=250,
-                 thresh=2)
-    pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
-                 vol_scale=10, rebal_slip=1,
-                 pnl_name='PNL_CRY_PZN10', min_obs=250, thresh=2)
-    pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
-                 vol_scale=20, rebal_slip=1,
-                 pnl_name='PNL_CRY_PZN20', min_obs=250, thresh=2)
-
-    pnl.make_long_pnl(vol_scale=20, label='Long_Only_EQXR20')
-
-    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN20', 'Long_Only_EQXR20'],
-                  pnl_cids=['ALL'], start='2000-01-01',
-                  title="Custom Title")
 
     # Instantiate a new instance to test the long-only functionality.
     pnl = NaivePnL(dfd, ret='EQXR', sigs=['CRY', 'GROWTH', 'INFL'],
