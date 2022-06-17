@@ -60,30 +60,26 @@ class NaivePnL:
         self.pnl_names = []
         self.signal_df = {}
         self.black = blacklist
-        self.bm_dict = {}
-        self.bms = []
+        self._bm_dict = {}
 
-        if isinstance(bms, List):
-            self.add_bm(df, bms=bms)
+        self.bm_bool = isinstance(bms, (str, list))
+        if self.bm_bool:
+            self.add_bm(bms=bms)
 
-    def add_bm(self, df, bms: List[str]):
+    def add_bm(self, bms: List[str]):
         """
-        Add benchmark series to instance dataframe
+        Add benchmark series to instance dataframe.
 
         :param <List[str]> bms: benchmark return tickers
-        :param <pd.Dataframe> df: standardized DataFrame with the following necessary
-        columns: 'cid', 'xcat', 'real_date' and 'value'.
         """
 
-        dfx = df.loc[:, ['cid', 'xcat', 'real_date', 'value']]
         for bm in bms:
             cid, xcat = bm.split("_", 1)
-            dfa = dfx[(dfx['cid'] == cid) & (dfx['xcat'] == xcat)]
+            dfa = self.dfd[(self.dfd['cid'] == cid) & (self.dfd['xcat'] == xcat)]
             if dfa.shape[0] == 0:
-                warnings.warn(f"{bm} has no observations in the dataframe")
+                warnings.warn(f"{bm} has no observations in the DataFrame.")
             else:
                 self.df = update_df(self.df, dfa)
-                self.bms += [bm]
 
     def make_pnl(self, sig: str, sig_op: str = 'zn_score_pan', pnl_name: str = None,
                  rebal_freq: str = 'daily', rebal_slip = 0, vol_scale: float = None,
@@ -552,8 +548,31 @@ class NaivePnL:
         ax.fmt_xdata = fmt
         plt.show()
 
+    def _benchmark_series(self, bms: Union[str, List[str]], stats: List[str]):
+        """
+        Populates the benchmark dictionary with the respective series used as benchmarks.
+
+        :param <str, List[str]> bms:
+        :param <List[str]> stats: list of the evaluation statistics computed. Insert any
+            correlation metrics.
+        """
+
+        bms = [bms] if isinstance(bms, str) else bms
+
+        for bm in bms:
+            cid, xcat = bm.split("_", 1)
+            dfa = self.df[(self.df['cid'] == cid) & (self.df['xcat'] == xcat)]
+            if dfa.shape[0] == 0:
+                warnings.warn(f"{bm} has no observations in the dataframe")
+            else:
+                stats.insert(len(stats) - 1, f"{bm} correl")
+                dfa['xcat'] = dfa['cid'] + "_" + dfa['xcat']
+                self.bm_dict[bm] = dfa.pivot(index='real_date', columns='xcat',
+                                             values='value')
+        return stats
+
     def evaluate_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
-                      bms: Union[str, List[str]] = 'all', start: str = None,
+                      bms: Union[str, List[str]] = None, start: str = None,
                       end: str = None):
 
         """
@@ -566,7 +585,7 @@ class NaivePnL:
             not both.
         :param <str, List[str]> bms: list of benchmark tickers for which
             correlations are displayed. The series denoted by the tickers must be in
-            the instances dataframe.
+            the instance's DataFrame.
         :param <str> start: earliest date in ISO format. Default is None and earliest
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
@@ -599,31 +618,19 @@ class NaivePnL:
 
         assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
 
-        dfx = reduce_df(self.df, pnl_cats, pnl_cids, start, end, self.black,
-                        out_all=False)
+        dfx = reduce_df(self.df, pnl_cats, pnl_cids, start,
+                        end, self.black, out_all=False)
 
         groups = 'xcat' if len(pnl_cids) == 1 else 'cid'
         stats = ['Return (pct ar)', 'St. Dev. (pct ar)', 'Sharpe Ratio', 'Sortino Ratio',
                  'Max 21-day draw', 'Max 6-month draw', 'Traded Months']
-        dfw = dfx.pivot(index='real_date', columns=groups, values='value')
 
-        bms = [bms] if isinstance(bms, str) else bms
-        list_for_dfbm = []
-        if isinstance(bms, List):
-            for bm in bms:
-                cid, xcat = bm.split("_", 1)
-                dfa = self.df[(self.df['cid'] == cid) & (self.df['xcat'] == xcat)]
-                if dfa.shape[0] == 0:
-                    warnings.warn(f"{bm} has no observations in the dataframe")
-                else:
-                    stats.insert(len(stats) - 1, f"{bm} correl")
-                    dfa['xcat'] = dfa['cid'] + "_" + dfa['xcat']
-                    dfaw = dfa.pivot(index='real_date', columns='xcat', values='value')
-                    list_for_dfbm.append(dfaw)
-            dfbm = pd.concat(list_for_dfbm)
+        if isinstance(bms, (str, list)):
+            stats = self._benchmark_series()
 
         dfw = dfx.pivot(index='real_date', columns=groups, values='value')
         df = pd.DataFrame(columns=dfw.columns, index=stats)
+        list_for_dfbm = list(self._bm_dict.keys())
 
         df.iloc[0, :] = dfw.mean(axis=0) * 261
         df.iloc[1, :] = dfw.std(axis=0) * np.sqrt(261)
@@ -633,8 +640,8 @@ class NaivePnL:
         df.iloc[4, :] = dfw.rolling(21).sum().min()
         df.iloc[5, :] = dfw.rolling(6*21).sum().min()
         if len(list_for_dfbm) > 0:
-            for i, bm in enumerate(dfbm.columns):
-                df.iloc[6 + i, :] = dfw.corrwith(dfbm.iloc[:, i], axis=0,
+            for i, bm in enumerate(list_for_dfbm):
+                df.iloc[6 + i, :] = dfw.corrwith(self.bm_dict[bm], axis=0,
                                                  method='pearson')
         df.iloc[6 + len(list_for_dfbm), :] = dfw.resample('M').sum().count()
 
@@ -707,7 +714,6 @@ if __name__ == "__main__":
     pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
                  vol_scale=20, rebal_slip=1,
                  pnl_name='PNL_CRY_PZN20', min_obs=250, thresh=2)
-    print(pnl.df)
 
     pnl.make_long_pnl(vol_scale=20, label='Long_Only_EQXR20')
 
@@ -757,7 +763,6 @@ if __name__ == "__main__":
     pnl.make_long_pnl(vol_scale=10, label="Long")
 
     # Return evaluation and PnL DataFrames.
-    benchmark_correl = ['USD_EQXR', 'EUR_EQXR', 'AUD_EQXR']
     cids_subset = ['ALL']
     # Test the inclusion of a single benchmark correlation.
     df_eval = pnl.evaluate_pnls(
