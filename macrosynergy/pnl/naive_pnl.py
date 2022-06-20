@@ -64,27 +64,34 @@ class NaivePnL:
 
         self.bm_bool = isinstance(bms, (str, list))
         if self.bm_bool:
-            self.add_bm(bms=bms)
+            add_bm_list = self.add_bm(df=self.dfd, bms=bms,
+                                      tickers=self.tickers)
+            self.df = pd.concat([self.df] + add_bm_list)
 
-    def add_bm(self, bms: List[str]):
+    @classmethod
+    def add_bm(cls, df: pd.DataFrame, bms: List[str],
+               tickers: List[str]):
         """
-        Add benchmark series to instance dataframe.
+        Return benchmark DataFrames which will be appended to the instance's DataFrame.
 
-        :param <List[str]> bms: benchmark return tickers
+        :param <pd.DataFrame> df: aggregate DataFrame passed into the Class.
+        :param <List[str]> bms: benchmark return tickers.
+        :param <List[str]> tickers: the available tickers held in the reduced DataFrame.
+            The reduced DataFrame consists exclusively of the signal & return categories.
         """
 
         add_bm_list = []
         for bm in bms:
             cid, xcat = bm.split("_", 1)
-            dfa = self.dfd[(self.dfd['cid'] == cid) & (self.dfd['xcat'] == xcat)]
+            dfa = df[(df['cid'] == cid) & (df['xcat'] == xcat)]
             if dfa.shape[0] == 0:
                 print(f"{bm} has no observations in the DataFrame.")
-            elif bm not in self.tickers:
+            elif bm not in tickers:
                 add_bm_list.append(dfa)
             else:
                 pass
 
-        self.df = pd.concat([self.df] + add_bm_list)
+        return add_bm_list
 
     def make_pnl(self, sig: str, sig_op: str = 'zn_score_pan', pnl_name: str = None,
                  rebal_freq: str = 'daily', rebal_slip = 0, vol_scale: float = None,
