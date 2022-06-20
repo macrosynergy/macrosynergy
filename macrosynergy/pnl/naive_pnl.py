@@ -93,6 +93,52 @@ class NaivePnL:
 
         return add_bm_list
 
+    @classmethod
+    def make_signal(cls, dfx: pd.DataFrame, sig: str, sig_op: str = 'zn_score_pan',
+                    min_obs: int = 252, iis: bool = True, sequential: bool = True,
+                    neutral: str = 'zero', thresh: float = None):
+        """
+        Helper function used to produce the raw signal that forms the basis for
+        positioning.
+
+        :param <pd.DataFrame> dfx: DataFrame defined over the return & signal category.
+        :param <str> sig: name of the raw signal.
+        :param <str> sig_op: signal transformation.
+        :param <int> min_obs: the minimum number of observations required to calculate
+            zn_scores. Default is 252.
+        :param <bool> iis: if True (default) zn-scores are also calculated for the initial
+            sample period defined by min_obs, on an in-sample basis, to avoid losing
+            history.
+        :param <bool> sequential: if True (default) score parameters are estimated
+            sequentially with concurrently available information only.
+        :param <str> neutral: method to determine neutral level.
+        :param <float> thresh: threshold value beyond which scores are winsorized,
+
+        """
+
+        if sig_op == 'binary':
+            dfw = dfx.pivot(index=['cid', 'real_date'], columns='xcat', values='value')
+            dfw['psig'] = np.sign(dfw[sig])
+        else:
+            panw = 1 if sig_op == 'zn_score_pan' else 0
+            # The re-estimation frequency for the neutral level and standard deviation
+            # will be the same as the re-balancing frequency. For instance, if the
+            # neutral level is computed weekly, a material change in the signal will only
+            # manifest along a similar timeline. Therefore, re-estimation and
+            # re-balancing frequencies match.
+            df_ms = make_zn_scores(dfx, xcat=sig, neutral=neutral, pan_weight=panw,
+                                   sequential=sequential, min_obs=min_obs, iis=iis,
+                                   thresh=thresh)
+            # est_freq = rebal_freq[0]
+            df_ms = df_ms.drop('xcat', axis=1)
+            df_ms['xcat'] = 'psig'
+
+            dfx_concat = pd.concat([dfx, df_ms])
+            dfw = dfx_concat.pivot(index=['cid', 'real_date'], columns='xcat',
+                                   values='value')
+
+        return dfw
+
     def make_pnl(self, sig: str, sig_op: str = 'zn_score_pan', pnl_name: str = None,
                  rebal_freq: str = 'daily', rebal_slip = 0, vol_scale: float = None,
                  min_obs: int = 252, iis: bool = True, sequential: bool = True,
@@ -162,26 +208,8 @@ class NaivePnL:
         # category and associated signal category.
         dfx = self.df[self.df['xcat'].isin([self.ret, sig])]
 
-        if sig_op == 'binary':
-            dfw = dfx.pivot(index=['cid', 'real_date'], columns='xcat', values='value')
-            dfw['psig'] = np.sign(dfw[sig])
-        else:
-            panw = 1 if sig_op == 'zn_score_pan' else 0
-            # The re-estimation frequency for the neutral level and standard deviation
-            # will be the same as the re-balancing frequency. For instance, if the
-            # neutral level is computed weekly, a material change in the signal will only
-            # manifest along a similar timeline. Therefore, re-estimation and
-            # re-balancing frequencies match.
-            df_ms = make_zn_scores(dfx, xcat=sig, neutral=neutral, pan_weight=panw,
-                                   sequential=sequential, min_obs=min_obs, iis=iis,
-                                   thresh=thresh)
-            # est_freq = rebal_freq[0]
-            df_ms = df_ms.drop('xcat', axis=1)
-            df_ms['xcat'] = 'psig'
-
-            dfx_concat = pd.concat([dfx, df_ms])
-            dfw = dfx_concat.pivot(index=['cid', 'real_date'], columns='xcat',
-                                   values='value')
+        dfw = self.make_signal(dfx=dfx, sig=sig, sig_op=sig_op, min_obs=min_obs, iis=iis,
+                               sequential=sequential, neutral=neutral, thresh=thresh)
 
         # Multi-index DataFrame with a natural minimum lag applied.
         dfw['psig'] = dfw['psig'].groupby(level=0).shift(1)
@@ -227,7 +255,8 @@ class NaivePnL:
         else:
             self.pnl_names = self.pnl_names + [pnn]
 
-        self.df = self.df.append(df_pnl[self.df.columns]).reset_index(drop=True)
+        agg_df = pd.concat([self.df, df_pnl[self.df.columns]])
+        self.df = agg_df.reset_index(drop=True)
 
     @staticmethod
     def rebalancing(dfw: pd.DataFrame, rebal_freq: str = 'daily', rebal_slip = 0):
@@ -275,6 +304,8 @@ class NaivePnL:
         # The signal is computed for each individual cross-section. Therefore, merge on
         # the real_date and the cross-section.
         rebal_merge = r_dates_df.merge(dfw, how='left', on=['real_date', 'cid'])
+        # Re-establish the daily date series index where the intermediary dates, between
+        # the re-balancing dates, will be populated using a forward fill.
         rebal_merge = dfw[['real_date', 'cid']].merge(rebal_merge, how='left',
                                                       on=['real_date', 'cid'])
 
