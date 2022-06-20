@@ -9,7 +9,6 @@ from typing import List, Union, Tuple
 from itertools import product
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
-from macrosynergy.management.update_df import update_df
 from macrosynergy.panel.make_zn_scores import make_zn_scores
 
 
@@ -46,6 +45,7 @@ class NaivePnL:
                  blacklist: dict = None):
 
         self.dfd = df
+        assert isinstance(ret, str), "The return category expects a single <str>."
         self.ret = ret
         self.sigs = sigs
         xcats = [ret] + sigs
