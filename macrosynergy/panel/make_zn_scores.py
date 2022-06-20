@@ -184,6 +184,8 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
                                      min_obs=min_obs, iis=iis)
 
             zns_css_arr = np.divide(dfx.to_numpy(), df_mabs.to_numpy())
+            # Todo: this causes errors in next line if zns_css_arr is shorter than number of columns of
+            #  dfw_zns_css, which may happen due to blacklisting
             dfw_zns_css.loc[:, cid] = zns_css_arr
 
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
@@ -225,11 +227,14 @@ if __name__ == "__main__":
     df_xcats.loc['INFL'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar = 0.75)
+    black = {'AUD': ['2010-01-01', '2015-12-31']}
 
     # Monthly: panel + cross.
+
     dfzm = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=True,
-                          neutral='mean', pan_weight=0.75, min_obs=261,
-                          est_freq="m")
+                          neutral='mean', pan_weight=0.5, min_obs=261,
+                          est_freq="m", blacklist=black)
+    # Todo: check if this returns empty dataframe
 
     # Weekly: panel + cross.
     dfzw = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=False,
