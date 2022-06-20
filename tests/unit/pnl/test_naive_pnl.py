@@ -77,6 +77,15 @@ class TestAll(unittest.TestCase):
         eur_duxr = self.dfd[(self.dfd['cid'] == "EUR") & (self.dfd['xcat'] == "DUXR")]
         self.assertTrue(np.all(first_bm['value'] == eur_duxr['value']))
 
+    def test_make_pnl(self):
+
+        self.dataframe_construction()
+
+        pnl = NaivePnL(self.dfd, ret=ret[0], sigs=sigs, cids=self.cids,
+                       start='2000-01-01', blacklist=self.blacklist,
+                       bms=["EUR_DUXR", "USD_DUXR"]
+                       )
+
 
 if __name__ == '__main__':
 
