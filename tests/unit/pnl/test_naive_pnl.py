@@ -125,6 +125,10 @@ class TestAll(unittest.TestCase):
             self.assertTrue(column.first_valid_index() ==
                             pd.Timestamp(expected_start[c]))
 
+    @staticmethod
+    def diff_month(d1, d2):
+        return (d1.year - d2.year) * 12 + d1.month - d2.month
+
     def test_rebalancing_dates(self):
 
         self.test_make_signal()
@@ -136,8 +140,24 @@ class TestAll(unittest.TestCase):
         dfw = dfw.sort_values(['cid', 'real_date'])
 
         sig_series = NaivePnL.rebalancing(dfw, rebal_freq='monthly')
+        dfw['sig'] = np.squeeze(sig_series.to_numpy())
 
-        dfw['sig'] = sig_series.to_numpy()
+        dfw_signal_rebal = dfw.pivot(index='real_date', columns='cid',
+                                     values='sig')
+
+        # Confirm, on a single cross-section that re-balancing occurs on a monthly basis.
+        # The number of unique values will equate to the number of months in the
+        # time-series.
+        dfw_signal_rebal_aud = dfw_signal_rebal.loc[:, 'AUD']
+        aud_array = np.squeeze(dfw_signal_rebal_aud.to_numpy())
+        unique_values_aud = set(aud_array)
+
+        start_date = dfw_signal_rebal.index[0]
+        end_date = dfw_signal_rebal.index[-1]
+
+        no_months = self.diff_month(end_date, start_date)
+
+        self.assertTrue(no_months - 1 == len(unique_values_aud))
 
 
 if __name__ == '__main__':
