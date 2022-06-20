@@ -137,7 +137,15 @@ class NaivePnL:
             dfw = dfx_concat.pivot(index=['cid', 'real_date'], columns='xcat',
                                    values='value')
 
-        return dfw
+        # Reconstruct the DataFrame to recognise the signal's start date for each
+        # individual cross-section
+        dfw_list = []
+        for c, cid_df in dfw.groupby(level=0):
+            first_date = cid_df.loc[:, 'psig'].first_valid_index()
+            cid_df = cid_df.loc[first_date:, :]
+            dfw_list.append(cid_df)
+
+        return pd.concat(dfw_list)
 
     def make_pnl(self, sig: str, sig_op: str = 'zn_score_pan', pnl_name: str = None,
                  rebal_freq: str = 'daily', rebal_slip = 0, vol_scale: float = None,
@@ -221,7 +229,7 @@ class NaivePnL:
         if rebal_freq != 'daily':
             sig_series = self.rebalancing(dfw=dfw, rebal_freq=rebal_freq,
                                           rebal_slip=rebal_slip)
-            dfw['sig'] = sig_series.to_numpy()
+            dfw['sig'] = np.squeeze(sig_series.to_numpy())
         else:
             dfw = dfw.rename({'psig': 'sig'}, axis=1)
 
@@ -309,11 +317,11 @@ class NaivePnL:
         # the re-balancing dates, will be populated using a forward fill.
         rebal_merge = dfw[['real_date', 'cid']].merge(rebal_merge, how='left',
                                                       on=['real_date', 'cid'])
-
         rebal_merge['psig'] = rebal_merge['psig'].fillna(method='ffill').shift(rebal_slip)
         rebal_merge = rebal_merge.sort_values(['cid', 'real_date'])
-        sig_series = pd.Series(data=rebal_merge['psig'],
-                               index=rebal_merge['real_date'])
+
+        rebal_merge = rebal_merge.set_index('real_date')
+        sig_series = rebal_merge.drop(['cid'], axis=1)
 
         return sig_series
 
