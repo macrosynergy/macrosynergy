@@ -129,7 +129,7 @@ class NaivePnL:
             df_ms = make_zn_scores(dfx, xcat=sig, neutral=neutral, pan_weight=panw,
                                    sequential=sequential, min_obs=min_obs, iis=iis,
                                    thresh=thresh)
-            # est_freq = rebal_freq[0]
+
             df_ms = df_ms.drop('xcat', axis=1)
             df_ms['xcat'] = 'psig'
 
@@ -219,8 +219,9 @@ class NaivePnL:
         dfw = dfw.sort_values(['cid', 'real_date'])
 
         if rebal_freq != 'daily':
-            dfw['sig'] = self.rebalancing(dfw=dfw, rebal_freq=rebal_freq,
+            sig_series = self.rebalancing(dfw=dfw, rebal_freq=rebal_freq,
                                           rebal_slip=rebal_slip)
+            dfw['sig'] = sig_series.to_numpy()
         else:
             dfw = dfw.rename({'psig': 'sig'}, axis=1)
 
@@ -258,8 +259,8 @@ class NaivePnL:
         agg_df = pd.concat([self.df, df_pnl[self.df.columns]])
         self.df = agg_df.reset_index(drop=True)
 
-    @staticmethod
-    def rebalancing(dfw: pd.DataFrame, rebal_freq: str = 'daily', rebal_slip = 0):
+    @classmethod
+    def rebalancing(cls, dfw: pd.DataFrame, rebal_freq: str = 'daily', rebal_slip = 0):
         """
         The signals are calculated daily and for each individual cross-section defined in
         the panel. However, re-balancing a position can occur more infrequently than
@@ -311,7 +312,8 @@ class NaivePnL:
 
         rebal_merge['psig'] = rebal_merge['psig'].fillna(method='ffill').shift(rebal_slip)
         rebal_merge = rebal_merge.sort_values(['cid', 'real_date'])
-        sig_series = rebal_merge['psig']
+        sig_series = pd.Series(data=rebal_merge['psig'],
+                               index=rebal_merge['real_date'])
 
         return sig_series
 
