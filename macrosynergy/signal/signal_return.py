@@ -51,7 +51,7 @@ class SignalReturnRelations:
                         'pos_prec', 'neg_prec',
                         'pearson', 'pearson_pval', 'kendall', 'kendall_pval']
 
-        self.df = categories_df(df, [ret, sig], cids, 'value', start=start, end=end,
+        self.df = categories_df(df, [sig, ret], cids, 'value', start=start, end=end,
                                 freq=freq, blacklist=blacklist,
                                 lag=1, fwin=fwin, xcat_aggs=['mean', agg_sig])
 
