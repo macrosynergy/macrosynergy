@@ -2,7 +2,6 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 from sklearn import metrics as skm
 from scipy import stats 
 
@@ -18,11 +17,11 @@ class SignalReturnRelations:
     Class for analyzing and visualizing relations between a signal and the subsequent
     returns.
 
-    :param <pd.Dataframe> df: standardized data frame with the following necessary
+    :param <pd.Dataframe> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcat', 'real_date' and 'value.
     :param <str> ret: return category.
     :param <str> sig: signal category.
-    :param <bool> sig_neg: if set to True  puts the signal in negative terms for all
+    :param <bool> sig_neg: if set to True puts the signal in negative terms for all
         analyses. Default is False.
     :param <str> start: earliest date in ISO format. Default is None in which case the
         earliest date in the df will be used.
@@ -35,30 +34,35 @@ class SignalReturnRelations:
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
     :param <str> agg_sig: aggregation method applied to the signal value in down-
         sampling. The default is "last".
-    :param <int> fwin: Forward window of return category in base periods. Default is 1.
+    :param <int> fwin: forward window of return category in base periods. Default is 1.
         This conceptually corresponds to the holding period of a position in
         accordance with the signal.
 
     """
     def __init__(self, df: pd.DataFrame, ret: str, sig: str, cids: List[str] = None,
-                 sig_neg: bool=False,
-                 start: str = None, end: str = None, fwin: int = 1,
-                 blacklist: dict = None, agg_sig: str = 'last', freq: str = 'M'):
+                 sig_neg: bool = False, start: str = None, end: str = None,
+                 fwin: int = 1, blacklist: dict = None, agg_sig: str = 'last',
+                 freq: str = 'M'):
 
         self.dic_freq = {'D': 'daily', 'W': 'weekly', 'M': 'monthly',
                          'Q': 'quarterly', 'A': 'annual'}
         self.metrics = ['accuracy', 'bal_accuracy', 'pos_sigr', "pos_retr",
-                        'pos_prec', 'neg_prec',
-                        'pearson', 'pearson_pval', 'kendall', 'kendall_pval']
+                        'pos_prec', 'neg_prec', 'pearson', 'pearson_pval',
+                        'kendall', 'kendall_pval']
 
-        self.df = categories_df(df, [sig, ret], cids, 'value', start=start, end=end,
-                                freq=freq, blacklist=blacklist,
+        # The signal will invariably be used as the explanatory variable and the return
+        # as the dependent variable. The method categories_df() expects to receive the
+        # explanatory variable first.
+        # Lag the signal by a single day: understand the relationship between the
+        # explanatory variable at time t and the dependent variable at time (t + 1).
+        self.df = categories_df(df, xcats=[sig, ret], cids=cids, val='value',
+                                start=start, end=end, freq=freq, blacklist=blacklist,
                                 lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'mean'])
 
         if sig_neg:
-            self.df.iloc[:, 1] = -1 * self.df.iloc[:, 1]
-            self.sig = sig+"_NEG"
-            self.df.rename(columns={sig:self.sig}, inplace=True)
+            self.df.iloc[:, 1] *= -1
+            self.sig = sig + "_NEG"
+            self.df.rename(columns={sig: self.sig}, inplace=True)
         else:
             self.sig = sig
 
@@ -82,7 +86,7 @@ class SignalReturnRelations:
             css = self.cids
         else:
             df['year'] = np.array(df.reset_index(level=1)['real_date'].dt.year)
-            css = [str(i) for i in np.sort(df['year'].unique())]
+            css = [str(y) for y in list(set(df['year']))]
 
         statms = self.metrics
         df_out = pd.DataFrame(index=['Panel', 'Mean', 'PosRatio'] + css, columns=statms)
@@ -97,6 +101,7 @@ class SignalReturnRelations:
             elif cs == 'Panel':
                 df_cs = df
 
+            # Returns an element - wise indication of the sign of a number.
             df_sgs = np.sign(df_cs.loc[:, [self.ret, self.sig]])
             df_sgs = df_sgs[~((df_sgs.iloc[:, 0] == 0) | (df_sgs.iloc[:, 1] == 0))]
 
