@@ -26,6 +26,7 @@ def update_df(df: pd.DataFrame, df_add):
     incumbent_categories = list(df['xcat'].unique())
     new_categories = list(df_add['xcat'].unique())
 
+    # Union of both category columns from the two DataFrames.
     append_condition = set(incumbent_categories) | set(new_categories)
     intersect = list(set(incumbent_categories).intersection(set(new_categories)))
 
