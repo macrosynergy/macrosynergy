@@ -53,7 +53,7 @@ class SignalReturnRelations:
 
         self.df = categories_df(df, [sig, ret], cids, 'value', start=start, end=end,
                                 freq=freq, blacklist=blacklist,
-                                lag=1, fwin=fwin, xcat_aggs=['mean', agg_sig])
+                                lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'mean'])
 
         if sig_neg:
             self.df.iloc[:, 1] = -1 * self.df.iloc[:, 1]
