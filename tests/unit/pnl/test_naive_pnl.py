@@ -87,6 +87,15 @@ class TestAll(unittest.TestCase):
         self.assertTrue(np.all(np.squeeze(pnl._bm_dict["EUR_DUXR"].to_numpy())
                                == eur_duxr['value'].to_numpy()))
 
+        # Confirm the benchmark functionality works when passing in a single ticker.
+        # Also, the benchmark will already be present on the instance's DataFrame.
+        pnl = NaivePnL(self.dfd, ret=ret[0], sigs=sigs, cids=self.cids,
+                       start='2000-01-01', blacklist=self.blacklist,
+                       bms="EUR_EQXR"
+                       )
+        bm_tickers = list(pnl._bm_dict.keys())
+        self.assertTrue(sorted(bm_tickers) == ["EUR_EQXR"])
+
     def test_make_signal(self):
 
         self.dataframe_construction()
@@ -211,6 +220,19 @@ class TestAll(unittest.TestCase):
             # mechanism. The computed signal is used for the following day's position.
             self.assertTrue(column.first_valid_index() ==
                             pd.Timestamp(expected_start[c]) + pd.DateOffset(1))
+
+        # Choose a random date to confirm the logic of computing the PnL. Multiply each
+        # cross-section's signal by their respective return.
+        random_date = "2015-01-19"
+
+        # Shift the signal by a single date. Replicating the logic in make_pnl().
+        dfw['psig'] = dfw['psig'].groupby(level=0).shift(1)
+        dfw.reset_index(inplace=True)
+        dfw = dfw.rename_axis(None, axis=1)
+        dfw = dfw.sort_values(['cid', 'real_date'])
+        dfw = dfw.rename({'psig': 'sig'}, axis=1)
+        dfw_sig = dfw.pivot(index='real_date', columns='cid',
+                            values='sig')
 
 
 if __name__ == '__main__':
