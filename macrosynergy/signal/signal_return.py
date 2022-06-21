@@ -29,7 +29,7 @@ class SignalReturnRelations:
         latest date in the df will be used.
     :param <dict> blacklist: cross sections with date ranges that should be excluded from
         the data frame. If one cross section has several blacklist periods append numbers
-        to the cross section code.
+        to the cross-section code.
     :param <str> freq: letter denoting frequency at which the series are to be sampled.
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
     :param <str> agg_sig: aggregation method applied to the signal value in down-
@@ -72,6 +72,29 @@ class SignalReturnRelations:
         self.df_cs = self.panel_relations(cs_type='cids')
         self.df_ys = self.panel_relations(cs_type='years')
 
+    @staticmethod
+    def df_isolator(df: pd.DataFrame, cs: str, cs_type: str):
+        """
+        Helper method used to isolate the specific time-series according to the parameter
+        'cs_type'. The performance metrics are computed either on a cross-sectional or
+        yearly basis.
+
+        :param <pd.DataFrame> df: standardised DataFrame.
+        :param <str> cs: individual segment, cross-section or year, for the associated
+            returned series.
+        :param <str> cs_type: the segmentation type.
+        """
+
+        # Row names of cross-sections or years.
+        if cs != 'Panel' and cs_type == 'cids':
+            df_cs = df.loc[cs]
+        elif cs != 'Panel':
+            df_cs = df[df['year'] == float(cs)]
+        else:
+            df_cs = df
+
+        return df_cs
+
     def panel_relations(self, cs_type: str = 'cids'):
         """
         Creates a DataFrame with information on the signal-return relation
@@ -93,13 +116,7 @@ class SignalReturnRelations:
 
         for cs in (css + ['Panel']):
             # Row names of cross-sections or years.
-            if cs in css:
-                if cs_type == 'cids':
-                    df_cs = df.loc[cs]
-                else:
-                    df_cs = df[df['year'] == float(cs)]
-            elif cs == 'Panel':
-                df_cs = df
+            df_cs = self.df_isolator(df=df, cs=cs, cs_type=cs_type)
 
             # Returns an element - wise indication of the sign of a number.
             df_sgs = np.sign(df_cs.loc[:, [self.ret, self.sig]])
@@ -107,10 +124,19 @@ class SignalReturnRelations:
 
             sig = df_sgs[self.sig]
             ret = df_sgs[self.ret]
+            # Accuracy classification score. The second array-like parameter will be the
+            # predicted labels. The lagged signal & returns have been reduced to [-1, 1]
+            # which are interpreted as indicator random variables: if one, take a
+            # position in the asset, if -1 short. Therefore, compute the number of times
+            # a long signal equates to a positive return.
             df_out.loc[cs, 'accuracy'] = skm.accuracy_score(sig, ret)
+            # Adjusts for imbalanced datasets.
             df_out.loc[cs, 'bal_accuracy'] = skm.balanced_accuracy_score(sig, ret)
+            # Across the segment, the ratio of positive signals.
             df_out.loc[cs, 'pos_sigr'] = np.mean(sig == 1)
             df_out.loc[cs, "pos_retr"] = np.mean(ret == 1)
+            # The greater the number of false positives, the more exposed a strategy is
+            # and subsequently any gains, through true positives, will be reversed.
             df_out.loc[cs, 'pos_prec'] = skm.precision_score(ret, sig, pos_label=1)
             df_out.loc[cs, 'neg_prec'] = skm.precision_score(ret, sig, pos_label=-1)
 
@@ -134,7 +160,7 @@ class SignalReturnRelations:
 
     def cross_section_table(self):
         """
-        Returns a dataframe with information on the signal-return relation across
+        Returns a DataFrame with information on the signal-return relation across
         sections and the panel.
         """
 
@@ -142,7 +168,7 @@ class SignalReturnRelations:
 
     def yearly_table(self):
         """
-        Returns dataframe with information on the signal-return relation across years
+        Returns DataFrame with information on the signal-return relation across years
         and the panel.
         """
         return self.df_ys.round(decimals=3)
