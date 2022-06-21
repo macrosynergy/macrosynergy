@@ -67,15 +67,25 @@ class TestAll(unittest.TestCase):
         self.assertTrue(sorted(test_categories) == sorted(ret + sigs + ['DUXR']))
 
         # Test that both the benchmarks are held in the DataFrame. Implicitly validating
-        # that add_bm() method works correctly.
+        # that add_bm() method works correctly. The benchmark series will be appended to
+        # the DataFrame held on the instance: confirm their presence.
         first_bm = pnl.df[(pnl.df['cid'] == "EUR") & (pnl.df['xcat'] == "DUXR")]
         self.assertTrue(not first_bm.empty)
         second_bm = pnl.df[(pnl.df['cid'] == "USD") & (pnl.df['xcat'] == "DUXR")]
         self.assertTrue(not second_bm.empty)
 
-        # Confirm the values are correct.
+        # Additionally, confirm that the benchmark dictionary has been populated
+        # correctly as both benchmarks are present in the passed DataFrame.
+        bm_tickers = list(pnl._bm_dict.keys())
+        self.assertTrue(sorted(bm_tickers) == ["EUR_DUXR", "USD_DUXR"])
+
+        # Confirm the values are correct. Confirm the values in each benchmark series
+        # have been correctly lifted from the original, standardised DataFrame.
         eur_duxr = self.dfd[(self.dfd['cid'] == "EUR") & (self.dfd['xcat'] == "DUXR")]
         self.assertTrue(np.all(first_bm['value'] == eur_duxr['value']))
+
+        self.assertTrue(np.all(np.squeeze(pnl._bm_dict["EUR_DUXR"].to_numpy())
+                               == eur_duxr['value'].to_numpy()))
 
     def test_make_signal(self):
 
@@ -107,7 +117,8 @@ class TestAll(unittest.TestCase):
         self.__dict__['signal_dfw'] = dfw
 
         # Confirm the first dates for each cross-section's signal are the expected start
-        # dates. There are not any falsified signals being created.
+        # dates. There are not any falsified signals being created. The signal is
+        # 'GROWTH'.
         # Dates have been adjusted for the first business day.
         expected_start = {'AUD': '2010-01-04', 'CAD': '2010-01-04', 'GBP': '2012-01-03',
                           'NZD': '2010-01-04', 'USD': '2015-01-05', 'EUR': '2010-01-04'}
@@ -158,6 +169,48 @@ class TestAll(unittest.TestCase):
         no_months = self.diff_month(end_date, start_date)
 
         self.assertTrue(no_months - 1 == len(unique_values_aud))
+
+    def test_make_pnl(self):
+
+        self.test_make_signal()
+
+        # Signal is produced daily. The calculation of the neutral level and standard
+        # deviation are also calculated daily. Only for a highly volatile asset would
+        # there be any value in calculating at a daily frequency. In most instances, the
+        # neutral level would remain fairly constant over the duration of a week.
+        dfw = self.signal_dfw
+
+        # The PnL DataFrame is appended to the instance DataFrame.
+        ret = 'EQXR'
+        sigs = ['CRY', 'GROWTH', 'INFL']
+        pnl = NaivePnL(self.dfd, ret=ret, sigs=sigs, cids=self.cids,
+                       start='2000-01-01', blacklist=self.blacklist,
+                       bms=["EUR_DUXR", "USD_DUXR"]
+                       )
+
+        pnl.make_pnl(sig='GROWTH', sig_op='zn_score_pan', rebal_freq='daily',
+                     vol_scale=None, rebal_slip=0, pnl_name='PNL_GROWTH',
+                     min_obs=252, iis=True, sequential=True, neutral='zero', thresh=None)
+
+        # Test the PnL value produced across the panel. Implicitly tests the PnL values
+        # for each cross-section.
+        pnl_df = pnl.df[pnl.df['xcat'] == 'PNL_GROWTH']
+
+        # Confirm the first PnL value for each cross-section is aligned to the first date
+        # of the respective signal, GROWTH. A PnL value should only be produced if the
+        # signal is available for the respective date.
+        expected_start = {'AUD': '2010-01-04', 'CAD': '2010-01-04', 'GBP': '2012-01-03',
+                          'NZD': '2010-01-04', 'USD': '2015-01-05', 'EUR': '2010-01-04'}
+
+        pnl_dfw = pnl_df.pivot(index='real_date', columns='cid',
+                               values='value')
+        cross_sections = self.cids
+        for c in cross_sections:
+            column = pnl_dfw.loc[:, c]
+            # Adjust the expected start dates by one day to account for the shift
+            # mechanism. The computed signal is used for the following day's position.
+            self.assertTrue(column.first_valid_index() ==
+                            pd.Timestamp(expected_start[c]) + pd.DateOffset(1))
 
 
 if __name__ == '__main__':
