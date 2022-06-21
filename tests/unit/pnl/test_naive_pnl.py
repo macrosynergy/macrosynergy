@@ -203,6 +203,7 @@ class TestAll(unittest.TestCase):
 
         # Test the PnL value produced across the panel. Implicitly tests the PnL values
         # for each cross-section.
+        # Confirms the category for the PnL is being named correctly.
         pnl_df = pnl.df[pnl.df['xcat'] == 'PNL_GROWTH']
 
         # Confirm the first PnL value for each cross-section is aligned to the first date
@@ -231,8 +232,66 @@ class TestAll(unittest.TestCase):
         dfw = dfw.rename_axis(None, axis=1)
         dfw = dfw.sort_values(['cid', 'real_date'])
         dfw = dfw.rename({'psig': 'sig'}, axis=1)
+
         dfw_sig = dfw.pivot(index='real_date', columns='cid',
                             values='sig')
+        signals = dfw_sig.loc[random_date, :]
+        signal_dict = dict(signals)
+        df = self.dfd
+
+        returns = df[(df['xcat'] == ret)]
+        returns_dfw = returns.pivot(index='real_date', columns='cid',
+                                    values='value')
+        return_dict = dict(returns_dfw.loc[random_date, :])
+
+        # Aggregate the individual cross-section's PnL to calculate the PnL across the
+        # panel.
+        pnl_return_date = 0
+        for cid, value in signal_dict.items():
+            pnl_return_date += return_dict[cid] * value
+
+        test_data = pnl_dfw['ALL'].loc[random_date]
+        self.assertTrue(round(float(test_data), 4) == round(pnl_return_date, 4))
+
+    def test_make_long_pnl(self):
+
+        self.dataframe_construction()
+
+        ret = 'EQXR'
+        sigs = ['CRY', 'GROWTH', 'INFL']
+        pnl = NaivePnL(self.dfd, ret=ret, sigs=sigs, cids=self.cids,
+                       start='2000-01-01', blacklist=self.blacklist,
+                       bms=["EUR_DUXR", "USD_DUXR"]
+                       )
+
+        pnl.make_pnl(sig='GROWTH', sig_op='zn_score_pan', rebal_freq='daily',
+                     vol_scale=None, rebal_slip=0, pnl_name='PNL_GROWTH',
+                     min_obs=252, iis=True, sequential=True, neutral='zero',
+                     thresh=None)
+
+        pnl.make_long_pnl(vol_scale=0, label="Unit_Long_EQXR")
+
+        long_equity = pnl.df[pnl.df['xcat'] == "Unit_Long_EQXR"]
+        # Long-only is naturally computed across the panel (individual cross-section's
+        # returns are already present in the DataFrame). Therefore, confirm that the
+        # only cross-section in 'cid' column is "ALL".
+        self.assertTrue(list(long_equity['cid'].unique()) == ["ALL"])
+
+        df = self.dfd
+        return_df = df[df['xcat'] == "EQXR"]
+
+        # Test on a random date.
+        random_date = "2016-01-19"
+        return_dfw = return_df.pivot(index='real_date', columns='cid',
+                                     values='value')
+        # Sum across the row: unitary position.
+        return_calc = sum(return_dfw.loc[random_date, :])
+        # Convert to a pd.Series.
+        long_equity_series = long_equity.pivot(index='real_date', columns='cid',
+                                               values='value')
+
+        condition = return_calc - float(long_equity_series.loc[random_date])
+        self.assertTrue(abs(condition) < 0.0001)
 
 
 if __name__ == '__main__':
