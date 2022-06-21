@@ -153,6 +153,64 @@ class NaivePnL:
 
         return pd.concat(dfw_list)
 
+    @classmethod
+    def rebalancing(cls, dfw: pd.DataFrame, rebal_freq: str = 'daily', rebal_slip = 0):
+        """
+        The signals are calculated daily and for each individual cross-section defined in
+        the panel. However, re-balancing a position can occur more infrequently than
+        daily. Therefore, produce the re-balancing values according to the more
+        infrequent timeline (weekly or monthly).
+
+        :param <pd.Dataframe> dfw: DataFrame with each category represented by a column
+            and the daily signal is also included with the column name 'psig'.
+        :param <str> rebal_freq: re-balancing frequency for positions according to signal
+            must be one of 'daily' (default), 'weekly' or 'monthly'.
+        :param <str> rebal_slip: re-balancing slippage in days.
+
+        :return <pd.Series>: will return a pd.Series containing the associated signals
+            according to the re-balancing frequency.
+        """
+
+        # The re-balancing days are the first of the respective time-periods because of
+        # the shift forward by one day applied earlier in the code. Therefore, only
+        # concerned with the minimum date of each re-balance period.
+        dfw['year'] = dfw['real_date'].dt.year
+        if rebal_freq == 'monthly':
+            dfw['month'] = dfw['real_date'].dt.month
+            rebal_dates = dfw.groupby(['cid', 'year', 'month'])['real_date'].min()
+        elif rebal_freq == 'weekly':
+            dfw['week'] = dfw['real_date'].dt.week
+            rebal_dates = dfw.groupby(['cid', 'year', 'week'])['real_date'].min()
+
+        # Convert the index, 'cid', to a formal column aligned to the re-balancing dates.
+        r_dates_df = rebal_dates.reset_index(level=0)
+        r_dates_df.reset_index(drop=True, inplace=True)
+        dfw = dfw[['real_date', 'psig', 'cid']]
+
+        # Isolate the required signals on the re-balancing dates. Only concerned with the
+        # respective signal on the re-balancing date. However, the produced dataframe
+        # will only be defined over the re-balancing dates. Therefore, merge the
+        # aforementioned dataframe with the original dataframe such that all business
+        # days are included. The intermediary dates, dates between re-balancing dates,
+        # will initially be populated by NA values. To ensure the signal is used for the
+        # duration between re-balancing dates, forward fill the computed signal over the
+        # associated dates.
+
+        # The signal is computed for each individual cross-section. Therefore, merge on
+        # the real_date and the cross-section.
+        rebal_merge = r_dates_df.merge(dfw, how='left', on=['real_date', 'cid'])
+        # Re-establish the daily date series index where the intermediary dates, between
+        # the re-balancing dates, will be populated using a forward fill.
+        rebal_merge = dfw[['real_date', 'cid']].merge(rebal_merge, how='left',
+                                                      on=['real_date', 'cid'])
+        rebal_merge['psig'] = rebal_merge['psig'].fillna(method='ffill').shift(rebal_slip)
+        rebal_merge = rebal_merge.sort_values(['cid', 'real_date'])
+
+        rebal_merge = rebal_merge.set_index('real_date')
+        sig_series = rebal_merge.drop(['cid'], axis=1)
+
+        return sig_series
+
     def make_pnl(self, sig: str, sig_op: str = 'zn_score_pan', pnl_name: str = None,
                  rebal_freq: str = 'daily', rebal_slip = 0, vol_scale: float = None,
                  min_obs: int = 252, iis: bool = True, sequential: bool = True,
@@ -273,64 +331,6 @@ class NaivePnL:
         agg_df = pd.concat([self.df, df_pnl[self.df.columns]])
         self.df = agg_df.reset_index(drop=True)
 
-    @classmethod
-    def rebalancing(cls, dfw: pd.DataFrame, rebal_freq: str = 'daily', rebal_slip = 0):
-        """
-        The signals are calculated daily and for each individual cross-section defined in
-        the panel. However, re-balancing a position can occur more infrequently than
-        daily. Therefore, produce the re-balancing values according to the more
-        infrequent timeline (weekly or monthly).
-
-        :param <pd.Dataframe> dfw: DataFrame with each category represented by a column
-            and the daily signal is also included with the column name 'psig'.
-        :param <str> rebal_freq: re-balancing frequency for positions according to signal
-            must be one of 'daily' (default), 'weekly' or 'monthly'.
-        :param <str> rebal_slip: re-balancing slippage in days.
-
-        :return <pd.Series>: will return a pd.Series containing the associated signals
-            according to the re-balancing frequency.
-        """
-
-        # The re-balancing days are the first of the respective time-periods because of
-        # the shift forward by one day applied earlier in the code. Therefore, only
-        # concerned with the minimum date of each re-balance period.
-        dfw['year'] = dfw['real_date'].dt.year
-        if rebal_freq == 'monthly':
-            dfw['month'] = dfw['real_date'].dt.month
-            rebal_dates = dfw.groupby(['cid', 'year', 'month'])['real_date'].min()
-        elif rebal_freq == 'weekly':
-            dfw['week'] = dfw['real_date'].dt.week
-            rebal_dates = dfw.groupby(['cid', 'year', 'week'])['real_date'].min()
-
-        # Convert the index, 'cid', to a formal column aligned to the re-balancing dates.
-        r_dates_df = rebal_dates.reset_index(level=0)
-        r_dates_df.reset_index(drop=True, inplace=True)
-        dfw = dfw[['real_date', 'psig', 'cid']]
-
-        # Isolate the required signals on the re-balancing dates. Only concerned with the
-        # respective signal on the re-balancing date. However, the produced dataframe
-        # will only be defined over the re-balancing dates. Therefore, merge the
-        # aforementioned dataframe with the original dataframe such that all business
-        # days are included. The intermediary dates, dates between re-balancing dates,
-        # will initially be populated by NA values. To ensure the signal is used for the
-        # duration between re-balancing dates, forward fill the computed signal over the
-        # associated dates.
-
-        # The signal is computed for each individual cross-section. Therefore, merge on
-        # the real_date and the cross-section.
-        rebal_merge = r_dates_df.merge(dfw, how='left', on=['real_date', 'cid'])
-        # Re-establish the daily date series index where the intermediary dates, between
-        # the re-balancing dates, will be populated using a forward fill.
-        rebal_merge = dfw[['real_date', 'cid']].merge(rebal_merge, how='left',
-                                                      on=['real_date', 'cid'])
-        rebal_merge['psig'] = rebal_merge['psig'].fillna(method='ffill').shift(rebal_slip)
-        rebal_merge = rebal_merge.sort_values(['cid', 'real_date'])
-
-        rebal_merge = rebal_merge.set_index('real_date')
-        sig_series = rebal_merge.drop(['cid'], axis=1)
-
-        return sig_series
-
     def make_long_pnl(self, vol_scale: float = None, label: str = None):
         """
         The long-only returns will be computed which act as a basis for comparison
@@ -354,10 +354,10 @@ class NaivePnL:
 
         dfx = self.df[self.df['xcat'].isin([self.ret])]
 
-        dfw_long = self.long_only_pnl(dfw=dfx, vol_scale=vol_scale,
-                                      label=label)
+        df_long = self.long_only_pnl(dfw=dfx, vol_scale=vol_scale,
+                                     label=label)
 
-        self.df = self.df.append(dfw_long)
+        self.df = pd.concat([self.df, df_long])
 
         if label not in self.pnl_names:
             self.pnl_names = self.pnl_names + [label]
@@ -394,7 +394,7 @@ class NaivePnL:
 
         return panel_pnl[['cid', 'xcat', 'real_date', 'value']]
 
-    def plot_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
+    def plot_pnls(self, pnl_cats: List[str] = None, pnl_cids: List[str] = ['ALL'],
                   start: str = None, end: str = None, figsize: Tuple = (10, 6),
                   title: str = "Cumulative Naive PnL",
                   xcat_labels: List[str] = None):
@@ -430,8 +430,9 @@ class NaivePnL:
             pnl_cats_c = pnl_cats.copy()
             xcat_labels = pnl_cats_c
 
-        dfx = reduce_df(self.df, pnl_cats, pnl_cids, start, end, self.black,
-                        out_all=False)
+        dfx = reduce_df(self.df, pnl_cats, pnl_cids, start,
+                        end, self.black, out_all=False)
+
         no_cids = len(pnl_cids)
 
         sns.set_theme(style='whitegrid', palette='colorblind',
@@ -439,6 +440,7 @@ class NaivePnL:
 
         if no_cids == 1:
             dfx['cum_value'] = dfx.groupby('xcat').cumsum()
+            print(dfx)
 
             ax = sns.lineplot(data=dfx, x='real_date', y='cum_value',
                               hue='xcat', hue_order=pnl_cats,
@@ -720,19 +722,19 @@ if __name__ == "__main__":
 
     cols_1 = ['earliest', 'latest', 'mean_add', 'sd_mult']
     df_cids = pd.DataFrame(index=cids, columns=cols_1)
-    df_cids.loc['AUD'] = ['2000-01-01', '2020-12-31', 0.1, 1]
-    df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
-    df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
-    df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
-    df_cids.loc['USD'] = ['2001-01-01', '2020-12-31', 0.2, 2]
-    df_cids.loc['EUR'] = ['2001-01-01', '2020-12-31', 0.1, 2]
+    df_cids.loc['AUD', :] = ['2008-01-03', '2020-12-31', 0.5, 2]
+    df_cids.loc['CAD', :] = ['2010-01-03', '2020-11-30', 0, 1]
+    df_cids.loc['GBP', :] = ['2012-01-03', '2020-11-30', -0.2, 0.5]
+    df_cids.loc['NZD'] = ['2002-01-03', '2020-09-30', -0.1, 2]
+    df_cids.loc['USD'] = ['2015-01-03', '2020-12-31', 0.2, 2]
+    df_cids.loc['EUR'] = ['2008-01-03', '2020-12-31', 0.1, 2]
 
     cols_2 = cols_1 + ['ar_coef', 'back_coef']
 
     df_xcats = pd.DataFrame(index=xcats, columns=cols_2)
-    df_xcats.loc['EQXR'] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
+    df_xcats.loc['EQXR'] = ['2000-01-03', '2020-12-31', 0.1, 1, 0, 0.3]
     df_xcats.loc['CRY'] = ['2000-01-01', '2020-10-30', 1, 2, 0.95, 1]
-    df_xcats.loc['GROWTH'] = ['2001-01-01', '2020-10-30', 1, 2, 0.9, 1]
+    df_xcats.loc['GROWTH'] = ['2010-01-03', '2020-10-30', 1, 2, 0.9, 1]
     df_xcats.loc['INFL'] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
     df_xcats.loc['DUXR'] = ['2000-01-01', '2020-12-31', 0.1, 0.5, 0, 0.1]
 
@@ -744,20 +746,23 @@ if __name__ == "__main__":
                    cids=cids, start='2000-01-01', blacklist=black,
                    bms=["EUR_EQXR", "USD_EQXR"])
 
-    pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
-                 vol_scale=5, rebal_slip=1, pnl_name='PNL_CRY_PZN05',
+    pnl.make_pnl(sig='GROWTH', sig_op='zn_score_pan', rebal_freq='monthly',
+                 vol_scale=5, rebal_slip=1, pnl_name='PNL_GROWTH_PZN05',
                  min_obs=250, thresh=2)
 
-    pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
-                 vol_scale=5, rebal_slip=1, pnl_name='PNL_CRY_PZN',
+    pnl.make_pnl(sig='GROWTH', sig_op='zn_score_pan', rebal_freq='monthly',
+                 vol_scale=5, rebal_slip=1, pnl_name='PNL_GROWTH_PZN',
                  min_obs=250, thresh=2.5)
 
     pnl.make_long_pnl(vol_scale=10, label="Long")
+
+    # Able to adjust the start date for any respective visual analysis.
+    pnl.plot_pnls(start="2010-01-01")
 
     # Return evaluation and PnL DataFrames.
     cids_subset = ['ALL']
     # Test the inclusion of a single benchmark correlation.
     df_eval = pnl.evaluate_pnls(
-        pnl_cats=['PNL_CRY_PZN', 'PNL_CRY_PZN05', "Long"],
+        pnl_cats=['PNL_GROWTH_PZN', 'PNL_GROWTH_PZN05', "Long"],
         pnl_cids=cids_subset
     )
