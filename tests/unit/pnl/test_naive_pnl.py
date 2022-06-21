@@ -293,6 +293,11 @@ class TestAll(unittest.TestCase):
         condition = return_calc - float(long_equity_series.loc[random_date])
         self.assertTrue(abs(condition) < 0.0001)
 
+        # The remaining methods in NaivePnL are graphical plots which display the values
+        # computed using the functions above. Therefore, if the functionality is correct
+        # above, the plotting methods do not explicitly need to be tested in the Unit
+        # Test as a visual assessment will be sufficient.
+
 
 if __name__ == '__main__':
 
