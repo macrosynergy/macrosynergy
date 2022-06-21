@@ -60,12 +60,13 @@ class NaivePnL:
         self.pnl_names = []
         self.signal_df = {}
         self.black = blacklist
-        self._bm_dict = {}
 
         self.bm_bool = isinstance(bms, (str, list))
         if self.bm_bool:
-            add_bm_list = self.add_bm(df=self.dfd, bms=bms,
-                                      tickers=self.tickers)
+            bms = [bms] if isinstance(bms, str) else bms
+            add_bm_list, bm_dict = self.add_bm(df=self.dfd, bms=bms,
+                                               tickers=self.tickers)
+            self._bm_dict = bm_dict
             self.df = pd.concat([self.df] + add_bm_list)
 
     @classmethod
@@ -73,6 +74,8 @@ class NaivePnL:
                tickers: List[str]):
         """
         Return benchmark DataFrames which will be appended to the instance's DataFrame.
+        Additionally, populate the benchmark dictionary which is used to host any valid
+        benchmarks.
 
         :param <pd.DataFrame> df: aggregate DataFrame passed into the Class.
         :param <List[str]> bms: benchmark return tickers.
@@ -81,17 +84,20 @@ class NaivePnL:
         """
 
         add_bm_list = []
+        bm_dict = {}
         for bm in bms:
             cid, xcat = bm.split("_", 1)
             dfa = df[(df['cid'] == cid) & (df['xcat'] == xcat)]
+
             if dfa.shape[0] == 0:
                 print(f"{bm} has no observations in the DataFrame.")
-            elif bm not in tickers:
-                add_bm_list.append(dfa)
             else:
-                pass
+                bm_dict[bm] = dfa.pivot(index='real_date', columns='xcat',
+                                        values='value').squeeze(axis=0)
+                if bm not in tickers:
+                    add_bm_list.append(dfa)
 
-        return add_bm_list
+        return add_bm_list, bm_dict
 
     @classmethod
     def make_signal(cls, dfx: pd.DataFrame, sig: str, sig_op: str = 'zn_score_pan',
@@ -601,32 +607,8 @@ class NaivePnL:
         ax.fmt_xdata = fmt
         plt.show()
 
-    def _benchmark_series(self, bms: Union[str, List[str]], stats: List[str]):
-        """
-        Populates the benchmark dictionary with the respective series used as benchmarks.
-
-        :param <str, List[str]> bms:
-        :param <List[str]> stats: list of the evaluation statistics computed. Insert any
-            correlation metrics.
-        """
-
-        bms = [bms] if isinstance(bms, str) else bms
-
-        for bm in bms:
-            cid, xcat = bm.split("_", 1)
-            dfa = self.df[(self.df['cid'] == cid) & (self.df['xcat'] == xcat)]
-            if dfa.shape[0] == 0:
-                print(f"{bm} has no observations in the DataFrame.")
-            else:
-                stats.insert(len(stats) - 1, f"{bm} correl")
-                dfa['xcat'] = bm
-                self._bm_dict[bm] = dfa.pivot(index='real_date', columns='xcat',
-                                              values='value').squeeze(axis=0)
-        return stats
-
     def evaluate_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
-                      bms: Union[str, List[str]] = None, start: str = None,
-                      end: str = None):
+                      start: str = None, end: str = None):
 
         """
         Table of key PnL statistics.
@@ -636,9 +618,6 @@ class NaivePnL:
             'ALL' (global PnL).
             Note: one can only have multiple PnL categories or multiple cross-sections,
             not both.
-        :param <str, List[str]> bms: list of benchmark tickers for which
-            correlations are displayed. The series denoted by the tickers must be in
-            the instance's DataFrame.
         :param <str> start: earliest date in ISO format. Default is None and earliest
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
@@ -678,12 +657,18 @@ class NaivePnL:
         stats = ['Return (pct ar)', 'St. Dev. (pct ar)', 'Sharpe Ratio', 'Sortino Ratio',
                  'Max 21-day draw', 'Max 6-month draw', 'Traded Months']
 
-        if isinstance(bms, (str, list)):
-            stats = self._benchmark_series(bms=bms, stats=stats)
+        # If benchmark tickers have been passed into the Class and if the tickers are
+        # present in self.dfd.
+        list_for_dfbm = []
+
+        if self.bm_bool and bool(self._bm_dict):
+
+            list_for_dfbm = list(self._bm_dict.keys())
+            for bm in list_for_dfbm:
+                stats.insert(len(stats) - 1, f"{bm} correl")
 
         dfw = dfx.pivot(index='real_date', columns=groups, values='value')
         df = pd.DataFrame(columns=dfw.columns, index=stats)
-        list_for_dfbm = list(self._bm_dict.keys())
 
         df.iloc[0, :] = dfw.mean(axis=0) * 261
         df.iloc[1, :] = dfw.std(axis=0) * np.sqrt(261)
@@ -699,7 +684,7 @@ class NaivePnL:
                 correlation = dfw.corrwith(bm_df.iloc[:, i], axis=0,
                                            method='pearson')
                 df.iloc[6 + i, :] = correlation
-            self._bm_dict = {}
+
         df.iloc[6 + len(list_for_dfbm), :] = dfw.resample('M').sum().count()
 
         return df
@@ -774,7 +759,5 @@ if __name__ == "__main__":
     # Test the inclusion of a single benchmark correlation.
     df_eval = pnl.evaluate_pnls(
         pnl_cats=['PNL_CRY_PZN', 'PNL_CRY_PZN05', "Long"],
-        pnl_cids=cids_subset, bms=["USD_EQXR", "EUR_EQXR"]
+        pnl_cids=cids_subset
     )
-
-    print(df_eval)
