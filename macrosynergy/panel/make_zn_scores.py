@@ -142,7 +142,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     assert isinstance(est_freq, str) and est_freq in frequencies, error_freq
     pd_freq = dict(zip(frequencies, ['B', 'W-Fri', 'BM', 'BQ']))
 
-    # --- Prepare re-estimation dates and time series dataframe
+    # --- Prepare re-estimation dates and time-series DataFrame.
 
     df = df.loc[:, ['cid', 'xcat', 'real_date', 'value']]
     df = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end,
@@ -154,7 +154,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     dfw = df.pivot(index='real_date', columns='cid', values='value')
     cross_sections = dfw.columns
 
-    # --- The actual scoring
+    # --- The actual scoring.
 
     dfw_zns_pan = dfw * 0
     dfw_zns_css = dfw * 0

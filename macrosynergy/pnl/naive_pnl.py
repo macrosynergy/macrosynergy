@@ -4,14 +4,11 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
-from itertools import product
-import warnings
 
 from typing import List, Union, Tuple
-
+from itertools import product
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
-from macrosynergy.management.update_df import update_df
 from macrosynergy.panel.make_zn_scores import make_zn_scores
 
 
@@ -48,42 +45,113 @@ class NaivePnL:
                  blacklist: dict = None):
 
         self.dfd = df
+        assert isinstance(ret, str), "The return category expects a single <str>."
         self.ret = ret
         self.sigs = sigs
         xcats = [ret] + sigs
 
         cols = ['cid', 'xcat', 'real_date', 'value']
-        self.cids = cids
         self.df, self.xcats, self.cids = reduce_df(df[cols], xcats, cids, start, end,
                                                    blacklist, out_all=True)
+        ticker_func = lambda t: t[0] + "_" + t[1]
+        self.tickers = list(map(ticker_func, product(self.cids, self.xcats)))
+
         self.df['real_date'] = pd.to_datetime(self.df['real_date'])
         self.pnl_names = []
         self.signal_df = {}
         self.black = blacklist
-        self.bm_dict = {}
-        self.bms = []
 
-        if isinstance(bms, List):
-            self.add_bm(df, bms=bms)
+        self.bm_bool = isinstance(bms, (str, list))
+        if self.bm_bool:
+            bms = [bms] if isinstance(bms, str) else bms
+            add_bm_list, bm_dict = self.add_bm(df=self.dfd, bms=bms,
+                                               tickers=self.tickers)
+            self._bm_dict = bm_dict
+            self.df = pd.concat([self.df] + add_bm_list)
 
-    def add_bm(self, df, bms: List[str]):
+    @classmethod
+    def add_bm(cls, df: pd.DataFrame, bms: List[str],
+               tickers: List[str]):
         """
-        Add benchmark series to instance dataframe
+        Return benchmark DataFrames which will be appended to the instance's DataFrame.
+        Additionally, populate the benchmark dictionary which is used to host any valid
+        benchmarks.
 
-        :param <List[str]> bms: benchmark return tickers
-        :param <pd.Dataframe> df: standardized DataFrame with the following necessary
-        columns: 'cid', 'xcat', 'real_date' and 'value'.
+        :param <pd.DataFrame> df: aggregate DataFrame passed into the Class.
+        :param <List[str]> bms: benchmark return tickers.
+        :param <List[str]> tickers: the available tickers held in the reduced DataFrame.
+            The reduced DataFrame consists exclusively of the signal & return categories.
         """
 
-        dfx = df.loc[:, ['cid', 'xcat', 'real_date', 'value']]
+        add_bm_list = []
+        bm_dict = {}
         for bm in bms:
             cid, xcat = bm.split("_", 1)
-            dfa = dfx[(dfx['cid'] == cid) & (dfx['xcat'] == xcat)]
+            dfa = df[(df['cid'] == cid) & (df['xcat'] == xcat)]
+
             if dfa.shape[0] == 0:
-                warnings.warn(f"{bm} has no observations in the dataframe")
+                print(f"{bm} has no observations in the DataFrame.")
             else:
-                self.df = update_df(self.df, dfa)
-                self.bms += [bm]
+                bm_dict[bm] = dfa.pivot(index='real_date', columns='xcat',
+                                        values='value').squeeze(axis=0)
+                if bm not in tickers:
+                    add_bm_list.append(dfa)
+
+        return add_bm_list, bm_dict
+
+    @classmethod
+    def make_signal(cls, dfx: pd.DataFrame, sig: str, sig_op: str = 'zn_score_pan',
+                    min_obs: int = 252, iis: bool = True, sequential: bool = True,
+                    neutral: str = 'zero', thresh: float = None):
+        """
+        Helper function used to produce the raw signal that forms the basis for
+        positioning.
+
+        :param <pd.DataFrame> dfx: DataFrame defined over the return & signal category.
+        :param <str> sig: name of the raw signal.
+        :param <str> sig_op: signal transformation.
+        :param <int> min_obs: the minimum number of observations required to calculate
+            zn_scores. Default is 252.
+        :param <bool> iis: if True (default) zn-scores are also calculated for the initial
+            sample period defined by min_obs, on an in-sample basis, to avoid losing
+            history.
+        :param <bool> sequential: if True (default) score parameters are estimated
+            sequentially with concurrently available information only.
+        :param <str> neutral: method to determine neutral level.
+        :param <float> thresh: threshold value beyond which scores are winsorized,
+
+        """
+
+        if sig_op == 'binary':
+            dfw = dfx.pivot(index=['cid', 'real_date'], columns='xcat', values='value')
+            dfw['psig'] = np.sign(dfw[sig])
+        else:
+            panw = 1 if sig_op == 'zn_score_pan' else 0
+            # The re-estimation frequency for the neutral level and standard deviation
+            # will be the same as the re-balancing frequency. For instance, if the
+            # neutral level is computed weekly, a material change in the signal will only
+            # manifest along a similar timeline. Therefore, re-estimation and
+            # re-balancing frequencies match.
+            df_ms = make_zn_scores(dfx, xcat=sig, neutral=neutral, pan_weight=panw,
+                                   sequential=sequential, min_obs=min_obs, iis=iis,
+                                   thresh=thresh)
+
+            df_ms = df_ms.drop('xcat', axis=1)
+            df_ms['xcat'] = 'psig'
+
+            dfx_concat = pd.concat([dfx, df_ms])
+            dfw = dfx_concat.pivot(index=['cid', 'real_date'], columns='xcat',
+                                   values='value')
+
+        # Reconstruct the DataFrame to recognise the signal's start date for each
+        # individual cross-section
+        dfw_list = []
+        for c, cid_df in dfw.groupby(level=0):
+            first_date = cid_df.loc[:, 'psig'].first_valid_index()
+            cid_df = cid_df.loc[first_date:, :]
+            dfw_list.append(cid_df)
+
+        return pd.concat(dfw_list)
 
     def make_pnl(self, sig: str, sig_op: str = 'zn_score_pan', pnl_name: str = None,
                  rebal_freq: str = 'daily', rebal_slip = 0, vol_scale: float = None,
@@ -154,26 +222,8 @@ class NaivePnL:
         # category and associated signal category.
         dfx = self.df[self.df['xcat'].isin([self.ret, sig])]
 
-        if sig_op == 'binary':
-            dfw = dfx.pivot(index=['cid', 'real_date'], columns='xcat', values='value')
-            dfw['psig'] = np.sign(dfw[sig])
-        else:
-            panw = 1 if sig_op == 'zn_score_pan' else 0
-            # The re-estimation frequency for the neutral level and standard deviation
-            # will be the same as the re-balancing frequency. For instance, if the
-            # neutral level is computed weekly, a material change in the signal will only
-            # manifest along a similar timeline. Therefore, re-estimation and
-            # re-balancing frequencies match.
-            df_ms = make_zn_scores(dfx, xcat=sig, neutral=neutral, pan_weight=panw,
-                                   sequential=sequential, min_obs=min_obs, iis=iis,
-                                   thresh=thresh)
-            # est_freq = rebal_freq[0]
-            df_ms = df_ms.drop('xcat', axis=1)
-            df_ms['xcat'] = 'psig'
-
-            dfx_concat = pd.concat([dfx, df_ms])
-            dfw = dfx_concat.pivot(index=['cid', 'real_date'], columns='xcat',
-                                   values='value')
+        dfw = self.make_signal(dfx=dfx, sig=sig, sig_op=sig_op, min_obs=min_obs, iis=iis,
+                               sequential=sequential, neutral=neutral, thresh=thresh)
 
         # Multi-index DataFrame with a natural minimum lag applied.
         dfw['psig'] = dfw['psig'].groupby(level=0).shift(1)
@@ -183,8 +233,9 @@ class NaivePnL:
         dfw = dfw.sort_values(['cid', 'real_date'])
 
         if rebal_freq != 'daily':
-            dfw['sig'] = self.rebalancing(dfw=dfw, rebal_freq=rebal_freq,
+            sig_series = self.rebalancing(dfw=dfw, rebal_freq=rebal_freq,
                                           rebal_slip=rebal_slip)
+            dfw['sig'] = np.squeeze(sig_series.to_numpy())
         else:
             dfw = dfw.rename({'psig': 'sig'}, axis=1)
 
@@ -219,10 +270,11 @@ class NaivePnL:
         else:
             self.pnl_names = self.pnl_names + [pnn]
 
-        self.df = self.df.append(df_pnl[self.df.columns]).reset_index(drop=True)
+        agg_df = pd.concat([self.df, df_pnl[self.df.columns]])
+        self.df = agg_df.reset_index(drop=True)
 
-    @staticmethod
-    def rebalancing(dfw: pd.DataFrame, rebal_freq: str = 'daily', rebal_slip = 0):
+    @classmethod
+    def rebalancing(cls, dfw: pd.DataFrame, rebal_freq: str = 'daily', rebal_slip = 0):
         """
         The signals are calculated daily and for each individual cross-section defined in
         the panel. However, re-balancing a position can occur more infrequently than
@@ -267,12 +319,15 @@ class NaivePnL:
         # The signal is computed for each individual cross-section. Therefore, merge on
         # the real_date and the cross-section.
         rebal_merge = r_dates_df.merge(dfw, how='left', on=['real_date', 'cid'])
+        # Re-establish the daily date series index where the intermediary dates, between
+        # the re-balancing dates, will be populated using a forward fill.
         rebal_merge = dfw[['real_date', 'cid']].merge(rebal_merge, how='left',
                                                       on=['real_date', 'cid'])
-
         rebal_merge['psig'] = rebal_merge['psig'].fillna(method='ffill').shift(rebal_slip)
         rebal_merge = rebal_merge.sort_values(['cid', 'real_date'])
-        sig_series = rebal_merge['psig']
+
+        rebal_merge = rebal_merge.set_index('real_date')
+        sig_series = rebal_merge.drop(['cid'], axis=1)
 
         return sig_series
 
@@ -553,8 +608,7 @@ class NaivePnL:
         plt.show()
 
     def evaluate_pnls(self, pnl_cats: List[str], pnl_cids: List[str] = ['ALL'],
-                      bms: Union[str, List[str]] = 'all', start: str = None,
-                      end: str = None):
+                      start: str = None, end: str = None):
 
         """
         Table of key PnL statistics.
@@ -564,9 +618,6 @@ class NaivePnL:
             'ALL' (global PnL).
             Note: one can only have multiple PnL categories or multiple cross-sections,
             not both.
-        :param <str, List[str]> bms: list of benchmark tickers for which
-            correlations are displayed. The series denoted by the tickers must be in
-            the instances dataframe.
         :param <str> start: earliest date in ISO format. Default is None and earliest
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
@@ -599,28 +650,22 @@ class NaivePnL:
 
         assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
 
-        dfx = reduce_df(self.df, pnl_cats, pnl_cids, start, end, self.black,
-                        out_all=False)
+        dfx = reduce_df(self.df, pnl_cats, pnl_cids, start,
+                        end, self.black, out_all=False)
 
         groups = 'xcat' if len(pnl_cids) == 1 else 'cid'
         stats = ['Return (pct ar)', 'St. Dev. (pct ar)', 'Sharpe Ratio', 'Sortino Ratio',
                  'Max 21-day draw', 'Max 6-month draw', 'Traded Months']
-        dfw = dfx.pivot(index='real_date', columns=groups, values='value')
 
-        bms = [bms] if isinstance(bms, str) else bms
+        # If benchmark tickers have been passed into the Class and if the tickers are
+        # present in self.dfd.
         list_for_dfbm = []
-        if isinstance(bms, List):
-            for bm in bms:
-                cid, xcat = bm.split("_", 1)
-                dfa = self.df[(self.df['cid'] == cid) & (self.df['xcat'] == xcat)]
-                if dfa.shape[0] == 0:
-                    warnings.warn(f"{bm} has no observations in the dataframe")
-                else:
-                    stats.insert(len(stats) - 1, f"{bm} correl")
-                    dfa['xcat'] = dfa['cid'] + "_" + dfa['xcat']
-                    dfaw = dfa.pivot(index='real_date', columns='xcat', values='value')
-                    list_for_dfbm.append(dfaw)
-            dfbm = pd.concat(list_for_dfbm)
+
+        if self.bm_bool and bool(self._bm_dict):
+
+            list_for_dfbm = list(self._bm_dict.keys())
+            for bm in list_for_dfbm:
+                stats.insert(len(stats) - 1, f"{bm} correl")
 
         dfw = dfx.pivot(index='real_date', columns=groups, values='value')
         df = pd.DataFrame(columns=dfw.columns, index=stats)
@@ -633,9 +678,13 @@ class NaivePnL:
         df.iloc[4, :] = dfw.rolling(21).sum().min()
         df.iloc[5, :] = dfw.rolling(6*21).sum().min()
         if len(list_for_dfbm) > 0:
-            for i, bm in enumerate(dfbm.columns):
-                df.iloc[6 + i, :] = dfw.corrwith(dfbm.iloc[:, i], axis=0,
-                                                 method='pearson')
+            bm_df = pd.concat(list(self._bm_dict.values()),
+                              axis=1)
+            for i, bm in enumerate(list_for_dfbm):
+                correlation = dfw.corrwith(bm_df.iloc[:, i], axis=0,
+                                           method='pearson')
+                df.iloc[6 + i, :] = correlation
+
         df.iloc[6 + len(list_for_dfbm), :] = dfw.resample('M').sum().count()
 
         return df
@@ -690,91 +739,25 @@ if __name__ == "__main__":
     black = {'AUD': ['2006-01-01', '2015-12-31'], 'GBP': ['2022-01-01', '2100-01-01']}
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    # Initiate instance.
-
-    pnl = NaivePnL(dfd, ret='EQXR', sigs=['CRY', 'GROWTH', 'INFL'],
-                   cids=cids, start='2000-01-01', blacklist=black,
-                   bms=['USD_DUXR', 'EUR_DUXR'])
-
-    # Make and plot PnLs to check correct labelling.
-
-    pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
-                 vol_scale=5, rebal_slip=1, pnl_name='PNL_CRY_PZN05', min_obs=250,
-                 thresh=2)
-    pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
-                 vol_scale=10, rebal_slip=1,
-                 pnl_name='PNL_CRY_PZN10', min_obs=250, thresh=2)
-    pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
-                 vol_scale=20, rebal_slip=1,
-                 pnl_name='PNL_CRY_PZN20', min_obs=250, thresh=2)
-    print(pnl.df)
-
-    pnl.make_long_pnl(vol_scale=20, label='Long_Only_EQXR20')
-
-    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN20', 'Long_Only_EQXR20'],
-                  pnl_cids=['ALL'], start='2000-01-01',
-                  title="Custom Title")
-
-    df_eval = pnl.evaluate_pnls(
-        pnl_cats=['PNL_CRY_PZN20', 'Long_Only_EQXR20'],
-        pnl_cids=["ALL"], bms=["USD_EQXR", "EUR_DUXR"])
-
-    # Testing on multiple volatility scales.
-    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN05', 'PNL_CRY_PZN10',
-                            'PNL_CRY_PZN20', 'Long_Only_EQXR20'],
-                  pnl_cids=['ALL'], start='2000-01-01')
-
-    pnl.make_long_pnl(vol_scale=10, label='Long_Only_EQXR10')
-
-    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN10', 'Long_Only_EQXR10'],
-                  pnl_cids=['ALL'], start='2000-01-01',
-                  title="Custom Title")
-
-    # Test on the option if the label is omitted from long-only DataFrame.
-    pnl = NaivePnL(dfd, ret='EQXR', sigs=['CRY', 'GROWTH', 'INFL'],
-                   cids=cids, start='2000-01-01', blacklist=black)
-
-    pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
-                 vol_scale=5, rebal_slip=1, pnl_name='PNL_CRY_PZN05', min_obs=250,
-                 thresh=2)
-    pnl.make_long_pnl(vol_scale=10)
-    pnl.plot_pnls(pnl_cats=['PNL_CRY_PZN05', 'EQXR'],
-                  pnl_cids=['ALL'], start='2000-01-01',
-                  title="Long-Only Comparison")
-
     # Instantiate a new instance to test the long-only functionality.
     pnl = NaivePnL(dfd, ret='EQXR', sigs=['CRY', 'GROWTH', 'INFL'],
-                   cids=cids, start='2000-01-01', blacklist=black)
-
-    pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
-                 vol_scale=10, rebal_slip=1, pnl_name='PNL_CRY_PZN',
-                 min_obs=250, thresh=1.5)
+                   cids=cids, start='2000-01-01', blacklist=black,
+                   bms=["EUR_EQXR", "USD_EQXR"])
 
     pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
                  vol_scale=5, rebal_slip=1, pnl_name='PNL_CRY_PZN05',
                  min_obs=250, thresh=2)
 
+    pnl.make_pnl(sig='CRY', sig_op='zn_score_pan', rebal_freq='monthly',
+                 vol_scale=5, rebal_slip=1, pnl_name='PNL_CRY_PZN',
+                 min_obs=250, thresh=2.5)
+
     pnl.make_long_pnl(vol_scale=10, label="Long")
 
     # Return evaluation and PnL DataFrames.
-    benchmark_correl = ['USD_EQXR', 'EUR_EQXR', 'AUD_EQXR']
     cids_subset = ['ALL']
     # Test the inclusion of a single benchmark correlation.
     df_eval = pnl.evaluate_pnls(
         pnl_cats=['PNL_CRY_PZN', 'PNL_CRY_PZN05', "Long"],
-        pnl_cids=cids_subset, bms=["USD_EQXR", "EUR_EQXR"])
-    print(df_eval)
-
-    df_pnls = pnl.pnl_df()
-    df_pnls.head()
-
-    # Testing signal display.
-    pnl.signal_heatmap(pnl_name='PNL_CRY_PZN', pnl_cids=['AUD', 'CAD', 'GBP'],
-                       freq='m', title="Average signal values")
-
-    # Testing signal strength display method.
-    # Directional.
-    pnl.agg_signal_bars(pnl_name='PNL_CRY_PZN', metric='direction', freq='m')
-    # Magnitude.
-    pnl.agg_signal_bars(pnl_name='PNL_CRY_PZN', metric='strength', freq='q',
-                        title='Absolute Value', y_label="Time Horizon")
+        pnl_cids=cids_subset
+    )
