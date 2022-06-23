@@ -10,7 +10,7 @@ import datetime as dt
 class VintageData:
     """
     Creates standardized dataframe of single-ticker vintages. This class creates
-    standardized grade 1 and grade 2 vintage data
+    standardized grade 1 and grade 2 vintage data.
 
     :param <str> ticker: ticker name
     :param <str> cutoff: last possible release date. The format must be '%Y-%m-%d'.
