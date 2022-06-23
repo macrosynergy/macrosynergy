@@ -14,8 +14,9 @@ from macrosynergy.management.shape_dfs import categories_df
 class SignalReturnRelations:
 
     """
-    Class for analyzing and visualizing relations between a signal and the subsequent
-    returns.
+    Class for analyzing and visualizing relations between a signal and a return series.
+    The performance measures of the proposed relationship will be completed over a
+    cross-sectional and yearly snapshot.
 
     :param <pd.Dataframe> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcat', 'real_date' and 'value.
@@ -59,8 +60,10 @@ class SignalReturnRelations:
                                 start=start, end=end, freq=freq, blacklist=blacklist,
                                 lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'mean'])
 
+        # Testing for inverse relationship between the signal and return: statistics will
+        # work in the same capacity.
         if sig_neg:
-            self.df.iloc[:, 1] *= -1
+            self.df.loc[:, sig] *= -1
             self.sig = sig + "_NEG"
             self.df.rename(columns={sig: self.sig}, inplace=True)
         else:
@@ -98,7 +101,9 @@ class SignalReturnRelations:
     def panel_relations(self, cs_type: str = 'cids'):
         """
         Creates a DataFrame with information on the signal-return relation
-        across cids or years and the panel.
+        across cross-sections or years and the panel.
+
+        :param <str> cs_type: the segmentation type.
 
         """
 
@@ -130,7 +135,6 @@ class SignalReturnRelations:
             # position in the asset, if -1 short. Therefore, compute the number of times
             # a long signal equates to a positive return.
             df_out.loc[cs, 'accuracy'] = skm.accuracy_score(sig, ret)
-            # Adjusts for imbalanced datasets.
             df_out.loc[cs, 'bal_accuracy'] = skm.balanced_accuracy_score(sig, ret)
             # Across the segment, the ratio of positive signals.
             df_out.loc[cs, 'pos_sigr'] = np.mean(sig == 1)
@@ -141,21 +145,40 @@ class SignalReturnRelations:
             df_out.loc[cs, 'neg_prec'] = skm.precision_score(ret, sig, pos_label=-1)
 
             ret_vals, sig_vals = df_cs[self.ret], df_cs[self.sig]
+            # Kendall Tau is non-parametric, and both the return & signal series will be
+            # used as quasi-ranking data.
+            # Kendall Tau offers value when used in conjunction with Pearson's
+            # correlation coefficient which is a linear measure: is the relationship
+            # uniform across the input space ?
+            # For instance, if the Pearson correlation coefficient is close to zero but
+            # the Kendall Tau is close to one, it can be deduced that there is a
+            # relationship between the two variables but a non-linear relationship.
+            # Alternatively, if the Pearson coefficient is close to one but the Kendall
+            # Tau is closer to zero, it suggests that the sample is exposed to a small
+            # number of sharp outliers.
             df_out.loc[cs, ['kendall', 'kendall_pval']] = stats.kendalltau(ret_vals,
                                                                            sig_vals)
             df_out.loc[cs, ['pearson', 'pearson_pval']] = stats.pearsonr(ret_vals,
                                                                          sig_vals)
 
+        # Mean across the segmentation categories.
         df_out.loc['Mean', :] = df_out.loc[css, :].mean()
 
         above50s = statms[0:6]
         df_out.loc['PosRatio', above50s] = (df_out.loc[css, above50s] > 0.5).mean()
-        above0s = [statms[i] for i in [6, 8]]
-        df_out.loc['PosRatio', above0s] = (df_out.loc[css, above0s] > 0).mean()
-        below50s = [statms[i] for i in [7, 9]]
-        pos_pvals = np.mean(np.array(df_out.loc[css, below50s] < 0.5)
-                            * np.array(df_out.loc[css, above0s] > 0), axis=0)
-        df_out.loc['PosRatio', below50s] = pos_pvals  # pos corrs with error prob < 50%
+
+        above0s = statms[6::2]
+        # Greater than zero suggests there is a positive linear or non-linear
+        # relationship between the signal & return series.
+        # Compute the average across the panel or time-series.
+        pos_corr_coefs = df_out.loc[css, above0s] > 0
+        df_out.loc['PosRatio', above0s] = pos_corr_coefs.mean()
+
+        below50s = statms[7::2]
+        pvals_bool = df_out.loc[css, below50s] < 0.5
+        pos_pvals = np.mean(np.array(pvals_bool) * np.array(pos_corr_coefs), axis=0)
+        # Positive correlation with error prob < 50%.
+        df_out.loc['PosRatio', below50s] = pos_pvals
         return df_out.astype('float')
 
     def cross_section_table(self):
@@ -173,25 +196,25 @@ class SignalReturnRelations:
         """
         return self.df_ys.round(decimals=3)
 
-    def accuracy_bars(self, type: str = 'cross_section', title: str = None,
+    def accuracy_bars(self, cs_type: str = 'cross_section', title: str = None,
                       size: Tuple[float] = None,
                       legend_pos: str = 'best'):
         """
-        Bars of overall and balanced accuracy
+        Bars of overall and balanced accuracy.
 
-        :param <str> type: type of segment over which bars are drawn.
-            Must be 'cross_section' (default) or 'years'
-        :param <str> title: chart header. Default will be applied if none is chosen.
-        :param <Tuple[float]> size: 2-tuple of width and height of plot.
-            Default will be applied if none is chosen.
+        :param <str> cs_type: type of segment over which bars are drawn. Either
+            'cross_section' (default) or 'years'.
+        :param <str> title: chart header - default will be applied if none is chosen.
+        :param <Tuple[float]> size: 2-tuple of width and height of plot - default will be
+            applied if none is chosen.
         :param <str> legend_pos: position of legend box. Default is 'best'.
-            See matplotlib.pyplot.legend.
+            See the documentation of matplotlib.pyplot.legend.
 
         """
 
-        assert type in ['cross_section', 'years']
+        assert cs_type in ['cross_section', 'years']
 
-        df_xs = self.df_cs if type == 'cross_section' else self.df_ys
+        df_xs = self.df_cs if cs_type == 'cross_section' else self.df_ys
         dfx = df_xs[~df_xs.index.isin(['PosRatio'])]
 
         if title is None:
@@ -209,21 +232,29 @@ class SignalReturnRelations:
         plt.bar(x_indexes + w / 2, dfx['bal_accuracy'], label='Balanced Accuracy',
                 width=w, color='steelblue')
         plt.xticks(ticks=x_indexes, labels=dfx.index,
-                   rotation=0)  # customize x ticks/labels
+                   rotation=0)
+
         plt.axhline(y=0.5, color='black', linestyle='-', linewidth=0.5)
-        plt.ylim(np.round(np.max(dfx.loc[:, ['accuracy', 'bal_accuracy']].
-                                 min().min()-0.03, 0), 2))
+
+        accuracy_df = dfx.loc[:, ['accuracy', 'bal_accuracy']]
+        y_axis = lambda min_correl: min_correl > 0.45
+        min_value = accuracy_df.min().min()
+        y_input = 0.45 if y_axis(min_value) else min_value
+        # Ensures any accuracy statistics greater than 0.5 are more pronounced given the
+        # adjusted scale.
+        plt.ylim(round(y_input, 2))
+
         plt.title(title)
         plt.legend(loc=legend_pos)
         plt.show()
 
-    def correlation_bars(self, type: str = 'cross_section', title: str = None,
+    def correlation_bars(self, cs_type: str = 'cross_section', title: str = None,
                          size: Tuple[float] = None,
                          legend_pos: str = 'best'):
         """
         Correlation coefficients and significance.
 
-        :param <str> type: type of segment over which bars are drawn. Must be
+        :param <str> cs_type: type of segment over which bars are drawn. Must be
             'cross_section' (default) or 'years'
         :param <str> title: chart header. Default will be applied if none is chosen.
         :param <Tuple[float]> size: 2-tuple of width and height of plot.
@@ -233,7 +264,7 @@ class SignalReturnRelations:
 
         """
 
-        df_xs = self.df_cs if type == 'cross_section' else self.df_ys
+        df_xs = self.df_cs if cs_type == 'cross_section' else self.df_ys
         dfx = df_xs[~df_xs.index.isin(['PosRatio', 'Mean'])]
 
         pprobs = np.array([(1 - pv) * (np.sign(cc) + 1) / 2
@@ -246,14 +277,14 @@ class SignalReturnRelations:
         if title is None:
             title = f'Positive correlation probability of {self.ret} ' \
                     f'and lagged {self.sig} ' \
-                    f'at {self.dic_freq[self.freq]} frequency'
+                    f'at {self.dic_freq[self.freq]} frequency.'
         if size is None:
             size = (np.max([dfx.shape[0]/2, 8]), 6)
 
         plt.style.use('seaborn')
         plt.figure(figsize=size)
-        x_indexes = np.arange(len(dfx.index))  # generic x index
-        w = 0.4  # offset parameter, related to width of bar
+        x_indexes = np.arange(len(dfx.index))
+        w = 0.4
         plt.bar(x_indexes - w / 2, pprobs, label='Pearson',
                 width=w, color='lightblue')
         plt.bar(x_indexes + w / 2, kprobs, label='Kendall',
@@ -353,10 +384,10 @@ if __name__ == "__main__":
                                 ret='XR', freq='D', blacklist=black)
     srn.summary_table()
 
-    srr.correlation_bars(type='cross_section')
-    srn.correlation_bars(type='cross_section')
+    srr.correlation_bars(cs_type='cross_section')
+    srn.correlation_bars(cs_type='cross_section')
 
-    srr.accuracy_bars(type='cross_section')
+    srr.accuracy_bars(cs_type='cross_section')
     df_cs_stats = srr.cross_section_table()
     df_ys_stats = srr.yearly_table()
     print(df_cs_stats)
