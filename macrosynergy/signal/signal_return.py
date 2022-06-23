@@ -99,7 +99,7 @@ class SignalReturnRelations:
 
             df_sgs = np.sign(df_cs.loc[:, [self.ret, self.sig]])
             df_sgs = df_sgs[~((df_sgs.iloc[:, 0] == 0) | (df_sgs.iloc[:, 1] == 0))]
-
+            
             sig = df_sgs[self.sig]
             ret = df_sgs[self.ret]
             df_out.loc[cs, 'accuracy'] = skm.accuracy_score(sig, ret)
@@ -180,8 +180,15 @@ class SignalReturnRelations:
         plt.xticks(ticks=x_indexes, labels=dfx.index,
                    rotation=0)  # customize x ticks/labels
         plt.axhline(y=0.5, color='black', linestyle='-', linewidth=0.5)
-        plt.ylim(np.round(np.max(dfx.loc[:, ['accuracy', 'bal_accuracy']].
-                                 min().min()-0.03, 0), 2))
+
+        accuracy_df = dfx.loc[:, ['accuracy', 'bal_accuracy']]
+        y_axis = lambda min_correl: min_correl > 0.45
+        min_value = accuracy_df.min().min()
+        y_input = 0.45 if y_axis(min_value) else min_value
+        # Ensures any accuracy statistics greater than 0.5 are more pronounced given the
+        # adjusted scale.
+        plt.ylim(round(y_input, 2))
+
         plt.title(title)
         plt.legend(loc=legend_pos)
         plt.show()
