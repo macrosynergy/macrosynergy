@@ -1,7 +1,7 @@
 
 from tests.simulate import make_qdf
 from macrosynergy.pnl.naive_pnl import NaivePnL
-
+from macrosynergy.management.shape_dfs import reduce_df
 import unittest
 import numpy as np
 import pandas as pd
@@ -119,6 +119,11 @@ class TestAll(unittest.TestCase):
         # functionality incorrectly populates unrealised dates.
         sig = 'GROWTH'
         dfx = df[df['xcat'].isin([ret, sig])]
+
+        # Adjust for any blacklist periods.
+        dfx = reduce_df(df=dfx, xcats=[ret, sig], cids=self.cids,
+                        blacklist=self.blacklist, out_all=False)
+
         # Will return a DataFrame with the transformed signal.
         dfw = pnl.make_signal(dfx=dfx, sig=sig, sig_op='zn_score_pan',
                               min_obs=252, iis=True, sequential=True,
@@ -222,9 +227,11 @@ class TestAll(unittest.TestCase):
             self.assertTrue(column.first_valid_index() ==
                             pd.Timestamp(expected_start[c]) + pd.DateOffset(1))
 
-        # Choose a random date to confirm the logic of computing the PnL. Multiply each
-        # cross-section's signal by their respective return.
-        random_date = "2015-01-19"
+        # Choose a quasi-random sample of dates to confirm the logic of computing the
+        # PnL. Multiply each cross-section's signal by their respective return.
+        # A "random" sample of dates (will be inclusive of dates where some
+        # cross-sections have NaN values and blacklists have been applied.).
+        fixed_dates = ["2010-01-13", "2012-01-26", "2015-01-20", "2019-01-08"]
 
         # Shift the signal by a single date. Replicating the logic in make_pnl().
         dfw['psig'] = dfw['psig'].groupby(level=0).shift(1)
@@ -235,23 +242,34 @@ class TestAll(unittest.TestCase):
 
         dfw_sig = dfw.pivot(index='real_date', columns='cid',
                             values='sig')
-        signals = dfw_sig.loc[random_date, :]
-        signal_dict = dict(signals)
-        df = self.dfd
 
-        returns = df[(df['xcat'] == ret)]
-        returns_dfw = returns.pivot(index='real_date', columns='cid',
-                                    values='value')
-        return_dict = dict(returns_dfw.loc[random_date, :])
+        # Confirm the logic on a small but representative sample of dates.
+        for date in fixed_dates:
 
-        # Aggregate the individual cross-section's PnL to calculate the PnL across the
-        # panel.
-        pnl_return_date = 0
-        for cid, value in signal_dict.items():
-            pnl_return_date += return_dict[cid] * value
+            signals = dfw_sig.loc[date, :]
+            signal_dict = dict(signals)
+            df = self.dfd
 
-        test_data = pnl_dfw['ALL'].loc[random_date]
-        self.assertTrue(round(float(test_data), 4) == round(pnl_return_date, 4))
+            returns = df[(df['xcat'] == ret)]
+            returns_dfw = returns.pivot(index='real_date', columns='cid',
+                                        values='value')
+
+            return_dict = dict(returns_dfw.loc[date, :])
+
+            # Aggregate the individual cross-section's PnL to calculate the PnL across
+            # the panel (weighted according to the signal).
+            pnl_return_date = 0
+            condition = lambda a, b: str(a) == 'nan' or str(b) == 'nan'
+            for cid, value in signal_dict.items():
+                # Mitigates for NaN values. Exclude from calculation - only sum on
+                # realised dates.
+                if condition(return_dict[cid], value):
+                    pass
+                else:
+                    pnl_return_date += return_dict[cid] * value
+
+            test_data = pnl_dfw['ALL'].loc[date]
+            self.assertTrue(round(float(test_data), 4) == round(pnl_return_date, 4))
 
     def test_make_long_pnl(self):
 
