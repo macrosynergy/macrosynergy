@@ -213,7 +213,7 @@ class NaivePnL:
 
     def make_pnl(self, sig: str, sig_op: str = 'zn_score_pan', pnl_name: str = None,
                  rebal_freq: str = 'daily', rebal_slip = 0, vol_scale: float = None,
-                 min_obs: int = 252, iis: bool = True, sequential: bool = True,
+                 min_obs: int = 261, iis: bool = True, sequential: bool = True,
                  neutral: str = 'zero', thresh: float = None):
 
         """
@@ -440,7 +440,6 @@ class NaivePnL:
 
         if no_cids == 1:
             dfx['cum_value'] = dfx.groupby('xcat').cumsum()
-            print(dfx)
 
             ax = sns.lineplot(data=dfx, x='real_date', y='cum_value',
                               hue='xcat', hue_order=pnl_cats,
