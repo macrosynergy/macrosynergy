@@ -129,10 +129,7 @@ class SignalReturnRelations:
             sig = df_sgs[self.sig]
             ret = df_sgs[self.ret]
             # Accuracy classification score. The second array-like parameter will be the
-            # predicted labels. The lagged signal & returns have been reduced to [-1, 1]
-            # which are interpreted as indicator random variables: if one, take a
-            # position in the asset, if -1 short. Therefore, compute the number of times
-            # a long signal equates to a positive return.
+            # predicted labels.
             df_out.loc[cs, 'accuracy'] = skm.accuracy_score(sig, ret)
             df_out.loc[cs, 'bal_accuracy'] = skm.balanced_accuracy_score(sig, ret)
             # Across the segment, the ratio of positive signals.
@@ -146,11 +143,8 @@ class SignalReturnRelations:
             df_out.loc[cs, 'neg_prec'] = skm.precision_score(ret, sig, pos_label=-1)
 
             ret_vals, sig_vals = df_cs[self.ret], df_cs[self.sig]
-            # Kendall Tau is non-parametric, and both the return & signal series will be
-            # used as quasi-ranking data.
             # Kendall Tau offers value when used in conjunction with Pearson's
-            # correlation coefficient which is a linear measure: is the relationship
-            # uniform across the input space ?
+            # correlation coefficient which is a linear measure.
             # For instance, if the Pearson correlation coefficient is close to zero but
             # the Kendall Tau is close to one, it can be deduced that there is a
             # relationship between the two variables but a non-linear relationship.
