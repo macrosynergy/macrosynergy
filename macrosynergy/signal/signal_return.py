@@ -51,9 +51,7 @@ class SignalReturnRelations:
                         'pos_prec', 'neg_prec', 'pearson', 'pearson_pval',
                         'kendall', 'kendall_pval']
 
-        # The signal will invariably be used as the explanatory variable and the return
-        # as the dependent variable. The method categories_df() expects to receive the
-        # explanatory variable first.
+        # The method categories_df() expects to receive the explanatory variable first.
         # Lag the signal by a single day: understand the relationship between the
         # explanatory variable at time t and the dependent variable at time (t + 1).
         self.df = categories_df(df, xcats=[sig, ret], cids=cids, val='value',
@@ -115,6 +113,7 @@ class SignalReturnRelations:
         else:
             df['year'] = np.array(df.reset_index(level=1)['real_date'].dt.year)
             css = [str(y) for y in list(set(df['year']))]
+            css = sorted(css)
 
         statms = self.metrics
         df_out = pd.DataFrame(index=['Panel', 'Mean', 'PosRatio'] + css, columns=statms)
