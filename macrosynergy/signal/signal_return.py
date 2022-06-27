@@ -193,8 +193,8 @@ class SignalReturnRelations:
         """
         return self.df_ys.round(decimals=3)
 
-    @classmethod
-    def yaxis_lim(cls, accuracy_df: pd.DataFrame):
+    @staticmethod
+    def yaxis_lim(accuracy_df: pd.DataFrame):
         """
         Determines the range the y-axis is defined over. The returned range will always
         be below 0.5 to offer greater relative insight.
@@ -229,7 +229,9 @@ class SignalReturnRelations:
         assert cs_type in ['cross_section', 'years']
 
         df_xs = self.df_cs if cs_type == 'cross_section' else self.df_ys
-        # 'PosRatio' represents average boolean across the panel.
+        # 'PosRatio' represents average boolean across the panel. It is not a statistic
+        # based directly on the signal return data. Therefore, exclude from the accuracy
+        # bar chart.
         dfx = df_xs[~df_xs.index.isin(['PosRatio'])]
 
         if title is None:
