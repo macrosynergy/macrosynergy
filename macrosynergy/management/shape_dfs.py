@@ -1,16 +1,29 @@
+
 import numpy as np
 import pandas as pd
 from typing import List, Union, Tuple
 import random
-
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
+def difference(list_1: List[str], list_2: List[str]):
+    """
+    Helper method used to display possible missing categories or cross-sections.
+
+    :param <List[str]> list_1: first list.
+    :param <List[str]> list_2: second list.
+
+    """
+
+    missing = sorted(set(list_1) - set(list_2))
+    if len(missing) > 0:
+        list_1 = [elem for elem in list_1 if elem not in missing]
+    return list_1
 
 def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
               start: str = None, end: str = None, blacklist: dict = None,
               out_all: bool = False, intersect: bool = False):
     """
-    Filter dataframe by xcats and cids and notify about missing xcats and cids.
+    Filter DataFrame by xcats and cids and notify about missing xcats and cids.
 
     :param <pd.Dataframe> df: standardized dataframe with the necessary columns:
         'cid', 'xcats', 'real_date'.
@@ -29,8 +42,8 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
     :param <bool> intersect: if True only retains cids that are available for all xcats.
         Default is False.
 
-    :return <pd.Dataframe>: reduced dataframe that also removes duplicates or
-        (for out_all True) dataframe and available and selected xcats and cids.
+    :return <pd.Dataframe>: reduced DataFrame that also removes duplicates or
+        (for out_all True) DataFrame and available and selected xcats and cids.
     """
 
     dfx = df[df['real_date'] >= pd.to_datetime(start)] if start is not None else df
@@ -47,37 +60,30 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
     if xcats is None:
         xcats = sorted(xcats_in_df)
     else:
-        missing = sorted(set(xcats) - set(xcats_in_df))
-        if len(missing) > 0:
-            print(f"Missing categories: {missing}.")
-            xcats.remove(missing)
+        xcats = difference(xcats, xcats_in_df)
 
     dfx = dfx[dfx['xcat'].isin(xcats)]
 
     if intersect:
-        df_uns = dfx.groupby('xcat')['cid'].unique()
-        cids_in_df = list(df_uns[0])
-        for i in range(1, len(df_uns)):
-            cids_in_df = [cid for cid in df_uns[i] if cid in cids_in_df]
+        df_uns = dict(dfx.groupby('xcat')['cid'].unique())
+        df_uns = {k: set(v) for k, v in df_uns.items()}
+        cids_in_df = list(set.intersection(*list(df_uns.values())))
     else:
         cids_in_df = dfx['cid'].unique()
 
     if cids is None:
         cids = sorted(cids_in_df)
     else:
-        if not isinstance(cids, list):
-           cids = [cids]
-        missing = sorted(set(cids) - set(cids_in_df))
-        if len(missing) > 0:
-            print(f'Missing cross sections: {missing}')
-        cids = sorted(list(set(cids).intersection(set(cids_in_df))))
+        cids = [cids] if isinstance(cids, str) else cids
+        cids = difference(cids, cids_in_df)
+
+        cids = set(cids).intersection(cids_in_df)
         dfx = dfx[dfx['cid'].isin(cids)]
 
     if out_all:
-        return dfx.drop_duplicates(), xcats, cids
+        return dfx.drop_duplicates(), xcats, sorted(list(cids))
     else:
         return dfx.drop_duplicates()
-
 
 def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str = None,
                         end: str = None, blacklist: dict = None):
@@ -85,13 +91,13 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
     Filter dataframe by xcats and cids and notify about missing xcats and cids
 
     :param <pd.Dataframe> df: standardized dataframe with the following columns:
-                              'cid', 'xcats', 'real_date'.
+        'cid', 'xcats', 'real_date'.
     :param <List[str]> ticks: tickers (cross sections + base categories)
     :param <str> start: string in ISO 8601 representing earliest date. Default is None.
     :param <str> end: string ISO 8601 representing the latest date. Default is None.
     :param <dict> blacklist: cross sections with date ranges that should be excluded from
-                             the dataframe. If one cross section has several blacklist
-                             periods append numbers to the cross section code.
+        the dataframe. If one cross section has several blacklist periods append numbers
+        to the cross section code.
 
     :return <pd.Dataframe>: reduced dataframe that also removes duplicates
     """
@@ -100,7 +106,8 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
     dfx = dfx[dfx["real_date"] >= pd.to_datetime(start)] if start is not None else dfx
     dfx = dfx[dfx["real_date"] <= pd.to_datetime(end)] if end is not None else dfx
 
-    if blacklist is not None:  # blacklisting by cross-section
+    # Blacklisting by cross-section.
+    if blacklist is not None:
         for key, value in blacklist.items():
             filt1 = dfx["cid"] == key[:3]
             filt2 = dfx["real_date"] >= pd.to_datetime(value[0])
@@ -112,15 +119,32 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
     if ticks is None:
         ticks = sorted(ticks_in_df)
     else:
-        missing = sorted(set(ticks) - set(ticks_in_df))
-        if len(missing) > 0:
-            print(f'Missing tickers: {missing}')
-            ticks.remove(missing)
+        ticks = difference(ticks, ticks_in_df)
 
     dfx = dfx[dfx["ticker"].isin(ticks)]
 
     return dfx.drop_duplicates()
 
+def aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
+    """
+    Helper method to down-sample each category in the DataFrame by aggregating over the
+    intermediary dates according to a prescribed method.
+
+    :param <List[str]> dfx: standardised DataFrame defined exclusively on a single
+        category.
+    :param <List[str]> xcat_agg: associated aggregation method for the respective
+        category.
+
+    """
+
+    dfx = dfx.groupby(['xcat', 'cid', 'custom_date'])
+    dfx = dfx.agg(xcat_agg).reset_index()
+
+    if 'real_date' in dfx.columns:
+        dfx = dfx.drop(['real_date'], axis=1)
+    dfx = dfx.rename(columns={"custom_date": "real_date"})
+
+    return dfx
 
 def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                   val: str = 'value', start: str = None, end: str = None,
@@ -233,15 +257,10 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         df['real_date'] = pd.to_datetime(df['real_date'], errors='coerce')
         df['custom_date'] = df['real_date'].dt.year.apply(translate_)
 
-        for i in range(2):
-            dfx = df[df['xcat'] == xcats[i]]
-            dfx = dfx.groupby(['xcat', 'cid', 'custom_date'])
-            dfx = dfx.agg(xcat_aggs[i]).reset_index()
-
-            if 'real_date' in dfx.columns:
-                dfx = dfx.drop(['real_date'], axis=1)
-            dfx = dfx.rename(columns={"custom_date": "real_date"})
-            df_output.append(dfx[col_names])
+        dfx_list = [df[df['xcat'] == xcats[0]],
+                    df[df['xcat'] == xcats[1]]]
+        df_agg = list(map(aggregation_helper, dfx_list, xcat_aggs))
+        df_output.extend([d[col_names] for d in df_agg])
 
     dfc = pd.concat(df_output)
     # If either of the two variables, explanatory or dependent variable, contain a NaN

@@ -125,7 +125,7 @@ class SignalReturnRelations:
             # Returns an element - wise indication of the sign of a number.
             df_sgs = np.sign(df_cs.loc[:, [self.ret, self.sig]])
             df_sgs = df_sgs[~((df_sgs.iloc[:, 0] == 0) | (df_sgs.iloc[:, 1] == 0))]
-
+            
             sig = df_sgs[self.sig]
             ret = df_sgs[self.ret]
             # Accuracy classification score. The second array-like parameter will be the
@@ -257,6 +257,7 @@ class SignalReturnRelations:
                    rotation=0)
 
         plt.axhline(y=0.5, color='black', linestyle='-', linewidth=0.5)
+
         y_input = self.yaxis_lim(accuracy_df=dfx.loc[:,
                                              ['accuracy', 'bal_accuracy']])
         plt.ylim(round(y_input, 2))
