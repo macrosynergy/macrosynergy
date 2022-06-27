@@ -154,7 +154,7 @@ class TestAll(unittest.TestCase):
         y_pred = aud_df[signal]
         y_true = aud_df[return_]
         accuracy = accuracy_score(y_true, y_pred)
-        self.assertTrue(df_cs_aud_acc - accuracy < 0.00001)
+        self.assertTrue(abs(df_cs_aud_acc - accuracy) < 0.00001)
 
         # Aim to test Kendall Tau correlation statistic via stats.rankdata() - Kendall
         # Tau is implicitly ranking the data but using the original values.
@@ -168,7 +168,42 @@ class TestAll(unittest.TestCase):
         y = stats.rankdata(usd_df[return_]).astype(int)
 
         kendall_tau, p_value = stats.kendalltau(x, y)
-        self.assertTrue(df_cs_usd_ken - kendall_tau < 0.00001)
+        self.assertTrue(abs(df_cs_usd_ken - kendall_tau) < 0.00001)
+
+        # Lastly, confirm that 'Mean' row is computed using exclusively the respective
+        # segmentation types. Test on yearly data and balanced accuracy.
+        df_ys = srr.panel_relations(cs_type='years')
+        df_ys_mean = df_ys.loc['Mean', 'bal_accuracy']
+
+        dfx = df_ys[~df_ys.index.isin(['Panel', 'Mean', 'PosRatio'])]
+        dfx_balance = dfx['bal_accuracy']
+        condition = np.abs(np.mean(dfx_balance) - df_ys_mean)
+        self.assertTrue(condition < 0.00001)
+
+    def test_yaxis_lim(self):
+
+        self.dataframe_generator()
+
+        signal = 'CRY'
+        return_ = 'XR'
+        srr = SignalReturnRelations(self.dfd, sig=signal, ret=return_,
+                                    freq='D', blacklist=self.blacklist)
+        df_cs = srr.panel_relations(cs_type='cids')
+        dfx = df_cs[~df_cs.index.isin(['PosRatio'])]
+        dfx_acc = dfx.loc[:, ['accuracy', 'bal_accuracy']]
+        arr_acc = dfx_acc.to_numpy()
+        arr_acc = arr_acc.flatten()
+
+        # Flatten the array - only concerned with the minimum across both dimensions. If
+        # the minimum value is less than 0.45, use the minimum value to initiate the
+        # range. Test the above logic.
+        ylim = srr.yaxis_lim(accuracy_df=dfx_acc)
+
+        min_value = min(arr_acc)
+        if min_value < 0.45:
+            self.assertTrue(ylim == min_value)
+        else:
+            self.assertTrue(ylim == 0.45)
 
 
 if __name__ == "__main__":
