@@ -321,28 +321,35 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     return df_hedge[cols]
 
 
-def hedge_ratio_display(df_hedge: pd.DataFrame, subplots: bool = False,
-                        hr_name: str = "H"):
+def hedge_display(df_hedge: pd.DataFrame, subplots: bool = False,
+                  hedge_symbol: str = "HR", title: str = "Hedging Ratios."):
     """
-    Method used to visualise the hedging ratios across the panel: assumes a single
-    category is used to hedge the primary asset.
+    Method used to visualise either the hedging ratios or hedged returns across the
+    panel. To distinguish between the two series types in the DataFrame, pass in a
+    specific symbol. For instance, the symbol appended to the category name to
+    differentiate the hedge ratio calculations is determined by the parameter
+    "ratio_name". The method will display one of the two series types.
 
     :param <pd.DataFrame> df_hedge: dataframe with hedge ratios.
     :param <bool> subplots: matplotlib parameter to determine if each hedging series is
         displayed on separate subplots.
-    :param <str> hr_name: label used to distinguish the hedged returns in the DataFrame.
-        Comparable to hedge_ratio() method, the default is "H".
+    :param <str> hedge_symbol: label used to distinguish either the hedged ratios or the
+        hedged returns in the DataFrame. The symbol used for the label must match either
+        of the two label fields in hedge_ratio(): "ratio_name" & "hr_name".
+        The default is "HR" - hedge ratios.
+    :param <str> title: title of plot. Default is "Hedging Ratios" given the default plot
+        is the hedge ratios.
 
     """
 
-    condition = lambda c: c.split('_')[-1] != hr_name
+    condition = lambda c: c.split('_')[-1] == hedge_symbol
 
     apply = list(map(condition, df_hedge['xcat']))
     df_hedge = df_hedge[apply]
 
     dfw_ratios = df_hedge.pivot(index='real_date', columns='cid', values='value')
 
-    dfw_ratios.plot(subplots=subplots, title="Hedging Ratios.",
+    dfw_ratios.plot(subplots=subplots, title=title,
                     legend=True)
     plt.xlabel('real_date, years')
     plt.show()
@@ -386,7 +393,8 @@ if __name__ == "__main__":
                            refreq='w', min_obs=24, hedged_returns=True)
 
     print(df_hedge)
-    hedge_ratio_display(df_hedge=df_hedge, subplots=False)
+    # Plot the Hedge Ratios.
+    hedge_display(df_hedge=df_hedge, subplots=False, hedge_symbol='HR')
 
     # Long position in S&P500 or the Nasdaq, and subsequently using US FX to hedge the
     # long position.
@@ -399,3 +407,5 @@ if __name__ == "__main__":
                                  blacklist=black, meth='ols', oos=True,
                                  refreq='m', min_obs=24)
     print(xcat_hedge_two)
+    # Plot the Hedge Returns.
+    hedge_display(df_hedge=xcat_hedge_two, subplots=False, hedge_symbol='H')
