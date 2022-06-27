@@ -2,12 +2,13 @@
 
 import unittest
 from macrosynergy.signal.signal_return import SignalReturnRelations
-from macrosynergy.management.shape_dfs import reduce_df
+
 from tests.simulate import make_qdf
+from sklearn.metrics import accuracy_score
+from scipy import stats
 import random
 import pandas as pd
 import numpy as np
-import math
 
 class TestAll(unittest.TestCase):
 
@@ -80,7 +81,8 @@ class TestAll(unittest.TestCase):
         self.assertTrue(round(float(test_aud), 5) == round(aud_lagged, 5))
 
         usd_lagged = lagged_df.loc['USD', signal]['2020-10-28']
-        self.assertTrue(round(float(test_usd), 5) == round(usd_lagged, 5))
+        condition = round(float(test_usd), 5) - round(usd_lagged, 5)
+        self.assertTrue(condition < 0.0001)
 
         # In addition to the DataFrame returned by categories_df(), an instance of the
         # Class will hold two "tables" for each segmentation type.
@@ -104,6 +106,69 @@ class TestAll(unittest.TestCase):
         # Choose a "random" cross-section.
 
         df_cs = srr.df_isolator(df=df, cs='GBP', cs_type='cids')
+
+        # Test the values on a fixed date.
+        fixed_date = '2010-01-04'
+        test_values = dict(df.loc['GBP', fixed_date])
+        segment_values = dict(df_cs.loc[fixed_date, :])
+
+        for c, v in test_values.items():
+            self.assertTrue(v - segment_values[c] < 0.0001)
+
+        # Test the yearly segmentation.
+        df['year'] = np.array(df.reset_index(level=1)['real_date'].dt.year)
+        df_cs = srr.df_isolator(df=df, cs='2013', cs_type='years')
+
+        # Confirm that the year column contains exclusively '2013'. If so, able to deduce
+        # that the segmentation works correctly for yearly type.
+        df_cs_year = df_cs['year'].to_numpy()
+        df_cs_year = np.array(list(map(lambda y: str(y), df_cs_year)))
+        self.assertTrue(np.all(df_cs_year == '2013'))
+
+    def test_panel_relations(self):
+
+        self.dataframe_generator()
+        # Test the method responsible for producing the table of metrics assessing the
+        # signal-return relationship.
+
+        # Firstly, for the six "Positive Ratio" statistics, confirm the computed value
+        # for the accuracy score is correct. If so, able to conclude the other scores
+        # are being assembled in the returned table correctly.
+        signal = 'CRY'
+        return_ = 'XR'
+        srr = SignalReturnRelations(self.dfd, sig=signal, ret=return_,
+                                    freq='D', blacklist=self.blacklist)
+        df_cs = srr.panel_relations(cs_type='cids')
+
+        # The lagged signal & returns have been reduced to[-1, 1] which are interpreted
+        # as indicator random variables.
+        # Test value.
+        df_cs_aud_acc = df_cs.loc['AUD', 'accuracy']
+
+        aud_df = srr.df.loc['AUD', :]
+        # Remove zero values.
+        aud_df = aud_df[~((aud_df.iloc[:, 0] == 0) | (aud_df.iloc[:, 1] == 0))]
+        # In the context of the accuracy score, reducing the DataFrame to boolean values
+        # will work equivalently to [1, -1].
+        aud_df = aud_df > 0
+        y_pred = aud_df[signal]
+        y_true = aud_df[return_]
+        accuracy = accuracy_score(y_true, y_pred)
+        self.assertTrue(df_cs_aud_acc - accuracy < 0.00001)
+
+        # Aim to test Kendall Tau correlation statistic via stats.rankdata() - Kendall
+        # Tau is implicitly ranking the data but using the original values.
+        # Kendall Tau is non-parametric, and both the return & signal series will be
+        # used as quasi-ranking data.
+        df_cs_usd_ken = df_cs.loc['USD', 'kendall']
+
+        usd_df = srr.df.loc['USD', :]
+        usd_df = usd_df[~((usd_df.iloc[:, 0] == 0) | (usd_df.iloc[:, 1] == 0))]
+        x = stats.rankdata(usd_df[signal]).astype(int)
+        y = stats.rankdata(usd_df[return_]).astype(int)
+
+        kendall_tau, p_value = stats.kendalltau(x, y)
+        self.assertTrue(df_cs_usd_ken - kendall_tau < 0.00001)
 
 
 if __name__ == "__main__":
