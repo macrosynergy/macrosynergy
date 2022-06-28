@@ -56,8 +56,7 @@ def dq_request(url: str, headers: dict = None, params: dict = None,
 
 
 class CertAuth(object):
-    """
-    Certificate Authentication
+    """Certificate Authentication.
 
     Class used to access DataQuery via certificate and private key. To access the API
     login both username % password are required as well as a certified certificate and
