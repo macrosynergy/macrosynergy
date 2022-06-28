@@ -68,8 +68,8 @@ def df_tickers(df: pd.DataFrame):
 
     :param <pd.DataFrame> df: standardised DataFrame.
     """
-    cids_append = list(map(lambda c: c + '_', df['cid']))
-    tickers = list(product(cids_append, df['xcat']))
+    cids_append = list(map(lambda c: c + '_', set(df['cid'])))
+    tickers = list(product(cids_append, set(df['xcat'])))
     tickers = [c[0] + c[1] for c in tickers]
 
     return tickers
@@ -94,8 +94,8 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
         if t in agg_df_tick:
             split = t.split('_')
             xcat = '_'.join(split[1:])
-            bool_df = [df['cid'] == split[0] & df['xcat'] == xcat]
-            df = df[~bool_df]
+            filter_1 = ~((df['cid'] == split[0]) & (df['xcat'] == xcat))
+            df = df[filter_1]
         else:
             continue
 
@@ -176,6 +176,7 @@ if __name__ == "__main__":
     df_xcats.loc['INFL'] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    tickers = df_tickers(dfd)
 
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
 
