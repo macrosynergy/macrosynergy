@@ -19,9 +19,13 @@ def update_df(df: pd.DataFrame, df_add):
     """
 
     cols = ['cid', 'xcat', 'real_date', 'value']
-    error_message = f"Expects a standardised dataframe with columns: {cols}"
-    assert list(df.columns) == cols, error_message
-    assert list(df_add.columns) == cols, error_message
+    # Consider the other possible metrics that the DataFrame could be defined over.
+    cols += ['grading', 'eop_lag', 'mop_lag']
+    error_message = f"Expects a standardised DataFrame with possible columns: {cols}."
+    assert set(df.columns).issubset(set(cols)), error_message
+    df_error = f"The two DataFrames must be defined over the same subset of possible " \
+               f"columns: {cols}."
+    assert sorted(list(df.columns)) == sorted(list(df_add.columns)), df_error
 
     incumbent_categories = list(df['xcat'].unique())
     new_categories = list(df_add['xcat'].unique())
