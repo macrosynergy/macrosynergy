@@ -527,7 +527,7 @@ class Basket(object):
             cartesian coordinate systems. If the basket consists of a high number of
             contracts, using the Facet Grid is recommended.
         :param <bool> all_tickers: if True (default) all weights are displayed.
-            If set to False`single-ticker` must be specified.
+            If set to False `single-ticker` must be specified.
         :param <str> single_ticker: individual ticker for further, more detailed,
             analysis.
         :param <bool> percentage_change: graphical display used to further assimilate the
@@ -571,7 +571,7 @@ class Basket(object):
                 error_3 = "The parameter, 'single_ticker', must be a <str>."
                 assert isinstance(single_ticker, str), error_3
                 error_4 = f"Ticker not present in the weight dataframe. Available " \
-                          f"tickers: {dfw_wgs.columns}."
+                          f"tickers: {list(dfw_wgs.columns)}."
                 assert single_ticker in dfw_wgs.columns, error_4
                 dfw_wgs = dfw_wgs[[single_ticker]]
 
@@ -613,7 +613,8 @@ class Basket(object):
 
             plt.show()
 
-    def column_split(self, df: pd.DataFrame):
+    @staticmethod
+    def column_split(df: pd.DataFrame):
         """
         Receives a dataframe with the columns 'ticker', 'real_date' and 'value' and
         returns a standardised dataframe with the columns 'cid', 'xcat', 'real_date' and
@@ -752,28 +753,25 @@ if __name__ == "__main__":
     # First test. Multiple carries. Equal weight method.
     # The main aspect to check in the code is that basket performance has been applied to
     # both the return category and the multiple carry categories.
-    print("Testing.")
-    print("Input dataframe.")
-    print(dfd)
     basket_1 = Basket(df=dfd, contracts=contracts_1,
                       ret="XR_NSA", cry=["CRY_NSA", "CRR_NSA"], blacklist=black)
     basket_1.make_basket(weight_meth="equal", max_weight=0.55,
                          basket_name="GLB_EQUAL")
-    print(basket_1.dfw_ret)
-    print(basket_1.dict_wgs["GLB_EQUAL"])
+
     basket_1.make_basket(weight_meth="fixed", max_weight=0.55,
                          weights=[1/6, 1/6, 1/6, 1/2],
                          basket_name="GLB_FIXED")
-    print(basket_1.dict_wgs["GLB_EQUAL"])
+
     dfp_1 = basket_1.return_basket()
     dfw_1 = basket_1.return_weights()
 
     df_basket = basket_1.return_basket("GLB_EQUAL")
-    print("Output df.")
     print(df_basket)
 
     df_weight = basket_1.return_weights("GLB_EQUAL")
     print(df_weight)
+    basket_1.weight_visualiser("GLB_EQUAL", all_tickers=True,
+                               facet_grid=True)
 
     # Second test. Zero carries. Inverse weight method.
     # However, call make_basket() method multiple times, using different weighting
@@ -785,13 +783,9 @@ if __name__ == "__main__":
     basket_2.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
                          max_weight=0.55, remove_zeros=True, basket_name="GLB_INVERSE")
     df_basket_inv = basket_2.return_basket("GLB_INVERSE")
-    print("Inverse.")
-    print(basket_2.dict_wgs["GLB_INVERSE"])
 
     basket_2.make_basket(weight_meth="equal", max_weight=0.55, basket_name="GLB_EQUAL")
     df_basket_equal = basket_2.return_basket("GLB_EQUAL")
-    print(df_basket_inv)
-    print(df_basket_equal)
 
     # Third test. One carry. Inverse values weight method.
     # Allow for multiple external weight methods being passed in. If multiple external
@@ -803,53 +797,29 @@ if __name__ == "__main__":
                       blacklist=black, ewgts='WBASE_NSA')
     contracts_1 = ['AUD_FX', 'GBP_FX', 'NZD_FX', 'USD_EQ']
 
-    print(dfd[dfd['xcat'] == 'EQWBASE_NSA'])
-    print(dfd[dfd['xcat'] == 'FXWBASE_NSA'])
-
     basket_3.make_basket(weight_meth="inv_values", ewgt="WBASE_NSA", max_weight=0.55,
                          remove_zeros=True, basket_name="GLB_INV_VALUES")
-    print("External Weights.")
-    print(basket_3.dict_wgs["GLB_INV_VALUES"])
 
     df_inv_values = basket_3.return_basket("GLB_INV_VALUES")
-    print(df_inv_values)
     df_weight = basket_3.return_weights("GLB_INV_VALUES")
-    print(df_weight)
 
     basket_3.make_basket(weight_meth="equal", max_weight=0.55, remove_zeros=True,
                          basket_name="GLB_EQUAL")
     df_equal = basket_3.return_basket("GLB_EQUAL")
-    print(df_equal)
-
-    # Final test.
-    # Tests the condition: "if self.wgt_flag and self.exo_w_postfix is not None".
-    contracts = ['AUD_FX', 'AUD_EQ', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
-    basket_4 = Basket(df=dfd, contracts=contracts, ret="XR_NSA",
-                      cry=["CRY_NSA", "CRR_NSA"], blacklist=black,
-                      ewgts="WBASE_NSA")
-    basket_4.make_basket(weight_meth="values", ewgt="WBASE_NSA", max_weight=0.55,
-                         remove_zeros=True, basket_name="GLB_VALUES")
-
-    basket_4.make_basket(weight_meth="equal", max_weight=0.45,
-                         basket_name="GLB_EQUAL")
-    weight_equal = basket_4.return_weights(basket_names="GLB_EQUAL")
-
-    basket_4.weight_visualiser("GLB_EQUAL", facet_grid=True)
 
     # Testing the visualisation method. Potentially should vary depending on the
     # associated method.
-    basket_5 = Basket(df=dfd, contracts=contracts_1,
+    basket_4 = Basket(df=dfd, contracts=contracts_1,
                       ret="XR_NSA", blacklist=black)
-    basket_5.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
+    basket_4.make_basket(weight_meth="invsd", lback_meth="ma", lback_periods=21,
                          max_weight=0.55, remove_zeros=True, basket_name="GLB_INVERSE")
-    df_basket_inv = basket_5.return_basket("GLB_INVERSE")
-    print(df_basket_inv)
+    df_basket_inv = basket_4.return_basket("GLB_INVERSE")
 
     # Examples of the different visualisation options.
-    basket_5.weight_visualiser("GLB_INVERSE", start_date="2020-01-07",
+    basket_4.weight_visualiser("GLB_INVERSE", start_date="2020-01-07",
                                end_date="2020-12-31", subplots=False,
                                all_tickers=False, single_ticker='AUD_FX',
                                percentage_change=True)
-    basket_5.weight_visualiser("GLB_INVERSE", subplots=False)
+    basket_4.weight_visualiser("GLB_INVERSE", subplots=False)
 
-    basket_5.weight_visualiser("GLB_INVERSE", all_tickers=True, facet_grid=True)
+    basket_4.weight_visualiser("GLB_INVERSE", all_tickers=True, facet_grid=True)
