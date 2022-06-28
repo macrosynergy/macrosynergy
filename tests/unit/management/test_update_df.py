@@ -4,7 +4,7 @@ import random
 import numpy as np
 import pandas as pd
 from tests.simulate import make_qdf
-from macrosynergy.management.update_df import update_df
+from macrosynergy.management.update_df import update_df, update_tickers
 from macrosynergy.panel.make_relative_value import make_relative_value
 from itertools import groupby
 
@@ -36,6 +36,35 @@ class TestAll(unittest.TestCase):
         black = {'AUD': ['2000-01-01', '2003-12-31'],
                  'GBP': ['2018-01-01', '2100-01-01']}
         self.__dict__['blacklist'] = black
+
+    def test_update_tickers(self):
+
+        self.dataframe_constructor()
+
+        # Method used to update the original DataFrame on a ticker level.
+        # Original DataFrame will be defined over the categories ['GROWTH', 'INFL',
+        # 'XR'].
+        dfd = self.dfd
+        # Design a DataFrame such that two of "new" tickers are already held in the
+        # aggregate DataFrame. Aim to confirm the existing tickers are replaced.
+        dfd_1_rv = make_relative_value(self.dfd, xcats=['GROWTH'], cids=['AUD', 'CAD'],
+                                       rel_meth='subtract', postfix='RV')
+        dfd = pd.concat([dfd, dfd_1_rv])
+
+        dfd_2_rv = make_relative_value(self.dfd, xcats=['GROWTH', 'INFL'],
+                                       cids=['AUD', 'CAD'], rel_meth='divide',
+                                       postfix='RV')
+        dfd = update_tickers(df=dfd, df_add=dfd_2_rv)
+
+        # Firstly, confirm that the returned DataFrame contains the new tickers:
+        # AUD_INFLRV, CAD_INFLRV.
+        dfd_copy = dfd.copy()
+        dfd_copy['tickers'] = dfd_copy['cid'] + "_" + dfd_copy['xcat']
+        agg_tickers = dfd_copy['tickers'].unique()
+
+        new_tickers = ['AUD_INFLRV', 'CAD_INFLRV']
+        for t in new_tickers:
+            self.assertTrue(t in agg_tickers)
 
     def test_update_df(self):
 
