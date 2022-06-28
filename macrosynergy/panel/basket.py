@@ -513,8 +513,9 @@ class Basket(object):
 
     def weight_visualiser(self, basket_name, start_date: str = None,
                           end_date: str = None, subplots: bool = True,
-                          facet_grid: bool = False, all_tickers: bool = True,
-                          single_ticker: str = None, percentage_change: bool = False):
+                          facet_grid: bool = False, scatter: bool = False,
+                          all_tickers: bool = True, single_ticker: str = None,
+                          percentage_change: bool = False):
         """
         Method used to visualise the weights associated with each contract in the basket.
 
@@ -526,6 +527,9 @@ class Basket(object):
         :param <bool> facet_grid: parameter used to break up the plot into multiple
             cartesian coordinate systems. If the basket consists of a high number of
             contracts, using the Facet Grid is recommended.
+        :param <bool> scatter: if the facet_grid parameter is set to True there are two
+            options: i) scatter plot if there a lot of blacklist periods; ii) line plot
+            for continuous series.
         :param <bool> all_tickers: if True (default) all weights are displayed.
             If set to False `single-ticker` must be specified.
         :param <str> single_ticker: individual ticker for further, more detailed,
@@ -583,13 +587,20 @@ class Basket(object):
                 fg = sns.FacetGrid(df_stack, col="ticker", col_wrap=facet_cols,
                                    sharey=True)
 
-                # Seaborn will linearly interpolate NaN values which is visually
-                # misleading. Therefore, aim to negate the operation.
-                fg.map_dataframe(sns.lineplot, x='real_date', y='value',
-                                 hue=df_stack['value'].isna().cumsum(),
-                                 palette=["blue"] *
-                                         df_stack['value'].isna().cumsum().nunique(),
-                                 ci=None, markers=True)
+                scatter_error = f"Boolean object expected - instead received " \
+                                f"{type(scatter)}."
+                assert isinstance(scatter, bool), scatter_error
+                if scatter:
+                    fg.map_dataframe(sns.scatterplot, x='real_date',
+                                     y='value')
+                else:
+                    # Seaborn will linearly interpolate NaN values which is visually
+                    # misleading. Therefore, aim to negate the operation.
+                    fg.map_dataframe(sns.lineplot, x='real_date', y='value',
+                                    hue=df_stack['value'].isna().cumsum(),
+                                    palette=["blue"] *
+                                            df_stack['value'].isna().cumsum().nunique(),
+                                    ci=None, markers=True)
 
                 equal_value = (1 / no_contracts)
                 fg.map(plt.axhline, y=equal_value, linestyle='--', color='gray', lw=0.5)
@@ -827,4 +838,5 @@ if __name__ == "__main__":
                                percentage_change=True)
     basket_4.weight_visualiser("GLB_INVERSE", subplots=False)
 
-    basket_4.weight_visualiser("GLB_INVERSE", all_tickers=True, facet_grid=True)
+    basket_4.weight_visualiser("GLB_INVERSE", all_tickers=True, facet_grid=True,
+                               scatter=True)
