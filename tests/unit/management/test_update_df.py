@@ -53,6 +53,16 @@ class TestAll(unittest.TestCase):
                                               values="value")
             dfd_add = update_df(df=dfd, df_add=dfd_pivot)
 
+        # Test the assertion that both dataframes must be defined over the same subset
+        # of standardised columns plus possible metrics.
+        with self.assertRaises(AssertionError):
+            dfd_1_rv_growth = dfd_1_rv[dfd_1_rv['xcat'] == 'GROWTHRV']
+            # Contrived DataFrame that includes the 'grading' metric.
+            dfd_1_rv_grading = dfd_1_rv_growth.copy()
+            dfd_1_rv_grading['grading'] = np.ones(dfd_1_rv_grading.shape[0])
+            # Should through an error as both DataFrames do not have the same columns.
+            dfd_add = update_df(df=dfd, df_add=dfd_1_rv_grading)
+
         # Test the above method by using the in-built make_relative_value() method.
         dfd_1_rv = make_relative_value(self.dfd, xcats=['GROWTH', 'INFL'], cids=None,
                                        blacklist=None, rel_meth='subtract',
