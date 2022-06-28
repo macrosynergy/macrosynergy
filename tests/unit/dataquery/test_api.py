@@ -2,9 +2,6 @@
 
 from macrosynergy.dataquery import api
 from macrosynergy.dataquery.auth import OAuth, CertAuth
-from datetime import datetime
-from pandas import Timestamp
-from pandas.tseries.offsets import BDay
 from typing import List
 from unittest import mock
 from random import random
@@ -47,34 +44,6 @@ class TestDataQueryInterface(unittest.TestCase):
 
         return aggregator
 
-    @mock.patch("macrosynergy.dataquery.auth.OAuth",
-                return_value=OAuth)
-    def test_oauth_condition(self, mock_check_oauth):
-
-        # Accessing DataQuery can be achieved via two methods: OAuth or Certificates /
-        # Keys. To handle for the idiosyncrasies of the two access methods, split the
-        # methods across individual Classes. The usage of each Class is controlled by the
-        # parameter "oauth".
-        # First check is that the DataQuery instance is using an OAuth Object if the
-        # parameter "oauth" is set to to True.
-        dq_access = api.Interface(oauth=True,
-                                  client_id="client1",
-                                  client_secret="123")
-        self.assertTrue(dq_access.check_access())
-
-    @mock.patch("macrosynergy.dataquery.api.Interface.check_access",
-                return_value=CertAuth)
-    def test_certauth_condition(self, mock_check_certauth):
-
-        # Second check is that the DataQuery instance is using an CertAuth Object if the
-        # parameter "oauth" is set to to False. The DataQuery Class's default is to use
-        # certificate / keys.
-        dq_access = api.Interface(username="user1",
-                                  password="123",
-                                  crt="/api_macrosynergy_com.crt",
-                                  key="/api_macrosynergy_com.key")
-        self.assertTrue(dq_access.check_access())
-
     @mock.patch("macrosynergy.dataquery.auth.OAuth.get_dq_api_result",
                return_value={"info": {"code": 200}})
     def test_check_connection(self, mock_p_request):
@@ -108,6 +77,32 @@ class TestDataQueryInterface(unittest.TestCase):
                                                "/services/heartbeat")
 
         mock_p_fail.assert_called_once()
+
+    def test_oauth_condition(self):
+
+        # Accessing DataQuery can be achieved via two methods: OAuth or Certificates /
+        # Keys. To handle for the idiosyncrasies of the two access methods, split the
+        # methods across individual Classes. The usage of each Class is controlled by the
+        # parameter "oauth".
+        # First check is that the DataQuery instance is using an OAuth Object if the
+        # parameter "oauth" is set to to True.
+        dq_access = api.Interface(oauth=True,
+                                  client_id="client1",
+                                  client_secret="123")
+        
+        self.assertTrue(type(dq_access.access) == OAuth)
+
+    def test_certauth_condition(self):
+
+        # Second check is that the DataQuery instance is using an CertAuth Object if the
+        # parameter "oauth" is set to to False. The DataQuery Class's default is to use
+        # certificate / keys.
+        dq_access = api.Interface(username="user1",
+                                  password="123",
+                                  crt="/api_macrosynergy_com.crt",
+                                  key="/api_macrosynergy_com.key")
+
+        self.assertTrue(type(dq_access.access) == CertAuth)
 
     def test_isolate_timeseries(self):
 
