@@ -60,14 +60,6 @@ class Interface(object):
         if exc_type:
             print(f'Execution {exc_type} with value (exc_value):\n{exc_value}')
 
-    def check_access(self):
-        """
-        Method to validate the Class used to access DataQuery. The access Class will be
-        controlled by the oauth parameter.
-        """
-
-        return self.access
-
     def check_connection(self) -> bool:
         """
         Check connection (heartbeat) to DataQuery.
