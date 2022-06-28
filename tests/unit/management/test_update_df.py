@@ -66,6 +66,32 @@ class TestAll(unittest.TestCase):
         for t in new_tickers:
             self.assertTrue(t in agg_tickers)
 
+        # After confirming expected presence, test the values.
+        filter_1 = ((dfd_copy['cid'] == 'AUD') & (dfd_copy['xcat'] == 'INFLRV'))
+        filt_df = dfd_copy[filter_1]
+
+        filter_2 = ((dfd_2_rv['cid'] == 'AUD') & (dfd_2_rv['xcat'] == 'INFLRV'))
+        compare_df = dfd_2_rv[filter_2]
+
+        # Series has been appended.
+        self.assertTrue(np.all(filt_df['value'] == compare_df['value']))
+
+        # Test the values of the two series that are being replaced. Ensure the series
+        # held in the aggregate DataFrame are from the secondary DataFrame. The two
+        # series are ['AUD_GROWTHRV', 'CAD_GROWTHRV'].
+        replace_tickers = ['AUD_GROWTHRV', 'CAD_GROWTHRV']
+        for t in replace_tickers:
+            self.assertTrue(t in agg_tickers)
+
+        filter_3 = ((dfd_copy['cid'] == 'AUD') & (dfd_copy['xcat'] == 'GROWTHRV'))
+        filt_df = dfd_copy[filter_3]
+
+        filter_4 = ((dfd_2_rv['cid'] == 'AUD') & (dfd_2_rv['xcat'] == 'GROWTHRV'))
+        compare_df = dfd_2_rv[filter_4]
+
+        # Series has been replaced correctly.
+        self.assertTrue(np.all(filt_df['value'] == compare_df['value']))
+
     def test_update_df(self):
 
         self.dataframe_constructor()
