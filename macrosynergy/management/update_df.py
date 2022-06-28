@@ -1,9 +1,10 @@
 
 import pandas as pd
+from itertools import product
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.panel.make_relative_value import make_relative_value
 
-def update_df(df: pd.DataFrame, df_add):
+def update_df(df: pd.DataFrame, df_add: pd.DataFrame, tickers: bool = False):
     """
     Efficient version. Aims to cover the most likely user cases from the sample space
     with computationally fast algorithms. Any residual instances will be covered by a
@@ -13,6 +14,9 @@ def update_df(df: pd.DataFrame, df_add):
     :param <pd.DataFrame> df_add: dataframe with the latest values. The categories will
         either be appended to the aggregate dataframe, or replace the previously defined
         category.
+    :param <bool> tickers: if the original dataframe should be updated on a individual
+        ticker level, as opposed to an entire panel being changed, set the parameter to
+        True. Default is False and the complete category will be updated.
 
     :return <pd.DataFrame>: standardised dataframe with the latest values of the modified
         or newly defined category.
@@ -27,32 +31,76 @@ def update_df(df: pd.DataFrame, df_add):
                f"columns: {cols}."
     assert sorted(list(df.columns)) == sorted(list(df_add.columns)), df_error
 
-    incumbent_categories = list(df['xcat'].unique())
-    new_categories = list(df_add['xcat'].unique())
-
-    # Union of both category columns from the two DataFrames.
-    append_condition = set(incumbent_categories) | set(new_categories)
-    intersect = list(set(incumbent_categories).intersection(set(new_categories)))
-
-    additional_category = list(set(new_categories).difference(set(intersect)))
-
-    if len(append_condition) == len(incumbent_categories + new_categories):
-        df = pd.concat([df, df_add])
-
-    elif sorted(list(intersect)) == sorted(new_categories):
-        retain = [c for c in incumbent_categories if c not in intersect]
-        df = df[df['xcat'].isin(retain)]
-        df = pd.concat([df, df_add])
-
-    elif sorted(intersect + additional_category) == sorted(new_categories):
-        temp_df = df_add[df_add['xcat'].isin(intersect)]
-        new_df = df_add[df_add['xcat'].isin(additional_category)]
-        df = pd.concat([update_df(df, temp_df), new_df])
+    if tickers:
+        df = update_tickers(df, df_add)
 
     else:
-        df = update_df_residual(df=df, df_add=df_add)
+        incumbent_categories = list(df['xcat'].unique())
+        new_categories = list(df_add['xcat'].unique())
+
+        # Union of both category columns from the two DataFrames.
+        append_condition = set(incumbent_categories) | set(new_categories)
+        intersect = list(set(incumbent_categories).intersection(set(new_categories)))
+
+        additional_category = list(set(new_categories).difference(set(intersect)))
+
+        if len(append_condition) == len(incumbent_categories + new_categories):
+            df = pd.concat([df, df_add])
+
+        elif sorted(list(intersect)) == sorted(new_categories):
+            retain = [c for c in incumbent_categories if c not in intersect]
+            df = df[df['xcat'].isin(retain)]
+            df = pd.concat([df, df_add])
+
+        elif sorted(intersect + additional_category) == sorted(new_categories):
+            temp_df = df_add[df_add['xcat'].isin(intersect)]
+            new_df = df_add[df_add['xcat'].isin(additional_category)]
+            df = pd.concat([update_df(df, temp_df), new_df])
+
+        else:
+            df = update_df_residual(df=df, df_add=df_add)
 
     return df.reset_index(drop=True)
+
+def df_tickers(df: pd.DataFrame):
+    """
+    Helper function used to delimit the tickers defined in a received DataFrame.
+
+    :param <pd.DataFrame> df: standardised DataFrame.
+    """
+    cids_append = list(map(lambda c: c + '_', df['cid']))
+    tickers = list(product(cids_append, df['xcat']))
+    tickers = [c[0] + c[1] for c in tickers]
+
+    return tickers
+
+def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
+    """
+    Method used to update aggregate DataFrame on a ticker level. The tickers in the
+    secondary DataFrame will either replace an existing ticker or be appended to the
+    returned DataFrame.
+
+    :param <pd.DataFrame> df: aggregate dataframe used to store all tickers.
+    :param <pd.DataFrame> df_add: dataframe with the latest values.
+
+    """
+    agg_df_tick = df_tickers(df)
+    add_df_tick = df_tickers(df_add)
+
+    # If the ticker is already defined in the DataFrame, replace with the new series
+    # otherwise append the series to the aggregate DataFrame.
+    for t in add_df_tick:
+
+        if t in agg_df_tick:
+            split = t.split('_')
+            xcat = '_'.join(split[1:])
+            bool_df = [df['cid'] == split[0] & df['xcat'] == xcat]
+            df = df[~bool_df]
+        else:
+            continue
+
+    df = pd.concat([df, df_add])
+    return df.sort_values(['xcat', 'cid', 'real_date'])
 
 def update_df_residual(df: pd.DataFrame, df_add):
     """
