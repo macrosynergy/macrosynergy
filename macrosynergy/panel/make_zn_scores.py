@@ -142,11 +142,12 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     assert isinstance(est_freq, str) and est_freq in frequencies, error_freq
     pd_freq = dict(zip(frequencies, ['B', 'W-Fri', 'BM', 'BQ']))
 
-    # --- Prepare re-estimation dates and time series dataframe
+    # --- Prepare re-estimation dates and time-series DataFrame.
 
     df = df.loc[:, ['cid', 'xcat', 'real_date', 'value']]
-    df = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end,
-                   blacklist=blacklist)
+    df = reduce_df(df, xcats=[xcat], cids=cids,
+                   start=start, end=end, blacklist=blacklist)
+
     s_date = min(df['real_date'])
     e_date = max(df['real_date'])
     dates_iter = pd.date_range(start=s_date, end=e_date, freq=pd_freq[est_freq])
@@ -154,15 +155,16 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     dfw = df.pivot(index='real_date', columns='cid', values='value')
     cross_sections = dfw.columns
 
-    # --- The actual scoring
+    # --- The actual scoring.
 
     dfw_zns_pan = dfw * 0
     dfw_zns_css = dfw * 0
 
     if pan_weight > 0:
 
-        df_neutral = expanding_stat(dfw, dates_iter, stat=neutral, sequential=sequential,
-                                    min_obs=min_obs, iis=iis)
+        df_neutral = expanding_stat(dfw, dates_iter, stat=neutral,
+                                    sequential=sequential, min_obs=min_obs,
+                                    iis=iis)
         dfx = dfw.sub(df_neutral['value'], axis=0)
         df_mabs = expanding_stat(dfx.abs(), dates_iter, stat="mean",
                                  sequential=sequential,
@@ -182,9 +184,12 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
             df_mabs = expanding_stat(dfx.abs().to_frame(name=cid), dates_iter,
                                      stat="mean", sequential=sequential,
                                      min_obs=min_obs, iis=iis)
+            dfx = pd.DataFrame(data=dfx.to_numpy(),
+                               index=dfx.index, columns=['value'])
+            dfx = dfx.rename_axis('cid', axis=1)
 
-            zns_css_arr = np.divide(dfx.to_numpy(), df_mabs.to_numpy())
-            dfw_zns_css.loc[:, cid] = zns_css_arr
+            zns_css_df = dfx / df_mabs
+            dfw_zns_css.loc[:, cid] = zns_css_df.to_numpy()
 
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
     dfw_zns = dfw_zns.dropna(axis=0, how='all')
@@ -212,40 +217,44 @@ if __name__ == "__main__":
                                                     'sd_mult'])
 
     df_cids.loc['AUD'] = ['2010-01-01', '2020-12-31', 0.5, 2]
-    df_cids.loc['CAD'] = ['2011-01-01', '2020-11-30', 0, 1]
-    df_cids.loc['GBP'] = ['2012-01-01', '2020-11-30', -0.2, 0.5]
-    df_cids.loc['USD'] = ['2013-01-01', '2020-09-30', -0.2, 0.5]
+    df_cids.loc['CAD'] = ['2006-01-01', '2020-11-30', 0, 1]
+    df_cids.loc['GBP'] = ['2008-01-01', '2020-11-30', -0.2, 0.5]
+    df_cids.loc['USD'] = ['2007-01-01', '2020-09-30', -0.2, 0.5]
     df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
 
     df_xcats = pd.DataFrame(index = xcats, columns = ['earliest', 'latest', 'mean_add',
                                                       'sd_mult', 'ar_coef', 'back_coef'])
-    df_xcats.loc['XR'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
+    df_xcats.loc['XR'] = ['2008-01-01', '2020-12-31', 0, 1, 0, 0.3]
     df_xcats.loc['CRY'] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
     df_xcats.loc['GROWTH'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
     df_xcats.loc['INFL'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
+    # Apply a blacklist period from series' start date.
+    black = {'AUD': ['2010-01-01', '2013-12-31'],
+             'GBP': ['2018-01-01', '2100-01-01']}
+
     dfd = make_qdf(df_cids, df_xcats, back_ar = 0.75)
 
     # Monthly: panel + cross.
-    dfzm = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=True,
-                          neutral='mean', pan_weight=0.75, min_obs=261,
-                          est_freq="m")
+    dfzm = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids,
+                          blacklist=black, iis=True, neutral='mean',
+                          pan_weight=0.75, min_obs=261, est_freq="m")
 
     # Weekly: panel + cross.
-    dfzw = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=False,
-                          neutral='mean', pan_weight=0.5, min_obs=261,
-                          est_freq="w")
+    dfzw = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids,
+                          blacklist=black, iis=False, neutral='mean',
+                          pan_weight=0.5, min_obs=261, est_freq="w")
 
     # Daily: panel. Neutral and standard deviation will be computed daily.
-    dfzd = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=True,
-                          neutral='mean', pan_weight=1.0, min_obs=261,
-                          est_freq="d")
+    dfzd = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids,
+                          blacklist=black, iis=True, neutral='mean',
+                          pan_weight=1.0, min_obs=261, est_freq="d")
 
     # Daily: cross.
-    dfzd = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids, iis=True,
-                          neutral='mean', pan_weight=0.0, min_obs=261,
-                          est_freq="d")
+    dfzd = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids,
+                          blacklist=black, iis=True, neutral='mean',
+                          pan_weight=0.0, min_obs=261, est_freq="d")
 
-    panel_df = make_zn_scores(dfd, 'CRY', cids, start="2010-01-04",
+    panel_df = make_zn_scores(dfd, 'CRY', cids, start="2010-01-04", blacklist=black,
                               sequential=False, min_obs=0, neutral='mean',
                               iis=True, thresh=None, pan_weight=0.75, postfix='ZN')
