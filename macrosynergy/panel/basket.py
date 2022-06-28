@@ -579,16 +579,23 @@ class Basket(object):
                 df_stack = dfw_wgs.stack().to_frame("value").reset_index()
                 df_stack = df_stack.sort_values(['ticker', 'real_date'])
                 no_contracts = dfw_wgs.shape[1]
-                facet_cols = 4 if no_contracts >=8 else 3
+                facet_cols = 4 if no_contracts >= 8 else 3
                 fg = sns.FacetGrid(df_stack, col="ticker", col_wrap=facet_cols,
                                    sharey=True)
+
+                # Seaborn will linearly interpolate NaN values which is visually
+                # misleading. Therefore, aim to negate the operation.
                 fg.map_dataframe(sns.lineplot, x='real_date', y='value',
-                                 ci=None)
+                                 hue=df_stack['value'].isna().cumsum(),
+                                 palette=["blue"] *
+                                         df_stack['value'].isna().cumsum().nunique(),
+                                 ci=None, markers=True)
 
                 equal_value = (1 / no_contracts)
                 fg.map(plt.axhline, y=equal_value, linestyle='--', color='gray', lw=0.5)
-                fg.set_axis_labels('', '')  # set axes labels of individual charts
-                fg.set_titles(col_template='{col_name}')  # set individual charts' title
+                # Set axes labels of individual charts.
+                fg.set_axis_labels('', '')
+                fg.set_titles(col_template='{col_name}')
                 fg.fig.suptitle('Contract weights in basket', y=1.02)
             else:
                 dfw_wgs.plot(subplots=subplots, title="Weight Values Timestamp",
@@ -770,8 +777,6 @@ if __name__ == "__main__":
 
     df_weight = basket_1.return_weights("GLB_EQUAL")
     print(df_weight)
-    basket_1.weight_visualiser("GLB_EQUAL", all_tickers=True,
-                               facet_grid=True)
 
     # Second test. Zero carries. Inverse weight method.
     # However, call make_basket() method multiple times, using different weighting
