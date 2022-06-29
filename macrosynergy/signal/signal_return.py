@@ -210,13 +210,13 @@ class SignalReturnRelations:
 
         return y_input
 
-    def accuracy_bars(self, cs_type: str = 'cross_section', title: str = None,
+    def accuracy_bars(self, type: str = 'cross_section', title: str = None,
                       size: Tuple[float] = None,
                       legend_pos: str = 'best'):
         """
         Bar chart for the overall and balanced accuracy metrics.
 
-        :param <str> cs_type: type of segment over which bars are drawn. Either
+        :param <str> type: type of segment over which bars are drawn. Either
             'cross_section' (default) or 'years'.
         :param <str> title: chart header - default will be applied if none is chosen.
         :param <Tuple[float]> size: 2-tuple of width and height of plot - default will be
@@ -226,9 +226,9 @@ class SignalReturnRelations:
 
         """
 
-        assert cs_type in ['cross_section', 'years']
+        assert type in ['cross_section', 'years']
 
-        df_xs = self.df_cs if cs_type == 'cross_section' else self.df_ys
+        df_xs = self.df_cs if type == 'cross_section' else self.df_ys
         # 'PosRatio' represents average boolean across the panel. It is not a statistic
         # based directly on the signal return data. Therefore, exclude from the accuracy
         # bar chart.
@@ -248,11 +248,14 @@ class SignalReturnRelations:
         plt.bar(x_indexes - w / 2, dfx['accuracy'],
                 label='Accuracy', width=w, color='lightblue')
         plt.bar(x_indexes + w / 2, dfx['bal_accuracy'],
-                label='Balanced Accuracy', width=w, color='steelblue')
+                label='Balanced Accuracy', width=w,
+                color='steelblue')
+
         plt.xticks(ticks=x_indexes, labels=dfx.index,
                    rotation=0)
 
-        plt.axhline(y=0.5, color='black', linestyle='-', linewidth=0.5)
+        plt.axhline(y=0.5, color='black',
+                    linestyle='-', linewidth=0.5)
 
         y_input = self.yaxis_lim(accuracy_df=dfx.loc[:,
                                              ['accuracy', 'bal_accuracy']])
@@ -262,13 +265,13 @@ class SignalReturnRelations:
         plt.legend(loc=legend_pos)
         plt.show()
 
-    def correlation_bars(self, cs_type: str = 'cross_section', title: str = None,
+    def correlation_bars(self, type: str = 'cross_section', title: str = None,
                          size: Tuple[float] = None,
                          legend_pos: str = 'best'):
         """
         Correlation coefficients and significance.
 
-        :param <str> cs_type: type of segment over which bars are drawn. Must be
+        :param <str> type: type of segment over which bars are drawn. Must be
             "cross-section" (default) or 'years'.
         :param <str> title: chart header. Default will be applied if none is chosen.
         :param <Tuple[float]> size: 2-tuple of width and height of plot.
@@ -278,7 +281,7 @@ class SignalReturnRelations:
 
         """
 
-        df_xs = self.df_cs if cs_type == 'cross_section' else self.df_ys
+        df_xs = self.df_cs if type == 'cross_section' else self.df_ys
         # Panel plus the cs_types.
         dfx = df_xs[~df_xs.index.isin(['PosRatio', 'Mean'])]
 
@@ -399,10 +402,10 @@ if __name__ == "__main__":
                                 ret='XR', freq='D', blacklist=black)
     srn.summary_table()
 
-    srr.correlation_bars(cs_type='cross_section')
-    srn.correlation_bars(cs_type='cross_section')
+    srr.correlation_bars(type='cross_section')
+    srn.correlation_bars(type='cross_section')
 
-    srr.accuracy_bars(cs_type='cross_section')
+    srr.accuracy_bars(type='cross_section')
     df_cs_stats = srr.cross_section_table()
     df_ys_stats = srr.yearly_table()
     print(df_cs_stats)
