@@ -1,66 +1,76 @@
 
 import pandas as pd
+import numpy as np
 from itertools import product
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.panel.make_relative_value import make_relative_value
 
-def update_df(df: pd.DataFrame, df_add: pd.DataFrame, tickers: bool = False):
+def update_df(df: pd.DataFrame, df_add: pd.DataFrame, categories: bool = False):
     """
-    Efficient version. Aims to cover the most likely user cases from the sample space
-    with computationally fast algorithms. Any residual instances will be covered by a
-    more methodical helper function.
+    The purpose of the function is to combine two DataFrames: an aggregate DataFrame and
+    a secondary DataFrame. If there are shared tickers across the two DataFrames, the
+    tickers in the aggregate DataFrame will be replaced by the new series held in the
+    secondary DataFrame. If an intersection does not exist between the two, the
+    DataFrames will simply be concatenated.
 
-    :param <pd.DataFrame> df: aggregate dataframe used to store all categories.
-    :param <pd.DataFrame> df_add: dataframe with the latest values. The categories will
-        either be appended to the aggregate dataframe, or replace the previously defined
-        category.
-    :param <bool> tickers: if the original dataframe should be updated on a individual
-        ticker level, as opposed to an entire panel being changed, set the parameter to
-        True. Default is False and the complete category will be updated.
+    :param <pd.DataFrame> df: aggregate DataFrame used to store all tickers.
+    :param <pd.DataFrame> df_add: DataFrame with the latest values. The tickers will
+        either be appended to the aggregate DataFrame, or replace the previously defined
+        series.
+    :param <bool> categories: if the original DataFrame should be updated on the category
+        level, an entire panel being changed, set the parameter to True. Default is False
+        and updates will occur on the individual ticker level.
 
-    :return <pd.DataFrame>: standardised dataframe with the latest values of the modified
-        or newly defined category.
+    :return <pd.DataFrame>: standardised DataFrame with the latest values of the modified
+        or newly defined tickers added.
     """
 
     cols = ['cid', 'xcat', 'real_date', 'value']
     # Consider the other possible metrics that the DataFrame could be defined over.
     cols += ['grading', 'eop_lag', 'mop_lag']
     error_message = f"Expects a standardised DataFrame with possible columns: {cols}."
-    assert set(df.columns).issubset(set(cols)), error_message
-    df_error = f"The two DataFrames must be defined over the same subset of possible " \
-               f"columns: {cols}."
-    assert sorted(list(df.columns)) == sorted(list(df_add.columns)), df_error
 
-    if tickers:
+    df_cols = set(df.columns)
+    df_add_cols = set(df_add.columns)
+
+    assert df_cols.issubset(set(cols)), error_message
+
+    additional_columns = filter(lambda c: c in df.columns, list(df_add.columns))
+    df_error = f"The appended DataFrame must be defined over a subset of the columns " \
+               f"in the returned DataFrame. The undefined column(s): " \
+               f"{additional_columns}."
+    assert df_add_cols.issubset(df_cols), df_error
+
+    df_add = column_alignment(df_add, df_cols, df_add_cols)
+
+    if categories:
         df = update_tickers(df, df_add)
 
     else:
-        incumbent_categories = list(df['xcat'].unique())
-        new_categories = list(df_add['xcat'].unique())
-
-        # Union of both category columns from the two DataFrames.
-        append_condition = set(incumbent_categories) | set(new_categories)
-        intersect = list(set(incumbent_categories).intersection(set(new_categories)))
-
-        additional_category = list(set(new_categories).difference(set(intersect)))
-
-        if len(append_condition) == len(incumbent_categories + new_categories):
-            df = pd.concat([df, df_add])
-
-        elif sorted(list(intersect)) == sorted(new_categories):
-            retain = [c for c in incumbent_categories if c not in intersect]
-            df = df[df['xcat'].isin(retain)]
-            df = pd.concat([df, df_add])
-
-        elif sorted(intersect + additional_category) == sorted(new_categories):
-            temp_df = df_add[df_add['xcat'].isin(intersect)]
-            new_df = df_add[df_add['xcat'].isin(additional_category)]
-            df = pd.concat([update_df(df, temp_df), new_df])
-
-        else:
-            df = update_df_residual(df=df, df_add=df_add)
+        df = update_categories(df, df_add)
 
     return df.reset_index(drop=True)
+
+def column_alignment(df_add: pd.DataFrame, df_cols: set, df_add_cols: set):
+    """
+    If the aggregate DataFrame is defined over additional metrics that are not present
+    in the added DataFrame, add the missing columns but populate all dates with NaN
+    values.
+
+    :param <pd.DataFrame> df_add: new, added DataFrame.
+    :param <set> df_cols: the columns of the aggregate DataFrame.
+    :param <set> df_add_cols: the columns of the appended DataFrame.
+
+    :return <pd.DataFrame> df_add: appended DataFrame but with additional metrics if
+        required.
+    """
+
+    difference = list(df_cols.difference(df_add_cols))
+    if difference:
+        for c in difference:
+            df_add[c] = np.empty(df_add.shape[0])
+
+    return df_add
 
 def df_tickers(df: pd.DataFrame):
     """
@@ -102,22 +112,55 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     df = pd.concat([df, df_add])
     return df.sort_values(['xcat', 'cid', 'real_date'])
 
-def update_df_residual(df: pd.DataFrame, df_add):
+def update_categories(df: pd.DataFrame, df_add):
     """
-    The method has two main purposes. Firstly, if the categories, in the second
-    dataframe, are not present in the aggregated dataframe, append the new categories and
-    return the combined version. Secondly, if the category is already present, the
-    method will be used to replace the aforementioned category in the standardised
-    dataframe with the new set of values. For instance, parameter values have been
-    changed leading to a renewal of values on a specific category, and subsequently aim
-    to update the aggregated dataframe with the latest values.
+    Method used to update the DataFrame on the category level. The method aims to cover
+    the most likely user cases from the sample space with computationally fast
+    algorithms. Any residual instances will be covered by a more methodical helper
+    function.
 
-    :param <pd.DataFrame> df: aggregate dataframe used to store all categories.
-    :param <pd.DataFrame> df_add: dataframe with the latest values. The categories will
-        either be appended to the aggregate dataframe, or replace the previously defined
-        category.
+    :param <pd.DataFrame> df: aggregate DataFrame used to store all categories.
+    :param <pd.DataFrame> df_add: DataFrame with the latest values. The categories will
+        either be appended to the aggregate DataFrame, or replace the previously defined
+        category(s).
 
-    :return <pd.DataFrame>: standardised dataframe with the latest values of the modified
+    """
+
+    incumbent_categories = list(df['xcat'].unique())
+    new_categories = list(df_add['xcat'].unique())
+
+    # Union of both category columns from the two DataFrames.
+    append_condition = set(incumbent_categories) | set(new_categories)
+    intersect = list(set(incumbent_categories).intersection(set(new_categories)))
+
+    additional_category = list(set(new_categories).difference(set(intersect)))
+
+    if len(append_condition) == len(incumbent_categories + new_categories):
+        df = pd.concat([df, df_add])
+
+    elif sorted(list(intersect)) == sorted(new_categories):
+        retain = [c for c in incumbent_categories if c not in intersect]
+        df = df[df['xcat'].isin(retain)]
+        df = pd.concat([df, df_add])
+
+    elif sorted(intersect + additional_category) == sorted(new_categories):
+        temp_df = df_add[df_add['xcat'].isin(intersect)]
+        new_df = df_add[df_add['xcat'].isin(additional_category)]
+        df = pd.concat([update_categories(df, temp_df), new_df])
+
+    else:
+        df = update_categories_residual(df=df, df_add=df_add)
+
+    return df
+
+def update_categories_residual(df: pd.DataFrame, df_add):
+    """
+    Helper function.
+
+    :param <pd.DataFrame> df: aggregate DataFrame used to store all categories.
+    :param <pd.DataFrame> df_add: DataFrame with the latest values.
+
+    :return <pd.DataFrame>: standardised DataFrame with the latest values of the modified
         or newly defined category.
     """
 
@@ -187,7 +230,7 @@ if __name__ == "__main__":
     # First test will simply append the two DataFrames. The categories defined in the
     # secondary DataFrame will not be present in the original DataFrame. Therefore, the
     # append mechanism is sufficient.
-    dfd_add = update_df_residual(df=dfd, df_add=dfd_1_rv)
+    dfd_add = update_categories_residual(df=dfd, df_add=dfd_1_rv)
 
     dfd_1_rv_blacklist = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=None,
                                              blacklist=None, rel_meth='divide',
@@ -197,13 +240,5 @@ if __name__ == "__main__":
     # Second test will be to replace updated categories. The second DataFrame's
     # categories will be a direct subset of the first. Therefore, replace the incumbent
     # categories with the latest values.
-    dfd_add_2 = update_df(df=dfd_add, df_add=dfd_1_rv_blacklist)
+    dfd_add_2 = update_df(df=dfd_add, df_add=dfd_1_rv_blacklist, categories=True)
     print(dfd_add_2)
-
-    # Third example requires replacing existing categories but also appending a new
-    # category to the aggregated, returned DataFrame.
-    dfd_add_copy = dfd_add.copy()
-    dfd_2_rv = make_relative_value(dfd, xcats=['CRY', 'GROWTH', 'INFL'], cids=None,
-                                   blacklist=None, rel_meth='subtract', rel_xcats=None,
-                                   postfix='RV')
-    dfd_add_3 = update_df(df=dfd_add_copy, df_add=dfd_2_rv)
