@@ -241,6 +241,45 @@ class TestAll(unittest.TestCase):
 
         self.assertTrue(float(test_2) == float(value))
 
+        # Lastly, confirm the update_df function operates on DataFrames defined over
+        # multiple metrics. The sample space of options are ['value', 'grading',
+        # 'mop_lag', 'eop_lag']
+
+        dfd = self.dfd
+        dfd_growth = dfd[dfd['xcat'] == 'GROWTH']
+        dfd_growth['grading'] = np.ones(dfd_growth.shape[0])
+
+        dfd_1_rv = make_relative_value(self.dfd, xcats=['GROWTH'], cids=['AUD', 'CAD'],
+                                       rel_meth='subtract', postfix='RV')
+        dfd_1_rv['grading'] = np.ones(dfd_1_rv.shape[0])
+
+        dfd_test = pd.concat([dfd_growth, dfd_1_rv])
+        dfd_test = dfd_test.reset_index(drop=True)
+
+        dfd_update = update_df(df=dfd_growth, df_add=dfd_1_rv)
+        self.assertTrue(dfd_test.shape == dfd_update.shape)
+
+        # Order the two DataFrames and confirm the values match.
+        dfd_test = dfd_test.sort_values(['xcat', 'cid', 'real_date'])
+        dfd_update = dfd_update.sort_values(['xcat', 'cid', 'real_date'])
+        self.assertTrue(np.all(dfd_test['value'] == dfd_update['value']))
+
+        dfd_2_rv = make_relative_value(self.dfd, xcats=['GROWTH'], cids=['AUD', 'CAD'],
+                                       rel_meth='divide', postfix='RV')
+        dfd_2_rv['grading'] = np.ones(dfd_2_rv.shape[0])
+        dfd_update = update_df(df=dfd_growth, df_add=dfd_2_rv)
+
+        dfd_update_rv = dfd_update[((dfd_update['xcat'] == 'GROWTHRV') &
+                                    (dfd_update['cid'] == 'AUD'))]
+
+        fixed_date = '2011-01-07'
+        test_row = dfd_update_rv[dfd_update_rv['real_date'] ==
+                                 pd.Timestamp(fixed_date)]['value']
+        original_data = dfd_2_rv[dfd_2_rv['real_date'] == pd.Timestamp(fixed_date)]
+        original_data_aud = original_data[original_data['cid'] == 'AUD']['value']
+
+        self.assertTrue(float(test_row) == float(original_data_aud))
+
 
 if __name__ == '__main__':
     unittest.main()
