@@ -169,6 +169,7 @@ class TestAll(unittest.TestCase):
 
         kendall_tau, p_value = stats.kendalltau(x, y)
         self.assertTrue(abs(df_cs_usd_ken - kendall_tau) < 0.00001)
+        # ToDo: Add tests for other statistics
 
         # Lastly, confirm that 'Mean' row is computed using exclusively the respective
         # segmentation types. Test on yearly data and balanced accuracy.
