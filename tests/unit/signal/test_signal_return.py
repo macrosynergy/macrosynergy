@@ -168,6 +168,14 @@ class TestAll(unittest.TestCase):
         y = stats.rankdata(usd_df[return_]).astype(int)
 
         kendall_tau, p_value = stats.kendalltau(x, y)
+        # Kendall Tau offers value when used in conjunction with Pearson's
+        # correlation coefficient which is a linear measure.
+        # For instance, if the Pearson correlation coefficient is close to zero but
+        # the Kendall Tau is close to one, it can be deduced that there is a
+        # relationship between the two variables but a non-linear relationship.
+        # Alternatively, if the Pearson coefficient is close to one but the Kendall
+        # Tau is closer to zero, it suggests that the sample is exposed to a small
+        # number of sharp outliers.
         self.assertTrue(abs(df_cs_usd_ken - kendall_tau) < 0.00001)
 
         # Lastly, confirm that 'Mean' row is computed using exclusively the respective
@@ -204,6 +212,10 @@ class TestAll(unittest.TestCase):
             self.assertTrue(ylim == min_value)
         else:
             self.assertTrue(ylim == 0.45)
+
+        # 'PosRatio' represents average boolean across the panel. It is not a statistic
+        # based directly on the signal return data. Therefore, exclude from the accuracy
+        # bar chart.
 
 
 if __name__ == "__main__":
