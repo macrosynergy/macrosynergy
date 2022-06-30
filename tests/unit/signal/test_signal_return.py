@@ -177,6 +177,7 @@ class TestAll(unittest.TestCase):
         # Tau is closer to zero, it suggests that the sample is exposed to a small
         # number of sharp outliers.
         self.assertTrue(abs(df_cs_usd_ken - kendall_tau) < 0.00001)
+        # ToDo: Add tests for other statistics
 
         # Lastly, confirm that 'Mean' row is computed using exclusively the respective
         # segmentation types. Test on yearly data and balanced accuracy.
