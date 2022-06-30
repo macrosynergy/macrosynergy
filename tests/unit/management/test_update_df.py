@@ -7,7 +7,7 @@ from tests.simulate import make_qdf
 from macrosynergy.management.update_df import update_df, update_tickers, \
     update_categories
 from macrosynergy.panel.make_relative_value import make_relative_value
-from itertools import groupby
+from random import shuffle
 
 class TestAll(unittest.TestCase):
 
@@ -253,7 +253,7 @@ class TestAll(unittest.TestCase):
             # Should through an error as both DataFrames do not have the same columns.
             dfd_add = update_df(df=dfd, df_add=dfd_1_rv_grading)
 
-        # Lastly, confirm the update_df function operates on DataFrames defined over
+        # Confirm the update_df function operates on DataFrames defined over
         # multiple metrics. The sample space of options are ['value', 'grading',
         # 'mop_lag', 'eop_lag']
         # The tests are completed on a panel-level changes.
@@ -297,6 +297,42 @@ class TestAll(unittest.TestCase):
 
         self.assertTrue(float(test_row) == float(original_data_aud))
 
+        # Lastly, confirm that if the aggregate DataFrame has been defined on additional
+        # metrics than the secondary DataFrame, update_df() function will instate the
+        # missing columns in the secondary DataFrame with NaN values.
+        # Confirm the logic works.
+        dfd = self.dfd
+        # Contrived columns for the purpose of testing.
+        dfd['grading'] = np.ones(dfd.shape[0])
+        dfd['mop_lag'] = list(range(dfd.shape[0]))
+
+        dfd_1_rv = make_relative_value(self.dfd, xcats=['INFL'], cids=['AUD', 'CAD'],
+                                       blacklist=None, rel_meth='subtract',
+                                       rel_xcats=None, postfix='RV')
+        dfd_update = update_df(dfd, dfd_1_rv)
+
+        # Confirm that the aggregate DataFrame contains the two additional tickers:
+        # ['AUD_INFLRV', 'CAD_INFLRV'].
+        self.assertTrue(dfd.shape[0] + dfd_1_rv.shape[0] == dfd_update.shape[0])
+
+        dfd_update_rv = (dfd_update['xcat'] == 'INFLRV') & (dfd_update['cid'] == 'AUD')
+        dfd_update_df = dfd_update[dfd_update_rv]
+
+        # First, confirm the data in the value column is correct.
+        test_value = dfd_update_df[dfd_update_df['real_date'] ==
+                                   pd.Timestamp(fixed_date)]['value']
+
+        dfd_1_rv_aud = dfd_1_rv[(dfd_1_rv['cid'] == 'AUD') &
+                                (dfd_1_rv['real_date'] == pd.Timestamp(fixed_date))]
+
+        self.assertTrue(float(test_value) == float(dfd_1_rv_aud['value']))
+
+        # Secondly, confirm that the two metrics that are not present in dfd_1_rv,
+        # ['grading', 'mop_lag'], are present and exclusively contain NaN values.
+        # Confirm all timestamps have NaN values.
+        self.assertTrue(dfd_update_df['grading'].isnull().all())
+        self.assertTrue(dfd_update_df['mop_lag'].isnull().all())
+        
 
 if __name__ == '__main__':
     unittest.main()
