@@ -8,15 +8,21 @@ from macrosynergy.panel.make_relative_value import make_relative_value
 def update_df(df: pd.DataFrame, df_add: pd.DataFrame, categories: bool = False):
     """
     The purpose of the function is to combine two DataFrames: an aggregate DataFrame and
-    a secondary DataFrame. If there are shared tickers across the two DataFrames, the
-    tickers in the aggregate DataFrame will be replaced by the new series held in the
-    secondary DataFrame. If an intersection does not exist between the two, the
-    DataFrames will simply be concatenated.
+    a secondary DataFrame.
+    If there are shared tickers across the two DataFrames, the tickers in the aggregate
+    DataFrame will be replaced by the new series held in the secondary DataFrame. If an
+    intersection does not exist between the two, the DataFrames will simply be
+    concatenated.
+    Additionally, if the parameter 'categories' is set to True, entire panels can be
+    efficiently updated. Will assume that the category being updated has been defined
+    over the same cross-sections.
 
-    :param <pd.DataFrame> df: aggregate DataFrame used to store all tickers.
-    :param <pd.DataFrame> df_add: DataFrame with the latest values. The tickers will
-        either be appended to the aggregate DataFrame, or replace the previously defined
-        series.
+    :param <pd.DataFrame> df: aggregate DataFrame used to store all tickers. It can be
+        defined over the standard columns plus any additional metrics: ['grading',
+        'eop_lag', 'mop_lag'].
+    :param <pd.DataFrame> df_add: DataFrame with the latest values. The secondary
+        DataFrame must be defined over at least the standard columns. If any metric
+        columns are missing, the columns will be populated with NaN values.
     :param <bool> categories: if the original DataFrame should be updated on the category
         level, an entire panel being changed, set the parameter to True. Default is False
         and updates will occur on the individual ticker level.
@@ -28,11 +34,11 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, categories: bool = False):
     cols = ['cid', 'xcat', 'real_date', 'value']
     # Consider the other possible metrics that the DataFrame could be defined over.
     cols += ['grading', 'eop_lag', 'mop_lag']
-    error_message = f"Expects a standardised DataFrame with possible columns: {cols}."
 
     df_cols = set(df.columns)
     df_add_cols = set(df_add.columns)
 
+    error_message = f"Expects a standardised DataFrame with possible columns: {cols}."
     assert df_cols.issubset(set(cols)), error_message
 
     additional_columns = filter(lambda c: c in df.columns, list(df_add.columns))
@@ -68,7 +74,9 @@ def column_alignment(df_add: pd.DataFrame, df_cols: set, df_add_cols: set):
     difference = list(df_cols.difference(df_add_cols))
     if difference:
         for c in difference:
-            df_add[c] = np.empty(df_add.shape[0])
+            column = np.empty(df_add.shape[0])
+            column[:] = np.nan
+            df_add[c] = column
 
     return df_add
 
