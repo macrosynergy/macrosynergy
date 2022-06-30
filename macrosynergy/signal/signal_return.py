@@ -206,6 +206,9 @@ class SignalReturnRelations:
         assert type in ['cross_section', 'years']
 
         df_xs = self.df_cs if type == 'cross_section' else self.df_ys
+        # 'PosRatio' represents average boolean across the panel. It is not a statistic
+        # based directly on the signal return data. Therefore, exclude from the accuracy
+        # bar chart.
         dfx = df_xs[~df_xs.index.isin(['PosRatio'])]
 
         if title is None:
