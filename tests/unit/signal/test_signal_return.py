@@ -4,7 +4,7 @@ import unittest
 from macrosynergy.signal.signal_return import SignalReturnRelations
 
 from tests.simulate import make_qdf
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, precision_score
 from scipy import stats
 import random
 import pandas as pd
@@ -177,7 +177,39 @@ class TestAll(unittest.TestCase):
         # Tau is closer to zero, it suggests that the sample is exposed to a small
         # number of sharp outliers.
         self.assertTrue(abs(df_cs_usd_ken - kendall_tau) < 0.00001)
-        # ToDo: Add tests for other statistics
+
+        # Test the linear correlation measure, Pearson correlation coefficient.
+        df_cs_usd_pearson = df_cs.loc['USD', 'pearson']
+        sig_ret_cov_matrix = np.cov(usd_df[signal], usd_df[return_])
+        sig_ret_cov = sig_ret_cov_matrix[0, 1]
+
+        # Covariance divided by the product of the variance.
+        manual_calc = sig_ret_cov / (np.std(usd_df[signal]) * np.std(usd_df[return_]))
+
+        self.assertTrue(abs(df_cs_usd_pearson - manual_calc) < 0.0001)
+
+        # Test the precision score which will record the signal's positive bias. This is
+        # important because the greater the number of false positives, the more exposed a
+        # strategy is and subsequently any gains, through true positives, will be
+        # reversed.
+        positive_signals_index = usd_df[signal] > 0
+        positive_signals = usd_df[signal][positive_signals_index]
+        positive_signals = np.sign(positive_signals)
+
+        negative_signals = usd_df[signal][~positive_signals_index]
+        negative_signals = np.sign(negative_signals)
+
+        return_series_pos = np.sign(usd_df[return_][positive_signals_index])
+        return_series_neg = np.sign(usd_df[return_][~positive_signals_index])
+
+        positive_accuracy = accuracy_score(positive_signals,
+                                           return_series_pos)
+        negative_accuracy = accuracy_score(negative_signals,
+                                           return_series_neg)
+
+        manual_precision = (positive_accuracy + (1 - negative_accuracy)) / 2
+        df_cs_usd_posprec = df_cs.loc['USD', 'pos_prec']
+        self.assertTrue(abs(manual_precision - df_cs_usd_posprec) < 0.01)
 
         # Lastly, confirm that 'Mean' row is computed using exclusively the respective
         # segmentation types. Test on yearly data and balanced accuracy.
@@ -213,10 +245,6 @@ class TestAll(unittest.TestCase):
             self.assertTrue(ylim == min_value)
         else:
             self.assertTrue(ylim == 0.45)
-
-        # 'PosRatio' represents average boolean across the panel. It is not a statistic
-        # based directly on the signal return data. Therefore, exclude from the accuracy
-        # bar chart.
 
 
 if __name__ == "__main__":
