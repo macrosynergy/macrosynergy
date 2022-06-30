@@ -14,9 +14,7 @@ from macrosynergy.management.shape_dfs import categories_df
 class SignalReturnRelations:
 
     """
-    Class for analyzing and visualizing relations between a signal and a return series.
-    The performance measures of the proposed relationship will be completed over a
-    cross-sectional and yearly snapshot.
+    Class for analyzing and visualizing signal and a return series.
 
     :param <pd.Dataframe> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcat', 'real_date' and 'value.
@@ -128,46 +126,25 @@ class SignalReturnRelations:
             
             sig = df_sgs[self.sig]
             ret = df_sgs[self.ret]
-            # Accuracy classification score. The second array-like parameter will be the
-            # predicted labels.
             df_out.loc[cs, 'accuracy'] = skm.accuracy_score(sig, ret)
             df_out.loc[cs, 'bal_accuracy'] = skm.balanced_accuracy_score(sig, ret)
-            # Across the segment, the ratio of positive signals.
-            # In absolute terms, the ideal output is for the number of positive signals &
-            # returns to similar (used in conjunction with accuracy).
             df_out.loc[cs, 'pos_sigr'] = np.mean(sig == 1)
             df_out.loc[cs, "pos_retr"] = np.mean(ret == 1)
-            # The greater the number of false positives, the more exposed a strategy is
-            # and subsequently any gains, through true positives, will be reversed.
             df_out.loc[cs, 'pos_prec'] = skm.precision_score(ret, sig, pos_label=1)
             df_out.loc[cs, 'neg_prec'] = skm.precision_score(ret, sig, pos_label=-1)
 
             ret_vals, sig_vals = df_cs[self.ret], df_cs[self.sig]
-            # Kendall Tau offers value when used in conjunction with Pearson's
-            # correlation coefficient which is a linear measure.
-            # For instance, if the Pearson correlation coefficient is close to zero but
-            # the Kendall Tau is close to one, it can be deduced that there is a
-            # relationship between the two variables but a non-linear relationship.
-            # Alternatively, if the Pearson coefficient is close to one but the Kendall
-            # Tau is closer to zero, it suggests that the sample is exposed to a small
-            # number of sharp outliers.
             df_out.loc[cs, ['kendall', 'kendall_pval']] = stats.kendalltau(ret_vals,
                                                                            sig_vals)
             df_out.loc[cs, ['pearson', 'pearson_pval']] = stats.pearsonr(ret_vals,
                                                                          sig_vals)
 
-        # Mean across the segmentation categories.
         df_out.loc['Mean', :] = df_out.loc[css, :].mean()
 
-        # If the first six columns, metrics, are above 50% it is suggestive of a
-        # meaningful relationship between the signal & return asset.
         above50s = statms[0:6]
         df_out.loc['PosRatio', above50s] = (df_out.loc[css, above50s] > 0.5).mean()
 
         above0s = statms[6::2]
-        # Greater than zero suggests there is a linear or non-linear relationship between
-        # the signal & return series.
-        # Compute the average across the panel or time-series.
         pos_corr_coefs = df_out.loc[css, above0s] > 0
         df_out.loc['PosRatio', above0s] = pos_corr_coefs.mean()
 
@@ -229,9 +206,6 @@ class SignalReturnRelations:
         assert type in ['cross_section', 'years']
 
         df_xs = self.df_cs if type == 'cross_section' else self.df_ys
-        # 'PosRatio' represents average boolean across the panel. It is not a statistic
-        # based directly on the signal return data. Therefore, exclude from the accuracy
-        # bar chart.
         dfx = df_xs[~df_xs.index.isin(['PosRatio'])]
 
         if title is None:
