@@ -62,8 +62,7 @@ class Interface(object):
             print(f'Execution {exc_type} with value (exc_value):\n{exc_value}')
 
     def check_connection(self) -> bool:
-        """
-        Check connection (heartbeat) to DataQuery.
+        """Check connection (heartbeat) to DataQuery.
         """
         endpoint = "/services/heartbeat"
         js: dict = self.access.get_dq_api_result(url=self.access.base_url + endpoint)
@@ -74,8 +73,7 @@ class Interface(object):
 
     @staticmethod
     def server_retry(response: dict, select: str):
-        """
-        Server retry.
+        """Server retry.
 
         DQ requests are powered by four servers. Therefore, if a single server is failing
         try the remaining three servers for a request. In theory, trying the sample space
