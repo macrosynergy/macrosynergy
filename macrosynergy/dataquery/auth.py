@@ -6,14 +6,16 @@ import requests
 from typing import Optional, Dict, Tuple
 from datetime import datetime
 
+CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 OAUTH_BASE_URL: str = "https://api-developer.jpmorgan.com/research/dataquery-authe/api/v2/"
 OAUTH_TOKEN_URL: str = "https://authe.jpmchase.com/as/token.oauth2"
 OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
-CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 
 
 def valid_response(r: requests.Response) -> dict:
-
+    """Prior to requesting any data, the function will confirm if a connection to the
+    DataQuery API is able to be established given the credentials passed.
+    """
     if r.status_code == 401:
         raise RuntimeError(
             f"Authentication error - unable to access DataQuery:\n{r.text}"
@@ -37,7 +39,9 @@ def dq_request(url: str, headers: dict = None, params: dict = None,
                method: str = "get", cert: Optional[Tuple[str, str]] = None,
                **kwargs
                ) -> Tuple[dict, str, str]:
+    """Will return the request from DataQuery.
 
+    """
     request_error = f"Unknown request method {method} not in ('get', 'post')."
     assert method in ("get", "post"), request_error
 
@@ -69,7 +73,7 @@ class CertAuth(object):
     :param <str> key: string with private key location.
 
     """
-    
+
     def __init__(self,
                  username: str,
                  password: str,
@@ -122,6 +126,10 @@ class CertAuth(object):
 
     def get_dq_api_result(self, url: str, params: dict = None) -> dict:
         """Method used exclusively to request data from the API.
+
+        :param <str> url: url to access DQ API.
+        :param <dict> params: dictionary containing the required parameters for the
+            ticker series.
         """
         js, self.last_response, self.last_url = dq_request(
             url=url,
@@ -176,13 +184,16 @@ class OAuth(object):
         self.last_url: Optional[str] = None
 
     def _active_token(self) -> bool:
+        """Confirms if the token being used has not expired.
+        """
         created: datetime = self._stored_token['created_at']
         expires: int = self._stored_token['expires_in']
 
         return (datetime.now() - created).total_seconds() / 60 >= (expires - 1)
 
     def _valid_token(self) -> bool:
-
+        """Confirms if the credentials passed correspond to a valid token.
+        """
         v_token = True
         if self._stored_token is None or self._active_token():
             v_token = False
@@ -190,6 +201,8 @@ class OAuth(object):
         return v_token
 
     def _get_token(self) -> str:
+        """Retrieves the token which is used to access DataQuery via OAuth method.
+        """
 
         if not self._valid_token():
 
@@ -208,6 +221,10 @@ class OAuth(object):
 
     def get_dq_api_result(self, url: str, params: dict = None) -> dict:
         """Method used exclusively to request data from the API.
+
+        :param <str> url: url to access DQ API.
+        :param <dict> params: dictionary containing the required parameters for the
+            ticker series.
         """
 
         js, self.last_response, self.last_url = dq_request(
