@@ -5,41 +5,41 @@ from itertools import product
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.panel.make_relative_value import make_relative_value
 
-def update_df(df: pd.DataFrame, df_add: pd.DataFrame, categories: bool = False):
+
+def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False):
     """
-    The purpose of the function is to combine two DataFrames: an aggregate DataFrame and
-    a secondary DataFrame.
-    If there are shared tickers across the two DataFrames, the tickers in the aggregate
-    DataFrame will be replaced by the new series held in the secondary DataFrame. If an
-    intersection does not exist between the two, the DataFrames will simply be
-    concatenated.
-    Additionally, if the parameter 'categories' is set to True, entire panels can be
-    efficiently updated. Will assume that the category being updated has been defined
-    over the same cross-sections.
+    Append a standard dataframe to a standard base frame with ticker replacements.
 
-    :param <pd.DataFrame> df: aggregate DataFrame used to store all tickers. It can be
-        defined over the standard columns plus any additional metrics: ['grading',
-        'eop_lag', 'mop_lag'].
-    :param <pd.DataFrame> df_add: DataFrame with the latest values. The secondary
-        DataFrame must be defined over at least the standard columns. If any metric
-        columns are missing, the columns will be populated with NaN values.
-    :param <bool> categories: if the original DataFrame should be updated on the category
-        level, an entire panel being changed, set the parameter to True. Default is False
-        and updates will occur on the individual ticker level.
+    :param <pd.DataFrame> df: standardized base JPMaQS DataFrame with the following
+        necessary columns: 'cid', 'xcats', 'real_date' and 'value.
+    :param <pd.DataFrame> df_add: another standardized JPMaQS DataFrame to be added
+         with the necessary columns: 'cid', 'xcats', 'real_date' and 'value.
+         Missing columns from the base DataFrame will be populated with NaN values.
+    :param <bool> xcat_replace: all series belonging to the categories in the added
+        DataFrame will be replaced, rather than just the added tickers.
+        N.B.: tickers are combinations of cross-sections and categories.
 
-    :return <pd.DataFrame>: standardised DataFrame with the latest values of the modified
-        or newly defined tickers added.
+    :return <pd.DataFrame>: extended standardised DataFrame
     """
 
     cols = ['cid', 'xcat', 'real_date', 'value']
     # Consider the other possible metrics that the DataFrame could be defined over.
     cols += ['grading', 'eop_lag', 'mop_lag']
+    # Todo: too restrictive. Any additional columns should be fine.
 
     df_cols = set(df.columns)
     df_add_cols = set(df_add.columns)
 
     error_message = f"Expects a standardised DataFrame with possible columns: {cols}."
     assert df_cols.issubset(set(cols)), error_message
+    # Todo: this should not be required.
+
+    # Todo: Simplest basic strategy
+    #  Step 1
+    #  df = df[~df['xcat'].isin([...])]
+    #  Step 2
+    #  df = df.append(df_add)
+
 
     additional_columns = filter(lambda c: c in df.columns, list(df_add.columns))
     df_error = f"The appended DataFrame must be defined over a subset of the columns " \
@@ -49,13 +49,14 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, categories: bool = False):
 
     df_add = column_alignment(df_add, df_cols, df_add_cols)
 
-    if categories:
+    if xcat_replace:
         df = update_tickers(df, df_add)
 
     else:
         df = update_categories(df, df_add)
 
     return df.reset_index(drop=True)
+
 
 def column_alignment(df_add: pd.DataFrame, df_cols: set, df_add_cols: set):
     """
@@ -80,6 +81,7 @@ def column_alignment(df_add: pd.DataFrame, df_cols: set, df_add_cols: set):
 
     return df_add
 
+
 def df_tickers(df: pd.DataFrame):
     """
     Helper function used to delimit the tickers defined in a received DataFrame.
@@ -91,6 +93,7 @@ def df_tickers(df: pd.DataFrame):
     tickers = [c[0] + c[1] for c in tickers]
 
     return tickers
+
 
 def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     """
@@ -119,6 +122,7 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
 
     df = pd.concat([df, df_add])
     return df.sort_values(['xcat', 'cid', 'real_date'])
+
 
 def update_categories(df: pd.DataFrame, df_add):
     """
@@ -160,6 +164,7 @@ def update_categories(df: pd.DataFrame, df_add):
         df = update_categories_residual(df=df, df_add=df_add)
 
     return df
+
 
 def update_categories_residual(df: pd.DataFrame, df_add):
     """
@@ -248,5 +253,5 @@ if __name__ == "__main__":
     # Second test will be to replace updated categories. The second DataFrame's
     # categories will be a direct subset of the first. Therefore, replace the incumbent
     # categories with the latest values.
-    dfd_add_2 = update_df(df=dfd_add, df_add=dfd_1_rv_blacklist, categories=True)
+    dfd_add_2 = update_df(df=dfd_add, df_add=dfd_1_rv_blacklist, xcat_replace=True)
     print(dfd_add_2)
