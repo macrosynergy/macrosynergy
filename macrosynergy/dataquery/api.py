@@ -1,3 +1,4 @@
+
 """DataQuery Interface."""
 from typing import List
 import pandas as pd
@@ -13,7 +14,7 @@ from .auth import CertAuth, OAuth
 
 
 class Interface(object):
-    """API Interface to ©JP Morgan DataQuery
+    """API Interface to ©JP Morgan DataQuery.
 
     :param <bool> debug: boolean,
         if True run the interface in debugging mode.
