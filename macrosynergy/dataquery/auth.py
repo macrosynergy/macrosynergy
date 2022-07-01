@@ -1,3 +1,4 @@
+
 """Authentication classes for DataQuery of OAuth and CertAuth."""
 import base64
 import os
@@ -66,9 +67,12 @@ class CertAuth(object):
     :param <str> password: password.
     :param <str> crt: string with location of public certificate.
     :param <str> key: string with private key location.
-    """
 
-    def __init__(self, username: str, password: str,
+    """
+    
+    def __init__(self,
+                 username: str,
+                 password: str,
                  crt: str = "api_macrosynergy_com.crt",
                  key: str = "api_macrosynergy_com.key",
                  base_url: str = CERT_BASE_URL):
@@ -97,8 +101,7 @@ class CertAuth(object):
 
     @staticmethod
     def valid_path(directory: str, file_type: str) -> Optional[str]:
-        """
-        Validates the key & certificate exist in the referenced directory.
+        """Validates the key & certificate exist in the referenced directory.
 
         :param <str> directory: directory hosting the respective files.
         :param <str> file_type: parameter used to distinguish between the certificate or
@@ -118,8 +121,7 @@ class CertAuth(object):
             return directory
 
     def get_dq_api_result(self, url: str, params: dict = None) -> dict:
-        """
-        Method used exclusively to request data from the API.
+        """Method used exclusively to request data from the API.
         """
         js, self.last_response, self.last_url = dq_request(
             url=url,
@@ -132,8 +134,7 @@ class CertAuth(object):
 
 
 class OAuth(object):
-    """
-    Accessing DataQuery via OAuth.
+    """Accessing DataQuery via OAuth.
 
     :param <str> client_id: string with client id, username.
     :param <str> client_secret: string with client secret, password.
@@ -206,8 +207,7 @@ class OAuth(object):
         return self._stored_token['access_token']
 
     def get_dq_api_result(self, url: str, params: dict = None) -> dict:
-        """
-        Method used exclusively to request data from the API.
+        """Method used exclusively to request data from the API.
         """
 
         js, self.last_response, self.last_url = dq_request(
