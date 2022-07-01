@@ -14,7 +14,8 @@ OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
 
 def valid_response(r: requests.Response) -> dict:
     """Prior to requesting any data, the function will confirm if a connection to the
-    DataQuery API is able to be established given the credentials passed.
+    DataQuery API is able to be established given the credentials passed. If the status
+    code is 200, able to access DataQuery's API.
     """
     if r.status_code == 401:
         raise RuntimeError(
