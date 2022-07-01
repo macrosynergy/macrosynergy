@@ -1,4 +1,5 @@
-"""Module with functions to simulate data for testing"""
+
+"""Module with functions to simulate data for testing."""
 import numpy as np
 import pandas as pd
 from typing import List, Union, Tuple
@@ -8,20 +9,22 @@ from macrosynergy.management.shape_dfs import reduce_df_by_ticker
 from itertools import chain
 
 def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float = 0.75):
-    """Create an auto-correlated data-series as Numpy Array
+    """
+    Create an auto-correlated data-series as Numpy Array.
 
     :param <int> nobs: number of observations.
     :param <float> mean: mean of values, default is zero.
     :param <float> sd_mult: standard deviation multipliers of values, default is 1.
         This affects non-zero means.
-    :param <float> ar_coef: autoregression coefficient (between 0 and 1): default is 0.75.
+    :param <float> ar_coef: auto-regression coefficient (between 0 and 1): default is
+        0.75.
 
-    return <np.array>: autocorrelated data series.
+    return <np.array>: auto-correlated data series.
     """
 
     ar_params = np.r_[
-        1, -ar_coef]  # define relative parameters for creating an AR process
-    ar_proc = ArmaProcess(ar_params)  # define ARMA process
+        1, -ar_coef]
+    ar_proc = ArmaProcess(ar_params)
     ser = ar_proc.generate_sample(nobs)
     ser = ser + mean - np.mean(ser)
     return sd_mult * ser / np.std(ser)
@@ -29,7 +32,7 @@ def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float =
 
 def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
     """
-    Make quantamental dataframe with basic columns: 'cid', 'xcat', 'real_date', 'value'
+    Make quantamental DataFrame with basic columns: 'cid', 'xcat', 'real_date', 'value'
 
     :param <pd.DataFrame> df_cids: dataframe with parameters by cid. Row indices are
         cross-sections. Columns are:
@@ -45,7 +48,7 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
     'sd_mult': float of country-specific multiplier of an category's standard deviation;
     'ar_coef': float between 0 and 1 denoting set autocorrelation of the category;
     'back_coef': float, coefficient with which communal (mean 0, SD 1) background factor
-                 is added to categoy values.
+                 is added to category values.
     :param <float> back_ar: float between 0 and 1 denoting set autocorrelation of the
         background factor. Default is zero.
 
@@ -53,7 +56,7 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
 
     """
     qdf_cols = ['cid', 'xcat', 'real_date', 'value']
-    df_out = pd.DataFrame(columns=qdf_cols)
+    df_out = []
 
     if any(df_xcats['back_coef'] != 0):
         sdate = min(min(df_cids.loc[:, 'earliest']), min(df_xcats.loc[:, 'earliest']))
@@ -87,14 +90,14 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
                                           ar_coef=ser_arc)
 
             back_coef = df_xcats.loc[xcat, 'back_coef']
-            if back_coef != 0:  # add influence of communal background series
+            if back_coef != 0:
                 df_add['value'] = df_add['value'] + \
                                   back_coef * df_back.loc[df_add['real_date'],
                                                           'value'].reset_index(drop=True)
 
-            df_out = df_out.append(df_add)
+            df_out.append(df_add)
 
-    return df_out.reset_index(drop=True)
+    return pd.concat(df_out).reset_index(drop=True)
 
 
 def dataframe_basket(ret = 'XR_NSA', cry = ['CRY_NSA'], start = None, end = None,
@@ -135,7 +138,8 @@ def dataframe_basket(ret = 'XR_NSA', cry = ['CRY_NSA'], start = None, end = None
 
     ticks_ret = [c + ret for c in contracts]
     tickers = ticks_ret + list(chain.from_iterable(ticks_cry))
-    dfx = reduce_df_by_ticker(dfd, start=start, end=end, blacklist=black, ticks=tickers)
+    dfx = reduce_df_by_ticker(dfd, start=start, end=end,
+                              blacklist=black, ticks=tickers)
 
     dfw_ret = dfx[dfx["ticker"].isin(ticks_ret)].pivot(index="real_date",
                                                        columns="ticker", values="value")
