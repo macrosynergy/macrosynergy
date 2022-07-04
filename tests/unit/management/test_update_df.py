@@ -7,7 +7,6 @@ from tests.simulate import make_qdf
 from macrosynergy.management.update_df import update_df, update_tickers, \
     update_categories
 from macrosynergy.panel.make_relative_value import make_relative_value
-from random import shuffle
 
 class TestAll(unittest.TestCase):
 
@@ -78,7 +77,8 @@ class TestAll(unittest.TestCase):
         compare_df = dfd_2_rv[filter_2]
 
         # Series has been appended.
-        self.assertTrue(np.all(filt_df['value'] == compare_df['value']))
+        self.assertTrue(np.all(filt_df['value'].to_numpy() ==
+                               compare_df['value'].to_numpy()))
 
         # Test the values of the two series that are being replaced. Ensure the series
         # held in the aggregate DataFrame are from the secondary DataFrame. The two
@@ -94,7 +94,8 @@ class TestAll(unittest.TestCase):
         compare_df = dfd_2_rv[filter_4]
 
         # Series has been replaced correctly.
-        self.assertTrue(np.all(filt_df['value'] == compare_df['value']))
+        self.assertTrue(np.all(filt_df['value'].to_numpy() ==
+                               compare_df['value'].to_numpy()))
 
     def test_update_categories(self):
         """
@@ -271,7 +272,7 @@ class TestAll(unittest.TestCase):
         dfd_test = dfd_test.reset_index(drop=True)
 
         dfd_update = update_df(df=dfd_growth, df_add=dfd_1_rv,
-                               categories=True)
+                               xcat_replace=True)
         self.assertTrue(dfd_test.shape == dfd_update.shape)
 
         # Order the two DataFrames and confirm the values match.
@@ -284,7 +285,7 @@ class TestAll(unittest.TestCase):
                                        rel_meth='divide', postfix='RV')
         dfd_2_rv['grading'] = np.ones(dfd_2_rv.shape[0])
         dfd_update = update_df(df=dfd_growth, df_add=dfd_2_rv,
-                               categories=True)
+                               xcat_replace=True)
 
         dfd_update_rv = dfd_update[((dfd_update['xcat'] == 'GROWTHRV') &
                                     (dfd_update['cid'] == 'AUD'))]
