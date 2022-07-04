@@ -11,7 +11,8 @@ from macrosynergy.management.check_availability import reduce_df
 def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
                 start: str = '2000-01-01', end: str = None, val: str = 'value',
                 kind: str = 'bar', sort_cids_by: str = None,
-                title: str = None, ylab: str = None, size: Tuple[float] = (16, 8)):
+                title: str = None, ylab: str = None, size: Tuple[float] = (16, 8),
+                xcat_labels: List[str] = None):
 
     """Plots averages and various ranges across sections for one or more categories.
 
@@ -29,8 +30,14 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
     :param <str> title: string of chart title; defaults depend on type of range plot.
     :param <str> ylab: y label. Default is no label.
     :param <Tuple[float]> size: Tuple of width and height of graph. Default is (16, 8). 
+    :param <List[str]> xcat_labels: custom labels to be used for the ranges.
 
     """
+
+    error_message = "The number of custom labels must match the defined number of " \
+                    "categories in pnl_cats."
+    if xcat_labels is not None:
+        assert (len(xcat_labels) == len(xcats)), error_message
 
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
 
@@ -52,7 +59,7 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
         dfx = df[df['xcat'] == xcats[0]].groupby(['cid'])[val].mean()
         order = dfx.sort_values(ascending=False).index
     elif sort_cids_by == 'std':
-        dfx = df[df['xcat']==xcats[0]].groupby(['cid'])[val].std()
+        dfx = df[df['xcat'] == xcats[0]].groupby(['cid'])[val].std()
         order = dfx.sort_values(ascending=False).index
     else:
         order = None
@@ -61,11 +68,11 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
     fig, ax = plt.subplots(figsize=size)
 
     if kind == 'bar':
-        ax = sns.barplot(x='cid', y=val, hue='xcat', hue_order=xcats, palette='Paired',
-                         data=df, ci='sd', order=order)
+        ax = sns.barplot(x='cid', y=val, hue='xcat', hue_order=xcats,
+                         palette='Paired', data=df, ci='sd', order=order)
     elif kind == 'box':
-        ax = sns.boxplot(x='cid', y=val, hue='xcat', hue_order=xcats, palette='Paired',
-                         data=df,  order=order)
+        ax = sns.boxplot(x='cid', y=val, hue='xcat', hue_order=xcats,
+                         palette='Paired', data=df,  order=order)
         ax.xaxis.grid(True)
 
     ax.set_title(title,  fontdict={'fontsize': 16})
@@ -74,6 +81,13 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
     ax.xaxis.grid(True)
     ax.axhline(0, ls='--', linewidth=1, color='black')
     handles, labels = ax.get_legend_handles_labels()
+
+    if xcat_labels is not None:
+        error_message = "The number of custom labels must match the defined number of " \
+                        "categories in pnl_cats."
+        assert (len(xcat_labels) == len(xcats)), error_message
+        labels = xcat_labels
+
     ax.legend(handles=handles[0:], labels=labels[0:])
     plt.show()
 
@@ -100,4 +114,6 @@ if __name__ == "__main__":
     view_ranges(dfd, xcats=['XR'], cids=cids, kind='box', start='2012-01-01',
                 end='2018-01-01', sort_cids_by='std')
 
-
+    view_ranges(dfd, xcats=['XR', 'CRY'], cids=cids, kind='box',
+                start='2012-01-01', end='2018-01-01', sort_cids_by='std',
+                xcat_labels=['EQXR_NSA', 'CRY_NSA'])
