@@ -52,8 +52,8 @@ class TestDataQueryInterface(unittest.TestCase):
         # connections.
 
         with api.Interface(client_id="client1",
-                          client_secret="123",
-                          oauth=True) as dq:
+                           client_secret="123",
+                           oauth=True) as dq:
             self.assertTrue(dq.check_connection())
             mock_p_request.assert_called_with(url=dq.access.base_url +
                                                   "/services/heartbeat")
@@ -90,7 +90,7 @@ class TestDataQueryInterface(unittest.TestCase):
                                   client_id="client1",
                                   client_secret="123")
         
-        self.assertTrue(type(dq_access.access) == OAuth)
+        self.assertIsInstance(dq_access.access, OAuth)
 
     def test_certauth_condition(self):
 
@@ -102,7 +102,7 @@ class TestDataQueryInterface(unittest.TestCase):
                                   crt="/api_macrosynergy_com.crt",
                                   key="/api_macrosynergy_com.key")
 
-        self.assertTrue(type(dq_access.access) == CertAuth)
+        self.assertIsInstance(dq_access.access, CertAuth)
 
     def test_isolate_timeseries(self):
 
@@ -202,7 +202,7 @@ class TestDataQueryInterface(unittest.TestCase):
         # Confirm the dictionary is a standardised DataFrame plus the respective metrics
         # passed.
         expected_columns = ['cid', 'xcat', 'real_date', 'value', 'grading']
-        self.assertTrue(sorted(list(trial_df.columns)) == sorted(expected_columns))
+        self.assertEqual(sorted(expected_columns), sorted(list(trial_df.columns)))
 
         # Next confirm that tickers held in the DataFrame are the complete set: i.e all
         # the tickers defined in the constructor. All tickers are valid. Therefore,
