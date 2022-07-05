@@ -12,11 +12,64 @@ from collections import defaultdict
 from macrosynergy.management.check_availability import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
+def lag_series(df_w: pd.DataFrame, lags: dict):
+    """
+    Method used to lag respective categories.
+
+    :param <pd.DataFrame> df_w: multi-index DataFrame where the columns are the
+        categories, and the two indices are the cross-sections and real-dates.
+    :param <dict> lags: dictionary of lags applied to respective categories.
+
+    """
+
+    lag_type = "The lag data structure must be of type <dict>."
+    assert isinstance(lags, dict), lag_type
+
+    lag_xcats = f"The categories referenced in the lagged dictionary must be " \
+                f"present in the defined DataFrame, {xcats}."
+    assert set(lags.keys()).issubset(set(xcats)), lag_xcats
+
+    # Modify the dictionary to adjust for single categories having multiple lags.
+    # The respective lags will be held inside a list.
+    lag_copy = {}
+    xcat_tracker = defaultdict(list)
+    for xcat, shift in lags.items():
+        if isinstance(shift, int):
+            lag_copy[xcat + f"_L{shift}"] = shift
+            xcat_tracker[xcat].append(xcat + f"_L{shift}")
+        else:
+            xcat_temp = [xcat + f"_L{s}" for s in shift]
+            # Merge the two dictionaries.
+            lag_copy = {**lag_copy, **dict(zip(xcat_temp, shift))}
+            xcat_tracker[xcat].extend(xcat_temp)
+
+    df_w_copy = df_w.copy()
+    # Handle for multi-index DataFrame. The interior index represents the
+    # timestamps.
+    for xcat, shift in lag_copy.items():
+
+        category = xcat[:-3]
+        clause = isinstance(lags[category], list)
+        first_lag = category in df_w.columns
+
+        if clause and not first_lag:
+            # Duplicate the column if multiple lags on the same category and the
+            # category's first lag has already been implemented. Always access
+            # the series from the original DataFrame.
+            df_w[xcat] = df_w_copy[category]
+        else:
+            # Otherwise, modify the name.
+            df_w = df_w.rename(columns={category: xcat})
+        # Shift the respective column (name will have been adjusted to reflect
+        # lag).
+        df_w[xcat] = df_w.groupby(level=0)[xcat].shift(shift)
+
+    return df_w, xcat_tracker
 
 def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
                   cids: List[str] = None, start: str = '2000-01-01',
                   end: str = None, val: str = 'value', freq: str = None,
-                  cluster: bool = False, lags: List[int] = None,
+                  cluster: bool = False, lags: dict = None,
                   title: str = None, size: Tuple[float] = (14, 8),
                   max_color: float = None):
     """
@@ -89,7 +142,8 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
 
     else:
 
-        df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values=val)
+        df_w = df.pivot(index=('cid', 'real_date'), columns='xcat',
+                        values=val)
 
         # Down-sample according to the passed frequency.
         if freq is not None:
@@ -99,47 +153,7 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
 
         # Apply the lag mechanism, to the respective categories, after the down-sampling.
         if lags is not None:
-            lag_type = "The lag data structure must be of type <dict>."
-            assert isinstance(lags, dict), lag_type
-
-            lag_xcats = f"The categories referenced in the lagged dictionary must be " \
-                        f"present in the defined DataFrame, {xcats}."
-            assert set(lags.keys()).issubset(set(xcats)), lag_xcats
-
-            # Modify the dictionary to adjust for single categories having multiple lags.
-            # The respective lags will be held inside a list.
-            lag_copy = {}
-            xcat_tracker = defaultdict(list)
-            for xcat, shift in lags.items():
-                if isinstance(shift, int):
-                    lag_copy[xcat + f"_L{shift}"] = shift
-                    xcat_tracker[xcat].append(xcat + f"_L{shift}")
-                else:
-                    xcat_temp = [xcat + f"_L{s}" for s in shift]
-                    # Merge the two dictionaries.
-                    lag_copy = {**lag_copy, **dict(zip(xcat_temp, shift))}
-                    xcat_tracker[xcat].extend(xcat_temp)
-
-            df_w_copy = df_w.copy()
-            # Handle for multi-index DataFrame. The interior index represents the
-            # timestamps.
-            for xcat, shift in lag_copy.items():
-
-                category = xcat[:-3]
-                clause = isinstance(lags[category], list)
-                first_lag = category in df_w.columns
-
-                if clause and not first_lag:
-                    # Duplicate the column if multiple lags on the same category and the
-                    # category's first lag has already been implemented. Always access
-                    # the series from the original DataFrame.
-                    df_w[xcat] = df_w_copy[category]
-                else:
-                    # Otherwise, modify the name.
-                    df_w = df_w.rename(columns={category: xcat})
-                # Shift the respective column (name will have been adjusted to reflect
-                # lag).
-                df_w[xcat] = df_w.groupby(level=0)[xcat].shift(shift)
+            df_w, xcat_tracker = lag_series(df_w=df_w, lags=lags)
 
         # Order the correlation DataFrame to reflect the order of the categories
         # parameter. Will replace the official category name with the lag appended name.
