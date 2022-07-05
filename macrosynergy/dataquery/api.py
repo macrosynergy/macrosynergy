@@ -585,7 +585,7 @@ class Interface(object):
         return df
 
     def tickers(self, tickers: list, metrics: list = ['value'],
-                start_date: str='2000-01-01', suppress_warning=False):
+                start_date: str = '2000-01-01', suppress_warning=False):
         """
         Returns standardized dataframe of specified base tickers and metric. Will also
         validate the connection to DataQuery through the api using the method
