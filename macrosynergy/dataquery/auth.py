@@ -65,7 +65,7 @@ class CertAuth(object):
     """Certificate Authentication.
 
     Class used to access DataQuery via certificate and private key. To access the API
-    login both username % password are required as well as a certified certificate and
+    login both username & password are required as well as a certified certificate and
     private key to verify the request.
 
     :param <str> username: username for login to REST API for JP Morgan DataQuery.
@@ -116,14 +116,14 @@ class CertAuth(object):
         dir_error = f"{file_type:s} file must be a <str> not <{type(directory)}>."
         assert isinstance(directory, str), dir_error
 
-        try:
-            os.path.exists(directory) and os.path.isfile(directory)
-        except OSError as error:
-            print(error)
-            print(f"Not a valid file path on the system: {directory} - return None")
-            return None
-        else:
+        condition = (os.path.exists(directory) and os.path.isfile(directory))
+        if condition:
             return directory
+        else:
+            print(f"The directory received, {directory}, does not contain the respective"
+                  f" file, {file_type}.")
+
+            return None
 
     def get_dq_api_result(self, url: str, params: dict = None) -> dict:
         """Method used exclusively to request data from the API.
@@ -174,10 +174,12 @@ class OAuth(object):
 
         self.client_secret: str = client_secret
         self._stored_token: Optional[dict] = None
-        self.data = {'grant_type': 'client_credentials',
-                      'client_id': self.client_id,
-                      'client_secret': self.client_secret,
-                      'aud': self.__dq_api_resource_id}
+        self.token_data = {
+            'grant_type': 'client_credentials',
+            'client_id': self.client_id,
+            'client_secret': self.client_secret,
+            'aud': self.__dq_api_resource_id
+        }
 
         # For debugging purposes save last request response.
         self.status_code: Optional[int] = None
@@ -195,11 +197,7 @@ class OAuth(object):
     def _valid_token(self) -> bool:
         """Confirms if the credentials passed correspond to a valid token.
         """
-        v_token = True
-        if self._stored_token is None or self._active_token():
-            v_token = False
-
-        return v_token
+        return not (self._stored_token is None or self._active_token())
 
     def _get_token(self) -> str:
         """Retrieves the token which is used to access DataQuery via OAuth method.
@@ -209,7 +207,7 @@ class OAuth(object):
 
             js, self.last_response, self.last_url = dq_request(
                 url=self.__token_url,
-                data=self.data,
+                data=self.token_data,
                 proxies={},
                 method="post")
             self._stored_token: dict = {
