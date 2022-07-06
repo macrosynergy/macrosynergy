@@ -143,8 +143,13 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
 
         # Order the correlation DataFrame to reflect the order of the categories
         # parameter. Will replace the official category name with the lag appended name.
-        order = [[x] if x not in xcat_tracker.keys() else xcat_tracker[x] for x in xcats]
-        order = list(itertools.chain(*order))
+        if lags is not None:
+            order = [[x] if x not in xcat_tracker.keys()
+                     else xcat_tracker[x] for x in xcats]
+            order = list(itertools.chain(*order))
+        else:
+            order = xcats
+
         df_w = df_w[order]
 
         if title is None:
@@ -152,7 +157,7 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
 
     sns.set(style="ticks")
 
-    corr = df_w.corr()
+    corr = df_w.corr(method='pearson')
 
     if cluster:
         # Pairwise distances between observations in n-dimensional space. If y is a 1-D
@@ -217,7 +222,7 @@ if __name__ == "__main__":
     # Lag inflation by 60 business days - 3 months.
     lag_dict = {'INFL': [0, 1, 2, 5]}
     correl_matrix(dfd, xcats=['INFL', 'GROWTH'], cids=cids,
-                  lags= lag_dict, max_color=0.1)
+                  lags= None, max_color=0.1)
     # Down-sample to monthly frequency and then apply the lags. Multiple lags applied to
     # single cross-section.
     lag_dict = {'INFL': [1, 2, 3], 'CRY': [1, 2, 3]}
