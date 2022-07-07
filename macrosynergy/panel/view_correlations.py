@@ -209,43 +209,12 @@ if __name__ == "__main__":
 
     # Un-clustered correlation matrices.
 
-    random.seed(1)
-    cids = ['AUD', 'CAD', 'GBP', 'NZD']
-    xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
-    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest',
-                                                'mean_add', 'sd_mult'])
-    df_cids.loc['AUD', ] = ['2010-01-01', '2020-12-31', 0.1, 1]
-    df_cids.loc['CAD', ] = ['2011-01-01', '2020-11-30', 0, 1]
-    df_cids.loc['GBP', ] = ['2012-01-01', '2020-11-30', 0, 2]
-    df_cids.loc['NZD', ] = ['2012-01-01', '2020-09-30', -0.1, 2]
-
-    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
-                                                  'sd_mult', 'ar_coef', 'back_coef'])
-    df_xcats.loc['XR', ] = ['2010-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
-    df_xcats.loc['CRY', ] = ['2010-01-01', '2020-10-30', 1, 2, 0.95, 0.5]
-    df_xcats.loc['GROWTH', ] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
-    df_xcats.loc['INFL', ] = ['2010-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
-
-    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-
-    # Lag inflation by 60 business days - 3 months.
-    lag_dict = {'INFL': [0, 1, 2, 5]}
-    correl_matrix(dfd, xcats=['INFL', 'GROWTH'], cids=cids,
-                  lags= lag_dict, max_color=0.1)
-    # Down-sample to monthly frequency and then apply the lags. Multiple lags applied to
-    # single cross-section.
-    lag_dict = {'INFL': [1, 2, 3], 'CRY': [1, 2, 3]}
-    correl_matrix(dfd, xcats=['INFL', 'CRY', 'GROWTH'], cids=cids, freq='Q',
-                  lags= lag_dict, max_color=0.1)
-
-    # Clustered correlation matrices. Test hierarchical clustering.
-    random.seed(1)
-    cids = ['AUD', 'CAD', 'GBP', 'USD', 'NZD', 'EUR']
+    cids = ["AUD", "CAD", "GBP", "USD", "NZD", "EUR"]
     cids_dmsc = ["CHF", "NOK", "SEK"]
     cids_dmec = ["DEM", "ESP", "FRF", "ITL", "NLG"]
     cids += cids_dmec
     cids += cids_dmsc
-    xcats = ['XR', 'CRY']
+    xcats = ["XR", "CRY"]
 
     df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest',
                                                 'mean_add', 'sd_mult'])
@@ -265,14 +234,17 @@ if __name__ == "__main__":
     df_cids.loc['NOK'] = ['2010-01-01', '2020-12-30', -0.1, 0.5]
     df_cids.loc['SEK'] = ['2010-01-01', '2020-09-30', -0.1, 0.5]
 
-    df_xcats = pd.DataFrame(index = xcats, columns = ['earliest', 'latest', 'mean_add',
-                                                      'sd_mult', 'ar_coef', 'back_coef'])
-    df_xcats.loc['XR'] = ['2012-01-01', '2020-12-31', 0, 1, 0, 0.3]
-    df_xcats.loc['CRY'] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
+    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
+                                                  'sd_mult', 'ar_coef', 'back_coef'])
+    df_xcats.loc['XR', ] = ['2010-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
+    df_xcats.loc['CRY', ] = ['2010-01-01', '2020-10-30', 1, 2, 0.95, 0.5]
+
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     start = '2012-01-01'
     end = '2020-09-30'
+
+    # Clustered correlation matrices. Test hierarchical clustering.
     correl_matrix(df=dfd, xcats='XR', cids=cids, start=start, end=end,
                   val='value', freq=None, cluster=True,
                   title='Correlation Matrix', size=(14, 8), max_color=None)
