@@ -4,10 +4,10 @@ from itertools import product
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.panel.make_relative_value import make_relative_value
 
+
 def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False):
     """
-    Append a standard DataFrame to a standard base DataFrame with ticker replacement on
-    the intersection.
+    Append standard DataFrame to standard base DataFrame with ticker replacement.
 
     :param <pd.DataFrame> df: standardised base JPMaQS DataFrame with the following
         necessary columns: 'cid', 'xcats', 'real_date' and 'value'.
@@ -15,16 +15,18 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
         values, to be added with the necessary columns: 'cid', 'xcats', 'real_date', and
         'value'. Columns that are present in the base DataFrame but not in the appended
         DataFrame will be populated with NaN values.
-    :param <bool> xcat_replace: all series belonging to the categories in the added
-        DataFrame will be replaced, rather than just the added tickers.
+    :param <bool> xcat_replace: Default is the replacement of tickers in the
+        base DataFrame by those in the added frame. If this argument is set to
+        True replacement is by category, i.e. all tickers belonging to the categories
+        in the added frame are removed in the base frame before the new ones are
+        added.
         N.B.: tickers are combinations of cross-sections and categories.
 
     :return <pd.DataFrame>: standardised DataFrame with the latest values of the modified
         or newly defined tickers added.
     """
 
-    cols = ['cid', 'xcat', 'real_date', 'value']
-    # Consider the other possible metrics that the DataFrame could be defined over
+    cols = ['cid', 'xcat', 'real_date', 'value']  # required columns
 
     df_cols = set(df.columns)
     df_add_cols = set(df_add.columns)
@@ -49,19 +51,9 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
 
     return df.reset_index(drop=True)
 
-def df_tickers(df: pd.DataFrame):
-    """
-    Helper function used to delimit the tickers defined in a received DataFrame.
-
-    :param <pd.DataFrame> df: standardised DataFrame.
-    """
-    cids_append = list(map(lambda c: c + '_', set(df['cid'])))
-    tickers = list(product(cids_append, set(df['xcat'])))
-    tickers = [c[0] + c[1] for c in tickers]
-
-    return tickers
 
 def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
+
     """
     Method used to update aggregate DataFrame on a ticker level.
 
@@ -69,23 +61,18 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     :param <pd.DataFrame> df_add: DataFrame with the latest values.
 
     """
-    agg_df_tick = set(df_tickers(df))
-    add_df_tick = set(df_tickers(df_add))
+    old_tiks = list((df['cid'] + '_' + df['xcat']).unique())
+    new_tiks = list((df_add['cid'] + '_' + df_add['xcat']).unique())
+    intersect = list(set(old_tiks).intersection(set(new_tiks)))
 
-    df['ticker'] = df['cid'] + '_' + df['xcat']
+    if len(intersect) > 0:
+        df = df[~(df['cid'] + '_' + df['xcat']).isin(intersect)]
 
-    # If the ticker is already defined in the DataFrame, replace with the new series
-    # otherwise append the series to the aggregate DataFrame.
-    df = df[~df['ticker'].isin(list(agg_df_tick.intersection(add_df_tick)))]
+    return pd.concat([df, df_add], axis=0, ignore_index=True)
 
-    df = pd.concat([df, df_add], axis=0,
-                   ignore_index=True)
-
-    df = df.drop(['ticker'], axis=1)
-
-    return df.sort_values(['xcat', 'cid', 'real_date'])
 
 def update_categories(df: pd.DataFrame, df_add):
+    
     """
     Method used to update the DataFrame on the category level.
 
@@ -94,25 +81,14 @@ def update_categories(df: pd.DataFrame, df_add):
 
     """
 
-    incumbent_categories = list(df['xcat'].unique())
+    old_categories = list(df['xcat'].unique())
     new_categories = list(df_add['xcat'].unique())
+    intersect = list(set(old_categories).intersection(set(new_categories)))
 
-    # Union of both category columns from the two DataFrames.
-    append_condition = set(incumbent_categories) | set(new_categories)
-    intersect = list(set(incumbent_categories).intersection(set(new_categories)))
-
-    if len(append_condition) == len(incumbent_categories + new_categories):
-        df = pd.concat([df, df_add], axis=0,
-                       ignore_index=True)
-
-    # Shared categories plus any additional categories previously not defined in the base
-    # DataFrame.
-    else:
+    if len(intersect) > 0:
         df = df[~df['xcat'].isin(intersect)]
-        df = pd.concat([df, df_add], axis=0,
-                       ignore_index=True)
-
-    return df
+        
+    return pd.concat([df, df_add], axis=0, ignore_index=True)
 
 
 if __name__ == "__main__":
@@ -136,7 +112,6 @@ if __name__ == "__main__":
     df_xcats.loc['INFL'] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-    tickers = df_tickers(dfd)
 
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
 
