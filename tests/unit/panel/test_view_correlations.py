@@ -35,27 +35,61 @@ class TestAll(unittest.TestCase):
         """
         self.dataframe_construction()
 
-        df_w = self.dfd.pivot(index=('cid', 'real_date'), columns='xcat',
-                              values='value')
+        df_w = self.dfd.pivot(index=("cid", "real_date"), columns="xcat",
+                              values="value")
 
         # Confirm the application of the lag to the respective category is correct.
         # Compare against the original DataFrame.
 
         # Lag inflation by a range of possible options.
-        lag_dict = {'INFL': [0, 2, 5]}
+        lag_dict = {"INFL": [0, 2, 5]}
         # Returns a multi-index DataFrame. Therefore, ensure the lag has been applied
         # correctly on each individual cross-section.
         df_w, xcat_tracker = lag_series(df_w, lag_dict, xcats=self.xcats)
 
         # Firstly, confirm the DataFrame includes the expected columns: incumbent
         # categories & additional categories that have had the lag postfix appended.
-        test_columns = df_w.columns
-        test_columns = set(test_columns)
+        test_columns = list(df_w.columns)
+        test_columns_set = set(test_columns)
         # The inflation category will be removed from the wide DataFrame as it is being
         # replaced by a lagged version.
         xcats_copy = self.xcats
-        xcats_copy.remove('INFL')
-        self.assertTrue(set(xcats_copy).issubset(test_columns))
+        xcats_copy.remove("INFL")
+        self.assertTrue(set(xcats_copy).issubset(test_columns_set))
+
+        # Remove the incumbent categories and confirm that the residual categories in
+        # the DataFrame are the respective lagged inflation series: ['INFL_L0',
+        # 'INFL_L2', 'INFL_L5'].
+
+        update_test_columns = [xcat for xcat in test_columns
+                               if xcat not in xcats_copy]
+
+        update_test_columns = sorted(update_test_columns)
+        self.assertTrue(update_test_columns == ["INFL_L0", "INFL_L2", "INFL_L5"])
+
+        # Confirm the lag mechanism works correctly. The DataFrame will be a multi-index
+        # DataFrame, and subsequently it is important to confirm that the lag works
+        # correctly on an individual ticker level.
+        df_w_lag = df_w[["INFL_L0", "INFL_L2", "INFL_L5"]]
+
+        # The benchmark value will be "INFL_L0" where a lag has not been applied. Test on
+        # two cross-sections: ['AUD', 'GBP'].
+        df_w_lag = df_w_lag.loc[['AUD', 'GBP'], :]
+
+        # Arbitrary date to test the logic.
+        fixed_date = '2013-03-11'
+        condition = df_w_lag.index.get_level_values('real_date') == fixed_date
+        period_t = df_w_lag[condition]["INFL_L0"]
+        period_t_aud = float(period_t.loc["AUD"])
+
+        lagged_date_2 = pd.Timestamp(fixed_date) + pd.DateOffset(2)
+        condition_2 = df_w_lag.index.get_level_values('real_date') == lagged_date_2
+        period_t_2 = df_w_lag[condition_2]["INFL_L2"]
+        period_t_2_aud = float(period_t_2.loc["AUD"])
+
+        # Confirm that the value at '2013-03-11' has been lagged correctly in INFL_L2:
+        # the same value should be held at '2013-03-13'.
+        self.assertEqual(period_t_aud, period_t_2_aud)
 
     def test_correl_matrix(self):
 
