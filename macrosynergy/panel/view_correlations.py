@@ -1,5 +1,4 @@
 
-import random
 import itertools
 import pandas as pd
 import numpy as np
@@ -12,14 +11,14 @@ from collections import defaultdict
 from macrosynergy.management.check_availability import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
-def lag_series(df_w: pd.DataFrame, lags: dict):
+def lag_series(df_w: pd.DataFrame, lags: dict, xcats: List[str]):
     """
     Method used to lag respective categories.
 
     :param <pd.DataFrame> df_w: multi-index DataFrame where the columns are the
         categories, and the two indices are the cross-sections and real-dates.
     :param <dict> lags: dictionary of lags applied to respective categories.
-
+    :param <List[str]> xcats: extended categories to be correlated.
     """
 
     lag_type = "The lag data structure must be of type <dict>."
@@ -79,9 +78,9 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: extended categories to be correlated. Default is all in the
         dataframe. If xcats contains only one category the correlation coefficients
-        across cross sections are displayed. If xcats contains more than one category the
-        correlation coefficients across categories are displayed. Additionally, the order
-        of the xcats received will be mirrored in the correlation matrix.
+        across cross sections are displayed. If xcats contains more than one category,
+        the correlation coefficients across categories are displayed. Additionally, the
+        order of the xcats received will be mirrored in the correlation matrix.
     :param <List[str]> cids: cross sections to be correlated. Default is all in the
         dataframe.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
@@ -153,7 +152,7 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
 
         # Apply the lag mechanism, to the respective categories, after the down-sampling.
         if lags is not None:
-            df_w, xcat_tracker = lag_series(df_w=df_w, lags=lags)
+            df_w, xcat_tracker = lag_series(df_w=df_w, lags=lags, xcats=xcats)
 
         # Order the correlation DataFrame to reflect the order of the categories
         # parameter. Will replace the official category name with the lag appended name.
