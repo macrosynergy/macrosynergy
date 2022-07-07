@@ -1,6 +1,7 @@
 
 import unittest
 import pandas as pd
+import numpy as np
 from tests.simulate import make_qdf
 from macrosynergy.panel.view_correlations import correl_matrix, lag_series
 
@@ -53,7 +54,7 @@ class TestAll(unittest.TestCase):
         test_columns_set = set(test_columns)
         # The inflation category will be removed from the wide DataFrame as it is being
         # replaced by a lagged version.
-        xcats_copy = self.xcats
+        xcats_copy = self.xcats.copy()
         xcats_copy.remove("INFL")
         self.assertTrue(set(xcats_copy).issubset(test_columns_set))
 
@@ -87,9 +88,46 @@ class TestAll(unittest.TestCase):
         period_t_2 = df_w_lag[condition_2]["INFL_L2"]
         period_t_2_aud = float(period_t_2.loc["AUD"])
 
-        # Confirm that the value at '2013-03-11' has been lagged correctly in INFL_L2:
-        # the same value should be held at '2013-03-13'.
+        # Confirm that the value at '2013-03-11' has been lagged correctly in INFL_L2 on
+        # AUD: the same value should be held at '2013-03-13'.
         self.assertEqual(period_t_aud, period_t_2_aud)
+
+        # Apply the same logic above but for INFL_L2.
+        dates_index = list(df_w_lag.loc['AUD', :].index)
+        dates_index = list(map(lambda d: str(d).split(' ')[0], dates_index))
+
+        fixed_date_index = dates_index.index(fixed_date)
+        lagged_date_5_index = fixed_date_index + 5
+
+        lagged_date_5 = dates_index[lagged_date_5_index]
+        condition_5 = df_w_lag.index.get_level_values('real_date') == lagged_date_5
+
+        period_t_5 = df_w_lag[condition_5]["INFL_L5"]
+        period_t_5_aud = float(period_t_5.loc["AUD"])
+        self.assertEqual(period_t_aud, period_t_5_aud)
+
+        period_t_gbp = float(period_t.loc["GBP"])
+        period_t_2_gbp = float(period_t_2.loc["GBP"])
+
+        # Confirm that the value at '2013-03-11' has been lagged correctly in INFL_L2 on
+        # GBP: the same value should be held at '2013-03-13'.
+        self.assertEqual(period_t_gbp, period_t_2_gbp)
+
+        # INFL_L5 on GBP.
+        period_t_5_gbp = float(period_t_5.loc["GBP"])
+        self.assertEqual(period_t_gbp, period_t_5_gbp)
+
+        # Lag inflation & Growth by a range of possible options.
+        lag_dict = {"INFL": [0, 5], "GROWTH": [3]}
+        df_w = self.dfd.pivot(index=("cid", "real_date"), columns="xcat",
+                              values="value")
+
+        df_w, xcat_tracker = lag_series(df_w, lag_dict, xcats=self.xcats)
+        test_columns = list(df_w.columns)
+
+        lagged_columns = [xcat for xcat in test_columns if xcat not in self.xcats]
+        self.assertTrue(sorted(lagged_columns) ==
+                        ["GROWTH_L3", "INFL_L0", "INFL_L5"])
 
     def test_correl_matrix(self):
 
