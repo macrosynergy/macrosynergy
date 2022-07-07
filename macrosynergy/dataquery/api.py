@@ -26,25 +26,25 @@ class Interface(object):
     """
 
     def __init__(
-            self,
-            oauth: bool = False,
-            debug: bool = False,
-            concurrent: bool = True,
-            thread_handler: int = 20,
-            **kwargs
+        self,
+        oauth: bool = False,
+        debug: bool = False,
+        concurrent: bool = True,
+        thread_handler: int = 20,
+        **kwargs
     ):
 
         if oauth:
             self.access: OAuth = OAuth(
-                client_id=kwargs.pop('client_id'),
-                client_secret=kwargs.pop('client_secret')
+                client_id=kwargs.pop("client_id"),
+                client_secret=kwargs.pop("client_secret")
             )
         else:
             self.access: CertAuth = CertAuth(
-                username=kwargs.pop('username'),
-                password=kwargs.pop('password'),
-                crt=kwargs.pop('crt'),
-                key=kwargs.pop('key')
+                username=kwargs.pop("username"),
+                password=kwargs.pop("password"),
+                crt=kwargs.pop("crt"),
+                key=kwargs.pop("key")
             )
 
         self.debug: bool = debug
@@ -59,7 +59,7 @@ class Interface(object):
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         if exc_type:
-            print(f'Execution {exc_type} with value (exc_value):\n{exc_value}')
+            print(f"Execution {exc_type} with value (exc_value):\n{exc_value}")
 
     def check_connection(self) -> bool:
         """Check connection (heartbeat) to DataQuery.
@@ -184,15 +184,21 @@ class Interface(object):
         no_tickers = len(tickers)
 
         if not count:
-            params_ = {"format": "JSON", "start-date": start_date, "end-date": end_date,
-                       "calendar": calendar, "frequency": frequency, "conversion":
-                       conversion, "nan_treatment": nan_treatment,
-                       "data": "NO_REFERENCE_DATA"}
+            params_ = {
+                "format": "JSON",
+                "start-date": start_date,
+                "end-date": end_date,
+                "calendar": calendar,
+                "frequency": frequency,
+                "conversion": conversion,
+                "nan_treatment": nan_treatment,
+                "data": "NO_REFERENCE_DATA"
+            }
             params.update(params_)
 
         t = self.thread_handler
         iterations = ceil(no_tickers / t)
-        tick_list_compr = [tickers[(i * t): (i * t) + t] for i in range(iterations)]
+        tick_list_compr = [tickers[(i * t) : (i * t) + t] for i in range(iterations)]
 
         unpack = list(chain(*tick_list_compr))
         assert len(unpack) == len(set(unpack)), "List comprehension incorrect."
@@ -208,12 +214,14 @@ class Interface(object):
                 if i > 0:
                     time.sleep(delay)
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    for elem in tick_list_compr[(i * 10): (i + 1) * 10]:
+                    for elem in tick_list_compr[(i * 10) : (i + 1) * 10]:
 
                         params_copy = params.copy()
                         params_copy["expressions"] = elem
-                        results = executor.submit(self._fetch_threading, endpoint,
-                                                  params_copy)
+                        results = executor.submit(
+                            self._fetch_threading, endpoint, params_copy
+                        )
+
                         time.sleep(delay)
                         results.__dict__[str(id(results))] = elem
                         output.append(results)
@@ -221,7 +229,7 @@ class Interface(object):
                     for f in concurrent.futures.as_completed(output):
                         try:
                             response = f.result()
-                            if f.__dict__['_result'] is None:
+                            if f.__dict__["_result"] is None:
                                 return None
 
                         except ValueError:
@@ -247,10 +255,12 @@ class Interface(object):
 
                 delay += 0.1
                 try:
-                    recursive_output = final_output + self._request(endpoint=endpoint,
-                                                                    tickers=list(set(tickers_server)),
-                                                                    params=params,
-                                                                    delay=delay, count=count)
+                    recursive_output = final_output + self._request(
+                        endpoint=endpoint,
+                        tickers=list(set(tickers_server)),
+                        params=params,
+                        delay=delay, count=count
+                    )
                 except TypeError:
                     continue
                 else:
@@ -296,8 +306,9 @@ class Interface(object):
 
         return dq_tix
 
-    def get_ts_expression(self, expression, original_metrics, suppress_warning,
-                          **kwargs):
+    def get_ts_expression(
+            self, expression, original_metrics, suppress_warning, **kwargs
+    ):
         """
         Main driver function. Receives the Tickers and returns the respective dataframe.
 
@@ -311,8 +322,11 @@ class Interface(object):
         """
 
         for metric in original_metrics:
-            assert metric in ['value', 'eop_lag', 'mop_lag', 'grading'], \
-                f"Incorrect metric passed: {metric}."
+            assert metric in [
+                "value",
+                "eop_lag",
+                "mop_lag",
+                "grading"], f"Incorrect metric passed: {metric}."
 
         unique_tix = list(set(expression))
 
@@ -321,31 +335,40 @@ class Interface(object):
         expression = dq_tix
 
         c_delay = self.delay_compute(len(dq_tix))
-        results = self._request(endpoint="/expressions/time-series",
-                                tickers=expression, params={},
-                                delay=c_delay, **kwargs)
+        results = self._request(
+            endpoint="/expressions/time-series",
+            tickers=expression,
+            params={},
+            delay=c_delay,
+            **kwargs
+        )
 
         while results is None:
             c_delay += 0.1
-            results = self._request(endpoint="/expressions/time-series",
-                                    tickers=expression, params={},
-                                    delay = c_delay, **kwargs)
+            results = self._request(
+                endpoint="/expressions/time-series",
+                tickers=expression,
+                params={},
+                delay = c_delay,
+                **kwargs
+            )
 
-        no_metrics = len(set([tick.split(',')[-1][:-1] for tick in expression]))
+        no_metrics = len(set([tick.split(",")[-1][:-1] for tick in expression]))
 
-        results_dict, output_dict, s_list = self.isolate_timeseries(results,
-                                                                    original_metrics,
-                                                                    self.debug,
-                                                                    False)
+        results_dict, output_dict, s_list = self.isolate_timeseries(
+            results, original_metrics, self.debug, False
+        )
+
         if s_list:
             sequential = True
-            self.__dict__['concurrent'] = False
-            results_seq = self._request(endpoint="/expressions/time-series",
-                                        tickers=s_list, params={}, **kwargs)
-            r_dict, o_dict, s_list = self.isolate_timeseries(results_seq,
-                                                             original_metrics,
-                                                             self.debug,
-                                                             sequential=sequential)
+            self.__dict__["concurrent"] = False
+            results_seq = self._request(
+                endpoint="/expressions/time-series", tickers=s_list, params={}, **kwargs
+            )
+            r_dict, o_dict, s_list = self.isolate_timeseries(
+                results_seq, original_metrics, self.debug, sequential=sequential
+            )
+
             results_dict = {**results_dict, **r_dict}
 
         results_dict = self.valid_ticker(results_dict, suppress_warning, self.debug)
@@ -358,8 +381,7 @@ class Interface(object):
             print("None of the tickers are available in the Database.")
             return
         else:
-            return self.dataframe_wrapper(results_dict, no_metrics,
-                                          original_metrics)
+            return self.dataframe_wrapper(results_dict, no_metrics, original_metrics)
 
     @staticmethod
     def array_construction(metrics: List[str], output_dict: dict, no_rows: int,
@@ -393,9 +415,11 @@ class Interface(object):
                     arr[:, i] = v[metric]
                 except KeyError:
                     if debug:
-                        print(f"The ticker, {k[3:]}, is missing the metric '{metric}' "
-                              f"whilst the requests are running concurrently - will "
-                              f"check the API sequentially.")
+                        print(
+                            f"The ticker, {k[3:]}, is missing the metric '{metric}' "
+                            f"whilst the requests are running concurrently - will "
+                            f"check the API sequentially."
+                        )
 
                     temp_list = [k + ',' + m + ')' for m in metrics]
                     ticker_list += temp_list
@@ -403,9 +427,11 @@ class Interface(object):
                         if 'value' in v.keys():
                             arr[:, i] = np.nan
                         else:
-                            print(f"The ticker, {k[3:]}, is missing from the API after "
-                                  f"running sequentially - will not be in the returned "
-                                  f"dataframe.")
+                            print(
+                                f"The ticker, {k[3:]}, is missing from the API after "
+                                f"running sequentially - will not be in the returned "
+                                f"DataFrame."
+                            )
                             clause = False
                             break
                     else:
@@ -417,8 +443,13 @@ class Interface(object):
         return modified_dict, ticker_list
 
     @classmethod
-    def isolate_timeseries(cls, list_, metrics: List[str],
-                           debug: bool, sequential: bool):
+    def isolate_timeseries(
+        cls,
+        list_,
+        metrics: List[str],
+        debug: bool,
+        sequential: bool
+    ):
         """
         Isolates the metrics, across all categories & cross-sections, held in the List,
         and concatenates the time-series, column-wise, into a single structure, and
@@ -446,18 +477,18 @@ class Interface(object):
             except IndexError:
                 break
             else:
-                dictionary = r['attributes'][0]
-                ticker = dictionary['expression'].split(',')
+                dictionary = r["attributes"][0]
+                ticker = dictionary["expression"].split(",")
                 metric = ticker[-1][:-1]
 
-                ticker_split = ','.join(ticker[:-1])
-                ts_arr = np.array(dictionary['time-series'])
+                ticker_split = ",".join(ticker[:-1])
+                ts_arr = np.array(dictionary["time-series"])
                 if ts_arr.size == 1:
                     flag = True
 
                 if not flag:
                     if ticker_split not in output_dict:
-                        output_dict[ticker_split]['real_date'] = ts_arr[:, 0]
+                        output_dict[ticker_split]["real_date"] = ts_arr[:, 0]
                         output_dict[ticker_split][metric] = ts_arr[:, 1]
                     elif metric not in output_dict[ticker_split]:
                         output_dict[ticker_split][metric] = ts_arr[:, 1]
@@ -468,11 +499,10 @@ class Interface(object):
         t_dict = next(iter(output_dict_c.values()))
         no_rows = next(iter(t_dict.values())).size
 
-        modified_dict, ticker_list = cls.array_construction(metrics=metrics,
-                                                            output_dict=output_dict,
-                                                            no_rows=no_rows,
-                                                            debug=debug,
-                                                            sequential=sequential)
+        modified_dict, ticker_list = cls.array_construction(
+            metrics=metrics, output_dict=output_dict, no_rows=no_rows, debug=debug,
+            sequential=sequential
+        )
 
         return modified_dict, output_dict, ticker_list
 
@@ -512,19 +542,21 @@ class Interface(object):
         dict_copy = _dict.copy()
         for k, v in _dict.items():
             no_cols = v.shape[1]
-
             condition = cls.column_check(v, 1)
+
             if condition:
                 ticker_missing += 1
+
                 for i in range(2, no_cols):
                     condition = cls.column_check(v, i)
                     if not condition:
                         if debug:
                             warnings.warn("Error has occurred in the Database.")
 
-                if not suppress_warning:
-                    print(f"The ticker, {k}), does not exist in the Database.")
-                dict_copy.pop(k)
+                    if not suppress_warning:
+                        print(f"The ticker, {k}), does not exist in the Database.")
+
+                    dict_copy.pop(k)
             else:
                 continue
 
@@ -554,27 +586,27 @@ class Interface(object):
         i = 0
         for k, v in _dict.items():
 
-            ticker = k.split(',')
-            ticker = ticker[1].split('_')
+            ticker = k.split(",")
+            ticker = ticker[1].split("_")
 
             cid = ticker[0]
-            xcat = '_'.join(ticker[1:])
+            xcat = "_".join(ticker[1:])
 
             cid_broad = np.repeat(cid, repeats=v.shape[0])
             xcat_broad = np.repeat(xcat, repeats=v.shape[0])
             data = np.column_stack((cid_broad, xcat_broad, v))
 
             row = i * v.shape[0]
-            arr[row:row + v.shape[0], :] = data
+            arr[row: row + v.shape[0], :] = data
             i += 1
 
-        columns = ['cid', 'xcat', 'real_date']
+        columns = ["cid", "xcat", "real_date"]
         cols_output = columns + original_metrics
 
         df = pd.DataFrame(data=arr, columns=cols_output)
 
-        df['real_date'] = pd.to_datetime(df['real_date'], yearfirst=True)
-        df = df[df['real_date'].dt.dayofweek < 5]
+        df["real_date"] = pd.to_datetime(df["real_date"], yearfirst=True)
+        df = df[df["real_date"].dt.dayofweek < 5]
         df = df.fillna(value=np.nan)
         df = df.reset_index(drop=True)
 
@@ -584,8 +616,12 @@ class Interface(object):
         df.real_date = pd.to_datetime(df.real_date)
         return df
 
-    def tickers(self, tickers: list, metrics: list = ['value'],
-                start_date: str = '2000-01-01', suppress_warning=False):
+    def tickers(self,
+        tickers: list,
+        metrics: list = ['value'],
+        start_date: str = '2000-01-01',
+        suppress_warning=False
+    ):
         """
         Returns standardized dataframe of specified base tickers and metric. Will also
         validate the connection to DataQuery through the api using the method
@@ -603,20 +639,30 @@ class Interface(object):
         """
 
         if self.check_connection():
-            df = self.get_ts_expression(expression=tickers, original_metrics=metrics,
-                                        start_date=start_date,
-                                        suppress_warning=suppress_warning)
+            df = self.get_ts_expression(
+                expression=tickers,
+                original_metrics=metrics,
+                start_date=start_date,
+                suppress_warning=suppress_warning
+            )
 
             if isinstance(df, pd.DataFrame):
-                df = df.sort_values(['cid', 'xcat', 'real_date']).reset_index(drop=True)
+                df = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
 
             return df
         else:
             error = "Unable to connect to DataQuery. Reach out to DQ Support."
             raise ConnectionError(error)
 
-    def download(self, tickers=None, xcats=None, cids=None, metrics=['value'],
-                 start_date='2000-01-01', suppress_warning=False):
+    def download(
+        self,
+        tickers=None,
+        xcats=None,
+        cids=None,
+        metrics=['value'],
+        start_date='2000-01-01',
+        suppress_warning=False
+    ):
         """
         Returns standardized dataframe of specified base tickers and metrics.
 
@@ -640,16 +686,16 @@ class Interface(object):
         """
 
         if (cids is None) & (xcats is not None):
-            cids_dmca = ['AUD', 'CAD', 'CHF', 'EUR', 'GBP', 'JPY', 'NOK', 'NZD', 'SEK',
-                         'USD']  # DM currency areas
-            cids_dmec = ['DEM', 'ESP', 'FRF', 'ITL', 'NLG']  # DM euro area countries
-            cids_latm = ['BRL', 'COP', 'CLP', 'MXN', 'PEN']  # Latam countries
-            cids_emea = ['HUF', 'ILS', 'PLN', 'RON', 'RUB', 'TRY', 'ZAR']  # EMEA countries
-            cids_emas = ['CZK', 'CNY', 'IDR', 'INR', 'KRW', 'MYR', 'PHP', 'SGD', 'THB',
-                         'TWD']  # EM Asia countries
+            cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NOK", "NZD", "SEK",
+                         "USD"]  # DM currency areas
+            cids_dmec = ["DEM", "ESP", "FRF", "ITL", "NLG"]  # DM euro area countries
+            cids_latm = ["BRL", "COP", "CLP", "MXN", "PEN"]  # Latam countries
+            cids_emea = ["HUF", "ILS", "PLN", "RON", "RUB", "TRY", "ZAR"]  # EMEA countries
+            cids_emas = ["CZK", "CNY", "IDR", "INR", "KRW", "MYR", "PHP", "SGD", "THB",
+                         "TWD"]  # EM Asia countries
             cids_dm = cids_dmca + cids_dmec
             cids_em = cids_latm + cids_emea + cids_emas
-            cids = sorted(cids_dm + cids_em)  # standard default
+            cids = sorted(cids_dm + cids_em)  # Standard default.
 
         if isinstance(tickers, str):
             tickers = [tickers]
@@ -669,11 +715,14 @@ class Interface(object):
 
         if xcats is not None:
             assert isinstance(xcats, (list, tuple))
-            add_tix = [cid + '_' + xcat for xcat in xcats for cid in cids]
+            add_tix = [cid + "_" + xcat for xcat in xcats for cid in cids]
             tickers = tickers + add_tix
 
-        df = self.tickers(tickers, metrics=metrics,
-                          suppress_warning=suppress_warning,
-                          start_date=start_date)
+        df = self.tickers(
+            tickers,
+            metrics=metrics,
+            suppress_warning=suppress_warning,
+            start_date=start_date
+        )
 
         return df
