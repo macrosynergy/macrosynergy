@@ -1,5 +1,3 @@
-
-
 from macrosynergy.dataquery import api
 from macrosynergy.dataquery.auth import OAuth, CertAuth
 from typing import List
@@ -19,8 +17,8 @@ class TestDataQueryInterface(unittest.TestCase):
 
         :param <str> elem: ticker.
         """
-        ticker_split = elem.split(',')
-        if ticker_split[-1][:-1] == 'grading':
+        ticker_split = elem.split(",")
+        if ticker_split[-1][:-1] == "grading":
             value = 1.0
         else:
             value = random()
@@ -34,18 +32,26 @@ class TestDataQueryInterface(unittest.TestCase):
         """
         aggregator = []
         for i, elem in enumerate(dq_expressions):
-            elem_dict = {'item': (i + 1), 'group': None,
-                         'attributes': [{'expression': elem, 'label': None,
-                                         'attribute-id': None, 'attribute-name': None,
-                                         'time-series': [['20220607',
-                                                          self.jpmaqs_value(elem)]]}],
-                         'instrument-id': None, 'instrument-name': None}
+            elem_dict = {"item": (i + 1), "group": None,
+                         "attributes": [
+                             {
+                                 "expression": elem,
+                                 "label": None,
+                                 "attribute-id": None,
+                                 "attribute-name": None,
+                                 "time-series": [["20220607", self.jpmaqs_value(elem)]]
+                             }
+                         ],
+                         "instrument-id": None,
+                         "instrument-name": None}
             aggregator.append(elem_dict)
 
         return aggregator
 
-    @mock.patch("macrosynergy.dataquery.auth.OAuth.get_dq_api_result",
-               return_value={"info": {"code": 200}})
+    @mock.patch(
+        "macrosynergy.dataquery.auth.OAuth.get_dq_api_result",
+        return_value={"info": {"code": 200}}
+    )
     def test_check_connection(self, mock_p_request):
         # If the connection to DataQuery is working, the response code will invariably be
         # 200. Therefore, use the Interface Object's method to check DataQuery
@@ -60,8 +66,10 @@ class TestDataQueryInterface(unittest.TestCase):
 
         mock_p_request.assert_called_once()
 
-    @mock.patch("macrosynergy.dataquery.auth.OAuth.get_dq_api_result",
-               return_value={"info": {"code": 400}})
+    @mock.patch(
+        "macrosynergy.dataquery.auth.OAuth.get_dq_api_result",
+        return_value={"info": {"code": 400}}
+    )
     def test_check_connection_fail(self, mock_p_fail):
 
         # Opposite of above method: if the connection to DataQuery fails, the error code
@@ -86,9 +94,9 @@ class TestDataQueryInterface(unittest.TestCase):
         # parameter "oauth".
         # First check is that the DataQuery instance is using an OAuth Object if the
         # parameter "oauth" is set to to True.
-        dq_access = api.Interface(oauth=True,
-                                  client_id="client1",
-                                  client_secret="123")
+        dq_access = api.Interface(
+            oauth=True, client_id="client1", client_secret="123"
+        )
         
         self.assertIsInstance(dq_access.access, OAuth)
 
@@ -97,24 +105,25 @@ class TestDataQueryInterface(unittest.TestCase):
         # Second check is that the DataQuery instance is using an CertAuth Object if the
         # parameter "oauth" is set to to False. The DataQuery Class's default is to use
         # certificate / keys.
-        dq_access = api.Interface(username="user1",
-                                  password="123",
-                                  crt="/api_macrosynergy_com.crt",
-                                  key="/api_macrosynergy_com.key")
+        dq_access = api.Interface(
+            username="user1", password="123", crt="/api_macrosynergy_com.crt",
+            key="/api_macrosynergy_com.key"
+        )
 
         self.assertIsInstance(dq_access.access, CertAuth)
 
     def test_isolate_timeseries(self):
 
-        cids_dmca = ['AUD', 'CAD', 'CHF', 'EUR', 'GBP', 'JPY']
-        xcats = ['EQXR_NSA', 'FXXR_NSA']
+        cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY"]
+        xcats = ["EQXR_NSA", "FXXR_NSA"]
 
-        tickers = [cid + '_' + xcat for xcat in xcats for cid in cids_dmca]
+        tickers = [cid + "_" + xcat for xcat in xcats for cid in cids_dmca]
 
         # First replicate the api.Interface()._request() method using the associated
         # JPMaQS expression.
-        expression = api.Interface.jpmaqs_indicators(metrics=['value', 'grading'],
-                                                     tickers=tickers)
+        expression = api.Interface.jpmaqs_indicators(
+            metrics=["value", "grading"], tickers=tickers
+        )
         final_output = self.dq_request(dq_expressions=expression)
 
         # The method, .isolate_timeseries(), will receive the returned dictionary from
@@ -125,15 +134,14 @@ class TestDataQueryInterface(unittest.TestCase):
         # Therefore, assert that the dictionary contains the expected tickers and that
         # each value is a three-dimensional DataFrame: real_date, value, grade.
         results_dict, output_dict, s_list = api.Interface.isolate_timeseries(
-                                                                            final_output,
-                                                                            ['value', 'grading'],
-                                                                            False, False
-                                                                            )
-        self.__dict__['results_dict'] = results_dict
+            final_output, ['value', 'grading'], False, False
+        )
+
+        self.__dict__["results_dict"] = results_dict
 
         self.assertTrue(len(results_dict.keys()) == len(tickers))
 
-        ticker_trunc = lambda t: t.split(',')[1]
+        ticker_trunc = lambda t: t.split(",")[1]
         test_keys = list(map(ticker_trunc, results_dict.keys()))
 
         test_keys = sorted(test_keys)
@@ -156,9 +164,9 @@ class TestDataQueryInterface(unittest.TestCase):
 
         # All tickers held in the dictionary are valid tickers. Therefore, confirm the
         # keys for the two dictionary, received & returned, match.
-        results_dict = api.Interface.valid_ticker(_dict=self.results_dict,
-                                                  suppress_warning=True,
-                                                  debug=False)
+        results_dict = api.Interface.valid_ticker(
+            _dict=self.results_dict, suppress_warning=True, debug=False
+        )
         self.assertTrue(len(results_dict.keys()) == len(self.results_dict.keys()))
 
         test = sorted(list(results_dict.keys()))
@@ -172,19 +180,19 @@ class TestDataQueryInterface(unittest.TestCase):
         # Again, as described above, a series is not valid if all values are NoneType.
         data = np.array([None] * (shape[0] * shape[1]))
 
-        results_dict['DB(JPMAQS,USD_FXXR_NSA'] = data.reshape(shape)
-        results_dict_USD = api.Interface.valid_ticker(self.results_dict,
-                                                      suppress_warning=True,
-                                                      debug=False)
+        results_dict["DB(JPMAQS,USD_FXXR_NSA"] = data.reshape(shape)
+        results_dict_USD = api.Interface.valid_ticker(
+            self.results_dict, suppress_warning=True, debug=False
+        )
         # Ticker should be removed from the dictionary.
-        self.assertTrue('DB(JPMAQS,USD_FXXR_NSA' not in results_dict_USD.keys())
+        self.assertTrue("DB(JPMAQS,USD_FXXR_NSA" not in results_dict_USD.keys())
 
     def test_dataframe_wrapper(self):
 
-        cids_dmca = ['AUD', 'CAD', 'CHF', 'EUR', 'GBP', 'JPY']
-        xcats = ['EQXR_NSA', 'FXXR_NSA']
+        cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY"]
+        xcats = ["EQXR_NSA", "FXXR_NSA"]
 
-        tickers = [cid + '_' + xcat for xcat in xcats for cid in cids_dmca]
+        tickers = [cid + "_" + xcat for xcat in xcats for cid in cids_dmca]
 
         # After the time-series have been isolated for each ticker and all the tickers
         # have been validated, aggregate the results, still held in a dictionary, into
@@ -196,12 +204,13 @@ class TestDataQueryInterface(unittest.TestCase):
         self.test_isolate_timeseries()
 
         results_dict = self.results_dict
-        trial_df = api.Interface.dataframe_wrapper(_dict=results_dict, no_metrics=2,
-                                                   original_metrics=['value', 'grading'])
+        trial_df = api.Interface.dataframe_wrapper(
+            _dict=results_dict, no_metrics=2, original_metrics=["value", "grading"]
+        )
 
         # Confirm the dictionary is a standardised DataFrame plus the respective metrics
         # passed.
-        expected_columns = ['cid', 'xcat', 'real_date', 'value', 'grading']
+        expected_columns = ["cid", "xcat", "real_date", "value", "grading"]
         self.assertEqual(sorted(expected_columns), sorted(list(trial_df.columns)))
 
         # Next confirm that tickers held in the DataFrame are the complete set: i.e all
@@ -209,15 +218,15 @@ class TestDataQueryInterface(unittest.TestCase):
         # confirm there is not any inadvertent leakage from constructing the DataFrame
         # and all tickers are included.
 
-        tickers_df = list(trial_df['cid'] + '_' + trial_df['xcat'])
+        tickers_df = list(trial_df["cid"] + "_" + trial_df["xcat"])
         self.assertTrue(sorted(tickers_df) == sorted(tickers))
 
         # Given the constructed nature of the DataFrame, confirm all values in the
         # 'grading' column are equal to 1.0.
         # Confirms the columns have the expected values.
-        grades_test = np.all(trial_df['grading'] == 1.0)
+        grades_test = np.all(trial_df["grading"] == 1.0)
         self.assertTrue(grades_test)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
