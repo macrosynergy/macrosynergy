@@ -326,12 +326,13 @@ class CategoryRelations(object):
             coefficient and probability statistics are included in the graphic. The
             default value is True: coefficient box included.
         :param <str> coef_box: gives the location of the box of correlation coefficient
-            and probability. If None (default), the box is shown in the upper left
-            corner. The options are standard, i.e. 'upper left', 'lower right' and so
+            and probability. If None (default), the box is shown in the centre of the
+            graph. The options are standard, i.e. 'upper left', 'lower right' and so
             forth. This does not work with a separator.
         :param <Union[str, int]> separator: allows categorizing the scatter analysis by
-            time period or cross section. In the former case the argument is set to
-            "cids" in the case the argument is set to a year that divides the sample to
+            cross-section or integer. In the former case the argument is set to
+            "cids" and in the latter case the argument is set to a year [2010, for
+            instance] which will subsequently split the time-period into the sample
             before (not including) that year and from (including) that year.
         :param <float> title_adj: parameter that sets top of figure to accommodate title.
             Default is 1.
@@ -370,9 +371,11 @@ class CategoryRelations(object):
 
             index_years = dfx.index.get_level_values(1).year
             years_in_df = list(index_years.unique())
-            assert separator in years_in_df, "separator year is not in range"
-            assert separator > np.min(years_in_df), \
-                "separator year must not be first in range"
+
+            assert separator in years_in_df, "Separator year is not in the range."
+            error_sep = "Separator year must not be the first in the range."
+            assert separator > np.min(years_in_df), error_sep
+
             label_set1 = f"before {separator}"
             label_set2 = f"from {separator}"
             dfx1 = dfx[index_years < separator]
@@ -409,7 +412,11 @@ class CategoryRelations(object):
             index_cids = dfx.index.get_level_values(0)
             cids_in_df = list(index_cids.unique())
             n_cids = len(cids_in_df)
-            assert n_cids > 1, "There must be more than one cid to use separator='cids'."
+
+            error_cids = "There must be more than one cross-section to use " \
+                         "separator = 'cids'."
+            assert n_cids > 1, error_cids
+
             dfx['cid'] = index_cids
             dict_coln = {2: 2, 5: 3, 8: 4, 30: 5}
 
