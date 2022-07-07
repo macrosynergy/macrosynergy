@@ -2,14 +2,14 @@
 import unittest
 import pandas as pd
 from tests.simulate import make_qdf
-from macrosynergy.panel.view_correlations import correl_matrix
+from macrosynergy.panel.view_correlations import correl_matrix, lag_series
 
 class TestAll(unittest.TestCase):
 
     def dataframe_construction(self):
 
         self.__dict__['cids'] = ['AUD', 'CAD', 'GBP']
-        self.__dict__['xcats'] = ['XR', 'CRY', 'GROWTH']
+        self.__dict__['xcats'] = ['XR', 'CRY', 'GROWTH', 'INFL']
 
         df_cids = pd.DataFrame(index=self.cids, columns=['earliest', 'latest', 'mean_add',
                                                          'sd_mult'])
@@ -22,13 +22,40 @@ class TestAll(unittest.TestCase):
                                          'sd_mult', 'ar_coef', 'back_coef'])
         df_xcats.loc['CRY', :] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
         df_xcats.loc['XR', :] = ['2011-01-01', '2020-12-31', 0, 1, 0, 0.3]
-        df_xcats.loc['GROWTH',] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
+        df_xcats.loc['GROWTH', :] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
+        df_xcats.loc['INFL', :] = ['2010-01-01', '2020-10-30', 0, 2, 0.9, 0.5]
 
         # Standard df for tests.
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-        self.__dict__['dfd'] = dfd[dfd['xcat'] == 'CRY']
-        self.__dict__['dfw'] = self.dfd.pivot(index='real_date', columns='cid',
-                                              values='value')
+        self.__dict__['dfd'] = dfd
+
+    def test_lag_series(self):
+        """
+        Test the method used to lag the categories included
+        """
+        self.dataframe_construction()
+
+        df_w = self.dfd.pivot(index=('cid', 'real_date'), columns='xcat',
+                              values='value')
+
+        # Confirm the application of the lag to the respective category is correct.
+        # Compare against the original DataFrame.
+
+        # Lag inflation by a range of possible options.
+        lag_dict = {'INFL': [0, 2, 5]}
+        # Returns a multi-index DataFrame. Therefore, ensure the lag has been applied
+        # correctly on each individual cross-section.
+        df_w, xcat_tracker = lag_series(df_w, lag_dict, xcats=self.xcats)
+
+        # Firstly, confirm the DataFrame includes the expected columns: incumbent
+        # categories & additional categories that have had the lag postfix appended.
+        test_columns = df_w.columns
+        test_columns = set(test_columns)
+        # The inflation category will be removed from the wide DataFrame as it is being
+        # replaced by a lagged version.
+        xcats_copy = self.xcats
+        xcats_copy.remove('INFL')
+        self.assertTrue(set(xcats_copy).issubset(test_columns))
 
     def test_correl_matrix(self):
 
