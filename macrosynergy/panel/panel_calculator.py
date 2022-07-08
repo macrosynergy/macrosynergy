@@ -1,3 +1,4 @@
+
 import numpy as np
 import pandas as pd
 from typing import List
@@ -63,8 +64,8 @@ def xcat_isolator(expression: str, start_index: str, index: int):
     return xcat, (start_index + start + len(xcat))
 
 
-def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] = None,
-                     start: str = None, end: str = None,
+def panel_calculator(df: pd.DataFrame, calcs: List[str] = None,
+                     cids: List[str] = None, start: str = None, end: str = None,
                      blacklist: dict = None):
     """
     Calculates new data panels through operations on existing panels.
@@ -88,20 +89,20 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
         format, i.e the columns 'cid', 'xcat', 'real_date' and 'value'.
 
     Notes:
-    Panel calculation strings can use numpy functions and unary/binary operators go
-    category panels, whereby the category is indicated by capital letters, underscores
+    Panel calculation strings can use numpy functions and unary/binary operators on
+    category panels. The category is indicated by capital letters, underscores
     and numbers.
     Panel category names that are not at the beginning or end of the string must always
     have a space before and after the name.
-    Calculated category and panel operations must be separated by '='.
-    "NEWCAT = ( OLDCAT1 + 0.5) * OLDCAT2"
-    "NEWCAT = np.log( OLDCAT1 ) - np.abs( OLDCAT2 ) ** 1/2"
+    Calculated category and panel operations must be separated by '='. Examples:
+        "NEWCAT = ( OLDCAT1 + 0.5) * OLDCAT2"
+        "NEWCAT = np.log( OLDCAT1 ) - np.abs( OLDCAT2 ) ** 1/2"
     Panel calculation can also involve individual indicator series (to be applied
     to all series in the panel by using th 'i' as prefix), such as:
-    "NEWCAT = OLDCAT1 - np.sqrt( iUSD_OLDCAT2 )"
+        "NEWCAT = OLDCAT1 - np.sqrt( iUSD_OLDCAT2 )"
     If more than one new category is calculated, the resulting panels can be used
     sequentially in the calculations, such as:
-    ["NEWCAT1 = 1 + OLDCAT1 / 100", "NEWCAT2 = OLDCAT2 * NEWCAT1"]
+        ["NEWCAT1 = 1 + OLDCAT1 / 100", "NEWCAT2 = OLDCAT2 * NEWCAT1"]
     """
 
     # A. Asserts
@@ -109,8 +110,9 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
     cols = ['cid', 'xcat', 'real_date', 'value']
     assert set(cols).issubset(set(df.columns))
     assert isinstance(calcs, list), "List of functions expected."
-    assert all([isinstance(elem, str) for elem in calcs]),\
-        "Each formula in the panel calculation list must be a string."
+
+    error_formula = "Each formula in the panel calculation list must be a string."
+    assert all([isinstance(elem, str) for elem in calcs]), error_formula
     assert isinstance(cids, list), "List of cross-sections expected."
 
     # B. Collect new category names and their formulas.
@@ -151,7 +153,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None, cids: List[str] 
 
     dfx = reduce_df(df, xcats=old_xcats_used, cids=cids,
                     start=start, end=end, blacklist=blacklist,
-                    intersect=True)
+                    intersect=False)
     cidx = np.sort(dfx['cid'].unique())
 
     # E. Create all required wide dataframes with category names.
@@ -224,41 +226,17 @@ if __name__ == "__main__":
 
     # Start of the testing. Various testcases included to understand the capabilities of
     # the designed function.
-    formula = ["NEW1 = np.abs( XR ) + 0.52 + 2 * CRY + iGBP_INFL", "NEW2 = NEW1 / XR"]
-    df_calc = panel_calculator(df=dfd, calcs=formula, cids=cids, start=start, end=end)
 
-    formula = ["NEW1 = np.abs( XR ) + 0.552 + 2 * CRY", "NEW2 = NEW1 / XR"]
-    # df_calc = panel_calculator(df=dfdx, calcs=formula, cids=cids, start=start, end=end)
-
-    # Third testcase.
+    # First testcase.
     formula = "NEW1 = GROWTH - INFL"
     formula_3 = "NEW2 = XR - iUSD_NEW1"
     formulas = [formula, formula_3]
-    # df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
 
-    # Fourth testcase.
-    formula = "NEW1 = GROWTH - iUSD_INFL / iUSD_XR"
-    formulas = [formula]
-    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
-
-    formula = "NEW1 = GROWTH.pct_change(periods=1, fill_method='pad') - " \
-              "INFL.pct_change(periods=1, fill_method='pad')"
-    formula_2 = "NEW2 = NEW1 / XR.pct_change(periods=1, fill_method='pad')"
-    formulas = [formula, formula_2]
-    # df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
-
-    # Fifth testcase: EUR is not passed in as one of the cross-sections in "cids"
+    # Second testcase: EUR is not passed in as one of the cross-sections in "cids"
     # parameter but is defined in the dataframe. Therefore, code will not break.
     cids = ['AUD', 'CAD', 'GBP', 'USD', 'NZD']
     formula = "NEW1 = XR - iUSD_XR"
     formula_2 = "NEW2 = GROWTH - iEUR_INFL"
     formulas = [formula, formula_2]
     df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
-
-    # Sixth testcase - an error should be thrown given CHF_INFL is not defined.
-    cids = ['AUD', 'CAD', 'GBP', 'USD', 'NZD']
-    formula = "NEW1 = XR - iUSD_XR"
-    formula_2 = "NEW2 = GROWTH - iCHF_INFL"
-    formulas = [formula, formula_2]
-    # df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
 

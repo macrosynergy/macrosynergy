@@ -117,6 +117,7 @@ class SignalReturnRelations:
         df_out = pd.DataFrame(index=['Panel', 'Mean', 'PosRatio'] + css, columns=statms)
 
         for cs in (css + ['Panel']):
+
             # Row names of cross-sections or years.
             df_cs = self.df_isolator(df=df, cs=cs, cs_type=cs_type)
 
@@ -136,8 +137,8 @@ class SignalReturnRelations:
             ret_vals, sig_vals = df_cs[self.ret], df_cs[self.sig]
             df_out.loc[cs, ['kendall', 'kendall_pval']] = stats.kendalltau(ret_vals,
                                                                            sig_vals)
-            df_out.loc[cs, ['pearson', 'pearson_pval']] = stats.pearsonr(ret_vals,
-                                                                         sig_vals)
+            corr, corr_pval = stats.pearsonr(ret_vals, sig_vals)
+            df_out.loc[cs, ['pearson', 'pearson_pval']] = np.array([corr, corr_pval])
 
         df_out.loc['Mean', :] = df_out.loc[css, :].mean()
 
