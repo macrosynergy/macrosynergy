@@ -129,8 +129,8 @@ class CertAuth(object):
         if condition:
             return directory
         else:
-            print(f"The directory received, {directory}, does not contain the respective"
-                  f" file, {file_type}.")
+            OSError(f"The directory received, {directory}, does not contain the "
+                    f"respective file, {file_type}.")
 
             return None
 
