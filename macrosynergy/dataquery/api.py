@@ -10,7 +10,7 @@ import concurrent.futures
 import time
 from itertools import chain
 from typing import Optional
-from .auth import CertAuth, OAuth
+from macrosynergy.dataquery.auth import CertAuth, OAuth
 
 
 class Interface(object):
@@ -67,9 +67,16 @@ class Interface(object):
         endpoint = "/services/heartbeat"
         js: dict = self.access.get_dq_api_result(url=self.access.base_url + endpoint)
 
-        results: dict = js["info"]
+        try:
+            results: dict = js["info"]
+            print(results["description"])
+        except KeyError:
+            results: dict = js["errors"][0]
+            print(f"The corresponding code is: {results['code']}.")
+            raise ConnectionError(results["description"])
 
-        return int(results["code"]) == 200
+        else:
+            return int(results["code"]) == 200
 
     @staticmethod
     def server_retry(response: dict, select: str):
@@ -408,37 +415,40 @@ class Interface(object):
         ticker_list = []
         for k, v in output_dict.items():
 
-            arr = np.empty(shape=(no_rows, len(d_frame_order)), dtype=object)
-            clause = True
-            for i, metric in enumerate(d_frame_order):
-                try:
-                    arr[:, i] = v[metric]
-                except KeyError:
-                    if debug:
-                        print(
-                            f"The ticker, {k[3:]}, is missing the metric '{metric}' "
-                            f"whilst the requests are running concurrently - will "
-                            f"check the API sequentially."
-                        )
+            available_metrics = set(v.keys())
+            expected_metrics = set(d_frame_order)
 
-                    temp_list = [k + ',' + m + ')' for m in metrics]
-                    ticker_list += temp_list
-                    if sequential:
-                        if 'value' in v.keys():
-                            arr[:, i] = np.nan
-                        else:
-                            print(
-                                f"The ticker, {k[3:]}, is missing from the API after "
-                                f"running sequentially - will not be in the returned "
-                                f"DataFrame."
-                            )
-                            clause = False
-                            break
-                    else:
-                        break
+            missing_metrics = list(expected_metrics.difference(available_metrics))
+            if not missing_metrics:
+                # Aggregates across all metrics requested and order according to the
+                # prescribed list.
+                ticker_df = pd.DataFrame.from_dict(v)[d_frame_order]
 
-            if clause:
-                modified_dict[k] = arr
+                modified_dict[k] = ticker_df.to_numpy()
+
+            elif missing_metrics and not sequential:
+                # If a requested metric has not been returned, its absence could be
+                # ascribed to a potential data leak from multithreading. Therefore,
+                # collect the respective tickers, defined over each metric, and run
+                # the requests sequentially to avoid any scope for data leakage.
+
+                temp_list = [k + ',' + m + ')' for m in metrics]
+                ticker_list += temp_list
+
+                if debug:
+                    print(
+                        f"The ticker, {k[3:]}, is missing the metric '{metric}' "
+                        f"whilst the requests are running concurrently - will "
+                        f"check the API sequentially."
+                    )
+            elif sequential and debug:
+                print(
+                    f"The ticker, {k[3:]}, is missing from the API after "
+                    f"running sequentially - will not be in the returned "
+                    f"dataframe."
+                )
+            else:
+                continue
 
         return modified_dict, ticker_list
 
