@@ -1,17 +1,20 @@
 
 """DataQuery Interface."""
-from typing import List
 import pandas as pd
 import numpy as np
-from math import ceil, floor
-from collections import defaultdict
 import warnings
 import concurrent.futures
 import time
+import logging
+
+from typing import List
+from math import ceil, floor
+from collections import defaultdict
 from itertools import chain
 from typing import Optional
 from macrosynergy.dataquery.auth import CertAuth, OAuth
 
+logger = logging.getLogger(__name__)
 
 class Interface(object):
     """API Interface to ©JP Morgan DataQuery.
@@ -69,14 +72,13 @@ class Interface(object):
 
         try:
             results: dict = js["info"]
-            print(results["description"])
         except KeyError:
             results: dict = js["errors"][0]
             print(f"The corresponding code is: {results['code']}.")
             raise ConnectionError(results["description"])
-
         else:
-            return int(results["code"]) == 200
+
+            return int(results["code"]) == 200, results
 
     @staticmethod
     def server_retry(response: dict, select: str):
@@ -437,9 +439,9 @@ class Interface(object):
 
                 if debug:
                     print(
-                        f"The ticker, {k[3:]}, is missing the metric '{metric}' "
-                        f"whilst the requests are running concurrently - will "
-                        f"check the API sequentially."
+                        f"The ticker, {k[3:]}, is missing the metric(s) "
+                        f"'{missing_metrics}' whilst the requests are running "
+                        f"concurrently - will check the API sequentially."
                     )
             elif sequential and debug:
                 print(
@@ -517,17 +519,25 @@ class Interface(object):
         return modified_dict, output_dict, ticker_list
 
     @staticmethod
-    def column_check(v, col):
+    def column_check(v, col, no_cols, debug):
         """
         Checking the values of the returned TimeSeries.
 
         :param <np.array> v:
-        :param <Integer> col: used to isolate the column being checked.
+        :param <integer> col: used to isolate the column being checked.
+        :param <integer> no_cols: number of metrics requested.
+        :param <bool> debug:
 
         :return <bool> condition.
         """
         returns = list(v[:, col])
         condition = all([isinstance(elem, type(None)) for elem in returns])
+
+        if condition:
+            other_metrics = list(v[:, 2:no_cols].flatten())
+
+            if debug and all([isinstance(e, type(None)) for e in other_metrics]):
+                warnings.warn("Error has occurred in the Database.")
 
         return condition
 
@@ -550,25 +560,17 @@ class Interface(object):
 
         ticker_missing = 0
         dict_copy = _dict.copy()
+
         for k, v in _dict.items():
             no_cols = v.shape[1]
-            condition = cls.column_check(v, 1)
+            condition = cls.column_check(v, col=1, no_cols=no_cols, debug=debug)
 
             if condition:
                 ticker_missing += 1
+                dict_copy.pop(k)
 
-                for i in range(2, no_cols):
-                    condition = cls.column_check(v, i)
-                    if not condition:
-                        if debug:
-                            warnings.warn("Error has occurred in the Database.")
-
-                    if not suppress_warning:
-                        print(f"The ticker, {k}), does not exist in the Database.")
-
-                    dict_copy.pop(k)
-            else:
-                continue
+                if not suppress_warning:
+                    print(f"The ticker, {k}), does not exist in the Database.")
 
         print(f"Number of missing time-series from the Database: {ticker_missing}.")
         return dict_copy
@@ -648,7 +650,10 @@ class Interface(object):
             'real_date' and chosen metrics.
         """
 
-        if self.check_connection():
+        clause, results = self.check_connection()
+        if clause:
+            print(results["description"])
+
             df = self.get_ts_expression(
                 expression=tickers,
                 original_metrics=metrics,
@@ -661,6 +666,10 @@ class Interface(object):
 
             return df
         else:
+            logger.error(
+                "DataQuery response %s with description: %s", results["message"],
+                results["description"]
+            )
             error = "Unable to connect to DataQuery. Reach out to DQ Support."
             raise ConnectionError(error)
 
