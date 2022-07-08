@@ -60,7 +60,8 @@ class TestDataQueryInterface(unittest.TestCase):
         with api.Interface(client_id="client1",
                            client_secret="123",
                            oauth=True) as dq:
-            self.assertTrue(dq.check_connection())
+            clause, results = dq.check_connection()
+            self.assertTrue(clause)
             mock_p_request.assert_called_with(url=dq.access.base_url +
                                                   "/services/heartbeat")
 
@@ -80,7 +81,8 @@ class TestDataQueryInterface(unittest.TestCase):
                            oauth=True) as dq:
             # Method returns a Boolean. In this instance, the method should return False
             # (unable to connect).
-            self.assertTrue(not dq.check_connection())
+            clause, results = dq.check_connection()
+            self.assertTrue(not clause)
             mock_p_fail.assert_called_with(url=dq.access.base_url +
                                                "/services/heartbeat")
 
@@ -224,8 +226,8 @@ class TestDataQueryInterface(unittest.TestCase):
         # Given the constructed nature of the DataFrame, confirm all values in the
         # 'grading' column are equal to 1.0.
         # Confirms the columns have the expected values.
-        grades_test = np.all(trial_df["grading"] == 1.0)
-        self.assertTrue(grades_test)
+
+        self.assertIn(next(iter((trial_df["grading"].unique()))), [1.0])
 
 
 if __name__ == "__main__":
