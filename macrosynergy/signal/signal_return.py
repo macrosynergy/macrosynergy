@@ -54,7 +54,7 @@ class SignalReturnRelations:
         # explanatory variable at time t and the dependent variable at time (t + 1).
         self.df = categories_df(df, xcats=[sig, ret], cids=cids, val='value',
                                 start=start, end=end, freq=freq, blacklist=blacklist,
-                                lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'mean'])
+                                lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum'])
 
         # Testing for inverse relationship between the signal and return: statistics will
         # work in the same capacity.

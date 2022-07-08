@@ -146,6 +146,7 @@ def aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
 
     return dfx
 
+
 def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                   val: str = 'value', start: str = None, end: str = None,
                   blacklist: dict = None, years: int = None, freq: str = 'M',
@@ -214,12 +215,14 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
             depnd_col = depnd_col.replace({0.0: np.nan})
         elif sum_clause:
             expln_col = expln_col.replace({0.0: np.nan})
+        # Todo: Comment why you do this
 
         # Explanatory variable is shifted forward.
         if lag > 0:
             # Utilise .groupby() to handle for multi-index Pandas DataFrame.
-            expln_col = expln_col.groupby(level=0).shift(1)
-        if fwin > 0:
+            expln_col = expln_col.groupby(level=0).shift(lag)
+            # Todo: add unit test on correct lagging
+        if fwin > 1:
             s = 1 - fwin
             depnd_col = depnd_col.rolling(window=fwin).mean().shift(s)
 
