@@ -1,5 +1,4 @@
 
-import random
 import itertools
 import pandas as pd
 import numpy as np
@@ -12,11 +11,64 @@ from collections import defaultdict
 from macrosynergy.management.check_availability import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
+def lag_series(df_w: pd.DataFrame, lags: dict, xcats: List[str]):
+    """
+    Method used to lag respective categories.
+
+    :param <pd.DataFrame> df_w: multi-index DataFrame where the columns are the
+        categories, and the two indices are the cross-sections and real-dates.
+    :param <dict> lags: dictionary of lags applied to respective categories.
+    :param <List[str]> xcats: extended categories to be correlated.
+    """
+
+    lag_type = "The lag data structure must be of type <dict>."
+    assert isinstance(lags, dict), lag_type
+
+    lag_xcats = f"The categories referenced in the lagged dictionary must be " \
+                f"present in the defined DataFrame, {xcats}."
+    assert set(lags.keys()).issubset(set(xcats)), lag_xcats
+
+    # Modify the dictionary to adjust for single categories having multiple lags.
+    # The respective lags will be held inside a list.
+    lag_copy = {}
+    xcat_tracker = defaultdict(list)
+    for xcat, shift in lags.items():
+        if isinstance(shift, int):
+            lag_copy[xcat + f"_L{shift}"] = shift
+            xcat_tracker[xcat].append(xcat + f"_L{shift}")
+        else:
+            xcat_temp = [xcat + f"_L{s}" for s in shift]
+            # Merge the two dictionaries.
+            lag_copy = {**lag_copy, **dict(zip(xcat_temp, shift))}
+            xcat_tracker[xcat].extend(xcat_temp)
+
+    df_w_copy = df_w.copy()
+    # Handle for multi-index DataFrame. The interior index represents the
+    # timestamps.
+    for xcat, shift in lag_copy.items():
+
+        category = xcat[:-3]
+        clause = isinstance(lags[category], list)
+        first_lag = category in df_w.columns
+
+        if clause and not first_lag:
+            # Duplicate the column if multiple lags on the same category and the
+            # category's first lag has already been implemented. Always access
+            # the series from the original DataFrame.
+            df_w[xcat] = df_w_copy[category]
+        else:
+            # Otherwise, modify the name.
+            df_w = df_w.rename(columns={category: xcat})
+        # Shift the respective column (name will have been adjusted to reflect
+        # lag).
+        df_w[xcat] = df_w.groupby(level=0)[xcat].shift(shift)
+
+    return df_w, xcat_tracker
 
 def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
                   cids: List[str] = None, start: str = '2000-01-01',
                   end: str = None, val: str = 'value', freq: str = None,
-                  cluster: bool = False, lags: List[int] = None,
+                  cluster: bool = False, lags: dict = None,
                   title: str = None, size: Tuple[float] = (14, 8),
                   max_color: float = None):
     """
@@ -26,9 +78,9 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: extended categories to be correlated. Default is all in the
         dataframe. If xcats contains only one category the correlation coefficients
-        across cross sections are displayed. If xcats contains more than one category the
-        correlation coefficients across categories are displayed. Additionally, the order
-        of the xcats received will be mirrored in the correlation matrix.
+        across cross sections are displayed. If xcats contains more than one category,
+        the correlation coefficients across categories are displayed. Additionally, the
+        order of the xcats received will be mirrored in the correlation matrix.
     :param <List[str]> cids: cross sections to be correlated. Default is all in the
         dataframe.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
@@ -89,7 +141,8 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
 
     else:
 
-        df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values=val)
+        df_w = df.pivot(index=('cid', 'real_date'), columns='xcat',
+                        values=val)
 
         # Down-sample according to the passed frequency.
         if freq is not None:
@@ -99,52 +152,17 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
 
         # Apply the lag mechanism, to the respective categories, after the down-sampling.
         if lags is not None:
-            lag_type = "The lag data structure must be of type <dict>."
-            assert isinstance(lags, dict), lag_type
-
-            lag_xcats = f"The categories referenced in the lagged dictionary must be " \
-                        f"present in the defined DataFrame, {xcats}."
-            assert set(lags.keys()).issubset(set(xcats)), lag_xcats
-
-            # Modify the dictionary to adjust for single categories having multiple lags.
-            # The respective lags will be held inside a list.
-            lag_copy = {}
-            xcat_tracker = defaultdict(list)
-            for xcat, shift in lags.items():
-                if isinstance(shift, int):
-                    lag_copy[xcat + f"_L{shift}"] = shift
-                    xcat_tracker[xcat].append(xcat + f"_L{shift}")
-                else:
-                    xcat_temp = [xcat + f"_L{s}" for s in shift]
-                    # Merge the two dictionaries.
-                    lag_copy = {**lag_copy, **dict(zip(xcat_temp, shift))}
-                    xcat_tracker[xcat].extend(xcat_temp)
-
-            df_w_copy = df_w.copy()
-            # Handle for multi-index DataFrame. The interior index represents the
-            # timestamps.
-            for xcat, shift in lag_copy.items():
-
-                category = xcat[:-3]
-                clause = isinstance(lags[category], list)
-                first_lag = category in df_w.columns
-
-                if clause and not first_lag:
-                    # Duplicate the column if multiple lags on the same category and the
-                    # category's first lag has already been implemented. Always access
-                    # the series from the original DataFrame.
-                    df_w[xcat] = df_w_copy[category]
-                else:
-                    # Otherwise, modify the name.
-                    df_w = df_w.rename(columns={category: xcat})
-                # Shift the respective column (name will have been adjusted to reflect
-                # lag).
-                df_w[xcat] = df_w.groupby(level=0)[xcat].shift(shift)
+            df_w, xcat_tracker = lag_series(df_w=df_w, lags=lags, xcats=xcats)
 
         # Order the correlation DataFrame to reflect the order of the categories
         # parameter. Will replace the official category name with the lag appended name.
-        order = [[x] if x not in xcat_tracker.keys() else xcat_tracker[x] for x in xcats]
-        order = list(itertools.chain(*order))
+        if lags is not None:
+            order = [[x] if x not in xcat_tracker.keys()
+                     else xcat_tracker[x] for x in xcats]
+            order = list(itertools.chain(*order))
+        else:
+            order = xcats
+
         df_w = df_w[order]
 
         if title is None:
@@ -152,7 +170,7 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
 
     sns.set(style="ticks")
 
-    corr = df_w.corr()
+    corr = df_w.corr(method='pearson')
 
     if cluster:
         # Pairwise distances between observations in n-dimensional space. If y is a 1-D
@@ -195,43 +213,12 @@ if __name__ == "__main__":
 
     # Un-clustered correlation matrices.
 
-    random.seed(1)
-    cids = ['AUD', 'CAD', 'GBP', 'NZD']
-    xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
-    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest',
-                                                'mean_add', 'sd_mult'])
-    df_cids.loc['AUD', ] = ['2010-01-01', '2020-12-31', 0.1, 1]
-    df_cids.loc['CAD', ] = ['2011-01-01', '2020-11-30', 0, 1]
-    df_cids.loc['GBP', ] = ['2012-01-01', '2020-11-30', 0, 2]
-    df_cids.loc['NZD', ] = ['2012-01-01', '2020-09-30', -0.1, 2]
-
-    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
-                                                  'sd_mult', 'ar_coef', 'back_coef'])
-    df_xcats.loc['XR', ] = ['2010-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
-    df_xcats.loc['CRY', ] = ['2010-01-01', '2020-10-30', 1, 2, 0.95, 0.5]
-    df_xcats.loc['GROWTH', ] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
-    df_xcats.loc['INFL', ] = ['2010-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
-
-    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-
-    # Lag inflation by 60 business days - 3 months.
-    lag_dict = {'INFL': [0, 1, 2, 5]}
-    correl_matrix(dfd, xcats=['INFL', 'GROWTH'], cids=cids,
-                  lags= lag_dict, max_color=0.1)
-    # Down-sample to monthly frequency and then apply the lags. Multiple lags applied to
-    # single cross-section.
-    lag_dict = {'INFL': [1, 2, 3], 'CRY': [1, 2, 3]}
-    correl_matrix(dfd, xcats=['INFL', 'CRY', 'GROWTH'], cids=cids, freq='Q',
-                  lags= lag_dict, max_color=0.1)
-
-    # Clustered correlation matrices. Test hierarchical clustering.
-    random.seed(1)
-    cids = ['AUD', 'CAD', 'GBP', 'USD', 'NZD', 'EUR']
+    cids = ["AUD", "CAD", "GBP", "USD", "NZD", "EUR"]
     cids_dmsc = ["CHF", "NOK", "SEK"]
     cids_dmec = ["DEM", "ESP", "FRF", "ITL", "NLG"]
     cids += cids_dmec
     cids += cids_dmsc
-    xcats = ['XR', 'CRY']
+    xcats = ["XR", "CRY"]
 
     df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest',
                                                 'mean_add', 'sd_mult'])
@@ -251,14 +238,17 @@ if __name__ == "__main__":
     df_cids.loc['NOK'] = ['2010-01-01', '2020-12-30', -0.1, 0.5]
     df_cids.loc['SEK'] = ['2010-01-01', '2020-09-30', -0.1, 0.5]
 
-    df_xcats = pd.DataFrame(index = xcats, columns = ['earliest', 'latest', 'mean_add',
-                                                      'sd_mult', 'ar_coef', 'back_coef'])
-    df_xcats.loc['XR'] = ['2012-01-01', '2020-12-31', 0, 1, 0, 0.3]
-    df_xcats.loc['CRY'] = ['2010-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
+    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
+                                                  'sd_mult', 'ar_coef', 'back_coef'])
+    df_xcats.loc['XR', ] = ['2010-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
+    df_xcats.loc['CRY', ] = ['2010-01-01', '2020-10-30', 1, 2, 0.95, 0.5]
+
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     start = '2012-01-01'
     end = '2020-09-30'
+
+    # Clustered correlation matrices. Test hierarchical clustering.
     correl_matrix(df=dfd, xcats='XR', cids=cids, start=start, end=end,
                   val='value', freq=None, cluster=True,
                   title='Correlation Matrix', size=(14, 8), max_color=None)
