@@ -22,7 +22,9 @@ class TestDataQueryOAuth(unittest.TestCase):
             client_id=os.getenv("DQ_CLIENT_ID"),
             client_secret=os.getenv("DQ_CLIENT_SECRET")
         ) as dq:
-            self.assertTrue(dq.check_connection())
+            self.assertTrue(dq.check_connection(),
+                            msg="Authentication error - unable to access DataQuery:"
+                            )
 
     def test_download_jpmaqs_data(self):
         with Interface(
@@ -42,6 +44,4 @@ class TestDataQueryOAuth(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # unittest.main()
-
-    pass
+    unittest.main()
