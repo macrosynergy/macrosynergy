@@ -16,6 +16,32 @@ class TestDataQueryOAuth(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 self.assertFalse(dq.check_connection())
 
+    def test_connection(self):
+        with Interface(
+            oauth=True,
+            client_id=os.getenv("DQ_CLIENT_ID"),
+            client_secret=os.getenv("DQ_CLIENT_SECRET")
+        ) as dq:
+            self.assertTrue(dq.check_connection())
+
+    def test_download_jpmaqs_data(self):
+        with Interface(
+            oauth=True,
+            client_id=os.getenv("DQ_CLIENT_ID"),
+            client_secret=os.getenv("DQ_CLIENT_SECRET")
+        ) as dq:
+            data = dq.download(
+                tickers="EUR_FXXR_NSA",
+                start_date=(datetime.date.today() - datetime.timedelta(days=10)).isoformat()
+            )
+        self.assertIsInstance(data, pd.DataFrame)
+
+        self.assertFalse(data.empty)
+
+        self.assertGreater(data.shape[0], 0)
+
 
 if __name__ == "__main__":
-    unittest.main()
+    # unittest.main()
+
+    pass
