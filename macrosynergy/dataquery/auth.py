@@ -126,13 +126,13 @@ class CertAuth(object):
         assert isinstance(directory, str), dir_error
 
         condition = (os.path.exists(directory) and os.path.isfile(directory))
-        if condition:
-            return directory
-        else:
-            OSError(f"The directory received, {directory}, does not contain the "
-                    f"respective file, {file_type}.")
+        if not condition:
+            raise OSError(
+                f"The directory received, {directory}, does not contain the "
+                f"respective file, {file_type}."
+            )
 
-            return None
+        return directory
 
     def get_dq_api_result(self, url: str, params: dict = None) -> dict:
         """Method used exclusively to request data from the API.
