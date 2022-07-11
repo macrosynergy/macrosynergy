@@ -73,9 +73,7 @@ class Interface(object):
         try:
             results: dict = js["info"]
         except KeyError:
-            results: dict = js["errors"][0]
-            print(f"The corresponding code is: {results['code']}.")
-            raise ConnectionError(results["description"])
+            raise ConnectionError(f"DataQuery error response: {js}")
         else:
 
             return int(results["code"]) == 200, results
