@@ -1,23 +1,9 @@
-
 import numpy as np
 import pandas as pd
 from typing import List, Union, Tuple
 import random
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
-def difference(list_1: List[str], list_2: List[str]):
-    """
-    Helper method used to display possible missing categories or cross-sections.
-
-    :param <List[str]> list_1: first list.
-    :param <List[str]> list_2: second list.
-
-    """
-
-    missing = sorted(set(list_1) - set(list_2))
-    if len(missing) > 0:
-        list_1 = [elem for elem in list_1 if elem not in missing]
-    return list_1
 
 def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
               start: str = None, end: str = None, blacklist: dict = None,
@@ -25,19 +11,19 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
     """
     Filter DataFrame by xcats and cids and notify about missing xcats and cids.
 
-    :param <pd.Dataframe> df: standardized dataframe with the necessary columns:
-        'cid', 'xcats', 'real_date'.
-    :param <List[str]> xcats: extended categories to be checked on. Default is all in the
+    :param <pd.Dataframe> df: standardized JPMaQS dataframe with the necessary columns:
+        'cid', 'xcats', 'real_date' and 'value'.
+    :param <List[str]> xcats: extended categories to be filtered on. Default is all in the
         dataframe.
     :param <List[str]> cids: cross sections to be checked on. Default is all in the
         dataframe.
-    :param <str> start: string representing earliest date. Default is None.
+    :param <str> start: string representing the earliest date. Default is None.
     :param <str> end: string representing the latest date. Default is None.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from
-        the data frame. If one cross section has several blacklist periods append numbers
+    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
+        the data frame. If one cross-section has several blacklist periods append numbers
         to the cross-section code.
     :param <bool> out_all: if True the function returns reduced dataframe and selected/
-        available xcats and cids.
+        available xcats and cids. Default is False.
         Default is False, i.e. only the dataframe is returned
     :param <bool> intersect: if True only retains cids that are available for all xcats.
         Default is False.
@@ -60,7 +46,7 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
     if xcats is None:
         xcats = sorted(xcats_in_df)
     else:
-        xcats = difference(xcats, xcats_in_df)
+        xcats = [xcat for xcat in xcats if xcat in xcats_in_df]
 
     dfx = dfx[dfx['xcat'].isin(xcats)]
 
@@ -75,7 +61,7 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
         cids = sorted(cids_in_df)
     else:
         cids = [cids] if isinstance(cids, str) else cids
-        cids = difference(cids, cids_in_df)
+        cids = [cid for cid in cids if cid in cids_in_df]
 
         cids = set(cids).intersection(cids_in_df)
         dfx = dfx[dfx['cid'].isin(cids)]
@@ -84,6 +70,7 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
         return dfx.drop_duplicates(), xcats, sorted(list(cids))
     else:
         return dfx.drop_duplicates()
+
 
 def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str = None,
                         end: str = None, blacklist: dict = None):
@@ -119,11 +106,12 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
     if ticks is None:
         ticks = sorted(ticks_in_df)
     else:
-        ticks = difference(ticks, ticks_in_df)
+        ticks = [tick for tick in ticks if tick in ticks_in_df]
 
     dfx = dfx[dfx["ticker"].isin(ticks)]
 
     return dfx.drop_duplicates()
+
 
 def aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
     """
@@ -146,6 +134,7 @@ def aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
 
     return dfx
 
+
 def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                   val: str = 'value', start: str = None, end: str = None,
                   blacklist: dict = None, years: int = None, freq: str = 'M',
@@ -153,22 +142,21 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
 
     """
     Create custom two-categories dataframe with appropriate frequency and lags
-    suitable for analysis.
 
-    :param <pd.Dataframe> df: standardized dataframe with the following necessary columns:
-        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+    :param <pd.Dataframe> df: standardized JPMaQS dataframe with the following necessary
+        columns: 'cid', 'xcats', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: exactly two extended categories whose relationship is to be
         analyzed. It must be noted that the first category is the explanatory variable
         and the second category the explained, dependent, variable.
     :param <List[str]> cids: cross sections to be included. Default is all in the
-        dataframe.
-    :param <str> start: earliest date in ISO 8601 format. Default is None, i.e. earliest
-        date in data frame is used.
-    :param <str> end: latest date in ISO 8601 format. Default is None, i.e. latest date
-        in data frame is used.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from
-        the data frame. If one cross section has several blacklist periods append numbers
-        to the cross section code.
+        DataFrame.
+    :param <str> start: earliest date in ISO 8601 format. Default is None, 
+        i.e. the earliest date in the DataFrame is used.
+    :param <str> end: latest date in ISO 8601 format. Default is None, 
+        i.e. the latest date in DataFrame is used.
+    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
+        the data frame. If one cross-section has several blacklist periods append numbers
+        to the cross-section code.
     :param <int> years: Number of years over which data are aggregated. Supersedes the
         "freq" parameter and does not allow lags, Default is None, i.e. no multi-year
         aggregation.
@@ -184,7 +172,8 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for
         both.
 
-    :return <pd.Dataframe>: custom data frame with two category columns
+    :return <pd.Dataframe>: custom data frame with two category columns and excluding
+        all columns that contain NaNs
     """
 
     assert freq in ['D', 'W', 'M', 'Q', 'A']
@@ -196,41 +185,33 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
 
     col_names = ['cid', 'xcat', 'real_date', val]
 
-    sum_clause = 'sum' in xcat_aggs
-    if sum_clause:
-        sum_index = xcat_aggs.index('sum')
-
     df_output = []
     if years is None:
-        expln = xcats[0]
-        depnd = xcats[1]
+        xpl = xcats[0]
+        dep = xcats[1]
 
         df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values=val)
         df_w = df_w.groupby([pd.Grouper(level='cid'),
                              pd.Grouper(level='real_date', freq=freq)])
-        expln_col = df_w[expln].agg(xcat_aggs[0]).astype(dtype=np.float32)
-        depnd_col = df_w[depnd].agg(xcat_aggs[1]).astype(dtype=np.float32)
-        if sum_clause and sum_index:
-            depnd_col = depnd_col.replace({0.0: np.nan})
-        elif sum_clause:
-            expln_col = expln_col.replace({0.0: np.nan})
+        xpl_col = df_w[xpl].agg(xcat_aggs[0]).astype(dtype=np.float32)
+        dep_col = df_w[dep].agg(xcat_aggs[1]).astype(dtype=np.float32)
 
         # Explanatory variable is shifted forward.
         if lag > 0:
             # Utilise .groupby() to handle for multi-index Pandas DataFrame.
-            expln_col = expln_col.groupby(level=0).shift(1)
+            xpl_col = xpl_col.groupby(level=0).shift(1)
         if fwin > 0:
             s = 1 - fwin
-            depnd_col = depnd_col.rolling(window=fwin).mean().shift(s)
+            dep_col = dep_col.rolling(window=fwin).mean().shift(s)
 
-        expln_df = expln_col.reset_index()
-        expln_df['xcat'] = expln
-        expln_df = expln_df.rename(columns={expln: "value"})
+        xpl_df = xpl_col.reset_index()
+        xpl_df['xcat'] = xpl
+        xpl_df = xpl_df.rename(columns={xpl: "value"})
 
-        depnd_df = depnd_col.reset_index()
-        depnd_df['xcat'] = depnd
-        depnd_df = depnd_df.rename(columns={depnd: "value"})
-        df_output.append(pd.concat([expln_df, depnd_df], ignore_index=True))
+        dep_df = dep_col.reset_index()
+        dep_df['xcat'] = dep
+        dep_df = dep_df.rename(columns={dep: "value"})
+        df_output.append(pd.concat([xpl_df, dep_df], ignore_index=True))
 
     else:
         s_year = pd.to_datetime(start).year
@@ -264,9 +245,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
 
     dfc = pd.concat(df_output)
     # If either of the two variables, explanatory or dependent variable, contain a NaN
-    # value, remove the row: a relationship is not able to be established between a
-    # realised datapoint and a Nan value. Therefore, remove the row from the returned
-    # DataFrame.
+    # value, remove the row
     dfc = dfc.pivot(index=('cid', 'real_date'), columns='xcat',
                     values=val).dropna()[xcats]
 
