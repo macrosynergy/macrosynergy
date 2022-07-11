@@ -107,12 +107,14 @@ class TestDataQueryInterface(unittest.TestCase):
         # Second check is that the DataQuery instance is using an CertAuth Object if the
         # parameter "oauth" is set to to False. The DataQuery Class's default is to use
         # certificate / keys.
-        dq_access = api.Interface(
-            username="user1", password="123", crt="/api_macrosynergy_com.crt",
-            key="/api_macrosynergy_com.key"
-        )
 
-        self.assertIsInstance(dq_access.access, CertAuth)
+        # Given the certificate and key will not point to valid directories, the expected
+        # behaviour is for an OSError to be thrown.
+        with self.assertRaises(OSError):
+            dq_access = api.Interface(
+                username="user1", password="123", crt="/api_macrosynergy_com.crt",
+                key="/api_macrosynergy_com.key"
+            )
 
     def test_isolate_timeseries(self):
 
