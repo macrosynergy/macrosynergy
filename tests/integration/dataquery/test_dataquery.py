@@ -17,14 +17,14 @@ class TestDataQueryOAuth(unittest.TestCase):
             self.assertFalse(dq.check_connection())
 
     def test_connection(self):
-        with Interface(
+        dq = Interface(
             oauth=True,
             client_id=os.getenv("DQ_CLIENT_ID"),
             client_secret=os.getenv("DQ_CLIENT_SECRET")
-        ) as dq:
-            self.assertTrue(dq.check_connection(),
-                            msg="Authentication error - unable to access DataQuery:"
-                            )
+        )
+        self.assertTrue(dq.check_connection(),
+                        msg="Authentication error - unable to access DataQuery:"
+                        )
 
     def test_download_jpmaqs_data(self):
         dq = Interface(
