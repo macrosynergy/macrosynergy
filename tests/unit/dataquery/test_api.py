@@ -121,9 +121,13 @@ class TestDataQueryInterface(unittest.TestCase):
 
         tickers = [cid + "_" + xcat for xcat in xcats for cid in cids_dmca]
 
+        dq = api.Interface(
+            oauth=True, client_id="client_id", client_secret="client_secret"
+        )
+
         # First replicate the api.Interface()._request() method using the associated
         # JPMaQS expression.
-        expression = api.Interface.jpmaqs_indicators(
+        expression = dq.jpmaqs_indicators(
             metrics=["value", "grading"], tickers=tickers
         )
         final_output = self.dq_request(dq_expressions=expression)
@@ -135,7 +139,7 @@ class TestDataQueryInterface(unittest.TestCase):
 
         # Therefore, assert that the dictionary contains the expected tickers and that
         # each value is a three-dimensional DataFrame: real_date, value, grade.
-        results_dict, output_dict, s_list = api.Interface.isolate_timeseries(
+        results_dict, output_dict, s_list = dq.isolate_timeseries(
             final_output, ['value', 'grading'], False, False
         )
 
@@ -158,6 +162,10 @@ class TestDataQueryInterface(unittest.TestCase):
         # associated method, isolate_timeseries().
         self.test_isolate_timeseries()
 
+        dq = api.Interface(
+            oauth=True, client_id="client_id", client_secret="client_secret"
+        )
+
         # The method, self.valid_ticker(), is used to delimit if each ticker has a valid
         # time-series. To determine if a time-series is valid, pass through each date and
         # confirm that the associated value is not a NoneType. If all dates contain NaN
@@ -166,7 +174,7 @@ class TestDataQueryInterface(unittest.TestCase):
 
         # All tickers held in the dictionary are valid tickers. Therefore, confirm the
         # keys for the two dictionary, received & returned, match.
-        results_dict = api.Interface.valid_ticker(
+        results_dict = dq.valid_ticker(
             _dict=self.results_dict, suppress_warning=True, debug=False
         )
         self.assertTrue(len(results_dict.keys()) == len(self.results_dict.keys()))
@@ -183,7 +191,7 @@ class TestDataQueryInterface(unittest.TestCase):
         data = np.array([None] * (shape[0] * shape[1]))
 
         results_dict["DB(JPMAQS,USD_FXXR_NSA"] = data.reshape(shape)
-        results_dict_USD = api.Interface.valid_ticker(
+        results_dict_USD = dq.valid_ticker(
             self.results_dict, suppress_warning=True, debug=False
         )
         # Ticker should be removed from the dictionary.
@@ -205,8 +213,12 @@ class TestDataQueryInterface(unittest.TestCase):
         # be valid by design.
         self.test_isolate_timeseries()
 
+        dq = api.Interface(
+            oauth=True, client_id="client_id", client_secret="client_secret"
+        )
+
         results_dict = self.results_dict
-        trial_df = api.Interface.dataframe_wrapper(
+        trial_df = dq.dataframe_wrapper(
             _dict=results_dict, no_metrics=2, original_metrics=["value", "grading"]
         )
 
