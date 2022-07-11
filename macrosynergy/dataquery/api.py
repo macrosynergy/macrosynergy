@@ -303,8 +303,8 @@ class Interface(object):
 
         return delay
 
-    @classmethod
-    def jpmaqs_indicators(cls, metrics, tickers):
+    @staticmethod
+    def jpmaqs_indicators(metrics, tickers):
         """
         Functionality used to convert tickers into formal JPMaQS expressions.
         """
@@ -393,7 +393,7 @@ class Interface(object):
             return self.dataframe_wrapper(results_dict, no_metrics, original_metrics)
 
     @staticmethod
-    def array_construction(metrics: List[str], output_dict: dict, no_rows: int,
+    def array_construction(metrics: List[str], output_dict: dict,
                            debug: bool, sequential: bool):
         """
         Helper function that will pass through the dictionary and aggregate each
@@ -404,7 +404,6 @@ class Interface(object):
         :param <dict> output_dict: nested dictionary where the keys are the tickers and
             the value is itself a dictionary. The interior dictionary's keys will be the
             associated metrics and the values will be their respective time-series.
-        :param <int> no_rows: number of timestamps the series is defined over.
         :param <bool> debug: used to understand any underlying issue.
         :param <bool> sequential: if series are not returned, potentially the fault of
             the threading mechanism, isolate each Ticker and run sequentially.
@@ -454,9 +453,8 @@ class Interface(object):
 
         return modified_dict, ticker_list
 
-    @classmethod
     def isolate_timeseries(
-        cls,
+        self,
         list_,
         metrics: List[str],
         debug: bool,
@@ -508,11 +506,9 @@ class Interface(object):
                         continue
 
         output_dict_c = output_dict.copy()
-        t_dict = next(iter(output_dict_c.values()))
-        no_rows = next(iter(t_dict.values())).size
 
-        modified_dict, ticker_list = cls.array_construction(
-            metrics=metrics, output_dict=output_dict, no_rows=no_rows, debug=debug,
+        modified_dict, ticker_list = self.array_construction(
+            metrics=metrics, output_dict=output_dict_c, debug=debug,
             sequential=sequential
         )
 
@@ -541,8 +537,7 @@ class Interface(object):
 
         return condition
 
-    @classmethod
-    def valid_ticker(cls, _dict, suppress_warning, debug):
+    def valid_ticker(self, _dict, suppress_warning, debug):
         """
         Iterates through each Ticker and determines whether the Ticker is held in the
         Database or not. The validation mechanism will isolate each column, in all the
@@ -563,7 +558,7 @@ class Interface(object):
 
         for k, v in _dict.items():
             no_cols = v.shape[1]
-            condition = cls.column_check(v, col=1, no_cols=no_cols, debug=debug)
+            condition = self.column_check(v, col=1, no_cols=no_cols, debug=debug)
 
             if condition:
                 ticker_missing += 1
@@ -628,7 +623,8 @@ class Interface(object):
         df.real_date = pd.to_datetime(df.real_date)
         return df
 
-    def tickers(self,
+    def tickers(
+        self,
         tickers: list,
         metrics: list = ['value'],
         start_date: str = '2000-01-01',
