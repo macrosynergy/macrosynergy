@@ -75,13 +75,13 @@ class Interface(object):
         try:
             results: dict = js["info"]
         except KeyError:
-            dq_url = self.access.base_url
-            ip_addr = socket.gethostbyname(dq_url)
-            url_request = self.access.last_url
+            # dq_url = self.access.base_url
+            # print("base url:", dq_url)
+            # ip_addr = socket.gethostbyname(dq_url)
+            url = self.access.last_url
             now = datetime.datetime.utcnow()
             raise ConnectionError(
-                f"DataQuery request {url_request:s} (base url {dq_url:s}, IP address {ip_addr})"
-                f" error response at {now.isoformat()}: {js}"
+                f"DataQuery request {url:s} error response at {now.isoformat()}: {js}"
             )
         else:
 
