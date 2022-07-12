@@ -210,8 +210,7 @@ class TestAll(unittest.TestCase):
 
         manual_precision = (positive_accuracy + (1 - negative_accuracy)) / 2
         df_cs_usd_posprec = df_cs.loc['USD', 'pos_prec']
-        print(manual_precision)
-        print(df_cs_usd_posprec)
+        
         self.assertTrue(abs(manual_precision - df_cs_usd_posprec) < 0.1)
 
         # Lastly, confirm that 'Mean' row is computed using exclusively the respective
