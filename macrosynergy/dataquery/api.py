@@ -1,13 +1,14 @@
-
 """DataQuery Interface."""
 import pandas as pd
 import numpy as np
 import warnings
 import concurrent.futures
 import time
+import socket
+import datetime
 import logging
 
-from typing import List
+from typing import List, Tuple
 from math import ceil, floor
 from collections import defaultdict
 from itertools import chain
@@ -15,6 +16,7 @@ from typing import Optional
 from macrosynergy.dataquery.auth import CertAuth, OAuth
 
 logger = logging.getLogger(__name__)
+
 
 class Interface(object):
     """API Interface to ©JP Morgan DataQuery.
@@ -64,7 +66,7 @@ class Interface(object):
         if exc_type:
             print(f"Execution {exc_type} with value (exc_value):\n{exc_value}")
 
-    def check_connection(self) -> bool:
+    def check_connection(self) -> Tuple[bool, dict]:
         """Check connection (heartbeat) to DataQuery.
         """
         endpoint = "/services/heartbeat"
@@ -73,7 +75,12 @@ class Interface(object):
         try:
             results: dict = js["info"]
         except KeyError:
-            raise ConnectionError(f"DataQuery error response: {js}")
+            url = self.access.base_url
+            ip_addr = socket.gethostbyname(url)
+            now = datetime.datetime.utcnow()
+            raise ConnectionError(
+                f"DataQuery base url {url:s} (IP address {ip_addr} error response at {now.isoformat()}: {js}"
+            )
         else:
 
             return int(results["code"]) == 200, results
