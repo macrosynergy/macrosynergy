@@ -62,8 +62,10 @@ class TestDataQueryInterface(unittest.TestCase):
                            oauth=True) as dq:
             clause, results = dq.check_connection()
             self.assertTrue(clause)
-            mock_p_request.assert_called_with(url=dq.access.base_url +
-                                                  "/services/heartbeat")
+            mock_p_request.assert_called_with(
+                url=dq.access.base_url +"/services/heartbeat",
+                params={'data': 'NO_REFERENCE_DATA'}
+            )
 
         mock_p_request.assert_called_once()
 
@@ -83,8 +85,10 @@ class TestDataQueryInterface(unittest.TestCase):
             # (unable to connect).
             clause, results = dq.check_connection()
             self.assertTrue(not clause)
-            mock_p_fail.assert_called_with(url=dq.access.base_url +
-                                               "/services/heartbeat")
+            mock_p_fail.assert_called_with(
+                url=dq.access.base_url + "/services/heartbeat",
+                params={"data": "NO_REFERENCE_DATA"}
+            )
 
         mock_p_fail.assert_called_once()
 
