@@ -224,7 +224,8 @@ class TestAll(unittest.TestCase):
         difference = test_df_copy.iloc[row_test]['INFL'] - \
                      test_df_copy.iloc[nan_adjustment]['INFL']
 
-        self.assertEqual(test_value, difference)
+        condition = abs(test_value - difference)
+        self.assertTrue(condition < 0.0001)
 
         # The logic and assembly of a the new dataframe have both been tested. The other
         # methods in the Class are for visualisation and heavily dependent on external
@@ -276,11 +277,15 @@ class TestAll(unittest.TestCase):
                                                        expln_var='GROWTH')
         val_1 = np.max(np.abs(df_time_series['GROWTH']))
         val_2 = np.max(np.abs(df_time_series['INFL']))
-        epsilon = 0.0000001
+        epsilon = 0.00001
         xcat_trims = [(val_1 + epsilon), (val_2 + epsilon)]
-        df = CategoryRelations.outlier_trim(df=df_time_series, xcats=['GROWTH', 'INFL'],
-                                            xcat_trims=xcat_trims)
-        self.assertTrue(df.shape == df_time_series.shape)
+
+        df_outlier = CategoryRelations.outlier_trim(df=df_time_series,
+                                                     xcats=['GROWTH', 'INFL'],
+                                                     xcat_trims=xcat_trims)
+
+        # Adjust for the application of the lag.
+        self.assertTrue(df_outlier.shape == df_time_series.shape)
 
 
 if __name__ == "__main__":

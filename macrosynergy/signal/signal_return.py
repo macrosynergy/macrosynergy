@@ -27,7 +27,7 @@ class SignalReturnRelations:
     :param <str> end: latest date in ISO format. Default is None in which case the
         latest date in the df will be used.
     :param <dict> blacklist: cross sections with date ranges that should be excluded from
-        the data frame. If one cross section has several blacklist periods append numbers
+        the DataFrame. If one cross section has several blacklist periods append numbers
         to the cross-section code.
     :param <str> freq: letter denoting frequency at which the series are to be sampled.
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
@@ -52,9 +52,11 @@ class SignalReturnRelations:
         # The method categories_df() expects to receive the explanatory variable first.
         # Lag the signal by a single day: understand the relationship between the
         # explanatory variable at time t and the dependent variable at time (t + 1).
+        # Use the sum as the default aggregation method to show the true return over the
+        # time-period.
         self.df = categories_df(df, xcats=[sig, ret], cids=cids, val='value',
                                 start=start, end=end, freq=freq, blacklist=blacklist,
-                                lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'mean'])
+                                lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum'])
 
         # Testing for inverse relationship between the signal and return: statistics will
         # work in the same capacity.

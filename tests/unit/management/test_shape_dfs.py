@@ -6,6 +6,7 @@ import pandas as pd
 from tests.simulate import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df, categories_df
 from math import ceil, floor
+from datetime import timedelta
 
 
 class TestAll(unittest.TestCase):
@@ -205,6 +206,42 @@ class TestAll(unittest.TestCase):
         x1 = self.dfd[filt1 & filt2]['value'].iloc[-1]
         x2 = float(dfc.loc[('AUD', '2011-11-30'), 'CRY'])
         self.assertAlmostEqual(x1, x2)
+
+        # The relationship between a signal and the return can materialise over different
+        # time intervals which is reflected in the use of lags. Additionally, the
+        # time sensitivity can vary between different pairs of signals & returns: weekly,
+        # monthly, quarterly etc.
+
+        df = self.dfd.copy()
+        dfc = categories_df(df, xcats=['CRY', 'XR'], cids=self.cids, freq='W',
+                            lag=3, fwin=0, xcat_aggs=['mean', 'mean'])
+
+        # Isolate a fixed week to test on and a single cross-section. It is the signal
+        # that is being lagged, 'CRY'.
+        dfc_aud = dfc.loc['AUD']
+
+        fixed_date = '2011-02-27'
+        test_value = dfc_aud.loc[fixed_date]['CRY']
+
+        # Lagged the arbitrarily chosen date by 3 weeks. The frequency has been reduced
+        # to weekly and the applied lag is three.
+        lagged_date = '2011-02-06'
+        date_lag = pd.Timestamp(lagged_date)
+        # Weekly aggregation will return a value at the end of the week (each date will
+        # be a Sunday). Therefore confirm the date is Sunday and use the preceding days
+        # to confirm the calculation manually.
+        self.assertEqual(date_lag.dayofweek, 6)
+
+        filter_1 = (df['cid'] == 'AUD') & (df['xcat'] == 'CRY')
+        df_cr_aud = df[filter_1]
+        df_cr_aud = df_cr_aud.pivot(index='real_date', columns='xcat', values='value')
+
+        # Subtract to the previous Sunday to include the entire week's individual series.
+        test_week = df_cr_aud.loc[date_lag - timedelta(7):lagged_date]
+        # Compute the average manually and confirm the lag has been applied correctly.
+        manual_calc = test_week.mean()
+        condition = abs(float(test_value) - float(manual_calc))
+        self.assertTrue(condition < 0.00001)
 
     def test_categories_df_black(self):
         self.dataframe_constructor()
