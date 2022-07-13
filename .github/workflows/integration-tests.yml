@@ -33,4 +33,7 @@ jobs:
         DQ_CLIENT_ID: ${{ secrets.DQ_CLIENT_ID }}
         DQ_CLIENT_SECRET: ${{ secrets.DQ_CLIENT_SECRET }}
       run: |
+        echo 'Run Integration tests'
         pytest tests/integration/
+        # echo "Integration test temporarily disabled."
+        echo 'Integration test complete'

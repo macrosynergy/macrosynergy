@@ -183,10 +183,6 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
 
     col_names = ['cid', 'xcat', 'real_date', val]
 
-    sum_clause = 'sum' in xcat_aggs
-    if sum_clause:
-        sum_index = xcat_aggs.index('sum')
-
     df_output = []
     if years is None:
         xpl = xcats[0]
@@ -195,18 +191,23 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values=val)
         df_w = df_w.groupby([pd.Grouper(level='cid'),
                              pd.Grouper(level='real_date', freq=freq)])
-        xpl_col = df_w[xpl].agg(xcat_aggs[0]).astype(dtype=np.float32)
-        dep_col = df_w[dep].agg(xcat_aggs[1]).astype(dtype=np.float32)
-        if sum_clause and sum_index:
-            dep_col = dep_col.replace({0.0: np.nan})
-        elif sum_clause:
-            xpl_col = xpl_col.replace({0.0: np.nan})
+
+        # Handles for falsified zeros. Following the frequency conversion, if the
+        # aggregation method is set to "sum", time periods that exclusively contain NaN
+        # values will incorrectly be summed to the value zero which is misleading for
+        # analysis.
+        sum_dict = {}
+        for i, agg in enumerate(xcat_aggs):
+            sum_dict[i] = {'min_count': 1} if agg == 'sum' else {}
+
+        xpl_col = df_w[xpl].agg(xcat_aggs[0], sum_dict[0]).astype(dtype=np.float32)
+        dep_col = df_w[dep].agg(xcat_aggs[1], sum_dict[1]).astype(dtype=np.float32)
 
         # Explanatory variable is shifted forward.
         if lag > 0:
             # Utilise .groupby() to handle for multi-index Pandas DataFrame.
-            xpl_col = xpl_col.groupby(level=0).shift(1)
-        if fwin > 0:
+            xpl_col = xpl_col.groupby(level=0).shift(lag)
+        if fwin > 1:
             s = 1 - fwin
             dep_col = dep_col.rolling(window=fwin).mean().shift(s)
 
