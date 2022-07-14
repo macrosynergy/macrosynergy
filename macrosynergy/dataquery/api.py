@@ -1,13 +1,14 @@
-
 """DataQuery Interface."""
 import pandas as pd
 import numpy as np
 import warnings
 import concurrent.futures
 import time
+import socket
+import datetime
 import logging
 
-from typing import List
+from typing import List, Tuple
 from math import ceil, floor
 from collections import defaultdict
 from itertools import chain
@@ -15,6 +16,7 @@ from typing import Optional
 from macrosynergy.dataquery.auth import CertAuth, OAuth
 
 logger = logging.getLogger(__name__)
+
 
 class Interface(object):
     """API Interface to ©JP Morgan DataQuery.
@@ -64,16 +66,26 @@ class Interface(object):
         if exc_type:
             print(f"Execution {exc_type} with value (exc_value):\n{exc_value}")
 
-    def check_connection(self) -> bool:
+    def check_connection(self) -> Tuple[bool, dict]:
         """Check connection (heartbeat) to DataQuery.
         """
         endpoint = "/services/heartbeat"
-        js: dict = self.access.get_dq_api_result(url=self.access.base_url + endpoint)
+        js: dict = self.access.get_dq_api_result(
+            url=self.access.base_url + endpoint,
+            params={"data": "NO_REFERENCE_DATA"}
+        )
 
         try:
             results: dict = js["info"]
         except KeyError:
-            raise ConnectionError(f"DataQuery error response: {js}")
+            # dq_url = self.access.base_url
+            # print("base url:", dq_url)
+            # ip_addr = socket.gethostbyname(dq_url)
+            url = self.access.last_url
+            now = datetime.datetime.utcnow()
+            raise ConnectionError(
+                f"DataQuery request {url:s} error response at {now.isoformat()}: {js}"
+            )
         else:
 
             return int(results["code"]) == 200, results
