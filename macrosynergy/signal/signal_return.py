@@ -23,14 +23,16 @@ class SignalReturnRelations:
     :param <bool> sig_neg: if set to True puts the signal in negative terms for all
         analyses. Default is False.
     :param <str> start: earliest date in ISO format. Default is None in which case the
-        earliest date in the df will be used.
+        earliest date available will be used.
     :param <str> end: latest date in ISO format. Default is None in which case the
         latest date in the df will be used.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from
-        the DataFrame. If one cross section has several blacklist periods append numbers
+    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
+        the data frame. If one cross-section has several blacklist periods append numbers
         to the cross-section code.
     :param <str> freq: letter denoting frequency at which the series are to be sampled.
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
+        The return series will always be summed over the sample period.
+        The signal series will be aggregated according to the value of agg_sig.
     :param <str> agg_sig: aggregation method applied to the signal value in down-
         sampling. The default is "last".
     :param <int> fwin: forward window of return category in base periods. Default is 1.
@@ -49,17 +51,10 @@ class SignalReturnRelations:
                         'pos_prec', 'neg_prec', 'pearson', 'pearson_pval',
                         'kendall', 'kendall_pval']
 
-        # The method categories_df() expects to receive the explanatory variable first.
-        # Lag the signal by a single day: understand the relationship between the
-        # explanatory variable at time t and the dependent variable at time (t + 1).
-        # Use the sum as the default aggregation method to show the true return over the
-        # time-period.
         self.df = categories_df(df, xcats=[sig, ret], cids=cids, val='value',
                                 start=start, end=end, freq=freq, blacklist=blacklist,
                                 lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum'])
 
-        # Testing for inverse relationship between the signal and return: statistics will
-        # work in the same capacity.
         if sig_neg:
             self.df.loc[:, sig] *= -1
             self.sig = sig + "_NEG"
@@ -75,15 +70,13 @@ class SignalReturnRelations:
 
     @staticmethod
     def df_isolator(df: pd.DataFrame, cs: str, cs_type: str):
+        # Todo: rename to __slice_df__ and hide from view
         """
-        Helper method used to isolate the specific time-series according to the parameter
-        'cs_type'. The performance metrics are computed either on a cross-sectional or
-        yearly basis.
+        Slice dataframe by year, cross-section, or use full panel
 
         :param <pd.DataFrame> df: standardised DataFrame.
-        :param <str> cs: individual segment, cross-section or year, for the associated
-            returned series.
-        :param <str> cs_type: the segmentation type.
+        :param <str> cs: individual segment, cross-section or year.
+        :param <str> cs_type: segmentation type.
         """
 
         # Row names of cross-sections or years.
@@ -97,15 +90,16 @@ class SignalReturnRelations:
         return df_cs
 
     def panel_relations(self, cs_type: str = 'cids'):
+        # Todo: rename to __output_table__ and hide from view
         """
-        Creates a DataFrame with information on the signal-return relation
-        across cross-sections or years and the panel.
+        Empty DataFrame for output on the signal-return relation
 
         :param <str> cs_type: the segmentation type.
 
         """
 
         assert cs_type in ['cids', 'years']
+        # Todo: should not be checked here, but at user entry menthod
         df = self.df.dropna(how='any')
 
         if cs_type == 'cids':
@@ -120,11 +114,10 @@ class SignalReturnRelations:
 
         for cs in (css + ['Panel']):
 
-            # Row names of cross-sections or years.
             df_cs = self.df_isolator(df=df, cs=cs, cs_type=cs_type)
 
-            # Returns an element - wise indication of the sign of a number.
             df_sgs = np.sign(df_cs.loc[:, [self.ret, self.sig]])
+            # Exact zeroes are disqualified for sign analysis only
             df_sgs = df_sgs[~((df_sgs.iloc[:, 0] == 0) | (df_sgs.iloc[:, 1] == 0))]
             
             sig = df_sgs[self.sig]
@@ -159,34 +152,27 @@ class SignalReturnRelations:
         return df_out.astype('float')
 
     def cross_section_table(self):
-        """
-        Returns a DataFrame with information on the signal-return relation across
-        sections and the panel.
-        """
+        """ Output table on relations across sections and the panel. """
 
         return self.df_cs.round(decimals=3)
 
     def yearly_table(self):
-        """
-        Returns DataFrame with information on the signal-return relation across years
-        and the panel.
-        """
+        """ Output table on relations across sections and the panel. """
         return self.df_ys.round(decimals=3)
 
     @staticmethod
     def yaxis_lim(accuracy_df: pd.DataFrame):
-        """
-        Determines the range the y-axis is defined over. The returned range will always
-        be below 0.5 to offer greater relative insight.
+        # Todo: rename to __yaxis_lim__ and hide from view
+        """Determines the range the y-axis is defined over.
 
         :param <pd.DataFrame> accuracy_df: two dimensional DataFrame with accuracy &
             balanced accuracy columns.
+
+        N.B.: The returned range will always be below 0.5.
         """
         y_axis = lambda min_correl: min_correl > 0.45
         min_value = accuracy_df.min().min()
         y_input = 0.45 if y_axis(min_value) else min_value
-        # Ensures any accuracy statistics greater than 0.5 are more pronounced given the
-        # adjusted scale.
 
         return y_input
 
@@ -194,7 +180,7 @@ class SignalReturnRelations:
                       size: Tuple[float] = None,
                       legend_pos: str = 'best'):
         """
-        Bar chart for the overall and balanced accuracy metrics.
+        Plot bar chart for the overall and balanced accuracy metrics.
 
         :param <str> type: type of segment over which bars are drawn. Either
             'cross_section' (default) or 'years'.
@@ -209,9 +195,6 @@ class SignalReturnRelations:
         assert type in ['cross_section', 'years']
 
         df_xs = self.df_cs if type == 'cross_section' else self.df_ys
-        # 'PosRatio' represents average boolean across the panel. It is not a statistic
-        # based directly on the signal return data. Therefore, exclude from the accuracy
-        # bar chart.
         dfx = df_xs[~df_xs.index.isin(['PosRatio'])]
 
         if title is None:
@@ -249,7 +232,7 @@ class SignalReturnRelations:
                          size: Tuple[float] = None,
                          legend_pos: str = 'best'):
         """
-        Correlation coefficients and significance.
+        Plot correlation coefficients and significance.
 
         :param <str> type: type of segment over which bars are drawn. Must be
             "cross-section" (default) or 'years'.
@@ -298,13 +281,14 @@ class SignalReturnRelations:
 
     def summary_table(self):
         """
-        Condensed summary table of signal-return relations.
-        N.B.:
-        The interpretation of the columns is generally as follows:
+        Return summary output table of signal-return relations.
+
+        N.B.: The interpretation of the columns is generally as follows:
 
         accuracy refers accuracy for binary classification, i.e. positive or negative
             return, and gives the ratio of correct prediction of the sign of returns
-            to all predictions.
+            to all predictions. Note that exact zero values for either signal or
+            return series will not be considered for accuracy analysis.
         bal_accuracy refers to balanced accuracy. This is the average of the ratios of
             correctly detected positive returns and correctly detected negative returns.
             The denominators here are the total of actual positive and negative returns
@@ -351,6 +335,11 @@ class SignalReturnRelations:
                        "Mean cids", "Positive ratio"]
 
         return dfsum
+
+    # Todo: add method .rival_sigs(sigs, sig_neg: bool = False)
+    #  In this case a comparative output table is returned with the Panel
+    #  row of the original table only, but for the original signal and
+    #  all rival categories.
 
 
 if __name__ == "__main__":
