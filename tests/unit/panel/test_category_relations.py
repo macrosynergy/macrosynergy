@@ -154,7 +154,7 @@ class TestAll(unittest.TestCase):
         temp_df[expln_var] -= shift
         temp_df = temp_df.astype(dtype=np.float32)
 
-        return temp_df.dropna(axis=0, how='any')
+        return temp_df
 
     # Test the conversion method from raw value to either n-period differencing or
     # percentage change.
@@ -259,13 +259,15 @@ class TestAll(unittest.TestCase):
 
         test_df_aud = original_df.loc['AUD']
         test_df_aud_dif = self.first_difference(
-            test_df_aud, expln_var='INFL', n_periods=4
+            test_df_aud, expln_var="INFL", n_periods=4
         )
+        test_df_aud_dif = test_df_aud_dif.dropna(axis=0, how="any")
 
-        df_time_series_aud = df_time_series[df_time_series.index.get_level_values('cid')
-                                            == 'AUD']
-        df_time_series_aud_infl = df_time_series_aud['INFL']
-        condition = np.abs(test_df_aud_dif['INFL'].to_numpy() - \
+        df_time_series_aud = df_time_series[df_time_series.index.get_level_values("cid")
+                                            == "AUD"]
+        df_time_series_aud_infl = df_time_series_aud["INFL"]
+
+        condition = np.abs(test_df_aud_dif["INFL"].to_numpy() - \
                     df_time_series_aud_infl.to_numpy())
         self.assertTrue(np.all(condition < 0.0001))
 
