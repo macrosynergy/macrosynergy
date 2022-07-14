@@ -122,15 +122,20 @@ class CategoryRelations(object):
         Returns a list of the common cross-sections across both categories: dependent &
         explanatory variable.
 
+        :param <pd.DataFrame> df: standardised DataFrame.
+        :param <List[str]> xcats: exactly two extended categories to be checked on.
+        :param <List[str]> cids: cross-sections for which the category relation is being
+        analyzed.
+
         :return <List[str]>: usable: List of the common cross-sections across the two
             categories.
         """
 
-        set_1 = set(df[df['xcat'] == xcats[0]]['cid'].unique())
-        set_2 = set(df[df['xcat'] == xcats[1]]['cid'].unique())
+        set_1 = set(df[df['xcat'] == xcats[0]]['cid'])
+        set_2 = set(df[df['xcat'] == xcats[1]]['cid'])
 
-        miss_1 = list(set(cids).difference(set_1))  # cids not available for 1st cat
-        miss_2 = list(set(cids).difference(set_2))  # cids not available for 2nd cat
+        miss_1 = list(set(cids).difference(set_1))
+        miss_2 = list(set(cids).difference(set_2))
 
         if len(miss_1) > 0:
             print(f"{xcats[0]} misses: {sorted(miss_1)}.")
@@ -138,7 +143,7 @@ class CategoryRelations(object):
             print(f"{xcats[1]} misses: {sorted(miss_2)}.")
 
         usable = list(set_1.intersection(set_2).
-                      intersection(set(cids)))  # 3 set intersection
+                      intersection(set(cids)))
 
         return usable
 
