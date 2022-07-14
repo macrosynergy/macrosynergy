@@ -93,8 +93,11 @@ class CategoryRelations(object):
 
         if xcat1_chg is not None:
 
-            assert xcat1_chg in ['diff', 'pch']
-            assert isinstance(n_periods, int)
+            xcat1_error = "Change applied to the explanatory variable must either be " \
+                          "first-differencing, 'diff', or percentage change, 'pch'."
+            assert xcat1_chg in ['diff', 'pch'], xcat1_error
+            n_periods_error = f"<int> expected and not {type(n_periods)}."
+            assert isinstance(n_periods, int), n_periods_error
 
             df = CategoryRelations.time_series(df, change=xcat1_chg,
                                                n_periods=n_periods,
@@ -165,16 +168,10 @@ class CategoryRelations(object):
         for c in shared_cids:
             temp_df = df.loc[c]
 
-            explan_col = temp_df[expln_var].to_numpy()
-            shift = np.empty(explan_col.size)
-            shift[:] = np.nan
-            shift[n_periods:] = explan_col[:-n_periods]
-
             if change == 'diff':
-                temp_df[expln_var] -= shift
+                temp_df[expln_var] = temp_df[expln_var].diff(periods=n_periods)
             else:
-                diff = explan_col - shift
-                temp_df[expln_var] = diff / shift
+                temp_df[expln_var] = temp_df[expln_var].pct_change(periods=n_periods)
 
             temp_df['cid'] = c
             temp_df = temp_df.set_index('cid', append=True)
