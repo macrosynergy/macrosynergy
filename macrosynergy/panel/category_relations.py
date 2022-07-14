@@ -12,19 +12,19 @@ from macrosynergy.management.shape_dfs import categories_df
 
 class CategoryRelations(object):
     """
-    Class for analyzing and visualizing two categories across a panel.
+    Class for analyzing and visualizing the relations of two panel categories.
 
-    :param <pd.Dataframe> df: standardized data frame with the necessary columns:
+    :param <pd.DataFrame> df: standardized DataFrame with the necessary columns:
         'cid', 'xcat', 'real_date' and at least one column with values of interest.
-    :param <List[str]> xcats: exactly two extended categories to be checked on.
+    :param <List[str]> xcats: exactly two extended categories to be analyzed.
         If there is a hypothesized explanatory-dependent relation, the first category
         is the explanatory variable and the second category the explained variable.
-    :param <List[str]> cids: cross-sections for which the category relation is being
-        analyzed. Default is all in the dataframe.
+    :param <List[str]> cids: cross-sections for which the category relations is being
+        analyzed. Default is all in the DataFrame.
     :param <str> start: earliest date in ISO format. Default is None in which case the
-        earliest date in the df will be used.
+        earliest date in the DataFrame will be used.
     :param <str> end: latest date in ISO format. Default is None in which case the
-        latest date in the df will be used.
+        latest date in the DataFrame will be used.
     :param <dict> blacklist: cross-sections with date ranges that should be excluded from
         the analysis.
     :param <int> years: number of years over which data are aggregated. Supersedes freq
@@ -37,12 +37,13 @@ class CategoryRelations(object):
     :param <int> lag: lag (delay of arrival) of first (explanatory) category in periods
         as set by freq. Default is 0.
         Importantly, for analyses with explanatory and dependent categories, the first
-        takes the role of the explanatory and a positive lag means that the explanatory
-        values will be deferred into the future.
+        category takes the role of the explanatory and a positive lag means that the
+        explanatory values will be deferred into the future, i.e. relate to future values
+        of the explained variable.
     :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for
         both.
-    :param <str> xcat1_chg: time series change applied to first category.
-        Default is None. Change options are 'diff' (first difference) and 'pchg'
+    :param <str> xcat1_chg: time series changes are applied to the first category.
+        Default is None. Options are 'diff' (first difference) and 'pch'
         (percentage change). The changes are calculated over the number of
         periods determined by `n_periods`.
     :param <int> n_periods: number of periods over which changes of the first category
@@ -56,7 +57,6 @@ class CategoryRelations(object):
         for the two respective categories. Observations with higher values will be
         trimmed, i.e. removed from the analysis (not winsorized!). Default is None
         for both. Trimming is applied after all other transformations.
-
     """
 
     def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
@@ -65,10 +65,7 @@ class CategoryRelations(object):
                  fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean'),
                  xcat1_chg: str = None, n_periods: int = 1,
                  xcat_trims: List[float] = [None, None]):
-
-        """
-        Constructs all attributes for the category relationship to be analyzed.
-        """
+        """ Initializes CategoryRelations """
 
         self.xcats = xcats
         self.cids = cids 
@@ -87,14 +84,18 @@ class CategoryRelations(object):
 
         # Select the cross-sections available for both categories.
         shared_cids = CategoryRelations.intersection_cids(df, xcats, cids)
+
         df = categories_df(df, xcats, shared_cids, val, start=start,
                            end=end, freq=freq, blacklist=blacklist, years=years,
                            lag=lag, fwin=fwin, xcat_aggs=xcat_aggs)
 
         if xcat1_chg is not None:
 
-            assert xcat1_chg in ['diff', 'pch']
-            assert isinstance(n_periods, int)
+            xcat1_error = "Change applied to the explanatory variable must either be " \
+                          "first-differencing, 'diff', or percentage change, 'pch'."
+            assert xcat1_chg in ['diff', 'pch'], xcat1_error
+            n_periods_error = f"<int> expected and not {type(n_periods)}."
+            assert isinstance(n_periods, int), n_periods_error
 
             df = CategoryRelations.time_series(df, change=xcat1_chg,
                                                n_periods=n_periods,
@@ -115,19 +116,23 @@ class CategoryRelations(object):
 
     @classmethod
     def intersection_cids(cls, df, xcats, cids):
-        """
-        Returns a list of the common cross-sections across both categories: dependent &
-        explanatory variable.
+        """Returns common cross-sections across both categories and specified
+        parameter.
+
+        :param <pd.DataFrame> df: standardised DataFrame.
+        :param <List[str]> xcats: exactly two extended categories to be checked on.
+        :param <List[str]> cids: cross-sections for which the category relation is being
+        analyzed.
 
         :return <List[str]>: usable: List of the common cross-sections across the two
             categories.
         """
 
-        set_1 = set(df[df['xcat'] == xcats[0]]['cid'].unique())
-        set_2 = set(df[df['xcat'] == xcats[1]]['cid'].unique())
+        set_1 = set(df[df['xcat'] == xcats[0]]['cid'])
+        set_2 = set(df[df['xcat'] == xcats[1]]['cid'])
 
-        miss_1 = list(set(cids).difference(set_1))  # cids not available for 1st cat
-        miss_2 = list(set(cids).difference(set_2))  # cids not available for 2nd cat
+        miss_1 = list(set(cids).difference(set_1))
+        miss_2 = list(set(cids).difference(set_2))
 
         if len(miss_1) > 0:
             print(f"{xcats[0]} misses: {sorted(miss_1)}.")
@@ -135,29 +140,26 @@ class CategoryRelations(object):
             print(f"{xcats[1]} misses: {sorted(miss_2)}.")
 
         usable = list(set_1.intersection(set_2).
-                      intersection(set(cids)))  # 3 set intersection
+                      intersection(set(cids)))
 
         return usable
 
     @classmethod
     def time_series(cls, df: pd.DataFrame, change: str, n_periods: int,
                     shared_cids: List[str], expln_var: str):
-        """
-        Modifying the metric on the explanatory variable: the dataframe's default will be
-        the raw value series, defined according to the frequency parameter, but allow for
-        additional time-series metrics such as differencing or % change (pchg).
+        """ Calculates first differences and percent changes.
 
         :param <pd.DataFrame> df: multi-index DataFrame hosting the two categories: first
             column represents the explanatory variable; second column hosts the dependent
-            variable. The dataframe's index is the real-date and cross-section.
-        :param <str> change:
-        :param <int> n_periods:
+            variable. The DataFrame's index is the real-date and cross-section.
+        :param <str> change: type of change to be applied
+        :param <int> n_periods: number of base periods in df over which the change is applied.
         :param <List[str]> shared_cids: shared cross-sections across the two categories
             and the received list.
         :param <str> expln_var: only the explanatory variable's data series will be
             changed from the raw value series to a difference or percentage change value.
 
-        :return <pd.Dataframe>: df: returns the same multi-index dataframe but with an
+        :return <pd.Dataframe>: df: returns the same multi-index DataFrame but with an
             adjusted series inline with the 'change' parameter.
         """
 
@@ -165,39 +167,36 @@ class CategoryRelations(object):
         for c in shared_cids:
             temp_df = df.loc[c]
 
-            explan_col = temp_df[expln_var].to_numpy()
-            shift = np.empty(explan_col.size)
-            shift[:] = np.nan
-            shift[n_periods:] = explan_col[:-n_periods]
-
             if change == 'diff':
-                temp_df[expln_var] -= shift
+                temp_df[expln_var] = temp_df[expln_var].diff(periods=n_periods)
             else:
-                diff = explan_col - shift
-                temp_df[expln_var] = diff / shift
+                temp_df[expln_var] = temp_df[expln_var].pct_change(periods=n_periods)
 
             temp_df['cid'] = c
             temp_df = temp_df.set_index('cid', append=True)
             df_lists.append(temp_df)
 
         df_ = pd.concat(df_lists)
-        return df_.dropna(axis=0, how='any')
+        df_ = df_.dropna(axis=0, how='any')
+        return df_
 
     @classmethod
     def outlier_trim(cls, df: pd.DataFrame, xcats: List[str], xcat_trims: List[float]):
         """
-        Method used to trim any outliers from the dataset - inclusive of both categories.
-        Outliers are classified as any datapoint whose absolute value exceeds the
-        predefined value specified in the field self.xcat_trims. The values will be set
-        to NaN, and subsequently excluded from any regression modelling or correlation
-        coefficients.
+        Trim outliers from the dataset.
 
         :param <pd.DataFrame> df: multi-index DataFrame hosting the two categories. The
             transformations, to each series, have already been applied.
         :param <List[str]> xcats: explanatory and dependent variable.
         :param <List[float]> xcat_trims:
 
-        :return <pd.DataFrame> df: returns the same multi-index dataframe.
+        :return <pd.DataFrame> df: returns the same multi-index DataFrame.
+
+        N.B.:
+        Outliers are classified as any datapoint whose absolute value exceeds the
+        predefined value specified in the field self.xcat_trims. The values will be set
+        to NaN, and subsequently excluded from any regression modelling or correlation
+        coefficients.
         """
 
         xcat_dict = dict(zip(xcats, xcat_trims))
@@ -212,9 +211,7 @@ class CategoryRelations(object):
     def corr_prob_calc(self, df_probability: Union[pd.DataFrame, List[pd.DataFrame]],
                        prob_bool: bool = True):
         """
-        Method used to compute the correlation coefficient and probability statistics.
-        The method is able to handle multiple dataframes, and will return the
-        corresponding number of statistics held inside a List.
+        Compute the correlation coefficient and probability statistics.
 
         :param <List[pd.DataFrame] or pd.DataFrame> df_probability: pandas DataFrame
             containing the dependent and explanatory variables.
@@ -222,6 +219,9 @@ class CategoryRelations(object):
             probability value is included in the table. The default is True.
 
         :return <List[tuple(float, float)]>:
+
+        N.B.: The method is able to handle multiple DataFrames, and will return the
+        corresponding number of statistics held inside a List.
         """
         if isinstance(df_probability, pd.DataFrame):
             df_probability = [df_probability]
@@ -243,13 +243,11 @@ class CategoryRelations(object):
                          coef_box_loc: str = 'upper left',
                          prob_bool: bool = True):
         """
-        Method used to add the computed correlation coefficient and probability
-        statistics to a Matplotlib table. The table containing the figures will be
-        emblazoned on the two-dimensional graphs.
+        Add the computed correlation coefficient and probability to a Matplotlib table.
 
         :param <List[pd.DataFrame] or pd.DataFrame> df_probability: pandas DataFrame
             containing the dependent and explanatory variables. Able to handle multiple
-            dataframes representing different time-periods of the original series.
+            DataFrames representing different time-periods of the original series.
         :param <str> time_period: indicator used to clarify which time-period the
             statistics are computed for. For example, before 2010 and after 2010: the two
             periods experience very different macroeconomic conditions. The default is
@@ -284,11 +282,7 @@ class CategoryRelations(object):
         return data_table
 
     def annotate_facet(self, data, **kws):
-        """
-        Method used to annotate each graph within the facet grid. The annotation will
-        exclusively include the correlation coefficient for each individual cross-section
-        defined across the explanatory and dependent variable.
-        """
+        """ Annotate each graph within the facet grid. """
 
         x = data[self.xcats[0]].to_numpy()
         y = data[self.xcats[1]].to_numpy()
@@ -424,7 +418,7 @@ class CategoryRelations(object):
             key = keys_ar[keys_ar <= n_cids][-1]
             col_number = dict_coln[key]
 
-            # Convert the dataframe to a standardised dataframe. Three columns: two
+            # Convert the DataFrame to a standardised dataframe. Three columns: two
             # categories (dependent & explanatory variable) and the respective
             # cross-sections. The index will be the date timestamp.
             dfx_copy = dfx.copy()
@@ -438,7 +432,7 @@ class CategoryRelations(object):
                    line_kws={'lw': 1})
 
             if coef_box_incl:
-                fg.map_dataframe(self.annotate_facet)
+                fg.map_DataFrame(self.annotate_facet)
 
             fg.set_titles(col_template='{col_name}')
             fg.fig.suptitle(title, y=title_adj, fontsize=14)
@@ -514,51 +508,6 @@ class CategoryRelations(object):
             
         plt.show()
 
-    def jointplot(self, kind, fit_reg: bool = True, title: str = None,
-                  height: float = 6, xlab: str = None, ylab: str = None):
-
-        """
-        Display joint plot of chosen type, based on seaborn.jointplot().
-        The plot will always be square.
-
-        :param <str> kind: determines type of relational plot inside the joint plot.
-            This must be one of one of 'scatter', 'kde', 'hist', or 'hex'.
-        :param <bool> fit_reg: if True (default) adds a regression line.
-        :param <str> title: title. If None (default) informative title is applied.
-        :param <float> height: height and implicit size of figure. Default is 6.
-        :param <str> xlab: x-axis label. Default is no label.
-        :param <str> ylab: y-axis label. Default is no label.
-
-        """
-        assert kind in ['scatter', 'kde', 'hist', 'hex']
-
-        sns.set_theme(style='whitegrid')
-        if kind == 'hex':
-            sns.set_theme(style='white')
-
-        fg = sns.jointplot(data=self.df,  x=self.xcats[0], y=self.xcats[1],
-                           kind=kind, height=height, color='steelblue')
-        
-        if fit_reg:
-            fg.plot_joint(sns.regplot, scatter=False, ci=0.95, color='black',
-                          line_kws={'lw': 1, 'linestyle': '--'})
-
-        xlab = xlab if xlab is not None else ''
-        ylab = ylab if ylab is not None else ''
-        fg.set_axis_labels(xlab, ylab)
-
-        if title is None and (self.years is None):
-            dates = self.df.index.get_level_values('real_date').to_series().\
-                dt.strftime('%Y-%m-%d')
-            title = f'{self.xcats[0]} and {self.xcats[1]} ' \
-                    f'from {dates.min()} to {dates.max()}'
-        elif title is None:
-            title = f'{self.xcats[0]} and {self.xcats[1]}'
-
-        fg.fig.suptitle(title, y=1.02)
-
-        plt.show()
-
     def ols_table(self):
         """
         Print statsmodel OLS table of pooled regression.
@@ -597,7 +546,7 @@ if __name__ == "__main__":
     # All AUD GROWTH locations.
     filt1 = (dfd['xcat'] == 'GROWTH') & (dfd['cid'] == 'AUD')
     filt2 = (dfd['xcat'] == 'INFL') & (dfd['cid'] == 'NZD')  # All NZD INFL locations.
-    # Reduced dataframe.
+    # Reduced DataFrame.
     dfdx = dfd[~(filt1 | filt2)]
     dfdx['ERA'] = "before 2010"
     dfdx.loc[dfdx.real_date.dt.year > 2007, 'ERA'] = "from 2010"

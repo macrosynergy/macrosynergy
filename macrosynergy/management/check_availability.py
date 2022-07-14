@@ -10,8 +10,7 @@ from macrosynergy.management.shape_dfs import reduce_df
 
 def missing_in_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None):
     """
-    Print cross sections and extended categories that are missing or redundant in the
-    dataframe
+    Print missing cross-sections and categories
 
     :param <pd.Dataframe> df: standardized dataframe with the following necessary
         columns: 'cid', 'xcats', 'real_date'.
@@ -31,7 +30,7 @@ def missing_in_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = 
 
 def check_startyears(df: pd.DataFrame):
     """
-    Dataframe with starting years across all extended categories and cross sections
+    Dataframe with starting years across all extended categories and cross-sections
 
     :param <pd.Dataframe> df: standardized dataframe with the following necessary
         columns: 'cid', 'xcats', 'real_date'
