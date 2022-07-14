@@ -51,6 +51,8 @@ class SignalReturnRelations:
                         'pos_prec', 'neg_prec', 'pearson', 'pearson_pval',
                         'kendall', 'kendall_pval']
 
+        # Use the sum as the default aggregation method to show the true return over the
+        # time-period.
         self.df = categories_df(df, xcats=[sig, ret], cids=cids, val='value',
                                 start=start, end=end, freq=freq, blacklist=blacklist,
                                 lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum'])
@@ -65,14 +67,13 @@ class SignalReturnRelations:
         self.ret = ret
         self.freq = freq
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
-        self.df_cs = self.panel_relations(cs_type='cids')
-        self.df_ys = self.panel_relations(cs_type='years')
+        self.df_cs = self.__output_table__(cs_type='cids')
+        self.df_ys = self.__output_table__(cs_type='years')
 
     @staticmethod
-    def df_isolator(df: pd.DataFrame, cs: str, cs_type: str):
-        # Todo: rename to __slice_df__ and hide from view
+    def __slice_df__(df: pd.DataFrame, cs: str, cs_type: str):
         """
-        Slice dataframe by year, cross-section, or use full panel
+        Slice DataFrame by year, cross-section, or use full panel.
 
         :param <pd.DataFrame> df: standardised DataFrame.
         :param <str> cs: individual segment, cross-section or year.
@@ -89,67 +90,66 @@ class SignalReturnRelations:
 
         return df_cs
 
-    def panel_relations(self, cs_type: str = 'cids'):
-        # Todo: rename to __output_table__ and hide from view
+    def __output_table__(self, cs_type: str = 'cids'):
         """
-        Empty DataFrame for output on the signal-return relation
+        Creates a DataFrame with information on the signal-return relation across
+        cross-sections or years and, additionally, the panel.
 
         :param <str> cs_type: the segmentation type.
 
         """
 
-        assert cs_type in ['cids', 'years']
-        # Todo: should not be checked here, but at user entry menthod
-        df = self.df.dropna(how='any')
+        df = self.df.dropna(how="any")
 
-        if cs_type == 'cids':
+        if cs_type == "cids":
             css = self.cids
         else:
-            df['year'] = np.array(df.reset_index(level=1)['real_date'].dt.year)
-            css = [str(y) for y in list(set(df['year']))]
+            df["year"] = np.array(df.reset_index(level=1)["real_date"].dt.year)
+            css = [str(y) for y in list(set(df["year"]))]
             css = sorted(css)
 
         statms = self.metrics
-        df_out = pd.DataFrame(index=['Panel', 'Mean', 'PosRatio'] + css, columns=statms)
+        df_out = pd.DataFrame(index=["Panel", "Mean", "PosRatio"] + css, columns=statms)
 
-        for cs in (css + ['Panel']):
+        for cs in (css + ["Panel"]):
 
-            df_cs = self.df_isolator(df=df, cs=cs, cs_type=cs_type)
+            df_cs = self.__slice_df__(df=df, cs=cs, cs_type=cs_type)
 
             df_sgs = np.sign(df_cs.loc[:, [self.ret, self.sig]])
-            # Exact zeroes are disqualified for sign analysis only
+            # Exact zeroes are disqualified for sign analysis only.
             df_sgs = df_sgs[~((df_sgs.iloc[:, 0] == 0) | (df_sgs.iloc[:, 1] == 0))]
             
             sig = df_sgs[self.sig]
             ret = df_sgs[self.ret]
-            df_out.loc[cs, 'accuracy'] = skm.accuracy_score(sig, ret)
-            df_out.loc[cs, 'bal_accuracy'] = skm.balanced_accuracy_score(sig, ret)
-            df_out.loc[cs, 'pos_sigr'] = np.mean(sig == 1)
+            df_out.loc[cs, "accuracy"] = skm.accuracy_score(sig, ret)
+            df_out.loc[cs, "bal_accuracy"] = skm.balanced_accuracy_score(sig, ret)
+            df_out.loc[cs, "pos_sigr"] = np.mean(sig == 1)
             df_out.loc[cs, "pos_retr"] = np.mean(ret == 1)
-            df_out.loc[cs, 'pos_prec'] = skm.precision_score(ret, sig, pos_label=1)
-            df_out.loc[cs, 'neg_prec'] = skm.precision_score(ret, sig, pos_label=-1)
+            df_out.loc[cs, "pos_prec"] = skm.precision_score(ret, sig, pos_label=1)
+            df_out.loc[cs, "neg_prec"] = skm.precision_score(ret, sig, pos_label=-1)
 
             ret_vals, sig_vals = df_cs[self.ret], df_cs[self.sig]
-            df_out.loc[cs, ['kendall', 'kendall_pval']] = stats.kendalltau(ret_vals,
+            df_out.loc[cs, ["kendall", "kendall_pval"]] = stats.kendalltau(ret_vals,
                                                                            sig_vals)
             corr, corr_pval = stats.pearsonr(ret_vals, sig_vals)
-            df_out.loc[cs, ['pearson', 'pearson_pval']] = np.array([corr, corr_pval])
+            df_out.loc[cs, ["pearson", "pearson_pval"]] = np.array([corr, corr_pval])
 
-        df_out.loc['Mean', :] = df_out.loc[css, :].mean()
+        df_out.loc["Mean", :] = df_out.loc[css, :].mean()
 
         above50s = statms[0:6]
-        df_out.loc['PosRatio', above50s] = (df_out.loc[css, above50s] > 0.5).mean()
+        df_out.loc["PosRatio", above50s] = (df_out.loc[css, above50s] > 0.5).mean()
 
         above0s = statms[6::2]
         pos_corr_coefs = df_out.loc[css, above0s] > 0
-        df_out.loc['PosRatio', above0s] = pos_corr_coefs.mean()
+        df_out.loc["PosRatio", above0s] = pos_corr_coefs.mean()
 
         below50s = statms[7::2]
         pvals_bool = df_out.loc[css, below50s] < 0.5
         pos_pvals = np.mean(np.array(pvals_bool) * np.array(pos_corr_coefs), axis=0)
         # Positive correlation with error prob < 50%.
-        df_out.loc['PosRatio', below50s] = pos_pvals
-        return df_out.astype('float')
+        df_out.loc["PosRatio", below50s] = pos_pvals
+
+        return df_out.astype("float")
 
     def cross_section_table(self):
         """ Output table on relations across sections and the panel. """
@@ -161,8 +161,7 @@ class SignalReturnRelations:
         return self.df_ys.round(decimals=3)
 
     @staticmethod
-    def yaxis_lim(accuracy_df: pd.DataFrame):
-        # Todo: rename to __yaxis_lim__ and hide from view
+    def __yaxis_lim__(accuracy_df: pd.DataFrame):
         """Determines the range the y-axis is defined over.
 
         :param <pd.DataFrame> accuracy_df: two dimensional DataFrame with accuracy &
@@ -172,6 +171,8 @@ class SignalReturnRelations:
         """
         y_axis = lambda min_correl: min_correl > 0.45
         min_value = accuracy_df.min().min()
+        # Ensures any accuracy statistics greater than 0.5 are more pronounced given the
+        # adjusted scale.
         y_input = 0.45 if y_axis(min_value) else min_value
 
         return y_input
@@ -220,8 +221,8 @@ class SignalReturnRelations:
         plt.axhline(y=0.5, color='black',
                     linestyle='-', linewidth=0.5)
 
-        y_input = self.yaxis_lim(accuracy_df=dfx.loc[:,
-                                             ['accuracy', 'bal_accuracy']])
+        y_input = self.__yaxis_lim__(accuracy_df=dfx.loc[:,
+                                                 ['accuracy', 'bal_accuracy']])
         plt.ylim(round(y_input, 2))
 
         plt.title(title)
@@ -335,11 +336,6 @@ class SignalReturnRelations:
                        "Mean cids", "Positive ratio"]
 
         return dfsum
-
-    # Todo: add method .rival_sigs(sigs, sig_neg: bool = False)
-    #  In this case a comparative output table is returned with the Panel
-    #  row of the original table only, but for the original signal and
-    #  all rival categories.
 
 
 if __name__ == "__main__":
