@@ -91,7 +91,7 @@ class TestAll(unittest.TestCase):
         test_index = list(srr.df_cs.index)[3:]
         self.assertTrue(sorted(self.cids) == sorted(test_index))
 
-    def test_df_isolator(self):
+    def test___slice_df__(self):
 
         self.dataframe_generator()
         # Method used to confirm that the segmentation of the original DataFrame is
@@ -106,7 +106,7 @@ class TestAll(unittest.TestCase):
         # First, test cross-sectional basis.
         # Choose a "random" cross-section.
 
-        df_cs = srr.df_isolator(df=df, cs='GBP', cs_type='cids')
+        df_cs = srr.__slice_df__(df=df, cs='GBP', cs_type='cids')
 
         # Test the values on a fixed date.
         fixed_date = '2010-01-04'
@@ -118,7 +118,7 @@ class TestAll(unittest.TestCase):
 
         # Test the yearly segmentation.
         df['year'] = np.array(df.reset_index(level=1)['real_date'].dt.year)
-        df_cs = srr.df_isolator(df=df, cs='2013', cs_type='years')
+        df_cs = srr.__slice_df__(df=df, cs='2013', cs_type='years')
 
         # Confirm that the year column contains exclusively '2013'. If so, able to deduce
         # that the segmentation works correctly for yearly type.
@@ -126,7 +126,7 @@ class TestAll(unittest.TestCase):
         df_cs_year = np.array(list(map(lambda y: str(y), df_cs_year)))
         self.assertTrue(np.all(df_cs_year == '2013'))
 
-    def test_panel_relations(self):
+    def test__output_table__(self):
 
         self.dataframe_generator()
         # Test the method responsible for producing the table of metrics assessing the
@@ -139,7 +139,7 @@ class TestAll(unittest.TestCase):
         return_ = 'XR'
         srr = SignalReturnRelations(self.dfd, sig=signal, ret=return_,
                                     freq='D', blacklist=self.blacklist)
-        df_cs = srr.panel_relations(cs_type='cids')
+        df_cs = srr.__output_table__(cs_type='cids')
 
         # The lagged signal & returns have been reduced to[-1, 1] which are interpreted
         # as indicator random variables.
@@ -215,7 +215,7 @@ class TestAll(unittest.TestCase):
 
         # Lastly, confirm that 'Mean' row is computed using exclusively the respective
         # segmentation types. Test on yearly data and balanced accuracy.
-        df_ys = srr.panel_relations(cs_type='years')
+        df_ys = srr.__output_table__(cs_type='years')
         df_ys_mean = df_ys.loc['Mean', 'bal_accuracy']
 
         dfx = df_ys[~df_ys.index.isin(['Panel', 'Mean', 'PosRatio'])]
@@ -223,7 +223,7 @@ class TestAll(unittest.TestCase):
         condition = np.abs(np.mean(dfx_balance) - df_ys_mean)
         self.assertTrue(condition < 0.00001)
 
-    def test_yaxis_lim(self):
+    def test__yaxis_lim__(self):
 
         self.dataframe_generator()
 
@@ -231,7 +231,7 @@ class TestAll(unittest.TestCase):
         return_ = 'XR'
         srr = SignalReturnRelations(self.dfd, sig=signal, ret=return_,
                                     freq='D', blacklist=self.blacklist)
-        df_cs = srr.panel_relations(cs_type='cids')
+        df_cs = srr.__output_table__(cs_type='cids')
         dfx = df_cs[~df_cs.index.isin(['PosRatio'])]
         dfx_acc = dfx.loc[:, ['accuracy', 'bal_accuracy']]
         arr_acc = dfx_acc.to_numpy()
@@ -240,7 +240,7 @@ class TestAll(unittest.TestCase):
         # Flatten the array - only concerned with the minimum across both dimensions. If
         # the minimum value is less than 0.45, use the minimum value to initiate the
         # range. Test the above logic.
-        ylim = srr.yaxis_lim(accuracy_df=dfx_acc)
+        ylim = srr.__yaxis_lim__(accuracy_df=dfx_acc)
 
         min_value = min(arr_acc)
         if min_value < 0.45:
