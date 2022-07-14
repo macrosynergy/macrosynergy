@@ -91,8 +91,11 @@ class CategoryRelations(object):
 
         if xcat1_chg is not None:
 
-            assert xcat1_chg in ['diff', 'pch']
-            assert isinstance(n_periods, int)
+            xcat1_error = "Change applied to the explanatory variable must either be " \
+                          "first-differencing, 'diff', or percentage change, 'pch'."
+            assert xcat1_chg in ['diff', 'pch'], xcat1_error
+            n_periods_error = f"<int> expected and not {type(n_periods)}."
+            assert isinstance(n_periods, int), n_periods_error
 
             df = CategoryRelations.time_series(df, change=xcat1_chg,
                                                n_periods=n_periods,
@@ -113,13 +116,23 @@ class CategoryRelations(object):
 
     @classmethod
     def intersection_cids(cls, df, xcats, cids):
-        """ Returns common cross-sections across both categories """
+        """Returns common cross-sections across both categories and specified
+        parameter.
 
-        set_1 = set(df[df['xcat'] == xcats[0]]['cid'].unique())
-        set_2 = set(df[df['xcat'] == xcats[1]]['cid'].unique())
+        :param <pd.DataFrame> df: standardised DataFrame.
+        :param <List[str]> xcats: exactly two extended categories to be checked on.
+        :param <List[str]> cids: cross-sections for which the category relation is being
+        analyzed.
 
-        miss_1 = list(set(cids).difference(set_1))  # cids not available for 1st cat
-        miss_2 = list(set(cids).difference(set_2))  # cids not available for 2nd cat
+        :return <List[str]>: usable: List of the common cross-sections across the two
+            categories.
+        """
+
+        set_1 = set(df[df['xcat'] == xcats[0]]['cid'])
+        set_2 = set(df[df['xcat'] == xcats[1]]['cid'])
+
+        miss_1 = list(set(cids).difference(set_1))
+        miss_2 = list(set(cids).difference(set_2))
 
         if len(miss_1) > 0:
             print(f"{xcats[0]} misses: {sorted(miss_1)}.")
@@ -127,7 +140,7 @@ class CategoryRelations(object):
             print(f"{xcats[1]} misses: {sorted(miss_2)}.")
 
         usable = list(set_1.intersection(set_2).
-                      intersection(set(cids)))  # 3 set intersection
+                      intersection(set(cids)))
 
         return usable
 
@@ -135,7 +148,6 @@ class CategoryRelations(object):
     def time_series(cls, df: pd.DataFrame, change: str, n_periods: int,
                     shared_cids: List[str], expln_var: str):
         """ Calculates first differences and percent changes.
-        # Todo: Replace by pandas' .diff() and .pct_change()
 
         :param <pd.DataFrame> df: multi-index DataFrame hosting the two categories: first
             column represents the explanatory variable; second column hosts the dependent
@@ -155,29 +167,23 @@ class CategoryRelations(object):
         for c in shared_cids:
             temp_df = df.loc[c]
 
-            explan_col = temp_df[expln_var].to_numpy()
-            shift = np.empty(explan_col.size)
-            shift[:] = np.nan
-            shift[n_periods:] = explan_col[:-n_periods]
-
             if change == 'diff':
-                temp_df[expln_var] -= shift
+                temp_df[expln_var] = temp_df[expln_var].diff(periods=n_periods)
             else:
-                diff = explan_col - shift
-                temp_df[expln_var] = diff / shift
+                temp_df[expln_var] = temp_df[expln_var].pct_change(periods=n_periods)
 
             temp_df['cid'] = c
             temp_df = temp_df.set_index('cid', append=True)
             df_lists.append(temp_df)
 
         df_ = pd.concat(df_lists)
-        return df_.dropna(axis=0, how='any')
+        df_ = df_.dropna(axis=0, how='any')
+        return df_
 
     @classmethod
     def outlier_trim(cls, df: pd.DataFrame, xcats: List[str], xcat_trims: List[float]):
         """
         Trim outliers from the dataset.
-        # Todo: Replace by simple filtering df['value'].abs() < thresh
 
         :param <pd.DataFrame> df: multi-index DataFrame hosting the two categories. The
             transformations, to each series, have already been applied.
