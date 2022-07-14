@@ -183,7 +183,8 @@ class CategoryRelations(object):
             df_lists.append(temp_df)
 
         df_ = pd.concat(df_lists)
-        return df_.dropna(axis=0, how='any')
+        df_ = df_.dropna(axis=0, how='any')
+        return df_
 
     @classmethod
     def outlier_trim(cls, df: pd.DataFrame, xcats: List[str], xcat_trims: List[float]):
