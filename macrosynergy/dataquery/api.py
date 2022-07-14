@@ -70,7 +70,10 @@ class Interface(object):
         """Check connection (heartbeat) to DataQuery.
         """
         endpoint = "/services/heartbeat"
-        js: dict = self.access.get_dq_api_result(url=self.access.base_url + endpoint)
+        js: dict = self.access.get_dq_api_result(
+            url=self.access.base_url + endpoint,
+            params={"data": "NO_REFERENCE_DATA"}
+        )
 
         try:
             results: dict = js["info"]
