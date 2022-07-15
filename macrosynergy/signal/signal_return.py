@@ -3,9 +3,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn import metrics as skm
-from scipy import stats 
-
-from typing import List, Union, Tuple
+from scipy import stats
+from typing import List, Tuple
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import categories_df
@@ -14,14 +13,16 @@ from macrosynergy.management.shape_dfs import categories_df
 class SignalReturnRelations:
 
     """
-    Class for analyzing and visualizing signal and a return series.
+    Class for analysing and visualizing signal and a return series.
 
     :param <pd.Dataframe> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcat', 'real_date' and 'value.
     :param <str> ret: return category.
     :param <str> sig: signal category.
+    :param <List[str]> sigs: list of additional signals. The relationship between the
+        return category and the respective signals is completed on the panel level.
     :param <bool> sig_neg: if set to True puts the signal in negative terms for all
-        analyses. Default is False.
+        analysis. Default is False.
     :param <str> start: earliest date in ISO format. Default is None in which case the
         earliest date available will be used.
     :param <str> end: latest date in ISO format. Default is None in which case the
@@ -33,23 +34,36 @@ class SignalReturnRelations:
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
         The return series will always be summed over the sample period.
         The signal series will be aggregated according to the value of agg_sig.
-    :param <str> agg_sig: aggregation method applied to the signal value in down-
+    :param <str> agg_sig: aggregation method applied to the signal values in down-
         sampling. The default is "last".
+        If defined, the additional signals will also use the same aggregation method for
+        any down-sampling.
     :param <int> fwin: forward window of return category in base periods. Default is 1.
         This conceptually corresponds to the holding period of a position in
         accordance with the signal.
 
+    NB:.
+    The Class can also facilitate the analysis of additional signals which are passed
+    into the parameter 'sigs'.
     """
-    def __init__(self, df: pd.DataFrame, ret: str, sig: str, cids: List[str] = None,
-                 sig_neg: bool = False, start: str = None, end: str = None,
-                 fwin: int = 1, blacklist: dict = None, agg_sig: str = 'last',
-                 freq: str = 'M'):
+    def __init__(self, df: pd.DataFrame, ret: str, sig: str, sigs: List[str] = None,
+                 cids: List[str] = None, sig_neg: bool = False, start: str = None,
+                 end: str = None, fwin: int = 1, blacklist: dict = None,
+                 agg_sig: str = 'last', freq: str = 'M'):
 
         self.dic_freq = {'D': 'daily', 'W': 'weekly', 'M': 'monthly',
                          'Q': 'quarterly', 'A': 'annual'}
         self.metrics = ['accuracy', 'bal_accuracy', 'pos_sigr', "pos_retr",
                         'pos_prec', 'neg_prec', 'pearson', 'pearson_pval',
                         'kendall', 'kendall_pval']
+
+        if sigs is not None:
+
+            assert isinstance(sigs, list), "List of signal(s) expected."
+            xcats = list(df['xcat'].unique())
+
+            df_sigs = self.__signal_table__(sigs=sigs, xcats=xcats, agg_sig=agg_sig)
+            self.df_sigs = df_sigs
 
         # Use the sum as the default aggregation method to show the true return over the
         # time-period.
@@ -67,8 +81,49 @@ class SignalReturnRelations:
         self.ret = ret
         self.freq = freq
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
+        self.start = start
+        self.end = end
+        self.blacklist = blacklist
+        self.fwin = fwin
+
         self.df_cs = self.__output_table__(cs_type='cids')
         self.df_ys = self.__output_table__(cs_type='years')
+
+    def __signal_table__(self, sigs: List[str], xcats: List[str], agg_sig: str):
+        """
+        Produces the panel-level table, assessed over the specified metrics, for the
+        additional signals.
+
+        :param <List[str]> sigs: list of additional signals.
+        :param <List[str]> xcats: categories the passed DataFrame is defined over.
+        :param <str> agg_sig: aggregation method applied to the signal values in down-
+            sampling. Will be applied to all signals passed.
+
+        """
+
+        intersection = set(xcats).intersection(sigs)
+        missing = sigs.difference(intersection)
+
+        if missing:
+            print(f"The signal(s), {missing}, are not available in the passed "
+                  f"DataFrame.")
+
+        df_out = pd.DataFrame(index=sigs, columns=self.metrics)
+
+        for s in list(intersection):
+            # Will use the same set of cross-sections present in the primary signal /
+            # return relationship.
+            df = categories_df(df, xcats=[s, self.ret], cids=self.cids, val='value',
+                               start=self.start, end=self.end, freq=self.freq,
+                               blacklist=self.blacklist, lag=1, fwin=self.fwin,
+                               xcat_aggs=[agg_sig, 'sum'])
+
+            # Analysed exclusively on the panel level.
+            df_out = self.__table_stats__(
+                df_segment=df, df_out=df_out, segment=s, signal=self.sig
+            )
+
+        return df_out
 
     @staticmethod
     def __slice_df__(df: pd.DataFrame, cs: str, cs_type: str):
@@ -89,6 +144,45 @@ class SignalReturnRelations:
             df_cs = df
 
         return df_cs
+
+    def __table_stats__(self, df_segment: pd.DataFrame, df_out: pd.DataFrame,
+                        segment: str, signal: str):
+        """
+        Method used to compute the evaluation metrics across segments: cross-section,
+        yearly or category level.
+
+        :param <pd.DataFrame> df_segment: segmented DataFrame.
+        :param <pd.DataFrame> df_out: metric DataFrame where the index will be all
+            segments for the respective segmentation type.
+        :param <str> segment: segment which could either be an individual cross-section,
+            year or category.
+        :param <str> signal: signal category.
+        """
+
+        df_sgs = np.sign(df_segment.loc[:, [self.ret, signal]])
+        # Exact zeroes are disqualified for sign analysis only.
+        df_sgs = df_sgs[~((df_sgs.iloc[:, 0] == 0) | (df_sgs.iloc[:, 1] == 0))]
+
+        sig_sign = df_sgs[signal]
+        ret_sign = df_sgs[self.ret]
+
+        df_out.loc[segment, "accuracy"] = skm.accuracy_score(sig_sign, ret_sign)
+        df_out.loc[segment, "bal_accuracy"] = skm.balanced_accuracy_score(sig_sign,
+                                                                          ret_sign)
+        df_out.loc[segment, "pos_sigr"] = np.mean(sig_sign == 1)
+        df_out.loc[segment, "pos_retr"] = np.mean(ret_sign == 1)
+        df_out.loc[segment, "pos_prec"] = skm.precision_score(ret_sign, sig_sign,
+                                                              pos_label=1)
+        df_out.loc[segment, "neg_prec"] = skm.precision_score(ret_sign, sig_sign,
+                                                              pos_label=-1)
+
+        ret_vals, sig_vals = df_segment[self.ret], df_segment[signal]
+        df_out.loc[segment, ["kendall", "kendall_pval"]] = stats.kendalltau(ret_vals,
+                                                                            sig_vals)
+        corr, corr_pval = stats.pearsonr(ret_vals, sig_vals)
+        df_out.loc[segment, ["pearson", "pearson_pval"]] = np.array([corr, corr_pval])
+
+        return df_out
 
     def __output_table__(self, cs_type: str = 'cids'):
         """
@@ -114,25 +208,8 @@ class SignalReturnRelations:
         for cs in (css + ["Panel"]):
 
             df_cs = self.__slice_df__(df=df, cs=cs, cs_type=cs_type)
-
-            df_sgs = np.sign(df_cs.loc[:, [self.ret, self.sig]])
-            # Exact zeroes are disqualified for sign analysis only.
-            df_sgs = df_sgs[~((df_sgs.iloc[:, 0] == 0) | (df_sgs.iloc[:, 1] == 0))]
-            
-            sig = df_sgs[self.sig]
-            ret = df_sgs[self.ret]
-            df_out.loc[cs, "accuracy"] = skm.accuracy_score(sig, ret)
-            df_out.loc[cs, "bal_accuracy"] = skm.balanced_accuracy_score(sig, ret)
-            df_out.loc[cs, "pos_sigr"] = np.mean(sig == 1)
-            df_out.loc[cs, "pos_retr"] = np.mean(ret == 1)
-            df_out.loc[cs, "pos_prec"] = skm.precision_score(ret, sig, pos_label=1)
-            df_out.loc[cs, "neg_prec"] = skm.precision_score(ret, sig, pos_label=-1)
-
-            ret_vals, sig_vals = df_cs[self.ret], df_cs[self.sig]
-            df_out.loc[cs, ["kendall", "kendall_pval"]] = stats.kendalltau(ret_vals,
-                                                                           sig_vals)
-            corr, corr_pval = stats.pearsonr(ret_vals, sig_vals)
-            df_out.loc[cs, ["pearson", "pearson_pval"]] = np.array([corr, corr_pval])
+            df_out = self.__table_stats__(df_segment=df_cs, df_out=df_out, segment=cs,
+                                          signal=self.sig)
 
         df_out.loc["Mean", :] = df_out.loc[css, :].mean()
 
@@ -150,6 +227,16 @@ class SignalReturnRelations:
         df_out.loc["PosRatio", below50s] = pos_pvals
 
         return df_out.astype("float")
+
+    def rival_signal_table(self):
+        """ Output table on relations between the additional signals and the return.
+        """
+        try:
+            df_sig = self.df_sig.round(decimals=3)
+        except AttributeError:
+            print("Additional signals have not been defined on the instance.")
+        else:
+            return df_sig
 
     def cross_section_table(self):
         """ Output table on relations across sections and the panel. """
@@ -244,6 +331,7 @@ class SignalReturnRelations:
             See matplotlib.pyplot.legend.
 
         """
+        assert type in ['cross_section', 'years']
 
         df_xs = self.df_cs if type == 'cross_section' else self.df_ys
         # Panel plus the cs_types.
@@ -276,6 +364,7 @@ class SignalReturnRelations:
                     linewidth=0.5, label='95% probability')
         plt.axhline(y=0.99, color='red', linestyle='--',
                     linewidth=0.5, label='99% probability')
+
         plt.title(title)
         plt.legend(loc=legend_pos)
         plt.show()
@@ -363,14 +452,14 @@ if __name__ == "__main__":
 
     srr = SignalReturnRelations(dfd, sig='CRY', ret='XR', freq='D', blacklist=black)
     srr.summary_table()
-    srn = SignalReturnRelations(dfd, sig='CRY', sig_neg=True,
+    srn = SignalReturnRelations(dfd, sig='CRY', sig_neg=False,
                                 ret='XR', freq='D', blacklist=black)
     srn.summary_table()
 
     srr.correlation_bars(type='cross_section')
     srn.correlation_bars(type='cross_section')
 
-    srr.accuracy_bars(type='cross_section')
+    srr.accuracy_bars(type='years')
     df_cs_stats = srr.cross_section_table()
     df_ys_stats = srr.yearly_table()
     print(df_cs_stats)
