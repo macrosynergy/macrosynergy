@@ -57,19 +57,30 @@ class SignalReturnRelations:
                         'pos_prec', 'neg_prec', 'pearson', 'pearson_pval',
                         'kendall', 'kendall_pval']
 
-        if sigs is not None:
+        self.ret = ret
+        self.freq = freq
 
-            assert isinstance(sigs, list), "List of signal(s) expected."
-            xcats = list(df['xcat'].unique())
-
-            df_sigs = self.__signal_table__(sigs=sigs, xcats=xcats, agg_sig=agg_sig)
-            self.df_sigs = df_sigs
+        self.start = start
+        self.end = end
+        self.blacklist = blacklist
+        self.fwin = fwin
 
         # Use the sum as the default aggregation method to show the true return over the
         # time-period.
         self.df = categories_df(df, xcats=[sig, ret], cids=cids, val='value',
                                 start=start, end=end, freq=freq, blacklist=blacklist,
                                 lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum'])
+
+        self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
+
+        if sigs is not None:
+
+            assert isinstance(sigs, list), "List of signal(s) expected."
+            xcats = list(df['xcat'].unique())
+
+            df_sigs = self.__signal_table__(df=dfd, sigs=sigs, xcats=xcats,
+                                            agg_sig=agg_sig)
+            self.df_sigs = df_sigs
 
         if sig_neg:
             self.df.loc[:, sig] *= -1
@@ -78,22 +89,17 @@ class SignalReturnRelations:
         else:
             self.sig = sig
 
-        self.ret = ret
-        self.freq = freq
-        self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
-        self.start = start
-        self.end = end
-        self.blacklist = blacklist
-        self.fwin = fwin
-
         self.df_cs = self.__output_table__(cs_type='cids')
         self.df_ys = self.__output_table__(cs_type='years')
 
-    def __signal_table__(self, sigs: List[str], xcats: List[str], agg_sig: str):
+    def __signal_table__(self, df: pd.DataFrame, sigs: List[str], xcats: List[str],
+                         agg_sig: str):
         """
         Produces the panel-level table, assessed over the specified metrics, for the
         additional signals.
 
+        :param <pd.DataFrame> df: standardized DataFrame with the following necessary
+            columns: 'cid', 'xcat', 'real_date' and 'value.
         :param <List[str]> sigs: list of additional signals.
         :param <List[str]> xcats: categories the passed DataFrame is defined over.
         :param <str> agg_sig: aggregation method applied to the signal values in down-
@@ -102,7 +108,7 @@ class SignalReturnRelations:
         """
 
         intersection = set(xcats).intersection(sigs)
-        missing = sigs.difference(intersection)
+        missing = set(sigs).difference(intersection)
 
         if missing:
             print(f"The signal(s), {missing}, are not available in the passed "
@@ -113,14 +119,14 @@ class SignalReturnRelations:
         for s in list(intersection):
             # Will use the same set of cross-sections present in the primary signal /
             # return relationship.
-            df = categories_df(df, xcats=[s, self.ret], cids=self.cids, val='value',
-                               start=self.start, end=self.end, freq=self.freq,
-                               blacklist=self.blacklist, lag=1, fwin=self.fwin,
-                               xcat_aggs=[agg_sig, 'sum'])
+            cat_df = categories_df(df, xcats=[s, self.ret], cids=self.cids, val='value',
+                                   start=self.start, end=self.end, freq=self.freq,
+                                   blacklist=self.blacklist, lag=1, fwin=self.fwin,
+                                   xcat_aggs=[agg_sig, 'sum'])
 
             # Analysed exclusively on the panel level.
             df_out = self.__table_stats__(
-                df_segment=df, df_out=df_out, segment=s, signal=self.sig
+                df_segment=cat_df, df_out=df_out, segment=s, signal=s
             )
 
         return df_out
@@ -232,11 +238,11 @@ class SignalReturnRelations:
         """ Output table on relations between the additional signals and the return.
         """
         try:
-            df_sig = self.df_sig.round(decimals=3)
+            df_sigs = self.df_sigs.round(decimals=3)
         except AttributeError:
             print("Additional signals have not been defined on the instance.")
         else:
-            return df_sig
+            return df_sigs
 
     def cross_section_table(self):
         """ Output table on relations across sections and the panel. """
@@ -456,11 +462,15 @@ if __name__ == "__main__":
                                 ret='XR', freq='D', blacklist=black)
     srn.summary_table()
 
-    srr.correlation_bars(type='cross_section')
-    srn.correlation_bars(type='cross_section')
+    # srr.correlation_bars(type='cross_section')
+    # srn.correlation_bars(type='cross_section')
 
     srr.accuracy_bars(type='years')
     df_cs_stats = srr.cross_section_table()
     df_ys_stats = srr.yearly_table()
-    print(df_cs_stats)
-    print(df_ys_stats)
+
+    # Additional signals.
+    srn = SignalReturnRelations(dfd, sig='CRY', sigs=['INFL', 'GROWTH'], sig_neg=False,
+                                ret='XR', freq='D', blacklist=black)
+    df_sigs = srn.rival_signal_table()
+    print(df_sigs)
