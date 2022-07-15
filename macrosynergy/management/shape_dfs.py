@@ -153,7 +153,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     :param <str> end: latest date in ISO 8601 format. Default is None,
         i.e. latest date in DataFrame is used.
     :param <dict> blacklist: cross sections with date ranges that should be excluded from
-        the data frame. If one cross section has several blacklist periods append numbers
+        the DataFrame. If one cross section has several blacklist periods append numbers
         to the cross section code.
     :param <int> years: Number of years over which data are aggregated. Supersedes the
         "freq" parameter and does not allow lags, Default is None, i.e. no multi-year
@@ -175,7 +175,12 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     """
 
     assert freq in ['D', 'W', 'M', 'Q', 'A']
-    assert not (years is not None) & (lag != 0), 'Lags cannot be applied to year groups.'
+
+    aggs_error = "List of strings, outlining the aggregation methods, expected."
+    assert isinstance(xcat_aggs, list), aggs_error
+    assert all([isinstance(a, str) for a in xcat_aggs]), aggs_error
+
+    assert not (years is not None) & (lag != 0), "Lags cannot be applied to year groups."
     if years is not None:
         assert isinstance(start, str), "Year aggregation requires a start date."
 
@@ -252,9 +257,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
 
     dfc = pd.concat(df_output)
     # If either of the two variables, explanatory or dependent variable, contain a NaN
-    # value, remove the row: a relationship is not able to be established between a
-    # realised datapoint and a Nan value. Therefore, remove the row from the returned
-    # DataFrame.
+    # value, remove the row.
     dfc = dfc.pivot(index=('cid', 'real_date'), columns='xcat',
                     values=val).dropna()[xcats]
 
