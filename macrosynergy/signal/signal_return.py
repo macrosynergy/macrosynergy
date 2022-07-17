@@ -19,7 +19,7 @@ class SignalReturnRelations:
         columns: 'cid', 'xcat', 'real_date' and 'value.
     :param <str> ret: return category.
     :param <str> sig: signal category.
-    :param <List[str]> sigs: list of additional signals. The relationship between the
+    :param <List[str]> rival_sigs: list of additional signals. The relationship between the
         return category and the respective signals is completed on the panel level.
     :param <bool> sig_neg: if set to True puts the signal in negative terms for all
         analysis. Default is False.
@@ -44,9 +44,9 @@ class SignalReturnRelations:
 
     NB:.
     The Class can also facilitate the analysis of additional signals which are passed
-    into the parameter 'sigs'.
+    into the parameter 'rival_sigs'.
     """
-    def __init__(self, df: pd.DataFrame, ret: str, sig: str, sigs: List[str] = None,
+    def __init__(self, df: pd.DataFrame, ret: str, sig: str, rival_sigs: List[str] = None,
                  cids: List[str] = None, sig_neg: bool = False, start: str = None,
                  end: str = None, fwin: int = 1, blacklist: dict = None,
                  agg_sig: str = 'last', freq: str = 'M'):
@@ -73,14 +73,19 @@ class SignalReturnRelations:
 
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
 
-        if sigs is not None:
+        if rival_sigs is not None:
 
-            assert isinstance(sigs, list), "List of signal(s) expected."
+            if isinstance(rival_sigs, str):
+                rival_sigs = [rival_sigs]
+            assert isinstance(rival_sigs, list), "List of signal(s) expected."
             xcats = list(df['xcat'].unique())
 
-            df_sigs = self.__signal_table__(df=dfd, sigs=sigs, xcats=xcats,
+            df_sigs = self.__signal_table__(df=dfd, sigs=rival_sigs, xcats=xcats,
                                             agg_sig=agg_sig)
-            self.df_sigs = df_sigs
+            # Todo: dfd has nor reference, should this be df?
+            # Todo: At instantiations rival sigals should only be stored in time series df
+            #  similar to self.df, maybe self.df_rivals
+            self.df_rival_sigs = df_rival_sigs
 
         if sig_neg:
             self.df.loc[:, sig] *= -1
@@ -94,16 +99,21 @@ class SignalReturnRelations:
 
     def __signal_table__(self, df: pd.DataFrame, sigs: List[str], xcats: List[str],
                          agg_sig: str):
+        # Todo: the below actions should be in two places:
+        #  First, potential rivals are extracted and stored at initation.
+        #  Second, stats are calculated when the comparative output table is needed.
         """
-        Produces the panel-level table, assessed over the specified metrics, for the
-        additional signals.
+        Panel statistics for original and rival signals
 
         :param <pd.DataFrame> df: standardized DataFrame with the following necessary
             columns: 'cid', 'xcat', 'real_date' and 'value.
         :param <List[str]> sigs: list of additional signals.
+        # Todo: should include both original signals and rivals
         :param <List[str]> xcats: categories the passed DataFrame is defined over.
         :param <str> agg_sig: aggregation method applied to the signal values in down-
             sampling. Will be applied to all signals passed.
+
+        # Todo: What exactly does the function return
 
         """
 
@@ -237,12 +247,16 @@ class SignalReturnRelations:
     def rival_signal_table(self):
         """ Output table on relations between the additional signals and the return.
         """
+        # Todo: This function should calculate the stats for rival
+        #  and return them side by side with original signal.
+        #  It should have an argument sigs = None, that defaults to all rivals
+        #  plus original signal, but can be set to a selection as well.
         try:
-            df_sigs = self.df_sigs.round(decimals=3)
+            df_rival_sigs = self.df_rival_sigs.round(decimals=3)
         except AttributeError:
             print("Additional signals have not been defined on the instance.")
         else:
-            return df_sigs
+            return df_rival_sigs
 
     def cross_section_table(self):
         """ Output table on relations across sections and the panel. """
@@ -470,7 +484,7 @@ if __name__ == "__main__":
     df_ys_stats = srr.yearly_table()
 
     # Additional signals.
-    srn = SignalReturnRelations(dfd, sig='CRY', sigs=['INFL', 'GROWTH'], sig_neg=False,
+    srn = SignalReturnRelations(dfd, sig='CRY', rival_sigs=['INFL', 'GROWTH'], sig_neg=False,
                                 ret='XR', freq='D', blacklist=black)
-    df_sigs = srn.rival_signal_table()
-    print(df_sigs)
+    df_rival_sigs = srn.rival_signal_table()
+    print(df_rival_sigs)
