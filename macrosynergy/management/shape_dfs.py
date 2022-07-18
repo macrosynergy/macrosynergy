@@ -138,24 +138,25 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                   lag: int = 0, fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean')):
 
     """
-    Create custom two-categories DataFrame with appropriate frequency and lags.
+    In principle, create custom two-categories DataFrame with appropriate frequency and,
+    if applicable, lags.
 
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the following necessary
         columns: 'cid', 'xcats', 'real_date' and at least one column with values of
         interest.
-    :param <List[str]> xcats: exactly two extended categories whose relationship is to be
-        analyzed. It must be noted that the first category is the explanatory variable
-        and the second category the explained, dependent, variable.
-    :param <List[str]> cids: cross sections to be included. Default is all in the
+    :param <List[str]> xcats: extended categories involved in the custom DataFrame. The
+        last category in the list represents the dependent variable, and the (n - 1)
+        preceding categories will be the explanatory variables(s).
+    :param <List[str]> cids: cross-sections to be included. Default is all in the
         DataFrame.
     :param <str> start: earliest date in ISO 8601 format. Default is None,
         i.e. earliest date in DataFrame is used.
     :param <str> end: latest date in ISO 8601 format. Default is None,
         i.e. latest date in DataFrame is used.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from
+    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
         the DataFrame. If one cross section has several blacklist periods append numbers
         to the cross section code.
-    :param <int> years: Number of years over which data are aggregated. Supersedes the
+    :param <int> years: number of years over which data are aggregated. Supersedes the
         "freq" parameter and does not allow lags, Default is None, i.e. no multi-year
         aggregation.
     :param <str> val: name of column that contains the values of interest. Default is
@@ -170,11 +171,22 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for
         both.
 
-    :return <pd.Dataframe>: custom DataFrame with two category columns and excluding all
-        columns that contain NaNs.
+    :return <pd.Dataframe>: custom DataFrame with category columns. All rows that contain
+    NaNs will be excluded.
+
+    N.B.:
+    The number of explanatory categories included is not restricted and will be appended
+    column-wise to the returned DataFrame. The return category will always be the
+    left-most column.
     """
 
     assert freq in ['D', 'W', 'M', 'Q', 'A']
+
+    assert isinstance(xcats, list), f"<list> expected and not {type(xcats)}."
+    assert all([isinstance(c, str) for c in xcats]), "List of categories expected."
+    xcat_error = "The minimum requirement is that a single dependent and explanatory " \
+                 "variable are included."
+    assert len(xcats) >= 2, xcat_error
 
     aggs_error = "List of strings, outlining the aggregation methods, expected."
     assert isinstance(xcat_aggs, list), aggs_error
@@ -191,7 +203,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     df_output = []
     if years is None:
         xpl = xcats[0]
-        dep = xcats[1]
+        dep = xcats[-1]
 
         df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values=val)
         df_w = df_w.groupby([pd.Grouper(level='cid'),
@@ -308,14 +320,4 @@ if __name__ == "__main__":
     dfc3 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
                          xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black,
                          years=3)
-
-    # Testing reduce_df()
-    filt1 = ~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))
-    filt2 = ~((dfd['cid'] == 'NZD') & (dfd['xcat'] == 'INFL'))
-    dfdx = dfd[filt1 & filt2]  # simulate missing cross sections
-    dfd_x1, xctx, cidx = reduce_df(dfdx, xcats=['XR', 'CRY', 'INFL'], cids=cids,
-                                   intersect=True, out_all=True)
-
-    dfc = categories_df(dfd, xcats=['XR', 'CRY'], cids=['CAD'],
-                        freq='M', lag=0, xcat_aggs=['mean', 'mean'],
-                        start='2000-01-01', years=10)
+    print(dfc3)
