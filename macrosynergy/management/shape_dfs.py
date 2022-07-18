@@ -198,7 +198,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     :param <List[str]> xcat_aggs: exactly two aggregation methods. Default is 'mean' for
         both. The same aggregation method will be used for all explanatory variables.
 
-    :return <pd.Dataframe>: custom DataFrame with category columns. All rows that contain
+    :return <pd.DataFrame>: custom DataFrame with category columns. All rows that contain
     NaNs will be excluded.
 
     N.B.:
@@ -342,9 +342,10 @@ if __name__ == "__main__":
     dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=1,
                          xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black)
 
-    dfc2 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
+    dfc2 = categories_df(dfd, xcats=['INFL', 'GROWTH', 'XR'], cids=cids, freq='M', lag=0,
                          fwin=3, xcat_aggs=['mean', 'mean'],
                          start='2000-01-01', blacklist=black)
+    print(dfc2)
 
     dfc3 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
                          xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black,
