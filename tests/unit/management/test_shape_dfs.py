@@ -163,7 +163,7 @@ class TestAll(unittest.TestCase):
 
         # Test the aggregator parameter 'last': as the name suggests, 'last' will isolate
         # the terminal value of each time-period. Therefore, check the returned value, in
-        # the dataframe, confirms the above logic.
+        # the DataFrame, confirms the above logic.
         dfc = categories_df(self.dfd, xcats=['XR', 'CRY'],
                             cids=['AUD', 'CAD'], xcat_aggs=['last', 'mean'],
                             start='2005-01-01', years=6)
@@ -176,8 +176,9 @@ class TestAll(unittest.TestCase):
         aud = aud['value'].to_numpy()[0]
         cad = cad['value'].to_numpy()[0]
 
-        aud_xr = dfc.iloc[0][0]
-        cad_xr = dfc.iloc[2][0]
+        # Isolate the first value for both cross-sectional series: '2011 - 2016'.
+        aud_xr = dfc['XR'].loc['AUD'][0]
+        cad_xr = dfc['XR'].loc['CAD'][0]
         self.assertTrue(aud == aud_xr)
         self.assertTrue(cad == cad_xr)
 
