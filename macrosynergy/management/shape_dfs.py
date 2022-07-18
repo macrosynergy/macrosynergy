@@ -4,6 +4,7 @@ import pandas as pd
 from typing import List
 import random
 from macrosynergy.management.simulate_quantamental_data import make_qdf
+from itertools import product
 
 def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
               start: str = None, end: str = None, blacklist: dict = None,
@@ -132,10 +133,36 @@ def aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
 
     return dfx
 
+def expln_df(df_w: pd.DataFrame, xpls: List[str], agg_meth: str, sum_adj: dict,
+             lag: int):
+    """
+    Produces the explanatory column(s) for the custom DataFrame.
+
+    :param <pd.DataFrame> df_w: group-by DataFrame which has been down-sampled. The
+        respective aggregation method will be applied.
+    :param <List[str]> xpls: list of explanatory category(s).
+    :param <str> agg_meth: aggregation method used for all explanatory variables.
+    :param <dict> sum_adj: required dictionary to negate erroneous zeros if the aggregate
+        method used is sum.
+    :param <int> lag: lag of explanatory category(s). Applied uniformly to each
+        category.
+    """
+
+    dfw_xpls = pd.DataFrame()
+    for xpl in xpls:
+
+        xpl_col = df_w[xpl].agg(agg_meth, sum_adj).astype(dtype=np.float32)
+        if lag > 0:
+            xpl_col = xpl_col.groupby(level=0).shift(lag)
+
+        dfw_xpls[xpl] = xpl_col
+
+    return dfw_xpls
+
 def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                   val: str = 'value', start: str = None, end: str = None,
                   blacklist: dict = None, years: int = None, freq: str = 'M',
-                  lag: int = 0, fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean')):
+                  lag: int = 0, fwin: int = 1, xcat_aggs: List[str] = ['mean', 'mean']):
 
     """
     In principle, create custom two-categories DataFrame with appropriate frequency and,
@@ -163,21 +190,21 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         'value'.
     :param <str> freq: letter denoting frequency at which the series are to be sampled.
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
-    :param <int> lag: lag (delay of arrival) of first (explanatory) category in periods
+    :param <int> lag: lag (delay of arrival) of explanatory category(s) in periods
         as set by freq. Default is 0.
     :param <int> fwin: forward moving average window of first category. Default is 1,
         i.e no average.
         Note: This parameter is used mainly for target returns as dependent variables.
-    :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for
-        both.
+    :param <List[str]> xcat_aggs: exactly two aggregation methods. Default is 'mean' for
+        both. The same aggregation method will be used for all explanatory variables.
 
     :return <pd.Dataframe>: custom DataFrame with category columns. All rows that contain
     NaNs will be excluded.
 
     N.B.:
-    The number of explanatory categories included is not restricted and will be appended
-    column-wise to the returned DataFrame. The return category will always be the
-    left-most column.
+    The number of explanatory categories that can be included is not restricted and will
+    be appended column-wise to the returned DataFrame. The return category will always be
+    the left-most column.
     """
 
     assert freq in ['D', 'W', 'M', 'Q', 'A']
@@ -191,10 +218,17 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     aggs_error = "List of strings, outlining the aggregation methods, expected."
     assert isinstance(xcat_aggs, list), aggs_error
     assert all([isinstance(a, str) for a in xcat_aggs]), aggs_error
+    aggs_len = "Only two aggregation methods required. The first will be used for all" \
+               "explanatory category(s)."
+    assert len(xcat_aggs) == 2, aggs_len
 
     assert not (years is not None) & (lag != 0), "Lags cannot be applied to year groups."
     if years is not None:
         assert isinstance(start, str), "Year aggregation requires a start date."
+
+        no_xcats = "If the data is aggregated over a multi-year timeframe, only two " \
+                   "categories are permitted."
+        assert len(xcats) == 2, no_xcats
 
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, blacklist, out_all=True)
 
@@ -202,10 +236,12 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
 
     df_output = []
     if years is None:
-        xpl = xcats[0]
-        dep = xcats[-1]
 
         df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values=val)
+
+        dep = xcats[-1]
+        xpls = xcats[:-1]
+
         df_w = df_w.groupby([pd.Grouper(level='cid'),
                              pd.Grouper(level='real_date', freq=freq)])
 
@@ -217,25 +253,20 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         for i, agg in enumerate(xcat_aggs):
             sum_dict[i] = {'min_count': 1} if agg == 'sum' else {}
 
-        xpl_col = df_w[xpl].agg(xcat_aggs[0], sum_dict[0]).astype(dtype=np.float32)
+        dfw_xpls = expln_df(
+            df_w=df_w, xpls=xpls, agg_meth=xcat_aggs[0],
+            sum_adj=sum_dict[0], lag=lag
+        )
+
         dep_col = df_w[dep].agg(xcat_aggs[1], sum_dict[1]).astype(dtype=np.float32)
 
-        # Explanatory variable is shifted forward.
-        if lag > 0:
-            # Utilise .groupby() to handle for multi-index Pandas DataFrame.
-            xpl_col = xpl_col.groupby(level=0).shift(lag)
         if fwin > 1:
             s = 1 - fwin
             dep_col = dep_col.rolling(window=fwin).mean().shift(s)
 
-        xpl_df = xpl_col.reset_index()
-        xpl_df['xcat'] = xpl
-        xpl_df = xpl_df.rename(columns={xpl: "value"})
-
-        dep_df = dep_col.reset_index()
-        dep_df['xcat'] = dep
-        dep_df = dep_df.rename(columns={dep: "value"})
-        df_output.append(pd.concat([xpl_df, dep_df], ignore_index=True))
+        dfw_xpls[dep] = dep_col
+        # Order such that the dependent variable is the left-most column.
+        dfc = dfw_xpls[[dep] + xpls]
 
     else:
         s_year = pd.to_datetime(start).year
@@ -267,13 +298,11 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         df_agg = list(map(aggregation_helper, dfx_list, xcat_aggs))
         df_output.extend([d[col_names] for d in df_agg])
 
-    dfc = pd.concat(df_output)
-    # If either of the two variables, explanatory or dependent variable, contain a NaN
-    # value, remove the row.
-    dfc = dfc.pivot(index=('cid', 'real_date'), columns='xcat',
-                    values=val).dropna()[xcats]
+        dfc = pd.concat(df_output)
+        dfc = dfc.pivot(index=('cid', 'real_date'), columns='xcat',
+                        values=val)
 
-    return dfc
+    return dfc.dropna()
 
 
 if __name__ == "__main__":
