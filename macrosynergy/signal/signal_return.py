@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn import metrics as skm
 from scipy import stats
-from typing import List, Tuple
+from typing import List, Union, Tuple
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import categories_df
@@ -18,9 +18,9 @@ class SignalReturnRelations:
     :param <pd.Dataframe> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcat', 'real_date' and 'value.
     :param <str> ret: return category.
-    :param <str> sig: signal category.
-    :param <List[str]> rival_sigs: list of additional signals. The relationship between the
-        return category and the respective signals is completed on the panel level.
+    :param <str> sig: primary signal category.
+    :param <str, List[str]> rival_sigs: additional signal(s). The relationship between
+        the return category and the respective signal(s) is completed on the panel level.
     :param <bool> sig_neg: if set to True puts the signal in negative terms for all
         analysis. Default is False.
     :param <str> start: earliest date in ISO format. Default is None in which case the
@@ -44,12 +44,13 @@ class SignalReturnRelations:
 
     NB:.
     The Class can also facilitate the analysis of additional signals which are passed
-    into the parameter 'rival_sigs'.
+    into the parameter 'rival_sigs'. Analysis will only be on the panel-level.
     """
-    def __init__(self, df: pd.DataFrame, ret: str, sig: str, rival_sigs: List[str] = None,
-                 cids: List[str] = None, sig_neg: bool = False, start: str = None,
-                 end: str = None, fwin: int = 1, blacklist: dict = None,
-                 agg_sig: str = 'last', freq: str = 'M'):
+    def __init__(self, df: pd.DataFrame, ret: str, sig: str,
+                 rival_sigs: Union[str, List[str]] = None, cids: List[str] = None,
+                 sig_neg: bool = False, start: str = None, end: str = None,
+                 fwin: int = 1, blacklist: dict = None, agg_sig: str = 'last',
+                 freq: str = 'M'):
 
         self.dic_freq = {'D': 'daily', 'W': 'weekly', 'M': 'monthly',
                          'Q': 'quarterly', 'A': 'annual'}
@@ -65,27 +66,15 @@ class SignalReturnRelations:
         self.blacklist = blacklist
         self.fwin = fwin
 
+        self.signals = self.__signal_list__(df=df, rival_sigs=rival_sigs, sig=sig)
+
         # Use the sum as the default aggregation method to show the true return over the
         # time-period.
-        self.df = categories_df(df, xcats=[sig, ret], cids=cids, val='value',
+        self.df = categories_df(df, xcats=self.signals + [ret], cids=cids, val='value',
                                 start=start, end=end, freq=freq, blacklist=blacklist,
                                 lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum'])
 
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
-
-        if rival_sigs is not None:
-
-            if isinstance(rival_sigs, str):
-                rival_sigs = [rival_sigs]
-            assert isinstance(rival_sigs, list), "List of signal(s) expected."
-            xcats = list(df['xcat'].unique())
-
-            df_sigs = self.__signal_table__(df=dfd, sigs=rival_sigs, xcats=xcats,
-                                            agg_sig=agg_sig)
-            # Todo: dfd has nor reference, should this be df?
-            # Todo: At instantiations rival sigals should only be stored in time series df
-            #  similar to self.df, maybe self.df_rivals
-            self.df_rival_sigs = df_rival_sigs
 
         if sig_neg:
             self.df.loc[:, sig] *= -1
@@ -97,49 +86,41 @@ class SignalReturnRelations:
         self.df_cs = self.__output_table__(cs_type='cids')
         self.df_ys = self.__output_table__(cs_type='years')
 
-    def __signal_table__(self, df: pd.DataFrame, sigs: List[str], xcats: List[str],
-                         agg_sig: str):
-        # Todo: the below actions should be in two places:
-        #  First, potential rivals are extracted and stored at initation.
-        #  Second, stats are calculated when the comparative output table is needed.
+    @staticmethod
+    def __signal_list__(df: pd.DataFrame, rival_sigs: List[str], sig: str):
         """
-        Panel statistics for original and rival signals
+        Assembles the requested and available signals into a list.
 
         :param <pd.DataFrame> df: standardized DataFrame with the following necessary
             columns: 'cid', 'xcat', 'real_date' and 'value.
-        :param <List[str]> sigs: list of additional signals.
-        # Todo: should include both original signals and rivals
-        :param <List[str]> xcats: categories the passed DataFrame is defined over.
-        :param <str> agg_sig: aggregation method applied to the signal values in down-
-            sampling. Will be applied to all signals passed.
+        :param <List[str]> rival_sigs: additional signal(s).
+        :param <str> sig: primary signal category.
 
-        # Todo: What exactly does the function return
+        :return <List[str]>: list of the involved signals.
 
+        NB.:
+        Availability of the signals is dependent on the DataFrame passed into the Class.
         """
+        xcats = list(df['xcat'].unique())
+        assert sig in xcats, "Primary signal must be available in the DataFrame."
 
-        intersection = set(xcats).intersection(sigs)
-        missing = set(sigs).difference(intersection)
+        if rival_sigs is not None:
+            rival_sigs = [rival_sigs] if isinstance(rival_sigs, str) else rival_sigs
 
-        if missing:
-            print(f"The signal(s), {missing}, are not available in the passed "
-                  f"DataFrame.")
+            assert isinstance(rival_sigs, list), "List of signal(s) expected."
 
-        df_out = pd.DataFrame(index=sigs, columns=self.metrics)
+            intersection = set(xcats).intersection(rival_sigs)
+            missing = set(rival_sigs).difference(intersection)
 
-        for s in list(intersection):
-            # Will use the same set of cross-sections present in the primary signal /
-            # return relationship.
-            cat_df = categories_df(df, xcats=[s, self.ret], cids=self.cids, val='value',
-                                   start=self.start, end=self.end, freq=self.freq,
-                                   blacklist=self.blacklist, lag=1, fwin=self.fwin,
-                                   xcat_aggs=[agg_sig, 'sum'])
+            if missing:
+                print(f"The signal(s), {missing}, are not available in the passed "
+                      f"DataFrame.")
 
-            # Analysed exclusively on the panel level.
-            df_out = self.__table_stats__(
-                df_segment=cat_df, df_out=df_out, segment=s, signal=s
-            )
+            signals = [sig] + list(intersection)
+        else:
+            signals = [sig]
 
-        return df_out
+        return signals
 
     @staticmethod
     def __slice_df__(df: pd.DataFrame, cs: str, cs_type: str):
@@ -171,7 +152,7 @@ class SignalReturnRelations:
         :param <pd.DataFrame> df_out: metric DataFrame where the index will be all
             segments for the respective segmentation type.
         :param <str> segment: segment which could either be an individual cross-section,
-            year or category.
+            year or category. Will form the index of the returned DataFrame.
         :param <str> signal: signal category.
         """
 
@@ -244,19 +225,39 @@ class SignalReturnRelations:
 
         return df_out.astype("float")
 
-    def rival_signal_table(self):
-        """ Output table on relations between the additional signals and the return.
+    def rival_signal_table(self, sigs: List[str] = None):
         """
-        # Todo: This function should calculate the stats for rival
-        #  and return them side by side with original signal.
-        #  It should have an argument sigs = None, that defaults to all rivals
-        #  plus original signal, but can be set to a selection as well.
-        try:
-            df_rival_sigs = self.df_rival_sigs.round(decimals=3)
-        except AttributeError:
-            print("Additional signals have not been defined on the instance.")
-        else:
-            return df_rival_sigs
+        Output table on relations between the signals, both primary & additional, and the
+        return.
+
+        :param <List[str]> sigs: signal categories to included in the panel-level table.
+            Default is None and all present signals will be displayed. Alternative is a
+            valid subset of the possible categories. Primary signal must be passed if to
+            be included.
+
+        NB.:
+        Analysis, across the defined metrics, will be completed exclusively on the panel
+        level.
+        """
+
+        if sigs is None:
+            # Set to all available signals.
+            sigs = self.signals
+
+        assert isinstance(sigs, list), "List of signals expected."
+
+        sigs_error = f"The requested signals must be a subset of the primary plus " \
+                     f"additional signals received, {self.signals}."
+        assert set(sigs).issubset(set(self.signals)), sigs_error
+
+        df_out = pd.DataFrame(index=sigs, columns=self.metrics)
+        for s in sigs:
+
+            df_out = self.__table_stats__(
+                df_segment=self.df, df_out=df_out, segment=s, signal=s
+            )
+
+        return df_out
 
     def cross_section_table(self):
         """ Output table on relations across sections and the panel. """
@@ -484,7 +485,8 @@ if __name__ == "__main__":
     df_ys_stats = srr.yearly_table()
 
     # Additional signals.
-    srn = SignalReturnRelations(dfd, sig='CRY', rival_sigs=['INFL', 'GROWTH'], sig_neg=False,
-                                ret='XR', freq='D', blacklist=black)
+    srn = SignalReturnRelations(dfd, sig='CRY', rival_sigs=['INFL', 'GROWTH'],
+                                sig_neg=False, ret='XR', freq='D', blacklist=black)
+
     df_rival_sigs = srn.rival_signal_table()
     print(df_rival_sigs)
