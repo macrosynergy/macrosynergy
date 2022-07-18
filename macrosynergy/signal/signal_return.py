@@ -77,9 +77,7 @@ class SignalReturnRelations:
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
 
         if sig_neg:
-            self.df.loc[:, sig] *= -1
-            self.sig = sig + "_NEG"
-            self.df.rename(columns={sig: self.sig}, inplace=True)
+            self.sig, self.signals = self.__neg_signals__(sig)
         else:
             self.sig = sig
 
@@ -104,6 +102,7 @@ class SignalReturnRelations:
         xcats = list(df['xcat'].unique())
         assert sig in xcats, "Primary signal must be available in the DataFrame."
 
+        signals = [sig]
         if rival_sigs is not None:
             rival_sigs = [rival_sigs] if isinstance(rival_sigs, str) else rival_sigs
 
@@ -116,11 +115,29 @@ class SignalReturnRelations:
                 print(f"The signal(s), {missing}, are not available in the passed "
                       f"DataFrame.")
 
-            signals = [sig] + list(intersection)
-        else:
-            signals = [sig]
+            signals += list(intersection)
 
         return signals
+
+    def __neg_signals__(self, sig: str):
+        """
+        Will convert all of the signal(s) to negative terms for all analysis. To
+        distinguish the use of the negative form, each signal category will have a
+        postfix appended.
+
+        :param <str> sig: primary signal category.
+
+        """
+
+        self.df.loc[:, self.signals] *= -1
+        s_copy = self.signals.copy()
+
+        signals = [s + "_NEG" for s in self.signals]
+        sig += "_NEG"
+        
+        self.df.rename(columns=dict(zip(s_copy, signals)), inplace=True)
+
+        return sig, signals
 
     @staticmethod
     def __slice_df__(df: pd.DataFrame, cs: str, cs_type: str):
@@ -237,7 +254,8 @@ class SignalReturnRelations:
 
         NB.:
         Analysis, across the defined metrics, will be completed exclusively on the panel
-        level.
+        level. The table will not be computed on instantiation of the Class and must be
+        explicitly called.
         """
 
         if sigs is None:
@@ -486,7 +504,7 @@ if __name__ == "__main__":
 
     # Additional signals.
     srn = SignalReturnRelations(dfd, sig='CRY', rival_sigs=['INFL', 'GROWTH'],
-                                sig_neg=False, ret='XR', freq='D', blacklist=black)
+                                sig_neg=True, ret='XR', freq='D', blacklist=black)
 
     df_rival_sigs = srn.rival_signal_table()
     print(df_rival_sigs)
