@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import List, Union, Tuple
+from typing import List, Tuple
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.check_availability import reduce_df
@@ -16,16 +16,16 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
 
     """Plots averages and various ranges across sections for one or more categories.
 
-    :param <pd.Dataframe> df: standardized dataframe with the necessary columns:
+    :param <pd.DataFrame> df: standardized DataFrame with the necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: extended categories to be checked on. Default is all
-        in the dataframe.
+        in the DataFrame.
     :param <List[str]> cids: cross sections to plot. Default is all in dataframe.
     :param <str> start: earliest date in ISO format. Default earliest date in df.
     :param <str> end: latest date in ISO format. Default is latest date in df.
     :param <str> val: name of column that contains the values. Default is 'value'.
     :param <str> kind: type of range plot. Default is 'bar'; other option is 'box'.
-    :param <str> sort_cids_by: criterion for sorting cids on x axis;
+    :param <str> sort_cids_by: criterion for sorting cids on x-axis;
         Arguments can be 'mean' and 'std'. Default is None, i.e. original order.
     :param <str> title: string of chart title; defaults depend on type of range plot.
     :param <str> ylab: y label. Default is no label.
@@ -39,6 +39,9 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
     if xcat_labels is not None:
         assert (len(xcat_labels) == len(xcats)), error_message
 
+    # Unique cross-sections across the union of categories passed. Will be inclusive of
+    # all cross-sections in the DataFrame given the parameter intersection is set to
+    # False.
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
 
     s_date = df['real_date'].min().strftime('%Y-%m-%d')
@@ -47,19 +50,19 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
     sns.set(style="darkgrid")
 
     if title is None:
-        if kind == 'bar':
-            title = f'Means and standard deviations from {s_date} to {e_date}'
-        elif kind == 'box':
-            title = f'Interquartile ranges, extended ranges and outliers ' \
-                    f'from {s_date} to {e_date}'
+        if kind == "bar":
+            title = f"Means and standard deviations from {s_date} to {e_date}."
+        elif kind == "box":
+            title = f"Interquartile ranges, extended ranges and outliers " \
+                    f"from {s_date} to {e_date}."
     if ylab is None:
         ylab = ""
 
     if sort_cids_by == 'mean':
-        dfx = df[df['xcat'] == xcats[0]].groupby(['cid'])[val].mean()
+        dfx = dfd.groupby(['cid'])[val].mean()
         order = dfx.sort_values(ascending=False).index
     elif sort_cids_by == 'std':
-        dfx = df[df['xcat'] == xcats[0]].groupby(['cid'])[val].std()
+        dfx = dfd.groupby(['cid'])[val].std()
         order = dfx.sort_values(ascending=False).index
     else:
         order = None
@@ -94,13 +97,14 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
 
 if __name__ == "__main__":
 
-    cids = ['AUD', 'CAD', 'GBP']
+    cids = ['AUD', 'CAD', 'GBP', 'USD']
     xcats = ['XR', 'CRY']
     df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
                                                 'sd_mult'])
     df_cids.loc['AUD', ] = ['2010-01-01', '2020-12-31', 0.5, 0.2]
     df_cids.loc['CAD', ] = ['2011-01-01', '2020-11-30', 0, 1]
     df_cids.loc['GBP', ] = ['2012-01-01', '2020-11-30', 0, 2]
+    df_cids.loc['USD', ] = ['2012-01-01', '2020-11-30', 1, 2]
 
     df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
                                                   'sd_mult', 'ar_coef', 'back_coef'])
@@ -109,10 +113,11 @@ if __name__ == "__main__":
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    view_ranges(dfd, xcats=['XR', 'CRY'], kind='bar', sort_cids_by='mean')
-    view_ranges(dfd, xcats=['XR'], cids=cids, kind='box', sort_cids_by='std')
     view_ranges(dfd, xcats=['XR'], cids=cids, kind='box', start='2012-01-01',
                 end='2018-01-01', sort_cids_by='std')
+
+    filter_1 = (dfd['xcat'] == 'XR') & (dfd['cid'] == 'AUD')
+    dfd = dfd[~filter_1]
 
     view_ranges(dfd, xcats=['XR', 'CRY'], cids=cids, kind='box',
                 start='2012-01-01', end='2018-01-01', sort_cids_by='std',
