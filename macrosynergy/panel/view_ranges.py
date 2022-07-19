@@ -39,9 +39,7 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
     if xcat_labels is not None:
         assert (len(xcat_labels) == len(xcats)), error_message
 
-    # Unique cross-sections across the union of categories passed. Will be inclusive of
-    # all cross-sections in the DataFrame given the parameter intersection is set to
-    # False.
+    # Unique cross-sections across the union of categories passed - not the intersection.
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
 
     s_date = df['real_date'].min().strftime('%Y-%m-%d')
