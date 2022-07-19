@@ -18,9 +18,12 @@ class SignalReturnRelations:
     :param <pd.Dataframe> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcat', 'real_date' and 'value.
     :param <str> ret: return category.
-    :param <str> sig: primary signal category.
-    :param <str, List[str]> rival_sigs: additional signal(s). The relationship between
-        the return category and the respective signal(s) is completed on the panel level.
+    :param <str> sig: primary signal category for which detailed relational statistics
+        can be calculated.
+    :param <str, List[str]> rival_sigs: "rival signals" for which basic relational
+        statistics can be calculated for comparison with the primary signal category.
+        N.B.: parameters set for sig, such as sig_neg, freq, and agg_sig are equally
+        applied to all rival signals.
     :param <bool> sig_neg: if set to True puts the signal in negative terms for all
         analysis. Default is False.
     :param <str> start: earliest date in ISO format. Default is None in which case the
@@ -41,10 +44,6 @@ class SignalReturnRelations:
     :param <int> fwin: forward window of return category in base periods. Default is 1.
         This conceptually corresponds to the holding period of a position in
         accordance with the signal.
-
-    NB:.
-    The Class can also facilitate the analysis of additional signals which are passed
-    into the parameter 'rival_sigs'. Analysis will only be on the panel-level.
     """
     def __init__(self, df: pd.DataFrame, ret: str, sig: str,
                  rival_sigs: Union[str, List[str]] = None, cids: List[str] = None,
@@ -66,78 +65,27 @@ class SignalReturnRelations:
         self.blacklist = blacklist
         self.fwin = fwin
 
-        self.signals = self.__signal_list__(df=df, rival_sigs=rival_sigs, sig=sig)
+        # Todo: Assert that sig is available
+        # Todo: Assert that all rivals are available
+        rival_sigs = [rival_sigs] if isinstance(rival_sigs, str) else rival_sigs
+        self.signals = [sig] + rival_sigs if rival_sigs is not None else [sig]
+        self.sig = self.signals[0]
 
-        # Use the sum as the default aggregation method to show the true return over the
-        # time-period.
         self.df = categories_df(df, xcats=self.signals + [ret], cids=cids, val='value',
                                 start=start, end=end, freq=freq, blacklist=blacklist,
                                 lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum'])
+        # Todo: categories.df should respect the order of xcats, but does not
+        #  which makes the order of columns in self.df unintuitive
+        # Todo: How is xcat_aggs applied for len(xcats) > 2. Not documented.
 
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
 
         if sig_neg:
-            self.sig, self.signals = self.__neg_signals__(sig)
-        else:
-            self.sig = sig
+            self.df.loc[:, self.signals] *= -1
+            self.df.columns = [ret] + list(self.df.iloc[:, 1:].columns + "_NEG")
 
         self.df_cs = self.__output_table__(cs_type='cids')
         self.df_ys = self.__output_table__(cs_type='years')
-
-    @staticmethod
-    def __signal_list__(df: pd.DataFrame, rival_sigs: List[str], sig: str):
-        """
-        Assembles the requested and available signals into a list.
-
-        :param <pd.DataFrame> df: standardized DataFrame with the following necessary
-            columns: 'cid', 'xcat', 'real_date' and 'value.
-        :param <List[str]> rival_sigs: additional signal(s).
-        :param <str> sig: primary signal category.
-
-        :return <List[str]>: list of the involved signals.
-
-        NB.:
-        Availability of the signals is dependent on the DataFrame passed into the Class.
-        """
-        xcats = list(df['xcat'].unique())
-        assert sig in xcats, "Primary signal must be available in the DataFrame."
-
-        signals = [sig]
-        if rival_sigs is not None:
-            rival_sigs = [rival_sigs] if isinstance(rival_sigs, str) else rival_sigs
-
-            assert isinstance(rival_sigs, list), "List of signal(s) expected."
-
-            intersection = set(xcats).intersection(rival_sigs)
-            missing = set(rival_sigs).difference(intersection)
-
-            if missing:
-                print(f"The signal(s), {missing}, are not available in the passed "
-                      f"DataFrame.")
-
-            signals += list(intersection)
-
-        return signals
-
-    def __neg_signals__(self, sig: str):
-        """
-        Will convert all of the signal(s) to negative terms for all analysis. To
-        distinguish the use of the negative form, each signal category will have a
-        postfix appended.
-
-        :param <str> sig: primary signal category.
-
-        """
-
-        self.df.loc[:, self.signals] *= -1
-        s_copy = self.signals.copy()
-
-        signals = [s + "_NEG" for s in self.signals]
-        sig += "_NEG"
-        
-        self.df.rename(columns=dict(zip(s_copy, signals)), inplace=True)
-
-        return sig, signals
 
     @staticmethod
     def __slice_df__(df: pd.DataFrame, cs: str, cs_type: str):
@@ -489,7 +437,9 @@ if __name__ == "__main__":
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    srr = SignalReturnRelations(dfd, sig='CRY', ret='XR', freq='D', blacklist=black)
+    srr = SignalReturnRelations(dfd, sig='CRY', ret='XR',
+                                rival_sigs=["GROWTH", "INFL", "CRAP"],
+                                freq='D', blacklist=black)
     srr.summary_table()
     srn = SignalReturnRelations(dfd, sig='CRY', sig_neg=False,
                                 ret='XR', freq='D', blacklist=black)
