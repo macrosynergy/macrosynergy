@@ -194,17 +194,18 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         as set by freq. Default is 0.
     :param <int> fwin: forward moving average window of first category. Default is 1,
         i.e no average.
-        Note: This parameter is used mainly for target returns as dependent variables.
+        Note: This parameter is used mainly for target returns as dependent variable.
     :param <List[str]> xcat_aggs: exactly two aggregation methods. Default is 'mean' for
-        both. The same aggregation method will be used for all explanatory variables.
+        both. The same aggregation method, the first method in the parameter, will be
+        used for all explanatory variables.
 
     :return <pd.DataFrame>: custom DataFrame with category columns. All rows that contain
     NaNs will be excluded.
 
     N.B.:
     The number of explanatory categories that can be included is not restricted and will
-    be appended column-wise to the returned DataFrame. The return category will always be
-    the left-most column.
+    be appended column-wise to the returned DataFrame. The order of the DataFrame's
+    columns will reflect the order of the categories list.
     """
 
     assert freq in ['D', 'W', 'M', 'Q', 'A']
@@ -218,7 +219,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     aggs_error = "List of strings, outlining the aggregation methods, expected."
     assert isinstance(xcat_aggs, list), aggs_error
     assert all([isinstance(a, str) for a in xcat_aggs]), aggs_error
-    aggs_len = "Only two aggregation methods required. The first will be used for all" \
+    aggs_len = "Only two aggregation methods required. The first will be used for all " \
                "explanatory category(s)."
     assert len(xcat_aggs) == 2, aggs_len
 
@@ -265,8 +266,9 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
             dep_col = dep_col.rolling(window=fwin).mean().shift(s)
 
         dfw_xpls[dep] = dep_col
-        # Order such that the dependent variable is the left-most column.
-        dfc = dfw_xpls[[dep] + xpls]
+        # Order such that the return category is the right-most column - will reflect the
+        # order of the categories list.
+        dfc = dfw_xpls[xpls + [dep]]
 
     else:
         s_year = pd.to_datetime(start).year
