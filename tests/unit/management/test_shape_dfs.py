@@ -14,7 +14,7 @@ class TestAll(unittest.TestCase):
     def dataframe_constructor(self):
 
         self.__dict__['cids'] = ['AUD', 'CAD', 'GBP']
-        self.__dict__['xcats'] = ['CRY', 'XR']
+        self.__dict__['xcats'] = ['CRY', 'XR', 'GROWTH', 'INFL', 'GDP']
 
         df_cids = pd.DataFrame(index=self.cids,
                                columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
@@ -27,6 +27,9 @@ class TestAll(unittest.TestCase):
                                          'ar_coef', 'back_coef'])
         df_xcats.loc['CRY', :] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
         df_xcats.loc['XR', :] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
+        df_xcats.loc['GROWTH', :] = ['2010-01-01', '2020-12-31', 0, 2, 0, 0.4]
+        df_xcats.loc['INFL', :] = ['2010-01-01', '2020-12-31', 0, 3, 0, 0.6]
+        df_xcats.loc['GDP', :] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.7]
 
         random.seed(1)
         np.random.seed(0)
@@ -85,9 +88,9 @@ class TestAll(unittest.TestCase):
                 (self.dfd['real_date'].dt.month == 10)
         filt2 = (self.dfd['cid'] == 'AUD') & (self.dfd['xcat'] == 'XR')
 
-        # Check correct application of monthly mean: the procedure used to compute the
+        # Check correct application of monthly mean: the procedure used to test the
         # value for each defined frequency is to isolate the last value of each
-        # respective period.
+        # respective period, and compare again the "manual" calculation, x1.
         x1 = self.dfd[filt1 & filt2]['value'].mean()
         x2 = float(dfc.loc[('AUD', '2011-10-31'), 'XR'])
         self.assertAlmostEqual(x1, x2)
@@ -244,11 +247,35 @@ class TestAll(unittest.TestCase):
         condition = abs(float(test_value) - float(manual_calc))
         self.assertTrue(condition < 0.00001)
 
+    def test_categories_df_multiple_xcats(self):
+        # The method categories_df allows for multiple signals to be passed. However, the
+        # same aggregation method will be used for all signals received. Therefore,
+        # confirm the logic holds with the addition of further signals: the functionality
+        # is preserved as n becomes large.
+
+        self.dataframe_constructor()
+
+        extra_signals = ['CRY', 'GROWTH', 'INFL', 'XR']
+        dfc = categories_df(self.dfd, xcats=extra_signals,
+                            cids=self.cids, freq='M', lag=1, fwin=0,
+                            xcat_aggs=['last', 'mean'])
+        # The first aspect to test is that all categories are present in the returned
+        # DataFrame and that the order of the columns matches the order passed to the
+        # category parameter. The dependent variable will invariably be in the left-most
+        # most column with the preceding columns occupied by the signals.
+        dfc_columns = list(dfc.columns)
+        self.assertTrue(dfc_columns[-1] == 'XR')
+        self.assertTrue(dfc_columns == extra_signals)
+
+        # Test the sum aggregation method to confirm NaN values are not falsely being
+        # converted to zero which misleads analysis.
+
     def test_categories_df_black(self):
         self.dataframe_constructor()
 
         black = {'CAD': ['2014-01-01', '2014-12-31']}
-        dfc = categories_df(self.dfd, xcats=['XR', 'CRY'], cids=self.cids,
+
+        dfc = categories_df(self.dfd, xcats=['CRY', 'XR'], cids=self.cids,
                             freq='M', xcat_aggs=['mean', 'last'], blacklist=black)
 
         dfc_cad = dfc[np.array(dfc.reset_index(level=0)['cid']) == 'CAD']
