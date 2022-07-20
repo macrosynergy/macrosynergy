@@ -65,24 +65,38 @@ class SignalReturnRelations:
         self.blacklist = blacklist
         self.fwin = fwin
 
-        # Todo: Assert that sig is available
-        # Todo: Assert that all rivals are available
-        rival_sigs = [rival_sigs] if isinstance(rival_sigs, str) else rival_sigs
-        self.signals = [sig] + rival_sigs if rival_sigs is not None else [sig]
-        self.sig = self.signals[0]
+        xcats = list(df['xcat'].unique())
+        assert sig in xcats, "Primary signal must be available in the DataFrame."
+        self.sig = sig
+
+        signals = [self.sig]
+        if rival_sigs is not None:
+
+            intersection = set(xcats).intersection(rival_sigs)
+            missing = set(rival_sigs).difference(intersection)
+
+            rival_error = f"The additional signals must be present in the defined " \
+                          f"DataFrame. It is currently missing, {missing}."
+            assert set(rival_sigs).issubset(set(xcats)), rival_error
+
+            rival_sigs = [rival_sigs] if isinstance(rival_sigs, str) else rival_sigs
+            signals += rival_sigs
+
+        self.signals = signals
 
         self.df = categories_df(df, xcats=self.signals + [ret], cids=cids, val='value',
                                 start=start, end=end, freq=freq, blacklist=blacklist,
                                 lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum'])
-        # Todo: categories.df should respect the order of xcats, but does not
-        #  which makes the order of columns in self.df unintuitive
-        # Todo: How is xcat_aggs applied for len(xcats) > 2. Not documented.
 
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
 
         if sig_neg:
             self.df.loc[:, self.signals] *= -1
-            self.df.columns = [ret] + list(self.df.iloc[:, 1:].columns + "_NEG")
+            s_copy = self.signals.copy()
+
+            self.signals = [s + "_NEG" for s in self.signals]
+            self.sig += "_NEG"
+            self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
 
         self.df_cs = self.__output_table__(cs_type='cids')
         self.df_ys = self.__output_table__(cs_type='years')
@@ -206,9 +220,8 @@ class SignalReturnRelations:
         explicitly called.
         """
 
-        if sigs is None:
-            # Set to all available signals.
-            sigs = self.signals
+        # Set to all available signals.
+        sigs = self.signals if sigs is None else sigs
 
         assert isinstance(sigs, list), "List of signals expected."
 
@@ -438,15 +451,12 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     srr = SignalReturnRelations(dfd, sig='CRY', ret='XR',
-                                rival_sigs=["GROWTH", "INFL", "CRAP"],
+                                rival_sigs=["GROWTH", "INFL"],
                                 freq='D', blacklist=black)
     srr.summary_table()
     srn = SignalReturnRelations(dfd, sig='CRY', sig_neg=False,
                                 ret='XR', freq='D', blacklist=black)
     srn.summary_table()
-
-    # srr.correlation_bars(type='cross_section')
-    # srn.correlation_bars(type='cross_section')
 
     srr.accuracy_bars(type='years')
     df_cs_stats = srr.cross_section_table()
