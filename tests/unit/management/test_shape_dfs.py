@@ -18,18 +18,18 @@ class TestAll(unittest.TestCase):
 
         df_cids = pd.DataFrame(index=self.cids,
                                columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
-        df_cids.loc['AUD', :] = ['2010-01-01', '2020-12-31', 0.5, 2]
-        df_cids.loc['CAD', :] = ['2011-01-01', '2020-11-30', 0, 1]
-        df_cids.loc['GBP', :] = ['2012-01-01', '2020-11-30', -0.2, 0.5]
+        df_cids.loc['AUD', :] = ['2011-01-01', '2020-12-31', 0.5, 2]
+        df_cids.loc['CAD', :] = ['2011-01-01', '2020-12-31', 0, 1]
+        df_cids.loc['GBP', :] = ['2011-01-01', '2020-12-31', -0.2, 0.5]
 
         df_xcats = pd.DataFrame(index=self.xcats,
                                 columns=['earliest', 'latest', 'mean_add', 'sd_mult',
                                          'ar_coef', 'back_coef'])
-        df_xcats.loc['CRY', :] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
-        df_xcats.loc['XR', :] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
-        df_xcats.loc['GROWTH', :] = ['2010-01-01', '2020-12-31', 0, 2, 0, 0.4]
-        df_xcats.loc['INFL', :] = ['2010-01-01', '2020-12-31', 0, 3, 0, 0.6]
-        df_xcats.loc['GDP', :] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.7]
+        df_xcats.loc['CRY', :] = ['2011-01-01', '2020-12-31', 1, 2, 0.9, 0.5]
+        df_xcats.loc['XR', :] = ['2011-01-01', '2020-12-31', 0, 1, 0, 0.3]
+        df_xcats.loc['GROWTH', :] = ['2011-01-01', '2020-12-31', 0, 2, 0, 0.4]
+        df_xcats.loc['INFL', :] = ['2011-01-01', '2020-12-31', 0, 3, 0, 0.6]
+        df_xcats.loc['GDP', :] = ['2011-01-01', '2020-12-31', 0, 1, 0, 0.7]
 
         random.seed(1)
         np.random.seed(0)
@@ -40,6 +40,7 @@ class TestAll(unittest.TestCase):
 
         dfd_x = reduce_df(self.dfd, xcats=['CRY'], cids=self.cids[0:2],
                           start='2013-01-01', end='2019-01-01')
+
         self.assertTrue(all(dfd_x['cid'].unique() == np.array(['AUD', 'CAD'])))
         self.assertTrue(all(dfd_x['xcat'].unique() == np.array(['CRY'])))
         # Test the dimensions through the date keys.
@@ -63,7 +64,8 @@ class TestAll(unittest.TestCase):
 
         dfd_x = reduce_df(self.dfd, xcats=['XR'], cids=self.cids, blacklist=black)
         dfd_aud = dfd_x[dfd_x['cid'] == 'AUD']
-        self.assertTrue(dfd_aud['real_date'].min() == pd.to_datetime('2010-01-01'))
+        # Adjustment for the blacklist period applied.
+        self.assertTrue(dfd_aud['real_date'].min() == pd.to_datetime('2013-01-01'))
 
         black_range_1 = pd.date_range(start='2011-01-01', end='2012-12-31')
         self.assertTrue(not any(item in black_range_1 for item in dfd_aud['real_date']))
@@ -224,34 +226,34 @@ class TestAll(unittest.TestCase):
         # that is being lagged, 'CRY'.
         dfc_aud = dfc.loc['AUD']
 
-        fixed_date = '2011-02-27'
+        fixed_date = '2011-02-25'
         test_value = dfc_aud.loc[fixed_date]['CRY']
 
         # Lagged the arbitrarily chosen date by 3 weeks. The frequency has been reduced
         # to weekly and the applied lag is three.
-        lagged_date = '2011-02-06'
+        lagged_date = '2011-02-04'
         date_lag = pd.Timestamp(lagged_date)
-        # Weekly aggregation will return a value at the end of the week (each date will
-        # be a Sunday). Therefore confirm the date is Sunday and use the preceding days
-        # to confirm the calculation manually.
-        self.assertEqual(date_lag.dayofweek, 6)
+        # Weekly aggregation will return a value at the end of the business-week (each
+        # date will be a Friday). Therefore, confirm the date is Friday and use the
+        # preceding days to confirm the calculation manually.
+        self.assertEqual(date_lag.dayofweek, 4)
 
         filter_1 = (df['cid'] == 'AUD') & (df['xcat'] == 'CRY')
         df_cr_aud = df[filter_1]
         df_cr_aud = df_cr_aud.pivot(index='real_date', columns='xcat', values='value')
 
         # Subtract to the previous Sunday to include the entire week's individual series.
-        test_week = df_cr_aud.loc[date_lag - timedelta(7):lagged_date]
+        test_week = df_cr_aud.loc[date_lag - timedelta(6):lagged_date]
         # Compute the average manually and confirm the lag has been applied correctly.
         manual_calc = test_week.mean()
         condition = abs(float(test_value) - float(manual_calc))
         self.assertTrue(condition < 0.00001)
 
     def test_categories_df_multiple_xcats(self):
-        # The method categories_df allows for multiple signals to be passed. However, the
-        # same aggregation method will be used for all signals received. Therefore,
-        # confirm the logic holds with the addition of further signals: the functionality
-        # is preserved as n becomes large.
+        # The method categories_df allows for multiple signals to be passed but the same
+        # aggregation method will be used for all signals received. Therefore, confirm
+        # the logic holds with the addition of further signals: the functionality is
+        # preserved as n becomes large.
 
         self.dataframe_constructor()
 
@@ -261,11 +263,38 @@ class TestAll(unittest.TestCase):
                             xcat_aggs=['last', 'mean'])
         # The first aspect to test is that all categories are present in the returned
         # DataFrame and that the order of the columns matches the order passed to the
-        # category parameter. The dependent variable will invariably be in the left-most
+        # category parameter. The dependent variable will invariably be in the right-most
         # most column with the preceding columns occupied by the signals.
         dfc_columns = list(dfc.columns)
         self.assertTrue(dfc_columns[-1] == 'XR')
         self.assertTrue(dfc_columns == extra_signals)
+
+        # Confirm the index is monthly.
+        # All categories and cross-sections start and end on the same day. This is
+        # significant given the application of df.dropna(how='any'): any row with a NaN
+        # value will be removed.
+        earliest_date = min(self.dfd['real_date'])
+        last_date = max(self.dfd['real_date'])
+
+        dates = pd.date_range(start=earliest_date, end=last_date, freq='M')
+        # Reduce to a single cross-section.
+        index = dfc.loc['AUD', :].index
+        # Subtract one from the manually assembled dates to adjust for the application of
+        # a lag. Implicitly tests that the lag has been applied correctly.
+        self.assertTrue(len(index) == len(dates) - 1)
+
+        # Finally, test the aggregation method. There will always be two aggregation
+        # methods passed into argument 'xcat_aggs'. The second element will be applied
+        # exclusively to the dependent category, and the first element will be used for
+        # all the signals received. Test the above logic.
+
+        # To test the signal categories, confirm each timestamp, in the returned
+        # DataFrame, corresponds to the last value of each time-period according to the
+        # down-sampling frequency.
+
+        fixed_date = index[len(index) // 2]
+
+        dfd_values = self.dfd[self.dfd['real_date'] == pd.Timestamp(fixed_date)]
 
         # Test the sum aggregation method to confirm NaN values are not falsely being
         # converted to zero which misleads analysis.
