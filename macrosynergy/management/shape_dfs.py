@@ -189,7 +189,8 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     :param <str> val: name of column that contains the values of interest. Default is
         'value'.
     :param <str> freq: letter denoting frequency at which the series are to be sampled.
-        This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
+        This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'. Will always be the
+        last business day of the respective frequency.
     :param <int> lag: lag (delay of arrival) of explanatory category(s) in periods
         as set by freq. Default is 0.
     :param <int> fwin: forward moving average window of first category. Default is 1,
@@ -200,7 +201,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         used for all explanatory variables.
 
     :return <pd.DataFrame>: custom DataFrame with category columns. All rows that contain
-    NaNs will be excluded.
+        NaNs will be excluded.
 
     N.B.:
     The number of explanatory categories that can be included is not restricted and will
@@ -208,7 +209,10 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     columns will reflect the order of the categories list.
     """
 
-    assert freq in ['D', 'W', 'M', 'Q', 'A']
+    frq_options = ['D', 'W', 'M', 'Q', 'A']
+    frq_error = f"Frequency parameter must be one of the stated options, {frq_options}."
+    assert freq in frq_options, frq_error
+    frq_dict = dict(zip(frq_options, ['B', 'W-Fri', 'BM', 'BQ', 'BA']))
 
     assert isinstance(xcats, list), f"<list> expected and not {type(xcats)}."
     assert all([isinstance(c, str) for c in xcats]), "List of categories expected."
@@ -244,7 +248,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         xpls = xcats[:-1]
 
         df_w = df_w.groupby([pd.Grouper(level='cid'),
-                             pd.Grouper(level='real_date', freq=freq)])
+                             pd.Grouper(level='real_date', freq=frq_dict[freq])])
 
         # Handles for falsified zeros. Following the frequency conversion, if the
         # aggregation method is set to "sum", time periods that exclusively contain NaN
@@ -341,13 +345,13 @@ if __name__ == "__main__":
     dfd_xt = reduce_df_by_ticker(dfd, ticks=tickers, blacklist=black)
 
     # Testing categories_df().
-    dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=1,
+    dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='W', lag=1,
                          xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black)
+    print(dfc1)
 
     dfc2 = categories_df(dfd, xcats=['INFL', 'GROWTH', 'XR'], cids=cids, freq='M', lag=0,
                          fwin=3, xcat_aggs=['mean', 'mean'],
                          start='2000-01-01', blacklist=black)
-    print(dfc2)
 
     dfc3 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
                          xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black,
