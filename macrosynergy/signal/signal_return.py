@@ -101,6 +101,11 @@ class SignalReturnRelations:
         self.df_cs = self.__output_table__(cs_type='cids')
         self.df_ys = self.__output_table__(cs_type='years')
 
+        if len(signals) > 1:
+            pass
+            # Todo: create and store signals table
+            # Todo: self.df_cs = self.__output_table__(cs_type='signals')
+
     @staticmethod
     def __slice_df__(df: pd.DataFrame, cs: str, cs_type: str):
         """
@@ -204,20 +209,17 @@ class SignalReturnRelations:
 
         return df_out.astype("float")
 
-    def rival_signal_table(self, sigs: List[str] = None):
+    def signals_table(self, sigs: List[str] = None):
+        # Todo: relegate the method to mere return, just as cross_section_table
         """
-        Output table on relations between the signals, both primary & additional, and the
-        return.
+        Output table relations of various signals and target return
 
         :param <List[str]> sigs: signal categories to included in the panel-level table.
             Default is None and all present signals will be displayed. Alternative is a
             valid subset of the possible categories. Primary signal must be passed if to
             be included.
 
-        NB.:
-        Analysis, across the defined metrics, will be completed exclusively on the panel
-        level. The table will not be computed on instantiation of the Class and must be
-        explicitly called.
+        NB.: The analysis will be based exclusively on the panel,
         """
 
         # Set to all available signals.
@@ -267,6 +269,7 @@ class SignalReturnRelations:
     def accuracy_bars(self, type: str = 'cross_section', title: str = None,
                       size: Tuple[float] = None,
                       legend_pos: str = 'best'):
+        # Todo: add type 'signals'
         """
         Plot bar chart for the overall and balanced accuracy metrics.
 
@@ -279,6 +282,7 @@ class SignalReturnRelations:
             See the documentation of matplotlib.pyplot.legend.
 
         """
+
 
         assert type in ['cross_section', 'years']
 
@@ -319,6 +323,7 @@ class SignalReturnRelations:
     def correlation_bars(self, type: str = 'cross_section', title: str = None,
                          size: Tuple[float] = None,
                          legend_pos: str = 'best'):
+        # Todo: add type 'signals'
         """
         Plot correlation coefficients and significance.
 
@@ -368,6 +373,7 @@ class SignalReturnRelations:
         plt.title(title)
         plt.legend(loc=legend_pos)
         plt.show()
+
 
     def summary_table(self):
         """
@@ -450,21 +456,20 @@ if __name__ == "__main__":
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    srr = SignalReturnRelations(dfd, sig='CRY', ret='XR',
-                                rival_sigs=["GROWTH", "INFL"],
-                                freq='D', blacklist=black)
-    srr.summary_table()
-    srn = SignalReturnRelations(dfd, sig='CRY', sig_neg=False,
-                                ret='XR', freq='D', blacklist=black)
-    srn.summary_table()
-
-    srr.accuracy_bars(type='years')
-    df_cs_stats = srr.cross_section_table()
-    df_ys_stats = srr.yearly_table()
-
-    # Additional signals.
+    # srr = SignalReturnRelations(dfd, sig='CRY', ret='XR',
+    #                             freq='D', blacklist=black)
+    # srr.summary_table()
+    # srn = SignalReturnRelations(dfd, sig='CRY', sig_neg=False,
+    #                             ret='XR', freq='D', blacklist=black)
+    # srn.summary_table()
+    #
+    # srr.accuracy_bars(type='years')
+    # df_cs_stats = srr.cross_section_table()
+    # df_ys_stats = srr.yearly_table()
+    #
+    # # Additional signals.
     srn = SignalReturnRelations(dfd, sig='CRY', rival_sigs=['INFL', 'GROWTH'],
-                                sig_neg=True, ret='XR', freq='D', blacklist=black)
+                                sig_neg=True, ret='XR', freq='M', blacklist=black)
 
-    df_rival_sigs = srn.rival_signal_table()
+    df_rival_sigs = srn.signals_table()
     print(df_rival_sigs)
