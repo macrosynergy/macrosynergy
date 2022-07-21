@@ -7,7 +7,7 @@ from tests.simulate import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df, categories_df
 from math import ceil, floor
 from datetime import timedelta
-
+from pandas.tseries.offsets import BMonthEnd
 
 class TestAll(unittest.TestCase):
 
@@ -258,6 +258,7 @@ class TestAll(unittest.TestCase):
         self.dataframe_constructor()
 
         extra_signals = ['CRY', 'GROWTH', 'INFL', 'XR']
+        ret = extra_signals[-1]
         dfc = categories_df(self.dfd, xcats=extra_signals,
                             cids=self.cids, freq='M', lag=1, fwin=0,
                             xcat_aggs=['last', 'mean'])
@@ -293,8 +294,40 @@ class TestAll(unittest.TestCase):
         # down-sampling frequency.
 
         fixed_date = index[len(index) // 2]
+        # Adjust for the lag applied.
+        adj_lag = fixed_date - timedelta(days=30)
+        offset = BMonthEnd()
+        adj_lag = offset.rollforward(adj_lag)
 
-        dfd_values = self.dfd[self.dfd['real_date'] == pd.Timestamp(fixed_date)]
+        df = self.dfd
+        # Test on a single cross-section.
+        filt_1 = (df['real_date'] == adj_lag) & (df['cid'] == 'AUD')
+        dfd_values = df[filt_1][['xcat', 'value']]
+        dfd_values = dict(zip(dfd_values['xcat'], dfd_values['value']))
+
+        # Isolate the signals.
+        test_values = dfc[dfc.index.get_level_values('real_date') == fixed_date]
+        test_values_sigs = test_values.loc['AUD'][extra_signals[:-1]]
+
+        for xcat in test_values_sigs.columns:
+            t_value = float(test_values_sigs[xcat])
+            condition = abs(t_value - dfd_values[xcat])
+            self.assertTrue(condition < 0.00001)
+
+        # Test the return category whose summation method is mean.
+        df_copy = df.copy()
+        df_copy['month'] = df_copy['real_date'].dt.month
+        df_copy['year'] = df_copy['real_date'].dt.year
+
+        filt_3 = (df_copy['month'] == fixed_date.month) & \
+                 (df_copy['year'] == fixed_date.year) & (df_copy['cid'] == 'AUD') & \
+                 (df_copy['xcat'] == ret)
+        df_copy = df_copy[filt_3]['value']
+
+        test_value_ret = test_values.loc['AUD'][ret]
+        condition = abs(float(test_value_ret) - df_copy.mean())
+
+        self.assertTrue(condition < 0.00001)
 
         # Test the sum aggregation method to confirm NaN values are not falsely being
         # converted to zero which misleads analysis.
