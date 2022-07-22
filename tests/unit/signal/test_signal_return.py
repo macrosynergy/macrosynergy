@@ -164,33 +164,6 @@ class TestAll(unittest.TestCase):
         sum_columns = zero_df_sigs.sum(axis=0)
         self.assertTrue(np.all(sum_columns.to_numpy() == 0.0))
 
-    def test__rival_sigs__(self):
-
-        self.dataframe_generator()
-        # Method is used to produce the metric table for the secondary signals. The
-        # analysis will be completed on the panel level.
-
-        # Test the construction of the table is correct and the values include all
-        # cross-sections.
-        primary_signal = "CRY"
-        rival_signals = ["GROWTH", "INFL"]
-        srr = SignalReturnRelations(self.dfd, ret="XR", sig=primary_signal,
-                                    rival_sigs=rival_signals, sig_neg=False, freq="D",
-                                    blacklist=self.blacklist)
-
-        df_sigs = srr.__rival_sigs__()
-
-        # Firstly, confirm that the index consists of only the primary and rival signals.
-        self.assertEqual(list(df_sigs.index), [primary_signal] + rival_signals)
-
-        # Secondly, test the actual calculation on a single signal. Test the accuracy
-        # score. If correct, all metrics should be correct.
-        growth_accuracy = df_sigs.loc["GROWTH", "accuracy"]
-
-        df_sgs = np.sign(srr.df.loc[:, ["GROWTH", "XR"]])
-        manual_value = accuracy_score(df_sgs["GROWTH"], df_sgs["XR"])
-        self.assertEqual(growth_accuracy, manual_value)
-
     def test__slice_df__(self):
 
         self.dataframe_generator()
@@ -322,6 +295,69 @@ class TestAll(unittest.TestCase):
         dfx_balance = dfx['bal_accuracy']
         condition = np.abs(np.mean(dfx_balance) - df_ys_mean)
         self.assertTrue(condition < 0.00001)
+
+    def test__rival_sigs__(self):
+
+        self.dataframe_generator()
+        # Method is used to produce the metric table for the secondary signals. The
+        # analysis will be completed on the panel level.
+
+        # Test the construction of the table is correct and the values include all
+        # cross-sections.
+        primary_signal = "CRY"
+        rival_signals = ["GROWTH", "INFL"]
+        srr = SignalReturnRelations(self.dfd, ret="XR", sig=primary_signal,
+                                    rival_sigs=rival_signals, sig_neg=False, freq="D",
+                                    blacklist=self.blacklist)
+
+        df_sigs = srr.__rival_sigs__()
+
+        # Firstly, confirm that the index consists of only the primary and rival signals.
+        self.assertEqual(list(df_sigs.index), [primary_signal] + rival_signals)
+
+        # Secondly, test the actual calculation on a single signal. Test the accuracy
+        # score. If correct, all metrics should be correct.
+        growth_accuracy = df_sigs.loc["GROWTH", "accuracy"]
+
+        df_sgs = np.sign(srr.df.loc[:, ["GROWTH", "XR"]])
+        manual_value = accuracy_score(df_sgs["GROWTH"], df_sgs["XR"])
+        self.assertEqual(growth_accuracy, manual_value)
+
+    def test_signals_table(self):
+
+        self.dataframe_generator()
+        # If defined, will return the panel-level table for the rival signals. The method
+        # receives a single parameter, "sigs", whose default is set to None (all
+        # available signals are returned).
+
+        primary_signal = "CRY"
+        rival_signals = ["GROWTH", "INFL"]
+        srr = SignalReturnRelations(self.dfd, ret="XR", sig=primary_signal,
+                                    rival_sigs=rival_signals, sig_neg=False, freq="M",
+                                    blacklist=self.blacklist)
+        # Firstly, confirm that if the parameter 'sigs' is left undefined, all signals
+        # will be displayed in the table (default setting).
+        df_sigs = srr.signals_table()
+        self.assertEqual(list(df_sigs.index), [primary_signal] + rival_signals)
+
+        # Secondly, confirm that a specific subset of the signals can be displayed.
+        df_sigs = srr.signals_table(sigs=["CRY", "INFL"])
+        self.assertEqual(list(df_sigs.index), [primary_signal] + ["INFL"])
+
+        # Confirm that a list of signals must be passed. The method is for comparison
+        # purposes. Therefore, at a minimum, it expects to receive the primary signal
+        # plus an additional rival signal.
+        with self.assertRaises(AssertionError):
+            # Pass in a single signal as a string.
+            df_sigs = srr.signals_table(sigs="INFL")
+
+        # Lastly, confirm that an AttributeError will be thrown if the method is called
+        # but additional signals have not been passed to the instance.
+        srr = SignalReturnRelations(self.dfd, ret="XR", sig=primary_signal,
+                                    rival_sigs=None, sig_neg=False, freq="M",
+                                    blacklist=self.blacklist)
+        with self.assertRaises(AttributeError):
+            df_sigs = srr.signals_table()
 
     def test__yaxis_lim__(self):
 
