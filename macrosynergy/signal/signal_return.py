@@ -21,7 +21,9 @@ class SignalReturnRelations:
     :param <str> sig: primary signal category for which detailed relational statistics
         can be calculated.
     :param <str, List[str]> rival_sigs: "rival signals" for which basic relational
-        statistics can be calculated for comparison with the primary signal category.
+        statistics can be calculated for comparison with the primary signal category. The
+        table, if rival signals are defined, will be generated upon instantiation of the
+        object.
         N.B.: parameters set for sig, such as sig_neg, freq, and agg_sig are equally
         applied to all rival signals.
     :param <bool> sig_neg: if set to True puts the signal in negative terms for all
@@ -242,8 +244,9 @@ class SignalReturnRelations:
 
         try:
             df_sigs = self.df_sigs.round(decimals=3)
-        except AttributeError:
-            print("Additional signals have not been defined on the instance.")
+        except Exception:
+            error_msg = "Additional signals have not been defined on the instance."
+            raise AttributeError(error_msg)
         else:
             # Set to all available signals.
             sigs = self.signals if sigs is None else sigs
