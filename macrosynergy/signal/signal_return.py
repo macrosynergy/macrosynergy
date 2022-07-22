@@ -72,15 +72,19 @@ class SignalReturnRelations:
         signals = [self.sig]
         if rival_sigs is not None:
 
-            intersection = set(xcats).intersection(rival_sigs)
-            missing = set(rival_sigs).difference(intersection)
+            r_sigs_error = "Signal or list of signals expected."
+            assert isinstance(rival_sigs, (str, list)), r_sigs_error
+
+            r_sigs = [rival_sigs] if isinstance(rival_sigs, str) else rival_sigs
+
+            intersection = set(xcats).intersection(r_sigs)
+            missing = set(r_sigs).difference(intersection)
 
             rival_error = f"The additional signals must be present in the defined " \
                           f"DataFrame. It is currently missing, {missing}."
-            assert set(rival_sigs).issubset(set(xcats)), rival_error
+            assert set(r_sigs).issubset(set(xcats)), rival_error
 
-            rival_sigs = [rival_sigs] if isinstance(rival_sigs, str) else rival_sigs
-            signals += rival_sigs
+            signals += r_sigs
 
         self.signals = signals
 
@@ -97,6 +101,10 @@ class SignalReturnRelations:
             self.signals = [s + "_NEG" for s in self.signals]
             self.sig += "_NEG"
             self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
+
+        if len(self.signals) > 1:
+
+            self.df_sigs = self.__rival_sigs__()
 
         self.df_cs = self.__output_table__(cs_type='cids')
         self.df_ys = self.__output_table__(cs_type='years')
@@ -204,10 +212,23 @@ class SignalReturnRelations:
 
         return df_out.astype("float")
 
-    def rival_signal_table(self, sigs: List[str] = None):
+    def __rival_sigs__(self):
         """
-        Output table on relations between the signals, both primary & additional, and the
-        return.
+        Produces the panel-level table for the additional signals.
+        """
+
+        df_out = pd.DataFrame(index=self.signals, columns=self.metrics)
+
+        for s in self.signals:
+            df_out = self.__table_stats__(
+                df_segment=self.df, df_out=df_out, segment=s, signal=s
+            )
+
+        return df_out
+
+    def signals_table(self, sigs: List[str] = None):
+        """
+        Output table on relations of various signals with the target return.
 
         :param <List[str]> sigs: signal categories to included in the panel-level table.
             Default is None and all present signals will be displayed. Alternative is a
@@ -215,28 +236,25 @@ class SignalReturnRelations:
             be included.
 
         NB.:
-        Analysis, across the defined metrics, will be completed exclusively on the panel
-        level. The table will not be computed on instantiation of the Class and must be
-        explicitly called.
+        Analysis will be based exclusively on the panel level. Will only return a table
+        if rival signals have been defined upon instantiation.
         """
 
-        # Set to all available signals.
-        sigs = self.signals if sigs is None else sigs
+        try:
+            df_sigs = self.df_sigs.round(decimals=3)
+        except AttributeError:
+            print("Additional signals have not been defined on the instance.")
+        else:
+            # Set to all available signals.
+            sigs = self.signals if sigs is None else sigs
 
-        assert isinstance(sigs, list), "List of signals expected."
+            assert isinstance(sigs, list), "List of signals expected."
 
-        sigs_error = f"The requested signals must be a subset of the primary plus " \
-                     f"additional signals received, {self.signals}."
-        assert set(sigs).issubset(set(self.signals)), sigs_error
+            sigs_error = f"The requested signals must be a subset of the primary plus " \
+                         f"additional signals received, {self.signals}."
+            assert set(sigs).issubset(set(self.signals)), sigs_error
 
-        df_out = pd.DataFrame(index=sigs, columns=self.metrics)
-        for s in sigs:
-
-            df_out = self.__table_stats__(
-                df_segment=self.df, df_out=df_out, segment=s, signal=s
-            )
-
-        return df_out
+            return df_sigs.loc[sigs, :]
 
     def cross_section_table(self):
         """ Output table on relations across sections and the panel. """
@@ -464,7 +482,7 @@ if __name__ == "__main__":
 
     # Additional signals.
     srn = SignalReturnRelations(dfd, sig='CRY', rival_sigs=['INFL', 'GROWTH'],
-                                sig_neg=True, ret='XR', freq='D', blacklist=black)
+                                sig_neg=False, ret='XR', freq='D', blacklist=black)
 
-    df_rival_sigs = srn.rival_signal_table()
-    print(df_rival_sigs)
+    df_sigs = srn.signals_table()
+    print(df_sigs)
