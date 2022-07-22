@@ -56,8 +56,16 @@ class TestAll(unittest.TestCase):
         self.dataframe_generator()
         # Test the Class's constructor.
 
+        # First, test the assertions.
+        # Trivial test to confirm the primary signal must be present in the passed
+        # DataFrame.
+        with self.assertRaises(AssertionError):
+
+            srr = SignalReturnRelations(self.dfd, ret='XR', sig="Missing",
+                                        freq='D', blacklist=self.blacklist)
+
         signal = 'CRY'
-        srr = SignalReturnRelations(self.dfd, sig=signal, ret='XR',
+        srr = SignalReturnRelations(self.dfd, ret='XR', sig=signal,
                                     freq='D', blacklist=self.blacklist)
 
         # The signal will invariably be used as the explanatory variable and the return
@@ -91,7 +99,46 @@ class TestAll(unittest.TestCase):
         test_index = list(srr.df_cs.index)[3:]
         self.assertTrue(sorted(self.cids) == sorted(test_index))
 
-    def test___slice_df__(self):
+    def test_constructor_multiple_sigs(self):
+
+        self.dataframe_generator()
+        # The signal return Class allows for additional signals to be passed, upon
+        # instantiation, to understand the primary signal's performance relative to other
+        # possible signals. The analysis will be completed on the panel level.
+
+        # First, test the assertions.
+        # Any additional signals passed must either be a string or list.
+        with self.assertRaises(AssertionError):
+            srr = SignalReturnRelations(self.dfd, ret='XR', sig='CRY',
+                                        rival_sigs=set(['GROWTH', 'INFL']), freq='D',
+                                        blacklist=self.blacklist)
+        # Signals passed must be a subset of the categories defined in the DataFrame. If
+        # not, will raise an assertion.
+        with self.assertRaises(AssertionError):
+            # GDP is not a defined category.
+            srr = SignalReturnRelations(self.dfd, ret='XR', sig='CRY',
+                                        rival_sigs=set(['GROWTH', 'INFL', 'GDP']),
+                                        freq='D', blacklist=self.blacklist)
+
+        primary_signal = 'CRY'
+        rival_signals = ['GROWTH', 'INFL']
+        srr = SignalReturnRelations(self.dfd, ret='XR', sig=primary_signal,
+                                    rival_sigs=rival_signals, freq='D',
+                                    blacklist=self.blacklist)
+        # First, confirm the signal list stored on the instance comprises both the
+        # primary signal and the rival signals.
+        self.assertTrue([primary_signal] + rival_signals == srr.signals)
+
+        # Secondly, confirm the DataFrame is defined over the expected columns.
+        self.assertTrue(list(srr.df.columns) ==
+                        [primary_signal] + rival_signals + ['XR'])
+
+        # Test the negative conversion if the parameter 'sig_neg' is set to True.
+        srr = SignalReturnRelations(self.dfd, ret='XR', sig=primary_signal,
+                                    rival_sigs=rival_signals, sig_neg=True,
+                                    blacklist=self.blacklist, freq='D')
+
+    def test__slice_df__(self):
 
         self.dataframe_generator()
         # Method used to confirm that the segmentation of the original DataFrame is
