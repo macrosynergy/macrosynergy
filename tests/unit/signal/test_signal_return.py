@@ -123,7 +123,7 @@ class TestAll(unittest.TestCase):
         primary_signal = 'CRY'
         rival_signals = ['GROWTH', 'INFL']
         srr = SignalReturnRelations(self.dfd, ret='XR', sig=primary_signal,
-                                    rival_sigs=rival_signals, freq='D',
+                                    rival_sigs=rival_signals, sig_neg=False, freq='D',
                                     blacklist=self.blacklist)
         # First, confirm the signal list stored on the instance comprises both the
         # primary signal and the rival signals.
@@ -133,10 +133,63 @@ class TestAll(unittest.TestCase):
         self.assertTrue(list(srr.df.columns) ==
                         [primary_signal] + rival_signals + ['XR'])
 
-        # Test the negative conversion if the parameter 'sig_neg' is set to True.
-        srr = SignalReturnRelations(self.dfd, ret='XR', sig=primary_signal,
-                                    rival_sigs=rival_signals, sig_neg=True,
-                                    blacklist=self.blacklist, freq='D')
+        # Test the negative conversion if the parameter 'sig_neg' is set to True. If set
+        # to True, the signal fields will have a postfix, '_NEG', appended.
+        srr_neg = SignalReturnRelations(self.dfd, ret='XR', sig=primary_signal,
+                                        rival_sigs=rival_signals, sig_neg=True,
+                                        blacklist=self.blacklist, freq='D')
+
+        # Firstly, confirm the signal names have been updated correctly.
+        srr_signals = list(map(lambda s: s.split('_'), srr_neg.signals))
+        signals = [primary_signal] + rival_signals
+        for i, s in enumerate(srr_signals):
+            self.assertTrue(s[1] == 'NEG')
+            self.assertTrue(s[0] == signals[i])
+
+        self.assertEqual(srr_neg.sig[-4:], '_NEG')
+        self.assertEqual(srr_neg.sig[:-4], primary_signal)
+
+        # Secondly, confirm the actual DataFrame's columns have been updated.
+        test_columns = list(srr_neg.df.columns)
+        # Confirms the update has been made on the DataFrame level.
+        self.assertTrue(test_columns == srr_neg.signals + ['XR'])
+
+        # Lastly, check the original values have been multiplied by minus one. Therefore,
+        # add the two DataFrames which should equate to zero. The multiplication by minus
+        # one only occurs on the signals.
+
+        srr_neg.df.rename(columns=dict(zip(srr_neg.signals, srr.signals)), inplace=True)
+        zero_df = srr.df + srr_neg.df
+        zero_df_sigs = zero_df.loc[:, srr.signals]
+        sum_columns = zero_df_sigs.sum(axis=0)
+        self.assertTrue(np.all(sum_columns.to_numpy() == 0.0))
+
+    def test__rival_sigs__(self):
+
+        self.dataframe_generator()
+        # Method is used to produce the metric table for the secondary signals. The
+        # analysis will be completed on the panel level.
+
+        # Test the construction of the table is correct and the values include all
+        # cross-sections.
+        primary_signal = "CRY"
+        rival_signals = ["GROWTH", "INFL"]
+        srr = SignalReturnRelations(self.dfd, ret="XR", sig=primary_signal,
+                                    rival_sigs=rival_signals, sig_neg=False, freq="D",
+                                    blacklist=self.blacklist)
+
+        df_sigs = srr.__rival_sigs__()
+
+        # Firstly, confirm that the index consists of only the primary and rival signals.
+        self.assertEqual(list(df_sigs.index), [primary_signal] + rival_signals)
+
+        # Secondly, test the actual calculation on a single signal. Test the accuracy
+        # score. If correct, all metrics should be correct.
+        growth_accuracy = df_sigs.loc["GROWTH", "accuracy"]
+
+        df_sgs = np.sign(srr.df.loc[:, ["GROWTH", "XR"]])
+        manual_value = accuracy_score(df_sgs["GROWTH"], df_sgs["XR"])
+        self.assertEqual(growth_accuracy, manual_value)
 
     def test__slice_df__(self):
 
