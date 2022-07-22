@@ -282,14 +282,14 @@ class SignalReturnRelations:
 
         return y_input
 
-    def accuracy_bars(self, type: str = 'cross_section', title: str = None,
+    def accuracy_bars(self, type: str = "cross_section", title: str = None,
                       size: Tuple[float] = None,
-                      legend_pos: str = 'best'):
+                      legend_pos: str = "best"):
         """
         Plot bar chart for the overall and balanced accuracy metrics.
 
         :param <str> type: type of segment over which bars are drawn. Either
-            'cross_section' (default) or 'years'.
+            "cross_section" (default), "years" or "panels".
         :param <str> title: chart header - default will be applied if none is chosen.
         :param <Tuple[float]> size: 2-tuple of width and height of plot - default will be
             applied if none is chosen.
@@ -298,9 +298,15 @@ class SignalReturnRelations:
 
         """
 
-        assert type in ['cross_section', 'years']
+        assert type in ['cross_section', 'years', 'panel']
 
-        df_xs = self.df_cs if type == 'cross_section' else self.df_ys
+        if type == "cross_section":
+            df_xs = self.df_cs
+        elif type == "years":
+            df_xs = self.df_ys
+        else:
+            df_xs = self.df_sigs
+
         dfx = df_xs[~df_xs.index.isin(['PosRatio'])]
 
         if title is None:
@@ -326,22 +332,24 @@ class SignalReturnRelations:
         plt.axhline(y=0.5, color='black',
                     linestyle='-', linewidth=0.5)
 
-        y_input = self.__yaxis_lim__(accuracy_df=dfx.loc[:,
-                                                 ['accuracy', 'bal_accuracy']])
+        y_input = self.__yaxis_lim__(
+            accuracy_df=dfx.loc[:, ['accuracy', 'bal_accuracy']]
+        )
+
         plt.ylim(round(y_input, 2))
 
         plt.title(title)
         plt.legend(loc=legend_pos)
         plt.show()
 
-    def correlation_bars(self, type: str = 'cross_section', title: str = None,
+    def correlation_bars(self, type: str = "cross_section", title: str = None,
                          size: Tuple[float] = None,
-                         legend_pos: str = 'best'):
+                         legend_pos: str = "best"):
         """
         Plot correlation coefficients and significance.
 
-        :param <str> type: type of segment over which bars are drawn. Must be
-            "cross-section" (default) or 'years'.
+        :param <str> type: type of segment over which bars are drawn. Either
+            "cross_section" (default), "years" or "panels".
         :param <str> title: chart header. Default will be applied if none is chosen.
         :param <Tuple[float]> size: 2-tuple of width and height of plot.
             Default will be applied if none is chosen.
@@ -349,9 +357,15 @@ class SignalReturnRelations:
             See matplotlib.pyplot.legend.
 
         """
-        assert type in ['cross_section', 'years']
+        assert type in ["cross_section", "years", "panel"]
 
-        df_xs = self.df_cs if type == 'cross_section' else self.df_ys
+        if type == "cross_section":
+            df_xs = self.df_cs
+        elif type == "years":
+            df_xs = self.df_ys
+        else:
+            df_xs = self.df_sigs
+
         # Panel plus the cs_types.
         dfx = df_xs[~df_xs.index.isin(['PosRatio', 'Mean'])]
 
@@ -364,8 +378,7 @@ class SignalReturnRelations:
 
         if title is None:
             title = f"Positive correlation probability of {self.ret} " \
-                    f"and lagged {self.sig} " \
-                    f"at {self.dic_freq[self.freq]} frequency."
+                    f"and lagged {self.sig} at {self.dic_freq[self.freq]} frequency."
         if size is None:
             size = (np.max([dfx.shape[0]/2, 8]), 6)
 
@@ -378,6 +391,7 @@ class SignalReturnRelations:
         plt.bar(x_indexes + w / 2, kprobs, label='Kendall',
                 width=w, color='steelblue')
         plt.xticks(ticks=x_indexes, labels=dfx.index, rotation=0)
+
         plt.axhline(y=0.95, color='orange', linestyle='--',
                     linewidth=0.5, label='95% probability')
         plt.axhline(y=0.99, color='red', linestyle='--',
@@ -471,18 +485,19 @@ if __name__ == "__main__":
     srr = SignalReturnRelations(dfd, sig='CRY', ret='XR',
                                 rival_sigs=["GROWTH", "INFL"],
                                 freq='D', blacklist=black)
-    srr.summary_table()
-    srn = SignalReturnRelations(dfd, sig='CRY', sig_neg=False,
-                                ret='XR', freq='D', blacklist=black)
-    srn.summary_table()
 
-    srr.accuracy_bars(type='years')
-    df_cs_stats = srr.cross_section_table()
-    df_ys_stats = srr.yearly_table()
+    srr.accuracy_bars(type="years")
 
     # Additional signals.
     srn = SignalReturnRelations(dfd, sig='CRY', rival_sigs=['INFL', 'GROWTH'],
                                 sig_neg=False, ret='XR', freq='D', blacklist=black)
 
-    df_sigs = srn.signals_table()
-    print(df_sigs)
+    df_sigs = srn.signals_table(sigs=['CRY', 'INFL'])
+    df_sigs_all = srn.signals_table()
+
+    srn.accuracy_bars(type="panel", title="Accuracy measure between target return, XR, "
+                                          "and the respective signals, ['CRY', 'INFL', "
+                                          "'GROWTH'].")
+    srn.correlation_bars(type="panel", title="Positive correlation probability between "
+                                             "XR and the respective signals, ['CRY', "
+                                             "'INFL', 'GROWTH'].")
