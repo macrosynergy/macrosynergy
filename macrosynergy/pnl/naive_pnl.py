@@ -44,6 +44,8 @@ class NaivePnL:
                  start: str = None, end: str = None,
                  blacklist: dict = None):
 
+        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+
         self.dfd = df
         assert isinstance(ret, str), "The return category expects a single <str>."
         self.ret = ret
@@ -188,9 +190,9 @@ class NaivePnL:
         dfw = dfw[['real_date', 'psig', 'cid']]
 
         # Isolate the required signals on the re-balancing dates. Only concerned with the
-        # respective signal on the re-balancing date. However, the produced dataframe
+        # respective signal on the re-balancing date. However, the produced DataFrame
         # will only be defined over the re-balancing dates. Therefore, merge the
-        # aforementioned dataframe with the original dataframe such that all business
+        # aforementioned DataFrame with the original DataFrame such that all business
         # days are included. The intermediary dates, dates between re-balancing dates,
         # will initially be populated by NA values. To ensure the signal is used for the
         # duration between re-balancing dates, forward fill the computed signal over the
@@ -201,8 +203,9 @@ class NaivePnL:
         rebal_merge = r_dates_df.merge(dfw, how='left', on=['real_date', 'cid'])
         # Re-establish the daily date series index where the intermediary dates, between
         # the re-balancing dates, will be populated using a forward fill.
-        rebal_merge = dfw[['real_date', 'cid']].merge(rebal_merge, how='left',
-                                                      on=['real_date', 'cid'])
+        rebal_merge = dfw[['real_date', 'cid']].merge(
+            rebal_merge, how='left', on=['real_date', 'cid']
+        )
         rebal_merge['psig'] = rebal_merge['psig'].fillna(method='ffill').shift(rebal_slip)
         rebal_merge = rebal_merge.sort_values(['cid', 'real_date'])
 
@@ -563,7 +566,7 @@ class NaivePnL:
         assert isinstance(freq, str) and freq in ['m', 'q'], error_time
 
         metric_error = "The metric must either be 'direction' or 'strength'."
-        assert metric in ['direction', 'strength'], metric_error
+        assert metric in ['direction', "strength"], metric_error
 
         dfx = self.signal_df[pnl_name]
         dfw = dfx.pivot(index='real_date', columns='cid', values='sig')
@@ -580,18 +583,18 @@ class NaivePnL:
         # down-sampling frequency.
         df_s = dfw.sum(axis=1)
         index = np.array(df_s.index)
-        df_signal = pd.DataFrame(data=df_s.to_numpy(), columns=['aggregate_signal'],
+        df_signal = pd.DataFrame(data=df_s.to_numpy(), columns=["aggregate_signal"],
                                  index=index)
 
         df_signal = df_signal.reset_index(level=0)
-        df_signal = df_signal.rename({'index': ''}, axis='columns')
+        df_signal = df_signal.rename({"index": ""}, axis="columns")
         dates = [pd.Timestamp(d) for d in df_signal['']]
         df_signal[''] = np.array(dates)
 
-        plt.style.use('ggplot')
+        plt.style.use("ggplot")
 
         fig, ax = plt.subplots()
-        df_signal.plot.bar(x='', y='aggregate_signal', ax=ax, title=title,
+        df_signal.plot.bar(x="", y="aggregate_signal", ax=ax, title=title,
                            ylabel=y_label, legend=False)
 
         ticklabels = [''] * len(df_signal)
@@ -754,6 +757,9 @@ if __name__ == "__main__":
                  min_obs=250, thresh=2.5)
 
     pnl.make_long_pnl(vol_scale=10, label="Long")
+
+    pnl.agg_signal_bars(pnl_name="PNL_GROWTH_PZN", metric="strength",
+                        title="Absolute Bar Chart.")
 
     # Able to adjust the start date for any respective visual analysis.
     pnl.plot_pnls(start="2010-01-01")
