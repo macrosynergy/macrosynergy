@@ -56,10 +56,7 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
 
         dates = dates_iter[dates_iter >= first_estimation]
         for date in dates:
-            # The try statement is required to handle time intervals which do not have
-            # any realised values. The stack operation will return an empty list instead
-            # of a floating point value which precludes it being inserted in the output
-            # DataFrame.
+
             df_out.loc[date, "value"] = df.loc[first_observation:date].stack().apply(stat)
 
         df_out = df_out.fillna(method='ffill')
@@ -121,10 +118,11 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         Lowest possible value is 0, i.e. parameters are all specific to cross section.
     :param <str> postfix: string appended to category name for output; default is "ZN".
 
-    :return <pd.Dataframe>: standardized dataframe with the zn-scores of the chosen xcat:
+    :return <pd.Dataframe>: standardized DataFrame with the zn-scores of the chosen xcat:
         'cid', 'xcat', 'real_date' and 'value'.
     """
 
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
     # --- Assertions
 
     assert neutral in ["mean", "median", "zero"]

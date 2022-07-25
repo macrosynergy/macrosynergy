@@ -109,6 +109,8 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None,
 
     cols = ['cid', 'xcat', 'real_date', 'value']
     assert set(cols).issubset(set(df.columns))
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+
     assert isinstance(calcs, list), "List of functions expected."
 
     error_formula = "Each formula in the panel calculation list must be a string."

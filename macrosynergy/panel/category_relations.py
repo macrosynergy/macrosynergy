@@ -83,6 +83,7 @@ class CategoryRelations(object):
         assert len(xcats) == 2, "Expects two fields."
 
         # Select the cross-sections available for both categories.
+        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
         shared_cids = CategoryRelations.intersection_cids(df, xcats, cids)
 
         df = categories_df(df, xcats, shared_cids, val, start=start,
@@ -432,7 +433,7 @@ class CategoryRelations(object):
                    line_kws={'lw': 1})
 
             if coef_box_incl:
-                fg.map_DataFrame(self.annotate_facet)
+                fg.map_dataframe(self.annotate_facet)
 
             fg.set_titles(col_template='{col_name}')
             fg.fig.suptitle(title, y=title_adj, fontsize=14)
@@ -598,7 +599,6 @@ if __name__ == "__main__":
                            xcat1_chg=None, xcat_trims=[2, 2])
 
     cr.reg_scatter(labels=False, coef_box='upper left')
-    cr.jointplot(kind='hist', xlab='growth', ylab='inflation', height=5)
 
     cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M',
                            xcat_aggs=['mean', 'mean'],
@@ -606,4 +606,3 @@ if __name__ == "__main__":
 
     cr.reg_scatter(labels=False, coef_box='lower right',
                    title='Growth and Inflation', xlab='Growth', ylab='Inflation')
-    cr.jointplot(kind='hist', xlab='growth', ylab='inflation', height=5)
