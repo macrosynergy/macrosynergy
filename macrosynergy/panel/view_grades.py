@@ -14,10 +14,10 @@ def heatmap_grades(df: pd.DataFrame, xcats:  List[str],  cids: List[str] = None,
 
     """Displays a heatmap of grading
 
-    :param <pd.Dataframe> df: standardized dataframe with the necessary columns:
+    :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
         'cid', 'xcat', 'real_date' and 'grading'.
     :param List[str] xcats: extended categorys to be checked on.
-    :param <List[str]> cids: cross sections to visualize. Default is all in  dataframe.
+    :param <List[str]> cids: cross sections to visualize. Default is all in  DataFrame.
     :param <str> start: earliest date in ISO format. Default is earliest available.
     :param <str> end: latest date in ISO format. Default is latest available.
     :param <str> grade: name of column that contains the grades Default is 'grading'.
@@ -26,6 +26,7 @@ def heatmap_grades(df: pd.DataFrame, xcats:  List[str],  cids: List[str] = None,
         Default is None, meaning it is set in accordance with df.
 
     """
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
     df = df[['xcat', 'cid', 'real_date', grade]]
