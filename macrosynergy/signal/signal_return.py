@@ -55,6 +55,9 @@ class SignalReturnRelations:
 
         self.dic_freq = {'D': 'daily', 'W': 'weekly', 'M': 'monthly',
                          'Q': 'quarterly', 'A': 'annual'}
+        freq_error = f"Frequency parameter must be one of {list(self.dic_freq.keys())}."
+        assert freq in self.dic_freq.keys(), freq_error
+
         self.metrics = ['accuracy', 'bal_accuracy', 'pos_sigr', "pos_retr",
                         'pos_prec', 'neg_prec', 'pearson', 'pearson_pval',
                         'kendall', 'kendall_pval']
@@ -292,8 +295,7 @@ class SignalReturnRelations:
         Plot bar chart for the overall and balanced accuracy metrics.
 
         :param <str> type: type of segment over which bars are drawn. Either
-            "cross_section" (default), "years" or "panels".
-            # Todo: type should be "signals" not "panels"
+            "cross_section" (default), "years" or "signals".
         :param <str> title: chart header - default will be applied if none is chosen.
         :param <Tuple[float]> size: 2-tuple of width and height of plot - default will be
             applied if none is chosen.
@@ -302,8 +304,7 @@ class SignalReturnRelations:
 
         """
 
-        assert type in ['cross_section', 'years', 'panel']
-        # Todo: "panel" rather than "panels"
+        assert type in ["cross_section", "years", "signals"]
 
         if type == "cross_section":
             df_xs = self.df_cs
@@ -315,7 +316,7 @@ class SignalReturnRelations:
         dfx = df_xs[~df_xs.index.isin(['PosRatio'])]
 
         if title is None:
-            refsig = "various signals" if type == "panel" else self.sig
+            refsig = "various signals" if type == "signals" else self.sig
             title = f"Accuracy for sign prediction of {self.ret} based on {refsig} " \
                     f"at {self.dic_freq[self.freq]} frequency."
         if size is None:
@@ -355,8 +356,7 @@ class SignalReturnRelations:
         Plot correlation coefficients and significance.
 
         :param <str> type: type of segment over which bars are drawn. Either
-            "cross_section" (default), "years" or "panels".
-            # Todo: type should be "signals" not "panels"
+            "cross_section" (default), "years" or "signals".
         :param <str> title: chart header. Default will be applied if none is chosen.
         :param <Tuple[float]> size: 2-tuple of width and height of plot.
             Default will be applied if none is chosen.
@@ -364,8 +364,7 @@ class SignalReturnRelations:
             See matplotlib.pyplot.legend.
 
         """
-        assert type in ["cross_section", "years", "panel"]
-        # Todo: "panel" rather than "panels"
+        assert type in ["cross_section", "years", "signals"]
 
         if type == "cross_section":
             df_xs = self.df_cs
@@ -385,9 +384,9 @@ class SignalReturnRelations:
         kprobs[kprobs == 0] = 0.01
 
         if title is None:
-            refsig = "various signals" if type == "panel" else self.sig
-            title = f"Positive correlation probability of {refsig} " \
-                    f"and lagged {self.sig} at {self.dic_freq[self.freq]} frequency."
+            refsig = "various signals" if type == "signals" else self.sig
+            title = f"Positive correlation probability of {self.ret} " \
+                    f"and lagged {refsig} at {self.dic_freq[self.freq]} frequency."
         if size is None:
             size = (np.max([dfx.shape[0]/2, 8]), 6)
 
@@ -491,12 +490,6 @@ if __name__ == "__main__":
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    # srr = SignalReturnRelations(dfd, sig='CRY', ret='XR',
-    #                             rival_sigs=["GROWTH", "INFL"],
-    #                             freq='D', blacklist=black)
-    #
-    # srr.accuracy_bars(type="years")
-
     # Additional signals.
     srn = SignalReturnRelations(dfd, sig='CRY', rival_sigs=['INFL', 'GROWTH'],
                                 sig_neg=False, ret='XR', freq='D', blacklist=black)
@@ -504,11 +497,9 @@ if __name__ == "__main__":
     df_sigs = srn.signals_table(sigs=['CRY', 'INFL'])
     df_sigs_all = srn.signals_table()
 
-    srn.accuracy_bars(type="panel", title="Accuracy measure between target return, XR, "
-                                          "and the respective signals, ['CRY', 'INFL', "
-                                          "'GROWTH'].")
-    srn.accuracy_bars(type="panel")
-    srn.correlation_bars(type="panel", title="Positive correlation probability between "
-                                             "XR and the respective signals, ['CRY', "
-                                             "'INFL', 'GROWTH'].")
-    srn.correlation_bars(type="panel")
+    srn.accuracy_bars(type="signals", title="Accuracy measure between target return, XR,"
+                                            " and the respective signals, ['CRY', 'INFL'"
+                                            ", 'GROWTH'].")
+    srn.accuracy_bars(type="signals")
+
+    srn.correlation_bars(type="signals")
