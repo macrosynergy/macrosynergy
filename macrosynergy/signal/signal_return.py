@@ -3,8 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn import metrics as skm
-from scipy import stats 
-
+from scipy import stats
 from typing import List, Union, Tuple
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
@@ -14,14 +13,21 @@ from macrosynergy.management.shape_dfs import categories_df
 class SignalReturnRelations:
 
     """
-    Class for analyzing and visualizing signal and a return series.
+    Class for analysing and visualizing signal and a return series.
 
     :param <pd.Dataframe> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcat', 'real_date' and 'value.
     :param <str> ret: return category.
-    :param <str> sig: signal category.
+    :param <str> sig: primary signal category for which detailed relational statistics
+        can be calculated.
+    :param <str, List[str]> rival_sigs: "rival signals" for which basic relational
+        statistics can be calculated for comparison with the primary signal category. The
+        table, if rival signals are defined, will be generated upon instantiation of the
+        object.
+        N.B.: parameters set for sig, such as sig_neg, freq, and agg_sig are equally
+        applied to all rival signals.
     :param <bool> sig_neg: if set to True puts the signal in negative terms for all
-        analyses. Default is False.
+        analysis. Default is False.
     :param <str> start: earliest date in ISO format. Default is None in which case the
         earliest date available will be used.
     :param <str> end: latest date in ISO format. Default is None in which case the
@@ -33,46 +39,85 @@ class SignalReturnRelations:
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
         The return series will always be summed over the sample period.
         The signal series will be aggregated according to the value of agg_sig.
-    :param <str> agg_sig: aggregation method applied to the signal value in down-
+    :param <str> agg_sig: aggregation method applied to the signal values in down-
         sampling. The default is "last".
+        If defined, the additional signals will also use the same aggregation method for
+        any down-sampling.
     :param <int> fwin: forward window of return category in base periods. Default is 1.
         This conceptually corresponds to the holding period of a position in
         accordance with the signal.
-
     """
-    def __init__(self, df: pd.DataFrame, ret: str, sig: str, cids: List[str] = None,
+    def __init__(self, df: pd.DataFrame, ret: str, sig: str,
+                 rival_sigs: Union[str, List[str]] = None, cids: List[str] = None,
                  sig_neg: bool = False, start: str = None, end: str = None,
                  fwin: int = 1, blacklist: dict = None, agg_sig: str = 'last',
                  freq: str = 'M'):
 
         self.dic_freq = {'D': 'daily', 'W': 'weekly', 'M': 'monthly',
                          'Q': 'quarterly', 'A': 'annual'}
+        freq_error = f"Frequency parameter must be one of {list(self.dic_freq.keys())}."
+        assert freq in self.dic_freq.keys(), freq_error
+
         self.metrics = ['accuracy', 'bal_accuracy', 'pos_sigr', "pos_retr",
                         'pos_prec', 'neg_prec', 'pearson', 'pearson_pval',
                         'kendall', 'kendall_pval']
 
-        self.df = categories_df(df, xcats=[sig, ret], cids=cids, val='value',
+        self.ret = ret
+        self.freq = freq
+
+        self.start = start
+        self.end = end
+        self.blacklist = blacklist
+        self.fwin = fwin
+
+        xcats = list(df['xcat'].unique())
+        assert sig in xcats, "Primary signal must be available in the DataFrame."
+        self.sig = sig
+
+        signals = [self.sig]
+        if rival_sigs is not None:
+
+            r_sigs_error = "Signal or list of signals expected."
+            assert isinstance(rival_sigs, (str, list)), r_sigs_error
+
+            r_sigs = [rival_sigs] if isinstance(rival_sigs, str) else rival_sigs
+
+            intersection = set(xcats).intersection(r_sigs)
+            missing = set(r_sigs).difference(intersection)
+
+            rival_error = f"The additional signals must be present in the defined " \
+                          f"DataFrame. It is currently missing, {missing}."
+            assert set(r_sigs).issubset(set(xcats)), rival_error
+
+            signals += r_sigs
+
+        self.signals = signals
+
+        self.df = categories_df(df, xcats=self.signals + [ret], cids=cids, val='value',
                                 start=start, end=end, freq=freq, blacklist=blacklist,
                                 lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum'])
 
-        if sig_neg:
-            self.df.loc[:, sig] *= -1
-            self.sig = sig + "_NEG"
-            self.df.rename(columns={sig: self.sig}, inplace=True)
-        else:
-            self.sig = sig
-
-        self.ret = ret
-        self.freq = freq
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
-        self.df_cs = self.panel_relations(cs_type='cids')
-        self.df_ys = self.panel_relations(cs_type='years')
+
+        if sig_neg:
+            self.df.loc[:, self.signals] *= -1
+            s_copy = self.signals.copy()
+
+            self.signals = [s + "_NEG" for s in self.signals]
+            self.sig += "_NEG"
+            self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
+
+        if len(self.signals) > 1:
+
+            self.df_sigs = self.__rival_sigs__()
+
+        self.df_cs = self.__output_table__(cs_type='cids')
+        self.df_ys = self.__output_table__(cs_type='years')
 
     @staticmethod
-    def df_isolator(df: pd.DataFrame, cs: str, cs_type: str):
-        # Todo: rename to __slice_df__ and hide from view
+    def __slice_df__(df: pd.DataFrame, cs: str, cs_type: str):
         """
-        Slice dataframe by year, cross-section, or use full panel
+        Slice DataFrame by year, cross-section, or use full panel.
 
         :param <pd.DataFrame> df: standardised DataFrame.
         :param <str> cs: individual segment, cross-section or year.
@@ -89,67 +134,133 @@ class SignalReturnRelations:
 
         return df_cs
 
-    def panel_relations(self, cs_type: str = 'cids'):
-        # Todo: rename to __output_table__ and hide from view
+    def __table_stats__(self, df_segment: pd.DataFrame, df_out: pd.DataFrame,
+                        segment: str, signal: str):
         """
-        Empty DataFrame for output on the signal-return relation
+        Method used to compute the evaluation metrics across segments: cross-section,
+        yearly or category level.
+
+        :param <pd.DataFrame> df_segment: segmented DataFrame.
+        :param <pd.DataFrame> df_out: metric DataFrame where the index will be all
+            segments for the respective segmentation type.
+        :param <str> segment: segment which could either be an individual cross-section,
+            year or category. Will form the index of the returned DataFrame.
+        :param <str> signal: signal category.
+        """
+
+        df_sgs = np.sign(df_segment.loc[:, [self.ret, signal]])
+        # Exact zeroes are disqualified for sign analysis only.
+        df_sgs = df_sgs[~((df_sgs.iloc[:, 0] == 0) | (df_sgs.iloc[:, 1] == 0))]
+
+        sig_sign = df_sgs[signal]
+        ret_sign = df_sgs[self.ret]
+
+        df_out.loc[segment, "accuracy"] = skm.accuracy_score(sig_sign, ret_sign)
+        df_out.loc[segment, "bal_accuracy"] = skm.balanced_accuracy_score(sig_sign,
+                                                                          ret_sign)
+        df_out.loc[segment, "pos_sigr"] = np.mean(sig_sign == 1)
+        df_out.loc[segment, "pos_retr"] = np.mean(ret_sign == 1)
+        df_out.loc[segment, "pos_prec"] = skm.precision_score(ret_sign, sig_sign,
+                                                              pos_label=1)
+        df_out.loc[segment, "neg_prec"] = skm.precision_score(ret_sign, sig_sign,
+                                                              pos_label=-1)
+
+        ret_vals, sig_vals = df_segment[self.ret], df_segment[signal]
+        df_out.loc[segment, ["kendall", "kendall_pval"]] = stats.kendalltau(ret_vals,
+                                                                            sig_vals)
+        corr, corr_pval = stats.pearsonr(ret_vals, sig_vals)
+        df_out.loc[segment, ["pearson", "pearson_pval"]] = np.array([corr, corr_pval])
+
+        return df_out
+
+    def __output_table__(self, cs_type: str = 'cids'):
+        """
+        Creates a DataFrame with information on the signal-return relation across
+        cross-sections or years and, additionally, the panel.
 
         :param <str> cs_type: the segmentation type.
 
         """
 
-        assert cs_type in ['cids', 'years']
-        # Todo: should not be checked here, but at user entry menthod
-        df = self.df.dropna(how='any')
+        df = self.df.dropna(how="any")
 
-        if cs_type == 'cids':
+        if cs_type == "cids":
             css = self.cids
         else:
-            df['year'] = np.array(df.reset_index(level=1)['real_date'].dt.year)
-            css = [str(y) for y in list(set(df['year']))]
+            df["year"] = np.array(df.reset_index(level=1)["real_date"].dt.year)
+            css = [str(y) for y in list(set(df["year"]))]
             css = sorted(css)
 
         statms = self.metrics
-        df_out = pd.DataFrame(index=['Panel', 'Mean', 'PosRatio'] + css, columns=statms)
+        df_out = pd.DataFrame(index=["Panel", "Mean", "PosRatio"] + css, columns=statms)
 
-        for cs in (css + ['Panel']):
+        for cs in (css + ["Panel"]):
 
-            df_cs = self.df_isolator(df=df, cs=cs, cs_type=cs_type)
+            df_cs = self.__slice_df__(df=df, cs=cs, cs_type=cs_type)
+            df_out = self.__table_stats__(df_segment=df_cs, df_out=df_out, segment=cs,
+                                          signal=self.sig)
 
-            df_sgs = np.sign(df_cs.loc[:, [self.ret, self.sig]])
-            # Exact zeroes are disqualified for sign analysis only
-            df_sgs = df_sgs[~((df_sgs.iloc[:, 0] == 0) | (df_sgs.iloc[:, 1] == 0))]
-            
-            sig = df_sgs[self.sig]
-            ret = df_sgs[self.ret]
-            df_out.loc[cs, 'accuracy'] = skm.accuracy_score(sig, ret)
-            df_out.loc[cs, 'bal_accuracy'] = skm.balanced_accuracy_score(sig, ret)
-            df_out.loc[cs, 'pos_sigr'] = np.mean(sig == 1)
-            df_out.loc[cs, "pos_retr"] = np.mean(ret == 1)
-            df_out.loc[cs, 'pos_prec'] = skm.precision_score(ret, sig, pos_label=1)
-            df_out.loc[cs, 'neg_prec'] = skm.precision_score(ret, sig, pos_label=-1)
-
-            ret_vals, sig_vals = df_cs[self.ret], df_cs[self.sig]
-            df_out.loc[cs, ['kendall', 'kendall_pval']] = stats.kendalltau(ret_vals,
-                                                                           sig_vals)
-            corr, corr_pval = stats.pearsonr(ret_vals, sig_vals)
-            df_out.loc[cs, ['pearson', 'pearson_pval']] = np.array([corr, corr_pval])
-
-        df_out.loc['Mean', :] = df_out.loc[css, :].mean()
+        df_out.loc["Mean", :] = df_out.loc[css, :].mean()
 
         above50s = statms[0:6]
-        df_out.loc['PosRatio', above50s] = (df_out.loc[css, above50s] > 0.5).mean()
+        df_out.loc["PosRatio", above50s] = (df_out.loc[css, above50s] > 0.5).mean()
 
         above0s = statms[6::2]
         pos_corr_coefs = df_out.loc[css, above0s] > 0
-        df_out.loc['PosRatio', above0s] = pos_corr_coefs.mean()
+        df_out.loc["PosRatio", above0s] = pos_corr_coefs.mean()
 
         below50s = statms[7::2]
         pvals_bool = df_out.loc[css, below50s] < 0.5
         pos_pvals = np.mean(np.array(pvals_bool) * np.array(pos_corr_coefs), axis=0)
         # Positive correlation with error prob < 50%.
-        df_out.loc['PosRatio', below50s] = pos_pvals
-        return df_out.astype('float')
+        df_out.loc["PosRatio", below50s] = pos_pvals
+
+        return df_out.astype("float")
+
+    def __rival_sigs__(self):
+        """
+        Produces the panel-level table for the additional signals.
+        """
+
+        df_out = pd.DataFrame(index=self.signals, columns=self.metrics)
+
+        for s in self.signals:
+            df_out = self.__table_stats__(
+                df_segment=self.df, df_out=df_out, segment=s, signal=s
+            )
+
+        return df_out
+
+    def signals_table(self, sigs: List[str] = None):
+        """
+        Output table on relations of various signals with the target return.
+
+        :param <List[str]> sigs: signal categories to included in the panel-level table.
+            Default is None and all present signals will be displayed. Alternative is a
+            valid subset of the possible categories. Primary signal must be passed if to
+            be included.
+
+        NB.:
+        Analysis will be based exclusively on the panel level. Will only return a table
+        if rival signals have been defined upon instantiation.
+        """
+
+        try:
+            df_sigs = self.df_sigs.round(decimals=3)
+        except Exception:
+            error_msg = "Additional signals have not been defined on the instance."
+            raise AttributeError(error_msg)
+        else:
+            # Set to all available signals.
+            sigs = self.signals if sigs is None else sigs
+
+            assert isinstance(sigs, list), "List of signals expected."
+
+            sigs_error = f"The requested signals must be a subset of the primary plus " \
+                         f"additional signals received, {self.signals}."
+            assert set(sigs).issubset(set(self.signals)), sigs_error
+
+            return df_sigs.loc[sigs, :]
 
     def cross_section_table(self):
         """ Output table on relations across sections and the panel. """
@@ -161,8 +272,7 @@ class SignalReturnRelations:
         return self.df_ys.round(decimals=3)
 
     @staticmethod
-    def yaxis_lim(accuracy_df: pd.DataFrame):
-        # Todo: rename to __yaxis_lim__ and hide from view
+    def __yaxis_lim__(accuracy_df: pd.DataFrame):
         """Determines the range the y-axis is defined over.
 
         :param <pd.DataFrame> accuracy_df: two dimensional DataFrame with accuracy &
@@ -172,18 +282,20 @@ class SignalReturnRelations:
         """
         y_axis = lambda min_correl: min_correl > 0.45
         min_value = accuracy_df.min().min()
+        # Ensures any accuracy statistics greater than 0.5 are more pronounced given the
+        # adjusted scale.
         y_input = 0.45 if y_axis(min_value) else min_value
 
         return y_input
 
-    def accuracy_bars(self, type: str = 'cross_section', title: str = None,
+    def accuracy_bars(self, type: str = "cross_section", title: str = None,
                       size: Tuple[float] = None,
-                      legend_pos: str = 'best'):
+                      legend_pos: str = "best"):
         """
         Plot bar chart for the overall and balanced accuracy metrics.
 
         :param <str> type: type of segment over which bars are drawn. Either
-            'cross_section' (default) or 'years'.
+            "cross_section" (default), "years" or "signals".
         :param <str> title: chart header - default will be applied if none is chosen.
         :param <Tuple[float]> size: 2-tuple of width and height of plot - default will be
             applied if none is chosen.
@@ -192,13 +304,20 @@ class SignalReturnRelations:
 
         """
 
-        assert type in ['cross_section', 'years']
+        assert type in ["cross_section", "years", "signals"]
 
-        df_xs = self.df_cs if type == 'cross_section' else self.df_ys
+        if type == "cross_section":
+            df_xs = self.df_cs
+        elif type == "years":
+            df_xs = self.df_ys
+        else:
+            df_xs = self.df_sigs
+
         dfx = df_xs[~df_xs.index.isin(['PosRatio'])]
 
         if title is None:
-            title = f"Accuracy for sign prediction of {self.ret} based on {self.sig} " \
+            refsig = "various signals" if type == "signals" else self.sig
+            title = f"Accuracy for sign prediction of {self.ret} based on {refsig} " \
                     f"at {self.dic_freq[self.freq]} frequency."
         if size is None:
             size = (np.max([dfx.shape[0] / 2, 8]), 6)
@@ -220,22 +339,24 @@ class SignalReturnRelations:
         plt.axhline(y=0.5, color='black',
                     linestyle='-', linewidth=0.5)
 
-        y_input = self.yaxis_lim(accuracy_df=dfx.loc[:,
-                                             ['accuracy', 'bal_accuracy']])
+        y_input = self.__yaxis_lim__(
+            accuracy_df=dfx.loc[:, ['accuracy', 'bal_accuracy']]
+        )
+
         plt.ylim(round(y_input, 2))
 
         plt.title(title)
         plt.legend(loc=legend_pos)
         plt.show()
 
-    def correlation_bars(self, type: str = 'cross_section', title: str = None,
+    def correlation_bars(self, type: str = "cross_section", title: str = None,
                          size: Tuple[float] = None,
-                         legend_pos: str = 'best'):
+                         legend_pos: str = "best"):
         """
         Plot correlation coefficients and significance.
 
-        :param <str> type: type of segment over which bars are drawn. Must be
-            "cross-section" (default) or 'years'.
+        :param <str> type: type of segment over which bars are drawn. Either
+            "cross_section" (default), "years" or "signals".
         :param <str> title: chart header. Default will be applied if none is chosen.
         :param <Tuple[float]> size: 2-tuple of width and height of plot.
             Default will be applied if none is chosen.
@@ -243,8 +364,15 @@ class SignalReturnRelations:
             See matplotlib.pyplot.legend.
 
         """
+        assert type in ["cross_section", "years", "signals"]
 
-        df_xs = self.df_cs if type == 'cross_section' else self.df_ys
+        if type == "cross_section":
+            df_xs = self.df_cs
+        elif type == "years":
+            df_xs = self.df_ys
+        else:
+            df_xs = self.df_sigs
+
         # Panel plus the cs_types.
         dfx = df_xs[~df_xs.index.isin(['PosRatio', 'Mean'])]
 
@@ -256,9 +384,9 @@ class SignalReturnRelations:
         kprobs[kprobs == 0] = 0.01
 
         if title is None:
+            refsig = "various signals" if type == "signals" else self.sig
             title = f"Positive correlation probability of {self.ret} " \
-                    f"and lagged {self.sig} " \
-                    f"at {self.dic_freq[self.freq]} frequency."
+                    f"and lagged {refsig} at {self.dic_freq[self.freq]} frequency."
         if size is None:
             size = (np.max([dfx.shape[0]/2, 8]), 6)
 
@@ -271,10 +399,12 @@ class SignalReturnRelations:
         plt.bar(x_indexes + w / 2, kprobs, label='Kendall',
                 width=w, color='steelblue')
         plt.xticks(ticks=x_indexes, labels=dfx.index, rotation=0)
+
         plt.axhline(y=0.95, color='orange', linestyle='--',
                     linewidth=0.5, label='95% probability')
         plt.axhline(y=0.99, color='red', linestyle='--',
                     linewidth=0.5, label='99% probability')
+
         plt.title(title)
         plt.legend(loc=legend_pos)
         plt.show()
@@ -336,11 +466,6 @@ class SignalReturnRelations:
 
         return dfsum
 
-    # Todo: add method .rival_sigs(sigs, sig_neg: bool = False)
-    #  In this case a comparative output table is returned with the Panel
-    #  row of the original table only, but for the original signal and
-    #  all rival categories.
-
 
 if __name__ == "__main__":
 
@@ -365,17 +490,16 @@ if __name__ == "__main__":
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    srr = SignalReturnRelations(dfd, sig='CRY', ret='XR', freq='D', blacklist=black)
-    srr.summary_table()
-    srn = SignalReturnRelations(dfd, sig='CRY', sig_neg=True,
-                                ret='XR', freq='D', blacklist=black)
-    srn.summary_table()
+    # Additional signals.
+    srn = SignalReturnRelations(dfd, sig='CRY', rival_sigs=['INFL', 'GROWTH'],
+                                sig_neg=False, ret='XR', freq='D', blacklist=black)
 
-    srr.correlation_bars(type='cross_section')
-    srn.correlation_bars(type='cross_section')
+    df_sigs = srn.signals_table(sigs=['CRY', 'INFL'])
+    df_sigs_all = srn.signals_table()
 
-    srr.accuracy_bars(type='cross_section')
-    df_cs_stats = srr.cross_section_table()
-    df_ys_stats = srr.yearly_table()
-    print(df_cs_stats)
-    print(df_ys_stats)
+    srn.accuracy_bars(type="signals", title="Accuracy measure between target return, XR,"
+                                            " and the respective signals, ['CRY', 'INFL'"
+                                            ", 'GROWTH'].")
+    srn.accuracy_bars(type="signals")
+
+    srn.correlation_bars(type="signals")
