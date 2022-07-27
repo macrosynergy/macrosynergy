@@ -1,4 +1,5 @@
 
+import numpy as np
 import pandas as pd
 from typing import List
 from macrosynergy.management.simulate_quantamental_data import make_qdf
@@ -43,12 +44,18 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         relative value category. Only applies if rel_xcats is None. Default is 'R'
 
     :return <pd.DataFrame>: standardized DataFrame with the relative values, featuring
-        the categories: 'cid', 'xcats', 'real_date' and 'value'.
+        the categories: 'cid', 'xcat', 'real_date' and 'value'.
 
     """
+
+    expected_columns = ["cid", "xcat", "real_date", "value"]
+    col_error = f"The DataFrame must contain the necessary columns: {expected_columns}."
+    assert set(expected_columns).issubset(set(df.columns)), col_error
+
+    df = df.loc[:, ["cid", "xcat", "real_date", "value"]]
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
-    assert rel_meth in ['subtract', 'divide'], "rel_meth must be 'subtract' or 'divide'"
+    assert rel_meth in ["subtract", "divide"], "rel_meth must be 'subtract' or 'divide'"
 
     xcat_error = "List of categories or single single category string expected "
     assert isinstance(xcats, (list, str)), xcat_error
@@ -72,6 +79,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
     dfx = reduce_df(df, xcats, cids, start, end, blacklist,
                     out_all=False)
+
     if cids is None:
         cids = list(dfx['cid'].unique())
 
@@ -198,26 +206,6 @@ if __name__ == "__main__":
                                       blacklist=black, rel_meth='subtract',
                                       rel_xcats=None, postfix='RV')
 
-    dfd_2 = make_relative_value(dfd, xcats=['XR', 'GROWTH', 'INFL'], cids=None,
-                                blacklist=None,  basket=['AUD', 'CAD', 'GBP'],
-                                rel_meth='subtract', rel_xcats=['XRvB3', 'GROWTHvB3',
-                                'INFLvB3'])
-
-    dfd_3 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=None,
-                                blacklist=None,  basket=['AUD'],
-                                rel_meth='subtract', rel_xcats=None, postfix='RV')
-
-    # Contrived test examples.
-    dfd_4 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=['AUD', 'CAD'],
-                                blacklist=None,  basket=['AUD'],
-                                rel_meth='subtract', rel_xcats=None, postfix='RV')
-
-    dfd_5 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=['AUD', 'CAD'],
-                                blacklist=None,  basket=['AUD'],
-                                rel_meth='divide', rel_xcats=['GROWTH_D', 'INFL_D'],
-                                postfix=None)
-    print(dfd_5)
-
     # Testing for complete-cross parameter.
     xcats = ['XR', 'CRY']
     start = '2000-01-01'
@@ -230,7 +218,10 @@ if __name__ == "__main__":
     filt1 = ~((dfx['cid'] == 'AUD') & (dfx['xcat'] == 'XR'))
     dfdx = dfx[filt1]
     # Pass in the filtered DataFrame.
-    dfd_rl = make_relative_value(dfdx, xcats=xcats, cids=cids, start=start,
+    dfdx["ticker"] = dfdx["cid"] + "_" + dfdx["xcat"]
+
+    dfd_rl = make_relative_value(df=dfdx, xcats=xcats, cids=cids, start=start,
                                  end=end, blacklist=None, basket=None,
                                  complete_cross=True, rel_meth='subtract',
                                  rel_xcats=None, postfix='RV')
+    print(dfd_rl)
