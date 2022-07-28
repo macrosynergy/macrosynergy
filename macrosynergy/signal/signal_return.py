@@ -158,6 +158,11 @@ class SignalReturnRelations:
         :param <str> signal: signal category.
         """
 
+        # Account for NaN values between the single respective signal and return. Only
+        # applicable if the segmentation type is signal.
+        if not self.cosp:
+            df_segment = df_segment.dropna(axis=0, how="any")
+
         df_sgs = np.sign(df_segment.loc[:, [self.ret, signal]])
         # Exact zeroes are disqualified for sign analysis only.
         df_sgs = df_sgs[~((df_sgs.iloc[:, 0] == 0) | (df_sgs.iloc[:, 1] == 0))]
@@ -194,6 +199,7 @@ class SignalReturnRelations:
 
         # Analysis completed exclusively on the primary signal.
         df = self.df[[self.ret, self.sig]]
+
         if self.cosp:
             # Align over the return & signal.
             df = df.dropna(how="any")
@@ -252,16 +258,28 @@ class SignalReturnRelations:
 
         df_out = pd.DataFrame(index=self.signals, columns=self.metrics)
 
-        df_xcat = df.loc[:, ["xcat", "real_date"]]
-        df_group = (
-            df_xcat.groupby(["xcat"]).aggregate(
-                min_date=pd.NamedAgg(column="real_date", aggfunc="min"),
-                max_date=pd.NamedAgg(column="real_date", aggfunc="max"))
-        )
-        print(df_group)
+        if self.cosp:
+            df_xcat = df.loc[:, ["xcat", "real_date"]]
+            df_group = (
+                df_xcat.groupby(["xcat"]).aggregate(
+                    min_date=pd.NamedAgg(column="real_date", aggfunc="min"),
+                    max_date=pd.NamedAgg(column="real_date", aggfunc="max"))
+            )
+
+            start_d = max(df_group['min_date'])
+            end_d = min(df_group['max_date'])
+
+            dfw = self.df.reset_index(level=[0])
+            # Truncate such that the categories are defined over the same time-horizon.
+            dfw = dfw.truncate(before=start_d, after=end_d)
+            df = dfw.reset_index().set_index(['cid', 'real_date'])
+
+        else:
+            df = self.df
+
         for s in self.signals:
             df_out = self.__table_stats__(
-                df_segment=self.df, df_out=df_out, segment=s, signal=s
+                df_segment=df, df_out=df_out, segment=s, signal=s
             )
 
         return df_out
