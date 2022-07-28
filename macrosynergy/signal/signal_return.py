@@ -28,6 +28,14 @@ class SignalReturnRelations:
         applied to all rival signals.
     :param <bool> sig_neg: if set to True puts the signal in negative terms for all
         analysis. Default is False.
+    :param <bool> cosp: If True the comparative statistics are calculated only for the
+        time-period where data is available for all compared instances (cross-sections,
+        signals etc). The start and end date used will be determined by the intersection
+        across the union of the respective segmentation type. Naturally, if True, the
+        start & end parameters will become redundant. Default is False and the
+        comparative statistics, for the various segments, will be potentially computed
+        over different time horizons which could result in spurious comparative
+        statistics.
     :param <str> start: earliest date in ISO format. Default is None in which case the
         earliest date available will be used.
     :param <str> end: latest date in ISO format. Default is None in which case the
@@ -49,9 +57,9 @@ class SignalReturnRelations:
     """
     def __init__(self, df: pd.DataFrame, ret: str, sig: str,
                  rival_sigs: Union[str, List[str]] = None, cids: List[str] = None,
-                 sig_neg: bool = False, start: str = None, end: str = None,
-                 fwin: int = 1, blacklist: dict = None, agg_sig: str = 'last',
-                 freq: str = 'M'):
+                 sig_neg: bool = False, cosp: bool = False, start: str = None,
+                 end: str = None, fwin: int = 1, blacklist: dict = None,
+                 agg_sig: str = 'last', freq: str = 'M'):
 
         self.dic_freq = {'D': 'daily', 'W': 'weekly', 'M': 'monthly',
                          'Q': 'quarterly', 'A': 'annual'}
@@ -65,6 +73,7 @@ class SignalReturnRelations:
         self.ret = ret
         self.freq = freq
 
+        self.cosp = cosp
         self.start = start
         self.end = end
         self.blacklist = blacklist
@@ -182,7 +191,9 @@ class SignalReturnRelations:
 
         """
 
-        df = self.df.dropna(how="any")
+        # Analysis completed exclusively on the primary signal.
+        df = self.df[[self.ret, self.sig]]
+        df = df.dropna(how="any")
 
         if cs_type == "cids":
             css = self.cids
@@ -327,17 +338,17 @@ class SignalReturnRelations:
         x_indexes = np.arange(dfx.shape[0])
 
         w = 0.4
-        plt.bar(x_indexes - w / 2, dfx['accuracy'],
-                label='Accuracy', width=w, color='lightblue')
-        plt.bar(x_indexes + w / 2, dfx['bal_accuracy'],
-                label='Balanced Accuracy', width=w,
-                color='steelblue')
+        plt.bar(
+            x_indexes - w / 2, dfx['accuracy'], label='Accuracy', width=w,
+            color='lightblue'
+        )
+        plt.bar(
+            x_indexes + w / 2, dfx['bal_accuracy'], label='Balanced Accuracy', width=w,
+            color='steelblue'
+        )
 
-        plt.xticks(ticks=x_indexes, labels=dfx.index,
-                   rotation=0)
-
-        plt.axhline(y=0.5, color='black',
-                    linestyle='-', linewidth=0.5)
+        plt.xticks(ticks=x_indexes, labels=dfx.index, rotation=0)
+        plt.axhline(y=0.5, color='black', linestyle='-', linewidth=0.5)
 
         y_input = self.__yaxis_lim__(
             accuracy_df=dfx.loc[:, ['accuracy', 'bal_accuracy']]
@@ -376,11 +387,16 @@ class SignalReturnRelations:
         # Panel plus the cs_types.
         dfx = df_xs[~df_xs.index.isin(['PosRatio', 'Mean'])]
 
-        pprobs = np.array([(1 - pv) * (np.sign(cc) + 1) / 2
-                           for pv, cc in zip(dfx['pearson_pval'], dfx['pearson'])])
+        pprobs = np.array(
+            [(1 - pv) * (np.sign(cc) + 1) / 2 for pv, cc in zip(dfx["pearson_pval"],
+                                                                dfx["pearson"])]
+        )
         pprobs[pprobs == 0] = 0.01
-        kprobs = np.array([(1 - pv) * (np.sign(cc) + 1) / 2
-                           for pv, cc in zip(dfx['kendall_pval'], dfx['kendall'])])
+        kprobs = np.array(
+            [(1 - pv) * (np.sign(cc) + 1) / 2 for pv, cc in zip(dfx["kendall_pval"],
+                                                                dfx["kendall"])]
+        )
+
         kprobs[kprobs == 0] = 0.01
 
         if title is None:
@@ -394,16 +410,17 @@ class SignalReturnRelations:
         plt.figure(figsize=size)
         x_indexes = np.arange(len(dfx.index))
         w = 0.4
-        plt.bar(x_indexes - w / 2, pprobs, label='Pearson',
-                width=w, color='lightblue')
-        plt.bar(x_indexes + w / 2, kprobs, label='Kendall',
-                width=w, color='steelblue')
+        plt.bar(x_indexes - w / 2, pprobs, label='Pearson', width=w, color='lightblue')
+        plt.bar(x_indexes + w / 2, kprobs, label='Kendall', width=w, color='steelblue')
         plt.xticks(ticks=x_indexes, labels=dfx.index, rotation=0)
 
-        plt.axhline(y=0.95, color='orange', linestyle='--',
-                    linewidth=0.5, label='95% probability')
-        plt.axhline(y=0.99, color='red', linestyle='--',
-                    linewidth=0.5, label='99% probability')
+        plt.axhline(
+            y=0.95, color='orange', linestyle='--', linewidth=0.5,
+            label='95% probability'
+        )
+        plt.axhline(
+            y=0.99, color='red', linestyle='--', linewidth=0.5, label='99% probability'
+        )
 
         plt.title(title)
         plt.legend(loc=legend_pos)
