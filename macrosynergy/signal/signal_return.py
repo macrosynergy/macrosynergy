@@ -73,6 +73,7 @@ class SignalReturnRelations:
         self.ret = ret
         self.freq = freq
 
+        assert isinstance(cosp, bool), f"<bool> object expected and not {type(cosp)}."
         self.cosp = cosp
         self.start = start
         self.end = end
@@ -193,7 +194,20 @@ class SignalReturnRelations:
 
         # Analysis completed exclusively on the primary signal.
         df = self.df[[self.ret, self.sig]]
-        df = df.dropna(how="any")
+        if self.cosp:
+            # Align over the return & signal.
+            df = df.dropna(how="any")
+            df = df.reset_index()
+            dfw = (df[df["xcat"] == self.sig]).pivot(
+                index='real_date', columns='cid', values='value'
+            )
+            # Align over the cross-sections.
+            dfw = dfw.dropna(how="any")
+            df = dfw.stack().to_frame("value").reset_index()
+        else:
+            # Will remove any timestamps where both the signal & return are not realised.
+            # Time horizon will not be aligned across cross-sections.
+            df = df.dropna(how="any")
 
         if cs_type == "cids":
             css = self.cids
