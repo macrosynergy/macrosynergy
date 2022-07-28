@@ -119,7 +119,7 @@ class SignalReturnRelations:
 
         if len(self.signals) > 1:
 
-            self.df_sigs = self.__rival_sigs__()
+            self.df_sigs = self.__rival_sigs__(df=df)
 
         self.df_cs = self.__output_table__(cs_type='cids')
         self.df_ys = self.__output_table__(cs_type='years')
@@ -242,13 +242,23 @@ class SignalReturnRelations:
 
         return df_out.astype("float")
 
-    def __rival_sigs__(self):
+    def __rival_sigs__(self, df: pd.DataFrame):
         """
         Produces the panel-level table for the additional signals.
+
+        :param <pd.DataFrame> df: the original standardized DataFrame passed into the
+            Class.
         """
 
         df_out = pd.DataFrame(index=self.signals, columns=self.metrics)
 
+        df_xcat = df.loc[:, ["xcat", "real_date"]]
+        df_group = (
+            df_xcat.groupby(["xcat"]).aggregate(
+                min_date=pd.NamedAgg(column="real_date", aggfunc="min"),
+                max_date=pd.NamedAgg(column="real_date", aggfunc="max"))
+        )
+        print(df_group)
         for s in self.signals:
             df_out = self.__table_stats__(
                 df_segment=self.df, df_out=df_out, segment=s, signal=s
