@@ -34,19 +34,20 @@ class Basket(object):
         :param <str> start: earliest date in ISO 8601 format. Default is None.
         :param <str> end: latest date in ISO 8601 format. Default is None.
         :param <dict> blacklist: cross-sections with date ranges that should be excluded
-            from the dataframe. If one cross-section has several blacklist periods append
+            from the DataFrame. If one cross-section has several blacklist periods append
             numbers to the cross-section code.
         :param List[str] ewgts: one or more postfixes that may identify exogenous weight
             categories. Similar to return postfixes they are appended to base tickers.
 
-        N.B.: Each instance of the class will update associated standardised dataframes,
+        N.B.: Each instance of the class will update associated standardised DataFrames,
         containing return and carry categories, and external weights.
         """
+        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
         assert isinstance(contracts, list)
-        assert all(isinstance(c, str) for c in contracts), \
-            "`contracts` must be list of strings"
-        assert isinstance(ret, str), "`ret`must be a string"
+        c_error = "Contracts must be a list of strings."
+        assert all(isinstance(c, str) for c in contracts), c_error
+        assert isinstance(ret, str), "`ret` must be a string"
 
         df = reduce_df_by_ticker(df, start=start, end=end, ticks=None,
                                  blacklist=blacklist)
@@ -71,7 +72,7 @@ class Basket(object):
         Adds multiple attributes to class based on postfixes that denote carry or
         external weight types.
 
-        :param <pd.DataFrame> df: original, standardised dataframe.
+        :param <pd.DataFrame> df: original, standardised DataFrame.
         :param <List[str]> pfx: category postfixes involved in the basket calculation.
         :param <str> pf_name: associated name of the postfix "cry" or "wgt".
 
@@ -102,7 +103,7 @@ class Basket(object):
     @staticmethod
     def pivot_dataframe(df, tick_list):
         """
-        Reduces the standardised dataframe to include a subset of the possible tickers
+        Reduces the standardised DataFrame to include a subset of the possible tickers
         and, subsequently returns a wide dataframe: each column corresponds to a ticker.
 
         :param <List[str]> tick_list: list of the respective tickers.
@@ -771,6 +772,7 @@ if __name__ == "__main__":
     # First test. Multiple carries. Equal weight method.
     # The main aspect to check in the code is that basket performance has been applied to
     # both the return category and the multiple carry categories.
+    print(dfd)
     basket_1 = Basket(df=dfd, contracts=contracts_1,
                       ret="XR_NSA", cry=["CRY_NSA", "CRR_NSA"], blacklist=black)
     basket_1.make_basket(weight_meth="equal", max_weight=0.55,
@@ -781,6 +783,7 @@ if __name__ == "__main__":
                          basket_name="GLB_FIXED")
 
     dfp_1 = basket_1.return_basket()
+    print(dfp_1)
     dfw_1 = basket_1.return_weights()
 
     df_basket = basket_1.return_basket("GLB_EQUAL")

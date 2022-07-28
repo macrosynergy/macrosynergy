@@ -49,6 +49,7 @@ def make_blacklist(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         keys (i.e. TRY_1, TRY_2, etc.)
     """
 
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
     dfd = reduce_df(df=df, xcats=[xcat], cids=cids, start=start, end=end)
     assert all(np.isin(dfd.value.dropna().unique(), [0, 1])), \
         "blacklist values must all be 0/1"

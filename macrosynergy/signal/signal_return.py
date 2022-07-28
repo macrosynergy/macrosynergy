@@ -53,6 +53,8 @@ class SignalReturnRelations:
                  fwin: int = 1, blacklist: dict = None, agg_sig: str = 'last',
                  freq: str = 'M'):
 
+        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+
         self.dic_freq = {'D': 'daily', 'W': 'weekly', 'M': 'monthly',
                          'Q': 'quarterly', 'A': 'annual'}
         freq_error = f"Frequency parameter must be one of {list(self.dic_freq.keys())}."

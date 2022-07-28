@@ -17,8 +17,8 @@ def expo_weights(lback_periods: int = 21, half_life: int = 11):
     :param <int> half_life: Refers to the half-time for "xma" and full lookback period
         for "ma". Default is 11.
 
-    :return <np.ndarray>: An Array of weights determined by the length of the Lookback
-        Period.
+    :return <np.ndarray>: An Array of weights determined by the length of the lookback
+        period.
 
     Note: 50% of the weight allocation will be applied to the number of days delimited by
           the half_life.
@@ -49,7 +49,7 @@ def expo_std(x: np.ndarray, w: np.ndarray, remove_zeros: bool = True):
     assert len(x) == len(w), "weights and window must have same length"
     if remove_zeros:
         x = x[x != 0]
-        w = w[0:len(x)] / sum(w[0:len(x)])  # Todo: seems redundant; consider removing
+        w = w[0:len(x)] / sum(w[0:len(x)])
     w = w / sum(w)  # weights are normalized
     mabs = np.sum(np.multiply(w, np.abs(x)))
     return mabs
@@ -83,7 +83,7 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     Estimate historic annualized standard deviations of asset returns. User Function.
     Controls the functionality.
 
-    :param <pd.Dataframe> df: standardized data frame with the following necessary columns:
+    :param <pd.Dataframe> df: standardized DataFrame with the following necessary columns:
         'cid', 'xcats', 'real_date' and 'value. Will contain all of the data across all
         macroeconomic fields.
     :param <str> xcat:  extended category denoting the return series for which volatility
@@ -111,12 +111,14 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         window instead.
     :param <str> postfix: string appended to category name for output; default is "ASD".
 
-    :return <pd.Dataframe>: standardized dataframe with the estimated annualized standard
+    :return <pd.Dataframe>: standardized DataFrame with the estimated annualized standard
         deviations of the chosen xcat.
         If the input 'value' is in % (as is the standard in JPMaQS) then the output
         will also be in %.
         'cid', 'xcat', 'real_date' and 'value'.
     """
+
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
     assert lback_periods > half_life, "Half life must be shorter than lookback period."
     assert lback_meth in ['xma', 'ma'], "Incorrect request."
@@ -128,11 +130,13 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     # "first valid index".
     if lback_meth == 'xma':
         weights = expo_weights(lback_periods, half_life)
-        dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(expo_std, w=weights,
-                                                                    remove_zeros=remove_zeros)
+        dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(
+            expo_std, w=weights, remove_zeros=remove_zeros
+        )
     else:
-        dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(flat_std,
-                                                                    remove_zeros=remove_zeros)
+        dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(
+            flat_std, remove_zeros=remove_zeros
+        )
 
     df_out = dfwa.stack().to_frame("value").reset_index()
 

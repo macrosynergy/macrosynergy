@@ -1,4 +1,5 @@
 
+import numpy as np
 import pandas as pd
 from typing import List
 from macrosynergy.management.simulate_quantamental_data import make_qdf
@@ -13,7 +14,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
     """
     Returns panel of relative values versus an average of cross-sections.
 
-    :param <pd.DataFrame> df:  standardized JPMaQS dataframe with the necessary
+    :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
     :param <List[str]> xcats: all extended categories for which relative values are to
         be calculated.
@@ -27,7 +28,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         the output.
     :param <List[str]> basket: cross-sections to be used for the relative value
         benchmark. The default is every cross-section in the chosen list that is
-        available in the dataframe over the respective time-period.
+        available in the DataFrame over the respective time-period.
         However, the basket can be reduced to a valid subset of the available
         cross-sections.
     :param <bool> complete_cross: Boolean parameter that outlines whether each category
@@ -42,12 +43,19 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
     :param <str> postfix: acronym to be appended to 'xcat' string to give the name for
         relative value category. Only applies if rel_xcats is None. Default is 'R'
 
-    :return <pd.Dataframe>: standardized dataframe with the relative values, featuring
-        the categories: 'cid', 'xcats', 'real_date' and 'value'.
+    :return <pd.DataFrame>: standardized DataFrame with the relative values, featuring
+        the categories: 'cid', 'xcat', 'real_date' and 'value'.
 
     """
 
-    assert rel_meth in ['subtract', 'divide'], "rel_meth must be 'subtract' or 'divide'"
+    expected_columns = ["cid", "xcat", "real_date", "value"]
+    col_error = f"The DataFrame must contain the necessary columns: {expected_columns}."
+    assert set(expected_columns).issubset(set(df.columns)), col_error
+
+    df = df.loc[:, ["cid", "xcat", "real_date", "value"]]
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+
+    assert rel_meth in ["subtract", "divide"], "rel_meth must be 'subtract' or 'divide'"
 
     xcat_error = "List of categories or single single category string expected "
     assert isinstance(xcats, (list, str)), xcat_error
@@ -66,11 +74,12 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         assert len(xcats) == len(rel_xcats), error_length
 
     col_names = ['cid', 'xcat', 'real_date', 'value']
-    # Host dataframe.
+    # Host DataFrame.
     df_out = pd.DataFrame(columns=col_names)
 
     dfx = reduce_df(df, xcats, cids, start, end, blacklist,
                     out_all=False)
+
     if cids is None:
         cids = list(dfx['cid'].unique())
 
@@ -120,7 +129,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
         dfx_xcat = df_xcat[['cid', 'real_date', 'value']]
 
-        # Reduce the dataframe to the specified basket.
+        # Reduce the DataFrame to the specified basket.
         dfb = dfx_xcat[dfx_xcat['cid'].isin(basket)]
 
         if len(basket) > 1:
@@ -162,7 +171,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
 if __name__ == "__main__":
 
-    # Simulate dataframe.
+    # Simulate DataFrame.
 
     cids = ['AUD', 'CAD', 'GBP', 'NZD']
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
@@ -197,26 +206,6 @@ if __name__ == "__main__":
                                       blacklist=black, rel_meth='subtract',
                                       rel_xcats=None, postfix='RV')
 
-    dfd_2 = make_relative_value(dfd, xcats=['XR', 'GROWTH', 'INFL'], cids=None,
-                                blacklist=None,  basket=['AUD', 'CAD', 'GBP'],
-                                rel_meth='subtract', rel_xcats=['XRvB3', 'GROWTHvB3',
-                                'INFLvB3'])
-
-    dfd_3 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=None,
-                                blacklist=None,  basket=['AUD'],
-                                rel_meth='subtract', rel_xcats=None, postfix='RV')
-
-    # Contrived test examples.
-    dfd_4 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=['AUD', 'CAD'],
-                                blacklist=None,  basket=['AUD'],
-                                rel_meth='subtract', rel_xcats=None, postfix='RV')
-
-    dfd_5 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=['AUD', 'CAD'],
-                                blacklist=None,  basket=['AUD'],
-                                rel_meth='divide', rel_xcats=['GROWTH_D', 'INFL_D'],
-                                postfix=None)
-    print(dfd_5)
-
     # Testing for complete-cross parameter.
     xcats = ['XR', 'CRY']
     start = '2000-01-01'
@@ -224,12 +213,15 @@ if __name__ == "__main__":
     dfx = reduce_df(df=dfd, xcats=xcats, cids=cids, start=start,
                     end=end, blacklist=None, out_all=False)
 
-    # On the reduced dataframe, remove a single cross-section from one of the
+    # On the reduced DataFrame, remove a single cross-section from one of the
     # categories.
     filt1 = ~((dfx['cid'] == 'AUD') & (dfx['xcat'] == 'XR'))
     dfdx = dfx[filt1]
-    # Pass in the filtered dataframe.
-    dfd_rl = make_relative_value(dfdx, xcats=xcats, cids=cids, start=start,
+    # Pass in the filtered DataFrame.
+    dfdx["ticker"] = dfdx["cid"] + "_" + dfdx["xcat"]
+
+    dfd_rl = make_relative_value(df=dfdx, xcats=xcats, cids=cids, start=start,
                                  end=end, blacklist=None, basket=None,
                                  complete_cross=True, rel_meth='subtract',
                                  rel_xcats=None, postfix='RV')
+    print(dfd_rl)
