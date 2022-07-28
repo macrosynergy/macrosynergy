@@ -219,7 +219,10 @@ class TestAll(unittest.TestCase):
         # Test value.
         df_cs_aud_acc = df_cs.loc['AUD', 'accuracy']
 
-        aud_df = srr.df.loc['AUD', :]
+        # Accounts for removal of dropna() from categories_df() function.
+        srr_df = srr.df.dropna(axis=0, how='any')
+
+        aud_df = srr_df.loc['AUD', :]
         # Remove zero values.
         aud_df = aud_df[~((aud_df.iloc[:, 0] == 0) | (aud_df.iloc[:, 1] == 0))]
         # In the context of the accuracy score, reducing the DataFrame to boolean values
@@ -236,7 +239,7 @@ class TestAll(unittest.TestCase):
         # used as quasi-ranking data.
         df_cs_usd_ken = df_cs.loc['USD', 'kendall']
 
-        usd_df = srr.df.loc['USD', :]
+        usd_df = srr_df.loc['USD', :]
         usd_df = usd_df[~((usd_df.iloc[:, 0] == 0) | (usd_df.iloc[:, 1] == 0))]
         x = stats.rankdata(usd_df[signal]).astype(int)
         y = stats.rankdata(usd_df[return_]).astype(int)
@@ -276,10 +279,12 @@ class TestAll(unittest.TestCase):
         return_series_pos = np.sign(usd_df[return_][positive_signals_index])
         return_series_neg = np.sign(usd_df[return_][~positive_signals_index])
 
-        positive_accuracy = accuracy_score(positive_signals,
-                                           return_series_pos)
-        negative_accuracy = accuracy_score(negative_signals,
-                                           return_series_neg)
+        positive_accuracy = accuracy_score(
+            positive_signals, return_series_pos
+        )
+        negative_accuracy = accuracy_score(
+            negative_signals, return_series_neg
+        )
 
         manual_precision = (positive_accuracy + (1 - negative_accuracy)) / 2
         df_cs_usd_posprec = df_cs.loc['USD', 'pos_prec']
@@ -310,7 +315,7 @@ class TestAll(unittest.TestCase):
                                     rival_sigs=rival_signals, sig_neg=False, freq="D",
                                     blacklist=self.blacklist)
 
-        df_sigs = srr.__rival_sigs__()
+        df_sigs = srr.__rival_sigs__(self.dfd)
 
         # Firstly, confirm that the index consists of only the primary and rival signals.
         self.assertEqual(list(df_sigs.index), [primary_signal] + rival_signals)
@@ -319,7 +324,9 @@ class TestAll(unittest.TestCase):
         # score. If correct, all metrics should be correct.
         growth_accuracy = df_sigs.loc["GROWTH", "accuracy"]
 
-        df_sgs = np.sign(srr.df.loc[:, ["GROWTH", "XR"]])
+        test_df = srr.df.loc[:, ["GROWTH", "XR"]]
+        test_df = test_df.dropna(axis=0, how='any')
+        df_sgs = np.sign(test_df)
         manual_value = accuracy_score(df_sgs["GROWTH"], df_sgs["XR"])
         self.assertEqual(growth_accuracy, manual_value)
 
