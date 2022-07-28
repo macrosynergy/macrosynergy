@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from sklearn import metrics as skm
 from scipy import stats
 from typing import List, Union, Tuple
+from datetime import timedelta
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import categories_df
@@ -204,12 +205,14 @@ class SignalReturnRelations:
             # Align over the return & signal.
             df = df.dropna(how="any")
             df = df.reset_index()
-            dfw = (df[df["xcat"] == self.sig]).pivot(
-                index='real_date', columns='cid', values='value'
+            dfw = (df.loc[:, 'real_date', 'cid', self.sig]).pivot(
+                index='real_date', columns='cid', values=self.sig
             )
             # Align over the cross-sections.
             dfw = dfw.dropna(how="any")
+
             df = dfw.stack().to_frame("value").reset_index()
+            df = df.pivot(index=('cid', 'real_date'), columns='xcat', values='value')
         else:
             # Will remove any timestamps where both the signal & return are not realised.
             # Time horizon will not be aligned across cross-sections.
@@ -259,21 +262,27 @@ class SignalReturnRelations:
         df_out = pd.DataFrame(index=self.signals, columns=self.metrics)
 
         if self.cosp:
-            df_xcat = df.loc[:, ["xcat", "real_date"]]
+            df_xcat = df.loc[:, ["xcat", "cid", "real_date"]]
             df_group = (
-                df_xcat.groupby(["xcat"]).aggregate(
+                df_xcat.groupby(["xcat", "cid"]).aggregate(
                     min_date=pd.NamedAgg(column="real_date", aggfunc="min"),
                     max_date=pd.NamedAgg(column="real_date", aggfunc="max"))
             )
 
-            start_d = max(df_group['min_date'])
-            end_d = min(df_group['max_date'])
+            # Before & After methods are inclusive. Therefore, add a date & apply.
+            start_d = max(df_group['min_date']) + timedelta(1)
+            end_d = min(df_group['max_date']) - timedelta(1)
 
-            dfw = self.df.reset_index(level=[0])
-            # Truncate such that the categories are defined over the same time-horizon.
-            dfw = dfw.truncate(before=start_d, after=end_d)
-            df = dfw.reset_index().set_index(['cid', 'real_date'])
+            storage = []
+            for c, cid_df in self.df.groupby(level=0):
 
+                dfw = cid_df.reset_index(level=[0])
+                # Truncate such that the categories are defined over the same
+                # time-horizon.
+                dfw = dfw.truncate(before=start_d, after=end_d)
+
+                storage.append(dfw.reset_index().set_index(['cid', 'real_date']))
+            df = pd.concat(storage)
         else:
             df = self.df
 
@@ -550,8 +559,8 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     # Additional signals.
-    srn = SignalReturnRelations(dfd, sig='CRY', rival_sigs=['INFL', 'GROWTH'],
-                                sig_neg=False, ret='XR', freq='D', blacklist=black)
+    srn = SignalReturnRelations(dfd, ret='XR', sig='CRY', rival_sigs=['INFL', 'GROWTH'],
+                                sig_neg=False, cosp=True, freq='D', blacklist=black)
 
     df_sigs = srn.signals_table(sigs=['CRY', 'INFL'])
     df_sigs_all = srn.signals_table()
