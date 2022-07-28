@@ -123,6 +123,11 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     """
 
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+
+    expected_columns = ["cid", "xcat", "real_date", "value"]
+    col_error = f"The DataFrame must contain the necessary columns: {expected_columns}."
+    assert set(expected_columns).issubset(set(df.columns)), col_error
+
     # --- Assertions
 
     assert neutral in ["mean", "median", "zero"]
@@ -142,7 +147,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
     # --- Prepare re-estimation dates and time-series DataFrame.
 
-    df = df.loc[:, ['cid', 'xcat', 'real_date', 'value']]
+    df = df.loc[:, expected_columns]
     df = reduce_df(df, xcats=[xcat], cids=cids,
                    start=start, end=end, blacklist=blacklist)
 
@@ -249,10 +254,7 @@ if __name__ == "__main__":
                           pan_weight=1.0, min_obs=261, est_freq="d")
 
     # Daily: cross.
+    dfd['ticker'] = dfd["cid"] + "_" + dfd["xcat"]
     dfzd = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids,
                           blacklist=black, iis=True, neutral='mean',
                           pan_weight=0.0, min_obs=261, est_freq="d")
-
-    panel_df = make_zn_scores(dfd, 'CRY', cids, start="2010-01-04", blacklist=black,
-                              sequential=False, min_obs=0, neutral='mean',
-                              iis=True, thresh=None, pan_weight=0.75, postfix='ZN')
