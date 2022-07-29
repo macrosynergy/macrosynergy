@@ -308,7 +308,10 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         dfc = dfc.pivot(index=('cid', 'real_date'), columns='xcat',
                         values=val)
 
-    return dfc.dropna()
+    # Adjusted to account for multiple signals requested. If the DataFrame is
+    # two-dimensional, signal & a return, NaN values will be handled inside other
+    # functionality, categories_df() is simply a support function.
+    return dfc.dropna(axis=0, how='all')
 
 
 if __name__ == "__main__":

@@ -280,8 +280,16 @@ class TestAll(unittest.TestCase):
         dates = pd.date_range(start=earliest_date, end=last_date, freq='M')
         # Reduce to a single cross-section.
         index = dfc.loc['AUD', :].index
+
+        self.assertTrue(len(index) == len(dates))
+
         # Subtract one from the manually assembled dates to adjust for the application of
         # a lag. Implicitly tests that the lag has been applied correctly.
+        # Confirm that a lag, of a single day, has been applied correctly by applying
+        # dropna() to the returned DataFrame. The method, categories_df(), will only
+        # drop rows where none of the cross-sections have a realised value.
+        dfc = dfc.dropna(how='any')
+        index = dfc.loc['AUD', :].index
         self.assertTrue(len(index) == len(dates) - 1)
 
         # Finally, test the aggregation method. There will always be two aggregation
