@@ -204,15 +204,24 @@ class SignalReturnRelations:
         if self.cosp:
             # Align over the return & signal.
             df = df.dropna(how="any")
-            df = df.reset_index()
-            dfw = (df.loc[:, 'real_date', 'cid', self.sig]).pivot(
+            df_mod = df.reset_index()
+            dfw = (df_mod.loc[:, ['real_date', 'cid', self.sig]]).pivot(
                 index='real_date', columns='cid', values=self.sig
             )
             # Align over the cross-sections.
             dfw = dfw.dropna(how="any")
 
-            df = dfw.stack().to_frame("value").reset_index()
-            df = df.pivot(index=('cid', 'real_date'), columns='xcat', values='value')
+            s_date = dfw.index[0]
+            e_date = dfw.index[-1]
+
+            storage = []
+            for c, cid_df in self.df.groupby(level=0):
+                cid_df = cid_df.droplevel(level=0)
+                # Will truncate across both the primary signal and return category.
+                cid_df = cid_df.loc[s_date:e_date, :].reset_index()
+                cid_df['cid'] = c
+                storage.append(cid_df.set_index(['cid', 'real_date']))
+            df = pd.concat(storage)
         else:
             # Will remove any timestamps where both the signal & return are not realised.
             # Time horizon will not be aligned across cross-sections.
