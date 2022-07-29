@@ -277,10 +277,22 @@ class SignalReturnRelations:
                     min_date=pd.NamedAgg(column="real_date", aggfunc="min"),
                     max_date=pd.NamedAgg(column="real_date", aggfunc="max"))
             )
+            
+            # Starting dates - will be iteratively updated.
+            start_d = min(df_group['min_date'])
+            end_d = max(df_group['max_date'])
 
-            # Before & After methods are inclusive. Therefore, add a date & apply.
-            start_d = max(df_group['min_date']) + timedelta(1)
-            end_d = min(df_group['max_date']) - timedelta(1)
+            # Shared date where each category has a realised value. Not aligned on the
+            # cross-section.
+            for cat, xcat_df in df_group.groupby(level=0):
+
+                d_min = max(xcat_df["min_date"])
+                if d_min > start_d:
+                    start_d = d_min
+
+                d_max = min(xcat_df["max_date"])
+                if d_max < end_d:
+                    end_d = d_max
 
             storage = []
             for c, cid_df in self.df.groupby(level=0):
