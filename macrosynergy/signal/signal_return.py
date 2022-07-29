@@ -215,7 +215,7 @@ class SignalReturnRelations:
             e_date = dfw.index[-1]
 
             storage = []
-            for c, cid_df in self.df.groupby(level=0):
+            for c, cid_df in df.groupby(level=0):
                 cid_df = cid_df.droplevel(level=0)
                 # Will truncate across both the primary signal and return category.
                 cid_df = cid_df.loc[s_date:e_date, :].reset_index()
@@ -570,6 +570,7 @@ if __name__ == "__main__":
     # Additional signals.
     srn = SignalReturnRelations(dfd, ret='XR', sig='CRY', rival_sigs=['INFL', 'GROWTH'],
                                 sig_neg=False, cosp=True, freq='D', blacklist=black)
+    print(srn.df_cs)
 
     df_sigs = srn.signals_table(sigs=['CRY', 'INFL'])
     df_sigs_all = srn.signals_table()
