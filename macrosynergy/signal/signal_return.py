@@ -277,7 +277,7 @@ class SignalReturnRelations:
                     min_date=pd.NamedAgg(column="real_date", aggfunc="min"),
                     max_date=pd.NamedAgg(column="real_date", aggfunc="max"))
             )
-            
+
             # Starting dates - will be iteratively updated.
             start_d = min(df_group['min_date'])
             end_d = max(df_group['max_date'])
