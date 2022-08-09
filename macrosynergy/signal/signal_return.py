@@ -107,6 +107,14 @@ class SignalReturnRelations:
         self.df = categories_df(df, xcats=self.signals + [ret], cids=cids, val='value',
                                 start=start, end=end, freq=freq, blacklist=blacklist,
                                 lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum'])
+        if self.cosp:
+            # Pass in the original DataFrame.
+            self.df = self.communal_sample(df=df)
+
+        else:
+            # Will remove any timestamps where both the signal & return are not realised.
+            # Time horizon will not be aligned across cross-sections.
+            self.df.dropna(how="any")
 
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
 
@@ -189,6 +197,51 @@ class SignalReturnRelations:
 
         return df_out
 
+    def communal_sample(self, df: pd.DataFrame):
+        """
+        Will reduce the instance's DataFrame to a time-period available across the
+        compared instances (cross-sections and signals).
+
+        :param <pd.Dataframe> df: standardized DataFrame with the following necessary
+            columns: 'cid', 'xcat', 'real_date' and 'value.
+
+        NB.: The objective is for each signal, both the primary & relative signals, and
+        the respective return category to be defined over the intersection - first
+        realised date each panel will be complete.
+        """
+
+        df_xcat = df.loc[:, ["xcat", "cid", "real_date"]]
+        # Find the minimum & maximum date across all categories in the DataFrame. The
+        # relative & primary signal analysis are completed over the same time-period.
+        df_group = (
+            df_xcat.groupby(["xcat", "cid"]).aggregate(
+                min_date=pd.NamedAgg(column="real_date", aggfunc="min"),
+                max_date=pd.NamedAgg(column="real_date", aggfunc="max"))
+        )
+
+        # Shared date - aligned on the category and cross-section level. If each
+        # category is conceptualised as a two-dimensional matrix where each cell is a
+        # realised timestamp for a respective cross-section, then each category's
+        # theoretical matrix must have the same dimensions
+        start_d = max(df_group['min_date'])
+        end_d = min(df_group['max_date'])
+
+        # Account for the lag of a single day applied during categories_df(). The
+        # shared dates calculation uses the original DataFrame where the lag has not
+        # been applied.
+        start_d = start_d + timedelta(days=1)
+
+        storage = []
+        for c, cid_df in self.df.groupby(level=0):
+            dfw = cid_df.reset_index(level=[0])
+            # Truncate such that the categories are defined over the same
+            # time-horizon.
+            dfw = dfw.truncate(before=start_d, after=end_d)
+
+            storage.append(dfw.reset_index().set_index(['cid', 'real_date']))
+
+        return pd.concat(storage)
+
     def __output_table__(self, cs_type: str = 'cids'):
         """
         Creates a DataFrame with information on the signal-return relation across
@@ -200,34 +253,6 @@ class SignalReturnRelations:
 
         # Analysis completed exclusively on the primary signal.
         df = self.df[[self.ret, self.sig]]
-
-        if self.cosp:
-            # Align over the return & signal.
-            df = df.dropna(how="any")
-            df_mod = df.reset_index()
-            dfw = (df_mod.loc[:, ['real_date', 'cid', self.sig]]).pivot(
-                index='real_date', columns='cid', values=self.sig
-            )
-            # Align over the cross-sections.
-            dfw = dfw.dropna(how="any")
-
-            s_date = dfw.index[0]
-            e_date = dfw.index[-1]
-
-            storage = []
-            for c, cid_df in df.groupby(level=0):
-
-                cid_df = cid_df.droplevel(level=0)
-                # Will truncate across both the primary signal and return category.
-                cid_df = cid_df.loc[s_date:e_date, :].reset_index()
-                cid_df['cid'] = c
-                storage.append(cid_df.set_index(['cid', 'real_date']))
-
-            df = pd.concat(storage)
-        else:
-            # Will remove any timestamps where both the signal & return are not realised.
-            # Time horizon will not be aligned across cross-sections.
-            df = df.dropna(how="any")
 
         if cs_type == "cids":
             css = self.cids
@@ -271,39 +296,7 @@ class SignalReturnRelations:
         """
 
         df_out = pd.DataFrame(index=self.signals, columns=self.metrics)
-
-        if self.cosp:
-            df_xcat = df.loc[:, ["xcat", "cid", "real_date"]]
-            df_group = (
-                df_xcat.groupby(["xcat", "cid"]).aggregate(
-                    min_date=pd.NamedAgg(column="real_date", aggfunc="min"),
-                    max_date=pd.NamedAgg(column="real_date", aggfunc="max"))
-            )
-
-            # Shared date - aligned on the category and cross-section level. If each
-            # category is conceptualised as a two-dimensional matrix where each cell is a
-            # realised timestamp for a respective cross-section, then each category's
-            # theoretical matrix must have the same dimensions
-            start_d = max(df_group['min_date'])
-            end_d = min(df_group['max_date'])
-
-            # Account for the lag of a single day applied during categories_df(). The
-            # shared dates calculation uses the original DataFrame where the lag has not
-            # been applied.
-            start_d = start_d + timedelta(days=1)
-
-            storage = []
-            for c, cid_df in self.df.groupby(level=0):
-
-                dfw = cid_df.reset_index(level=[0])
-                # Truncate such that the categories are defined over the same
-                # time-horizon.
-                dfw = dfw.truncate(before=start_d, after=end_d)
-
-                storage.append(dfw.reset_index().set_index(['cid', 'real_date']))
-            df = pd.concat(storage)
-        else:
-            df = self.df
+        df = self.df
 
         for s in self.signals:
             df_out = self.__table_stats__(
