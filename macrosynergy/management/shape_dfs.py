@@ -339,24 +339,12 @@ if __name__ == "__main__":
 
     dfd_x1 = reduce_df(dfd, xcats=xcats[:-1], cids=cids[0],
                        start='2012-01-01', end='2018-01-31')
-    print(dfd_x1['xcat'].unique())
-
-    dfd_x2 = reduce_df(dfd, xcats=xcats, cids=cids, start='2012-01-01', end='2018-01-31')
-    dfd_x3 = reduce_df(dfd, xcats=xcats, cids=cids, blacklist=black)
 
     tickers = [cid + "_XR" for cid in cids]
     dfd_xt = reduce_df_by_ticker(dfd, ticks=tickers, blacklist=black)
 
     # Testing categories_df().
     dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='W', lag=1,
-                         xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black)
-    print(dfc1)
-
-    dfc2 = categories_df(dfd, xcats=['INFL', 'GROWTH', 'XR'], cids=cids, freq='M', lag=0,
-                         fwin=3, xcat_aggs=['mean', 'mean'],
-                         start='2000-01-01', blacklist=black)
-
-    dfc3 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
-                         xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black,
-                         years=3)
-    print(dfc3)
+                         xcat_aggs=['mean', 'mean'], start='2000-01-01',
+                         blacklist=black
+                         )
