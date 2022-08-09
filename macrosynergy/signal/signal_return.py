@@ -8,7 +8,7 @@ from typing import List, Union, Tuple
 from datetime import timedelta
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.shape_dfs import categories_df
+from macrosynergy.management.shape_dfs import reduce_df, categories_df
 
 
 class SignalReturnRelations:
@@ -104,13 +104,19 @@ class SignalReturnRelations:
 
         self.signals = signals
 
-        self.df = categories_df(df, xcats=self.signals + [ret], cids=cids, val='value',
-                                start=start, end=end, freq=freq, blacklist=blacklist,
-                                lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum'])
+        xcats = self.signals + [ret]
+        # Ensures communal sampling method accounts for Blacklisting.
+        self.dfd = reduce_df(
+            df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
+        )
+        self.df = categories_df(self.dfd, xcats=self.signals + [ret], cids=cids,
+                                val='value', start=start, end=end, freq=freq,
+                                blacklist=None, lag=1, fwin=fwin,
+                                xcat_aggs=[agg_sig, 'sum'])
 
         if self.cosp:
-            # Pass in the original DataFrame.
-            self.df = self.communal_sample(df=df)
+            # Pass in the reduced DataFrame.
+            self.df = self.communal_sample(df=self.dfd)
 
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
 
