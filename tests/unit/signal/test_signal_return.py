@@ -178,12 +178,12 @@ class TestAll(unittest.TestCase):
         # Therefore, each cross-section's start date should be the same and additionally
         # equal to the series with the latest start date.
 
-        primary_signal = 'CRY'
-        rival_signals = ['GROWTH', 'INFL']
+        primary_signal = "CRY"
+        rival_signals = ["GROWTH", "INFL"]
         # Set "cosp" equal to True.
-        srr = SignalReturnRelations(self.dfd, ret='XR', sig=primary_signal,
+        srr = SignalReturnRelations(self.dfd, ret="XR", sig=primary_signal,
                                     rival_sigs=rival_signals, sig_neg=False, cosp=True,
-                                    freq='D', blacklist=None)
+                                    freq="D", blacklist=None)
 
         # The start date for the communal series should be "2012-01-01" - the start date
         # of USD.
@@ -200,6 +200,15 @@ class TestAll(unittest.TestCase):
             # shortest series' end date.
             series_e_date = str(cid_df.iloc[-1, :].name[1]).split(' ')[0]
             self.assertEqual("2020-06-30", series_e_date)
+
+        # Test the values.
+        dfd = srr.dfd
+        filt_1 = (dfd['real_date'] == "2012-01-03") & (dfd['xcat'] == "XR")
+        dfd_filt = dfd[filt_1]
+        benchmark_value = float(dfd_filt[dfd_filt["cid"] == "AUD"]["value"])
+
+        test_row = srr.df.loc['AUD'].loc["2012-01-03"]
+        self.assertAlmostEqual(benchmark_value, test_row["XR"])
 
     def test__slice_df__(self):
 
