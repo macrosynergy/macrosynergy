@@ -23,11 +23,13 @@ class TestAll(unittest.TestCase):
         df_cids = pd.DataFrame(index=self.cids, columns=['earliest', 'latest',
                                                          'mean_add', 'sd_mult'])
 
-        df_cids.loc['AUD'] = ['2010-01-01', '2020-12-31', 0, 1]
-        df_cids.loc['CAD'] = ['2010-01-01', '2020-12-31', 0, 2]
-        df_cids.loc['GBP'] = ['2010-01-01', '2020-12-31', 0, 5]
-        df_cids.loc['NZD'] = ['2010-01-01', '2020-12-31', 0, 3]
-        df_cids.loc['USD'] = ['2010-01-01', '2020-12-31', 0, 4]
+        # Purposefully choose a different start date for all cross-sections. Used to test
+        # communal sampling.
+        df_cids.loc['AUD'] = ['2011-01-01', '2020-12-31', 0, 1]
+        df_cids.loc['CAD'] = ['2009-01-01', '2020-10-30', 0, 2]
+        df_cids.loc['GBP'] = ['2010-01-01', '2020-08-30', 0, 5]
+        df_cids.loc['NZD'] = ['2008-01-01', '2020-06-30', 0, 3]
+        df_cids.loc['USD'] = ['2012-01-01', '2020-12-31', 0, 4]
 
         df_xcats = pd.DataFrame(index=self.xcats, columns=['earliest', 'latest',
                                                            'mean_add', 'sd_mult',
@@ -75,7 +77,7 @@ class TestAll(unittest.TestCase):
         # Choose an arbitrary date and confirm that the signal in the original DataFrame
         # has been lagged by a day. Confirm on multiple cross-sections: AUD & USD.
         df_signal = self.dfd[self.dfd['xcat'] == signal]
-        arbitrary_date_one = '2010-01-07'
+        arbitrary_date_one = '2011-01-10'
         arbitrary_date_two = '2020-10-27'
 
         test_aud = df_signal[df_signal['real_date'] == arbitrary_date_one]
@@ -85,7 +87,7 @@ class TestAll(unittest.TestCase):
         test_usd = test_usd[test_usd['cid'] == 'USD']['value']
 
         lagged_df = srr.df
-        aud_lagged = lagged_df.loc['AUD', signal]['2010-01-08']
+        aud_lagged = lagged_df.loc['AUD', signal]['2011-01-11']
         condition = round(float(test_aud), 5) - round(aud_lagged, 5)
         self.assertTrue(abs(condition) < 0.0001)
 
@@ -163,6 +165,41 @@ class TestAll(unittest.TestCase):
         zero_df_sigs = zero_df.loc[:, srr.signals]
         sum_columns = zero_df_sigs.sum(axis=0)
         self.assertTrue(np.all(sum_columns.to_numpy() == 0.0))
+
+    def test_constructor_communal(self):
+
+        self.dataframe_generator()
+
+        # Used to test the communal sample period by setting the parameter equal to True.
+        # The DataFrame instantiated on the instance is a multi-index DataFrame where the
+        # outer index will be qualified by the available cross-sections and the interior
+        # index will be timestamps. The columns will be the respective signals plus
+        # return.
+        # Therefore, each cross-section's start date should be the same and additionally
+        # equal to the series with the latest start date.
+
+        primary_signal = 'CRY'
+        rival_signals = ['GROWTH', 'INFL']
+        # Set "cosp" equal to True.
+        srr = SignalReturnRelations(self.dfd, ret='XR', sig=primary_signal,
+                                    rival_sigs=rival_signals, sig_neg=False, cosp=True,
+                                    freq='D', blacklist=None)
+
+        # The start date for the communal series should be "2012-01-01" - the start date
+        # of USD.
+        # The date, "2012-01-03", should be the first timestamp where all cross-sections
+        # for each category are available. The date is complete.
+        df = srr.df
+        expected_date = "2012-01-03"
+        for c, cid_df in df.groupby(level=0):
+            # Isolate the interior index.
+            series_s_date = str(cid_df.iloc[0, :].name[1]).split(' ')[0]
+            self.assertEqual(expected_date, series_s_date)
+
+            # Additionally, confirm the terminal dates are the same and equal to the
+            # shortest series' end date.
+            series_e_date = str(cid_df.iloc[-1, :].name[1]).split(' ')[0]
+            self.assertEqual("2020-06-30", series_e_date)
 
     def test__slice_df__(self):
 
