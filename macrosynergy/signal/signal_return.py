@@ -32,7 +32,7 @@ class SignalReturnRelations:
     :param <bool> cosp: If True the comparative statistics are calculated only for the
         time-period where data is available for all compared instances (cross-sections,
         signals etc). The start and end date used will be determined by the intersection
-        across the union of the respective segmentation type. Naturally, if True, the
+        across the union of categories present in the DataFrame. Naturally, if True, the
         start & end parameters will become redundant. Default is False and the
         comparative statistics, for the various segments, will be potentially computed
         over different time horizons which could result in spurious comparative
@@ -107,14 +107,10 @@ class SignalReturnRelations:
         self.df = categories_df(df, xcats=self.signals + [ret], cids=cids, val='value',
                                 start=start, end=end, freq=freq, blacklist=blacklist,
                                 lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum'])
+
         if self.cosp:
             # Pass in the original DataFrame.
             self.df = self.communal_sample(df=df)
-
-        else:
-            # Will remove any timestamps where both the signal & return are not realised.
-            # Time horizon will not be aligned across cross-sections.
-            self.df.dropna(how="any")
 
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
 
@@ -168,9 +164,10 @@ class SignalReturnRelations:
         """
 
         # Account for NaN values between the single respective signal and return. Only
-        # applicable if the segmentation type is signal.
+        # applicable if the segmentation type is signals.
         if not self.cosp:
-            df_segment = df_segment.dropna(axis=0, how="any")
+            df_segment = df_segment.loc[:,
+                         [self.ret, signal]].dropna(axis=0, how="any")
 
         df_sgs = np.sign(df_segment.loc[:, [self.ret, signal]])
         # Exact zeroes are disqualified for sign analysis only.
@@ -253,6 +250,11 @@ class SignalReturnRelations:
 
         # Analysis completed exclusively on the primary signal.
         df = self.df[[self.ret, self.sig]]
+
+        if not self.cosp:
+            # Will remove any timestamps where both the signal & return are not realised.
+            # Time horizon will not be aligned across cross-sections.
+            df = df.dropna(how="any")
 
         if cs_type == "cids":
             css = self.cids
