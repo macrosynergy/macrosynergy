@@ -216,11 +216,13 @@ class SignalReturnRelations:
 
             storage = []
             for c, cid_df in df.groupby(level=0):
+
                 cid_df = cid_df.droplevel(level=0)
                 # Will truncate across both the primary signal and return category.
                 cid_df = cid_df.loc[s_date:e_date, :].reset_index()
                 cid_df['cid'] = c
                 storage.append(cid_df.set_index(['cid', 'real_date']))
+
             df = pd.concat(storage)
         else:
             # Will remove any timestamps where both the signal & return are not realised.
@@ -278,21 +280,17 @@ class SignalReturnRelations:
                     max_date=pd.NamedAgg(column="real_date", aggfunc="max"))
             )
 
-            # Starting dates - will be iteratively updated.
-            start_d = min(df_group['min_date'])
-            end_d = max(df_group['max_date'])
+            # Shared date - aligned on the category and cross-section level. If each
+            # category is conceptualised as a two-dimensional matrix where each cell is a
+            # realised timestamp for a respective cross-section, then each category's
+            # theoretical matrix must have the same dimensions
+            start_d = max(df_group['min_date'])
+            end_d = min(df_group['max_date'])
 
-            # Shared date where each category has a realised value. Not aligned on the
-            # cross-section.
-            for cat, xcat_df in df_group.groupby(level=0):
-
-                d_min = max(xcat_df["min_date"])
-                if d_min > start_d:
-                    start_d = d_min
-
-                d_max = min(xcat_df["max_date"])
-                if d_max < end_d:
-                    end_d = d_max
+            # Account for the lag of a single day applied during categories_df(). The
+            # shared dates calculation uses the original DataFrame where the lag has not
+            # been applied.
+            start_d = start_d + timedelta(days=1)
 
             storage = []
             for c, cid_df in self.df.groupby(level=0):
