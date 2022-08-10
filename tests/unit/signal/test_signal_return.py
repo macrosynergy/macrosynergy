@@ -206,9 +206,10 @@ class TestAll(unittest.TestCase):
         filt_1 = (dfd['real_date'] == "2012-01-04") & (dfd['xcat'] == "XR")
         dfd_filt = dfd[filt_1]
         benchmark_value = float(dfd_filt[dfd_filt["cid"] == "AUD"]["value"])
+        benchmark_value = round(benchmark_value, 5)
 
         test_row = srr.df.loc['AUD'].loc["2012-01-04"]
-        self.assertAlmostEqual(benchmark_value, test_row["XR"])
+        self.assertAlmostEqual(benchmark_value, round(test_row["XR"], 5))
 
         # Account for lagging the signals. Therefore, the signal values will reference
         # the previous day.
@@ -218,7 +219,8 @@ class TestAll(unittest.TestCase):
 
         for s in signals:
             test_value = float(dfd_filt[dfd_filt["xcat"] == s]["value"])
-            self.assertAlmostEqual(test_value, test_row[s])
+            test_value = round(test_value, 5)
+            self.assertAlmostEqual(test_value, round(test_row[s], 5))
 
         # The DataFrame held on the instance, after communal sampling has been applied,
         # will be consistently used to produce the metric tables.
@@ -374,7 +376,7 @@ class TestAll(unittest.TestCase):
                                     rival_sigs=rival_signals, sig_neg=False, freq="D",
                                     blacklist=self.blacklist)
 
-        df_sigs = srr.__rival_sigs__(self.dfd)
+        df_sigs = srr.__rival_sigs__()
 
         # Firstly, confirm that the index consists of only the primary and rival signals.
         self.assertEqual(list(df_sigs.index), [primary_signal] + rival_signals)
