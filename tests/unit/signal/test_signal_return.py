@@ -203,12 +203,22 @@ class TestAll(unittest.TestCase):
 
         # Test the values.
         dfd = srr.dfd
-        filt_1 = (dfd['real_date'] == "2012-01-03") & (dfd['xcat'] == "XR")
+        filt_1 = (dfd['real_date'] == "2012-01-04") & (dfd['xcat'] == "XR")
         dfd_filt = dfd[filt_1]
         benchmark_value = float(dfd_filt[dfd_filt["cid"] == "AUD"]["value"])
 
-        test_row = srr.df.loc['AUD'].loc["2012-01-03"]
+        test_row = srr.df.loc['AUD'].loc["2012-01-04"]
         self.assertAlmostEqual(benchmark_value, test_row["XR"])
+
+        # Account for lagging the signals. Therefore, the signal values will reference
+        # the previous day.
+        filt_2 = (dfd['real_date'] == "2012-01-03") & (dfd["cid"] == "AUD")
+        dfd_filt = dfd[filt_2]
+        signals = ([primary_signal] + rival_signals)
+
+        for s in signals:
+            test_value = float(dfd_filt[dfd_filt["xcat"] == s]["value"])
+            self.assertAlmostEqual(test_value, test_row[s])
 
     def test__slice_df__(self):
 
