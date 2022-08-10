@@ -41,7 +41,7 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
                f"{additional_columns}."
     assert df_add_cols.issubset(df_cols), df_error
 
-    if xcat_replace:
+    if not xcat_replace:
         df = update_tickers(df, df_add)
 
     else:
@@ -144,9 +144,7 @@ if __name__ == "__main__":
     dfd_1_rv = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=None,
                                    blacklist=None, rel_meth='subtract', rel_xcats=None,
                                    postfix='RV')
-    # First test will simply append the two DataFrames. The categories defined in the
-    # secondary DataFrame will not be present in the original DataFrame. Therefore, the
-    # append mechanism is sufficient.
+
     dfd_add = update_categories(df=dfd, df_add=dfd_1_rv)
 
     dfd_1_rv_blacklist = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=None,
@@ -154,9 +152,6 @@ if __name__ == "__main__":
                                              rel_xcats=None,
                                              postfix='RV')
 
-    # Second test will be to replace updated categories. The second DataFrame's
-    # categories will be a direct subset of the first. Therefore, replace the incumbent
-    # categories with the latest values.
-    dfd_add_2 = update_df(df=dfd_add, df_add=dfd_1_rv_blacklist,
-                          xcat_replace=True)
-    print(dfd_add_2)
+    dfd_add_2 = update_df(
+        df=dfd_add, df_add=dfd_1_rv_blacklist, xcat_replace=True
+    )
