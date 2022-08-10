@@ -220,6 +220,9 @@ class TestAll(unittest.TestCase):
             test_value = float(dfd_filt[dfd_filt["xcat"] == s]["value"])
             self.assertAlmostEqual(test_value, test_row[s])
 
+        # The DataFrame held on the instance, after communal sampling has been applied,
+        # will be consistently used to produce the metric tables.
+
     def test__slice_df__(self):
 
         self.dataframe_generator()
