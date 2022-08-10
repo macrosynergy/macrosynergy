@@ -109,10 +109,9 @@ class SignalReturnRelations:
         self.dfd = reduce_df(
             df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
         )
-        self.df = categories_df(self.dfd, xcats=self.signals + [ret], cids=cids,
-                                val='value', start=start, end=end, freq=freq,
-                                blacklist=None, lag=1, fwin=fwin,
-                                xcat_aggs=[agg_sig, 'sum'])
+        self.df = categories_df(self.dfd, xcats=xcats, cids=cids, val='value',
+                                start=start, end=end, freq=freq, blacklist=None, lag=1,
+                                fwin=fwin, xcat_aggs=[agg_sig, 'sum'])
 
         if self.cosp:
             # Pass in the reduced DataFrame.
@@ -237,8 +236,7 @@ class SignalReturnRelations:
         storage = []
         for c, cid_df in self.df.groupby(level=0):
             dfw = cid_df.reset_index(level=[0])
-            # Truncate such that the categories are defined over the same
-            # time-horizon.
+
             dfw = dfw.truncate(before=start_d, after=end_d)
 
             storage.append(dfw.reset_index().set_index(['cid', 'real_date']))
@@ -259,7 +257,8 @@ class SignalReturnRelations:
 
         if not self.cosp:
             # Will remove any timestamps where both the signal & return are not realised.
-            # Time horizon will not be aligned across cross-sections.
+            # Time horizon will not be aligned across cross-sections (communal sampling
+            # has not been applied).
             df = df.dropna(how="any")
 
         if cs_type == "cids":
@@ -281,6 +280,7 @@ class SignalReturnRelations:
         df_out.loc["Mean", :] = df_out.loc[css, :].mean()
 
         above50s = statms[0:6]
+        # Overview of the cross-sectional performance.
         df_out.loc["PosRatio", above50s] = (df_out.loc[css, above50s] > 0.5).mean()
 
         above0s = statms[6::2]
@@ -295,12 +295,9 @@ class SignalReturnRelations:
 
         return df_out.astype("float")
 
-    def __rival_sigs__(self, df: pd.DataFrame):
+    def __rival_sigs__(self):
         """
         Produces the panel-level table for the additional signals.
-
-        :param <pd.DataFrame> df: the original standardized DataFrame passed into the
-            Class.
         """
 
         df_out = pd.DataFrame(index=self.signals, columns=self.metrics)
@@ -503,9 +500,9 @@ class SignalReturnRelations:
 
         N.B.: The interpretation of the columns is generally as follows:
 
-        accuracy refers accuracy for binary classification, i.e. positive or negative
+        accuracy refers to accuracy for binary classification, i.e. positive or negative
             return, and gives the ratio of correct prediction of the sign of returns
-            to all predictions. Note that exact zero values for either signal or
+            against all predictions. Note that exact zero values for either signal or
             return series will not be considered for accuracy analysis.
         bal_accuracy refers to balanced accuracy. This is the average of the ratios of
             correctly detected positive returns and correctly detected negative returns.
@@ -518,7 +515,8 @@ class SignalReturnRelations:
         pos_prec means positive precision, i.e. the ratio of correct positive return
             predictions to all positive predictions. It indicates how well the positive
             predictions of the signal have fared. Generally, good positive precision is
-            easy to accomplish if the ratio of positive returns has been high.
+            easy to accomplish if the ratio of positive returns has been high (the signal
+            can simply propose a long position for the full duration).
         neg_prec means negative precision, i.e. the ratio of correct negative return
             predictions to all negative predictions. It indicates how well the negative
             predictions of the signal have fared. Generally, good negative precision is
@@ -536,13 +534,13 @@ class SignalReturnRelations:
 
         The rows have the following meaning:
 
-        Panel refers to the the whole panel of cross sections and sample period,
+        Panel refers to the the whole panel of cross-sections and sample period,
             excluding unavailable and blacklisted periods.
         Mean years is the mean of the statistic across all years.
-        Mean cids is the mean of the statistic across all sections.
-        Positive ratio is the ratio of positive years or cross sections for which the
+        Mean cids is the mean of the statistic across all cross-sections.
+        Positive ratio is the ratio of positive years or cross-sections for which the
             statistic was above its "neutral" level, i.e. above 0.5 for classification
-            ratios and positive correlation probabilities and above 0 for the
+            ratios and positive correlation probabilities, and above 0 for the
             correlation coefficients.
         """
 
