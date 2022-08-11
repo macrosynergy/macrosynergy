@@ -82,7 +82,9 @@ class TestAll(unittest.TestCase):
         # Confirm the values are correct. Confirm the values in each benchmark series
         # have been correctly lifted from the original, standardised DataFrame.
         eur_duxr = self.dfd[(self.dfd['cid'] == "EUR") & (self.dfd['xcat'] == "DUXR")]
-        self.assertTrue(np.all(first_bm['value'] == eur_duxr['value']))
+
+        self.assertTrue(np.all(first_bm['value'].to_numpy()
+                               == eur_duxr['value'].to_numpy()))
 
         self.assertTrue(np.all(np.squeeze(pnl._bm_dict["EUR_DUXR"].to_numpy())
                                == eur_duxr['value'].to_numpy()))

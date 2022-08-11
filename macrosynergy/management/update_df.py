@@ -41,7 +41,7 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
                f"{additional_columns}."
     assert df_add_cols.issubset(df_cols), df_error
 
-    if xcat_replace:
+    if not xcat_replace:
         df = update_tickers(df, df_add)
 
     else:
