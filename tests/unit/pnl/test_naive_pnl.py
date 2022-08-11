@@ -127,9 +127,9 @@ class TestAll(unittest.TestCase):
                         blacklist=self.blacklist, out_all=False)
 
         # Will return a DataFrame with the transformed signal.
-        dfw = pnl.make_signal(dfx=dfx, sig=sig, sig_op='zn_score_pan',
-                              min_obs=252, iis=True, sequential=True,
-                              neutral='zero', thresh=None)
+        dfw = pnl.__make_signal__(dfx=dfx, sig=sig, sig_op='zn_score_pan',
+                                  min_obs=252, iis=True, sequential=True,
+                                  neutral='zero', thresh=None)
         self.__dict__['signal_dfw'] = dfw
 
         # Confirm the first dates for each cross-section's signal are the expected start
