@@ -625,7 +625,7 @@ class NaivePnL:
             in df is used.
 
         :return <pd.DataFrame>: standardized DataFrame with key PnL performance
-            statistics
+            statistics.
         """
 
         error_cids = "List of cross-sections expected."
@@ -654,7 +654,7 @@ class NaivePnL:
         dfx = reduce_df(self.df, pnl_cats, pnl_cids, start,
                         end, self.black, out_all=False)
 
-        groups = 'xcat' if len(pnl_cids) == 1 else 'cid'
+        groups = "xcat" if len(pnl_cids) == 1 else "cid"
         stats = ['Return (pct ar)', 'St. Dev. (pct ar)', 'Sharpe Ratio', 'Sortino Ratio',
                  'Max 21-day draw', 'Max 6-month draw', 'Traded Months']
 
@@ -754,6 +754,11 @@ if __name__ == "__main__":
                  min_obs=250, thresh=2.5)
 
     pnl.make_long_pnl(vol_scale=10, label="Long")
+
+    df_eval = pnl.evaluate_pnls(pnl_cats=["PNL_GROWTH_PZN"], pnl_cids=cids,
+                                start="2015-01-01",
+                                end="2020-12-31")
+    print(df_eval)
 
     # Able to adjust the start date for any respective visual analysis.
     pnl.plot_pnls(start="2010-01-01")
