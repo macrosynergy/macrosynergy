@@ -333,7 +333,8 @@ class CategoryRelations(object):
         :param <bool> single_chart: boolean parameter determining whether the x- and y-
             labels are only written on a single graph of the Facet Grid (useful if there
             are numerous charts, and the labels are excessively long). The default is
-            False.
+            False, and the names of the axis will be displayed on each grid if not
+            conflicting with the label for each variable.
         """
 
         coef_box_error = "Expects a Boolean Object indicating whether to include the " \
@@ -412,6 +413,8 @@ class CategoryRelations(object):
             assert n_cids > 1, error_cids
 
             dfx['cid'] = index_cids
+            # “Wrap” the column variable at this width, so that the column facets span
+            # multiple rows. Used to determine the number of grids on each row.
             dict_coln = {2: 2, 5: 3, 8: 4, 30: 5}
 
             keys_ar = np.array(list(dict_coln.keys()))
@@ -426,13 +429,15 @@ class CategoryRelations(object):
             dfx_copy = dfx_copy.reset_index(level=0)
 
             fg = sns.FacetGrid(data=dfx_copy, col='cid', col_wrap=col_number)
-            fg.map(sns.regplot, self.xcats[0], self.xcats[1], ci=reg_ci, order=reg_order,
-                   robust=reg_robust, fit_reg=fit_reg,
-                   scatter_kws={'s': 15, 'alpha': 0.5, 'color': 'lightgray'},
-                   line_kws={'lw': 1})
+            fg.map(
+                sns.regplot, self.xcats[0], self.xcats[1], ci=reg_ci, order=reg_order,
+                robust=reg_robust, fit_reg=fit_reg,
+                scatter_kws={'s': 15, 'alpha': 0.5, 'color': 'lightgray'},
+                line_kws={'lw': 1}
+            )
 
             if coef_box_incl:
-                fg.map_DataFrame(self.annotate_facet)
+                fg.map_dataframe(self.annotate_facet)
 
             fg.set_titles(col_template='{col_name}')
             fg.fig.suptitle(title, y=title_adj, fontsize=14)
@@ -451,15 +456,15 @@ class CategoryRelations(object):
                 remainder = int(number_of_graphs % no_columns)
 
                 for i in range(number_of_graphs):
-                    fg.axes[i].set_xlabel('')
-                    fg.axes[i].set_ylabel('')
+                    fg.axes[i].set_xlabel("")
+                    fg.axes[i].set_ylabel("")
 
                     if remainder == 0:
                         fg.axes[no_columns].set_xlabel(xlab)
-                        fg.axes[no_columns].set_ylabel(xlab)
+                        fg.axes[no_columns].set_ylabel(ylab)
                     else:
                         fg.axes[-remainder].set_xlabel(xlab)
-                        fg.axes[-remainder].set_ylabel(xlab)
+                        fg.axes[-remainder].set_ylabel(ylab)
 
         elif separator is None:
             fig, ax = plt.subplots(figsize=size)
@@ -553,57 +558,12 @@ if __name__ == "__main__":
 
     cidx = ['AUD', 'CAD', 'GBP', 'USD']
 
-    cr = CategoryRelations(dfdx, xcats=['CRY', 'XR'], freq='Q', lag=1,
-                           cids=cidx, xcat_aggs=['mean', 'sum'],
-                           start='2005-01-01', blacklist=black,
+    cr = CategoryRelations(dfdx, xcats=["CRY", "XR"], freq="Q", lag=1,
+                           cids=cidx, xcat_aggs=["mean", "sum"],
+                           start="2005-01-01", blacklist=black,
                            years=None)
 
-    cr.reg_scatter(labels=False, separator=None,
-                   title="Carry and Return",
-                   xlab="Carry", ylab="Return")
-
-    cr.reg_scatter(labels=False, coef_box='upper left', separator=None,
-                   title="Carry and Return",
-                   xlab="Carry", ylab="Return")
-    cr.reg_scatter(labels=False, coef_box='upper left', separator='cids',
-                   title="Carry and Return",
-                   ylab="", xlab="")
-    cr.reg_scatter(labels=False, coef_box='upper left', separator=2010,
-                   title="Carry and Return",
-                   xlab="Carry", ylab="Return")
-
-    cr = CategoryRelations(dfdx, xcats=['CRY', 'XR'], freq='M',
-                           cids=cidx, xcat_aggs=['last', 'mean'],
-                           start='2005-01-01', blacklist=black,
-                           years=3)
-
-    cr.reg_scatter(labels=True, coef_box='upper right', separator=None,
-                   title="Carry and Return",
-                   xlab="Carry", ylab="Return")
-    cr.reg_scatter(labels=True, coef_box='upper left', separator='cids',
-                   title="Carry and Return",
-                   xlab="Carry", ylab="Return")
-
-    cr = CategoryRelations(dfdx, xcats=['CRY', 'XR'], freq='M',
-                           cids=cidx, xcat_aggs=['last', 'mean'],
-                           start='2005-01-01', blacklist=black,
-                           years=None)
-    cr.reg_scatter(labels=True, coef_box='upper right', separator=2010,
-                   title="Test Mechanism.",
-                   xlab="Carry", ylab="Return")
-
-    cr = CategoryRelations(dfdx, xcats=['GROWTH', 'INFL'], cids=cidx, freq='M',
-                           xcat_aggs=['last', 'mean'], lag=1,
-                           start='2000-01-01', years=None, blacklist=black,
-                           xcat1_chg=None, xcat_trims=[2, 2])
-
-    cr.reg_scatter(labels=False, coef_box='upper left')
-    cr.jointplot(kind='hist', xlab='growth', ylab='inflation', height=5)
-
-    cr = CategoryRelations(dfd, xcats=['GROWTH', 'INFL'], cids=cids, freq='M',
-                           xcat_aggs=['mean', 'mean'],
-                           start='2000-01-01', years=3, blacklist=black)
-
-    cr.reg_scatter(labels=False, coef_box='lower right',
-                   title='Growth and Inflation', xlab='Growth', ylab='Inflation')
-    cr.jointplot(kind='hist', xlab='growth', ylab='inflation', height=5)
+    cr.reg_scatter(
+        labels=True, separator="cids", title="Carry and Return", xlab="Carry",
+        ylab="Return"
+    )
