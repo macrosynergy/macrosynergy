@@ -5,7 +5,7 @@ import pandas as pd
 import warnings
 import statsmodels.api as sm
 from tests.simulate import make_qdf
-from macrosynergy.panel.hedge_ratio import *
+from macrosynergy.panel.return_beta import *
 from macrosynergy.management.shape_dfs import reduce_df
 import math
 
@@ -65,7 +65,7 @@ class TestAll(unittest.TestCase):
 
     def test_date_alignment(self):
         """
-        Firstly, hedge_ratio.py will potentially use a single asset to hedge a panel
+        Firstly, return_beta.py will potentially use a single asset to hedge a panel
         which can consist of multiple cross-sections, and each cross-section could be
         defined over differing time-series. Therefore, the .date_alignment() method is
         used to ensure the asset being used as the hedge and the asset being hedged are
@@ -213,7 +213,7 @@ class TestAll(unittest.TestCase):
 
         br_cat = "USD_EQXR_NSA"
         # Standardised dataframe consisting of exclusively the hedge-ratios.
-        df_hedge = hedge_ratio(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
+        df_hedge = return_beta(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
                                benchmark_return=br_cat, start='2010-01-01',
                                end='2020-10-30', blacklist=self.blacklist, meth='ols',
                                oos=True, refreq='m', min_obs=60,
@@ -272,7 +272,7 @@ class TestAll(unittest.TestCase):
             # a benchmark of USD intuitive GDP growth will throw an error given the
             # ticker is not in the database.
             test_br = "USD_INTRGDP_NSA"
-            df_hedge = hedge_ratio(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
+            df_hedge = return_beta(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
                                    benchmark_return=test_br, start='2010-01-01',
                                    end='2020-10-30', blacklist=self.blacklist,
                                    meth='ols',
@@ -283,7 +283,7 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(AssertionError):
             # The re-estimation frequency can either be weekly, monthly or quarterly:
             # ['w', 'm', 'q']. Set the 'refreq' parameter to an incorrect value.
-            df_hedge = hedge_ratio(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
+            df_hedge = return_beta(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
                                    benchmark_return=br_cat, start='2010-01-01',
                                    end='2020-10-30', blacklist=self.blacklist,
                                    meth='ols',
@@ -294,7 +294,7 @@ class TestAll(unittest.TestCase):
         # 24. However, if the parameter is defined, the specified number must be greater
         # than 10 business days, two weeks.
         with self.assertRaises(AssertionError):
-            df_hedge = hedge_ratio(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
+            df_hedge = return_beta(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
                                    benchmark_return=br_cat, start='2010-01-01',
                                    end='2020-10-30', blacklist=self.blacklist,
                                    meth='ols',
@@ -305,7 +305,7 @@ class TestAll(unittest.TestCase):
         # weekly data where the final day of the week will invariably be the Friday. The
         # new re-estimation value should be applied from the next business day, the
         # following Monday.
-        df_hedge = hedge_ratio(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
+        df_hedge = return_beta(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
                                benchmark_return=br_cat, start='2010-01-01',
                                end='2020-10-30', blacklist=self.blacklist,
                                meth='ols',
