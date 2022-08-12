@@ -174,14 +174,14 @@ def adjusted_returns(benchmark_return: pd.Series, df_hedge: pd.DataFrame,
     return df_stack
 
 
-def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
+def return_beta(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                 benchmark_return: str = None, start: str = None, end: str = None,
                 blacklist: dict = None, meth: str = 'ols', oos: bool = True,
                 refreq: str = 'm', min_obs: int = 24, hedged_returns: bool = False,
                 ratio_name: str = "_HR", hr_name: str = "H"):
 
     """
-    Estimates hedge ratios of a return category with respect to a hedge benchmark.
+    Estimate sensitivities (betas) of return category with respect to single return.
     
     :param <pd.Dataframe> df: standardized data frame with the necessary columns:
         'cid', 'xcats', 'real_date' and 'value.
@@ -224,7 +224,7 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         Additionally, the dataframe can include the hedged returns if the parameter
         `benchmark_return` has been set to True.
 
-    N.B.: A hedge ratio is the estimated sensitivity of the main return with respect to
+    N.B.: A return beta is the estimated sensitivity of the main return with respect to
     the asset used for hedging. The ratio is recorded for the period after the estimation
     sample up until the next re-estimation date.
     
@@ -321,8 +321,8 @@ def hedge_ratio(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     return df_hedge[cols]
 
 
-def hedge_ratio_display(df_hedge: pd.DataFrame, subplots: bool = False,
-                        hr_name: str = "H"):
+def beta_display(df_hedge: pd.DataFrame, subplots: bool = False,
+                 hr_name: str = "H"):
     """
     Method used to visualise the hedging ratios across the panel: assumes a single
     category is used to hedge the primary asset.
@@ -331,7 +331,7 @@ def hedge_ratio_display(df_hedge: pd.DataFrame, subplots: bool = False,
     :param <bool> subplots: matplotlib parameter to determine if each hedging series is
         displayed on separate subplots.
     :param <str> hr_name: label used to distinguish the hedged returns in the DataFrame.
-        Comparable to hedge_ratio() method, the default is "H".
+        Comparable to return_beta() method, the default is "H".
 
     """
 
@@ -379,21 +379,21 @@ if __name__ == "__main__":
     xcat_hedge = "EQXR_NSA"
     # S&P500.
     benchmark_return = "USD_EQXR_NSA"
-    df_hedge = hedge_ratio(df=dfd, xcat=xcat_hedge, cids=cids,
+    df_hedge = return_beta(df=dfd, xcat=xcat_hedge, cids=cids,
                            benchmark_return=benchmark_return, start='2010-01-01',
                            end='2020-10-30',
                            blacklist=black, meth='ols', oos=True,
                            refreq='w', min_obs=24, hedged_returns=True)
 
     print(df_hedge)
-    hedge_ratio_display(df_hedge=df_hedge, subplots=False)
+    beta_display(df_hedge=df_hedge, subplots=False)
 
     # Long position in S&P500 or the Nasdaq, and subsequently using US FX to hedge the
     # long position.
     xcats = 'FXXR_NSA'
     cids = ['USD']
     benchmark_return = "USD_EQXR_NSA"
-    xcat_hedge_two = hedge_ratio(df=dfd, xcat=xcats, cids=cids,
+    xcat_hedge_two = return_beta(df=dfd, xcat=xcats, cids=cids,
                                  benchmark_return=benchmark_return, start='2010-01-01',
                                  end='2020-10-30',
                                  blacklist=black, meth='ols', oos=True,
