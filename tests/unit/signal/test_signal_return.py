@@ -175,8 +175,10 @@ class TestAll(unittest.TestCase):
         # outer index will be qualified by the available cross-sections and the interior
         # index will be timestamps. The columns will be the respective signals plus
         # return.
-        # Therefore, each cross-section's start date should be the same and additionally
-        # equal to the series with the latest start date.
+        # If the parameter is set to True, the individual cross-section's start dates
+        # will be aligned across the panels: the proposed start date will have a
+        # realised value for all categories for that specific cross-section. The logic is
+        # applied to each cross-section.
 
         primary_signal = "CRY"
         rival_signals = ["GROWTH", "INFL"]
@@ -185,42 +187,41 @@ class TestAll(unittest.TestCase):
                                     rival_sigs=rival_signals, sig_neg=False, cosp=True,
                                     freq="D", blacklist=None)
 
-        # The start date for the communal series should be "2012-01-01" - the start date
-        # of USD.
-        # The date, "2012-01-03", should be the first timestamp where all cross-sections
-        # for each category are available. The date is complete.
+        # The start date for the communal series should be:
+        # start_dates = {'AUD': '2011-01-01', 'CAD': '2009-01-01', 'GBP': '2010-01-01',
+        #                'NZD': '2008-01-01', 'USD': '2012-01-01'}
+
         df = srr.df
-        expected_date = "2012-01-03"
+        # Test across all cross-sections - aligned on the cross-section's intersection.
+        # Again, account for lag applied.
+        expected_date = {'AUD': '2011-01-04', 'CAD': '2009-01-02', 'GBP': '2010-01-04',
+                         'NZD': '2008-01-02', 'USD': '2012-01-03'}
         for c, cid_df in df.groupby(level=0):
             # Isolate the interior index.
             series_s_date = str(cid_df.iloc[0, :].name[1]).split(' ')[0]
-            self.assertEqual(expected_date, series_s_date)
-
-            # Additionally, confirm the terminal dates are the same and equal to the
-            # shortest series' end date.
-            series_e_date = str(cid_df.iloc[-1, :].name[1]).split(' ')[0]
-            self.assertEqual("2020-06-30", series_e_date)
+            self.assertEqual(expected_date[c], series_s_date)
 
         # Test the values.
         dfd = srr.dfd
-        filt_1 = (dfd['real_date'] == "2012-01-04") & (dfd['xcat'] == "XR")
+        filt_1 = (dfd['real_date'] == "2011-01-04") & (dfd['xcat'] == "XR")
         dfd_filt = dfd[filt_1]
         benchmark_value = float(dfd_filt[dfd_filt["cid"] == "AUD"]["value"])
         benchmark_value = round(benchmark_value, 5)
 
-        test_row = srr.df.loc['AUD'].loc["2012-01-04"]
+        test_row = srr.df.loc['AUD'].loc["2011-01-04"]
         self.assertAlmostEqual(benchmark_value, round(test_row["XR"], 5))
 
         # Account for lagging the signals. Therefore, the signal values will reference
         # the previous day.
-        filt_2 = (dfd['real_date'] == "2012-01-03") & (dfd["cid"] == "AUD")
+        filt_2 = (dfd['real_date'] == "2011-01-03") & (dfd["cid"] == "AUD")
         dfd_filt = dfd[filt_2]
         signals = ([primary_signal] + rival_signals)
 
         for s in signals:
             test_value = float(dfd_filt[dfd_filt["xcat"] == s]["value"])
             test_value = round(test_value, 5)
-            self.assertAlmostEqual(test_value, round(test_row[s], 5))
+            condition = abs(test_value - round(test_row[s], 5)) < 0.00001
+            self.assertTrue(condition)
 
         # The DataFrame held on the instance, after communal sampling has been applied,
         # will be consistently used to produce the metric tables.

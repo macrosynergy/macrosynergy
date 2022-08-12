@@ -6,6 +6,7 @@ from sklearn import metrics as skm
 from scipy import stats
 from typing import List, Union, Tuple
 from datetime import timedelta
+from collections import defaultdict
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df, categories_df
@@ -32,11 +33,11 @@ class SignalReturnRelations:
     :param <bool> cosp: If True the comparative statistics are calculated only for the
         time-period where data is available for all compared instances (cross-sections,
         signals etc). The start and end date used will be determined by the intersection
-        across the union of categories present in the DataFrame. Naturally, if True, the
-        start & end parameters will become redundant. Default is False and the
-        comparative statistics, for the various segments, will be potentially computed
-        over different time horizons which could result in spurious comparative
-        statistics.
+        across the cross-sections defined over the panels present in the DataFrame.
+        Naturally, if True, the start & end parameters will become redundant. Default is
+        False and the comparative statistics, for the various segments, will be
+        potentially computed over different time horizons which could result in spurious
+        comparative statistics.
     :param <str> start: earliest date in ISO format. Default is None in which case the
         earliest date available will be used.
     :param <str> end: latest date in ISO format. Default is None in which case the
@@ -208,8 +209,8 @@ class SignalReturnRelations:
             columns: 'cid', 'xcat', 'real_date' and 'value.
 
         NB.: The objective is for each signal, both the primary & relative signals, and
-        the respective return category to be defined over the intersection - first
-        realised date each panel will be complete.
+        the respective return category to be defined over the intersection - the cross-
+        sections in the panel will be aligned.
         """
 
         df_xcat = df.loc[:, ["xcat", "cid", "real_date"]]
@@ -221,23 +222,29 @@ class SignalReturnRelations:
                 max_date=pd.NamedAgg(column="real_date", aggfunc="max"))
         )
 
-        # Shared date - aligned on the category and cross-section level. If each
-        # category is conceptualised as a two-dimensional matrix where each cell is a
-        # realised timestamp for a respective cross-section, then each category's
-        # theoretical matrix must have the same dimensions
-        start_d = max(df_group['min_date'])
-        end_d = min(df_group['max_date'])
+        start_dates_dict = df_group["min_date"].to_dict()
+        end_dates_dict = df_group["max_date"].to_dict()
 
-        # Account for the lag of a single day applied during categories_df(). The
-        # shared dates calculation uses the original DataFrame where the lag has not
-        # been applied.
-        start_d = start_d + timedelta(days=1)
+        cid_start = defaultdict()
+        cid_end = defaultdict()
+        # Intersection across individual cross-sections.
+        for k, v in start_dates_dict.items():
+            c = k[1]
+
+            if c not in cid_start.keys() or v > cid_start[c]:
+                # Account for the lag of a single day applied during categories_df(). The
+                # shared dates calculation uses the original DataFrame where the lag has
+                # not been applied.
+                cid_start[c] = v + timedelta(days=1)
+
+            if c not in cid_end.keys() or end_dates_dict[k] < cid_end[c]:
+                cid_end[c] = end_dates_dict[k]
 
         storage = []
         for c, cid_df in self.df.groupby(level=0):
             dfw = cid_df.reset_index(level=[0])
 
-            dfw = dfw.truncate(before=start_d, after=end_d)
+            dfw = dfw.truncate(before=cid_start[c], after=cid_end[c])
 
             storage.append(dfw.reset_index().set_index(['cid', 'real_date']))
 
@@ -562,7 +569,7 @@ if __name__ == "__main__":
     df_cids.loc['AUD'] = ['2000-01-01', '2020-12-31', 0, 1]
     df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
     df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
-    df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', 0., 2]
+    df_cids.loc['NZD'] = ['2007-01-01', '2020-09-30', 0., 2]
 
     df_xcats = pd.DataFrame(index=xcats,
                             columns=['earliest', 'latest', 'mean_add', 'sd_mult',
