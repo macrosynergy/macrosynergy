@@ -31,13 +31,8 @@ class SignalReturnRelations:
     :param <bool> sig_neg: if set to True puts the signal in negative terms for all
         analysis. Default is False.
     :param <bool> cosp: If True the comparative statistics are calculated only for the
-        time-period where data is available for all compared instances (cross-sections,
-        signals etc). The start and end date used will be determined by the intersection
-        across the cross-sections defined over the panels present in the DataFrame.
-        Naturally, if True, the start & end parameters will become redundant. Default is
-        False and the comparative statistics, for the various segments, will be
-        potentially computed over different time horizons which could result in spurious
-        comparative statistics.
+        "communal sample periods", i.e. periods and cross-sections that have values
+        for all compared signals. Default is False.
     :param <str> start: earliest date in ISO format. Default is None in which case the
         earliest date available will be used.
     :param <str> end: latest date in ISO format. Default is None in which case the
@@ -110,14 +105,22 @@ class SignalReturnRelations:
         self.dfd = reduce_df(
             df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
         )
+        # Todo: if self.cops=True and len(signals) > 1
+        #  create dfdx  based on dfd["xcat"].isin(signals)
+        #  pivot it to signals columns
+        #  identify the dates and cross sections that have NAs in row
+        #  set those rows fully to NA
+        #  melt back and merge with original frame via update_df
+
         self.df = categories_df(
             self.dfd, xcats=xcats, cids=cids, val='value', start=start, end=end,
             freq=freq, blacklist=None, lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum']
         )
 
-        if self.cosp:
-            # Pass in the reduced DataFrame.
-            self.df = self.communal_sample(df=self.dfd)
+        # if self.cosp:
+        #     # Pass in the reduced DataFrame.
+        #     self.df = self.communal_sample(df=self.dfd)
+        # Todo: remove
 
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
 
@@ -202,6 +205,7 @@ class SignalReturnRelations:
         return df_out
 
     def communal_sample(self, df: pd.DataFrame):
+        # Todo: replace by simpler code as per above
         """
         Will reduce the instance's DataFrame to a time-period available across the
         compared instances (cross-sections and signals).
@@ -598,7 +602,7 @@ if __name__ == "__main__":
     dfsum = srn.summary_table()
     print(dfsum)
 
-    df_sigs = srn.signals_table(sigs=['CRY', 'INFL'])
+    df_sigs = srn.signals_table(sigs=['CRY_NEG', 'INFL_NEG'])
     df_sigs_all = srn.signals_table()
 
     srn.accuracy_bars(type="signals", title="Accuracy measure between target return, XR,"
