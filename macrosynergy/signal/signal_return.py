@@ -110,9 +110,10 @@ class SignalReturnRelations:
         self.dfd = reduce_df(
             df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
         )
-        self.df = categories_df(self.dfd, xcats=xcats, cids=cids, val='value',
-                                start=start, end=end, freq=freq, blacklist=None, lag=1,
-                                fwin=fwin, xcat_aggs=[agg_sig, 'sum'])
+        self.df = categories_df(
+            self.dfd, xcats=xcats, cids=cids, val='value', start=start, end=end,
+            freq=freq, blacklist=None, lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum']
+        )
 
         if self.cosp:
             # Pass in the reduced DataFrame.
@@ -321,14 +322,16 @@ class SignalReturnRelations:
         """
         Output table on relations of various signals with the target return.
 
-        :param <List[str]> sigs: signal categories to included in the panel-level table.
-            Default is None and all present signals will be displayed. Alternative is a
-            valid subset of the possible categories. Primary signal must be passed if to
-            be included.
+        :param <List[str]> sigs: signal categories to be included in the panel-level
+            table. Default is None and all present signals will be displayed. Alternative
+            is a valid subset of the possible categories. Primary signal must be passed
+            if to be included.
 
         NB.:
         Analysis will be based exclusively on the panel level. Will only return a table
-        if rival signals have been defined upon instantiation.
+        if rival signals have been defined upon instantiation. If the communal sample
+        parameter has been set to True, all signals will be aligned on the individual
+        cross-sectional level.
         """
 
         try:
@@ -551,8 +554,8 @@ class SignalReturnRelations:
             correlation coefficients.
         """
 
-        dfys = self.df_ys.round(decimals=3)
-        dfcs = self.df_cs.round(decimals=3)
+        dfys = self.df_ys.round(decimals=5)
+        dfcs = self.df_cs.round(decimals=5)
         dfsum = dfys.iloc[:3, ].append(dfcs.iloc[1:3, ])
         dfsum.index = ["Panel", "Mean years", "Positive ratio",
                        "Mean cids", "Positive ratio"]
@@ -584,9 +587,16 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     # Additional signals.
-    srn = SignalReturnRelations(dfd, ret='XR', sig='CRY', rival_sigs=['INFL', 'GROWTH'],
-                                sig_neg=False, cosp=True, freq='D', blacklist=black)
-    print(srn.df_cs)
+    srn = SignalReturnRelations(dfd, ret="XR", sig="CRY", rival_sigs=None,
+                                sig_neg=True, cosp=False, freq="M", start="2002-01-01")
+    dfsum = srn.summary_table()
+    print(dfsum)
+
+    r_sigs = ["INFL", "GROWTH"]
+    srn = SignalReturnRelations(dfd, ret="XR", sig="CRY", rival_sigs=r_sigs,
+                                sig_neg=True, cosp=False, freq="M", start="2002-01-01")
+    dfsum = srn.summary_table()
+    print(dfsum)
 
     df_sigs = srn.signals_table(sigs=['CRY', 'INFL'])
     df_sigs_all = srn.signals_table()
