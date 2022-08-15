@@ -117,9 +117,9 @@ class SignalReturnRelations:
             freq=freq, blacklist=None, lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum']
         )
 
-        # if self.cosp:
-        #     # Pass in the reduced DataFrame.
-        #     self.df = self.communal_sample(df=self.dfd)
+        if self.cosp:
+            # Pass in the reduced DataFrame.
+            self.df = self.communal_sample(df=self.dfd)
         # Todo: remove
 
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))

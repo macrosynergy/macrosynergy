@@ -209,7 +209,8 @@ class TestAll(unittest.TestCase):
         benchmark_value = round(benchmark_value, 5)
 
         test_row = srr.df.loc['AUD'].loc["2011-01-04"]
-        self.assertAlmostEqual(benchmark_value, round(test_row["XR"], 5))
+        condition = abs(benchmark_value - round(test_row["XR"], 5)) < 0.00001
+        self.assertTrue(condition)
 
         # Account for lagging the signals. Therefore, the signal values will reference
         # the previous day.
