@@ -72,9 +72,9 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
 
 def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
                    start: str = None, end: str = None, blacklist: dict = None,
-                   sequential: bool = True, min_obs: int = 261,  iis: bool = True,
-                   neutral: str = 'zero', est_freq: str = 'd', thresh: float = None,
-                   pan_weight: float = 1, postfix: str = 'ZN'):
+                   sequential: bool = True, min_obs: int = 261, max_wind: int = None,
+                   iis: bool = True, neutral: str = 'zero', est_freq: str = 'd',
+                   thresh: float = None, pan_weight: float = 1, postfix: str = 'ZN'):
 
     """
     Computes z-scores for a panel around a neutral level ("zn scores").
@@ -103,6 +103,11 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         zn_scores. Default is 261. The parameter is only applicable if the "sequential"
         parameter is set to True. Otherwise the neutral level and the standard deviation
         are both computed in-sample and will use the full sample.
+    :param <int> max_wind: the maximum number of observations allowed in the expanding
+        window to calculate zn_scores. If defined, the expanding window will transition
+        to a rolling window of size 'max_wind'. Its purpose is to exclude realised values
+        that are considered too "old" (different data generating process). Default is
+        None and the entire expanding series will be used.
     :param <bool> iis: if True (default) zn-scores are also calculated for the initial
         sample period defined by min-obs on an in-sample basis to avoid losing history.
         This is irrelevant if sequential is set to False.
@@ -135,6 +140,9 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
     error_min = "Minimum observations must be a non-negative Integer value."
     assert isinstance(min_obs, int) and min_obs >= 0, error_min
+
+    if max_wind is not None:
+        assert isinstance(max_wind, int) and max_wind >= 0, error_min
 
     frequencies = ["d", "w", "m", "q"]
     error_freq = f"String Object required and must be one of the available frequencies: " \
@@ -240,21 +248,4 @@ if __name__ == "__main__":
                           blacklist=black, iis=True, neutral='mean',
                           pan_weight=0.75, min_obs=261, est_freq="m")
 
-    # Weekly: panel + cross.
-    dfzw = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids,
-                          blacklist=black, iis=False, neutral='mean',
-                          pan_weight=0.5, min_obs=261, est_freq="w")
-
     # Daily: panel. Neutral and standard deviation will be computed daily.
-    dfzd = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids,
-                          blacklist=black, iis=True, neutral='mean',
-                          pan_weight=1.0, min_obs=261, est_freq="d")
-
-    # Daily: cross.
-    dfzd = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids,
-                          blacklist=black, iis=True, neutral='mean',
-                          pan_weight=0.0, min_obs=261, est_freq="d")
-
-    panel_df = make_zn_scores(dfd, 'CRY', cids, start="2010-01-04", blacklist=black,
-                              sequential=False, min_obs=0, neutral='mean',
-                              iis=True, thresh=None, pan_weight=0.75, postfix='ZN')
