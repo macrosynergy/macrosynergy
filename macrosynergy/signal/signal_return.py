@@ -102,25 +102,24 @@ class SignalReturnRelations:
 
         xcats = self.signals + [ret]
         # Ensures communal sampling method accounts for Blacklisting.
-        self.dfd = reduce_df(
+        dfd = reduce_df(
             df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
-        )
-        # Todo: if self.cops=True and len(signals) > 1
-        #  create dfdx  based on dfd["xcat"].isin(signals)
-        #  pivot it to signals columns
-        #  identify the dates and cross sections that have NAs in row
-        #  set those rows fully to NA
-        #  melt back and merge with original frame via update_df
-
-        self.df = categories_df(
-            self.dfd, xcats=xcats, cids=cids, val='value', start=start, end=end,
-            freq=freq, blacklist=None, lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum']
         )
 
         if self.cosp:
             # Pass in the reduced DataFrame.
-            self.df = self.communal_sample(df=self.dfd)
-        # Todo: remove
+            dfd = self.__communal_sample__(df=dfd)
+        self.dfd = dfd
+
+        df = categories_df(
+            dfd, xcats=xcats, cids=cids, val='value', start=None, end=None,
+            freq=freq, blacklist=None, lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum']
+        )
+        if self.cosp:
+            # All NaN values must be removed. Therefore, account for the lag of a single
+            # day applied by categories_df().
+            df = df.dropna(how="any")
+        self.df = df
 
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
 
@@ -204,8 +203,35 @@ class SignalReturnRelations:
 
         return df_out
 
+    @staticmethod
+    def __communal_sample__(df: pd.DataFrame):
+        """
+        Will reduce the instance's DataFrame to a time-period available across the
+        compared instances (cross-sections and signals).
+
+        :param <pd.Dataframe> df: standardized DataFrame with the following necessary
+            columns: 'cid', 'xcat', 'real_date' and 'value.
+
+        NB.: The objective is for each signal, both the primary & relative signals, and
+        the respective return category to be defined over the intersection - the cross-
+        sections in the panel will be aligned.
+        """
+
+        df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values="value")
+
+        storage = []
+        for c, cid_df in df_w.groupby(level=0):
+
+            cid_df = cid_df.dropna(how="any")
+            storage.append(cid_df)
+
+        df = pd.concat(storage)
+        df = df.stack().reset_index().sort_values(["cid", "xcat", "real_date"])
+        df.columns = ["cid", "real_date", "xcat", "value"]
+
+        return df[["cid", "xcat", "real_date", "value"]]
+
     def communal_sample(self, df: pd.DataFrame):
-        # Todo: replace by simpler code as per above
         """
         Will reduce the instance's DataFrame to a time-period available across the
         compared instances (cross-sections and signals).
@@ -240,7 +266,7 @@ class SignalReturnRelations:
                 # Account for the lag of a single day applied during categories_df(). The
                 # shared dates calculation uses the original DataFrame where the lag has
                 # not been applied.
-                cid_start[c] = v + timedelta(days=1)
+                cid_start[c] = v
 
             if c not in cid_end.keys() or end_dates_dict[k] < cid_end[c]:
                 cid_end[c] = end_dates_dict[k]
@@ -592,15 +618,14 @@ if __name__ == "__main__":
 
     # Additional signals.
     srn = SignalReturnRelations(dfd, ret="XR", sig="CRY", rival_sigs=None,
-                                sig_neg=True, cosp=False, freq="M", start="2002-01-01")
+                                sig_neg=True, cosp=True, freq="M", start="2002-01-01")
+
     dfsum = srn.summary_table()
-    print(dfsum)
 
     r_sigs = ["INFL", "GROWTH"]
     srn = SignalReturnRelations(dfd, ret="XR", sig="CRY", rival_sigs=r_sigs,
                                 sig_neg=True, cosp=False, freq="M", start="2002-01-01")
     dfsum = srn.summary_table()
-    print(dfsum)
 
     df_sigs = srn.signals_table(sigs=['CRY_NEG', 'INFL_NEG'])
     df_sigs_all = srn.signals_table()
@@ -608,6 +633,3 @@ if __name__ == "__main__":
     srn.accuracy_bars(type="signals", title="Accuracy measure between target return, XR,"
                                             " and the respective signals, ['CRY', 'INFL'"
                                             ", 'GROWTH'].")
-    srn.accuracy_bars(type="signals")
-
-    srn.correlation_bars(type="signals")
