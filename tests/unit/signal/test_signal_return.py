@@ -10,6 +10,7 @@ import random
 import pandas as pd
 import numpy as np
 
+
 class TestAll(unittest.TestCase):
 
     def dataframe_generator(self):

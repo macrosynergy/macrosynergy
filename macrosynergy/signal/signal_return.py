@@ -101,14 +101,14 @@ class SignalReturnRelations:
         self.signals = signals
 
         xcats = self.signals + [ret]
-        # Ensures communal sampling method accounts for Blacklisting.
+
         dfd = reduce_df(
             df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
-        )
+        )  # reduce prior to applying communal sample restriction
 
         if self.cosp:
-            # Pass in the reduced DataFrame.
             dfd = self.__communal_sample__(df=dfd)
+            # TODO: must not include returns because of subsequent lagging
         self.dfd = dfd
 
         df = categories_df(
@@ -116,8 +116,7 @@ class SignalReturnRelations:
             freq=freq, blacklist=None, lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum']
         )
         if self.cosp:
-            # All NaN values must be removed. Therefore, account for the lag of a single
-            # day applied by categories_df().
+            # TODO: check if necessary
             df = df.dropna(how="any")
         self.df = df
 
@@ -206,23 +205,17 @@ class SignalReturnRelations:
     @staticmethod
     def __communal_sample__(df: pd.DataFrame):
         """
-        Will reduce the instance's DataFrame to a time-period available across the
-        compared instances (cross-sections and signals).
+        Reduce dataframe to rows where all categories have values.
 
         :param <pd.Dataframe> df: standardized DataFrame with the following necessary
             columns: 'cid', 'xcat', 'real_date' and 'value.
-
-        NB.: The objective is for each signal, both the primary & relative signals, and
-        the respective return category to be defined over the intersection - the cross-
-        sections in the panel will be aligned.
         """
 
         df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values="value")
 
         storage = []
-        for c, cid_df in df_w.groupby(level=0):
-
-            cid_df = cid_df.dropna(how="any")
+        for c, cid_df in df_w.groupby(level=0):  # loop though cids
+            cid_df = cid_df.dropna(how="any")  # remove rows/dates that
             storage.append(cid_df)
 
         df = pd.concat(storage)
@@ -230,56 +223,6 @@ class SignalReturnRelations:
         df.columns = ["cid", "real_date", "xcat", "value"]
 
         return df[["cid", "xcat", "real_date", "value"]]
-
-    def communal_sample(self, df: pd.DataFrame):
-        """
-        Will reduce the instance's DataFrame to a time-period available across the
-        compared instances (cross-sections and signals).
-
-        :param <pd.Dataframe> df: standardized DataFrame with the following necessary
-            columns: 'cid', 'xcat', 'real_date' and 'value.
-
-        NB.: The objective is for each signal, both the primary & relative signals, and
-        the respective return category to be defined over the intersection - the cross-
-        sections in the panel will be aligned.
-        """
-
-        df_xcat = df.loc[:, ["xcat", "cid", "real_date"]]
-        # Find the minimum & maximum date across all categories in the DataFrame. The
-        # relative & primary signal analysis are completed over the same time-period.
-        df_group = (
-            df_xcat.groupby(["xcat", "cid"]).aggregate(
-                min_date=pd.NamedAgg(column="real_date", aggfunc="min"),
-                max_date=pd.NamedAgg(column="real_date", aggfunc="max"))
-        )
-
-        start_dates_dict = df_group["min_date"].to_dict()
-        end_dates_dict = df_group["max_date"].to_dict()
-
-        cid_start = defaultdict()
-        cid_end = defaultdict()
-        # Intersection across individual cross-sections.
-        for k, v in start_dates_dict.items():
-            c = k[1]
-
-            if c not in cid_start.keys() or v > cid_start[c]:
-                # Account for the lag of a single day applied during categories_df(). The
-                # shared dates calculation uses the original DataFrame where the lag has
-                # not been applied.
-                cid_start[c] = v
-
-            if c not in cid_end.keys() or end_dates_dict[k] < cid_end[c]:
-                cid_end[c] = end_dates_dict[k]
-
-        storage = []
-        for c, cid_df in self.df.groupby(level=0):
-            dfw = cid_df.reset_index(level=[0])
-
-            dfw = dfw.truncate(before=cid_start[c], after=cid_end[c])
-
-            storage.append(dfw.reset_index().set_index(['cid', 'real_date']))
-
-        return pd.concat(storage)
 
     def __output_table__(self, cs_type: str = 'cids'):
         """
