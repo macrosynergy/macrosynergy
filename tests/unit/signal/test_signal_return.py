@@ -184,32 +184,32 @@ class TestAll(unittest.TestCase):
         primary_signal = "CRY"
         rival_signals = ["GROWTH", "INFL"]
         # Set "cosp" equal to True.
-        srr = SignalReturnRelations(self.dfd, ret="XR", sig=primary_signal,
-                                    rival_sigs=rival_signals, sig_neg=False, cosp=True,
-                                    freq="D", blacklist=None)
+        srr_cosp = SignalReturnRelations(self.dfd, ret="XR", sig=primary_signal,
+                                         rival_sigs=rival_signals, sig_neg=False,
+                                         cosp=True, freq="D", blacklist=None)
 
         # The start date for the communal series should be:
         # start_dates = {'AUD': '2011-01-01', 'CAD': '2009-01-01', 'GBP': '2010-01-01',
         #                'NZD': '2008-01-01', 'USD': '2012-01-01'}
 
-        df = srr.df
+        df = srr_cosp.df
         # Test across all cross-sections - aligned on the cross-section's intersection.
-        # Again, account for lag applied.
-        expected_date = {'AUD': '2011-01-04', 'CAD': '2009-01-02', 'GBP': '2010-01-04',
-                         'NZD': '2008-01-02', 'USD': '2012-01-03'}
+        # Account for weekends.
+        expected_date = {'AUD': '2011-01-03', 'CAD': '2009-01-01', 'GBP': '2010-01-01',
+                         'NZD': '2008-01-01', 'USD': '2012-01-02'}
         for c, cid_df in df.groupby(level=0):
             # Isolate the interior index.
             series_s_date = str(cid_df.iloc[0, :].name[1]).split(' ')[0]
             self.assertEqual(expected_date[c], series_s_date)
 
         # Test the values.
-        dfd = srr.dfd
+        dfd = srr_cosp.dfd
         filt_1 = (dfd['real_date'] == "2011-01-04") & (dfd['xcat'] == "XR")
         dfd_filt = dfd[filt_1]
         benchmark_value = float(dfd_filt[dfd_filt["cid"] == "AUD"]["value"])
         benchmark_value = round(benchmark_value, 5)
 
-        test_row = srr.df.loc['AUD'].loc["2011-01-04"]
+        test_row = srr_cosp.df.loc['AUD'].loc["2011-01-04"]
         condition = abs(benchmark_value - round(test_row["XR"], 5)) < 0.00001
         self.assertTrue(condition)
 
@@ -225,8 +225,13 @@ class TestAll(unittest.TestCase):
             condition = abs(test_value - round(test_row[s], 5)) < 0.00001
             self.assertTrue(condition)
 
-        # The DataFrame held on the instance, after communal sampling has been applied,
-        # will be consistently used to produce the metric tables.
+        # Confirm the dimensions of the return column remains unchanged - alignment
+        # occurs exclusively on the signals. To test, confirm the columns are the same
+        # regardless of whether communal sampling is applied.
+        srr = SignalReturnRelations(self.dfd, ret="XR", sig=primary_signal,
+                                    rival_sigs=rival_signals, sig_neg=False, cosp=False,
+                                    freq="D", blacklist=None)
+        self.assertTrue(srr.df.loc[:, srr.ret].shape == srr_cosp.df.loc[:, srr.ret].shape)
 
     def test__slice_df__(self):
 

@@ -104,22 +104,20 @@ class SignalReturnRelations:
 
         dfd = reduce_df(
             df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
-        )  # reduce prior to applying communal sample restriction
+        )
 
-        if self.cosp:
+        # Naturally, only applicable if rival signals have been passed.
+        if self.cosp and len(signals) > 1:
             dfd = self.__communal_sample__(df=dfd)
-            # TODO: must not include returns because of subsequent lagging
+
         self.dfd = dfd
 
         df = categories_df(
             dfd, xcats=xcats, cids=cids, val='value', start=None, end=None,
             freq=freq, blacklist=None, lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum']
         )
-        if self.cosp:
-            # TODO: check if necessary
-            df = df.dropna(how="any")
-        self.df = df
 
+        self.df = df
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
 
         if sig_neg:
@@ -171,11 +169,8 @@ class SignalReturnRelations:
         :param <str> signal: signal category.
         """
 
-        # Account for NaN values between the single respective signal and return. Only
-        # applicable if the segmentation type is signals.
-        if not self.cosp:
-            df_segment = df_segment.loc[:,
-                         [self.ret, signal]].dropna(axis=0, how="any")
+        # Account for NaN values between the single respective signal and return.
+        df_segment = df_segment.loc[:, [self.ret, signal]].dropna(axis=0, how="any")
 
         df_sgs = np.sign(df_segment.loc[:, [self.ret, signal]])
         # Exact zeroes are disqualified for sign analysis only.
@@ -185,14 +180,18 @@ class SignalReturnRelations:
         ret_sign = df_sgs[self.ret]
 
         df_out.loc[segment, "accuracy"] = skm.accuracy_score(sig_sign, ret_sign)
-        df_out.loc[segment, "bal_accuracy"] = skm.balanced_accuracy_score(sig_sign,
-                                                                          ret_sign)
+        df_out.loc[segment, "bal_accuracy"] = skm.balanced_accuracy_score(
+            sig_sign, ret_sign
+        )
+
         df_out.loc[segment, "pos_sigr"] = np.mean(sig_sign == 1)
         df_out.loc[segment, "pos_retr"] = np.mean(ret_sign == 1)
-        df_out.loc[segment, "pos_prec"] = skm.precision_score(ret_sign, sig_sign,
-                                                              pos_label=1)
-        df_out.loc[segment, "neg_prec"] = skm.precision_score(ret_sign, sig_sign,
-                                                              pos_label=-1)
+        df_out.loc[segment, "pos_prec"] = skm.precision_score(
+            ret_sign, sig_sign, pos_label=1
+        )
+        df_out.loc[segment, "neg_prec"] = skm.precision_score(
+            ret_sign, sig_sign, pos_label=-1
+        )
 
         ret_vals, sig_vals = df_segment[self.ret], df_segment[signal]
         df_out.loc[segment, ["kendall", "kendall_pval"]] = stats.kendalltau(ret_vals,
@@ -202,21 +201,42 @@ class SignalReturnRelations:
 
         return df_out
 
-    @staticmethod
-    def __communal_sample__(df: pd.DataFrame):
+    def __communal_sample__(self, df: pd.DataFrame):
         """
-        Reduce dataframe to rows where all categories have values.
+        On a multi-index DataFrame, where the outer index are the cross-sections and the
+        inner index are the timestamps, exclude any row where all signals do not have
+        a realised value.
 
         :param <pd.Dataframe> df: standardized DataFrame with the following necessary
-            columns: 'cid', 'xcat', 'real_date' and 'value.
+            columns: 'cid', 'xcat', 'real_date' and 'value'.
+
+        NB.:
+        Remove the return category from establishing the intersection to preserve the
+        maximum amount of signal data available (required because of the applied lag).
         """
 
         df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values="value")
 
         storage = []
-        for c, cid_df in df_w.groupby(level=0):  # loop though cids
-            cid_df = cid_df.dropna(how="any")  # remove rows/dates that
-            storage.append(cid_df)
+        for c, cid_df in df_w.groupby(level=0):
+            cid_df = cid_df[self.signals + [self.ret]]
+
+            final_df = pd.DataFrame(
+                data=np.empty(shape=cid_df.shape), columns=cid_df.columns,
+                index=cid_df.index
+            )
+            final_df.loc[:, :] = np.NaN
+
+            # Return category is preserved.
+            final_df.loc[:, self.ret] = cid_df[self.ret]
+
+            intersection_df = cid_df.loc[:, self.signals].droplevel(level=0)
+            intersection_df = intersection_df.dropna(how="any")
+            s_date = intersection_df.index[0]
+            e_date = intersection_df.index[-1]
+
+            final_df.loc[(c, s_date): (c, e_date), self.signals] = intersection_df.to_numpy()
+            storage.append(final_df)
 
         df = pd.concat(storage)
         df = df.stack().reset_index().sort_values(["cid", "xcat", "real_date"])
@@ -236,11 +256,10 @@ class SignalReturnRelations:
         # Analysis completed exclusively on the primary signal.
         df = self.df[[self.ret, self.sig]]
 
-        if not self.cosp:
-            # Will remove any timestamps where both the signal & return are not realised.
-            # Time horizon will not be aligned across cross-sections (communal sampling
-            # has not been applied).
-            df = df.dropna(how="any")
+        # Will remove any timestamps where both the signal & return are not realised.
+        # Applicable even if communal sampling has been applied given the alignment
+        # excludes return.
+        df = df.dropna(how="any")
 
         if cs_type == "cids":
             css = self.cids
@@ -567,7 +586,7 @@ if __name__ == "__main__":
 
     r_sigs = ["INFL", "GROWTH"]
     srn = SignalReturnRelations(dfd, ret="XR", sig="CRY", rival_sigs=r_sigs,
-                                sig_neg=True, cosp=False, freq="M", start="2002-01-01")
+                                sig_neg=True, cosp=True, freq="M", start="2002-01-01")
     dfsum = srn.summary_table()
 
     df_sigs = srn.signals_table(sigs=['CRY_NEG', 'INFL_NEG'])
