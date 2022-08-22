@@ -95,7 +95,6 @@ class SignalReturnRelations:
             rival_error = f"The additional signals must be present in the defined " \
                           f"DataFrame. It is currently missing, {missing}."
             assert set(r_sigs).issubset(set(xcats)), rival_error
-
             signals += r_sigs
 
         self.signals = signals
@@ -116,7 +115,6 @@ class SignalReturnRelations:
             dfd, xcats=xcats, cids=cids, val='value', start=None, end=None,
             freq=freq, blacklist=None, lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum']
         )
-
         self.df = df
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
 
@@ -169,7 +167,8 @@ class SignalReturnRelations:
         :param <str> signal: signal category.
         """
 
-        # Account for NaN values between the single respective signal and return.
+        # Account for NaN values between the single respective signal and return. Only
+        # applicable for rival signals panel level calculations.
         df_segment = df_segment.loc[:, [self.ret, signal]].dropna(axis=0, how="any")
 
         df_sgs = np.sign(df_segment.loc[:, [self.ret, signal]])
@@ -231,6 +230,7 @@ class SignalReturnRelations:
             final_df.loc[:, self.ret] = cid_df[self.ret]
 
             intersection_df = cid_df.loc[:, self.signals].droplevel(level=0)
+            # Intersection exclusively across the signals.
             intersection_df = intersection_df.dropna(how="any")
             s_date = intersection_df.index[0]
             e_date = intersection_df.index[-1]
@@ -258,7 +258,7 @@ class SignalReturnRelations:
 
         # Will remove any timestamps where both the signal & return are not realised.
         # Applicable even if communal sampling has been applied given the alignment
-        # excludes return.
+        # excludes the return category.
         df = df.dropna(how="any")
 
         if cs_type == "cids":
@@ -304,6 +304,7 @@ class SignalReturnRelations:
         df = self.df
 
         for s in self.signals:
+            # Entire panel will be passed in.
             df_out = self.__table_stats__(
                 df_segment=df, df_out=df_out, segment=s, signal=s
             )
