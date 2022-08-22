@@ -10,7 +10,7 @@ from itertools import product
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.panel.make_zn_scores import make_zn_scores
-
+from macrosynergy.management.update_df import update_df
 
 class NaivePnL:
 
@@ -87,14 +87,12 @@ class NaivePnL:
 
             if sig_neg:
                 bms = [b + "_NEG" for b in bms]
+                
+            bm_dict = self.add_bm(df=self.dfd, bms=bms, tickers=self.tickers)
 
-            add_bm_list, bm_dict = self.add_bm(df=self.dfd, bms=bms,
-                                               tickers=self.tickers)
             self._bm_dict = bm_dict
-            self.df = pd.concat([self.df] + add_bm_list)
 
-    @classmethod
-    def add_bm(cls, df: pd.DataFrame, bms: List[str],
+    def add_bm(self, df: pd.DataFrame, bms: List[str],
                tickers: List[str]):
         """
         Return benchmark DataFrames which will be appended to the instance's DataFrame.
@@ -107,8 +105,8 @@ class NaivePnL:
             The reduced DataFrame consists exclusively of the signal & return categories.
         """
 
-        add_bm_list = []
         bm_dict = {}
+
         for bm in bms:
             # Accounts for appending "_NEG" to the ticker.
             bm_s = bm.split("_")
@@ -122,14 +120,14 @@ class NaivePnL:
                 bm_dict[bm] = dfa.pivot(index='real_date', columns='xcat',
                                         values='value').squeeze(axis=0)
                 if bm not in tickers:
-                    add_bm_list.append(dfa)
+                    self.df = update_df(self.df, dfa)
 
-        return add_bm_list, bm_dict
+        return bm_dict
 
     @classmethod
-    def make_signal(cls, dfx: pd.DataFrame, sig: str, sig_op: str = 'zn_score_pan',
-                    min_obs: int = 252, iis: bool = True, sequential: bool = True,
-                    neutral: str = 'zero', thresh: float = None):
+    def __make_signal__(cls, dfx: pd.DataFrame, sig: str, sig_op: str = 'zn_score_pan',
+                        min_obs: int = 252, iis: bool = True, sequential: bool = True,
+                        neutral: str = 'zero', thresh: float = None):
         """
         Helper function used to produce the raw signal that forms the basis for
         positioning.
@@ -217,7 +215,7 @@ class NaivePnL:
         # Isolate the required signals on the re-balancing dates. Only concerned with the
         # respective signal on the re-balancing date. However, the produced dataframe
         # will only be defined over the re-balancing dates. Therefore, merge the
-        # aforementioned dataframe with the original dataframe such that all business
+        # aforementioned DataFrame with the original DataFrame such that all business
         # days are included. The intermediary dates, dates between re-balancing dates,
         # will initially be populated by NA values. To ensure the signal is used for the
         # duration between re-balancing dates, forward fill the computed signal over the
@@ -307,8 +305,10 @@ class NaivePnL:
         # category and associated signal category.
         dfx = self.df[self.df['xcat'].isin([self.ret, sig])]
 
-        dfw = self.make_signal(dfx=dfx, sig=sig, sig_op=sig_op, min_obs=min_obs, iis=iis,
-                               sequential=sequential, neutral=neutral, thresh=thresh)
+        dfw = self.__make_signal__(
+            dfx=dfx, sig=sig, sig_op=sig_op, min_obs=min_obs, iis=iis,
+            sequential=sequential, neutral=neutral, thresh=thresh
+        )
 
         # Multi-index DataFrame with a natural minimum lag applied.
         dfw['psig'] = dfw['psig'].groupby(level=0).shift(1)
@@ -652,7 +652,7 @@ class NaivePnL:
             in df is used.
 
         :return <pd.DataFrame>: standardized DataFrame with key PnL performance
-            statistics
+            statistics.
         """
 
         error_cids = "List of cross-sections expected."
@@ -681,7 +681,7 @@ class NaivePnL:
         dfx = reduce_df(self.df, pnl_cats, pnl_cids, start,
                         end, self.black, out_all=False)
 
-        groups = 'xcat' if len(pnl_cids) == 1 else 'cid'
+        groups = "xcat" if len(pnl_cids) == 1 else "cid"
         stats = ['Return (pct ar)', 'St. Dev. (pct ar)', 'Sharpe Ratio', 'Sortino Ratio',
                  'Max 21-day draw', 'Max 6-month draw', 'Traded Months']
 
@@ -781,6 +781,11 @@ if __name__ == "__main__":
                  min_obs=250, thresh=2.5)
 
     pnl.make_long_pnl(vol_scale=10, label="Long")
+
+    df_eval = pnl.evaluate_pnls(pnl_cats=["PNL_GROWTH_PZN"], pnl_cids=cids,
+                                start="2015-01-01",
+                                end="2020-12-31")
+    print(df_eval)
 
     # Able to adjust the start date for any respective visual analysis.
     pnl.plot_pnls(start="2010-01-01")
