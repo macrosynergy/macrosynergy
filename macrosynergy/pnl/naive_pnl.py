@@ -28,7 +28,9 @@ class NaivePnL:
     :param <bool> sig_neg: if set to True puts the signal in negative terms for all
         analysis. The postfix "_NEG" will be appended to all signal categories and
         benchmark tickers passed. Thus, the postfix must be included when referencing any
-        signal in .make_pnl(). Default is False.
+        signal or PnL name, if the default form is used for constructing the respective
+        PnL name, in .make_pnl(). For instance, 'PNL_GROWTH_NEG' where GROWTH is the
+        original signal. The default setting is False.
     :param <List[str]> cids: cross sections that are traded. Default is all in the
         dataframe.
     :param <str, List[str]> bms: list of benchmark tickers for which
@@ -61,7 +63,7 @@ class NaivePnL:
             dfd_neg["xcat"] += "_NEG"
 
             sigs = [s + "_NEG" for s in sigs]
-            df = pd.concat([df[filt_1], dfd_neg]).reset_index()
+            df = pd.concat([df[filt_1], dfd_neg]).reset_index(drop=True)
 
         self.dfd = df
         self.sigs = sigs
@@ -673,7 +675,8 @@ class NaivePnL:
             if not set(pnl_cats) <= set(self.pnl_names):
                 missing = [pnl for pnl in pnl_cats if pnl not in self.pnl_names]
                 pnl_error = f"Received PnL categories have not been defined. The PnL " \
-                            f"category(s) which has not been defined is: {missing}."
+                            f"category(s) which has not been defined is: {missing}. " \
+                            f"The produced PnL category(s) are {self.pnl_names}."
                 raise ValueError(pnl_error)
 
         assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
@@ -782,7 +785,7 @@ if __name__ == "__main__":
 
     pnl.make_long_pnl(vol_scale=10, label="Long")
 
-    df_eval = pnl.evaluate_pnls(pnl_cats=["PNL_GROWTH_PZN"], pnl_cids=cids,
+    df_eval = pnl.evaluate_pnls(pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids,
                                 start="2015-01-01",
                                 end="2020-12-31")
     print(df_eval)
@@ -794,6 +797,6 @@ if __name__ == "__main__":
     cids_subset = ["ALL"]
     # Test the inclusion of a single benchmark correlation.
     df_eval = pnl.evaluate_pnls(
-        pnl_cats=["PNL_GROWTH_PZN", "PNL_GROWTH_PZN05", "Long"],
+        pnl_cats=["PNL_GROWTH_NEG", "PNL_GROWTH_PZN05", "Long"],
         pnl_cids=cids_subset
     )
