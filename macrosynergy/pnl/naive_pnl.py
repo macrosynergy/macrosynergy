@@ -25,6 +25,12 @@ class NaivePnL:
         to the Class' constructor and their respective vintages will be held on the
         instance's DataFrame. The signals can subsequently be referenced through the
         self.make_pnl() method which receives a single signal per call.
+    :param <bool> sig_neg: if set to True puts the signal in negative terms for all
+        analysis. The postfix "_NEG" will be appended to all signal categories and
+        benchmark tickers passed. Thus, the postfix must be included when referencing any
+        signal or PnL name, if the default form is used for constructing the respective
+        PnL name, in .make_pnl(). For instance, 'PNL_GROWTH_NEG' where GROWTH is the
+        original signal. The default setting is False.
     :param <List[str]> cids: cross sections that are traded. Default is all in the
         dataframe.
     :param <str, List[str]> bms: list of benchmark tickers for which
@@ -40,23 +46,39 @@ class NaivePnL:
 
     """
     def __init__(self, df: pd.DataFrame, ret: str, sigs: List[str],
-                 cids: List[str] = None, bms: Union[str, List[str]] = None,
-                 start: str = None, end: str = None,
+                 sig_neg: bool = False, cids: List[str] = None,
+                 bms: Union[str, List[str]] = None, start: str = None, end: str = None,
                  blacklist: dict = None):
 
-        self.dfd = df
         assert isinstance(ret, str), "The return category expects a single <str>."
         self.ret = ret
+
+        sig_neg_error = "Boolean object expected for negative conversion."
+        assert isinstance(sig_neg, bool), sig_neg_error
+        if sig_neg:
+
+            filt_1 = (df["xcat"] == self.ret)
+            dfd_neg = df[~filt_1]
+            dfd_neg["value"] *= -1
+            dfd_neg["xcat"] += "_NEG"
+
+            sigs = [s + "_NEG" for s in sigs]
+            df = pd.concat([df[filt_1], dfd_neg]).reset_index(drop=True)
+
+        self.dfd = df
         self.sigs = sigs
         xcats = [ret] + sigs
 
-        cols = ['cid', 'xcat', 'real_date', 'value']
-        self.df, self.xcats, self.cids = reduce_df(df[cols], xcats, cids, start, end,
-                                                   blacklist, out_all=True)
+        cols = ["cid", "xcat", "real_date", "value"]
+        # Potentially excludes the benchmarks but will be held on the instance level
+        # through self.dfd.
+        self.df, self.xcats, self.cids = reduce_df(self.dfd[cols], xcats, cids, start,
+                                                   end, blacklist, out_all=True)
+
         ticker_func = lambda t: t[0] + "_" + t[1]
         self.tickers = list(map(ticker_func, product(self.cids, self.xcats)))
 
-        self.df['real_date'] = pd.to_datetime(self.df['real_date'])
+        self.df["real_date"] = pd.to_datetime(self.df["real_date"])
         self.pnl_names = []
         self.signal_df = {}
         self.black = blacklist
@@ -64,6 +86,10 @@ class NaivePnL:
         self.bm_bool = isinstance(bms, (str, list))
         if self.bm_bool:
             bms = [bms] if isinstance(bms, str) else bms
+
+            if sig_neg:
+                bms = [b + "_NEG" for b in bms]
+                
             bm_dict = self.add_bm(df=self.dfd, bms=bms, tickers=self.tickers)
 
             self._bm_dict = bm_dict
@@ -84,7 +110,10 @@ class NaivePnL:
         bm_dict = {}
 
         for bm in bms:
-            cid, xcat = bm.split("_", 1)
+            # Accounts for appending "_NEG" to the ticker.
+            bm_s = bm.split("_")
+            cid = bm_s[0]
+            xcat = bm_s[1]
             dfa = df[(df['cid'] == cid) & (df['xcat'] == xcat)]
 
             if dfa.shape[0] == 0:
@@ -646,7 +675,8 @@ class NaivePnL:
             if not set(pnl_cats) <= set(self.pnl_names):
                 missing = [pnl for pnl in pnl_cats if pnl not in self.pnl_names]
                 pnl_error = f"Received PnL categories have not been defined. The PnL " \
-                            f"category(s) which has not been defined is: {missing}."
+                            f"category(s) which has not been defined is: {missing}. " \
+                            f"The produced PnL category(s) are {self.pnl_names}."
                 raise ValueError(pnl_error)
 
         assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
@@ -741,21 +771,21 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     # Instantiate a new instance to test the long-only functionality.
-    pnl = NaivePnL(dfd, ret='EQXR', sigs=['CRY', 'GROWTH', 'INFL'],
-                   cids=cids, start='2000-01-01', blacklist=black,
+    pnl = NaivePnL(dfd, ret="EQXR", sigs=["CRY", "GROWTH", "INFL"], sig_neg=True,
+                   cids=cids, start="2000-01-01", blacklist=black,
                    bms=["EUR_EQXR", "USD_EQXR"])
 
-    pnl.make_pnl(sig='GROWTH', sig_op='zn_score_pan', rebal_freq='monthly',
-                 vol_scale=5, rebal_slip=1, pnl_name='PNL_GROWTH_PZN05',
+    pnl.make_pnl(sig="GROWTH_NEG", sig_op="zn_score_pan", rebal_freq="monthly",
+                 vol_scale=5, rebal_slip=1, pnl_name="PNL_GROWTH_PZN05",
                  min_obs=250, thresh=2)
 
-    pnl.make_pnl(sig='GROWTH', sig_op='zn_score_pan', rebal_freq='monthly',
-                 vol_scale=5, rebal_slip=1, pnl_name='PNL_GROWTH_PZN',
+    pnl.make_pnl(sig="GROWTH_NEG", sig_op="zn_score_pan", rebal_freq="monthly",
+                 vol_scale=5, rebal_slip=1, pnl_name=None,
                  min_obs=250, thresh=2.5)
 
     pnl.make_long_pnl(vol_scale=10, label="Long")
 
-    df_eval = pnl.evaluate_pnls(pnl_cats=["PNL_GROWTH_PZN"], pnl_cids=cids,
+    df_eval = pnl.evaluate_pnls(pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids,
                                 start="2015-01-01",
                                 end="2020-12-31")
     print(df_eval)
@@ -764,9 +794,9 @@ if __name__ == "__main__":
     pnl.plot_pnls(start="2010-01-01")
 
     # Return evaluation and PnL DataFrames.
-    cids_subset = ['ALL']
+    cids_subset = ["ALL"]
     # Test the inclusion of a single benchmark correlation.
     df_eval = pnl.evaluate_pnls(
-        pnl_cats=['PNL_GROWTH_PZN', 'PNL_GROWTH_PZN05', "Long"],
+        pnl_cats=["PNL_GROWTH_NEG", "PNL_GROWTH_PZN05", "Long"],
         pnl_cids=cids_subset
     )
