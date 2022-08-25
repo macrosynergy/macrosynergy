@@ -56,10 +56,7 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
 
         dates = dates_iter[dates_iter >= first_estimation]
         for date in dates:
-            # The try statement is required to handle time intervals which do not have
-            # any realised values. The stack operation will return an empty list instead
-            # of a floating point value which precludes it being inserted in the output
-            # DataFrame.
+
             df_out.loc[date, "value"] = df.loc[first_observation:date].stack().apply(stat)
 
         df_out = df_out.fillna(method='ffill')
@@ -72,7 +69,7 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
 
 def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
                    start: str = None, end: str = None, blacklist: dict = None,
-                   sequential: bool = True, min_obs: int = 261,  iis: bool = True,
+                   sequential: bool = True, min_obs: int = 261, iis: bool = True,
                    neutral: str = 'zero', est_freq: str = 'd', thresh: float = None,
                    pan_weight: float = 1, postfix: str = 'ZN'):
 
