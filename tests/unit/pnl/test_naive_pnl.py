@@ -98,6 +98,45 @@ class TestAll(unittest.TestCase):
         bm_tickers = list(pnl._bm_dict.keys())
         self.assertTrue(sorted(bm_tickers) == ["EUR_EQXR"])
 
+    def test_constructor_neg_sig(self):
+
+        # Apply the negative signal transformation. Used to validate if a signal has an
+        # inverse relationship with the return category.
+        self.dataframe_construction()
+
+        ret = "EQXR"
+        sigs = ["CRY", "GROWTH", "INFL"]
+        pnl = NaivePnL(
+            self.dfd, ret=ret, sigs=sigs, cids=self.cids, sig_neg=True,
+            bms=["EUR_DUXR", "USD_DUXR"], start="2000-01-01", blacklist=None
+        )
+
+        # Firstly, the return series remains unchanged, as the negative application is
+        # exclusively on the defined signals.
+        test_df = self.dfd[self.dfd["xcat"].isin([ret] + sigs)]
+        neg_sig_df = pnl.df
+
+        return_filt = test_df["xcat"] == ret
+        test_df_ret = test_df[return_filt]
+        neg_sig_df_ret = neg_sig_df[neg_sig_df["xcat"] == ret]
+
+        # Return category remains unchanged.
+        dfw_1 = test_df_ret.pivot(index='real_date', columns='cid', values='value')
+        dfw_2 = neg_sig_df_ret.pivot(index='real_date', columns='cid', values='value')
+
+        # Populate with zero values to test comparability.
+        self.assertTrue(np.all(dfw_1.fillna(0) == dfw_2.fillna(0)))
+
+        # Secondly, confirm the signal names have the postfix, "_NEG", appended.
+        xcats_mod = list(set(pnl.df["xcat"]))
+        for c in xcats_mod:
+            split = c.split("_")
+
+            if len(split) > 1:
+                self.assertEqual(split[1], "NEG")
+                # Negative postfix is only applied to the signal categories.
+                self.assertTrue(split[0] in sigs)
+
     def test_make_signal(self):
 
         self.dataframe_construction()
