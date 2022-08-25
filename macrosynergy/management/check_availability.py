@@ -49,7 +49,7 @@ def check_startyears(df: pd.DataFrame):
 
 def check_enddates(df: pd.DataFrame):
     """
-    Dataframe with end dates across all extended categories and cross sections
+    DataFrame with end dates across all extended categories and cross sections
 
     :param <pd.Dataframe> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcats', 'real_date'.
