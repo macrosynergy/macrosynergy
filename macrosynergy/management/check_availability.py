@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import List, Union, Tuple
+from typing import List, Tuple
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
@@ -67,7 +67,9 @@ def business_day_dif(df: pd.DataFrame, maxdate: pd.Timestamp):
 
     :param <pd.Dataframe> df: DataFrame cross-sections rows and category columns. Each
         cell in the DataFrame will correspond to the start date of the respective series.
-    :param <pd.Timestamp> maxdate: maximum date found in the receievd DataFrame.
+    :param <pd.Timestamp> maxdate: maximum release date found in the received DataFrame.
+        In principle, all series should have values up until the respective business
+        date. The difference will represent possible missing values.
 
     :return <pd.Dataframe>: DataFrame consisting of business day differences for all
         series.
@@ -77,7 +79,7 @@ def business_day_dif(df: pd.DataFrame, maxdate: pd.Timestamp):
     year_df *= 52
 
     week_max = maxdate.week
-    week_df = week_max - df.apply(lambda x: x.dt.week)
+    week_df = week_max - df.apply(lambda x: x.dt.isocalendar().week)
 
     # Account for difference over a year.
     week_df += year_df
@@ -97,12 +99,13 @@ def visual_paneldates(df: pd.DataFrame, size: Tuple[float] = None):
 
     """
 
-    # Timestamps.
+    # DataFrame of official timestamps.
     if all(df.dtypes == object):
 
         df = df.apply(pd.to_datetime)
+        # All series, in principle, should be populated to the last active release date
+        # in the DataFrame.
         maxdate = df.max().max()
-
         df = business_day_dif(df=df, maxdate=maxdate)
 
         header = f"Missing days prior to {maxdate.strftime('%Y-%m-%d')}"

@@ -1,5 +1,6 @@
 
 import unittest
+import pandas as pd
 from macrosynergy.management.check_availability import *
 from tests.simulate import make_qdf
 
@@ -13,19 +14,19 @@ class TestAll(unittest.TestCase):
         df_cids = pd.DataFrame(index=self.cids,
                                columns=["earliest", "latest", "mean_add", "sd_mult"])
 
-        df_cids.loc["AUD", :] = ['2011-01-01', '2020-12-31', 0.5, 2]
-        df_cids.loc["CAD", :] = ['2011-01-01', '2020-12-31', 0, 1]
-        df_cids.loc["GBP", :] = ['2011-01-01', '2020-12-31', -0.2, 0.5]
+        df_cids.loc["AUD", :] = ["2011-01-01", "2022-08-10", 0.5, 2]
+        df_cids.loc["CAD", :] = ["2011-01-01", "2022-08-24", 0, 1]
+        df_cids.loc["GBP", :] = ["2011-01-01", "2022-08-15", -0.2, 0.5]
 
         df_xcats = pd.DataFrame(index=self.xcats,
                                 columns=["earliest", "latest", "mean_add", "sd_mult",
                                          "ar_coef", "back_coef"])
 
-        df_xcats.loc["CRY", :] = ["2011-01-01", "2020-12-31", 1, 2, 0.9, 0.5]
-        df_xcats.loc["XR", :] = ["2011-01-01", "2020-12-31", 0, 1, 0, 0.3]
-        df_xcats.loc["GROWTH", :] = ["2011-01-01", "2020-12-31", 0, 2, 0, 0.4]
-        df_xcats.loc["INFL", :] = ["2011-01-01", "2020-12-31", 0, 3, 0, 0.6]
-        df_xcats.loc["GDP", :] = ["2011-01-01", "2020-12-31", 0, 1, 0, 0.7]
+        df_xcats.loc["CRY", :] = ["2011-01-01", "2022-08-25", 1, 2, 0.9, 0.5]
+        df_xcats.loc["XR", :] = ["2011-01-01", "2022-08-25", 0, 1, 0, 0.3]
+        df_xcats.loc["GROWTH", :] = ["2011-01-01", "2022-08-25", 0, 2, 0, 0.4]
+        df_xcats.loc["INFL", :] = ["2011-01-01", "2022-08-25", 0, 3, 0, 0.6]
+        df_xcats.loc["GDP", :] = ["2011-01-01", "2022-08-25", 0, 1, 0, 0.7]
 
         np.random.seed(0)
 
@@ -80,6 +81,23 @@ class TestAll(unittest.TestCase):
 
         df_exp = df_exp.reindex(sorted(df_exp.columns), axis=1)
         self.assertTrue(df_ed.equals(df_exp))
+
+    def test_business_day_dif(self):
+
+        self.dataframe_constructor()
+        dfd = self.dfd
+
+        dfe = check_enddates(dfd)
+        dfe = dfe.apply(pd.to_datetime)
+
+        maxdate = dfe.max().max()
+        bus_df = business_day_dif(df=dfe, maxdate=maxdate)
+
+        # The last realised value in the series occurs on "2022-08-24". Australia series
+        # will have a final value of "2022-08-15" and Great Britain will have
+        # "2022-08-10".
+        self.assertTrue(all(bus_df.loc["AUD", :].values == 10))
+        self.assertTrue(all(bus_df.loc["GBP", :].values == 7))
 
 
 if __name__ == '__main__':
