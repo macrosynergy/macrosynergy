@@ -34,7 +34,10 @@ def valid_response(r: requests.Response) -> dict:
                 condition + " - unable to access DataQuery. Password expired."
             )
 
-    assert r.ok, f"Access issue status code {r.status_code} for {r.text}."
+    assert r.ok, (
+        f"Access issue status code {r.status_code},"
+        f" headers: {r.headers}, text: {r.text} for url {r.url}."
+    )
 
     return r.json()
 
