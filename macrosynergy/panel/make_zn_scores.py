@@ -24,8 +24,8 @@ def rolling_date(df_out_index: pd.DatetimeIndex, deck: deque, date: pd.Timestamp
 
     final_date_index = np.where(df_out_index == date)[0][0]
 
-    # Not inclusive of the final date.
-    new_dates = list(df_out_index)[next_date_index:final_date_index]
+    # Not inclusive of the final date and up to the date (final_date_index + 1).
+    new_dates = list(df_out_index)[next_date_index:(final_date_index + 1)]
     deck.extend(new_dates)
 
     first_observation = deck[0]
@@ -66,14 +66,15 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
     # the arithmetic operation is made, any falsified values will be displaced by NaN
     # values.
 
+    # Handles for cross-sections with leading NaN values.
     first_observation = df.dropna(axis=0, how='all').index[0]
     first_index = np.where(df_out.index == first_observation)[0][0]
 
     if max_wind_bool:
         # Instantiate the double-ended Queue with the first "max_wind" number of
-        # elements.
+        # elements. Will exclude the leading NaN values.
         deck = deque(
-            df.index[first_index:(first_index + max_wind)], maxlen=max_wind
+            index_df[first_index:(first_index + max_wind)], maxlen=max_wind
         )
 
     # Adjust for individual cross-sections' series commencing at different dates.
@@ -200,6 +201,10 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         max_wind_error = "The size of the rolling window must be greater than the chosen" \
                          " estimation frequency."
         assert max_wind >= pd_freq_dur[est_freq], max_wind_error
+
+        max_min_obs = "The size of the rolling window must be greater than the minimum " \
+                      "observation date parameter."
+        assert max_wind > min_obs, max_min_obs
 
     # --- Prepare re-estimation dates and time-series DataFrame.
 
