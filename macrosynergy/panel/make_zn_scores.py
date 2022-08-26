@@ -6,6 +6,31 @@ from collections import deque
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
+def rolling_date(df_out_index: pd.DatetimeIndex, deck: deque, date: pd.Timestamp):
+    """Adjusts the start date of the time-period the neutral level is computed over.
+
+    :param <pd.DatetimeIndex> df_out_index: original daily frequency. Will iterate
+        through according to the estimation frequency.
+    :param <deque> deck: data structure to hold the rolling period according to the
+        maximum number of observations.
+    :param <pd.Timestamp> date: the next re-estimation date according to the specified
+        frequency.
+
+    :return: rolling timestamp.
+    """
+
+    last_date_index = np.where(df_out_index == deck[-1])[0][0]
+    next_date_index = last_date_index + 1
+
+    final_date_index = np.where(df_out_index == date)[0][0]
+
+    # Not inclusive of the final date.
+    new_dates = list(df_out_index)[next_date_index:final_date_index]
+    deck.extend(new_dates)
+
+    first_observation = deck[0]
+    return first_observation
+
 def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
                    stat: str = 'mean', sequential: bool = True,
                    min_obs: int = 261, max_wind: int = None, iis: bool = True):
@@ -13,7 +38,7 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
     """
     Compute statistic based on an expanding sample.
 
-    :param <pd.Dataframe> df: daily-frequency time series DataFrame.
+    :param <pd.DataFrame> df: daily-frequency time series DataFrame.
     :param <pd.DatetimeIndex> dates_iter: controls the frequency of the neutral &
         standard deviation calculations.
     :param <str> stat: statistical method to be applied. This is typically 'mean',
@@ -29,11 +54,12 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
     :param <bool> iis: if set to True, the values of the initial interval determined
         by min_obs will be estimated in-sample, based on the full initial sample.
 
-    :return: Time series dataframe of the chosen statistic across all columns
+    :return: Time series DataFrame of the chosen statistic across all columns.
     """
     max_wind_bool = True if max_wind is not None else False
 
-    df_out = pd.DataFrame(np.nan, index=df.index, columns=['value'])
+    index_df = df.index
+    df_out = pd.DataFrame(np.nan, index=index_df, columns=['value'])
     # An adjustment for individual series' first realised value is not required given the
     # returned DataFrame will be subtracted from the original DataFrame. The original
     # DataFrame will implicitly host this information through NaN values such that when
@@ -44,6 +70,8 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
     first_index = np.where(df_out.index == first_observation)[0][0]
 
     if max_wind_bool:
+        # Instantiate the double-ended Queue with the first "max_wind" number of
+        # elements.
         deck = deque(
             df.index[first_index:(first_index + max_wind)], maxlen=max_wind
         )
@@ -71,13 +99,9 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
 
             if max_wind_bool and date > deck[-1]:
 
-                last_date_index = np.where(df_out.index == deck[-1])[0][0]
-                next_date = df_out.index[last_date_index + 1]
-
-                new_dates = df_out.loc[next_date:date].index
-                deck.extend(new_dates)
-
-                first_observation = deck[0]
+                first_observation = rolling_date(
+                    df_out_index=index_df, deck=deck, date=date
+                )
 
             # The stack operation will return an empty list instead of a floating point
             # value which precludes it being inserted in the output DataFrame.
@@ -153,8 +177,10 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     # --- Assertions
 
     assert neutral in ["mean", "median", "zero"]
+
     if thresh is not None:
         assert thresh > 1, "The 'thresh' parameter must be larger than 1."
+
     assert 0 <= pan_weight <= 1, "The 'pan_weight' parameter must be between 0 and 1."
     assert isinstance(iis, bool), "Boolean Object required."
 
@@ -271,9 +297,8 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar = 0.75)
 
     # Monthly: panel + cross.
+    # Apply the maximum window.
     dfzm = make_zn_scores(
         dfd, xcat='XR', sequential=True, cids=cids, blacklist=black, iis=True,
         neutral='mean', pan_weight=0.75, min_obs=261, max_wind=500, est_freq="q"
     )
-
-    # Daily: panel. Neutral and standard deviation will be computed daily.
