@@ -25,19 +25,14 @@ class NaivePnL:
         to the Class' constructor and their respective vintages will be held on the
         instance's DataFrame. The signals can subsequently be referenced through the
         self.make_pnl() method which receives a single signal per call.
-    :param <bool> sig_neg: if set to True puts the signal(s) in negative terms for all
-        analysis which is useful if determining whether there is an inverse relationship.
-        The postfix "_NEG" will be appended to all signal categories. Thus, the postfix
-        must be included when referencing any signal or PnL name, if the default form is
-        used for constructing the respective PnL name, in .make_pnl(). For instance,
-        'PNL_GROWTH_NEG' where GROWTH is the original signal. The default setting is
-        False.
+    :param <bool> sig_neg: if set to True puts the signal(s) will be applied in negative
+        terms. Default is False. The postfix "_NEG" will be appended to all signal
+        categories in this case and this postfix  must be included when referencing
+        any signal or PnL name.
     :param <List[str]> cids: cross sections that are traded. Default is all in the
         dataframe.
     :param <str, List[str]> bms: list of benchmark tickers for which
         correlations are displayed against PnL strategies.
-        If there are not any benchmarks defined on the Class' instance, then the
-        parameter, 'bms', in the method self.evaluate_pnls() becomes obsolete.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df
@@ -72,12 +67,12 @@ class NaivePnL:
             filt_1 = (df["xcat"] == self.ret)
             # Reduce to signal categories and multiply by negative one to account for
             # inverse relationship.
-            dfd_neg = df[~filt_1]
-            dfd_neg["value"] *= -1
-            dfd_neg["xcat"] += "_NEG"
+            df_neg = df[~filt_1]
+            df_neg["value"] *= -1
+            df_neg["xcat"] += "_NEG"
 
             sigs = [s + "_NEG" for s in sigs]
-            df = pd.concat([df[filt_1], dfd_neg]).reset_index(drop=True)
+            df = pd.concat([df[filt_1], df_neg]).reset_index(drop=True)
 
         self.df = df
         self.sigs = sigs
