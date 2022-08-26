@@ -275,5 +275,3 @@ if __name__ == "__main__":
         dfd, xcat='XR', sequential=True, cids=cids, blacklist=black, iis=True,
         neutral='mean', pan_weight=0.75, min_obs=261, max_wind=500, est_freq="q"
     )
-
-    # Daily: panel. Neutral and standard deviation will be computed daily.

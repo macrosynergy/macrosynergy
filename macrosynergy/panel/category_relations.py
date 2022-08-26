@@ -295,10 +295,10 @@ class CategoryRelations(object):
 
     def reg_scatter(self, title: str = None, labels: bool = False,
                     size: Tuple[float] = (12, 8), xlab: str = None, ylab: str = None,
-                    coef_box_incl: bool = True, coef_box: str = None,
-                    fit_reg: bool = True, reg_ci: int = 95, reg_order: int = 1,
-                    reg_robust: bool = False, separator: Union[str, int] = None,
-                    title_adj: float = 1, single_chart: bool = False):
+                    coef_box: str = None, fit_reg: bool = True, reg_ci: int = 95,
+                    reg_order: int = 1, reg_robust: bool = False,
+                    separator: Union[str, int] = None, title_adj: float = 1,
+                    single_chart: bool = False):
 
         """
         Display scatter-plot and regression line.
@@ -316,13 +316,13 @@ class CategoryRelations(object):
         :param <int> reg_order: order of the regression equation. Default is 1 (linear).
         :param <bool> reg_robust: if this will de-weight outliers, which is
             computationally expensive. Default is False.
-        :param <bool> coef_box_incl: binary variable delimiting whether the correlation
-            coefficient and probability statistics are included in the graphic. The
-            default value is True: coefficient box included.
-        :param <str> coef_box: gives the location of the box of correlation coefficient
-            and probability. If None (default), the box is shown in the centre of the
-            graph. The options are standard, i.e. 'upper left', 'lower right' and so
-            forth. This does not work with a separator.
+        :param <str> coef_box: two-purpose parameter. Firstly, if the parameter equals
+            None, the correlation coefficient and probability statistics will not be
+            included in the graphic. Secondly, if the statistics are to be included,
+            pass in the desired location on the graph which, in addition, will act as a
+            pseudo-boolean parameter. The options are standard, i.e. 'upper left',
+            'lower right' and so forth. Default is None, i.e the statistics are not
+            displayed.
         :param <Union[str, int]> separator: allows categorizing the scatter analysis by
             cross-section or integer. In the former case the argument is set to
             "cids" and in the latter case the argument is set to a year [2010, for
@@ -336,10 +336,6 @@ class CategoryRelations(object):
             False, and the names of the axis will be displayed on each grid if not
             conflicting with the label for each variable.
         """
-
-        coef_box_error = "Expects a Boolean Object indicating whether to include the " \
-                         "correlation coefficient & probability statistics in the graph."
-        assert isinstance(coef_box_incl, bool), coef_box_error
 
         coef_box_loc_error = "The parameter expects a string used to delimit the " \
                              "location of the box: 'upper left', 'lower right' etc."
@@ -386,7 +382,8 @@ class CategoryRelations(object):
                         label=label_set2,
                         scatter_kws={'s': 30, 'alpha': 0.5},
                         line_kws={'lw': 1})
-            if coef_box_incl:
+
+            if coef_box is not None:
                 data_table = self.corr_probability(df_probability=[dfx1, dfx2],
                                                    time_period="",
                                                    coef_box_loc=coef_box)
@@ -436,7 +433,7 @@ class CategoryRelations(object):
                 line_kws={'lw': 1}
             )
 
-            if coef_box_incl:
+            if coef_box is not None:
                 fg.map_dataframe(self.annotate_facet)
 
             fg.set_titles(col_template='{col_name}')
@@ -474,7 +471,7 @@ class CategoryRelations(object):
                         scatter_kws={'s': 30, 'alpha': 0.5, 'color': 'lightgray'},
                         line_kws={'lw': 1})
 
-            if coef_box_incl:
+            if coef_box is not None:
                 data_table = self.corr_probability(df_probability=self.df,
                                                    coef_box_loc=coef_box)
                 data_table.scale(0.4, 2.5)
