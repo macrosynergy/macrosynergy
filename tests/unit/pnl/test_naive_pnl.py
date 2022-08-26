@@ -137,6 +137,39 @@ class TestAll(unittest.TestCase):
                 # Negative postfix is only applied to the signal categories.
                 self.assertTrue(split[0] in sigs)
 
+        # Thirdly, confirm that the signals have been multiplied by minus one.
+        for s in sigs:
+
+            signal_filt = test_df["xcat"] == s
+            test_df_sig = test_df[signal_filt]
+            neg_sig_df_sig = neg_sig_df[neg_sig_df["xcat"] == s + "_NEG"]
+
+            dfw_1 = test_df_sig.pivot(index='real_date', columns='cid', values='value')
+            dfw_2 = neg_sig_df_sig.pivot(
+                index='real_date', columns='cid', values='value'
+            )
+
+            # Difference DataFrame should exclusively consist of zero values.
+            dif = dfw_1 + dfw_2
+            dif = dif.fillna(0)
+            self.assertTrue(np.all(dif.sum(axis=1) == 0))
+
+        # Lastly, confirm that the benchmark tickers have not been multiplied by minus
+        # one. Compute the correlation between the PnL series and the respective
+        # benchmark tickers.
+        # Benchmarks will be appended to the instance DataFrame, self.df.
+        bms = ["EUR_DUXR", "USD_DUXR"]
+        neg_sig_df["ticker"] = neg_sig_df["cid"] + "_" + neg_sig_df["xcat"]
+        for b in bms:
+
+            b_cid, b_xcat = b.split("_")
+            filt_bm = (self.dfd["xcat"] == b_xcat) & (self.dfd["cid"] == b_cid)
+
+            test_bm_df = self.dfd[filt_bm]["value"]
+            neg_sig_df_bm = neg_sig_df[neg_sig_df["ticker"] == b]["value"]
+
+            self.assertTrue(np.all(test_bm_df.to_numpy() == neg_sig_df_bm.to_numpy()))
+
     def test_make_signal(self):
 
         self.dataframe_construction()
