@@ -37,6 +37,12 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
 
     """
 
+    possible_xcats = set(df["xcat"])
+    missing_xcats = set(xcats).difference(possible_xcats)
+    error_xcats = "The categories passed in to view_ranges() must be present in the " \
+                  f"DataFrame: missing {missing_xcats}."
+    assert set(xcats).issubset(possible_xcats), error_xcats
+
     if sort_cids_by is not None:
         assert isinstance(sort_cids_by, str)
         sort_error = "Sorting parameter must either be 'mean' or 'std'."
