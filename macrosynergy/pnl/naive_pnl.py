@@ -789,13 +789,3 @@ if __name__ == "__main__":
                                 end="2020-12-31")
     print(df_eval)
 
-    # Able to adjust the start date for any respective visual analysis.
-    pnl.plot_pnls(start="2010-01-01")
-
-    # Return evaluation and PnL DataFrames.
-    cids_subset = ["ALL"]
-    # Test the inclusion of a single benchmark correlation.
-    df_eval = pnl.evaluate_pnls(
-        pnl_cats=["PNL_GROWTH_NEG", "PNL_GROWTH_PZN05", "Long"],
-        pnl_cids=cids_subset
-    )
