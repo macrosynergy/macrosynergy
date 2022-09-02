@@ -787,6 +787,5 @@ if __name__ == "__main__":
     df_eval = pnl.evaluate_pnls(pnl_cats=["PNL_GROWTH", "PNL_GROWTH_NEG"],
                                 start="2015-01-01",
                                 end="2020-12-31")
-    print(tabulate(df_eval))
     print(df_eval)
 
