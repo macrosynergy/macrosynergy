@@ -4,6 +4,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+import tabulate
 
 from typing import List, Union, Tuple
 from itertools import product
@@ -787,15 +788,6 @@ if __name__ == "__main__":
     df_eval = pnl.evaluate_pnls(pnl_cats=["PNL_GROWTH", "PNL_GROWTH_NEG"],
                                 start="2015-01-01",
                                 end="2020-12-31")
+    print(tabulate(df_eval))
     print(df_eval)
 
-    # Able to adjust the start date for any respective visual analysis.
-    pnl.plot_pnls(start="2010-01-01")
-
-    # Return evaluation and PnL DataFrames.
-    cids_subset = ["ALL"]
-    # Test the inclusion of a single benchmark correlation.
-    df_eval = pnl.evaluate_pnls(
-        pnl_cats=["PNL_GROWTH_NEG", "PNL_GROWTH_PZN05", "Long"],
-        pnl_cids=cids_subset
-    )

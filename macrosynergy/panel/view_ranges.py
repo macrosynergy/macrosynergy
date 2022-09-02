@@ -47,6 +47,10 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
         assert isinstance(sort_cids_by, str)
         sort_error = "Sorting parameter must either be 'mean' or 'std'."
         assert sort_cids_by in ['mean', 'std'], sort_error
+        if sort_cids_by == "mean":
+            sort_cids_by = np.mean
+        else:
+            sort_cids_by = np.std
 
     error_message = "The number of custom labels must match the defined number of " \
                     "categories in pnl_cats."
