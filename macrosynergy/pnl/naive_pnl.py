@@ -4,7 +4,6 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
-import tabulate
 
 from typing import List, Union, Tuple
 from itertools import product
