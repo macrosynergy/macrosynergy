@@ -472,7 +472,8 @@ class CategoryRelations(object):
                         line_kws={'lw': 1})
 
             if coef_box is not None:
-                data_table = self.corr_probability(df_probability=self.df,
+                dfxna = self.df.dropna()  # Todo: How come that self.df has NAs?
+                data_table = self.corr_probability(df_probability=dfxna,
                                                    coef_box_loc=coef_box)
                 data_table.scale(0.4, 2.5)
                 data_table.set_fontsize(12)
@@ -555,12 +556,12 @@ if __name__ == "__main__":
 
     cidx = ['AUD', 'CAD', 'GBP', 'USD']
 
-    cr = CategoryRelations(dfdx, xcats=["CRY", "XR"], freq="Q", lag=1,
+    cr = CategoryRelations(dfdx, xcats=["CRY", "XR"], freq="M", lag=1,
                            cids=cidx, xcat_aggs=["mean", "sum"],
-                           start="2005-01-01", blacklist=black,
+                           start="2001-01-01", blacklist=black,
                            years=None)
 
     cr.reg_scatter(
-        labels=True, separator="cids", title="Carry and Return", xlab="Carry",
-        ylab="Return"
+        labels=False, separator=None, title="Carry and Return", xlab="Carry",
+        ylab="Return", coef_box="lower left"
     )
