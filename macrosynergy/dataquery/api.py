@@ -109,7 +109,7 @@ class Interface(object):
         try:
             response[select]
         except KeyError:
-            print(f"{response['errors'][0]['message']} - will try a different server.")
+            print(f"{response['errors'][0]['message']} no instruments in response - will try a different server.")
             return False
         else:
             return True
