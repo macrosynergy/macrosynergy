@@ -97,7 +97,7 @@ class NaivePnL:
 
         for bm in bms:
             # Accounts for appending "_NEG" to the ticker.
-            bm_s = bm.split("_")
+            bm_s = bm.split("_", maxsplit=1)
             cid = bm_s[0]
             xcat = bm_s[1]
             dfa = df[(df['cid'] == cid) & (df['xcat'] == xcat)]
@@ -743,7 +743,7 @@ class NaivePnL:
 
 if __name__ == "__main__":
     cids = ['AUD', 'CAD', 'GBP', 'NZD', 'USD', 'EUR']
-    xcats = ['EQXR', 'CRY', 'GROWTH', 'INFL', 'DUXR']
+    xcats = ['EQXR_NSA', 'CRY', 'GROWTH', 'INFL', 'DUXR']
 
     cols_1 = ['earliest', 'latest', 'mean_add', 'sd_mult']
     df_cids = pd.DataFrame(index=cids, columns=cols_1)
@@ -757,7 +757,7 @@ if __name__ == "__main__":
     cols_2 = cols_1 + ['ar_coef', 'back_coef']
 
     df_xcats = pd.DataFrame(index=xcats, columns=cols_2)
-    df_xcats.loc['EQXR'] = ['2000-01-03', '2020-12-31', 0.1, 1, 0, 0.3]
+    df_xcats.loc['EQXR_NSA'] = ['2000-01-03', '2020-12-31', 0.1, 1, 0, 0.3]
     df_xcats.loc['CRY'] = ['2000-01-01', '2020-10-30', 1, 2, 0.95, 1]
     df_xcats.loc['GROWTH'] = ['2010-01-03', '2020-10-30', 1, 2, 0.9, 1]
     df_xcats.loc['INFL'] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
@@ -767,9 +767,9 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     # Instantiate a new instance to test the long-only functionality.
-    pnl = NaivePnL(dfd, ret="EQXR", sigs=["CRY", "GROWTH", "INFL"],
+    pnl = NaivePnL(dfd, ret="EQXR_NSA", sigs=["CRY", "GROWTH", "INFL"],
                    cids=cids, start="2000-01-01", blacklist=black,
-                   bms=["EUR_EQXR", "USD_EQXR"])
+                   bms=["EUR_EQXR_NSA", "USD_EQXR_NSA"])
 
     pnl.make_pnl(sig="GROWTH", sig_op="zn_score_pan",
                  sig_neg=True,
