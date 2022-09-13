@@ -6,6 +6,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
+
 class TestAll(unittest.TestCase):
 
     def dataframe_construction(self):
@@ -97,6 +98,8 @@ class TestAll(unittest.TestCase):
                        )
         bm_tickers = list(pnl._bm_dict.keys())
         self.assertTrue(sorted(bm_tickers) == ["EUR_EQXR"])
+
+    # Todo: test sig_neg application in make_pnl
 
     def test_make_signal(self):
 
