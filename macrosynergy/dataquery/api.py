@@ -196,7 +196,9 @@ class Interface(object):
             respective time-series over the defined dates.
         """
 
-        if delay > 0.9999:
+        # Delay parameter is only applicable if the requests are run concurrently. If
+        # sequentially run, the conditional statement is not relevant.
+        if not self.concurrent and delay > 0.9999:
             error_delay = "Issue with DataQuery - requests should not be throttled."
             raise RuntimeError(error_delay)
 
@@ -261,6 +263,8 @@ class Interface(object):
                                 continue
 
         else:
+            # Runs through the Tickers sequentially. Thus, breaking the requests into
+            # subsets is not required.
             for elem in tick_list_compr:
                 params["expressions"] = elem
                 results = self._fetch_threading(endpoint=endpoint, params=params)
@@ -378,6 +382,10 @@ class Interface(object):
             results, original_metrics, self.debug, False
         )
 
+        # Conditional statement which is only applicable if multiple metrics have been
+        # requested. If any Ticker is not defined over all requested metrics, run
+        # sequentially to confirm it is missing from the database. If all metrics are not
+        # available, the Ticker will not be included in the output DataFrame.
         if s_list:
             sequential = True
             self.__dict__["concurrent"] = False
@@ -456,7 +464,7 @@ class Interface(object):
                 print(
                     f"The ticker, {k[3:]}, is missing from the API after "
                     f"running sequentially - will not be in the returned "
-                    f"dataframe."
+                    f"DataFrame."
                 )
             else:
                 continue
