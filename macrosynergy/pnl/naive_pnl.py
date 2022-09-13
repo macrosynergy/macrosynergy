@@ -25,18 +25,14 @@ class NaivePnL:
         to the Class' constructor and their respective vintages will be held on the
         instance's DataFrame. The signals can subsequently be referenced through the
         self.make_pnl() method which receives a single signal per call.
-    :param <bool> sig_neg: if set to True puts the signal in negative terms for all
-        analysis. The postfix "_NEG" will be appended to all signal categories and
-        benchmark tickers passed. Thus, the postfix must be included when referencing any
-        signal or PnL name, if the default form is used for constructing the respective
-        PnL name, in .make_pnl(). For instance, 'PNL_GROWTH_NEG' where GROWTH is the
-        original signal. The default setting is False.
+    :param <bool> sig_neg: if set to True puts the signal(s) will be applied in negative
+        terms. Default is False. The postfix "_NEG" will be appended to all signal
+        categories in this case and this postfix  must be included when referencing
+        any signal or PnL name.
     :param <List[str]> cids: cross sections that are traded. Default is all in the
         dataframe.
     :param <str, List[str]> bms: list of benchmark tickers for which
         correlations are displayed against PnL strategies.
-        If there are not any benchmarks defined on the Class' instance, then the
-        parameter, 'bms', in the method self.evaluate_pnls() becomes obsolete.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df
@@ -46,34 +42,25 @@ class NaivePnL:
 
     """
     def __init__(self, df: pd.DataFrame, ret: str, sigs: List[str],
-                 sig_neg: bool = False, cids: List[str] = None,
-                 bms: Union[str, List[str]] = None, start: str = None, end: str = None,
-                 blacklist: dict = None):
+                 cids: List[str] = None, bms: Union[str, List[str]] = None,
+                 start: str = None, end: str = None, blacklist: dict = None):
+
+        # Will host the benchmarks.
+        dfd = df.copy()
 
         assert isinstance(ret, str), "The return category expects a single <str>."
         self.ret = ret
-
-        sig_neg_error = "Boolean object expected for negative conversion."
-        assert isinstance(sig_neg, bool), sig_neg_error
-        if sig_neg:
-
-            filt_1 = (df["xcat"] == self.ret)
-            dfd_neg = df[~filt_1]
-            dfd_neg["value"] *= -1
-            dfd_neg["xcat"] += "_NEG"
-
-            sigs = [s + "_NEG" for s in sigs]
-            df = pd.concat([df[filt_1], dfd_neg]).reset_index(drop=True)
-
-        self.dfd = df
-        self.sigs = sigs
         xcats = [ret] + sigs
 
         cols = ["cid", "xcat", "real_date", "value"]
         # Potentially excludes the benchmarks but will be held on the instance level
         # through self.dfd.
-        self.df, self.xcats, self.cids = reduce_df(self.dfd[cols], xcats, cids, start,
-                                                   end, blacklist, out_all=True)
+        df, self.xcats, self.cids = reduce_df(
+            df[cols], xcats, cids, start, end, blacklist, out_all=True
+        )
+
+        self.df = df
+        self.sigs = sigs
 
         ticker_func = lambda t: t[0] + "_" + t[1]
         self.tickers = list(map(ticker_func, product(self.cids, self.xcats)))
@@ -87,10 +74,9 @@ class NaivePnL:
         if self.bm_bool:
             bms = [bms] if isinstance(bms, str) else bms
 
-            if sig_neg:
-                bms = [b + "_NEG" for b in bms]
-                
-            bm_dict = self.add_bm(df=self.dfd, bms=bms, tickers=self.tickers)
+            # Pass in the original DataFrame; negative signal will not have been applied
+            # which will corrupt the use of the benchmark categories.
+            bm_dict = self.add_bm(df=dfd, bms=bms, tickers=self.tickers)
 
             self._bm_dict = bm_dict
 
@@ -111,7 +97,7 @@ class NaivePnL:
 
         for bm in bms:
             # Accounts for appending "_NEG" to the ticker.
-            bm_s = bm.split("_")
+            bm_s = bm.split("_", maxsplit=1)
             cid = bm_s[0]
             xcat = bm_s[1]
             dfa = df[(df['cid'] == cid) & (df['xcat'] == xcat)]
@@ -238,7 +224,8 @@ class NaivePnL:
 
         return sig_series
 
-    def make_pnl(self, sig: str, sig_op: str = 'zn_score_pan', pnl_name: str = None,
+    def make_pnl(self, sig: str, sig_op: str = 'zn_score_pan', sig_neg: bool = False,
+                 pnl_name: str = None,
                  rebal_freq: str = 'daily', rebal_slip = 0, vol_scale: float = None,
                  min_obs: int = 261, iis: bool = True, sequential: bool = True,
                  neutral: str = 'zero', thresh: float = None):
@@ -259,11 +246,14 @@ class NaivePnL:
             sections.
             N.B.: zn-score here means standardized score with zero being the natural
             neutral level and standardization through division by mean absolute value.
+        :param <str> sig_neg: if True the PnL is based on the negative value of the
+            transformed signal. Default is False.
         :param <str> pnl_name: name of the PnL to be generated and stored.
             Default is None, i.e. a default name is given. The default name will be:
-            ('PNL_' + sig).
-            Previously calculated PnLs in the class will be overwritten. This means that
-            if a set of PnLs is to be compared, each PnL requires a distinct name.
+            'PNL_<signal name>[_<NEG>]', with the last part added if sig_neg has been
+            set to True.
+            Previously calculated PnLs of the same name will be overwritten. This means
+            that if a set of PnLs is to be compared, each PnL requires a distinct name.
         :param <str> rebal_freq: re-balancing frequency for positions according to signal
             must be one of 'daily' (default), 'weekly' or 'monthly'. The re-balancing is
             only concerned with the signal value on the re-balancing date which is
@@ -292,6 +282,8 @@ class NaivePnL:
 
         """
 
+        # A. Checks
+
         error_sig = f"Signal category missing from the options defined on the class: " \
                     f"{self.sigs}. "
         assert sig in self.sigs, error_sig
@@ -303,14 +295,18 @@ class NaivePnL:
         freq_error = f"Re-balancing frequency must be one of: {freq_params}."
         assert rebal_freq in freq_params, freq_error
 
-        # DataFrame consisting exclusively of the two types of categories: the return
-        # category and associated signal category.
-        dfx = self.df[self.df['xcat'].isin([self.ret, sig])]
+        # B. Extract data frame of return and signal categories in time series format
 
+        dfx = self.df[self.df['xcat'].isin([self.ret, sig])]
         dfw = self.__make_signal__(
             dfx=dfx, sig=sig, sig_op=sig_op, min_obs=min_obs, iis=iis,
             sequential=sequential, neutral=neutral, thresh=thresh
         )
+        if sig_neg:
+            dfw['psig'] = - dfw['psig']
+            neg = "_NEG"
+        else:
+            neg = ""
 
         # Multi-index DataFrame with a natural minimum lag applied.
         dfw['psig'] = dfw['psig'].groupby(level=0).shift(1)
@@ -347,7 +343,7 @@ class NaivePnL:
             leverage = vol_scale * (df_pnl_all['value'].std() * np.sqrt(261))**(-1)
             df_pnl['value'] = df_pnl['value'] * leverage
 
-        pnn = ('PNL_' + sig) if pnl_name is None else pnl_name
+        pnn = ('PNL_' + sig + neg) if pnl_name is None else pnl_name
         # Populating the signal dictionary is required for the display methods:
         self.signal_df[pnn] = dfw.loc[:, ['cid', 'real_date', 'sig']]
 
@@ -747,7 +743,7 @@ class NaivePnL:
 
 if __name__ == "__main__":
     cids = ['AUD', 'CAD', 'GBP', 'NZD', 'USD', 'EUR']
-    xcats = ['EQXR', 'CRY', 'GROWTH', 'INFL', 'DUXR']
+    xcats = ['EQXR_NSA', 'CRY', 'GROWTH', 'INFL', 'DUXR']
 
     cols_1 = ['earliest', 'latest', 'mean_add', 'sd_mult']
     df_cids = pd.DataFrame(index=cids, columns=cols_1)
@@ -761,7 +757,7 @@ if __name__ == "__main__":
     cols_2 = cols_1 + ['ar_coef', 'back_coef']
 
     df_xcats = pd.DataFrame(index=xcats, columns=cols_2)
-    df_xcats.loc['EQXR'] = ['2000-01-03', '2020-12-31', 0.1, 1, 0, 0.3]
+    df_xcats.loc['EQXR_NSA'] = ['2000-01-03', '2020-12-31', 0.1, 1, 0, 0.3]
     df_xcats.loc['CRY'] = ['2000-01-01', '2020-10-30', 1, 2, 0.95, 1]
     df_xcats.loc['GROWTH'] = ['2010-01-03', '2020-10-30', 1, 2, 0.9, 1]
     df_xcats.loc['INFL'] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
@@ -771,32 +767,25 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     # Instantiate a new instance to test the long-only functionality.
-    pnl = NaivePnL(dfd, ret="EQXR", sigs=["CRY", "GROWTH", "INFL"], sig_neg=True,
+    pnl = NaivePnL(dfd, ret="EQXR_NSA", sigs=["CRY", "GROWTH", "INFL"],
                    cids=cids, start="2000-01-01", blacklist=black,
-                   bms=["EUR_EQXR", "USD_EQXR"])
+                   bms=["EUR_EQXR_NSA", "USD_EQXR_NSA"])
 
-    pnl.make_pnl(sig="GROWTH_NEG", sig_op="zn_score_pan", rebal_freq="monthly",
-                 vol_scale=5, rebal_slip=1, pnl_name="PNL_GROWTH_PZN05",
+    pnl.make_pnl(sig="GROWTH", sig_op="zn_score_pan",
+                 sig_neg=True,
+                 rebal_freq="monthly",
+                 vol_scale=5, rebal_slip=1,
                  min_obs=250, thresh=2)
 
-    pnl.make_pnl(sig="GROWTH_NEG", sig_op="zn_score_pan", rebal_freq="monthly",
+    pnl.make_pnl(sig="GROWTH", sig_op="zn_score_pan",
+                 rebal_freq="monthly",
                  vol_scale=5, rebal_slip=1, pnl_name=None,
-                 min_obs=250, thresh=2.5)
+                 min_obs=250, thresh=2)
 
     pnl.make_long_pnl(vol_scale=10, label="Long")
 
-    df_eval = pnl.evaluate_pnls(pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids,
+    df_eval = pnl.evaluate_pnls(pnl_cats=["PNL_GROWTH", "PNL_GROWTH_NEG"],
                                 start="2015-01-01",
                                 end="2020-12-31")
     print(df_eval)
 
-    # Able to adjust the start date for any respective visual analysis.
-    pnl.plot_pnls(start="2010-01-01")
-
-    # Return evaluation and PnL DataFrames.
-    cids_subset = ["ALL"]
-    # Test the inclusion of a single benchmark correlation.
-    df_eval = pnl.evaluate_pnls(
-        pnl_cats=["PNL_GROWTH_NEG", "PNL_GROWTH_PZN05", "Long"],
-        pnl_cids=cids_subset
-    )
