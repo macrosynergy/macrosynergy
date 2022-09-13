@@ -205,6 +205,7 @@ class Interface(object):
             raise RuntimeError(error_delay)
 
         no_tickers = len(tickers)
+        print(f"Number of tickers requested {no_tickers}.")
 
         if not count:
             params_ = {
@@ -500,9 +501,9 @@ class Interface(object):
         output_dict = defaultdict(dict)
         size = len(list_)
         if debug:
-            print(f"Number of returned tickers from JPMaQS: {size}.")
+            print(f"Number of returned expressions from JPMaQS: {size}.")
 
-        unavailable_series = 0
+        unavailable_series = []
         # Each element inside the List will be a dictionary for an individual Ticker
         # returned by DataQuery.
         for r in list_:
@@ -513,10 +514,14 @@ class Interface(object):
 
             ticker_split = ",".join(ticker[1:-1])
             ts_arr = np.array(dictionary["time-series"])
-            # Catches Tickers that are defined correctly but will not have a valid
-            # associated series. For example, "USD_FXXR_NSA" or "NLG_FXCRR_VT10".
+
+            # Catches tickers that are defined correctly but will not have a valid
+            # associated series. For example, "USD_FXXR_NSA" or "NLG_FXCRR_VT10". The
+            # request to the API will return the ticker but the "time-series" value
+            # will be a None Object.
+            # Occasionally, on large requests, DataQuery will incorrect
             if ts_arr.size == 1:
-                unavailable_series += 1
+                unavailable_series.append(ticker_split)
 
             else:
                 if ticker_split not in output_dict.keys():
@@ -535,7 +540,8 @@ class Interface(object):
         )
         if debug:
             print(f"The number of tickers requested that are unavailable is: "
-                  f"{unavailable_series}.")
+                  f"{len(unavailable_series)}.")
+            self.__dict__["unavailable_series"] = unavailable_series
 
         return modified_dict, output_dict, ticker_list
 
