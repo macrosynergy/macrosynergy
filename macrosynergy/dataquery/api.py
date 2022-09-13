@@ -517,9 +517,10 @@ class Interface(object):
 
             # Catches tickers that are defined correctly but will not have a valid
             # associated series. For example, "USD_FXXR_NSA" or "NLG_FXCRR_VT10". The
-            # request to the API will return the ticker but the "time-series" value
+            # request to the API will return the expression but the "time-series" value
             # will be a None Object.
-            # Occasionally, on large requests, DataQuery will incorrect
+            # Occasionally, on large requests, DataQuery will incorrectly return a None
+            # Object for a series that is available in the database.
             if ts_arr.size == 1:
                 unavailable_series.append(ticker_split)
 
