@@ -112,7 +112,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
         intersection = intersection_function(basket, available_cids)
         clause = len(intersection)
-        missing_cids = list(set(intersection) - set(basket))
+        missing_cids = [b for b in basket if b not in intersection]
 
         if clause != len(basket) and complete_cross:
             print(f"The category, {xcat}, is missing {missing_cids} which are included "
