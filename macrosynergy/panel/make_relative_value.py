@@ -121,8 +121,8 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
         # Must be a valid subset of the available cross-sections.
         elif clause != len(basket):
-            print(f"The category, {xcat}, is missing {missing_cids}. "
-                  f"The new basket will be {intersection}.")
+            print(f"The category, {xcat}, is missing {missing_cids} from the requested "
+                  f"basket. The new basket will be {intersection}.")
 
         dfx_xcat = df_xcat[['cid', 'real_date', 'value']]
 
