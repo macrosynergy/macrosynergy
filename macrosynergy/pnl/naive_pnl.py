@@ -249,8 +249,7 @@ class NaivePnL:
             'PNL_<signal name>[_<NEG>]', with the last part added if sig_neg has been
             set to True.
             Previously calculated PnLs of the same name will be overwritten. This means
-            that if a set of PnLs are to be included in analysis, each PnL requires a
-            distinct name.
+            that if a set of PnLs are to be compared, each PnL requires a distinct name.
         :param <str> rebal_freq: re-balancing frequency for positions according to signal
             must be one of 'daily' (default), 'weekly' or 'monthly'. The re-balancing is
             only concerned with the signal value on the re-balancing date which is
@@ -563,20 +562,23 @@ class NaivePnL:
         plt.show()
 
     def agg_signal_bars(self, pnl_name: str, freq: str = 'm',
-                       metric: str = "direction", title: str = "Directional Bar Chart.",
-                       y_label: str = ""):
+                        metric: str = "direction", title: str = None,
+                        y_label: str = "Sum of Std. across the Panel"):
         """
         Display aggregate signal strength and - potentially - direction.
 
-        :param <str> pnl_name: name of the PnL whose signals are to be visualized.
-            N.B.: Signal is here is the value that actually determines
-            the concurrent PnL.
+        :param <str> pnl_name: name of the PnL whose signal is to be visualized.
+            N.B.: The referenced signal corresponds to the series that determines the
+            concurrent PnL.
         :param <str> freq: frequency at which the signal is visualized. Default is
             monthly ('m'). The alternative is quarterly ('q').
         :param <str> metric: the type of signal value. Default is "direction".
             Alternative is "strength".
-        :param <str> title: allows entering text for a custom chart header.
-        :param <str> y_label: label for the y-axis. Default is None.
+        :param <str> title: allows entering text for a custom chart header. Default will
+            be "Directional Bar Chart of <pnl_name>.".
+        :param <str> y_label: label for the y-axis. Default is the sum of standard
+            deviations across the panel corresponding to the default signal
+            transformation: 'zn_score_pan'.
 
         """
 
@@ -591,6 +593,9 @@ class NaivePnL:
 
         metric_error = "The metric must either be 'direction' or 'strength'."
         assert metric in ['direction', 'strength'], metric_error
+
+        if title is None:
+            title = f"Directional Bar Chart of {pnl_name}."
 
         dfx = self.signal_df[pnl_name]
         dfw = dfx.pivot(index='real_date', columns='cid', values='sig')
@@ -625,6 +630,7 @@ class NaivePnL:
         skip = len(df_signal) // 12
         ticklabels[::skip] = df_signal[''].iloc[::skip].dt.strftime('%Y-%m-%d')
         ax.xaxis.set_major_formatter(mticker.FixedFormatter(ticklabels))
+
         fig.autofmt_xdate()
 
         def fmt(x, pos=0, max_i=len(ticklabels) - 1):
@@ -785,4 +791,7 @@ if __name__ == "__main__":
     df_eval = pnl.evaluate_pnls(
         pnl_cats=["PNL_GROWTH_NEG"], start="2015-01-01", end="2020-12-31"
     )
-    print(df_eval)
+
+    pnl.agg_signal_bars(
+        pnl_name="PNL_GROWTH_NEG", freq="m", metric="direction", title=None,
+    )
