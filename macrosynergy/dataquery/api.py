@@ -196,11 +196,16 @@ class Interface(object):
             respective time-series over the defined dates.
         """
 
+        # Delay parameter is only applicable if the requests are run concurrently. If
+        # sequentially run, the conditional statement is not relevant.
+        delay = 0 if not self.concurrent else delay
+
         if delay > 0.9999:
             error_delay = "Issue with DataQuery - requests should not be throttled."
             raise RuntimeError(error_delay)
 
         no_tickers = len(tickers)
+        print(f"Number of tickers requested {no_tickers}.")
 
         if not count:
             params_ = {
@@ -261,12 +266,15 @@ class Interface(object):
                                 continue
 
         else:
+            # Runs through the Tickers sequentially. Thus, breaking the requests into
+            # subsets is not required.
             for elem in tick_list_compr:
                 params["expressions"] = elem
                 results = self._fetch_threading(endpoint=endpoint, params=params)
                 final_output.extend(results)
 
         tickers_server = list(chain(*tickers_server))
+
         if tickers_server:
             count += 1
             recursive_call = True
@@ -378,6 +386,10 @@ class Interface(object):
             results, original_metrics, self.debug, False
         )
 
+        # Conditional statement which is only applicable if multiple metrics have been
+        # requested. If any Ticker is not defined over all requested metrics, run
+        # sequentially to confirm it is missing from the database. If all metrics are not
+        # available, the Ticker will not be included in the output DataFrame.
         if s_list:
             sequential = True
             self.__dict__["concurrent"] = False
@@ -385,9 +397,8 @@ class Interface(object):
                 endpoint="/expressions/time-series", tickers=s_list, params={}, **kwargs
             )
             r_dict, o_dict, s_list = self.isolate_timeseries(
-                results_seq, original_metrics, self.debug, sequential=sequential
+                results_seq, original_metrics, debug=False, sequential=sequential
             )
-
             results_dict = {**results_dict, **r_dict}
 
         results_dict = self.valid_ticker(results_dict, suppress_warning, self.debug)
@@ -443,20 +454,20 @@ class Interface(object):
                 # collect the respective tickers, defined over each metric, and run
                 # the requests sequentially to avoid any scope for data leakage.
 
-                temp_list = [k + ',' + m + ')' for m in metrics]
+                temp_list = ['DB(JPMAQS,' + k + ',' + m + ')' for m in metrics]
                 ticker_list += temp_list
 
                 if debug:
                     print(
-                        f"The ticker, {k[3:]}, is missing the metric(s) "
+                        f"The ticker, {k}, is missing the metric(s) "
                         f"'{missing_metrics}' whilst the requests are running "
                         f"concurrently - will check the API sequentially."
                     )
             elif sequential and debug:
                 print(
-                    f"The ticker, {k[3:]}, is missing from the API after "
+                    f"The ticker, {k}, is missing from the API after "
                     f"running sequentially - will not be in the returned "
-                    f"dataframe."
+                    f"DataFrame."
                 )
             else:
                 continue
@@ -489,31 +500,38 @@ class Interface(object):
         """
         output_dict = defaultdict(dict)
         size = len(list_)
+        if debug:
+            print(f"Number of returned expressions from JPMaQS: {size}.")
 
-        for i in range(size):
-            flag = False
-            try:
-                r = list_.pop()
-            except IndexError:
-                break
+        unavailable_series = []
+        # Each element inside the List will be a dictionary for an individual Ticker
+        # returned by DataQuery.
+        for r in list_:
+
+            dictionary = r["attributes"][0]
+            ticker = dictionary["expression"].split(",")
+            metric = ticker[-1][:-1]
+
+            ticker_split = ",".join(ticker[1:-1])
+            ts_arr = np.array(dictionary["time-series"])
+
+            # Catches tickers that are defined correctly but will not have a valid
+            # associated series. For example, "USD_FXXR_NSA" or "NLG_FXCRR_VT10". The
+            # request to the API will return the expression but the "time-series" value
+            # will be a None Object.
+            # Occasionally, on large requests, DataQuery will incorrectly return a None
+            # Object for a series that is available in the database.
+            if ts_arr.size == 1:
+                unavailable_series.append(ticker_split)
+
             else:
-                dictionary = r["attributes"][0]
-                ticker = dictionary["expression"].split(",")
-                metric = ticker[-1][:-1]
-
-                ticker_split = ",".join(ticker[:-1])
-                ts_arr = np.array(dictionary["time-series"])
-                if ts_arr.size == 1:
-                    flag = True
-
-                if not flag:
-                    if ticker_split not in output_dict:
-                        output_dict[ticker_split]["real_date"] = ts_arr[:, 0]
-                        output_dict[ticker_split][metric] = ts_arr[:, 1]
-                    elif metric not in output_dict[ticker_split]:
-                        output_dict[ticker_split][metric] = ts_arr[:, 1]
-                    else:
-                        continue
+                if ticker_split not in output_dict.keys():
+                    output_dict[ticker_split]["real_date"] = ts_arr[:, 0]
+                    output_dict[ticker_split][metric] = ts_arr[:, 1]
+                # Each encountered metric should be unique and one of "value", "grading",
+                # "eop_lag" or "mop_lag".
+                else:
+                    output_dict[ticker_split][metric] = ts_arr[:, 1]
 
         output_dict_c = output_dict.copy()
 
@@ -521,6 +539,10 @@ class Interface(object):
             metrics=metrics, output_dict=output_dict_c, debug=debug,
             sequential=sequential
         )
+        if debug:
+            print(f"The number of tickers requested that are unavailable is: "
+                  f"{len(unavailable_series)}.")
+            self.__dict__["unavailable_series"] = unavailable_series
 
         return modified_dict, output_dict, ticker_list
 
@@ -603,8 +625,7 @@ class Interface(object):
         i = 0
         for k, v in _dict.items():
 
-            ticker = k.split(",")
-            ticker = ticker[1].split("_")
+            ticker = k.split("_")
 
             cid = ticker[0]
             xcat = "_".join(ticker[1:])
@@ -700,9 +721,8 @@ class Interface(object):
         :param <List[str]> cids: JPMaQS cross-section identifiers, typically based  on
             currency code. See JPMaQS documentation.
         :param <str> metrics: must choose one or more from 'value', 'eop_lag', 'mop_lag',
-            or 'grade'. Default is ['value'].
+            or 'grading'. Default is ['value'].
         :param <str> start_date: first date in ISO 8601 string format.
-        :param <str> path: relative path from notebook to credential files.
         :param <bool> suppress_warning: used to suppress warning of any invalid
             ticker received by DataQuery.
 
