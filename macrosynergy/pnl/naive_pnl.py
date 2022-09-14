@@ -62,6 +62,8 @@ class NaivePnL:
         self.tickers = list(map(ticker_func, product(self.cids, self.xcats)))
 
         self.df["real_date"] = pd.to_datetime(self.df["real_date"])
+
+        # Data structure used to track all of the generated PnLs from make_pnl() method.
         self.pnl_names = []
         self.signal_df = {}
         self.black = blacklist
@@ -446,6 +448,21 @@ class NaivePnL:
 
         if pnl_cats is None:
             pnl_cats = self.pnl_names
+        else:
+            pnl_cats_error = f"List of PnL categories expected - received " \
+                             f"{type(pnl_cats)}."
+            assert isinstance(pnl_cats, list), pnl_cats_error
+
+            pnl_cats_copy = pnl_cats.copy()
+            pnl_cats = [pnl for pnl in pnl_cats if pnl in self.pnl_names]
+
+            dif = set(pnl_cats_copy).difference(set(pnl_cats))
+            if dif:
+                print(f"The PnL(s) requested, {dif}, have not been defined on the "
+                      f"Class.")
+            elif len(pnl_cats) == 0:
+                raise ValueError("There are not any valid PnL(s) to display given the "
+                                 "request.")
 
         assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
         error_message = "The number of custom labels must match the defined number of " \
