@@ -25,10 +25,6 @@ class NaivePnL:
         to the Class' constructor and their respective vintages will be held on the
         instance's DataFrame. The signals can subsequently be referenced through the
         self.make_pnl() method which receives a single signal per call.
-    :param <bool> sig_neg: if set to True puts the signal(s) will be applied in negative
-        terms. Default is False. The postfix "_NEG" will be appended to all signal
-        categories in this case and this postfix  must be included when referencing
-        any signal or PnL name.
     :param <List[str]> cids: cross sections that are traded. Default is all in the
         dataframe.
     :param <str, List[str]> bms: list of benchmark tickers for which
@@ -253,7 +249,8 @@ class NaivePnL:
             'PNL_<signal name>[_<NEG>]', with the last part added if sig_neg has been
             set to True.
             Previously calculated PnLs of the same name will be overwritten. This means
-            that if a set of PnLs is to be compared, each PnL requires a distinct name.
+            that if a set of PnLs are to be included in analysis, each PnL requires a
+            distinct name.
         :param <str> rebal_freq: re-balancing frequency for positions according to signal
             must be one of 'daily' (default), 'weekly' or 'monthly'. The re-balancing is
             only concerned with the signal value on the re-balancing date which is
@@ -295,13 +292,18 @@ class NaivePnL:
         freq_error = f"Re-balancing frequency must be one of: {freq_params}."
         assert rebal_freq in freq_params, freq_error
 
-        # B. Extract data frame of return and signal categories in time series format
+        sig_neg_error = "Boolean object expected for negative conversion."
+        assert isinstance(sig_neg, bool), sig_neg_error
 
+        # B. Extract DataFrame of exclusively return and signal categories in time series
+        # format.
         dfx = self.df[self.df['xcat'].isin([self.ret, sig])]
+
         dfw = self.__make_signal__(
             dfx=dfx, sig=sig, sig_op=sig_op, min_obs=min_obs, iis=iis,
             sequential=sequential, neutral=neutral, thresh=thresh
         )
+
         if sig_neg:
             dfw['psig'] = - dfw['psig']
             neg = "_NEG"
@@ -731,7 +733,7 @@ class NaivePnL:
             Default is 'ALL'.
         :param <bool> cs: inclusion of cross section PnLs. Default is False.
 
-        :return custom data frame with PnLs
+        :return custom DataFrame with PnLs
         """
         selected_pnls = pnl_names if pnl_names is not None else self.pnl_names
 
@@ -767,20 +769,21 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     # Instantiate a new instance to test the long-only functionality.
-    pnl = NaivePnL(dfd, ret="EQXR_NSA", sigs=["CRY", "GROWTH", "INFL"],
-                   cids=cids, start="2000-01-01", blacklist=black,
-                   bms=["EUR_EQXR_NSA", "USD_EQXR_NSA"])
+    # Benchmarks are used to calculate correlation against PnL series.
+    pnl = NaivePnL(
+        dfd, ret="EQXR_NSA", sigs=["CRY", "GROWTH", "INFL"], cids=cids,
+        start="2000-01-01", blacklist=black, bms=["EUR_EQXR_NSA", "USD_EQXR_NSA"]
+    )
 
-    pnl.make_pnl(sig="GROWTH", sig_op="zn_score_pan",
-                 sig_neg=True,
-                 rebal_freq="monthly",
-                 vol_scale=5, rebal_slip=1,
-                 min_obs=250, thresh=2)
+    pnl.make_pnl(
+        sig="GROWTH", sig_op="zn_score_pan", sig_neg=True, rebal_freq="monthly",
+        vol_scale=5, rebal_slip=1, min_obs=250, thresh=2
+    )
 
-    pnl.make_pnl(sig="GROWTH", sig_op="zn_score_pan",
-                 rebal_freq="monthly",
-                 vol_scale=5, rebal_slip=1, pnl_name=None,
-                 min_obs=250, thresh=2)
+    pnl.make_pnl(
+        sig="GROWTH", sig_op="zn_score_pan", rebal_freq="monthly", vol_scale=5,
+        rebal_slip=1, pnl_name=None, min_obs=250, thresh=2
+    )
 
     pnl.make_long_pnl(vol_scale=10, label="Long")
 
