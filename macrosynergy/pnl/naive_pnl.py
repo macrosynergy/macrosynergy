@@ -305,7 +305,7 @@ class NaivePnL:
         )
 
         if sig_neg:
-            dfw['psig'] = - dfw['psig']
+            dfw['psig'] *= -1
             neg = "_NEG"
         else:
             neg = ""
@@ -780,15 +780,9 @@ if __name__ == "__main__":
         vol_scale=5, rebal_slip=1, min_obs=250, thresh=2
     )
 
-    pnl.make_pnl(
-        sig="GROWTH", sig_op="zn_score_pan", rebal_freq="monthly", vol_scale=5,
-        rebal_slip=1, pnl_name=None, min_obs=250, thresh=2
-    )
-
     pnl.make_long_pnl(vol_scale=10, label="Long")
 
-    df_eval = pnl.evaluate_pnls(pnl_cats=["PNL_GROWTH", "PNL_GROWTH_NEG"],
-                                start="2015-01-01",
-                                end="2020-12-31")
+    df_eval = pnl.evaluate_pnls(
+        pnl_cats=["PNL_GROWTH_NEG"], start="2015-01-01", end="2020-12-31"
+    )
     print(df_eval)
-
