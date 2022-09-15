@@ -109,7 +109,8 @@ class Interface(object):
         try:
             response[select]
         except KeyError:
-            print(f"{response['errors'][0]['message']} - will try a different server.")
+            print(f"Key {select} not found in response: {response} --- will retry "
+                  f"download.")
             return False
         else:
             return True
@@ -167,7 +168,7 @@ class Interface(object):
             return None
 
     def _request(self, endpoint: str, tickers: List[str], params: dict,
-                 delay: int = None, count: int = 0, start_date: str = None,
+                 delay: int = 0, count: int = 0, start_date: str = None,
                  end_date: str = None, calendar: str = "CAL_ALLDAYS",
                  frequency: str = "FREQ_DAY", conversion: str = "CONV_LASTBUS_ABS",
                  nan_treatment: str = "NA_NOTHING"):
@@ -181,7 +182,8 @@ class Interface(object):
         :param <dict> params: dictionary of required parameters for request.
         :param <Integer> delay: each release of a thread requires a delay (roughly 200
             milliseconds) to prevent overwhelming DataQuery. Computed dynamically if DQ
-            is being hit too hard.
+            is being hit too hard. Naturally, if the code is run sequentially, the delay
+            parameter is not applicable. Thus, default value is zero.
         :param <Integer> count: tracks the number of recursive calls of the method. The
             first call requires defining the parameter dictionary used for the request
             API.
@@ -196,16 +198,12 @@ class Interface(object):
             respective time-series over the defined dates.
         """
 
-        # Delay parameter is only applicable if the requests are run concurrently. If
-        # sequentially run, the conditional statement is not relevant.
-        delay = 0 if not self.concurrent else delay
-
         if delay > 0.9999:
             error_delay = "Issue with DataQuery - requests should not be throttled."
             raise RuntimeError(error_delay)
 
         no_tickers = len(tickers)
-        print(f"Number of tickers requested {no_tickers}.")
+        print(f"Number of expressions requested {no_tickers}.")
 
         if not count:
             params_ = {
@@ -357,8 +355,9 @@ class Interface(object):
 
         unique_tix = list(set(expression))
 
-        dq_tix = self.jpmaqs_indicators(metrics=original_metrics,
-                                        tickers=unique_tix)
+        dq_tix = self.jpmaqs_indicators(
+            metrics=original_metrics, tickers=unique_tix
+        )
         expression = dq_tix
 
         c_delay = self.delay_compute(len(dq_tix))
