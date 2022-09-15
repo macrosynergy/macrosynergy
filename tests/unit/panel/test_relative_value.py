@@ -67,8 +67,8 @@ class TestAll(unittest.TestCase):
                                         rel_meth='divide',
                                         rel_xcats=['XRvB3', 'GROWTHvB3', 'INFLvB3'])
 
-        # The first aspect of the code to validate is if the dataframe is reduced to a
-        # single cross-section, and the basket is axiomatically limited to a single cross
+        # The first aspect of the code to validate is if the DataFrame is reduced to a
+        # single cross-section, and the basket is naturally limited to a single cross
         # section as well, the notion of computing the relative value is not appropriate.
         # Therefore, the code should throw a runtime error given it is being used
         # incorrectly.
@@ -83,7 +83,7 @@ class TestAll(unittest.TestCase):
             self.assertTrue(run_error in context.exception)
 
         # First part of the logic to validate is the stacking mechanism, and subsequent
-        # dimensions of the returned dataframe. Once the reduction is accounted for, the
+        # dimensions of the returned DataFrame. Once the reduction is accounted for, the
         # dimensions should reflect the returned input.
         xcats = self.xcats[:-2]
         cids = self.cids
@@ -93,25 +93,25 @@ class TestAll(unittest.TestCase):
                         blacklist=None, out_all=False)
         # To confirm the above statement, the parameter "basket" must be equated to None
         # to prevent any further reduction.
-        # Further, for the dimensions of the input dataframe to match the output
-        # dataframe, each date the dataframe is defined over must have greater than one
+        # Further, for the dimensions of the input DataFrame to match the output
+        # DataFrame, each date the DataFrame is defined over must have greater than one
         # cross-section available for each index (date) otherwise rows with only a single
         # realised value will be removed.
         # Therefore, to achieve this, each date having at least two realised values,
         # set both the start date & end date parameters to the second earliest and
         # latest date respectively (of the defined cross-sections' realised series). Both
-        # the categories are defined over the same time-period, so cross-sections will
-        # delimit the dimensions.
+        # the categories are defined over the same time-period, so the cross-sections
+        # will delimit the dimensions.
         dfd_rl = make_relative_value(self.dfd, xcats=xcats, cids=cids, start=start,
                                      end=end, blacklist=None, basket=None,
                                      rel_meth='subtract', rel_xcats=None, postfix='RV')
         self.assertEqual(dfx.shape, dfd_rl.shape)
 
         # Test the proposal that any dates with only a single realised value will be
-        # truncated from the dataframe given understanding the relative value of a single
+        # truncated from the DataFrame given understanding the relative value of a single
         # realised return is meaningless.
-        # The difference between the dimensions of the input dataframe and the returned
-        # dataframe should correspond to the number of indices with only a single value.
+        # The difference between the dimensions of the input DataFrame and the returned
+        # DataFrame should correspond to the number of indices with only a single value.
 
         xcats = self.xcats[0]
         cids = self.cids
@@ -140,7 +140,7 @@ class TestAll(unittest.TestCase):
 
         # Test "complete_cross" parameter.
 
-        # Construct a dataframe containing two categories but one of the categories is
+        # Construct a DataFrame containing two categories but one of the categories is
         # defined over fewer cross-sections. To be precise, the cross-sections present
         # for the aforementioned category will be a subset of the cross-sections
         # available for the secondary category. Further, the basket will be set to the
@@ -150,22 +150,26 @@ class TestAll(unittest.TestCase):
         cids = self.cids
         start = '2000-01-01'
         end = '2020-12-31'
-        dfx = reduce_df(df=dfd, xcats=xcats, cids=cids, start=start,
-                        end=end, blacklist=None, out_all=False)
+        dfx = reduce_df(
+            df=dfd, xcats=xcats, cids=cids, start=start, end=end, blacklist=None,
+            out_all=False
+        )
 
-        # On the reduced dataframe, remove a single cross-section from one of the
+        # On the reduced DataFrame, remove a single cross-section from one of the
         # categories.
         filt1 = ~((dfx['cid'] == 'AUD') & (dfx['xcat'] == 'XR'))
         dfdx = dfx[filt1]
 
-        # Pass in the filtered dataframe, and test whether the correct print statement
+        # Pass in the filtered DataFrame, and test whether the correct print statement
         # appears in the console.
         capturedOutput = io.StringIO()
         sys.stdout = capturedOutput
-        dfd_rl = make_relative_value(dfdx, xcats=xcats, cids=cids, start=start,
-                                     end=end, blacklist=None, basket=None,
-                                     complete_cross = False, rel_meth='subtract',
-                                     rel_xcats=None, postfix='RV')
+        dfd_rl = make_relative_value(
+            dfdx, xcats=xcats, cids=cids, start=start, end=end, blacklist=None,
+            basket=None, complete_cross=False, rel_meth='subtract', rel_xcats=None,
+            postfix='RV'
+        )
+
         sys.stdout = sys.__stdout__
         capturedOutput.seek(0)
         print_statement = capturedOutput.read()[-23:-2]
@@ -173,15 +177,24 @@ class TestAll(unittest.TestCase):
         self.assertTrue(print_statement == test)
 
         # If the "complete_cross" parameter is set to True, the corresponding category
-        # defined over an incomplete set of cross-sections will be removed from the
-        # output dataframe.
-        dfd_rl = make_relative_value(dfdx, xcats=xcats, cids=cids, start=start,
-                                     end=end, blacklist=None, basket=None,
-                                     complete_cross = True, rel_meth='subtract',
-                                     rel_xcats=None, postfix='RV')
-        # Assert the dataframe only contains a single category: the category with a
-        # complete set of cross-sections.
-        self.assertTrue(dfd_rl['xcat'].unique()[0] == 'CRYRV')
+        # defined over an incomplete set of cross-sections, relative to the basket, will
+        # be removed from the output DataFrame.
+        rel_xcats = ["XR_RelValue", "CRY_RelVal"]
+        dfd_rl = make_relative_value(
+            dfdx, xcats=xcats, cids=cids, start=start, end=end, blacklist=None,
+            basket=self.cids, complete_cross=True, rel_meth='subtract',
+            rel_xcats=rel_xcats, postfix=None
+        )
+
+        # Assert the DataFrame only contains a single category: the category with a
+        # complete set of cross-sections relative to the basket ("CRY_RelVal").
+        rlt_value_xcats = set(dfd_rl["xcat"])
+        no_rlt_value_xcats = len(rlt_value_xcats)
+
+        self.assertTrue(no_rlt_value_xcats == 1)
+
+        rl_xcat = next(iter(rlt_value_xcats))
+        self.assertTrue(rl_xcat == "CRY_RelVal")
 
     def test_relative_value_logic(self):
 
