@@ -13,7 +13,7 @@ def missing_in_df(df: pd.DataFrame, xcats: List[str] = None, cids: List[str] = N
     """
     Print missing cross-sections and categories
 
-    :param <pd.Dataframe> df: standardized DataFrame with the following necessary
+    :param <pd.DataFrame> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcats', 'real_date'.
     :param <List[str]> xcats: extended categories to be checked on. Default is all
         in the DataFrame.
@@ -35,7 +35,7 @@ def check_startyears(df: pd.DataFrame):
     """
     DataFrame with starting years across all extended categories and cross-sections
 
-    :param <pd.Dataframe> df: standardized DataFrame with the following necessary
+    :param <pd.DataFrame> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcats', 'real_date'.
 
     """
@@ -49,9 +49,9 @@ def check_startyears(df: pd.DataFrame):
 
 def check_enddates(df: pd.DataFrame):
     """
-    DataFrame with end dates across all extended categories and cross sections
+    DataFrame with end dates across all extended categories and cross sections.
 
-    :param <pd.Dataframe> df: standardized DataFrame with the following necessary
+    :param <pd.DataFrame> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcats', 'real_date'.
     """
 
@@ -65,13 +65,13 @@ def business_day_dif(df: pd.DataFrame, maxdate: pd.Timestamp):
     """
     Number of business days between two respective business dates.
 
-    :param <pd.Dataframe> df: DataFrame cross-sections rows and category columns. Each
+    :param <pd.DataFrame> df: DataFrame cross-sections rows and category columns. Each
         cell in the DataFrame will correspond to the start date of the respective series.
     :param <pd.Timestamp> maxdate: maximum release date found in the received DataFrame.
         In principle, all series should have values up until the respective business
         date. The difference will represent possible missing values.
 
-    :return <pd.Dataframe>: DataFrame consisting of business day differences for all
+    :return <pd.DataFrame>: DataFrame consisting of business day differences for all
         series.
 
     """
@@ -94,7 +94,7 @@ def visual_paneldates(df: pd.DataFrame, size: Tuple[float] = None):
     """
     Visualize panel dates with color codes.
 
-    :param <pd.Dataframe> df: DataFrame cross sections rows and category columns.
+    :param <pd.DataFrame> df: DataFrame cross sections rows and category columns.
     :param <Tuple[float]> size: tuple of floats with width/length of displayed heatmap.
 
     """
@@ -107,6 +107,7 @@ def visual_paneldates(df: pd.DataFrame, size: Tuple[float] = None):
         # in the DataFrame.
         maxdate = df.max().max()
         df = business_day_dif(df=df, maxdate=maxdate)
+        df = df.astype(int)
 
         header = f"Missing days prior to {maxdate.strftime('%Y-%m-%d')}"
 
@@ -132,7 +133,7 @@ def check_availability(df: pd.DataFrame, xcats: List[str] = None,
     """
     Wrapper for visualizing start and end dates of a filtered DataFrame.
 
-    :param <pd.Dataframe> df: standardized DataFrame with the following necessary
+    :param <pd.DataFrame> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcats', 'real_date'.
     :param <List[str]> xcats: extended categories to be checked on.
         Default is all in the DataFrame.
