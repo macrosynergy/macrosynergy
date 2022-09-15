@@ -245,6 +245,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values=val)
 
         dep = xcats[-1]
+        # The possibility of multiple explanatory variables.
         xpls = xcats[:-1]
 
         df_w = df_w.groupby([pd.Grouper(level='cid'),
@@ -310,7 +311,9 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
 
     # Adjusted to account for multiple signals requested. If the DataFrame is
     # two-dimensional, signal & a return, NaN values will be handled inside other
-    # functionality, categories_df() is simply a support function.
+    # functionality, as categories_df() is simply a support function. If the parameter
+    # how is set to "any", a potential unnecessary loss of data on certain categories
+    # could arise.
     return dfc.dropna(axis=0, how='all')
 
 
