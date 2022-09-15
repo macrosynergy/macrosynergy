@@ -25,10 +25,6 @@ class NaivePnL:
         to the Class' constructor and their respective vintages will be held on the
         instance's DataFrame. The signals can subsequently be referenced through the
         self.make_pnl() method which receives a single signal per call.
-    :param <bool> sig_neg: if set to True puts the signal(s) will be applied in negative
-        terms. Default is False. The postfix "_NEG" will be appended to all signal
-        categories in this case and this postfix  must be included when referencing
-        any signal or PnL name.
     :param <List[str]> cids: cross sections that are traded. Default is all in the
         dataframe.
     :param <str, List[str]> bms: list of benchmark tickers for which
@@ -66,6 +62,8 @@ class NaivePnL:
         self.tickers = list(map(ticker_func, product(self.cids, self.xcats)))
 
         self.df["real_date"] = pd.to_datetime(self.df["real_date"])
+
+        # Data structure used to track all of the generated PnLs from make_pnl() method.
         self.pnl_names = []
         self.signal_df = {}
         self.black = blacklist
@@ -253,7 +251,7 @@ class NaivePnL:
             'PNL_<signal name>[_<NEG>]', with the last part added if sig_neg has been
             set to True.
             Previously calculated PnLs of the same name will be overwritten. This means
-            that if a set of PnLs is to be compared, each PnL requires a distinct name.
+            that if a set of PnLs are to be compared, each PnL requires a distinct name.
         :param <str> rebal_freq: re-balancing frequency for positions according to signal
             must be one of 'daily' (default), 'weekly' or 'monthly'. The re-balancing is
             only concerned with the signal value on the re-balancing date which is
@@ -295,15 +293,20 @@ class NaivePnL:
         freq_error = f"Re-balancing frequency must be one of: {freq_params}."
         assert rebal_freq in freq_params, freq_error
 
-        # B. Extract data frame of return and signal categories in time series format
+        sig_neg_error = "Boolean object expected for negative conversion."
+        assert isinstance(sig_neg, bool), sig_neg_error
 
+        # B. Extract DataFrame of exclusively return and signal categories in time series
+        # format.
         dfx = self.df[self.df['xcat'].isin([self.ret, sig])]
+
         dfw = self.__make_signal__(
             dfx=dfx, sig=sig, sig_op=sig_op, min_obs=min_obs, iis=iis,
             sequential=sequential, neutral=neutral, thresh=thresh
         )
+
         if sig_neg:
-            dfw['psig'] = - dfw['psig']
+            dfw['psig'] *= -1
             neg = "_NEG"
         else:
             neg = ""
@@ -445,6 +448,21 @@ class NaivePnL:
 
         if pnl_cats is None:
             pnl_cats = self.pnl_names
+        else:
+            pnl_cats_error = f"List of PnL categories expected - received " \
+                             f"{type(pnl_cats)}."
+            assert isinstance(pnl_cats, list), pnl_cats_error
+
+            pnl_cats_copy = pnl_cats.copy()
+            pnl_cats = [pnl for pnl in pnl_cats if pnl in self.pnl_names]
+
+            dif = set(pnl_cats_copy).difference(set(pnl_cats))
+            if dif:
+                print(f"The PnL(s) requested, {dif}, have not been defined on the "
+                      f"Class.")
+            elif len(pnl_cats) == 0:
+                raise ValueError("There are not any valid PnL(s) to display given the "
+                                 "request.")
 
         assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
         error_message = "The number of custom labels must match the defined number of " \
@@ -561,20 +579,23 @@ class NaivePnL:
         plt.show()
 
     def agg_signal_bars(self, pnl_name: str, freq: str = 'm',
-                       metric: str = "direction", title: str = "Directional Bar Chart.",
-                       y_label: str = ""):
+                        metric: str = "direction", title: str = None,
+                        y_label: str = "Sum of Std. across the Panel"):
         """
         Display aggregate signal strength and - potentially - direction.
 
-        :param <str> pnl_name: name of the PnL whose signals are to be visualized.
-            N.B.: Signal is here is the value that actually determines
-            the concurrent PnL.
+        :param <str> pnl_name: name of the PnL whose signal is to be visualized.
+            N.B.: The referenced signal corresponds to the series that determines the
+            concurrent PnL.
         :param <str> freq: frequency at which the signal is visualized. Default is
             monthly ('m'). The alternative is quarterly ('q').
         :param <str> metric: the type of signal value. Default is "direction".
             Alternative is "strength".
-        :param <str> title: allows entering text for a custom chart header.
-        :param <str> y_label: label for the y-axis. Default is None.
+        :param <str> title: allows entering text for a custom chart header. Default will
+            be "Directional Bar Chart of <pnl_name>.".
+        :param <str> y_label: label for the y-axis. Default is the sum of standard
+            deviations across the panel corresponding to the default signal
+            transformation: 'zn_score_pan'.
 
         """
 
@@ -589,6 +610,9 @@ class NaivePnL:
 
         metric_error = "The metric must either be 'direction' or 'strength'."
         assert metric in ['direction', 'strength'], metric_error
+
+        if title is None:
+            title = f"Directional Bar Chart of {pnl_name}."
 
         dfx = self.signal_df[pnl_name]
         dfw = dfx.pivot(index='real_date', columns='cid', values='sig')
@@ -623,6 +647,7 @@ class NaivePnL:
         skip = len(df_signal) // 12
         ticklabels[::skip] = df_signal[''].iloc[::skip].dt.strftime('%Y-%m-%d')
         ax.xaxis.set_major_formatter(mticker.FixedFormatter(ticklabels))
+
         fig.autofmt_xdate()
 
         def fmt(x, pos=0, max_i=len(ticklabels) - 1):
@@ -731,7 +756,7 @@ class NaivePnL:
             Default is 'ALL'.
         :param <bool> cs: inclusion of cross section PnLs. Default is False.
 
-        :return custom data frame with PnLs
+        :return custom DataFrame with PnLs
         """
         selected_pnls = pnl_names if pnl_names is not None else self.pnl_names
 
@@ -767,25 +792,23 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     # Instantiate a new instance to test the long-only functionality.
-    pnl = NaivePnL(dfd, ret="EQXR_NSA", sigs=["CRY", "GROWTH", "INFL"],
-                   cids=cids, start="2000-01-01", blacklist=black,
-                   bms=["EUR_EQXR_NSA", "USD_EQXR_NSA"])
+    # Benchmarks are used to calculate correlation against PnL series.
+    pnl = NaivePnL(
+        dfd, ret="EQXR_NSA", sigs=["CRY", "GROWTH", "INFL"], cids=cids,
+        start="2000-01-01", blacklist=black, bms=["EUR_EQXR_NSA", "USD_EQXR_NSA"]
+    )
 
-    pnl.make_pnl(sig="GROWTH", sig_op="zn_score_pan",
-                 sig_neg=True,
-                 rebal_freq="monthly",
-                 vol_scale=5, rebal_slip=1,
-                 min_obs=250, thresh=2)
-
-    pnl.make_pnl(sig="GROWTH", sig_op="zn_score_pan",
-                 rebal_freq="monthly",
-                 vol_scale=5, rebal_slip=1, pnl_name=None,
-                 min_obs=250, thresh=2)
+    pnl.make_pnl(
+        sig="GROWTH", sig_op="zn_score_pan", sig_neg=True, rebal_freq="monthly",
+        vol_scale=5, rebal_slip=1, min_obs=250, thresh=2
+    )
 
     pnl.make_long_pnl(vol_scale=10, label="Long")
 
-    df_eval = pnl.evaluate_pnls(pnl_cats=["PNL_GROWTH", "PNL_GROWTH_NEG"],
-                                start="2015-01-01",
-                                end="2020-12-31")
-    print(df_eval)
+    df_eval = pnl.evaluate_pnls(
+        pnl_cats=["PNL_GROWTH_NEG"], start="2015-01-01", end="2020-12-31"
+    )
 
+    pnl.agg_signal_bars(
+        pnl_name="PNL_GROWTH_NEG", freq="m", metric="direction", title=None,
+    )
