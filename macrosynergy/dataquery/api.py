@@ -24,7 +24,8 @@ class Interface(object):
     :param <bool> debug: boolean,
         if True run the interface in debugging mode.
     :param <bool> concurrent: run the requests concurrently.
-    :param <int> thread_handler: count of threads for downloading from DQ.
+    :param <int> batch_size: number of JPMaQS expressions handled in a single request
+        sent to DQ API. Each request will be handled concurrently by DataQuery.
     :param <str> client_id: optional argument required for OAuth authentication
     :param <str> client_secret: optional argument required for OAuth authentication
 
@@ -35,7 +36,7 @@ class Interface(object):
         oauth: bool = False,
         debug: bool = False,
         concurrent: bool = True,
-        thread_handler: int = 20,
+        batch_size: int = 10,
         **kwargs
     ):
 
@@ -57,7 +58,7 @@ class Interface(object):
         self.status_code: Optional[int] = None
         self.last_response: Optional[str] = None
         self.concurrent: bool = concurrent
-        self.thread_handler: int = thread_handler
+        self.batch_size: int = batch_size
 
     def __enter__(self):
         return self
@@ -218,9 +219,9 @@ class Interface(object):
             }
             params.update(params_)
 
-        t = self.thread_handler
-        iterations = ceil(no_tickers / t)
-        tick_list_compr = [tickers[(i * t) : (i * t) + t] for i in range(iterations)]
+        b = self.batch_size
+        iterations = ceil(no_tickers / b)
+        tick_list_compr = [tickers[(i * b): (i * b) + b] for i in range(iterations)]
 
         unpack = list(chain(*tick_list_compr))
         assert len(unpack) == len(set(unpack)), "List comprehension incorrect."
@@ -236,16 +237,16 @@ class Interface(object):
                 if i > 0:
                     time.sleep(delay)
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    for elem in tick_list_compr[(i * 10) : (i + 1) * 10]:
+                    for request_list in tick_list_compr[(i * 10): (i + 1) * 10]:
 
                         params_copy = params.copy()
-                        params_copy["expressions"] = elem
+                        params_copy["expressions"] = request_list
                         results = executor.submit(
                             self._fetch_threading, endpoint, params_copy
                         )
 
                         time.sleep(delay)
-                        results.__dict__[str(id(results))] = elem
+                        results.__dict__[str(id(results))] = request_list
                         output.append(results)
 
                     for f in concurrent.futures.as_completed(output):
