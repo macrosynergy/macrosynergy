@@ -27,8 +27,9 @@ class CategoryRelations(object):
         latest date in the DataFrame will be used.
     :param <dict> blacklist: cross-sections with date ranges that should be excluded from
         the analysis.
-    :param <int> years: number of years over which data are aggregated. Supersedes freq
-        and does not allow lags, Default is None, meaning no multi-year aggregation.
+    :param <int> years: number of years over which data are aggregated. Supersedes the
+        'freq' parameter and does not allow lags, Default is None, meaning no multi-year
+        aggregation.
         Note: for single year labelled plots, better use freq='A' for cleaner labels.
     :param <str> val: name of column that contains the values of interest. Default is
         'value'.
@@ -85,6 +86,8 @@ class CategoryRelations(object):
         # Select the cross-sections available for both categories.
         shared_cids = CategoryRelations.intersection_cids(df, xcats, cids)
 
+        # Will potentially contain NaN values if the two categories are defined over
+        # time-periods.
         df = categories_df(df, xcats, shared_cids, val, start=start,
                            end=end, freq=freq, blacklist=blacklist, years=years,
                            lag=lag, fwin=fwin, xcat_aggs=xcat_aggs)
@@ -97,22 +100,26 @@ class CategoryRelations(object):
             n_periods_error = f"<int> expected and not {type(n_periods)}."
             assert isinstance(n_periods, int), n_periods_error
 
-            df = CategoryRelations.time_series(df, change=xcat1_chg,
-                                               n_periods=n_periods,
-                                               shared_cids=shared_cids,
-                                               expln_var=xcats[0])
+            df = CategoryRelations.time_series(
+                df, change=xcat1_chg, n_periods=n_periods, shared_cids=shared_cids,
+                expln_var=xcats[0]
+            )
 
         if any([xt is not None for xt in self.xcat_trims]):
 
-            assert len(xcat_trims) == len(xcats), "Two values expected corresponding to " \
-                                                  "the number of categories."
+            xcat_trim_error = "Two values expected corresponding to the number " \
+                              "of categories."
+            assert len(xcat_trims) == len(xcats), xcat_trim_error
+
             types = [isinstance(elem, (float, int)) and elem >= 0.0
                      for elem in xcat_trims]
             assert any(types), "Expected two floating point values."
 
             df = CategoryRelations.outlier_trim(df, xcats, xcat_trims)
 
-        self.df = df
+        # NaN values will not be handled if both of the above conditions are not
+        # satisfied.
+        self.df = df.dropna(axis=0, how='any')
 
     @classmethod
     def intersection_cids(cls, df, xcats, cids):
@@ -353,6 +360,8 @@ class CategoryRelations(object):
         elif title is None:
             title = f'{self.xcats[0]} and {self.xcats[1]}'
 
+        # If "separator" is type Integer, the scatter plot is split across two
+        # time-periods where the divisor is the received year.
         if isinstance(separator, int):
 
             year_error = "Separation by years does not work with year groups."
@@ -384,9 +393,9 @@ class CategoryRelations(object):
                         line_kws={'lw': 1})
 
             if coef_box is not None:
-                data_table = self.corr_probability(df_probability=[dfx1, dfx2],
-                                                   time_period="",
-                                                   coef_box_loc=coef_box)
+                data_table = self.corr_probability(
+                    df_probability=[dfx1, dfx2], time_period="", coef_box_loc=coef_box
+                )
                 data_table.scale(0.4, 2.5)
                 data_table.set_fontsize(14)
 
@@ -418,7 +427,7 @@ class CategoryRelations(object):
             key = keys_ar[keys_ar <= n_cids][-1]
             col_number = dict_coln[key]
 
-            # Convert the DataFrame to a standardised dataframe. Three columns: two
+            # Convert the DataFrame to a standardised DataFrame. Three columns: two
             # categories (dependent & explanatory variable) and the respective
             # cross-sections. The index will be the date timestamp.
             dfx_copy = dfx.copy()
@@ -472,8 +481,9 @@ class CategoryRelations(object):
                         line_kws={'lw': 1})
 
             if coef_box is not None:
-                data_table = self.corr_probability(df_probability=self.df,
-                                                   coef_box_loc=coef_box)
+                data_table = self.corr_probability(
+                    df_probability=self.df, coef_box_loc=coef_box
+                )
                 data_table.scale(0.4, 2.5)
                 data_table.set_fontsize(12)
 
@@ -547,7 +557,8 @@ if __name__ == "__main__":
 
     # All AUD GROWTH locations.
     filt1 = (dfd['xcat'] == 'GROWTH') & (dfd['cid'] == 'AUD')
-    filt2 = (dfd['xcat'] == 'INFL') & (dfd['cid'] == 'NZD')  # All NZD INFL locations.
+    filt2 = (dfd['xcat'] == 'INFL') & (dfd['cid'] == 'NZD')
+
     # Reduced DataFrame.
     dfdx = dfd[~(filt1 | filt2)]
     dfdx['ERA'] = "before 2010"
@@ -555,12 +566,12 @@ if __name__ == "__main__":
 
     cidx = ['AUD', 'CAD', 'GBP', 'USD']
 
-    cr = CategoryRelations(dfdx, xcats=["CRY", "XR"], freq="Q", lag=1,
+    cr = CategoryRelations(dfdx, xcats=["CRY", "XR"], freq="M", lag=1,
                            cids=cidx, xcat_aggs=["mean", "sum"],
-                           start="2005-01-01", blacklist=black,
+                           start="2001-01-01", blacklist=black,
                            years=None)
 
     cr.reg_scatter(
-        labels=True, separator="cids", title="Carry and Return", xlab="Carry",
-        ylab="Return"
+        labels=False, separator=None, title="Carry and Return", xlab="Carry",
+        ylab="Return", coef_box="lower left"
     )

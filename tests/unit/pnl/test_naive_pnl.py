@@ -6,6 +6,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
+
 class TestAll(unittest.TestCase):
 
     def dataframe_construction(self):
@@ -97,78 +98,6 @@ class TestAll(unittest.TestCase):
                        )
         bm_tickers = list(pnl._bm_dict.keys())
         self.assertTrue(sorted(bm_tickers) == ["EUR_EQXR"])
-
-    def test_constructor_neg_sig(self):
-
-        # Apply the negative signal transformation. Used to validate if a signal has an
-        # inverse relationship with the return category.
-        self.dataframe_construction()
-
-        ret = "EQXR"
-        sigs = ["CRY", "GROWTH", "INFL"]
-        pnl = NaivePnL(
-            self.dfd, ret=ret, sigs=sigs, cids=self.cids, sig_neg=True,
-            bms=["EUR_DUXR", "USD_DUXR"], start="2000-01-01", blacklist=None
-        )
-
-        # Firstly, the return series remains unchanged, as the negative application is
-        # exclusively on the defined signals.
-        test_df = self.dfd[self.dfd["xcat"].isin([ret] + sigs)]
-        neg_sig_df = pnl.df
-
-        return_filt = test_df["xcat"] == ret
-        test_df_ret = test_df[return_filt]
-        neg_sig_df_ret = neg_sig_df[neg_sig_df["xcat"] == ret]
-
-        # Return category remains unchanged.
-        dfw_1 = test_df_ret.pivot(index='real_date', columns='cid', values='value')
-        dfw_2 = neg_sig_df_ret.pivot(index='real_date', columns='cid', values='value')
-
-        # Populate with zero values to test comparability.
-        self.assertTrue(np.all(dfw_1.fillna(0) == dfw_2.fillna(0)))
-
-        # Secondly, confirm the signal names have the postfix, "_NEG", appended.
-        xcats_mod = list(set(pnl.df["xcat"]))
-        for c in xcats_mod:
-            split = c.split("_")
-
-            if len(split) > 1:
-                self.assertEqual(split[1], "NEG")
-                # Negative postfix is only applied to the signal categories.
-                self.assertTrue(split[0] in sigs)
-
-        # Thirdly, confirm that the signals have been multiplied by minus one.
-        for s in sigs:
-
-            signal_filt = test_df["xcat"] == s
-            test_df_sig = test_df[signal_filt]
-            neg_sig_df_sig = neg_sig_df[neg_sig_df["xcat"] == s + "_NEG"]
-
-            dfw_1 = test_df_sig.pivot(index='real_date', columns='cid', values='value')
-            dfw_2 = neg_sig_df_sig.pivot(
-                index='real_date', columns='cid', values='value'
-            )
-
-            # Difference DataFrame should exclusively consist of zero values.
-            dif = dfw_1 + dfw_2
-            dif = dif.fillna(0)
-            self.assertTrue(np.all(dif.sum(axis=1) == 0))
-
-        # Lastly, confirm that the benchmark tickers have not been multiplied by minus
-        # one. Compute the correlation between the PnL series and the respective
-        # benchmark tickers.
-        # Benchmarks will be appended to the instance DataFrame, self.df.
-        bms = ["EUR_DUXR", "USD_DUXR"]
-        neg_sig_df["ticker"] = neg_sig_df["cid"] + "_" + neg_sig_df["xcat"]
-        for b in bms:
-
-            b_cid, b_xcat = b.split("_")
-            filt_bm = (self.dfd["xcat"] == b_xcat) & (self.dfd["cid"] == b_cid)
-
-            test_bm_df = self.dfd[filt_bm]["value"]
-            neg_sig_df_bm = neg_sig_df[neg_sig_df["ticker"] == b]["value"]
-
-            self.assertTrue(np.all(test_bm_df.to_numpy() == neg_sig_df_bm.to_numpy()))
 
     def test_make_signal(self):
 
@@ -344,6 +273,52 @@ class TestAll(unittest.TestCase):
 
             test_data = pnl_dfw['ALL'].loc[date]
             self.assertTrue(round(float(test_data), 4) == round(pnl_return_date, 4))
+
+    def test_make_pnl_neg(self):
+
+        self.dataframe_construction()
+
+        # The majority of the logic for make_pnl is tested through the method
+        # test_make_pnl(). Therefore, aim to isolate the application of the negative
+        # signal through evaluate_pnl() method.
+        # For make_pnl(), the sig_neg parameter will be set to True and the associated
+        # transformed signal will be multiplied by minus one.
+        # To test the negative signal, call make_pnl() on the same raw signal but set the
+        # sig_neg parameter to True and False. The two produced PnL series should have an
+        # inverse relationship with any benchmark.
+
+        ret = "EQXR"
+        sigs = ["CRY", "GROWTH", "INFL"]
+        bms = ["EUR_DUXR", "USD_DUXR"]
+
+        pnl = NaivePnL(
+            self.dfd, ret=ret, sigs=sigs, cids=self.cids, start="2000-01-01",
+            blacklist=self.blacklist, bms=bms
+        )
+
+        # Set the signal to True.
+        # Will implicitly test if the PnL name, using the default mechanism, will have
+        # the postfix "_NEG" appended given sig_neg is set to True.
+        pnl.make_pnl(
+            sig="GROWTH", sig_op="zn_score_pan", sig_neg=True, rebal_freq="monthly",
+            vol_scale=5, rebal_slip=1, min_obs=250, thresh=2
+        )
+
+        # Same parameter but sig_neg is set to False.
+        pnl.make_pnl(
+            sig="GROWTH", sig_op="zn_score_pan", sig_neg=False, rebal_freq="monthly",
+            vol_scale=5, rebal_slip=1, min_obs=250, thresh=2
+        )
+
+        # Confirm the direct negative correlation across the two PnLs. By adding the
+        # correlation coefficients with the benchmarks, the value should equate to
+        # zero.
+        df_eval = pnl.evaluate_pnls(
+            pnl_cats=["PNL_GROWTH", "PNL_GROWTH_NEG"],
+        )
+
+        bm_correl = df_eval.loc[[b + " correl" for b in bms], :]
+        self.assertTrue(np.all(bm_correl.sum(axis=1).to_numpy()) == 0)
 
     def test_make_long_pnl(self):
 
