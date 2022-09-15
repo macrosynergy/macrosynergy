@@ -22,7 +22,7 @@ def _prepare_basket(df: pd.DataFrame, xcat: str, basket: List[str],
     cids_used = sorted(set(basket) & set(cids_avl))
     cids_miss = [b for b in basket if b not in cids_used]
 
-    # Not able to be greater than because of assertion on line 124. If the basket
+    # Not able to be greater than because of assertion on line 126. If the basket
     # references a cross-section not defined in the DataFrame, an error will be thrown.
     condition = len(cids_used) < len(basket)
     if condition and complete_cross:
@@ -76,7 +76,8 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
     :param <str> rel_meth: method for calculating relative value. Default is 'subtract'.
         Alternative is 'divide'.
     :param <List[str]> rel_xcats: extended category name of the relative values. Will
-        displace the original category names: xcat + postfix.
+        displace the original category names: xcat + postfix. The order should reflect
+        the order of the passed categories.
     :param <str> postfix: acronym to be appended to 'xcat' string to give the name for
         relative value category. Only applies if rel_xcats is None. Default is 'R'
 
@@ -103,6 +104,8 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
         error_length = "`rel_xcats` must have the same number of elements as `xcats`."
         assert len(xcats) == len(rel_xcats), error_length
+
+        rel_xcats_dict = dict(zip(xcats, rel_xcats))
 
     col_names = ['cid', 'xcat', 'real_date', 'value']
     # Host DataFrame.
@@ -184,7 +187,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         if rel_xcats is None:
             df_new['xcat'] = xcat + postfix
         else:
-            df_new['xcat'] = rel_xcats[i]
+            df_new['xcat'] = rel_xcats_dict[xcat]
 
         storage.append(df_new.sort_values(['cid', 'real_date'])[col_names])
 
