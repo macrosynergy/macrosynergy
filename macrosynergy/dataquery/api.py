@@ -237,16 +237,16 @@ class Interface(object):
                 if i > 0:
                     time.sleep(delay)
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    for elem in tick_list_compr[(i * 10): (i + 1) * 10]:
+                    for request_list in tick_list_compr[(i * 10): (i + 1) * 10]:
 
                         params_copy = params.copy()
-                        params_copy["expressions"] = elem
+                        params_copy["expressions"] = request_list
                         results = executor.submit(
                             self._fetch_threading, endpoint, params_copy
                         )
 
                         time.sleep(delay)
-                        results.__dict__[str(id(results))] = elem
+                        results.__dict__[str(id(results))] = request_list
                         output.append(results)
 
                     for f in concurrent.futures.as_completed(output):
