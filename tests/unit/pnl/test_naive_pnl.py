@@ -99,8 +99,6 @@ class TestAll(unittest.TestCase):
         bm_tickers = list(pnl._bm_dict.keys())
         self.assertTrue(sorted(bm_tickers) == ["EUR_EQXR"])
 
-    # Todo: test sig_neg application in make_pnl
-
     def test_make_signal(self):
 
         self.dataframe_construction()
@@ -275,6 +273,52 @@ class TestAll(unittest.TestCase):
 
             test_data = pnl_dfw['ALL'].loc[date]
             self.assertTrue(round(float(test_data), 4) == round(pnl_return_date, 4))
+
+    def test_make_pnl_neg(self):
+
+        self.dataframe_construction()
+
+        # The majority of the logic for make_pnl is tested through the method
+        # test_make_pnl(). Therefore, aim to isolate the application of the negative
+        # signal through evaluate_pnl() method.
+        # For make_pnl(), the sig_neg parameter will be set to True and the associated
+        # transformed signal will be multiplied by minus one.
+        # To test the negative signal, call make_pnl() on the same raw signal but set the
+        # sig_neg parameter to True and False. The two produced PnL series should have an
+        # inverse relationship with any benchmark.
+
+        ret = "EQXR"
+        sigs = ["CRY", "GROWTH", "INFL"]
+        bms = ["EUR_DUXR", "USD_DUXR"]
+
+        pnl = NaivePnL(
+            self.dfd, ret=ret, sigs=sigs, cids=self.cids, start="2000-01-01",
+            blacklist=self.blacklist, bms=bms
+        )
+
+        # Set the signal to True.
+        # Will implicitly test if the PnL name, using the default mechanism, will have
+        # the postfix "_NEG" appended given sig_neg is set to True.
+        pnl.make_pnl(
+            sig="GROWTH", sig_op="zn_score_pan", sig_neg=True, rebal_freq="monthly",
+            vol_scale=5, rebal_slip=1, min_obs=250, thresh=2
+        )
+
+        # Same parameter but sig_neg is set to False.
+        pnl.make_pnl(
+            sig="GROWTH", sig_op="zn_score_pan", sig_neg=False, rebal_freq="monthly",
+            vol_scale=5, rebal_slip=1, min_obs=250, thresh=2
+        )
+
+        # Confirm the direct negative correlation across the two PnLs. By adding the
+        # correlation coefficients with the benchmarks, the value should equate to
+        # zero.
+        df_eval = pnl.evaluate_pnls(
+            pnl_cats=["PNL_GROWTH", "PNL_GROWTH_NEG"],
+        )
+
+        bm_correl = df_eval.loc[[b + " correl" for b in bms], :]
+        self.assertTrue(np.all(bm_correl.sum(axis=1).to_numpy()) == 0)
 
     def test_make_long_pnl(self):
 
