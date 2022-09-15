@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import pandas as pd
 from tests.simulate import make_qdf
-from macrosynergy.panel.make_relative_value import make_relative_value
+from macrosynergy.panel.make_relative_value import make_relative_value, _prepare_basket
 from macrosynergy.management.shape_dfs import reduce_df
 from random import randint, choice
 import io
@@ -195,6 +195,39 @@ class TestAll(unittest.TestCase):
 
         rl_xcat = next(iter(rlt_value_xcats))
         self.assertTrue(rl_xcat == "CRY_RelVal")
+
+    def test_prepare_basket(self):
+
+        # Explicitly test _prepare_basket() method.
+        self.dataframe_generator()
+        dfd = self.dfd
+
+        # Set the cids parameter to a reduce subset (a particuliar category is missing
+        # requested cross-sections).
+        cids = ["AUD", "NZD"]
+        start = "2000-01-01"
+        end = "2020-12-31"
+        dfx = reduce_df(
+            df=dfd, xcats=["XR"], cids=cids, start=start, end=end, blacklist=None,
+            out_all=False
+        )
+
+        # Set the basket to all available cross-sections. Larger request.
+        basket = self.cids
+        dfb, cids_used = _prepare_basket(
+            df=dfx, xcat="XR", basket=basket, cids_avl=cids, complete_cross=False
+        )
+        self.assertTrue(sorted(cids_used) == cids)
+        self.assertTrue(sorted(list(set(dfb["cid"]))) == cids)
+
+        # If complete_cross parameter is set to True and the respective category is not
+        # defined over all cross-sections defined in the basket, the function should
+        # return an empty list and an empty DataFrame.
+        dfb, cids_used = _prepare_basket(
+            df=dfx, xcat="XR", basket=basket, cids_avl=cids, complete_cross=True
+        )
+        self.assertTrue(len(cids_used) == 0)
+        self.assertTrue(dfb.empty)
 
     def test_relative_value_logic(self):
 
