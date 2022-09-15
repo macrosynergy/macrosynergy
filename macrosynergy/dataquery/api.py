@@ -35,7 +35,7 @@ class Interface(object):
         oauth: bool = False,
         debug: bool = False,
         concurrent: bool = True,
-        thread_handler: int = 20,
+        thread_handler: int = 10,
         **kwargs
     ):
 
