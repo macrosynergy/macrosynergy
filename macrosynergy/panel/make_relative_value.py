@@ -211,16 +211,16 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     # Simulate blacklist
-
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
 
     # Applications
-    dfd_1 = make_relative_value(dfd, xcats=["GROWTH", "INFL"], cids=None,
-                                blacklist=None, rel_meth='subtract', rel_xcats=None,
-                                postfix='RV')
-    dfd_concatenate = pd.concat([dfd, dfd_1])
-    dfd_concatenate = dfd_concatenate.reset_index(drop=True)
+    dfd_1 = make_relative_value(
+        dfd, xcats=["GROWTH", "INFL"], cids=None, blacklist=None, rel_meth='subtract',
+        rel_xcats=None, postfix='RV'
+    )
 
-    dfd_1_black = make_relative_value(dfd, xcats=["GROWTH", "INFL"], cids=None,
-                                      blacklist=black, rel_meth='subtract',
-                                      rel_xcats=None, postfix='RV')
+    rel_xcats = ["GROWTH_sRV", "INFL_sRV"]
+    dfd_1_black = make_relative_value(
+        dfd, xcats=["GROWTH", "INFL"], cids=None, blacklist=black, rel_meth='subtract',
+        rel_xcats=rel_xcats, postfix='RV'
+    )
