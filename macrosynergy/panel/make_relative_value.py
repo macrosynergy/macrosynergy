@@ -4,6 +4,44 @@ from typing import List
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 
+def basket_handler(dfx_xcat: pd.DataFrame, basket: List[str], available_cids: List[str],
+                   xcat: str, complete_cross: bool):
+    """
+    Categories can be defined over different cross-sections. Will determine the
+    respective basket given the available cross-sections for the respective category.
+
+    :param <pd.DataFrame> dfx_xcat: category exclusive DataFrame.
+    :param <pd.DataFrame> basket: cross-sections to be used for the relative value
+        benchmark if available.
+    :param <List[str] available_cids: available cross-sections for the respective
+        category.
+    :param <str> xcat: respective category for the relative value calculation.
+    :param <bool> complete_cross: boolean parameter that outlines whether each category
+        is required to have the full set of cross-sections held by the basket parameter.
+    """
+
+    intersection_function = lambda l_1, l_2: sorted(list(set(l_1) & set(l_2)))
+
+    intersection = intersection_function(basket, available_cids)
+    # If True, all cross-sections defined in the "basket" data structure are
+    # available for the respective category.
+    clause = len(intersection)
+    missing_cids = [b for b in basket if b not in intersection]
+
+    if clause != len(basket) and complete_cross:
+        print(f"The category, {xcat}, is missing {missing_cids} which are included "
+              f"in the basket {basket}. Therefore, the category will be excluded "
+              f"from the returned DataFrame.")
+
+    # Must be a valid subset of the available cross-sections.
+    elif clause != len(basket):
+        print(f"The category, {xcat}, is missing {missing_cids} from the requested "
+              f"basket. The new basket will be {intersection}.")
+
+    # Reduce the DataFrame to the specified basket given the available cross-sections.
+    dfb = dfx_xcat[dfx_xcat['cid'].isin(intersection)]
+
+    return dfb, intersection
 
 def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                         start: str = None, end: str = None, blacklist: dict = None,
@@ -30,7 +68,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         available in the DataFrame over the respective time-period.
         However, the basket can be reduced to a valid subset of the available
         cross-sections.
-    :param <bool> complete_cross: Boolean parameter that outlines whether each category
+    :param <bool> complete_cross: boolean parameter that outlines whether each category
         is required to have the full set of cross-sections held by the basket parameter.
         Default is False. If False, the mean, for the relative value, will use the subset
         that is available for that category. For instance, if basket = ['AUD', 'CAD',
@@ -38,7 +76,8 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         updated to basket = ['GBP', 'NZD'] for that respective category.
     :param <str> rel_meth: method for calculating relative value. Default is 'subtract'.
         Alternative is 'divide'.
-    :param <List[str]> rel_xcats: extended category name of the relative values.
+    :param <List[str]> rel_xcats: extended category name of the relative values. Will
+        displace the original category names: xcat + postfix.
     :param <str> postfix: acronym to be appended to 'xcat' string to give the name for
         relative value category. Only applies if rel_xcats is None. Default is 'R'
 
@@ -70,12 +109,13 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
     # Host DataFrame.
     df_out = pd.DataFrame(columns=col_names)
 
+    # Intersect set to False. Therefore, cross-sections across the categories can vary.
     dfx = reduce_df(
         df, xcats, cids, start, end, blacklist, out_all=False
     )
 
     if cids is None:
-        # All cross-sections available.
+        # All cross-sections available - union across categories.
         cids = list(dfx['cid'].unique())
 
     if basket is not None:
@@ -96,41 +136,23 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
                     "is an incorrect usage of the function."
         raise RuntimeError(run_error)
 
-    intersection_function = lambda l_1, l_2: sorted(list(set(l_1) & set(l_2)))
-
     storage = [df_out]
-    # Implicit assumption that both categories are defined over the same cross-sections.
-    # Achieved by the reduce_df() subroutine will unify the cross-sections both
-    # categories are defined over.
+    # Categories can be defined over a different set of cross-sections.
     for i, xcat in enumerate(available_xcats):
 
         df_xcat = dfx[dfx['xcat'] == xcat]
         available_cids = df_xcat['cid'].unique()
 
-        # If True, all cross-sections defined in the "basket" data structure are
-        # available for the respective category.
-
-        intersection = intersection_function(basket, available_cids)
-        clause = len(intersection)
-        missing_cids = [b for b in basket if b not in intersection]
-
-        if clause != len(basket) and complete_cross:
-            print(f"The category, {xcat}, is missing {missing_cids} which are included "
-                  f"in the basket {basket}. Therefore, the category will be excluded "
-                  f"from the returned DataFrame.")
-
-        # Must be a valid subset of the available cross-sections.
-        elif clause != len(basket):
-            print(f"The category, {xcat}, is missing {missing_cids} from the requested "
-                  f"basket. The new basket will be {intersection}.")
-
         dfx_xcat = df_xcat[['cid', 'real_date', 'value']]
-
-        # Reduce the DataFrame to the specified basket.
-        dfb = dfx_xcat[dfx_xcat['cid'].isin(intersection)]
+        # The new "basket" variable will be the intersection of the available
+        # cross-sections, for the respective category, and the requested basket.
+        dfb, basket = basket_handler(
+            dfx_xcat=dfx_xcat, basket=basket, available_cids=available_cids, xcat=xcat,
+            complete_cross=complete_cross
+        )
 
         if len(basket) > 1:
-            # Mean of (available) cross sections at each point in time. If all
+            # Mean of (available) cross-sections at each point in time. If all
             # cross-sections defined in the "basket" data structure are not available for
             # a specific date, compute the mean over the available subset.
             bm = dfb.groupby(by='real_date').mean()
