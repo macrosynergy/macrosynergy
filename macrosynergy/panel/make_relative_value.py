@@ -26,6 +26,7 @@ def _prepare_basket(df: pd.DataFrame, xcat: str, basket: List[str],
     # references a cross-section not defined in the DataFrame, an error will be thrown.
     condition = len(cids_used) < len(basket)
     if condition and complete_cross:
+        cids_used.clear()
         print(f"The category, {xcat}, is missing {cids_miss} which are included "
               f"in the basket {basket}. Therefore, the category will be excluded "
               f"from the returned DataFrame.")
@@ -107,7 +108,8 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
     # Host DataFrame.
     df_out = pd.DataFrame(columns=col_names)
 
-    # Intersect set to False. Therefore, cross-sections across the categories can vary.
+    # Intersect parameter set to False. Therefore, cross-sections across the categories
+    # can vary.
     dfx = reduce_df(
         df, xcats, cids, start, end, blacklist, out_all=False
     )
@@ -142,8 +144,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         available_cids = df_xcat['cid'].unique()
 
         dfx_xcat = df_xcat[['cid', 'real_date', 'value']]
-        # The new "basket" variable will be the intersection of the available
-        # cross-sections, for the respective category, and the requested basket.
+
         dfb, basket = _prepare_basket(
             df=dfx_xcat, xcat=xcat, basket=basket, cids_avl=available_cids,
             complete_cross=complete_cross
@@ -154,9 +155,13 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
             # cross-sections defined in the "basket" data structure are not available for
             # a specific date, compute the mean over the available subset.
             bm = dfb.groupby(by='real_date').mean()
-        else:
+        elif len(basket) == 1:
             # Relative value is mapped against a single cross-section.
             bm = dfb.set_index('real_date')['value']
+        else:
+            # Category is not defined over all cross-sections in the basket and
+            # 'complete_cross' equals True.
+            continue
 
         dfw = dfx_xcat.pivot(index='real_date', columns='cid', values='value')
 
