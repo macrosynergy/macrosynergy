@@ -24,8 +24,8 @@ class Interface(object):
     :param <bool> debug: boolean,
         if True run the interface in debugging mode.
     :param <bool> concurrent: run the requests concurrently.
-    :param <int> batch_size: number of expressions handled in a single request to DQ API.
-        Each request will be handled concurrently by DataQuery.
+    :param <int> batch_size: number of JPMaQS expressions handled in a single request
+        sent to DQ API. Each request will be handled concurrently by DataQuery.
     :param <str> client_id: optional argument required for OAuth authentication
     :param <str> client_secret: optional argument required for OAuth authentication
 
