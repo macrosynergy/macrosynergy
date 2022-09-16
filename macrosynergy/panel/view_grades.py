@@ -20,13 +20,18 @@ def heatmap_grades(df: pd.DataFrame, xcats:  List[str],  cids: List[str] = None,
     :param <List[str]> cids: cross sections to visualize. Default is all in  DataFrame.
     :param <str> start: earliest date in ISO format. Default is earliest available.
     :param <str> end: latest date in ISO format. Default is latest available.
-    :param <str> grade: name of column that contains the grades Default is 'grading'.
+    :param <str> grade: name of column that contains the grades. Default is 'grading'.
     :param <str> title: string of chart title; defaults depend on type of range plot.
     :param <Tuple[float]> size: Tuple of width and height of graph.
         Default is None, meaning it is set in accordance with df.
 
     """
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+
+    df_cols = list(df.columns)
+    grade_error = "Column that contains the grade values must be present in the " \
+                  f"DataFrame: {df_cols}."
+    assert grade in df.columns, grade_error
 
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
     df = df[['xcat', 'cid', 'real_date', grade]]

@@ -54,7 +54,6 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
         else:
             sort_cids_by = np.std
 
-
     error_message = "The number of custom labels must match the defined number of " \
                     "categories in pnl_cats."
     if xcat_labels is not None:

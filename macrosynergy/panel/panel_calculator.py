@@ -107,7 +107,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None,
 
     # A. Asserts
 
-    cols = ['cid', 'xcat', 'real_date', 'value']
+    cols = ["cid", "xcat", "real_date", "value"]
 
     col_error = f"The DataFrame must contain the necessary columns: {cols}."
     assert set(cols).issubset(set(df.columns)), col_error

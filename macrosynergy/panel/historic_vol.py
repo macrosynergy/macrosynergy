@@ -1,9 +1,7 @@
-import time
+
 import numpy as np
 import pandas as pd
-from collections import defaultdict, deque
 from typing import List, Union, Tuple
-from random import choice
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 
@@ -83,8 +81,8 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     Estimate historic annualized standard deviations of asset returns. User Function.
     Controls the functionality.
 
-    :param <pd.Dataframe> df: standardized DataFrame with the following necessary columns:
-        'cid', 'xcats', 'real_date' and 'value. Will contain all of the data across all
+    :param <pd.DataFrame> df: standardized DataFrame with the following necessary columns:
+        'cid', 'xcats', 'real_date' and 'value'. Will contain all of the data across all
         macroeconomic fields.
     :param <str> xcat:  extended category denoting the return series for which volatility
         should be calculated.
@@ -111,7 +109,7 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         window instead.
     :param <str> postfix: string appended to category name for output; default is "ASD".
 
-    :return <pd.Dataframe>: standardized DataFrame with the estimated annualized standard
+    :return <pd.DataFrame>: standardized DataFrame with the estimated annualized standard
         deviations of the chosen xcat.
         If the input 'value' is in % (as is the standard in JPMaQS) then the output
         will also be in %.
@@ -119,11 +117,14 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     """
 
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+    df = df[["cid", "xcat", "real_date", "value"]]
 
     assert lback_periods > half_life, "Half life must be shorter than lookback period."
     assert lback_meth in ['xma', 'ma'], "Incorrect request."
 
-    df = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end, blacklist=blacklist)
+    df = reduce_df(
+        df, xcats=[xcat], cids=cids, start=start, end=end, blacklist=blacklist
+    )
     dfw = df.pivot(index='real_date', columns='cid', values='value')
 
     # The pandas in-built method df.rolling() will account for NaNs and start from the
@@ -165,8 +166,11 @@ if __name__ == "__main__":
     df_xcats.loc['GROWTH'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
     df_xcats.loc['INFL'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    dfd["grading"] = np.ones(dfd.shape[0])
 
     weights = expo_weights(lback_periods=21, half_life=11)
 
-    df = historic_vol(dfd, cids=cids, xcat='XR', lback_periods=21, lback_meth='ma',
-                      half_life=11, remove_zeros=True)
+    df = historic_vol(
+        dfd, cids=cids, xcat='XR', lback_periods=21, lback_meth='ma', half_life=11,
+        remove_zeros=True
+    )

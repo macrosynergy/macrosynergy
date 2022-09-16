@@ -112,6 +112,8 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
     """
 
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+    col_names = ['cid', 'xcat', 'real_date', val]
+    df = df[col_names]
 
     if freq is not None:
         freq_options = ['W', 'M', 'Q']

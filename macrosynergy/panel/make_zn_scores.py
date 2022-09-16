@@ -147,9 +147,11 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
     # --- Prepare re-estimation dates and time-series DataFrame.
 
+    # Remove any additional metrics defined in the DataFrame.
     df = df.loc[:, expected_columns]
-    df = reduce_df(df, xcats=[xcat], cids=cids,
-                   start=start, end=end, blacklist=blacklist)
+    df = reduce_df(
+        df, xcats=[xcat], cids=cids, start=start, end=end, blacklist=blacklist
+    )
 
     s_date = min(df['real_date'])
     e_date = max(df['real_date'])
@@ -237,11 +239,13 @@ if __name__ == "__main__":
              'GBP': ['2018-01-01', '2100-01-01']}
 
     dfd = make_qdf(df_cids, df_xcats, back_ar = 0.75)
+    dfd["grading"] = np.ones(dfd.shape[0])
 
     # Monthly: panel + cross.
     dfzm = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids,
                           blacklist=black, iis=True, neutral='mean',
                           pan_weight=0.75, min_obs=261, est_freq="m")
+    print(dfzm)
 
     # Weekly: panel + cross.
     dfzw = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids,
