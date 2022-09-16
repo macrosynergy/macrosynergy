@@ -176,6 +176,8 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         preceding categories will be the explanatory variables(s).
     :param <List[str]> cids: cross-sections to be included. Default is all in the
         DataFrame.
+    :param <str> val: name of column that contains the values of interest. Default is
+        'value'.
     :param <str> start: earliest date in ISO 8601 format. Default is None,
         i.e. earliest date in DataFrame is used.
     :param <str> end: latest date in ISO 8601 format. Default is None,
@@ -186,8 +188,6 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     :param <int> years: number of years over which data are aggregated. Supersedes the
         "freq" parameter and does not allow lags, Default is None, i.e. no multi-year
         aggregation.
-    :param <str> val: name of column that contains the values of interest. Default is
-        'value'.
     :param <str> freq: letter denoting frequency at which the series are to be sampled.
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'. Will always be the
         last business day of the respective frequency.
@@ -237,6 +237,17 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
 
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, blacklist, out_all=True)
 
+    metric = ["value", "grading", "mop_lag", "eop_lag"]
+    val_error = "The column of interest must be one of the defined JPMaQS metrics, " \
+                f"{metric}, but received {val}."
+    assert val in metric, val_error
+    avbl_cols = list(df.columns)
+    assert val in avbl_cols, f"The passed column name, {val}, must be present in the " \
+                             f"received DataFrame. DataFrame contains {avbl_cols}."
+
+    # Reduce the columns in the DataFrame to the necessary columns:
+    # ['cid', 'xcat', 'real_date'] + [val] (name of column that contains the
+    # values of interest: "value", "grading", "mop_lag", "eop_lag").
     col_names = ['cid', 'xcat', 'real_date', val]
 
     df_output = []
@@ -347,7 +358,7 @@ if __name__ == "__main__":
     dfd_xt = reduce_df_by_ticker(dfd, ticks=tickers, blacklist=black)
 
     # Testing categories_df().
-    dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='W', lag=1,
-                         xcat_aggs=['mean', 'mean'], start='2000-01-01',
-                         blacklist=black
-                         )
+    dfc1 = categories_df(
+        dfd, xcats=['GROWTH', 'CRY'], cids=cids, val="value", freq='W', lag=1,
+        xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black
+    )
