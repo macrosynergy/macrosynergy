@@ -1,4 +1,5 @@
 
+import numpy as np
 import pandas as pd
 from typing import List
 from macrosynergy.management.simulate_quantamental_data import make_qdf
@@ -81,12 +82,19 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
     :param <str> postfix: acronym to be appended to 'xcat' string to give the name for
         relative value category. Only applies if rel_xcats is None. Default is 'R'
 
-    :return <pd.Dataframe>: standardized DataFrame with the relative values, featuring
-        the categories: 'cid', 'xcats', 'real_date' and 'value'.
+    :return <pd.DataFrame>: standardized DataFrame with the relative values, featuring
+        the categories: 'cid', 'xcat', 'real_date' and 'value'.
 
     """
 
-    assert rel_meth in ['subtract', 'divide'], "rel_meth must be 'subtract' or 'divide'"
+    expected_columns = ["cid", "xcat", "real_date", "value"]
+    col_error = f"The DataFrame must contain the necessary columns: {expected_columns}."
+    assert set(expected_columns).issubset(set(df.columns)), col_error
+
+    df = df.loc[:, ["cid", "xcat", "real_date", "value"]]
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+
+    assert rel_meth in ["subtract", "divide"], "rel_meth must be 'subtract' or 'divide'"
 
     xcat_error = f"List of categories or single single category string expected. " \
                  f"Received {type(xcats)}."

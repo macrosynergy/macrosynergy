@@ -16,11 +16,11 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
 
     """Plots averages and various ranges across sections for one or more categories.
 
-    :param <pd.DataFrame> df: standardized DataFrame with the necessary columns:
+    :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: extended categories to be checked on. Default is all
         in the DataFrame.
-    :param <List[str]> cids: cross sections to plot. Default is all in dataframe.
+    :param <List[str]> cids: cross sections to plot. Default is all in DataFrame.
     :param <str> start: earliest date in ISO format. Default earliest date in df.
     :param <str> end: latest date in ISO format. Default is latest date in df.
     :param <str> val: name of column that contains the values. Default is 'value'.
@@ -36,6 +36,8 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
     :param <List[str]> xcat_labels: custom labels to be used for the ranges.
 
     """
+
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
     possible_xcats = set(df["xcat"])
     missing_xcats = set(xcats).difference(possible_xcats)
