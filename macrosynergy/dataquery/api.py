@@ -226,43 +226,38 @@ class Interface(object):
         unpack = list(chain(*tick_list_compr))
         assert len(unpack) == len(set(unpack)), "List comprehension incorrect."
 
-        exterior_iterations = ceil(len(tick_list_compr) / 10)
-
+        thread_output = []
         final_output = []
         tickers_server = []
         if self.concurrent:
-            for i in range(exterior_iterations):
 
-                output = []
-                if i > 0:
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                for r_list in tick_list_compr:
+
+                    params_copy = params.copy()
+                    params_copy["expressions"] = r_list
+                    results = executor.submit(
+                        self._fetch_threading, endpoint, params_copy
+                    )
+
                     time.sleep(delay)
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    for request_list in tick_list_compr[(i * 10): (i + 1) * 10]:
+                    results.__dict__[str(id(results))] = r_list
+                    thread_output.append(results)
 
-                        params_copy = params.copy()
-                        params_copy["expressions"] = request_list
-                        results = executor.submit(
-                            self._fetch_threading, endpoint, params_copy
-                        )
+                for f in concurrent.futures.as_completed(thread_output):
+                    try:
+                        response = f.result()
+                        if f.__dict__["_result"] is None:
+                            return None
 
-                        time.sleep(delay)
-                        results.__dict__[str(id(results))] = request_list
-                        output.append(results)
-
-                    for f in concurrent.futures.as_completed(output):
-                        try:
-                            response = f.result()
-                            if f.__dict__["_result"] is None:
-                                return None
-
-                        except ValueError:
-                            delay += 0.05
-                            tickers_server.append(f.__dict__[str(id(f))])
+                    except ValueError:
+                        delay += 0.05
+                        tickers_server.append(f.__dict__[str(id(f))])
+                    else:
+                        if isinstance(response, list):
+                            final_output.extend(response)
                         else:
-                            if isinstance(response, list):
-                                final_output.extend(response)
-                            else:
-                                continue
+                            continue
 
         else:
             # Runs through the Tickers sequentially. Thus, breaking the requests into
