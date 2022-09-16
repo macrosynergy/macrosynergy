@@ -20,7 +20,7 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
 
     """Displays a facet grid of time line charts of one or more categories.
 
-    :param <pd.Dataframe> df: standardized dataframe with the necessary columns:
+    :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: extended categories to plot. Default is all in DataFrame.
     :param <List[str]> cids: cross sections to plot. Default is all in DataFrame.
@@ -52,6 +52,8 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
     :param <float> height: height of plots in facet. Default is 3.
 
     """
+
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
     cs_mean_error = f"cs_mean parameter must be a Boolean Object."
     assert isinstance(cs_mean, bool), cs_mean_error

@@ -16,11 +16,11 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
 
     """Plots averages and various ranges across sections for one or more categories.
 
-    :param <pd.DataFrame> df: standardized DataFrame with the necessary columns:
+    :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: extended categories to be checked on. Default is all
         in the DataFrame.
-    :param <List[str]> cids: cross sections to plot. Default is all in dataframe.
+    :param <List[str]> cids: cross sections to plot. Default is all in DataFrame.
     :param <str> start: earliest date in ISO format. Default earliest date in df.
     :param <str> end: latest date in ISO format. Default is latest date in df.
     :param <str> val: name of column that contains the values. Default is 'value'.
@@ -37,10 +37,22 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
 
     """
 
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+
+    possible_xcats = set(df["xcat"])
+    missing_xcats = set(xcats).difference(possible_xcats)
+    error_xcats = "The categories passed in to view_ranges() must be present in the " \
+                  f"DataFrame: missing {missing_xcats}."
+    assert set(xcats).issubset(possible_xcats), error_xcats
+
     if sort_cids_by is not None:
         assert isinstance(sort_cids_by, str)
         sort_error = "Sorting parameter must either be 'mean' or 'std'."
         assert sort_cids_by in ['mean', 'std'], sort_error
+        if sort_cids_by == "mean":
+            sort_cids_by = np.mean
+        else:
+            sort_cids_by = np.std
 
     error_message = "The number of custom labels must match the defined number of " \
                     "categories in pnl_cats."

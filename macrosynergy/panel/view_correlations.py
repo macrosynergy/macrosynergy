@@ -74,15 +74,15 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
     """
     Visualize correlation across categories or cross-sections of panels.
 
-    :param <pd.Dataframe> df: standardized JPMaQS dataframe with the necessary columns:
+    :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: extended categories to be correlated. Default is all in the
-        dataframe. If xcats contains only one category the correlation coefficients
+        DataFrame. If xcats contains only one category the correlation coefficients
         across cross sections are displayed. If xcats contains more than one category,
         the correlation coefficients across categories are displayed. Additionally, the
         order of the xcats received will be mirrored in the correlation matrix.
     :param <List[str]> cids: cross sections to be correlated. Default is all in the
-        dataframe.
+        DataFrame.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df
@@ -110,6 +110,10 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
     N.B:. The function displays the heatmap of a correlation matrix across categories or
     cross-sections (depending on which parameter has received multiple elements).
     """
+
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+    col_names = ['cid', 'xcat', 'real_date', val]
+    df = df[col_names]
 
     if freq is not None:
         freq_options = ['W', 'M', 'Q']

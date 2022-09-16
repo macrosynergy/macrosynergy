@@ -5,9 +5,11 @@ import matplotlib.pyplot as plt
 from sklearn import metrics as skm
 from scipy import stats
 from typing import List, Union, Tuple
+from datetime import timedelta
+from collections import defaultdict
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.shape_dfs import categories_df
+from macrosynergy.management.shape_dfs import reduce_df, categories_df
 
 
 class SignalReturnRelations:
@@ -28,6 +30,9 @@ class SignalReturnRelations:
         applied to all rival signals.
     :param <bool> sig_neg: if set to True puts the signal in negative terms for all
         analysis. Default is False.
+    :param <bool> cosp: If True the comparative statistics are calculated only for the
+        "communal sample periods", i.e. periods and cross-sections that have values
+        for all compared signals. Default is False.
     :param <str> start: earliest date in ISO format. Default is None in which case the
         earliest date available will be used.
     :param <str> end: latest date in ISO format. Default is None in which case the
@@ -49,9 +54,11 @@ class SignalReturnRelations:
     """
     def __init__(self, df: pd.DataFrame, ret: str, sig: str,
                  rival_sigs: Union[str, List[str]] = None, cids: List[str] = None,
-                 sig_neg: bool = False, start: str = None, end: str = None,
-                 fwin: int = 1, blacklist: dict = None, agg_sig: str = 'last',
-                 freq: str = 'M'):
+                 sig_neg: bool = False, cosp: bool = False, start: str = None,
+                 end: str = None, fwin: int = 1, blacklist: dict = None,
+                 agg_sig: str = 'last', freq: str = 'M'):
+
+        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
         self.dic_freq = {'D': 'daily', 'W': 'weekly', 'M': 'monthly',
                          'Q': 'quarterly', 'A': 'annual'}
@@ -65,6 +72,8 @@ class SignalReturnRelations:
         self.ret = ret
         self.freq = freq
 
+        assert isinstance(cosp, bool), f"<bool> object expected and not {type(cosp)}."
+        self.cosp = cosp
         self.start = start
         self.end = end
         self.blacklist = blacklist
@@ -88,15 +97,27 @@ class SignalReturnRelations:
             rival_error = f"The additional signals must be present in the defined " \
                           f"DataFrame. It is currently missing, {missing}."
             assert set(r_sigs).issubset(set(xcats)), rival_error
-
             signals += r_sigs
 
         self.signals = signals
 
-        self.df = categories_df(df, xcats=self.signals + [ret], cids=cids, val='value',
-                                start=start, end=end, freq=freq, blacklist=blacklist,
-                                lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum'])
+        xcats = self.signals + [ret]
 
+        dfd = reduce_df(
+            df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
+        )
+
+        # Naturally, only applicable if rival signals have been passed.
+        if self.cosp and len(signals) > 1:
+            dfd = self.__communal_sample__(df=dfd)
+
+        self.dfd = dfd
+
+        df = categories_df(
+            dfd, xcats=xcats, cids=cids, val='value', start=None, end=None,
+            freq=freq, blacklist=None, lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum']
+        )
+        self.df = df
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
 
         if sig_neg:
@@ -148,6 +169,10 @@ class SignalReturnRelations:
         :param <str> signal: signal category.
         """
 
+        # Account for NaN values between the single respective signal and return. Only
+        # applicable for rival signals panel level calculations.
+        df_segment = df_segment.loc[:, [self.ret, signal]].dropna(axis=0, how="any")
+
         df_sgs = np.sign(df_segment.loc[:, [self.ret, signal]])
         # Exact zeroes are disqualified for sign analysis only.
         df_sgs = df_sgs[~((df_sgs.iloc[:, 0] == 0) | (df_sgs.iloc[:, 1] == 0))]
@@ -156,14 +181,18 @@ class SignalReturnRelations:
         ret_sign = df_sgs[self.ret]
 
         df_out.loc[segment, "accuracy"] = skm.accuracy_score(sig_sign, ret_sign)
-        df_out.loc[segment, "bal_accuracy"] = skm.balanced_accuracy_score(sig_sign,
-                                                                          ret_sign)
+        df_out.loc[segment, "bal_accuracy"] = skm.balanced_accuracy_score(
+            sig_sign, ret_sign
+        )
+
         df_out.loc[segment, "pos_sigr"] = np.mean(sig_sign == 1)
         df_out.loc[segment, "pos_retr"] = np.mean(ret_sign == 1)
-        df_out.loc[segment, "pos_prec"] = skm.precision_score(ret_sign, sig_sign,
-                                                              pos_label=1)
-        df_out.loc[segment, "neg_prec"] = skm.precision_score(ret_sign, sig_sign,
-                                                              pos_label=-1)
+        df_out.loc[segment, "pos_prec"] = skm.precision_score(
+            ret_sign, sig_sign, pos_label=1
+        )
+        df_out.loc[segment, "neg_prec"] = skm.precision_score(
+            ret_sign, sig_sign, pos_label=-1
+        )
 
         ret_vals, sig_vals = df_segment[self.ret], df_segment[signal]
         df_out.loc[segment, ["kendall", "kendall_pval"]] = stats.kendalltau(ret_vals,
@@ -172,6 +201,50 @@ class SignalReturnRelations:
         df_out.loc[segment, ["pearson", "pearson_pval"]] = np.array([corr, corr_pval])
 
         return df_out
+
+    def __communal_sample__(self, df: pd.DataFrame):
+        """
+        On a multi-index DataFrame, where the outer index are the cross-sections and the
+        inner index are the timestamps, exclude any row where all signals do not have
+        a realised value.
+
+        :param <pd.Dataframe> df: standardized DataFrame with the following necessary
+            columns: 'cid', 'xcat', 'real_date' and 'value'.
+
+        NB.:
+        Remove the return category from establishing the intersection to preserve the
+        maximum amount of signal data available (required because of the applied lag).
+        """
+
+        df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values="value")
+
+        storage = []
+        for c, cid_df in df_w.groupby(level=0):
+            cid_df = cid_df[self.signals + [self.ret]]
+
+            final_df = pd.DataFrame(
+                data=np.empty(shape=cid_df.shape), columns=cid_df.columns,
+                index=cid_df.index
+            )
+            final_df.loc[:, :] = np.NaN
+
+            # Return category is preserved.
+            final_df.loc[:, self.ret] = cid_df[self.ret]
+
+            intersection_df = cid_df.loc[:, self.signals].droplevel(level=0)
+            # Intersection exclusively across the signals.
+            intersection_df = intersection_df.dropna(how="any")
+            s_date = intersection_df.index[0]
+            e_date = intersection_df.index[-1]
+
+            final_df.loc[(c, s_date): (c, e_date), self.signals] = intersection_df.to_numpy()
+            storage.append(final_df)
+
+        df = pd.concat(storage)
+        df = df.stack().reset_index().sort_values(["cid", "xcat", "real_date"])
+        df.columns = ["cid", "real_date", "xcat", "value"]
+
+        return df[["cid", "xcat", "real_date", "value"]]
 
     def __output_table__(self, cs_type: str = 'cids'):
         """
@@ -182,7 +255,13 @@ class SignalReturnRelations:
 
         """
 
-        df = self.df.dropna(how="any")
+        # Analysis completed exclusively on the primary signal.
+        df = self.df[[self.ret, self.sig]]
+
+        # Will remove any timestamps where both the signal & return are not realised.
+        # Applicable even if communal sampling has been applied given the alignment
+        # excludes the return category.
+        df = df.dropna(how="any")
 
         if cs_type == "cids":
             css = self.cids
@@ -203,6 +282,7 @@ class SignalReturnRelations:
         df_out.loc["Mean", :] = df_out.loc[css, :].mean()
 
         above50s = statms[0:6]
+        # Overview of the cross-sectional performance.
         df_out.loc["PosRatio", above50s] = (df_out.loc[css, above50s] > 0.5).mean()
 
         above0s = statms[6::2]
@@ -223,10 +303,12 @@ class SignalReturnRelations:
         """
 
         df_out = pd.DataFrame(index=self.signals, columns=self.metrics)
+        df = self.df
 
         for s in self.signals:
+            # Entire panel will be passed in.
             df_out = self.__table_stats__(
-                df_segment=self.df, df_out=df_out, segment=s, signal=s
+                df_segment=df, df_out=df_out, segment=s, signal=s
             )
 
         return df_out
@@ -235,14 +317,16 @@ class SignalReturnRelations:
         """
         Output table on relations of various signals with the target return.
 
-        :param <List[str]> sigs: signal categories to included in the panel-level table.
-            Default is None and all present signals will be displayed. Alternative is a
-            valid subset of the possible categories. Primary signal must be passed if to
-            be included.
+        :param <List[str]> sigs: signal categories to be included in the panel-level
+            table. Default is None and all present signals will be displayed. Alternative
+            is a valid subset of the possible categories. Primary signal must be passed
+            if to be included.
 
         NB.:
         Analysis will be based exclusively on the panel level. Will only return a table
-        if rival signals have been defined upon instantiation.
+        if rival signals have been defined upon instantiation. If the communal sample
+        parameter has been set to True, all signals will be aligned on the individual
+        cross-sectional level.
         """
 
         try:
@@ -327,17 +411,17 @@ class SignalReturnRelations:
         x_indexes = np.arange(dfx.shape[0])
 
         w = 0.4
-        plt.bar(x_indexes - w / 2, dfx['accuracy'],
-                label='Accuracy', width=w, color='lightblue')
-        plt.bar(x_indexes + w / 2, dfx['bal_accuracy'],
-                label='Balanced Accuracy', width=w,
-                color='steelblue')
+        plt.bar(
+            x_indexes - w / 2, dfx['accuracy'], label='Accuracy', width=w,
+            color='lightblue'
+        )
+        plt.bar(
+            x_indexes + w / 2, dfx['bal_accuracy'], label='Balanced Accuracy', width=w,
+            color='steelblue'
+        )
 
-        plt.xticks(ticks=x_indexes, labels=dfx.index,
-                   rotation=0)
-
-        plt.axhline(y=0.5, color='black',
-                    linestyle='-', linewidth=0.5)
+        plt.xticks(ticks=x_indexes, labels=dfx.index, rotation=0)
+        plt.axhline(y=0.5, color='black', linestyle='-', linewidth=0.5)
 
         y_input = self.__yaxis_lim__(
             accuracy_df=dfx.loc[:, ['accuracy', 'bal_accuracy']]
@@ -376,11 +460,16 @@ class SignalReturnRelations:
         # Panel plus the cs_types.
         dfx = df_xs[~df_xs.index.isin(['PosRatio', 'Mean'])]
 
-        pprobs = np.array([(1 - pv) * (np.sign(cc) + 1) / 2
-                           for pv, cc in zip(dfx['pearson_pval'], dfx['pearson'])])
+        pprobs = np.array(
+            [(1 - pv) * (np.sign(cc) + 1) / 2 for pv, cc in zip(dfx["pearson_pval"],
+                                                                dfx["pearson"])]
+        )
         pprobs[pprobs == 0] = 0.01
-        kprobs = np.array([(1 - pv) * (np.sign(cc) + 1) / 2
-                           for pv, cc in zip(dfx['kendall_pval'], dfx['kendall'])])
+        kprobs = np.array(
+            [(1 - pv) * (np.sign(cc) + 1) / 2 for pv, cc in zip(dfx["kendall_pval"],
+                                                                dfx["kendall"])]
+        )
+
         kprobs[kprobs == 0] = 0.01
 
         if title is None:
@@ -394,16 +483,17 @@ class SignalReturnRelations:
         plt.figure(figsize=size)
         x_indexes = np.arange(len(dfx.index))
         w = 0.4
-        plt.bar(x_indexes - w / 2, pprobs, label='Pearson',
-                width=w, color='lightblue')
-        plt.bar(x_indexes + w / 2, kprobs, label='Kendall',
-                width=w, color='steelblue')
+        plt.bar(x_indexes - w / 2, pprobs, label='Pearson', width=w, color='lightblue')
+        plt.bar(x_indexes + w / 2, kprobs, label='Kendall', width=w, color='steelblue')
         plt.xticks(ticks=x_indexes, labels=dfx.index, rotation=0)
 
-        plt.axhline(y=0.95, color='orange', linestyle='--',
-                    linewidth=0.5, label='95% probability')
-        plt.axhline(y=0.99, color='red', linestyle='--',
-                    linewidth=0.5, label='99% probability')
+        plt.axhline(
+            y=0.95, color='orange', linestyle='--', linewidth=0.5,
+            label='95% probability'
+        )
+        plt.axhline(
+            y=0.99, color='red', linestyle='--', linewidth=0.5, label='99% probability'
+        )
 
         plt.title(title)
         plt.legend(loc=legend_pos)
@@ -415,9 +505,9 @@ class SignalReturnRelations:
 
         N.B.: The interpretation of the columns is generally as follows:
 
-        accuracy refers accuracy for binary classification, i.e. positive or negative
+        accuracy refers to accuracy for binary classification, i.e. positive or negative
             return, and gives the ratio of correct prediction of the sign of returns
-            to all predictions. Note that exact zero values for either signal or
+            against all predictions. Note that exact zero values for either signal or
             return series will not be considered for accuracy analysis.
         bal_accuracy refers to balanced accuracy. This is the average of the ratios of
             correctly detected positive returns and correctly detected negative returns.
@@ -430,7 +520,8 @@ class SignalReturnRelations:
         pos_prec means positive precision, i.e. the ratio of correct positive return
             predictions to all positive predictions. It indicates how well the positive
             predictions of the signal have fared. Generally, good positive precision is
-            easy to accomplish if the ratio of positive returns has been high.
+            easy to accomplish if the ratio of positive returns has been high (the signal
+            can simply propose a long position for the full duration).
         neg_prec means negative precision, i.e. the ratio of correct negative return
             predictions to all negative predictions. It indicates how well the negative
             predictions of the signal have fared. Generally, good negative precision is
@@ -448,18 +539,18 @@ class SignalReturnRelations:
 
         The rows have the following meaning:
 
-        Panel refers to the the whole panel of cross sections and sample period,
+        Panel refers to the the whole panel of cross-sections and sample period,
             excluding unavailable and blacklisted periods.
         Mean years is the mean of the statistic across all years.
-        Mean cids is the mean of the statistic across all sections.
-        Positive ratio is the ratio of positive years or cross sections for which the
+        Mean cids is the mean of the statistic across all cross-sections.
+        Positive ratio is the ratio of positive years or cross-sections for which the
             statistic was above its "neutral" level, i.e. above 0.5 for classification
-            ratios and positive correlation probabilities and above 0 for the
+            ratios and positive correlation probabilities, and above 0 for the
             correlation coefficients.
         """
 
-        dfys = self.df_ys.round(decimals=3)
-        dfcs = self.df_cs.round(decimals=3)
+        dfys = self.df_ys.round(decimals=5)
+        dfcs = self.df_cs.round(decimals=5)
         dfsum = dfys.iloc[:3, ].append(dfcs.iloc[1:3, ])
         dfsum.index = ["Panel", "Mean years", "Positive ratio",
                        "Mean cids", "Positive ratio"]
@@ -476,7 +567,7 @@ if __name__ == "__main__":
     df_cids.loc['AUD'] = ['2000-01-01', '2020-12-31', 0, 1]
     df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
     df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
-    df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', 0., 2]
+    df_cids.loc['NZD'] = ['2007-01-01', '2020-09-30', 0., 2]
 
     df_xcats = pd.DataFrame(index=xcats,
                             columns=['earliest', 'latest', 'mean_add', 'sd_mult',
@@ -491,15 +582,19 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     # Additional signals.
-    srn = SignalReturnRelations(dfd, sig='CRY', rival_sigs=['INFL', 'GROWTH'],
-                                sig_neg=False, ret='XR', freq='D', blacklist=black)
+    srn = SignalReturnRelations(dfd, ret="XR", sig="CRY", rival_sigs=None,
+                                sig_neg=True, cosp=True, freq="M", start="2002-01-01")
 
-    df_sigs = srn.signals_table(sigs=['CRY', 'INFL'])
+    dfsum = srn.summary_table()
+
+    r_sigs = ["INFL", "GROWTH"]
+    srn = SignalReturnRelations(dfd, ret="XR", sig="CRY", rival_sigs=r_sigs,
+                                sig_neg=True, cosp=True, freq="M", start="2002-01-01")
+    dfsum = srn.summary_table()
+
+    df_sigs = srn.signals_table(sigs=['CRY_NEG', 'INFL_NEG'])
     df_sigs_all = srn.signals_table()
 
     srn.accuracy_bars(type="signals", title="Accuracy measure between target return, XR,"
                                             " and the respective signals, ['CRY', 'INFL'"
                                             ", 'GROWTH'].")
-    srn.accuracy_bars(type="signals")
-
-    srn.correlation_bars(type="signals")
