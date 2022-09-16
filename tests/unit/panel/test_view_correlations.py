@@ -5,6 +5,7 @@ import numpy as np
 from tests.simulate import make_qdf
 from macrosynergy.panel.view_correlations import correl_matrix, lag_series
 
+
 class TestAll(unittest.TestCase):
 
     def dataframe_construction(self):

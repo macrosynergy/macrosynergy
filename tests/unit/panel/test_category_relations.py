@@ -68,8 +68,16 @@ class TestAll(unittest.TestCase):
     def test_constructor(self):
 
         self.dataframe_generator()
-
         # Testing the various assert statements built into the Class's Constructor.
+
+        with self.assertRaises(AssertionError):
+            # Test the notion that the metric of interest is present in the DataFrame. If
+            # not, an assertion will be thrown.
+            cr = CategoryRelations(self.dfdx, xcats=['GROWTH', 'INFL'], cids=self.cidx,
+                                   freq='d', xcat_aggs=['mean', 'mean'], lag=1,
+                                   start='2000-01-01', years=None, blacklist=self.black,
+                                   val="grading")
+
         with self.assertRaises(AssertionError):
             # Test the restrictions placed on the frequency parameter.
             cr = CategoryRelations(self.dfdx, xcats=['GROWTH', 'INFL'], cids=self.cidx,
@@ -140,13 +148,29 @@ class TestAll(unittest.TestCase):
 
         self.assertTrue(sorted(shared_cids) == ['CAD', 'CHF', 'GBP'])
 
+    @staticmethod
+    def first_difference(temp_df: pd.DataFrame, expln_var: str, n_periods):
+        """
+        First-differencing of the explanatory variable. Used for a single cross-section.
+        """
+
+        explan_col = temp_df[expln_var].to_numpy()
+        shift = np.empty(explan_col.size)
+        shift[:] = np.nan
+        shift[n_periods:] = explan_col[:-n_periods]
+
+        temp_df[expln_var] -= shift
+        temp_df = temp_df.astype(dtype=np.float32)
+
+        return temp_df
+
     # Test the conversion method from raw value to either n-period differencing or
     # percentage change.
     def test_time_series(self):
 
         self.dataframe_generator()
 
-        # Generate the dataframe passed into the time_series() method: the procedure
+        # Generate the DataFrame passed into the time_series() method: the procedure
         # occurs inside the Class's constructor.
         shared_cids = CategoryRelations.intersection_cids(self.dfdx, ['GROWTH', 'INFL'],
                                                           self.cidx)
@@ -167,7 +191,7 @@ class TestAll(unittest.TestCase):
         # date. Therefore, the index will be filled with a NaN which will subsequently be
         # dropped.
         # Test the above occurs for each cross-section. The number of rows in the
-        # returned dataframe will drop by (n_periods * cross_sections).
+        # returned DataFrame will drop by (n_periods * cross_sections).
 
         n_periods = 3
         df_time_series = CategoryRelations.time_series(original_df, change='diff',
@@ -193,7 +217,7 @@ class TestAll(unittest.TestCase):
         # Test the logic of the differencing method and percentage change. Take a random
         # index and manually check the logic is correct.
         # To test the fundamental logic of the time_series() method construct a separate
-        # dataframe.
+        # DataFrame.
         # Test on a single cross-section.
         cidx = ['GBP']
         shared_cids = CategoryRelations.intersection_cids(self.dfdx, ['GROWTH', 'INFL'],
@@ -227,7 +251,37 @@ class TestAll(unittest.TestCase):
         condition = abs(test_value - difference)
         self.assertTrue(condition < 0.0001)
 
-        # The logic and assembly of a the new dataframe have both been tested. The other
+        # Test the first-differencing in the context of a multi-index DataFrame.
+        shared_cids = CategoryRelations.intersection_cids(self.dfd, ['GROWTH', 'INFL'],
+                                                          self.cids)
+        original_df = categories_df(self.dfd, ['GROWTH', 'INFL'], shared_cids,
+                                    val='value', freq='W', blacklist=self.black,
+                                    start='2000-01-01', years=None, lag=1,
+                                    xcat_aggs=['mean', 'mean'])
+
+        n_periods = 4
+        df_time_series = CategoryRelations.time_series(original_df, change='diff',
+                                                       n_periods=n_periods,
+                                                       shared_cids=shared_cids,
+                                                       expln_var='INFL')
+
+        test_df_aud = original_df.loc['AUD']
+        test_df_aud_dif = self.first_difference(
+            test_df_aud, expln_var="INFL", n_periods=4
+        )
+        test_df_aud_dif = test_df_aud_dif.dropna(axis=0, how="any")
+
+        df_time_series_aud = df_time_series[df_time_series.index.get_level_values("cid")
+                                            == "AUD"]
+        df_time_series_aud_infl = df_time_series_aud["INFL"]
+
+        # Handling of Python 3.7 GitHub.
+        if test_df_aud_dif.shape[0] == df_time_series_aud_infl.shape[0]:
+            condition = np.abs(test_df_aud_dif["INFL"].to_numpy() - \
+                        df_time_series_aud_infl.to_numpy())
+            self.assertTrue(np.all(condition < 0.0001))
+
+        # The logic and assembly of a the new DataFrame have both been tested. The other
         # methods in the Class are for visualisation and heavily dependent on external
         # packages.
 

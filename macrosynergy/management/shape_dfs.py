@@ -4,6 +4,7 @@ import pandas as pd
 from typing import List
 import random
 from macrosynergy.management.simulate_quantamental_data import make_qdf
+from itertools import product
 
 def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
               start: str = None, end: str = None, blacklist: dict = None,
@@ -132,65 +133,134 @@ def aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
 
     return dfx
 
+def expln_df(df_w: pd.DataFrame, xpls: List[str], agg_meth: str, sum_adj: dict,
+             lag: int):
+    """
+    Produces the explanatory column(s) for the custom DataFrame.
+
+    :param <pd.DataFrame> df_w: group-by DataFrame which has been down-sampled. The
+        respective aggregation method will be applied.
+    :param <List[str]> xpls: list of explanatory category(s).
+    :param <str> agg_meth: aggregation method used for all explanatory variables.
+    :param <dict> sum_adj: required dictionary to negate erroneous zeros if the aggregate
+        method used is sum.
+    :param <int> lag: lag of explanatory category(s). Applied uniformly to each
+        category.
+    """
+
+    dfw_xpls = pd.DataFrame()
+    for xpl in xpls:
+
+        xpl_col = df_w[xpl].agg(agg_meth, sum_adj).astype(dtype=np.float32)
+        if lag > 0:
+            xpl_col = xpl_col.groupby(level=0).shift(lag)
+
+        dfw_xpls[xpl] = xpl_col
+
+    return dfw_xpls
+
 def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                   val: str = 'value', start: str = None, end: str = None,
                   blacklist: dict = None, years: int = None, freq: str = 'M',
-                  lag: int = 0, fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean')):
+                  lag: int = 0, fwin: int = 1, xcat_aggs: List[str] = ['mean', 'mean']):
 
     """
-    Create custom two-categories DataFrame with appropriate frequency and lags.
+    In principle, create custom two-categories DataFrame with appropriate frequency and,
+    if applicable, lags.
 
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the following necessary
         columns: 'cid', 'xcats', 'real_date' and at least one column with values of
         interest.
-    :param <List[str]> xcats: exactly two extended categories whose relationship is to be
-        analyzed. It must be noted that the first category is the explanatory variable
-        and the second category the explained, dependent, variable.
-    :param <List[str]> cids: cross sections to be included. Default is all in the
+    :param <List[str]> xcats: extended categories involved in the custom DataFrame. The
+        last category in the list represents the dependent variable, and the (n - 1)
+        preceding categories will be the explanatory variables(s).
+    :param <List[str]> cids: cross-sections to be included. Default is all in the
         DataFrame.
+    :param <str> val: name of column that contains the values of interest. Default is
+        'value'.
     :param <str> start: earliest date in ISO 8601 format. Default is None,
         i.e. earliest date in DataFrame is used.
     :param <str> end: latest date in ISO 8601 format. Default is None,
         i.e. latest date in DataFrame is used.
-    :param <dict> blacklist: cross sections with date ranges that should be excluded from
-        the data frame. If one cross section has several blacklist periods append numbers
+    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
+        the DataFrame. If one cross section has several blacklist periods append numbers
         to the cross section code.
-    :param <int> years: Number of years over which data are aggregated. Supersedes the
+    :param <int> years: number of years over which data are aggregated. Supersedes the
         "freq" parameter and does not allow lags, Default is None, i.e. no multi-year
         aggregation.
-    :param <str> val: name of column that contains the values of interest. Default is
-        'value'.
     :param <str> freq: letter denoting frequency at which the series are to be sampled.
-        This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
-    :param <int> lag: lag (delay of arrival) of first (explanatory) category in periods
+        This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'. Will always be the
+        last business day of the respective frequency.
+    :param <int> lag: lag (delay of arrival) of explanatory category(s) in periods
         as set by freq. Default is 0.
     :param <int> fwin: forward moving average window of first category. Default is 1,
         i.e no average.
-        Note: This parameter is used mainly for target returns as dependent variables.
-    :param <List[str]> xcat_aggs: Exactly two aggregation methods. Default is 'mean' for
-        both.
+        Note: This parameter is used mainly for target returns as dependent variable.
+    :param <List[str]> xcat_aggs: exactly two aggregation methods. Default is 'mean' for
+        both. The same aggregation method, the first method in the parameter, will be
+        used for all explanatory variables.
 
-    :return <pd.Dataframe>: custom DataFrame with two category columns and excluding all
-        columns that contain NaNs.
+    :return <pd.DataFrame>: custom DataFrame with category columns. All rows that contain
+        NaNs will be excluded.
+
+    N.B.:
+    The number of explanatory categories that can be included is not restricted and will
+    be appended column-wise to the returned DataFrame. The order of the DataFrame's
+    columns will reflect the order of the categories list.
     """
 
-    assert freq in ['D', 'W', 'M', 'Q', 'A']
-    assert not (years is not None) & (lag != 0), 'Lags cannot be applied to year groups.'
+    frq_options = ['D', 'W', 'M', 'Q', 'A']
+    frq_error = f"Frequency parameter must be one of the stated options, {frq_options}."
+    assert freq in frq_options, frq_error
+    frq_dict = dict(zip(frq_options, ['B', 'W-Fri', 'BM', 'BQ', 'BA']))
+
+    assert isinstance(xcats, list), f"<list> expected and not {type(xcats)}."
+    assert all([isinstance(c, str) for c in xcats]), "List of categories expected."
+    xcat_error = "The minimum requirement is that a single dependent and explanatory " \
+                 "variable are included."
+    assert len(xcats) >= 2, xcat_error
+
+    aggs_error = "List of strings, outlining the aggregation methods, expected."
+    assert isinstance(xcat_aggs, list), aggs_error
+    assert all([isinstance(a, str) for a in xcat_aggs]), aggs_error
+    aggs_len = "Only two aggregation methods required. The first will be used for all " \
+               "explanatory category(s)."
+    assert len(xcat_aggs) == 2, aggs_len
+
+    assert not (years is not None) & (lag != 0), "Lags cannot be applied to year groups."
     if years is not None:
         assert isinstance(start, str), "Year aggregation requires a start date."
 
+        no_xcats = "If the data is aggregated over a multi-year timeframe, only two " \
+                   "categories are permitted."
+        assert len(xcats) == 2, no_xcats
+
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, blacklist, out_all=True)
 
+    metric = ["value", "grading", "mop_lag", "eop_lag"]
+    val_error = "The column of interest must be one of the defined JPMaQS metrics, " \
+                f"{metric}, but received {val}."
+    assert val in metric, val_error
+    avbl_cols = list(df.columns)
+    assert val in avbl_cols, f"The passed column name, {val}, must be present in the " \
+                             f"received DataFrame. DataFrame contains {avbl_cols}."
+
+    # Reduce the columns in the DataFrame to the necessary columns:
+    # ['cid', 'xcat', 'real_date'] + [val] (name of column that contains the
+    # values of interest: "value", "grading", "mop_lag", "eop_lag").
     col_names = ['cid', 'xcat', 'real_date', val]
 
     df_output = []
     if years is None:
-        xpl = xcats[0]
-        dep = xcats[1]
 
         df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values=val)
+
+        dep = xcats[-1]
+        # The possibility of multiple explanatory variables.
+        xpls = xcats[:-1]
+
         df_w = df_w.groupby([pd.Grouper(level='cid'),
-                             pd.Grouper(level='real_date', freq=freq)])
+                             pd.Grouper(level='real_date', freq=frq_dict[freq])])
 
         # Handles for falsified zeros. Following the frequency conversion, if the
         # aggregation method is set to "sum", time periods that exclusively contain NaN
@@ -200,25 +270,21 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         for i, agg in enumerate(xcat_aggs):
             sum_dict[i] = {'min_count': 1} if agg == 'sum' else {}
 
-        xpl_col = df_w[xpl].agg(xcat_aggs[0], sum_dict[0]).astype(dtype=np.float32)
+        dfw_xpls = expln_df(
+            df_w=df_w, xpls=xpls, agg_meth=xcat_aggs[0],
+            sum_adj=sum_dict[0], lag=lag
+        )
+
         dep_col = df_w[dep].agg(xcat_aggs[1], sum_dict[1]).astype(dtype=np.float32)
 
-        # Explanatory variable is shifted forward.
-        if lag > 0:
-            # Utilise .groupby() to handle for multi-index Pandas DataFrame.
-            xpl_col = xpl_col.groupby(level=0).shift(lag)
         if fwin > 1:
             s = 1 - fwin
             dep_col = dep_col.rolling(window=fwin).mean().shift(s)
 
-        xpl_df = xpl_col.reset_index()
-        xpl_df['xcat'] = xpl
-        xpl_df = xpl_df.rename(columns={xpl: "value"})
-
-        dep_df = dep_col.reset_index()
-        dep_df['xcat'] = dep
-        dep_df = dep_df.rename(columns={dep: "value"})
-        df_output.append(pd.concat([xpl_df, dep_df], ignore_index=True))
+        dfw_xpls[dep] = dep_col
+        # Order such that the return category is the right-most column - will reflect the
+        # order of the categories list.
+        dfc = dfw_xpls[xpls + [dep]]
 
     else:
         s_year = pd.to_datetime(start).year
@@ -250,15 +316,16 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         df_agg = list(map(aggregation_helper, dfx_list, xcat_aggs))
         df_output.extend([d[col_names] for d in df_agg])
 
-    dfc = pd.concat(df_output)
-    # If either of the two variables, explanatory or dependent variable, contain a NaN
-    # value, remove the row: a relationship is not able to be established between a
-    # realised datapoint and a Nan value. Therefore, remove the row from the returned
-    # DataFrame.
-    dfc = dfc.pivot(index=('cid', 'real_date'), columns='xcat',
-                    values=val).dropna()[xcats]
+        dfc = pd.concat(df_output)
+        dfc = dfc.pivot(index=('cid', 'real_date'), columns='xcat',
+                        values=val)
 
-    return dfc
+    # Adjusted to account for multiple signals requested. If the DataFrame is
+    # two-dimensional, signal & a return, NaN values will be handled inside other
+    # functionality, as categories_df() is simply a support function. If the parameter
+    # how is set to "any", a potential unnecessary loss of data on certain categories
+    # could arise.
+    return dfc.dropna(axis=0, how='all')
 
 
 if __name__ == "__main__":
@@ -286,33 +353,12 @@ if __name__ == "__main__":
 
     dfd_x1 = reduce_df(dfd, xcats=xcats[:-1], cids=cids[0],
                        start='2012-01-01', end='2018-01-31')
-    print(dfd_x1['xcat'].unique())
-
-    dfd_x2 = reduce_df(dfd, xcats=xcats, cids=cids, start='2012-01-01', end='2018-01-31')
-    dfd_x3 = reduce_df(dfd, xcats=xcats, cids=cids, blacklist=black)
 
     tickers = [cid + "_XR" for cid in cids]
     dfd_xt = reduce_df_by_ticker(dfd, ticks=tickers, blacklist=black)
 
     # Testing categories_df().
-    dfc1 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=1,
-                         xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black)
-
-    dfc2 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
-                         fwin=3, xcat_aggs=['mean', 'mean'],
-                         start='2000-01-01', blacklist=black)
-
-    dfc3 = categories_df(dfd, xcats=['GROWTH', 'CRY'], cids=cids, freq='M', lag=0,
-                         xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black,
-                         years=3)
-
-    # Testing reduce_df()
-    filt1 = ~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))
-    filt2 = ~((dfd['cid'] == 'NZD') & (dfd['xcat'] == 'INFL'))
-    dfdx = dfd[filt1 & filt2]  # simulate missing cross sections
-    dfd_x1, xctx, cidx = reduce_df(dfdx, xcats=['XR', 'CRY', 'INFL'], cids=cids,
-                                   intersect=True, out_all=True)
-
-    dfc = categories_df(dfd, xcats=['XR', 'CRY'], cids=['CAD'],
-                        freq='M', lag=0, xcat_aggs=['mean', 'mean'],
-                        start='2000-01-01', years=10)
+    dfc1 = categories_df(
+        dfd, xcats=['GROWTH', 'CRY'], cids=cids, val="value", freq='W', lag=1,
+        xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black
+    )
