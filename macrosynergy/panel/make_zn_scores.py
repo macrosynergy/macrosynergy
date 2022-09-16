@@ -69,7 +69,7 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
 
 def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
                    start: str = None, end: str = None, blacklist: dict = None,
-                   sequential: bool = True, min_obs: int = 261,  iis: bool = True,
+                   sequential: bool = True, min_obs: int = 261, iis: bool = True,
                    neutral: str = 'zero', est_freq: str = 'd', thresh: float = None,
                    pan_weight: float = 1, postfix: str = 'ZN'):
 
@@ -258,3 +258,7 @@ if __name__ == "__main__":
     dfzd = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids,
                           blacklist=black, iis=True, neutral='mean',
                           pan_weight=0.0, min_obs=261, est_freq="d")
+
+    panel_df = make_zn_scores(dfd, 'CRY', cids, start="2010-01-04", blacklist=black,
+                              sequential=False, min_obs=0, neutral='mean',
+                              iis=True, thresh=None, pan_weight=0.75, postfix='ZN')

@@ -154,7 +154,7 @@ class TestDataQueryInterface(unittest.TestCase):
         self.assertTrue(len(results_dict.keys()) == len(tickers))
 
         ticker_trunc = lambda t: t.split(",")[1]
-        test_keys = list(map(ticker_trunc, results_dict.keys()))
+        test_keys = results_dict.keys()
 
         test_keys = sorted(test_keys)
         self.assertTrue(test_keys == sorted(tickers))
