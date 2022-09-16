@@ -168,9 +168,9 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
         dfw = dfx_xcat.pivot(index='real_date', columns='cid', values='value')
 
-        # Taking an average and computing the relative value is only justified if the
-        # number of cross-sections, for the respective date, exceeds one. Therefore, if
-        # any rows have only a single cross-section, remove the dates from the DataFrame.
+        # Computing the relative value is only justified if the number of cross-sections,
+        # for the respective date, exceeds one. Therefore, if any rows have only a single
+        # cross-section, remove the dates from the DataFrame.
         dfw = dfw[dfw.count(axis=1) > 1]
         # The time-index will be delimited by the respective category.
         dfa = pd.merge(dfw, bm, how='left', left_index=True, right_index=True)
@@ -181,8 +181,9 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
             dfo = dfa[dfw.columns].div(dfa.loc[:, 'value'], axis=0)
 
         # Re-stack.
-        df_new = dfo.stack().reset_index().rename({'level_1': 'cid', 0: 'value'},
-                                                  axis=1)
+        df_new = dfo.stack().reset_index().rename(
+            {'level_1': 'cid', 0: 'value'}, axis=1
+        )
 
         if rel_xcats is None:
             df_new['xcat'] = xcat + postfix

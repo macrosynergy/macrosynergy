@@ -202,7 +202,7 @@ class TestAll(unittest.TestCase):
         self.dataframe_generator()
         dfd = self.dfd
 
-        # Set the cids parameter to a reduce subset (a particuliar category is missing
+        # Set the cids parameter to a reduced subset (a particuliar category is missing
         # requested cross-sections).
         cids = ["AUD", "NZD"]
         start = "2000-01-01"
@@ -236,10 +236,10 @@ class TestAll(unittest.TestCase):
 
         # Aim to test the application of the actual relative_value method: subtract or
         # divide.
-        # If the basket contains a single cross-section, the relative value is simply the
-        # realised return of the respective cross-section. Therefore, the cross-section
-        # chosen will consequently have a zero value for each output if the logic is
-        # correct.
+        # If the basket contains a single cross-section, the relative value benchmark is
+        # simply the realised return of the respective cross-section. Therefore, the
+        # cross-section chosen will consequently have a zero value for each output if the
+        # logic is correct.
         basket_cid = ['AUD']
         dfd_2 = make_relative_value(dfd, xcats=['INFL'], cids=self.cids,
                                     blacklist=None, basket=basket_cid,
