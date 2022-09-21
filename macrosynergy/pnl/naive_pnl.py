@@ -106,8 +106,13 @@ class NaivePnL:
             if dfa.shape[0] == 0:
                 print(f"{bm} has no observations in the DataFrame.")
             else:
-                bm_dict[bm] = dfa.pivot(index='real_date', columns='xcat',
-                                        values='value').squeeze(axis=0)
+                df_single_bm = dfa.pivot(
+                    index='real_date', columns='xcat', values='value'
+                ).squeeze(axis=0)
+                col_name = next(iter(df_single_bm.columns))
+                df_single_bm = df_single_bm.rename(columns={col_name: bm})
+
+                bm_dict[bm] = df_single_bm
                 if bm not in tickers:
                     self.df = update_df(self.df, dfa)
 
@@ -737,8 +742,17 @@ class NaivePnL:
             bm_df = pd.concat(list(self._bm_dict.values()),
                               axis=1)
             for i, bm in enumerate(list_for_dfbm):
-                correlation = dfw.corrwith(bm_df.iloc[:, i], axis=0,
-                                           method='pearson')
+
+                # Date alignment. Calculate the correlation, between series and
+                # respective benchmark, over the same time-period.
+                bm_i = bm_df.iloc[:, i]
+                dfw_iter = pd.concat([dfw, bm_i], axis=1)
+                dfw_iter = dfw_iter.dropna(how="any")
+                bm_series = dfw_iter[[bm]].iloc[:, 0]
+
+                correlation = dfw.corrwith(
+                    bm_series, axis=0, method='pearson'
+                )
                 df.iloc[6 + i, :] = correlation
 
         df.iloc[6 + len(list_for_dfbm), :] = dfw.resample('M').sum().count()
