@@ -16,30 +16,28 @@ def _prepare_basket(df: pd.DataFrame, xcat: str, basket: List[str],
     :param <pd.DataFrame> basket: cross-sections to be used for the relative value
         benchmark if available.
     :param <List[str] cids_avl: cross-sections available for the category.
-    :param <bool> complete_cross: if True, the basket is only calculated if all cross-
-        sections, held in the basket, are available for that respective category.
+    :param <bool> complete_cross: If True a basket and relative will only be calculated
+     for dates for which all basket cross sections are available. Other dates will retun NAs.
     """
 
-    cids_used = sorted(set(basket) & set(cids_avl))
-    cids_miss = [b for b in basket if b not in cids_used]
+    mask = df.groupby('real_date')['cid'].transform("nunique") == len(basket)
+    incompl_dates = df[~mask]['real_date'].nunique()
 
-    # Not able to be greater than because of assertion on line 126. If the basket
-    # references a cross-section not defined in the DataFrame, an error will be thrown.
-    condition = len(cids_used) < len(basket)
-    if condition and complete_cross:
-        cids_used.clear()
-        print(f"The category, {xcat}, is missing {cids_miss} which are included "
-              f"in the basket {basket}. Therefore, the category will be excluded "
-              f"from the returned DataFrame.")
+    if complete_cross:
 
-    elif condition:
-        print(f"The category, {xcat}, is missing {cids_miss} from the requested "
-              f"basket. The new basket will be {cids_used}.")
+        # sanity check, matters only in the case of the complete basket
+        dates_error = "The DataFrame does not have any date when all basket elements are available, set complete_cross = False"
+        assert any(mask.values), dates_error
 
-    # Reduce the DataFrame to the specified basket given the available cross-sections.
-    dfb = df[df['cid'].isin(cids_used)]
+        print(f"The category, {xcat}, is missing some elements of the cross sections on {incompl_dates} days. "
+              f"Therefore, the basket will not be computed for these dates.")
+        df.loc[~mask, 'value'] = np.nan
 
-    return dfb, cids_used
+    else:
+        print(f"The category, {xcat}, some elements of the cross sections on {incompl_dates} days. "
+              f"The basket will be computed using the available elements in this case.")
+
+    return df
 
 def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                         start: str = None, end: str = None, blacklist: dict = None,
@@ -66,14 +64,13 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         available in the DataFrame over the respective time-period.
         However, the basket can be reduced to a valid subset of the available
         cross-sections.
-    :param <bool> complete_cross: boolean parameter that outlines whether each category
-        is required to have the full set of cross-sections held by the basket parameter
-        for a relative value calculation to occur. If set to True, the category will be
-        excluded from the output if cross-sections are missing.
-        Default is False. If False, the mean, for the relative value, will use the subset
-        that is available for that category. For instance, if basket = ['AUD', 'CAD',
-        'GBP', 'NZD'] but available cids = ['GBP', 'NZD'], the basket will be implicitly
-        updated to basket = ['GBP', 'NZD'] for that respective category.
+    :param <bool> complete_cross: boolean parameter that outlines whether a basket and relative
+        value will only be calculated on dates when all basket cross sections are available.
+        Other dates will retun NAs. If False, the subset that is available for that category
+        on that date will be used to compute the basket value.
+        For instance, if on a certain date basket = ['AUD', 'CAD','GBP', 'NZD'] but available
+        cids = ['GBP', 'NZD'], the basket will be implicitly updated to basket = ['GBP', 'NZD']
+        for that respective category.
     :param <str> rel_meth: method for calculating relative value. Default is 'subtract'.
         Alternative is 'divide'.
     :param <List[str]> rel_xcats: extended category name of the relative values. Will
@@ -156,30 +153,23 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
         dfx_xcat = df_xcat[['cid', 'real_date', 'value']]
 
-        dfb, basket = _prepare_basket(
+        dfb = _prepare_basket(
             df=dfx_xcat, xcat=xcat, basket=basket, cids_avl=available_cids,
             complete_cross=complete_cross
         )
 
-        if len(basket) > 1:
-            # Mean of (available) cross-sections at each point in time. If all
-            # cross-sections defined in the "basket" data structure are not available for
-            # a specific date, compute the mean over the available subset.
-            bm = dfb.groupby(by='real_date').mean()
-        elif len(basket) == 1:
-            # Relative value is mapped against a single cross-section.
-            bm = dfb.set_index('real_date')['value']
-        else:
-            # Category is not defined over all cross-sections in the basket and
-            # 'complete_cross' equals True.
-            continue
-
+        # Computing the average value of the basket for this category, returning a single-col DataFrame regardless of
+        # the size of the basket, as long as it has at least one element
+        bm = dfb.groupby(by='real_date')['value'].mean()
         dfw = dfx_xcat.pivot(index='real_date', columns='cid', values='value')
 
+        # TODO : can you explain this?
         # Computing the relative value is only justified if the number of cross-sections,
         # for the respective date, exceeds one. Therefore, if any rows have only a single
         # cross-section, remove the dates from the DataFrame.
-        dfw = dfw[dfw.count(axis=1) > 1]
+
+        # dfw = dfw[dfw.count(axis=1) > 1]
+
         # The time-index will be delimited by the respective category.
         dfa = pd.merge(dfw, bm, how='left', left_index=True, right_index=True)
 
@@ -189,7 +179,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
             dfo = dfa[dfw.columns].div(dfa.loc[:, 'value'], axis=0)
 
         # Re-stack.
-        df_new = dfo.stack().reset_index().rename(
+        df_new = dfo.stack(dropna=False).reset_index().rename(
             {'level_1': 'cid', 0: 'value'}, axis=1
         )
 
@@ -206,7 +196,6 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 if __name__ == "__main__":
 
     # Simulate DataFrame.
-
     cids = ['AUD', 'CAD', 'GBP', 'NZD']
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
     df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
@@ -233,7 +222,14 @@ if __name__ == "__main__":
         dfd, xcats=["GROWTH", "INFL"], cids=None, blacklist=None, rel_meth='subtract',
         rel_xcats=None, postfix='RV'
     )
-
+    dfd_2 = make_relative_value(
+        dfd, xcats=["GROWTH", "INFL"], cids=None, blacklist=None, rel_meth='subtract',
+        rel_xcats=None, postfix='RV', complete_cross=True
+    )
+    # comparison of the outputs
+    dfd_combo = dfd_1.rename(columns={'value': 'def_cross'}).merge(dfd_2.rename(columns={'value': 'com_cross'}),
+                                                                   on=['cid', 'xcat', 'real_date'],
+                                                                   how='outer')
     rel_xcats = ["GROWTH_sRV", "INFL_sRV"]
     dfd_1_black = make_relative_value(
         dfd, xcats=["GROWTH", "INFL"], cids=None, blacklist=black, rel_meth='subtract',
