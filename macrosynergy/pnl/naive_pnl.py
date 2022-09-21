@@ -750,7 +750,8 @@ class NaivePnL:
                 dfw_iter = dfw_iter.dropna(how="any")
                 bm_series = dfw_iter[[bm]].iloc[:, 0]
 
-                correlation = dfw.corrwith(
+                dfw_iter = dfw_iter.drop(labels=bm, axis=1)
+                correlation = dfw_iter.corrwith(
                     bm_series, axis=0, method='pearson'
                 )
                 df.iloc[6 + i, :] = correlation
