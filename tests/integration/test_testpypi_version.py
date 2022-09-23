@@ -16,6 +16,9 @@ except ModuleNotFoundError:
 class TestPyPIVersionNumber(unittest.TestCase):
 
     def test_version_number(self):
+
+        # test for TestPyPI version number
+
         package = 'macrosynergy'
         with requests.get(f'https://test.pypi.org/pypi/{package}/json') as r:
             self.assertEqual(200, r.status_code, f"Incorrect: {r.status_code}, {r.text}")
