@@ -1,0 +1,58 @@
+name: Format Python code
+
+on:
+  push:
+    branches: [ main, develop, test ] 
+    # should apply to all branches, right?
+    paths:
+      - "**.py"
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@develop
+
+      - name: Checkout Black repository
+        uses: psf/black@stable
+        with:
+          options: --check --diff
+          src: '.'
+
+    
+
+      - name: Push changes
+        if: steps.git-check.outputs.modified == 'true'
+        run: |
+          # git config --global user.name 'abc'
+          # git config --global user.email 'abc123@users.noreply.github.com'
+
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+
+          git commit -am "Apply Black code formatting"
+          
+          git push
+
+
+
+# Black formatter, GitHub Actions guide
+# https://black.readthedocs.io/en/stable/integrations/github_actions.html
+
+
+# other resources
+# Thank you, 
+#           Peter Evans   , https://peterevans.dev/posts/github-actions-how-to-automate-code-formatting-in-pull-requests/
+#           MichaelCurrin , https://michaelcurrin.github.io/code-cookbook/recipes/ci-cd/github-actions/workflows/python/format.html
+#           rickstaa      , https://github.com/rickstaa/action-black/
+
+
+# an Github action for running black-action already exists, however it's 3rd party so I would not recommend as it uses a slightly hacky-tachy method.
+#           rickstaa      , https://github.com/marketplace/actions/run-black-formatter 
+
+
+
