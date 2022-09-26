@@ -1,20 +1,20 @@
+.. figure:: ../_static/MACROSYNERGY_Logo_Primary.png
+
 macrosynergy.management package
 ===============================
 
 Submodules
 ----------
 
-Click on the individual subpackages for the respective functionality:
-
 .. toctree::
-    :maxdepth: 3
+   :maxdepth: 4
 
-    management/check_availability
-    management/dq
-    management/shape_dfs
-    management/simulate_quantamental_data
-    management/simulate_vintage_data
-
+   macrosynergy.management.check_availability
+   macrosynergy.management.dq
+   macrosynergy.management.shape_dfs
+   macrosynergy.management.simulate_quantamental_data
+   macrosynergy.management.simulate_vintage_data
+   macrosynergy.management.update_df
 
 Module contents
 ---------------
@@ -23,4 +23,4 @@ Module contents
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: dq, check_availability, shape_dfs, simulate_quantamental_data, simulate_vintage_data
+   :exclude-members: check_availability, dq, shape_dfs, simulate_quantamental_data, simulate_vintage_data, update_df
