@@ -82,11 +82,11 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
     # First category is not defined over all cross-sections.
     order_condition = list(set(cids)) == list(first_xcat_cids)
 
-    if order_condition:
+    if order_condition and sort_cids_by is not None:
         # Sort exclusively on the first category.
         dfx = df[filt_1].groupby(['cid'])[val].apply(sort_cids_by)
         order = dfx.sort_values(ascending=False).index
-    elif not order_condition:
+    elif not order_condition and sort_cids_by is not None:
         # Sort across all categories on the available cross-sections.
         dfx = df.groupby(['cid'])[val].apply(sort_cids_by)
         order = dfx.sort_values(ascending=False).index
@@ -146,5 +146,5 @@ if __name__ == "__main__":
     dfd = dfd[~filter_1]
 
     view_ranges(dfd, xcats=['XR', 'CRY'], cids=cids, kind='box',
-                start='2012-01-01', end='2018-01-01', sort_cids_by='std',
+                start='2012-01-01', end='2018-01-01', sort_cids_by=None,
                 xcat_labels=['EQXR_NSA', 'CRY_NSA'])
