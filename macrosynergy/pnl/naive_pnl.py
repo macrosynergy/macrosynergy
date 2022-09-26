@@ -84,9 +84,7 @@ class NaivePnL:
     def add_bm(self, df: pd.DataFrame, bms: List[str],
                tickers: List[str]):
         """
-        Return benchmark DataFrames which will be appended to the instance's DataFrame.
-        Additionally, populate the benchmark dictionary which is used to host any valid
-        benchmarks.
+        Returns a dictionary with benchmark return series.
 
         :param <pd.DataFrame> df: aggregate DataFrame passed into the Class.
         :param <List[str]> bms: benchmark return tickers.
@@ -106,8 +104,11 @@ class NaivePnL:
             if dfa.shape[0] == 0:
                 print(f"{bm} has no observations in the DataFrame.")
             else:
-                bm_dict[bm] = dfa.pivot(index='real_date', columns='xcat',
-                                        values='value').squeeze(axis=0)
+                df_single_bm = dfa.pivot(
+                    index='real_date', columns='xcat', values='value'
+                )
+                df_single_bm.columns = [bm]
+                bm_dict[bm] = df_single_bm
                 if bm not in tickers:
                     self.df = update_df(self.df, dfa)
 
@@ -734,11 +735,18 @@ class NaivePnL:
         df.iloc[4, :] = dfw.rolling(21).sum().min()
         df.iloc[5, :] = dfw.rolling(6*21).sum().min()
         if len(list_for_dfbm) > 0:
-            bm_df = pd.concat(list(self._bm_dict.values()),
-                              axis=1)
+            bm_df = pd.concat(
+                list(self._bm_dict.values()),
+                axis=1
+            )
             for i, bm in enumerate(list_for_dfbm):
-                correlation = dfw.corrwith(bm_df.iloc[:, i], axis=0,
-                                           method='pearson')
+                index = dfw.index.intersection(bm_df.index)
+                correlation = dfw.loc[index].corrwith(
+                    bm_df.loc[index].iloc[:, i],
+                    axis=0,
+                    method='pearson',
+                    drop=True
+                )
                 df.iloc[6 + i, :] = correlation
 
         df.iloc[6 + len(list_for_dfbm), :] = dfw.resample('M').sum().count()
