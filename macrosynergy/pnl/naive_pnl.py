@@ -84,9 +84,7 @@ class NaivePnL:
     def add_bm(self, df: pd.DataFrame, bms: List[str],
                tickers: List[str]):
         """
-        Return benchmark DataFrames which will be appended to the instance's DataFrame.
-        Additionally, populate the benchmark dictionary which is used to host any valid
-        benchmarks.
+        Returns a dictionary with benchmark return series.
 
         :param <pd.DataFrame> df: aggregate DataFrame passed into the Class.
         :param <List[str]> bms: benchmark return tickers.
@@ -108,10 +106,8 @@ class NaivePnL:
             else:
                 df_single_bm = dfa.pivot(
                     index='real_date', columns='xcat', values='value'
-                ).squeeze(axis=0)
-                col_name = next(iter(df_single_bm.columns))
-                df_single_bm = df_single_bm.rename(columns={col_name: bm})
-
+                )
+                df_single_bm.columns = [bm]
                 bm_dict[bm] = df_single_bm
                 if bm not in tickers:
                     self.df = update_df(self.df, dfa)
@@ -742,18 +738,8 @@ class NaivePnL:
             bm_df = pd.concat(list(self._bm_dict.values()),
                               axis=1)
             for i, bm in enumerate(list_for_dfbm):
-
-                # Date alignment. Calculate the correlation, between series and
-                # respective benchmark, over the same time-period.
-                bm_i = bm_df.iloc[:, i]
-                dfw_iter = pd.concat([dfw, bm_i], axis=1)
-                dfw_iter = dfw_iter.dropna(how="any")
-                bm_series = dfw_iter[[bm]].iloc[:, 0]
-
-                dfw_iter = dfw_iter.drop(labels=bm, axis=1)
-                correlation = dfw_iter.corrwith(
-                    bm_series, axis=0, method='pearson'
-                )
+                correlation = dfw.corrwith(bm_df.iloc[:, i], axis=0,
+                                           method='pearson', drop=True)
                 df.iloc[6 + i, :] = correlation
 
         df.iloc[6 + len(list_for_dfbm), :] = dfw.resample('M').sum().count()
