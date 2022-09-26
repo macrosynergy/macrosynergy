@@ -300,13 +300,13 @@ class TestAll(unittest.TestCase):
         # Will implicitly test if the PnL name, using the default mechanism, will have
         # the postfix "_NEG" appended given sig_neg is set to True.
         pnl.make_pnl(
-            sig="GROWTH", sig_op="zn_score_pan", sig_neg=True, rebal_freq="monthly",
+            sig="INFL", sig_op="zn_score_pan", sig_neg=True, rebal_freq="monthly",
             vol_scale=5, rebal_slip=1, min_obs=250, thresh=2
         )
 
         # Same parameter but sig_neg is set to False.
         pnl.make_pnl(
-            sig="GROWTH", sig_op="zn_score_pan", sig_neg=False, rebal_freq="monthly",
+            sig="INFL", sig_op="zn_score_pan", sig_neg=False, rebal_freq="monthly",
             vol_scale=5, rebal_slip=1, min_obs=250, thresh=2
         )
 
@@ -314,7 +314,7 @@ class TestAll(unittest.TestCase):
         # correlation coefficients with the benchmarks, the value should equate to
         # zero.
         df_eval = pnl.evaluate_pnls(
-            pnl_cats=["PNL_GROWTH", "PNL_GROWTH_NEG"],
+            pnl_cats=["PNL_INFL", "PNL_INFL_NEG"],
         )
 
         bm_correl = df_eval.loc[[b + " correl" for b in bms], :]
