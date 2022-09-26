@@ -735,11 +735,18 @@ class NaivePnL:
         df.iloc[4, :] = dfw.rolling(21).sum().min()
         df.iloc[5, :] = dfw.rolling(6*21).sum().min()
         if len(list_for_dfbm) > 0:
-            bm_df = pd.concat(list(self._bm_dict.values()),
-                              axis=1)
+            bm_df = pd.concat(
+                list(self._bm_dict.values()),
+                axis=1
+            )
             for i, bm in enumerate(list_for_dfbm):
-                correlation = dfw.corrwith(bm_df.iloc[:, i], axis=0,
-                                           method='pearson', drop=True)
+                index = dfw.index.intersection(bm_df.index)
+                correlation = dfw.loc[index].corrwith(
+                    bm_df.loc[index].iloc[:, i],
+                    axis=0,
+                    method='pearson',
+                    drop=True
+                )
                 df.iloc[6 + i, :] = correlation
 
         df.iloc[6 + len(list_for_dfbm), :] = dfw.resample('M').sum().count()
