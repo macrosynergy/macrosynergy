@@ -1,4 +1,4 @@
-![Macrosynergy](docs/source/_static/MACROSYNERGY_Logo_Primary.png)
+![Macrosynergy](https://raw.githubusercontent.com/macrosynergy/macrosynergy/main/docs/source/_static/MACROSYNERGY_Logo_Primary.png?raw=True)
 
 # Macrosynergy Quant Research
 [![PyPI Latest Release](https://img.shields.io/pypi/v/macrosynergy.svg)](https://pypi.org/project/macrosynergy/)
@@ -72,3 +72,7 @@ data.info()
 
 Both of the above example will download a snippet of example data from the premium JPMaQS dataset
 of the daily timeseries of EUR FX excess returns.
+
+## Documentation
+
+The official documentation can be found at our website: https://docs.macrosynergy.com
