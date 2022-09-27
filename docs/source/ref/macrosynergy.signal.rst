@@ -1,7 +1,7 @@
 .. figure:: ../_static/MACROSYNERGY_Logo_Primary.png
 
-macrosynergy.signal package
-===========================
+signal
+======
 
 Submodules
 ----------

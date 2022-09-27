@@ -1,7 +1,7 @@
 .. figure:: ../_static/MACROSYNERGY_Logo_Primary.png
 
-macrosynergy.pnl package
-========================
+pnl
+===
 
 Submodules
 ----------
@@ -19,4 +19,4 @@ Module contents
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: naive_pnl, real_pnl
+   :exclude-members:

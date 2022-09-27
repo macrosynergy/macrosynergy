@@ -1,7 +1,7 @@
 .. figure:: ../_static/MACROSYNERGY_Logo_Primary.png
 
-macrosynergy.panel package
-==========================
+panel
+=====
 
 Submodules
 ----------
@@ -31,4 +31,4 @@ Module contents
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: basket, category_relations, converge_row, expanding_statistics, historic_vol, make_blacklist, make_relative_value, make_zn_scores, panel_calculator, return_beta, view_correlations, view_grades, view_ranges, view_timelines
+   :exclude-members:

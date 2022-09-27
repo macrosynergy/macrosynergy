@@ -24,7 +24,7 @@ import macrosynergy
 # -- Project information -----------------------------------------------------
 
 project = 'macrosynergy'
-copyright = '2021, Macrosynergy Quant Research Team'
+copyright = '2022, Macrosynergy Quant Research Team'
 author = 'Macrosynergy Quant Research Team'
 version = VERSION if ISRELEASED else f"{VERSION:s}.dev"
 release = VERSION if ISRELEASED else f"{VERSION:s}.dev"
@@ -85,7 +85,7 @@ todo_include_todos = True
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_book_theme'
+html_theme = 'sphinx_rtd_theme'
 # html_theme = 'sphinxdoc'
 
 # Add any paths that contain custom static files (such as style sheets) here,

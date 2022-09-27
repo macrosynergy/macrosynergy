@@ -72,3 +72,7 @@ data.info()
 
 Both of the above example will download a snippet of example data from the premium JPMaQS dataset
 of the daily timeseries of EUR FX excess returns.
+
+## Documentation
+
+The official documentation can be found at our website: https://docs.macrosynergy.com
