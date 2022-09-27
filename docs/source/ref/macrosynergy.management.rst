@@ -1,7 +1,7 @@
 .. figure:: ../_static/MACROSYNERGY_Logo_Primary.png
 
-macrosynergy.management package
-===============================
+management
+==========
 
 Submodules
 ----------
@@ -23,4 +23,4 @@ Module contents
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: check_availability, dq, shape_dfs, simulate_quantamental_data, simulate_vintage_data, update_df
+   :exclude-members:

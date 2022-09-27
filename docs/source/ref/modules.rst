@@ -6,4 +6,8 @@ macrosynergy
 .. toctree::
    :maxdepth: 4
 
-   macrosynergy
+   macrosynergy.dataquery
+   macrosynergy.management
+   macrosynergy.panel
+   macrosynergy.pnl
+   macrosynergy.signal

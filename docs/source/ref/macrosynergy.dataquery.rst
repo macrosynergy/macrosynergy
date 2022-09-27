@@ -1,7 +1,7 @@
 .. figure:: ../_static/MACROSYNERGY_Logo_Primary.png
 
-macrosynergy.dataquery package
-==============================
+dataquery
+=========
 
 Submodules
 ----------
@@ -19,4 +19,3 @@ Module contents
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: api, auth

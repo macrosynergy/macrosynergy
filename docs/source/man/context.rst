@@ -132,7 +132,7 @@ Links to Macrosynergy Website and associated pages.
 * NumPy documentation: https://numpy.org/doc/stable/reference/
 * Systematic-Risk, Systematic Value. Quantitative Finance Research Journal by Macrosynergy's
   Ralph Sueppel:
-  http://www.sr-sv.com
+  https://research.macrosynergy.com/
 * Macrosynergy's website: https://www.macrosynergy.com
 * Macrosynergy's Linkedin Page: https://www.linkedin.com/company/macrosynergy-partners/
 
