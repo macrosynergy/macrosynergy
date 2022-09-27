@@ -1,7 +1,7 @@
 .. figure:: ../_static/MACROSYNERGY_Logo_Primary.png
 
-signal
-======
+pnl
+===
 
 Submodules
 ----------
@@ -9,14 +9,14 @@ Submodules
 .. toctree::
    :maxdepth: 4
 
-   macrosynergy.signal.signal_return
-   macrosynergy.signal.target_positions
+   macrosynergy.pnl.naive_pnl
+   macrosynergy.pnl.real_pnl
 
 Module contents
 ---------------
 
-.. automodule:: macrosynergy.signal
+.. automodule:: macrosynergy.pnl
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: signal_return, target_positions
+   :exclude-members:

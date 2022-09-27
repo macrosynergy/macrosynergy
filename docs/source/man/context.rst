@@ -20,9 +20,9 @@ Context
 
 .. moduleauthor:: Ralph Sueppel <rsueppel@macrosynergy.com>
 
-.. testsetup::
+.. code:: python
 
-    from macrosynergy import *
+>>> from macrosynergy import *
 
 **A software package designed by the Macrosynergy Team to accompany JPMaQS: a novel source
 of macroeconomic data pioneered by Macrosynergy & JP Morgan.**
@@ -48,7 +48,7 @@ The User Guide
 ---------------
 
 This part of the documentation, which is mostly prose, begins with some background information about Macrosynergy,
-then focuses on broader instructions for getting the most out of ``macrosynergy`` Packege.
+then focuses on broader instructions for getting the most out of ``macrosynergy`` Package.
 
 Background
 -----------
@@ -132,7 +132,7 @@ Links to Macrosynergy Website and associated pages.
 * NumPy documentation: https://numpy.org/doc/stable/reference/
 * Systematic-Risk, Systematic Value. Quantitative Finance Research Journal by Macrosynergy's
   Ralph Sueppel:
-  http://www.sr-sv.com
+  https://research.macrosynergy.com/
 * Macrosynergy's website: https://www.macrosynergy.com
 * Macrosynergy's Linkedin Page: https://www.linkedin.com/company/macrosynergy-partners/
 
