@@ -25,9 +25,10 @@ class TestPyPIVersionNumber(unittest.TestCase):
             js = r.json()
 
         latest_version = js['info']['version']
-        self.assertTrue(version.parse(latest_version) > version.parse(__version__))
+        self.assertGreater(version.parse(__version__), version.parse(latest_version),
+                           f"The version being published to TestPyPI is not newer than the latest version already on TestPyPI. -- {__version__} <= {latest_version}")
 
-
+        # prevents publishing a version that is older or equal to the latest version on TestPyPI
 
 if __name__ == "__main__":
     unittest.main()
