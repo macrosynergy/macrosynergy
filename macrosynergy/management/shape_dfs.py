@@ -133,7 +133,7 @@ def aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
 
     return dfx
 
-def expln_df(df_w: pd.DataFrame, xpls: List[str], agg_meth: str, sum_adj: dict,
+def expln_df(df_w: pd.DataFrame, xpls: List[str], agg_meth: str, sum_condition: bool,
              lag: int):
     """
     Produces the explanatory column(s) for the custom DataFrame.
@@ -142,7 +142,7 @@ def expln_df(df_w: pd.DataFrame, xpls: List[str], agg_meth: str, sum_adj: dict,
         respective aggregation method will be applied.
     :param <List[str]> xpls: list of explanatory category(s).
     :param <str> agg_meth: aggregation method used for all explanatory variables.
-    :param <dict> sum_adj: required dictionary to negate erroneous zeros if the aggregate
+    :param <dict> sum_condition: required boolean to negate erroneous zeros if the aggregate
         method used is sum.
     :param <int> lag: lag of explanatory category(s). Applied uniformly to each
         category.
@@ -151,7 +151,11 @@ def expln_df(df_w: pd.DataFrame, xpls: List[str], agg_meth: str, sum_adj: dict,
     dfw_xpls = pd.DataFrame()
     for xpl in xpls:
 
-        xpl_col = df_w[xpl].agg(agg_meth, sum_adj).astype(dtype=np.float32)
+        if not sum_condition:
+            xpl_col = df_w[xpl].agg(agg_meth).astype(dtype=np.float32)
+        else:
+            xpl_col = df_w[xpl].sum(min_count=1)
+
         if lag > 0:
             xpl_col = xpl_col.groupby(level=0).shift(lag)
 
@@ -266,16 +270,17 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         # aggregation method is set to "sum", time periods that exclusively contain NaN
         # values will incorrectly be summed to the value zero which is misleading for
         # analysis.
-        sum_dict = {}
-        for i, agg in enumerate(xcat_aggs):
-            sum_dict[i] = {'min_count': 1} if agg == 'sum' else {}
+        sum_condition = any([x_agg == "sum" for x_agg in xcat_aggs])
 
         dfw_xpls = expln_df(
             df_w=df_w, xpls=xpls, agg_meth=xcat_aggs[0],
-            sum_adj=sum_dict[0], lag=lag
+            sum_condition=sum_condition, lag=lag
         )
 
-        dep_col = df_w[dep].agg(xcat_aggs[1], sum_dict[1]).astype(dtype=np.float32)
+        if not sum_condition:
+            dep_col = df_w[dep].agg(xcat_aggs[1]).astype(dtype=np.float32)
+        else:
+            dep_col = df_w[dep].sum(min_count=1)
 
         if fwin > 1:
             s = 1 - fwin
