@@ -34,8 +34,10 @@ Operating System :: MacOS
 
 MAJOR = 0
 MINOR = 0
-MICRO = 17
-ISRELEASED = False
+
+MICRO = 18
+ISRELEASED = True
+
 VERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
 
 if sys.version_info >= (3, 10):
