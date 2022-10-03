@@ -5,7 +5,7 @@ name: Package documentation - check build
 
 on:
   push:
-    branches: [ main, dev, test, prod, develop, release ]
+    branches: [ main, dev, test, prod, develop, release, feature/codecov ]
   pull_request:
     branches: [ main, dev, test, prod, develop, release ]
 
@@ -36,6 +36,11 @@ jobs:
       run: |
         # Options: --ignore=tests/specific.py --ignore-glob=tests/ignore-pattern
         pytest -rEf tests/unit/ --cov macrosynergy -p no:warnings --verbose --cov macrosynergy
+    - name: Upload coverage reports to Codecov
+      run: |
+        curl -Os https://uploader.codecov.io/latest/linux/codecov
+        chmod +x codecov
+        ./codecov -t ${CODECOV_TOKEN}
     - name: Test sphinx build of documentation
       run: |
         cd docs
