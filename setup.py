@@ -34,7 +34,6 @@ Operating System :: MacOS
 
 MAJOR = 0
 MINOR = 0
-
 MICRO = 18
 ISRELEASED = True
 
