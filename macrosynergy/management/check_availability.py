@@ -153,6 +153,7 @@ def check_availability(df: pd.DataFrame, xcats: List[str] = None,
     dfs = check_startyears(dfx)
     visual_paneldates(dfs, size=start_size)
     dfe = check_enddates(dfx)
+    plt.figure()
     visual_paneldates(dfe, size=end_size)
 
 
