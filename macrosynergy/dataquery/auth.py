@@ -8,7 +8,7 @@ from datetime import datetime
 
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 OAUTH_BASE_URL: str = (
-    "https://api-developer.jpmorgan.com/research/dataquery-authe/api/v2/"
+    "https://api-developer.jpmorgan.com/research/dataquery-authe/api/v2"
 )
 OAUTH_TOKEN_URL: str = "https://authe.jpmchase.com/as/token.oauth2"
 OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
