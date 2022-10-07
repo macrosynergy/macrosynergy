@@ -107,7 +107,10 @@ def visual_paneldates(df: pd.DataFrame, size: Tuple[float] = None):
         # in the DataFrame.
         maxdate = df.max().max()
         df = business_day_dif(df=df, maxdate=maxdate)
-        df = df.astype(int)
+
+        df = df.astype(float)
+        # Ideally the data type should be int, but Pandas cannot represent NaN as int.
+        # -- https://pandas.pydata.org/pandas-docs/stable/user_guide/gotchas.html#support-for-integer-na
 
         header = f"Missing days prior to {maxdate.strftime('%Y-%m-%d')}"
 
@@ -150,6 +153,7 @@ def check_availability(df: pd.DataFrame, xcats: List[str] = None,
     dfs = check_startyears(dfx)
     visual_paneldates(dfs, size=start_size)
     dfe = check_enddates(dfx)
+    plt.figure()
     visual_paneldates(dfe, size=end_size)
 
 

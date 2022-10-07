@@ -603,7 +603,7 @@ class Basket(object):
                                     hue=df_stack['value'].isna().cumsum(),
                                     palette=["blue"] *
                                             df_stack['value'].isna().cumsum().nunique(),
-                                    ci=None, markers=True)
+                                    estimator=None, markers=True)
 
                 equal_value = (1 / no_contracts)
                 fg.map(plt.axhline, y=equal_value, linestyle='--', color='gray', lw=0.5)
