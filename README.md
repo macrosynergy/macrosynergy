@@ -126,6 +126,7 @@ data = make_qdf(df_cids, df_xcats, back_ar=0.75)
 The management sub-module can also be used to [check](./macrosynergy/management/check_availability.py) which data is available
 in the dataframe.
 
+
 ```python
 from macrosynergy.management.check_availability import check_availability
 filt_na = (data['cid'] == 'USD') & (data['real_date'] < '2015-01-01')
@@ -141,8 +142,6 @@ data_reduced = reduce_df(data, xcats=xcats[:-1], cids=cids[0],
 ```
 
 ### Panel
-The panel sub-module can be used to analyse and visualise quantamental data.
-
 #### Basket
 The basket class is used to calculate the returns and carries of financial contracts using various methods,
 a [basket](./macrosynergy/panel/basket.py) is created as so.
@@ -165,6 +164,7 @@ basket_1.return_basket()
 basket_1.return_weights()
 basket_1.weight_visualiser(basket_name="GLB_EQUAL")
 ```
+
 You can also calculate and visualise the following and more with built-in functions.
 1.  [historic volume](./macrosynergy/panel/historic_vol.py)
 2.  [z-scores](./macrosynergy/panel/make_zn_scores.py)
@@ -188,6 +188,7 @@ z_median = make_zn_scores(data, xcat='FXXR_NSA', sequential=True, cids=cids,
                       pan_weight=0.5, min_obs=261, est_freq="d")
 ```
 
+
 ```python
 from macrosynergy.panel.return_beta import return_beta
 benchmark_return = "USD_FXXR_NSA"
@@ -199,6 +200,7 @@ data_hedge = return_beta(df=data, xcat='FXXR_NSA', cids=cids,
 print(df_hedge)
 beta_display(df_hedge=df_hedge, subplots=False)
 ```
+
 ```python
 view_timelines(data, xcats=['FXXR_NSA','FXCRY_NSA'], cids=cids[0],
                    size=(10, 5), title='AUD Return and Carry')
@@ -209,16 +211,20 @@ The [SignalReturnRelations](./macrosynergy/signal/signal_return.py) class analys
 return series.
 ```python
 from macrosynergy.signal.signal_return import SignalReturnRelations
+
 srn = SignalReturnRelations(data, ret="EQXR_NSA", sig="EQCRY_NSA", rival_sigs=None,
+
                                 sig_neg=True, cosp=True, freq="M", start="2002-01-01")
 srn.summary_table()
 ```
 In the creation of the class you can also indicate rival signals for basic relational statistics.
 ```python
+
 r_sigs = [ "EQCRR_NSA"]
 srn = SignalReturnRelations(data, "EQXR_NSA", sig="EQCRY_NSA", rival_sigs=r_sigs,
                             sig_neg=True, cosp=True, freq="M", start="2002-01-01")
 df_sigs = srn.signals_table(sigs=['EQCRY_NSA_NEG', 'EQCRR_NSA_NEG'])
+
 df_sigs_all = srn.signals_table()
 ```
 Using the class you can plot accuracy bars between returns and signals.
@@ -226,6 +232,7 @@ Using the class you can plot accuracy bars between returns and signals.
 srn.accuracy_bars(type="signals", title="Accuracy measure between target return, EQXR_NSA,"
                                         " and the respective signals, ['EQCRY_NSA_NEG', "
                                         " 'EQCRR_NSA_NEG'].")
+
 ```
 ### PnL
 #### Naive pnl
