@@ -99,6 +99,7 @@ In order to use the rest of the package without access to the api you can [simul
 management sub-module. 
 ```python
 from macrosynergy.management.simulate_quantamental_data import make_qdf
+
 cids = ['AUD', 'GBP', 'NZD', 'USD']
 xcats = ['FXXR_NSA', 'FXCRY_NSA', 'FXCRR_NSA', 'EQXR_NSA', 'EQCRY_NSA', 'EQCRR_NSA',
              'FXWBASE_NSA', 'EQWBASE_NSA']
@@ -188,7 +189,6 @@ z_median = make_zn_scores(data, xcat='FXXR_NSA', sequential=True, cids=cids,
                       pan_weight=0.5, min_obs=261, est_freq="d")
 ```
 
-
 ```python
 from macrosynergy.panel.return_beta import return_beta
 benchmark_return = "USD_FXXR_NSA"
@@ -213,13 +213,11 @@ return series.
 from macrosynergy.signal.signal_return import SignalReturnRelations
 
 srn = SignalReturnRelations(data, ret="EQXR_NSA", sig="EQCRY_NSA", rival_sigs=None,
-
                                 sig_neg=True, cosp=True, freq="M", start="2002-01-01")
 srn.summary_table()
 ```
 In the creation of the class you can also indicate rival signals for basic relational statistics.
 ```python
-
 r_sigs = [ "EQCRR_NSA"]
 srn = SignalReturnRelations(data, "EQXR_NSA", sig="EQCRY_NSA", rival_sigs=r_sigs,
                             sig_neg=True, cosp=True, freq="M", start="2002-01-01")
