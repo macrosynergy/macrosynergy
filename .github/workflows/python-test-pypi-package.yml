@@ -63,9 +63,7 @@ jobs:
       env:
         TWINE_USERNAME: __token__           # To be replaced
         TWINE_PASSWORD: ${{ secrets.TWINE_TEST_TOKEN }}
-        # TWINE_REPOSITORY: testpypi
-        TWINE_REPOSITORY_URL: https://test.pypi.org/project/macrosynergy/
-
+        TWINE_REPOSITORY: testpypi
 
 # thank you arnu515, https://dev.to/arnu515/create-a-pypi-pip-package-test-it-and-publish-it-using-github-actions-part-2-1o83 
 
