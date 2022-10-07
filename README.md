@@ -96,9 +96,11 @@ data.info()
 ```
 ### Management 
 In order to use the rest of the package without access to the api you can [simulate](./macrosynergy/management/simulate_quantamental_data.py) quantamental data using the 
+
 management sub-module. 
 ```python
 from macrosynergy.management.simulate_quantamental_data import make_qdf
+
 cids = ['AUD', 'GBP', 'NZD', 'USD']
 xcats = ['FXXR_NSA', 'FXCRY_NSA', 'FXCRR_NSA', 'EQXR_NSA', 'EQCRY_NSA', 'EQCRR_NSA',
              'FXWBASE_NSA', 'EQWBASE_NSA']
@@ -148,6 +150,7 @@ a [basket](./macrosynergy/panel/basket.py) is created as so.
 
 ```python
 from macrosynergy.panel.basket import Basket
+
 black = {'AUD': ['2010-01-01', '2013-12-31'], 'GBP': ['2010-01-01', '2013-12-31']}
 contracts = ['AUD_FX', 'AUD_EQ', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
 gdp_figures = [17.0, 17.0, 41.0, 9.0, 250.0]
@@ -164,13 +167,11 @@ basket_1.return_basket()
 basket_1.return_weights()
 basket_1.weight_visualiser(basket_name="GLB_EQUAL")
 ```
-
 You can also calculate and visualise the following and more with built-in functions.
 1.  [historic volume](./macrosynergy/panel/historic_vol.py)
 2.  [z-scores](./macrosynergy/panel/make_zn_scores.py)
 3.  [beta values](./macrosynergy/panel/return_beta.py)
 4.  [timeline](./macrosynergy/panel/view_timelines.py) 
-
 ```python
 from macrosynergy.panel.historic_vol import historic_vol
 data_historic = historic_vol(
@@ -187,7 +188,6 @@ z_median = make_zn_scores(data, xcat='FXXR_NSA', sequential=True, cids=cids,
                       blacklist=black, iis=False, neutral='median',
                       pan_weight=0.5, min_obs=261, est_freq="d")
 ```
-
 
 ```python
 from macrosynergy.panel.return_beta import return_beta
@@ -213,13 +213,11 @@ return series.
 from macrosynergy.signal.signal_return import SignalReturnRelations
 
 srn = SignalReturnRelations(data, ret="EQXR_NSA", sig="EQCRY_NSA", rival_sigs=None,
-
                                 sig_neg=True, cosp=True, freq="M", start="2002-01-01")
 srn.summary_table()
 ```
 In the creation of the class you can also indicate rival signals for basic relational statistics.
 ```python
-
 r_sigs = [ "EQCRR_NSA"]
 srn = SignalReturnRelations(data, "EQXR_NSA", sig="EQCRY_NSA", rival_sigs=r_sigs,
                             sig_neg=True, cosp=True, freq="M", start="2002-01-01")
@@ -232,7 +230,6 @@ Using the class you can plot accuracy bars between returns and signals.
 srn.accuracy_bars(type="signals", title="Accuracy measure between target return, EQXR_NSA,"
                                         " and the respective signals, ['EQCRY_NSA_NEG', "
                                         " 'EQCRR_NSA_NEG'].")
-
 ```
 ### PnL
 #### Naive pnl
