@@ -96,52 +96,9 @@ data.info()
 ```
 ### Management 
 In order to use the rest of the package without access to the api you can [simulate](./macrosynergy/management/simulate_quantamental_data.py) quantamental data using the 
-management package. 
+management sub-module. 
 ```python
 from macrosynergy.management.simulate_quantamental_data import make_qdf
-cids = ['EUR','GBP','USD']
-
-xcats = ['FXXR_NSA','EQXR_NSA']
-df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
-                                                'sd_mult'])
-df_cids.loc['EUR', ] = ['2010-01-01', '2020-12-31', 0.5, 2]
-df_cids.loc['GBP', ] = ['2011-01-01', '2020-11-30', 0, 1]
-df_cids.loc['USD', ] = ['2011-01-01', '2020-11-30', -0.2, 0.5]
-df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest',
-                                                  'mean_add', 'sd_mult', 'ar_coef',
-                                                  'back_coef'])
-df_xcats.loc['FXXR_NSA', ] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
-df_xcats.loc['EQXR_NSA', ] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
-
-data = make_qdf(df_cids, df_xcats, back_ar=0.75)
-```
-The management package can also be used to [check](./macrosynergy/management/check_availability.py) how much data is missing
-from a dataframe.
-
-```python
-from macrosynergy.management.check_availability import check_availability
-filt_na = (data['cid'] == 'USD') & (data['real_date'] < '2015-01-01')
-data_filt.loc[filt_na, 'value'] = np.nan
-check_availability(df=data_filt, xcats=xcats, cids=cids)
-```
-You can also use the built-in function to [reshape](./macrosynergy/management/shape_dfs.py) the data depending on
-the dates or tickers of your choice.
-
-```python
-data_reduced = reduce_df(data, xcats=xcats[:-1], cids=cids[0],
-                       start='2012-01-01', end='2018-01-31')
-```
-
-### Panel
-The panel package can be used to analyse and visualise quantamental data
-
-#### Basket
-The basket class is used to calculate the returns and carries of financial contracts using various methods,
-a [basket](./macrosynergy/panel/basket.py) is created as so.
-
-```python
-from macrosynergy.panel.basket import Basket
-
 cids = ['AUD', 'GBP', 'NZD', 'USD']
 xcats = ['FXXR_NSA', 'FXCRY_NSA', 'FXCRR_NSA', 'EQXR_NSA', 'EQCRY_NSA', 'EQCRR_NSA',
              'FXWBASE_NSA', 'EQWBASE_NSA']
@@ -165,6 +122,32 @@ df_xcats.loc['EQCRR_NSA'] = ['2010-01-01', '2022-03-14', 1.5, 1.5, 0.9, 0.5]
 df_xcats.loc['FXWBASE_NSA'] = ['2010-01-01', '2022-02-01', 1, 1.5, 0.8, 0.5]
 df_xcats.loc['EQWBASE_NSA'] = ['2010-01-01', '2022-02-01', 1, 1.5, 0.9, 0.5]
 data = make_qdf(df_cids, df_xcats, back_ar=0.75)
+```
+The management sub-module can also be used to [check](./macrosynergy/management/check_availability.py) which data is available
+in the dataframe.
+
+
+```python
+from macrosynergy.management.check_availability import check_availability
+filt_na = (data['cid'] == 'USD') & (data['real_date'] < '2015-01-01')
+data_filt.loc[filt_na, 'value'] = np.nan
+check_availability(df=data_filt, xcats=xcats, cids=cids)
+```
+You can also use the built-in function to [reshape](./macrosynergy/management/shape_dfs.py) the data depending on
+the dates or tickers of your choice.
+
+```python
+data_reduced = reduce_df(data, xcats=xcats[:-1], cids=cids[0],
+                       start='2012-01-01', end='2018-01-31')
+```
+
+### Panel
+#### Basket
+The basket class is used to calculate the returns and carries of financial contracts using various methods,
+a [basket](./macrosynergy/panel/basket.py) is created as so.
+
+```python
+from macrosynergy.panel.basket import Basket
 black = {'AUD': ['2010-01-01', '2013-12-31'], 'GBP': ['2010-01-01', '2013-12-31']}
 contracts = ['AUD_FX', 'AUD_EQ', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
 gdp_figures = [17.0, 17.0, 41.0, 9.0, 250.0]
@@ -181,16 +164,20 @@ basket_1.return_basket()
 basket_1.return_weights()
 basket_1.weight_visualiser(basket_name="GLB_EQUAL")
 ```
-You can estimate the historic annualised standard deviations of asset returns using the 
-[historic_vol](./macrosynergy/panel/historic_vol.py) function.
+
+You can also calculate and visualise the following and more with built-in functions.
+1.  [historic volume](./macrosynergy/panel/historic_vol.py)
+2.  [z-scores](./macrosynergy/panel/make_zn_scores.py)
+3.  [beta values](./macrosynergy/panel/return_beta.py)
+4.  [timeline](./macrosynergy/panel/view_timelines.py) 
+
 ```python
 from macrosynergy.panel.historic_vol import historic_vol
 data_historic = historic_vol(
     data, cids=cids, xcat='FXXR_NSA', lback_periods=21, lback_meth='ma', half_life=11,
     remove_zeros=True)
 ```
-[z-scores](./macrosynergy/panel/make_zn_scores.py) can also be calculated using the package with 
-various neutral levels available.
+
 ```python
 from macrosynergy.panel.make_zn_scores import make_zn_scores
 z_mean = make_zn_scores(data, xcat='FXXR_NSA', sequential=True, cids=cids,
@@ -201,7 +188,7 @@ z_median = make_zn_scores(data, xcat='FXXR_NSA', sequential=True, cids=cids,
                       pan_weight=0.5, min_obs=261, est_freq="d")
 ```
 
-[beta](./macrosynergy/panel/return_beta.py) values can be estimated and visualised as well.
+
 ```python
 from macrosynergy.panel.return_beta import return_beta
 benchmark_return = "USD_FXXR_NSA"
@@ -213,7 +200,7 @@ data_hedge = return_beta(df=data, xcat='FXXR_NSA', cids=cids,
 print(df_hedge)
 beta_display(df_hedge=df_hedge, subplots=False)
 ```
-The [timeline](./macrosynergy/panel/view_timelines.py) of a panel can be visualised.
+
 ```python
 view_timelines(data, xcats=['FXXR_NSA','FXCRY_NSA'], cids=cids[0],
                    size=(10, 5), title='AUD Return and Carry')
@@ -224,39 +211,28 @@ The [SignalReturnRelations](./macrosynergy/signal/signal_return.py) class analys
 return series.
 ```python
 from macrosynergy.signal.signal_return import SignalReturnRelations
-cids = ['GBP', 'NZD', 'USD', 'EUR']
-xcats = ['EQXR_NSA', 'CRY', 'GROWTH']
 
-cols_1 = ['earliest', 'latest', 'mean_add', 'sd_mult']
-df_cids = pd.DataFrame(index=cids, columns=cols_1)
-df_cids.loc['GBP', :] = ['2012-01-03', '2020-11-30', -0.2, 0.5]
-df_cids.loc['NZD'] = ['2002-01-03', '2020-09-30', -0.1, 2]
-df_cids.loc['USD'] = ['2015-01-03', '2020-12-31', 0.2, 2]
-df_cids.loc['EUR'] = ['2008-01-03', '2020-12-31', 0.1, 2]
-cols_2 = cols_1 + ['ar_coef', 'back_coef']
+srn = SignalReturnRelations(data, ret="EQXR_NSA", sig="EQCRY_NSA", rival_sigs=None,
 
-df_xcats = pd.DataFrame(index=xcats, columns=cols_2)
-df_xcats.loc['EQXR_NSA'] = ['2000-01-03', '2020-12-31', 0.1, 1, 0, 0.3]
-df_xcats.loc['CRY'] = ['2000-01-01', '2020-10-30', 1, 2, 0.95, 1]
-df_xcats.loc['GROWTH'] = ['2010-01-03', '2020-10-30', 1, 2, 0.9, 1]
-data = make_qdf(df_cids, df_xcats, back_ar=0.75)
-srn = SignalReturnRelations(data, ret="EQXR_NSA", sig="CRY", rival_sigs=None,
                                 sig_neg=True, cosp=True, freq="M", start="2002-01-01")
 srn.summary_table()
 ```
 In the creation of the class you can also indicate rival signals for basic relational statistics.
 ```python
-r_sigs = [ "GROWTH"]
-srn = SignalReturnRelations(data, "EQXR_NSA", sig="CRY", rival_sigs=r_sigs,
+
+r_sigs = [ "EQCRR_NSA"]
+srn = SignalReturnRelations(data, "EQXR_NSA", sig="EQCRY_NSA", rival_sigs=r_sigs,
                             sig_neg=True, cosp=True, freq="M", start="2002-01-01")
-df_sigs = srn.signals_table(sigs=['CRY_NEG', 'GROWTH_NEG'])
+df_sigs = srn.signals_table(sigs=['EQCRY_NSA_NEG', 'EQCRR_NSA_NEG'])
+
 df_sigs_all = srn.signals_table()
 ```
 Using the class you can plot accuracy bars between returns and signals.
 ```python
 srn.accuracy_bars(type="signals", title="Accuracy measure between target return, EQXR_NSA,"
-                                        " and the respective signals, ['CRY', "
-                                        " 'GROWTH'].")
+                                        " and the respective signals, ['EQCRY_NSA_NEG', "
+                                        " 'EQCRR_NSA_NEG'].")
+
 ```
 ### PnL
 #### Naive pnl
