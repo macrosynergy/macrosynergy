@@ -435,9 +435,8 @@ class NaivePnL:
                   figsize: Tuple = (12, 7), # should be changed to size, or view_timelines.py L18 should change.
                   aspect: float = 1.7,
                   height : float = 3,
-                  label_adj: float = 0.05
-                  
-                  ):
+                  label_adj: float = 0.05,
+                  title_adj: float = 0.95,):
 
         """
         Plot line chart of cumulative PnLs, single PnL, multiple PnL types per
@@ -452,9 +451,20 @@ class NaivePnL:
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
             in df is used.
-        :param <tuple> figsize: tuple of plot width and height. Default is (10,6).
+        :param <int> ncol: number of columns in facet grid. Default is 3.
+        :param <bool> same_y: if True (default) all plots in facet grid share same y axis.
         :param <str> title: allows entering text for a custom chart header.
         :param <List[str]> xcat_labels: custom labels to be used for the PnLs.
+        :param <tuple> figsize: tuple of plot width and height. Default is (12 , 7).
+        :param <float> aspect: width-height ratio for plots in facet. Default is 1.7.
+        :param <float> height: height of plots in facet. Default is 3.
+        :param <float> label_adj: parameter that sets bottom of figure to fit the label.
+            Default is 0.05.
+        :param <float> title_adj: parameter that sets top of figure to accommodate title.
+            Default is 0.95.
+
+
+
 
         """
 
@@ -507,9 +517,16 @@ class NaivePnL:
 
         dfx['cum_value'] = dfx.groupby(plot_by).cumsum()
 
+                        
         fg =  sns.FacetGrid(data=dfx, col=plot_by, col_wrap=ncol,   
                             sharey=same_y, aspect=aspect,
-                            height=height, col_order=col_order, legend_out=True)
+                            height=height, 
+                            col_order=col_order, legend_out=True)
+
+        
+        fg.fig.suptitle(title, fontsize=20, x = 0.4)
+
+        fg.fig.subplots_adjust(top=title_adj)
 
         fg.map_dataframe(   sns.lineplot, x='real_date', y='cum_value',
                             hue=plot_by, hue_order=col_order,
@@ -518,20 +535,18 @@ class NaivePnL:
         for ax in fg.axes.flat:
             ax.axhline(y=0, color='black', linestyle='--', linewidth=1)
 
-        
-        fg.fig.suptitle(title, fontsize=16, y=1.05)
 
         fg.add_legend(  title=legend_title, 
                         bbox_to_anchor=(0.5, -label_adj), 
                         ncol=ncol, 
-                        labels=labels)
-                    
+                        labels=labels,)
 
+                    
         fg.set_titles(row_template='', col_template='{col_name}')
         fg.set_axis_labels(x_var="Year", y_var="% of risk capital, no compounding")
+
   
         plt.axhline(y=0, color='black', linestyle='--', lw=1)
-    
         plt.show()
 
 
