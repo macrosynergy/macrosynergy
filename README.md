@@ -230,7 +230,6 @@ Using the class you can plot accuracy bars between returns and signals.
 srn.accuracy_bars(type="signals", title="Accuracy measure between target return, EQXR_NSA,"
                                         " and the respective signals, ['EQCRY_NSA_NEG', "
                                         " 'EQCRR_NSA_NEG'].")
-
 ```
 ### PnL
 #### Naive pnl
