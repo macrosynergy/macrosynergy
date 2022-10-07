@@ -30,6 +30,7 @@ Typing :: Typed
 Operating System :: Microsoft :: Windows
 Operating System :: POSIX
 Operating System :: MacOS
+Development Status :: 4 - Beta
 """
 
 MAJOR = 0
