@@ -57,6 +57,7 @@ jobs:
 
     - name: Check and Upload to TestPyPI
       run: |
+        pip install twine
         twine check dist/*
         twine upload dist/*
       env:
