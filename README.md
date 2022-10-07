@@ -96,6 +96,7 @@ data.info()
 ```
 ### Management 
 In order to use the rest of the package without access to the api you can [simulate](./macrosynergy/management/simulate_quantamental_data.py) quantamental data using the 
+
 management sub-module. 
 ```python
 from macrosynergy.management.simulate_quantamental_data import make_qdf
@@ -149,6 +150,7 @@ a [basket](./macrosynergy/panel/basket.py) is created as so.
 
 ```python
 from macrosynergy.panel.basket import Basket
+
 black = {'AUD': ['2010-01-01', '2013-12-31'], 'GBP': ['2010-01-01', '2013-12-31']}
 contracts = ['AUD_FX', 'AUD_EQ', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
 gdp_figures = [17.0, 17.0, 41.0, 9.0, 250.0]
@@ -165,13 +167,11 @@ basket_1.return_basket()
 basket_1.return_weights()
 basket_1.weight_visualiser(basket_name="GLB_EQUAL")
 ```
-
 You can also calculate and visualise the following and more with built-in functions.
 1.  [historic volume](./macrosynergy/panel/historic_vol.py)
 2.  [z-scores](./macrosynergy/panel/make_zn_scores.py)
 3.  [beta values](./macrosynergy/panel/return_beta.py)
 4.  [timeline](./macrosynergy/panel/view_timelines.py) 
-
 ```python
 from macrosynergy.panel.historic_vol import historic_vol
 data_historic = historic_vol(
