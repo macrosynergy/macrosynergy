@@ -1,4 +1,3 @@
-
 import numpy as np
 import pandas as pd
 from typing import List
@@ -142,8 +141,8 @@ def expln_df(df_w: pd.DataFrame, xpls: List[str], agg_meth: str, sum_condition: 
         respective aggregation method will be applied.
     :param <List[str]> xpls: list of explanatory category(s).
     :param <str> agg_meth: aggregation method used for all explanatory variables.
-    :param <dict> sum_condition: required boolean to negate erroneous zeros if the aggregate
-        method used is sum.
+    :param <dict> sum_condition: required boolean to negate erroneous zeros if the
+        aggregate method used, for the explanatory variable, is sum.
     :param <int> lag: lag of explanatory category(s). Applied uniformly to each
         category.
     """
@@ -266,18 +265,16 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         df_w = df_w.groupby([pd.Grouper(level='cid'),
                              pd.Grouper(level='real_date', freq=frq_dict[freq])])
 
+        dfw_xpls = expln_df(
+            df_w=df_w, xpls=xpls, agg_meth=xcat_aggs[0],
+            sum_condition=(xcat_aggs[0] == "sum"), lag=lag
+        )
+
         # Handles for falsified zeros. Following the frequency conversion, if the
         # aggregation method is set to "sum", time periods that exclusively contain NaN
         # values will incorrectly be summed to the value zero which is misleading for
         # analysis.
-        sum_condition = any([x_agg == "sum" for x_agg in xcat_aggs])
-
-        dfw_xpls = expln_df(
-            df_w=df_w, xpls=xpls, agg_meth=xcat_aggs[0],
-            sum_condition=sum_condition, lag=lag
-        )
-
-        if not sum_condition:
+        if not (xcat_aggs[-1] == "sum"):
             dep_col = df_w[dep].agg(xcat_aggs[1]).astype(dtype=np.float32)
         else:
             dep_col = df_w[dep].sum(min_count=1)
