@@ -1,4 +1,3 @@
-
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -435,7 +434,6 @@ class NaivePnL:
                   figsize: Tuple = (12, 7), aspect: float = 1.7,
                   height: float = 3, label_adj: float = 0.05,
                   title_adj: float = 0.95):
-
         """
         Plot line chart of cumulative PnLs, single PnL, multiple PnL types per
         cross section, or multiple cross sections per PnL type.
@@ -546,6 +544,7 @@ class NaivePnL:
             plt.ylabel("% of risk capital, no compounding")
         plt.axhline(y=0, color='black', linestyle='--', lw=1)
         plt.show()
+
 
     def signal_heatmap(self, pnl_name: str, pnl_cids: List[str] = None,
                        start: str = None, end: str = None, freq: str = 'm',
