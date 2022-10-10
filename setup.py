@@ -156,6 +156,7 @@ def setup_package():
         project_urls={
             "Bug Tracker": "https://github.com/macrosynergy/macrosynergy/issues",
             "Source Code": "https://github.com/macrosynergy/macrosynergy",
+            "Documentation": "https://docs.macrosynergy.com"
         },
         classifiers=[_f for _f in CLASSIFIERS.split('\n') if _f],
         platforms=["Windows", "Linux", "Mac OS-X"],
