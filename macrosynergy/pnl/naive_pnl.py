@@ -428,15 +428,12 @@ class NaivePnL:
         return panel_pnl[['cid', 'xcat', 'real_date', 'value']]
 
     def plot_pnls(self, pnl_cats: List[str] = None, pnl_cids: List[str] = ['ALL'],
-                  start: str = None, end: str = None, 
-                  ncol: int = 3, same_y : bool = True,
-                  title: str = "Cumulative Naive PnL",
-                  xcat_labels: List[str] = None,
-                  figsize: Tuple = (12, 7), # should be changed to size, or view_timelines.py L18 should change.
-                  aspect: float = 1.7,
-                  height : float = 3,
-                  label_adj: float = 0.05,
-                  title_adj: float = 0.95,):
+                  start: str = None, end: str = None,
+                  ncol: int = 3, same_y: bool = True,
+                  title: str = "Cumulative Naive PnL", xcat_labels: List[str] = None,
+                  figsize: Tuple = (12, 7), aspect: float = 1.7,
+                  height: float = 3, label_adj: float = 0.05,
+                  title_adj: float = 0.95):
 
         """
         Plot line chart of cumulative PnLs, single PnL, multiple PnL types per
@@ -462,10 +459,6 @@ class NaivePnL:
             Default is 0.05.
         :param <float> title_adj: parameter that sets top of figure to accommodate title.
             Default is 0.95.
-
-
-
-
         """
 
         if pnl_cats is None:
@@ -489,6 +482,7 @@ class NaivePnL:
         assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
         error_message = "The number of custom labels must match the defined number of " \
                         "categories in pnl_cats."
+
         if xcat_labels is not None:
             assert(len(xcat_labels) == len(pnl_cats)), error_message
         else:
@@ -500,55 +494,46 @@ class NaivePnL:
 
         no_cids = len(pnl_cids)
 
-        sns.set_theme(style='whitegrid', palette='colorblind',
-                      rc={'figure.figsize': figsize})
+        sns.set_theme(
+            style='whitegrid', palette='colorblind', rc={'figure.figsize': figsize}
+        )
 
         if no_cids == 1:
-            plot_by         = 'xcat'
-            col_order       = pnl_cats
-            labels          = xcat_labels
-            legend_title    = 'PnL Category(s)'
+            plot_by = "xcat"
+            col_order = pnl_cats
+            labels = xcat_labels
+            legend_title = "PnL Category(s)"
         else:
-            plot_by         = 'cid'
-            col_order       = pnl_cids
-            labels          = pnl_cids
-            legend_title    = 'Cross Section(s)'
-
+            plot_by = "cid"
+            col_order = labels = pnl_cids
+            legend_title = "Cross Section(s)"
 
         dfx['cum_value'] = dfx.groupby(plot_by).cumsum()
 
-                        
-        fg =  sns.FacetGrid(data=dfx, col=plot_by, col_wrap=ncol,   
-                            sharey=same_y, aspect=aspect,
-                            height=height, 
-                            col_order=col_order, legend_out=True)
-
-        
-        fg.fig.suptitle(title, fontsize=20, x = 0.4)
+        fg = sns.FacetGrid(
+            data=dfx, col=plot_by, col_wrap=ncol, sharey=same_y, aspect=aspect,
+            height=height, col_order=col_order, legend_out=True
+        )
+        fg.fig.suptitle(title, fontsize=20, x=0.4)
 
         fg.fig.subplots_adjust(top=title_adj)
 
-        fg.map_dataframe(   sns.lineplot, x='real_date', y='cum_value',
-                            hue=plot_by, hue_order=col_order,
-                            estimator=None, lw=1)
-
+        fg.map_dataframe(
+            sns.lineplot, x='real_date', y='cum_value', hue=plot_by, hue_order=col_order,
+            estimator=None, lw=1
+        )
         for ax in fg.axes.flat:
             ax.axhline(y=0, color='black', linestyle='--', linewidth=1)
 
-
-        fg.add_legend(  title=legend_title, 
-                        bbox_to_anchor=(0.5, -label_adj), 
-                        ncol=ncol, 
-                        labels=labels,)
-
-                    
+        fg.add_legend(
+            title=legend_title, bbox_to_anchor=(0.5, -label_adj), ncol=ncol,
+            labels=labels
+        )
         fg.set_titles(row_template='', col_template='{col_name}')
         fg.set_axis_labels(x_var="Year", y_var="% of risk capital, no compounding")
 
-  
         plt.axhline(y=0, color='black', linestyle='--', lw=1)
         plt.show()
-
 
     def signal_heatmap(self, pnl_name: str, pnl_cids: List[str] = None,
                        start: str = None, end: str = None, freq: str = 'm',
@@ -864,3 +849,5 @@ if __name__ == "__main__":
     pnl.agg_signal_bars(
         pnl_name="PNL_GROWTH_NEG", freq="m", metric="direction", title=None,
     )
+
+    pnl.plot_pnls(pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids, )
