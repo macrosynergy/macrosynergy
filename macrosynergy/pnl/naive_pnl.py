@@ -447,7 +447,9 @@ class NaivePnL:
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
             in df is used.
-        :param <bool> facet: whether to facet the plot by cross section. Default is False.
+        :param <bool> facet: parameter to control whether each PnL series is plotted on
+            its own respective grid using Seaborn's FacetGrid. Default is False and all
+            series will be plotted in the same graph.
         :param <int> ncol: number of columns in facet grid. Default is 3.
         :param <bool> same_y: if True (default) all plots in facet grid share same y axis.
         :param <str> title: allows entering text for a custom chart header.
@@ -474,7 +476,7 @@ class NaivePnL:
             dif = set(pnl_cats_copy).difference(set(pnl_cats))
             if dif:
                 print(f"The PnL(s) requested, {dif}, have not been defined on the "
-                      f"Class.")
+                      f"Class. The defined PnL(s) are {self.pnl_names}.")
             elif len(pnl_cats) == 0:
                 raise ValueError("There are not any valid PnL(s) to display given the "
                                  "request.")
@@ -483,14 +485,18 @@ class NaivePnL:
         error_message = "The number of custom labels must match the defined number of " \
                         "categories in pnl_cats."
 
+        dfx = reduce_df(
+            self.df, pnl_cats, pnl_cids, start, end, self.black, out_all=False
+        )
+
         if xcat_labels is not None:
             assert(len(xcat_labels) == len(pnl_cats)), error_message
+
+            xcat_label_dict = dict(zip(pnl_cats, xcat_labels))
+            dfx = dfx.replace(xcat_label_dict)
         else:
             pnl_cats_c = pnl_cats.copy()
             xcat_labels = pnl_cats_c
-
-        dfx = reduce_df(self.df, pnl_cats, pnl_cids, start,
-                        end, self.black, out_all=False)
 
         no_cids = len(pnl_cids)
 
@@ -513,38 +519,37 @@ class NaivePnL:
         if facet:
             fg = sns.FacetGrid(
                 data=dfx, col=plot_by, col_wrap=ncol, sharey=same_y, aspect=aspect,
-                height=height, col_order=col_order, legend_out=True
+                height=height, col_order=labels, legend_out=True
             )
             fg.fig.suptitle(title, fontsize=20, x=0.4)
 
             fg.fig.subplots_adjust(top=title_adj)
 
             fg.map_dataframe(
-                sns.lineplot, x='real_date', y='cum_value', hue=plot_by, hue_order=col_order,
-                estimator=None, lw=1
+                sns.lineplot, x="real_date", y="cum_value", hue=plot_by,
+                hue_order=labels, estimator=None, lw=1
             )
             for ax in fg.axes.flat:
-                ax.axhline(y=0, color='black', linestyle='--', linewidth=1)
+                ax.axhline(y=0, color="black", linestyle='--', linewidth=1)
 
-            fg.add_legend(
-                title=legend_title, bbox_to_anchor=(0.5, -label_adj), ncol=ncol,
-                labels=labels
-            )
             fg.set_titles(row_template='', col_template='{col_name}')
             fg.set_axis_labels(x_var="Year", y_var="% of risk capital, no compounding")
         
         else:
-            ax = sns.lineplot(data=dfx, x='real_date', y='cum_value', hue=plot_by, 
-                                hue_order=col_order, estimator=None, lw=1)
+            ax = sns.lineplot(
+                data=dfx, x='real_date', y='cum_value', hue=plot_by,
+                hue_order=labels, estimator=None, lw=1
+            )
 
             leg = ax.axes.get_legend()
             leg.set_title(legend_title)
             plt.title(title, fontsize=20)
+
             plt.xlabel("Year")
             plt.ylabel("% of risk capital, no compounding")
+
         plt.axhline(y=0, color='black', linestyle='--', lw=1)
         plt.show()
-
 
     def signal_heatmap(self, pnl_name: str, pnl_cids: List[str] = None,
                        start: str = None, end: str = None, freq: str = 'm',
@@ -861,4 +866,5 @@ if __name__ == "__main__":
         pnl_name="PNL_GROWTH_NEG", freq="m", metric="direction", title=None,
     )
 
-    pnl.plot_pnls(pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids, )
+    pnl.plot_pnls(
+        pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=False, xcat_labels=["S_1", "S_2"])
