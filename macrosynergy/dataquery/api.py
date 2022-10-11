@@ -36,7 +36,7 @@ class Interface(object):
         oauth: bool = False,
         debug: bool = False,
         concurrent: bool = True,
-        batch_size: int = 10,
+        batch_size: int = 20,
         **kwargs
     ):
 
