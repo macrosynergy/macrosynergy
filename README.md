@@ -93,7 +93,7 @@ data.info()
 ### Management 
 In order to use the rest of the package without access to the api you can [simulate](./macrosynergy/management/simulate_quantamental_data.py) quantamental data using the 
 
-management sub-module. 
+management sub-package. 
 ```python
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
@@ -121,7 +121,7 @@ df_xcats.loc['FXWBASE_NSA'] = ['2010-01-01', '2022-02-01', 1, 1.5, 0.8, 0.5]
 df_xcats.loc['EQWBASE_NSA'] = ['2010-01-01', '2022-02-01', 1, 1.5, 0.9, 0.5]
 data = make_qdf(df_cids, df_xcats, back_ar=0.75)
 ```
-The management sub-module can also be used to [check](./macrosynergy/management/check_availability.py) which data is available
+The management sub-package can also be used to [check](./macrosynergy/management/check_availability.py) which data is available
 in the dataframe.
 
 

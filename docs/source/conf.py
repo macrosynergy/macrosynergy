@@ -15,9 +15,10 @@
 # sys.path.insert(0, os.path.abspath('.'))
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../../../'))
-sys.path.insert(0, os.path.abspath('../../../macrosynergy'))
-sys.path.insert(0, os.path.abspath('../../../latest'))
+#sys.path.insert(0, os.path.abspath('../../../'))
+#sys.path.insert(0, os.path.abspath('../../../macrosynergy'))
+#sys.path.insert(0, os.path.abspath('../../../latest'))
+sys.path.insert(0, os.path.abspath("../../"))
 from setup import VERSION, ISRELEASED
 import macrosynergy
 
