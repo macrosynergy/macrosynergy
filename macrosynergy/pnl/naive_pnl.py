@@ -867,4 +867,5 @@ if __name__ == "__main__":
     )
 
     pnl.plot_pnls(
-        pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=False, xcat_labels=["S_1", "S_2"])
+        pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=False, xcat_labels=["S_1", "S_2"]
+    )
