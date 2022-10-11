@@ -21,14 +21,10 @@ The easiest method for installing the package is to use the [PyPI](https://pypi.
 ```shell script
 pip install macrosynergy
 ```
-Alternatively, we you want to install the package directly from the [GitHub repository](https://github.com/macrosynergy/macrosynergy/tree/main) using
-```shell script
-pip install https://github.com/macrosynergy/macrosynergy@main
-```
-for the latest stable version. Alternatively for the cutting edge development version, install the package from the
+ Alternatively for the cutting edge development version, install the package from the
  [develop](https://github.com/macrosynergy/macrosynergy/tree/develop) branch as
 ```shell script
-pip install https://github.com/macrosynergy/macrosynergy@development
+pip install git+https://github.com/macrosynergy/macrosynergy@develop
 ```
 ## Usage
 ### DataQuery Interface
