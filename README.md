@@ -21,14 +21,10 @@ The easiest method for installing the package is to use the [PyPI](https://pypi.
 ```shell script
 pip install macrosynergy
 ```
-Alternatively, we you want to install the package directly from the [GitHub repository](https://github.com/macrosynergy/macrosynergy/tree/main) using
-```shell script
-pip install https://github.com/macrosynergy/macrosynergy@main
-```
-for the latest stable version. Alternatively for the cutting edge development version, install the package from the
+ Alternatively for the cutting edge development version, install the package from the
  [develop](https://github.com/macrosynergy/macrosynergy/tree/develop) branch as
 ```shell script
-pip install https://github.com/macrosynergy/macrosynergy@development
+pip install git+https://github.com/macrosynergy/macrosynergy@develop
 ```
 ## Usage
 ### DataQuery Interface
@@ -97,7 +93,7 @@ data.info()
 ### Management 
 In order to use the rest of the package without access to the api you can [simulate](./macrosynergy/management/simulate_quantamental_data.py) quantamental data using the 
 
-management sub-module. 
+management sub-package. 
 ```python
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
@@ -125,7 +121,7 @@ df_xcats.loc['FXWBASE_NSA'] = ['2010-01-01', '2022-02-01', 1, 1.5, 0.8, 0.5]
 df_xcats.loc['EQWBASE_NSA'] = ['2010-01-01', '2022-02-01', 1, 1.5, 0.9, 0.5]
 data = make_qdf(df_cids, df_xcats, back_ar=0.75)
 ```
-The management sub-module can also be used to [check](./macrosynergy/management/check_availability.py) which data is available
+The management sub-package can also be used to [check](./macrosynergy/management/check_availability.py) which data is available
 in the dataframe.
 
 
