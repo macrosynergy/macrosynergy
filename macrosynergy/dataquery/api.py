@@ -28,18 +28,19 @@ class DQException(Exception):
 
         if ("header" in kwargs) and ("Date" in kwargs["header"]):
             self.timestamp = kwargs["header"]["Date"]
-            # key error prevented by short circuit
-            # automatically goes to looking for timestamp            
+        # key error prevented by short circuit
+        # automatically goes to looking for timestamp instead of if if else else       
         else:
             if "timestamp" not in kwargs:
                 self.timestamp = datetime.datetime.utcnow().isoformat()
-            # if timestamp is in kwargs, it will be loaded in L40,41
+        # if timestamp is in kwargs, it will be loaded in Line 41; less code.
         # Exception has a __traceback__ attribute.
-
-
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-
+        if (set(self.__dict__.keys()) & set(kwargs.keys())):
+            raise ValueError("Key-word arguments overlap with DQException attributes")
+            # and also with the Exception attributes
+        self.__dict__.update(kwargs)
+        # update the attributes with the key-word arguments
+        
     def __str__(self):
         r = f"{self.message} with {json.dumps(self.__dict__)}"
         if self.base_exception:
