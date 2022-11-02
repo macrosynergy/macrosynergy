@@ -44,11 +44,11 @@ class DQException(Exception):
     def __str__(self):
         r = f"{self.message} with {json.dumps(self.__dict__)}"
         if self.base_exception:
-            r += f"\n caused by {self.base_exception}"
+            r += f"caused by {self.base_exception}"
         return r
     
-    def __repr__(self) -> str:
-        return super().__repr__()
+    def __repr__(self):
+        return self.__str__() + super().__repr__()
 
 
 class Interface(object):
