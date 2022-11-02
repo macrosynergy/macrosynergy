@@ -7,6 +7,7 @@ import time
 import socket
 import datetime
 import logging
+import json
 
 from typing import List, Tuple
 from math import ceil, floor
@@ -16,6 +17,37 @@ from typing import Optional
 from macrosynergy.dataquery.auth import CertAuth, OAuth
 
 logger = logging.getLogger(__name__)
+
+
+class DQException(Exception):
+    """DataQuery Exception."""
+    def __init__(self, message, base_exception=None ,**kwargs):
+        super().__init__(message)
+        self.message = message
+        self.base_exception = base_exception
+
+        if ("header" in kwargs) and ("Date" in kwargs["header"]):
+            self.timestamp = kwargs["header"]["Date"]
+            # key error prevented by short circuit
+            # automatically goes to looking for timestamp            
+        else:
+            if "timestamp" not in kwargs:
+                self.timestamp = datetime.datetime.utcnow().isoformat()
+            # if timestamp is in kwargs, it will be loaded in L40,41
+        # Exception has a __traceback__ attribute.
+
+
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+    def __str__(self):
+        r = f"{self.message} with {json.dumps(self.__dict__)}"
+        if self.base_exception:
+            r += f"\n caused by {self.base_exception}"
+        return r
+    
+    def __repr__(self) -> str:
+        return super().__repr__()
 
 
 class Interface(object):
@@ -83,13 +115,22 @@ class Interface(object):
             # print("base url:", dq_url)
             # ip_addr = socket.gethostbyname(dq_url)
             url = self.access.last_url
-            now = datetime.datetime.utcnow()
-            raise ConnectionError(
-                f"DataQuery request {url:s} error response at {now.isoformat()}: {js}"
+            # now = datetime.datetime.utcnow()
+            # raise ConnectionError(
+            #     f"DataQuery request {url:s} error response at {now.isoformat()}: {js}"
+            # )
+            raise DQException(
+                message="DataQuery request error response",
+                url=url,
+                response=self.access.headers
             )
+            # now in L113 was being used to create a timestamp for the error message.
+            # it has been commented as DQException adds a timestamp to the error message on creation.
+
         else:
 
             return int(results["code"]) == 200, results
+            # if results["code"] != "200", the URL and entire response should be returned. ? 
 
     @staticmethod
     def server_retry(response: dict, select: str):
@@ -152,7 +193,13 @@ class Interface(object):
             while not self.server_retry(response, select):
                 count += 1
                 if count > 5:
-                    raise RuntimeError("All servers are down.")
+                    # raise RuntimeError("All servers are down.")
+                    raise DQException(
+                        message="All servers are down.",
+                        url=url,
+                        response=response,
+                        base_exception=RuntimeError("All servers are down.")  # is this a good idea?
+                    )
 
             if select in response.keys():
                 results.extend(response[select])
@@ -201,7 +248,15 @@ class Interface(object):
 
         if delay > 0.9999:
             error_delay = "Issue with DataQuery - requests should not be throttled."
-            raise RuntimeError(error_delay)
+            # raise RuntimeError(error_delay)
+            raise DQException(
+                message=error_delay,
+                url=endpoint,
+                # response=None,
+                base_exception=RuntimeError(error_delay)
+            )
+            # only the endpoint is available in this scope, so it is used as the url.
+            # response is not available in this scope.
 
         no_tickers = len(tickers)
         print(f"Number of expressions requested {no_tickers}.")
@@ -224,7 +279,13 @@ class Interface(object):
         tick_list_compr = [tickers[(i * b): (i * b) + b] for i in range(iterations)]
 
         unpack = list(chain(*tick_list_compr))
-        assert len(unpack) == len(set(unpack)), "List comprehension incorrect."
+        # assert len(unpack) == len(set(unpack)), "List comprehension incorrect."
+        if len(unpack) != len(set(unpack)):
+            error = "List comprehension incorrect."
+            raise DQException(
+                message=error,
+            )
+            # not relevant to add url and response here.
 
         thread_output = []
         final_output = []
@@ -342,12 +403,20 @@ class Interface(object):
         :return: <pd.DataFrame> df: ['cid', 'xcat', 'real_date'] + [original_metrics].
         """
 
+        # for metric in original_metrics:
+        #     assert metric in [
+        #         "value",
+        #         "eop_lag",
+        #         "mop_lag",
+        #         "grading"], f"Incorrect metric passed: {metric}."
+
         for metric in original_metrics:
-            assert metric in [
-                "value",
-                "eop_lag",
-                "mop_lag",
-                "grading"], f"Incorrect metric passed: {metric}."
+            if metric not in ["value", "eop_lag", "mop_lag", "grading"]:
+                error = f"Incorrect metric passed: {metric}."
+                raise DQException(
+                    message=error,
+                )
+
 
         unique_tix = list(set(expression))
 
@@ -402,9 +471,14 @@ class Interface(object):
         try:
             results_copy.popitem()
         except Exception as err:
-            print(err)
-            print("None of the tickers are available in the Database.")
-            return
+            # print(err)
+            # print("None of the tickers are available in the Database.")
+            # return
+            return DQException(
+                message="None of the tickers are available in the Database.",
+                error=err,
+                # url?
+            )
         else:
             return self.dataframe_wrapper(results_dict, no_metrics, original_metrics)
 
@@ -693,7 +767,14 @@ class Interface(object):
                 results["description"]
             )
             error = "Unable to connect to DataQuery. Reach out to DQ Support."
-            raise ConnectionError(error)
+            # raise ConnectionError(error)
+            endpoint = "/services/heartbeat"  # to be removed once  check_connection() is changed. 
+            raise DQException(
+                message=error,
+                url=self.access.base_url + endpoint,
+                header=self.access.headers,
+                base_exception=ConnectionError
+            )
 
     def download(
         self,
@@ -742,7 +823,11 @@ class Interface(object):
         elif tickers is None:
             tickers = []
 
-        assert isinstance(tickers, list)
+        # assert isinstance(tickers, list)
+        if not isinstance(tickers, list):
+            raise DQException(
+                message="'tickers' must be a list of strings",
+            )
 
         if isinstance(xcats, str):
             xcats = [xcats]
@@ -754,7 +839,12 @@ class Interface(object):
             metrics = [metrics]
 
         if xcats is not None:
-            assert isinstance(xcats, (list, tuple))
+            # assert isinstance(xcats, (list, tuple))
+            if not isinstance(xcats, (list, tuple)):
+                raise DQException(
+                    message="'xcats' must be a list of strings",
+                )
+
             add_tix = [cid + "_" + xcat for xcat in xcats for cid in cids]
             tickers = tickers + add_tix
 
