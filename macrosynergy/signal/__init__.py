@@ -1,4 +1,4 @@
 from .signal_return import SignalReturnRelations
-from macrosynergy.pnl.naive_pnl import NaivePnL
+from .target_positions import target_positions
 
-__all__ = ['SignalReturnRelations', 'NaivePnL']
+__all__ = ['SignalReturnRelations', 'target_positions']

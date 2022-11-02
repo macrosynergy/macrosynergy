@@ -20,7 +20,7 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
 
     """Displays a facet grid of time line charts of one or more categories.
 
-    :param <pd.Dataframe> df: standardized dataframe with the necessary columns:
+    :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: extended categories to plot. Default is all in DataFrame.
     :param <List[str]> cids: cross sections to plot. Default is all in DataFrame.
@@ -53,6 +53,8 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
 
     """
 
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+
     cs_mean_error = f"cs_mean parameter must be a Boolean Object."
     assert isinstance(cs_mean, bool), cs_mean_error
     error = f"cs_mean can only be set to True if a single category is passed. The " \
@@ -72,7 +74,7 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
     if len(cids) == 1:
         sns.set(rc={'figure.figsize': size})
         ax = sns.lineplot(data=df, x='real_date', y=val,
-                          hue='xcat', ci=None, sizes=size)
+                          hue='xcat', estimator=None, sizes=size)
 
         plt.axhline(y=0, c=".5")
         handles, labels = ax.get_legend_handles_labels()
@@ -90,7 +92,7 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
                            sharey=same_y, aspect=aspect,
                            height=height, col_order=cids)
         fg.map_dataframe(sns.lineplot, x='real_date', y=val,
-                         hue='xcat', hue_order=xcats, ci=None)
+                         hue='xcat', hue_order=xcats, estimator=None)
 
         if cs_mean:
             axes = fg.axes.flatten()

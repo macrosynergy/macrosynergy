@@ -1,26 +1,28 @@
-macrosynergy.panel package
-==========================
+.. figure:: ../_static/MACROSYNERGY_Logo_Primary.png
+
+panel
+=====
 
 Submodules
 ----------
 
-Click on the individual subpackages for the respective functionality:
-
 .. toctree::
-    :maxdepth: 3
+   :maxdepth: 4
 
-    panel/basket_performance
-    panel/category_relations
-    panel/converge_row
-    panel/dynamic_weights
-    panel/historic_vol
-    panel/make_relative_value
-    panel/make_zn_scores
-    panel/view_correlations
-    panel/view_grades
-    panel/view_ranges
-    panel/view_timelines
-
+   macrosynergy.panel.basket
+   macrosynergy.panel.category_relations
+   macrosynergy.panel.converge_row
+   macrosynergy.panel.expanding_statistics
+   macrosynergy.panel.historic_vol
+   macrosynergy.panel.make_blacklist
+   macrosynergy.panel.make_relative_value
+   macrosynergy.panel.make_zn_scores
+   macrosynergy.panel.panel_calculator
+   macrosynergy.panel.return_beta
+   macrosynergy.panel.view_correlations
+   macrosynergy.panel.view_grades
+   macrosynergy.panel.view_ranges
+   macrosynergy.panel.view_timelines
 
 Module contents
 ---------------
@@ -29,4 +31,4 @@ Module contents
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: basket_performance, category_relations, converge_row, dynamic_weights, historic_vol, make_relative_value, make_zn_scores, view_correlations, view_grades, view_ranges, view_timelines
+   :exclude-members:
