@@ -94,10 +94,8 @@ class Interface(object):
                 message="DataQuery request error response",
                 url=url,
                 response=self.access.headers
+                base_exception=ConnectionError
             )
-            # now in L113 was being used to create a timestamp for the error message.
-            # it has been commented as DQException adds a timestamp to the error message on creation.
-
         else:
 
             return int(results["code"]) == 200, results
@@ -255,8 +253,10 @@ class Interface(object):
             error = "List comprehension incorrect."
             raise DQException(
                 message=error,
+                base_exception=RuntimeError(error)
             )
             # not relevant to add url and response here.
+            # is this a ValueError?
 
         thread_output = []
         final_output = []
@@ -798,6 +798,7 @@ class Interface(object):
         if not isinstance(tickers, list):
             raise DQException(
                 message="'tickers' must be a list of strings",
+                base_exception=TypeError
             )
 
         if isinstance(xcats, str):
@@ -814,6 +815,7 @@ class Interface(object):
             if not isinstance(xcats, (list, tuple)):
                 raise DQException(
                     message="'xcats' must be a list of strings",
+                    base_exception=TypeError
                 )
 
             add_tix = [cid + "_" + xcat for xcat in xcats for cid in cids]

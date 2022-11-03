@@ -23,18 +23,37 @@ def valid_response(r: requests.Response) -> dict:
     code is 200, able to access DataQuery's API.
     """
     if r.status_code == 401:
-        raise RuntimeError(
-            f"Authentication error - unable to access DataQuery:\n{r.text}"
+        # raise RuntimeError(
+        #     f"Authentication error - unable to access DataQuery:\n{r.text}"
+        # )
+        raise DQException(
+            message=f"Authentication error - unable to access DataQuery:\n{r.text}",
+            status_code=r.status_code,
+            text=r.text,
+            url=r.url,
+            response_object=r,
         )
+
 
     elif r.text[0] != "{":
 
         # Authentication check.
         condition: str = r.text.split("-")[1].strip().split("<")[0]
         if condition == "Authentication Failure":
-            raise RuntimeError(
-                condition + " - unable to access DataQuery. Password expired."
+            # raise RuntimeError(
+            #     condition + " - unable to access DataQuery. Password expired."
+            # )
+            raise DQException(
+                message=condition + " - unable to access DataQuery. Password/token expired.",
+                url = r.url,
+                status_code = r.status_code,
+                headers = r.headers,
+                base_exception=RuntimeError,
+                response_object = r,
+                # is this a good idea?
             )
+
+
 
     # assert r.ok, (
     #     f"Access issue status code {r.status_code},"
@@ -47,7 +66,8 @@ def valid_response(r: requests.Response) -> dict:
             headers=r.headers,
             text=r.text,
             url=r.url,
-            timestamp=r.headers.get(key="Date", default=datetime.datetime.utcnow()),
+            response_object=r
+            # again; is this a good idea?
         )
 
     return r.json()
@@ -65,7 +85,12 @@ def dq_request(
 
     """
     request_error = f"Unknown request method {method} not in ('get', 'post')."
-    assert method in ("get", "post"), request_error
+    # assert method in ("get", "post"), request_error
+    if method not in ("get", "post"):
+        raise DQException(
+            message=request_error,
+            base_exception=RuntimeError,
+                    )
 
     with requests.request(
         method=method,
@@ -106,10 +131,20 @@ class CertAuth(object):
     ):
 
         error_user = f"username must be a <str> and not <{type(username)}>."
-        assert isinstance(username, str), error_user
+        # assert isinstance(username, str), error_user
+        if not isinstance(username, str):
+            raise DQException(
+                message=error_user,
+                base_exception=TypeError,
+            )
 
         error_password = f"password must be a <str> and not <{type(password)}>."
-        assert isinstance(password, str), error_password
+        # assert isinstance(password, str), error_password
+        if not isinstance(password, str):
+            raise DQException(
+                message=error_password,
+                base_exception=TypeError,
+            )
 
         self.auth: str = base64.b64encode(
             bytes(f"{username:s}:{password:s}", "utf-8")
@@ -137,14 +172,26 @@ class CertAuth(object):
 
         """
         dir_error = f"{file_type:s} file must be a <str> not <{type(directory)}>."
-        assert isinstance(directory, str), dir_error
+        # assert isinstance(directory, str), dir_error
+        if not isinstance(directory, str):
+            raise DQException(
+                message=dir_error,
+                base_exception=TypeError,
+            )
+
 
         condition = (os.path.exists(directory) and os.path.isfile(directory))
         if not condition:
-            raise OSError(
-                f"The directory received, {directory}, does not contain the "
-                f"respective file, {file_type}."
-            )
+            # raise OSError(
+            #     f"The directory received, {directory}, does not contain the "
+            #     f"respective file, {file_type}."
+            # )
+            raise DQException(
+                    message=f"The directory received, {directory}, does not contain the respective file, {file_type}.",
+                    base_exception=OSError,
+                    )
+                    # or should it be a FileNotFoundError?
+                    # should the error be raised directly or should it be a DQException?
 
         return directory
 
@@ -186,11 +233,25 @@ class OAuth(object):
         self.__dq_api_resource_id: str = dq_resource_id
 
         id_error = f"client_id argument must be a <str> and not <{type(client_id)}>."
-        assert isinstance(client_id, str), id_error
+        # assert isinstance(client_id, str), id_error
+        if not isinstance(client_id, str):
+            DQException(
+                        message=id_error,
+                        base_exception=TypeError,
+                        )
+
+
+
         self.client_id: str = client_id
 
         secret_error = f"client_secret must be a str and not <{type(client_secret)}>."
-        assert isinstance(client_secret, str), secret_error
+        # assert isinstance(client_secret, str), secret_error
+        if not isinstance(client_secret, str):
+            DQException(
+                        message=secret_error,
+                        base_exception=TypeError,
+                        )
+        
 
         self.client_secret: str = client_secret
         self._stored_token: Optional[dict] = None
