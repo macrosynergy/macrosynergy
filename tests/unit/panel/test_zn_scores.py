@@ -55,7 +55,7 @@ class TestAll(unittest.TestCase):
     def test_rolling_window(self):
 
         # Test the application of a rolling window. The size of the window is determined
-        # by the "max_wind" parameter. The window will move through the series and update
+        # by the "max_obs" parameter. The window will move through the series and update
         # the current sample according to the estimation frequency: "d", "m", "q".
         # The "window" will only shift along the series once it has been fully populated.
 
@@ -71,11 +71,11 @@ class TestAll(unittest.TestCase):
 
         index_df = dfw.index
         # 5 years worth of data.
-        max_wind = 1250
+        max_obs = 1250
 
         deck = deque(
             # Index has already been trimmed to include only valid timestamps.
-            index_df[0:(0 + max_wind)], maxlen=max_wind
+            index_df[0:(0 + max_obs)], maxlen=max_obs
         )
 
         for i, date in enumerate(list(index_df[:1255])):
@@ -89,7 +89,7 @@ class TestAll(unittest.TestCase):
                 # will be removed and replaced by the next realised date. Confirm this
                 # logic stands and that the first date moves daily through the series:
                 # "2010-01-01", "2010-01-04", "2010-01-05" etc.
-                self.assertTrue(first_observation == index_df[(i - max_wind) + 1])
+                self.assertTrue(first_observation == index_df[(i - max_obs) + 1])
 
     def test_pan_neutral(self):
 

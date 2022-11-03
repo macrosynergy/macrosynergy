@@ -6,6 +6,7 @@ from collections import deque
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
+
 def rolling_date(df_out_index: pd.DatetimeIndex, deck: deque, date: pd.Timestamp):
     """Adjusts the start date of the time-period the neutral level is computed over.
 
@@ -31,9 +32,10 @@ def rolling_date(df_out_index: pd.DatetimeIndex, deck: deque, date: pd.Timestamp
     first_observation = deck[0]
     return first_observation
 
+
 def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
                    stat: str = 'mean', sequential: bool = True,
-                   min_obs: int = 261, max_wind: int = None, iis: bool = True):
+                   min_obs: int = 261, max_obs: int = None, iis: bool = True):
 
     """
     Compute statistic based on an expanding sample.
@@ -46,7 +48,7 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
     :param <bool> sequential: if True (default) the statistic is estimated sequentially.
         If this set to false a single value is calculated per time series, based on
         the full sample.
-    :param <int> max_wind: the maximum number of observations, business days, allowed in
+    :param <int> max_obs: the maximum number of observations, business days, allowed in
         the expanding window to calculate zn-scores.
     :param <int> min_obs: minimum required observations for calculation of the
         statistic in days.
@@ -56,26 +58,22 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
 
     :return: Time series DataFrame of the chosen statistic across all columns.
     """
-    max_wind_bool = True if max_wind is not None else False
+    max_obs_bool = True if max_obs is not None else False
 
     index_df = df.index
     df_out = pd.DataFrame(np.nan, index=index_df, columns=['value'])
-    # An adjustment for individual series' first realised value is not required given the
-    # returned DataFrame will be subtracted from the original DataFrame. The original
-    # DataFrame will implicitly host this information through NaN values such that when
-    # the arithmetic operation is made, any falsified values will be displaced by NaN
-    # values.
 
     # Handles for cross-sections with leading NaN values.
     first_observation = df.dropna(axis=0, how='all').index[0]
     first_index = np.where(df_out.index == first_observation)[0][0]
 
-    if max_wind_bool:
-        # Instantiate the double-ended Queue with the first "max_wind" number of
+    if max_obs_bool:
+        # Instantiate the double-ended Queue with the first "max_obs" number of
         # elements. Will exclude the leading NaN values.
         deck = deque(
-            index_df[first_index:(first_index + max_wind)], maxlen=max_wind
+            index_df[first_index:(first_index + max_obs)], maxlen=max_obs
         )
+        # Todo: double use of max_obs . One must be redundant.
 
     # Adjust for individual cross-sections' series commencing at different dates.
     first_estimation = df.dropna(axis=0, how='all').index[min_obs]
@@ -88,17 +86,17 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
         df_out["value"] = 0
 
     elif not sequential:
-        # The entire series is treated as in-sample. Will automatically handle NaN
-        # values.
         statval = df.stack().apply(stat)
         df_out["value"] = statval
 
     else:
 
         dates = dates_iter[dates_iter >= first_estimation]
+        # Todo: looks like much redundant code.
+        #  Just subtract smaller of max_obs and all available working days
         for date in dates:
 
-            if max_wind_bool and date > deck[-1]:
+            if max_obs_bool and date > deck[-1]:
 
                 first_observation = rolling_date(
                     df_out_index=index_df, deck=deck, date=date
@@ -118,7 +116,7 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
 
 def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
                    start: str = None, end: str = None, blacklist: dict = None,
-                   sequential: bool = True, min_obs: int = 261, max_wind: int = None,
+                   sequential: bool = True, min_obs: int = 261, max_obs: int = None,
                    iis: bool = True, neutral: str = 'zero', est_freq: str = 'd',
                    thresh: float = None, pan_weight: float = 1, postfix: str = 'ZN'):
 
@@ -149,11 +147,11 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         zn_scores. Default is 261. The parameter is only applicable if the "sequential"
         parameter is set to True. Otherwise the neutral level and the standard deviation
         are both computed in-sample and will use the full sample.
-    :param <int> max_wind: the maximum number of observations, business days, allowed in
+    :param <int> max_obs: the maximum number of observations, business days, allowed in
         the expanding window to calculate zn-scores. If defined, the expanding
-        window will transition to a rolling window of size 'max_wind'. Its purpose is to
-        exclude realised values that are considered too "old" (different data generating
-        process). Default is None and the entire expanding series will be used.
+        window will transition to a rolling window of size 'max_obs'. Its purpose is to
+        exclude values that are considered too "old" from estimation
+        Default is None and the entire expanding series will be used.
     :param <bool> iis: if True (default) zn-scores are also calculated for the initial
         sample period defined by min-obs on an in-sample basis to avoid losing history.
         This is irrelevant if sequential is set to False.
@@ -201,17 +199,16 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     assert isinstance(est_freq, str) and est_freq in frequencies, error_freq
     pd_freq = dict(zip(frequencies, ['B', 'W-Fri', 'BM', 'BQ']))
 
-    if max_wind is not None:
-        assert isinstance(max_wind, int) and max_wind >= 0, error_min
+    if max_obs is not None:
+        assert isinstance(max_obs, int) and max_obs >= 0, error_min
         pd_freq_dur = dict(zip(pd_freq.keys(), [1, 5, 21, 63]))
 
-        max_wind_error = "The size of the rolling window must be greater than the chosen" \
-                         " estimation frequency."
-        assert max_wind >= pd_freq_dur[est_freq], max_wind_error
+        max_obs_error = "Maximum window must be longer than one estimation interval"
+        assert max_obs >= pd_freq_dur[est_freq], max_obs_error
 
-        max_min_obs = "The size of the rolling window must be greater than the minimum " \
-                      "observation date parameter."
-        assert max_wind > min_obs, max_min_obs
+        if not iis:
+            max_min_obs = "Maximum window must be longer than minimum window."
+            assert max_obs > min_obs, max_min_obs
 
     # --- Prepare re-estimation dates and time-series DataFrame.
 
@@ -237,7 +234,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
         df_neutral = expanding_stat(
             dfw, dates_iter, stat=neutral, sequential=sequential, min_obs=min_obs,
-            max_wind=max_wind, iis=iis
+            max_obs=max_obs, iis=iis
         )
         dfx = dfw.sub(df_neutral['value'], axis=0)
         df_mabs = expanding_stat(
@@ -314,7 +311,7 @@ if __name__ == "__main__":
     # Monthly: panel + cross.
 
     dfzm = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids,
-                          blacklist=black, iis=True, neutral='mean',
+                          blacklist=black, iis=True, neutral='mean', max_obs=1260,
                           pan_weight=0.75, min_obs=261, est_freq="m")
     print(dfzm)
 
