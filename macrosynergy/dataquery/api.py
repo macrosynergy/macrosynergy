@@ -7,7 +7,6 @@ import time
 import socket
 import datetime
 import logging
-import json
 
 from typing import List, Tuple
 from math import ceil, floor
@@ -15,40 +14,11 @@ from collections import defaultdict
 from itertools import chain
 from typing import Optional
 from macrosynergy.dataquery.auth import CertAuth, OAuth
+from macrosynergy.dataquery.exceptions import DQException
 
 logger = logging.getLogger(__name__)
 
 
-class DQException(Exception):
-    """DataQuery Exception."""
-    def __init__(self, message, base_exception=None ,**kwargs):
-        super().__init__(message)
-        self.message = message
-        self.base_exception = base_exception
-
-        if ("header" in kwargs) and ("Date" in kwargs["header"]):
-            self.timestamp = kwargs["header"]["Date"]
-        # key error prevented by short circuit
-        # automatically goes to looking for timestamp instead of if if else else       
-        else:
-            if "timestamp" not in kwargs:
-                self.timestamp = datetime.datetime.utcnow().isoformat()
-        # if timestamp is in kwargs, it will be loaded in Line 41; less code.
-        # Exception has a __traceback__ attribute.
-        if (set(self.__dict__.keys()) & set(kwargs.keys())):
-            raise ValueError("Key-word arguments overlap with DQException attributes")
-            # and also with the Exception attributes
-        self.__dict__.update(kwargs)
-        # update the attributes with the key-word arguments
-        
-    def __str__(self):
-        r = f"{self.message} with {json.dumps(self.__dict__)}"
-        if self.base_exception:
-            r += f"caused by {self.base_exception}"
-        return r
-    
-    def __repr__(self):
-        return self.__str__() + super().__repr__()
 
 
 class Interface(object):
@@ -855,5 +825,10 @@ class Interface(object):
             suppress_warning=suppress_warning,
             start_date=start_date
         )
+        
+        if not isinstance(df, pd.DataFrame) or df.empty:
+            raise DQException(
+                message="No/corrupt data returned from DataQuery",
+            )
 
         return df

@@ -6,6 +6,8 @@ import requests
 from typing import Optional, Dict, Tuple
 from datetime import datetime
 
+from macrosynergy.dataquery.exceptions import DQException
+
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 OAUTH_BASE_URL: str = (
     "https://api-developer.jpmorgan.com/research/dataquery-authe/api/v2"
@@ -34,10 +36,19 @@ def valid_response(r: requests.Response) -> dict:
                 condition + " - unable to access DataQuery. Password expired."
             )
 
-    assert r.ok, (
-        f"Access issue status code {r.status_code},"
-        f" headers: {r.headers}, text: {r.text} for url {r.url}."
-    )
+    # assert r.ok, (
+    #     f"Access issue status code {r.status_code},"
+    #     f" headers: {r.headers}, text: {r.text} for url {r.url}."
+    # )
+
+    if not r.ok:
+        raise DQException(
+            message=f"Access issue status code {r.status_code}",
+            headers=r.headers,
+            text=r.text,
+            url=r.url,
+            timestamp=r.headers.get(key="Date", default=datetime.datetime.utcnow()),
+        )
 
     return r.json()
 
