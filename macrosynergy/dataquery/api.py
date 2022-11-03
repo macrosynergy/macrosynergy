@@ -93,7 +93,7 @@ class Interface(object):
             raise DQException(
                 message="DataQuery request error response",
                 url=url,
-                response=self.access.headers
+                response=self.access.headers,
                 base_exception=ConnectionError
             )
         else:
