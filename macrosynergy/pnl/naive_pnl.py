@@ -1,4 +1,3 @@
-
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -41,9 +40,12 @@ class NaivePnL:
                  cids: List[str] = None, bms: Union[str, List[str]] = None,
                  start: str = None, end: str = None, blacklist: dict = None):
 
+        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+
         # Will host the benchmarks.
         dfd = df.copy()
 
+        self.dfd = df
         assert isinstance(ret, str), "The return category expects a single <str>."
         self.ret = ret
         xcats = [ret] + sigs
@@ -81,9 +83,7 @@ class NaivePnL:
     def add_bm(self, df: pd.DataFrame, bms: List[str],
                tickers: List[str]):
         """
-        Return benchmark DataFrames which will be appended to the instance's DataFrame.
-        Additionally, populate the benchmark dictionary which is used to host any valid
-        benchmarks.
+        Returns a dictionary with benchmark return series.
 
         :param <pd.DataFrame> df: aggregate DataFrame passed into the Class.
         :param <List[str]> bms: benchmark return tickers.
@@ -103,8 +103,11 @@ class NaivePnL:
             if dfa.shape[0] == 0:
                 print(f"{bm} has no observations in the DataFrame.")
             else:
-                bm_dict[bm] = dfa.pivot(index='real_date', columns='xcat',
-                                        values='value').squeeze(axis=0)
+                df_single_bm = dfa.pivot(
+                    index='real_date', columns='xcat', values='value'
+                )
+                df_single_bm.columns = [bm]
+                bm_dict[bm] = df_single_bm
                 if bm not in tickers:
                     self.df = update_df(self.df, dfa)
 
@@ -199,7 +202,7 @@ class NaivePnL:
         dfw = dfw[['real_date', 'psig', 'cid']]
 
         # Isolate the required signals on the re-balancing dates. Only concerned with the
-        # respective signal on the re-balancing date. However, the produced dataframe
+        # respective signal on the re-balancing date. However, the produced DataFrame
         # will only be defined over the re-balancing dates. Therefore, merge the
         # aforementioned DataFrame with the original DataFrame such that all business
         # days are included. The intermediary dates, dates between re-balancing dates,
@@ -212,8 +215,9 @@ class NaivePnL:
         rebal_merge = r_dates_df.merge(dfw, how='left', on=['real_date', 'cid'])
         # Re-establish the daily date series index where the intermediary dates, between
         # the re-balancing dates, will be populated using a forward fill.
-        rebal_merge = dfw[['real_date', 'cid']].merge(rebal_merge, how='left',
-                                                      on=['real_date', 'cid'])
+        rebal_merge = dfw[['real_date', 'cid']].merge(
+            rebal_merge, how='left', on=['real_date', 'cid']
+        )
         rebal_merge['psig'] = rebal_merge['psig'].fillna(method='ffill').shift(rebal_slip)
         rebal_merge = rebal_merge.sort_values(['cid', 'real_date'])
 
@@ -423,10 +427,13 @@ class NaivePnL:
         return panel_pnl[['cid', 'xcat', 'real_date', 'value']]
 
     def plot_pnls(self, pnl_cats: List[str] = None, pnl_cids: List[str] = ['ALL'],
-                  start: str = None, end: str = None, figsize: Tuple = (10, 6),
-                  title: str = "Cumulative Naive PnL",
-                  xcat_labels: List[str] = None):
-
+                  start: str = None, end: str = None,
+                  facet: bool = False,
+                  ncol: int = 3, same_y: bool = True,
+                  title: str = "Cumulative Naive PnL", xcat_labels: List[str] = None,
+                  figsize: Tuple = (12, 7), aspect: float = 1.7,
+                  height: float = 3, label_adj: float = 0.05,
+                  title_adj: float = 0.95):
         """
         Plot line chart of cumulative PnLs, single PnL, multiple PnL types per
         cross section, or multiple cross sections per PnL type.
@@ -440,10 +447,20 @@ class NaivePnL:
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
             in df is used.
-        :param <tuple> figsize: tuple of plot width and height. Default is (10,6).
+        :param <bool> facet: parameter to control whether each PnL series is plotted on
+            its own respective grid using Seaborn's FacetGrid. Default is False and all
+            series will be plotted in the same graph.
+        :param <int> ncol: number of columns in facet grid. Default is 3.
+        :param <bool> same_y: if True (default) all plots in facet grid share same y axis.
         :param <str> title: allows entering text for a custom chart header.
         :param <List[str]> xcat_labels: custom labels to be used for the PnLs.
-
+        :param <tuple> figsize: tuple of plot width and height. Default is (12 , 7).
+        :param <float> aspect: width-height ratio for plots in facet. Default is 1.7.
+        :param <float> height: height of plots in facet. Default is 3.
+        :param <float> label_adj: parameter that sets bottom of figure to fit the label.
+            Default is 0.05.
+        :param <float> title_adj: parameter that sets top of figure to accommodate title.
+            Default is 0.95.
         """
 
         if pnl_cats is None:
@@ -459,7 +476,7 @@ class NaivePnL:
             dif = set(pnl_cats_copy).difference(set(pnl_cats))
             if dif:
                 print(f"The PnL(s) requested, {dif}, have not been defined on the "
-                      f"Class.")
+                      f"Class. The defined PnL(s) are {self.pnl_names}.")
             elif len(pnl_cats) == 0:
                 raise ValueError("There are not any valid PnL(s) to display given the "
                                  "request.")
@@ -467,41 +484,70 @@ class NaivePnL:
         assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
         error_message = "The number of custom labels must match the defined number of " \
                         "categories in pnl_cats."
+
+        dfx = reduce_df(
+            self.df, pnl_cats, pnl_cids, start, end, self.black, out_all=False
+        )
+
         if xcat_labels is not None:
             assert(len(xcat_labels) == len(pnl_cats)), error_message
+
+            xcat_label_dict = dict(zip(pnl_cats, xcat_labels))
+            dfx = dfx.replace(xcat_label_dict)
         else:
             pnl_cats_c = pnl_cats.copy()
             xcat_labels = pnl_cats_c
 
-        dfx = reduce_df(self.df, pnl_cats, pnl_cids, start,
-                        end, self.black, out_all=False)
-
         no_cids = len(pnl_cids)
 
-        sns.set_theme(style='whitegrid', palette='colorblind',
-                      rc={'figure.figsize': figsize})
+        sns.set_theme(
+            style='whitegrid', palette='colorblind', rc={'figure.figsize': figsize}
+        )
 
         if no_cids == 1:
-            dfx['cum_value'] = dfx.groupby('xcat').cumsum()
-
-            ax = sns.lineplot(data=dfx, x='real_date', y='cum_value',
-                              hue='xcat', hue_order=pnl_cats,
-                              estimator=None, lw=1)
-            plt.legend(loc='upper left', labels=xcat_labels)
-            leg = ax.axes.get_legend()
-            leg.set_title('PnL category(s) for ' + pnl_cids[0])
-
+            plot_by = "xcat"
+            col_order = pnl_cats
+            labels = xcat_labels
+            legend_title = "PnL Category(s)"
         else:
-            dfx['cum_value'] = dfx.groupby('cid').cumsum()
+            plot_by = "cid"
+            col_order = labels = pnl_cids
+            legend_title = "Cross Section(s)"
 
-            ax = sns.lineplot(data=dfx, x='real_date', y='cum_value',
-                              hue='cid', estimator=None, lw=1)
+        dfx['cum_value'] = dfx.groupby(plot_by).cumsum()
+
+        if facet:
+            fg = sns.FacetGrid(
+                data=dfx, col=plot_by, col_wrap=ncol, sharey=same_y, aspect=aspect,
+                height=height, col_order=labels, legend_out=True
+            )
+            fg.fig.suptitle(title, fontsize=20, x=0.4)
+
+            fg.fig.subplots_adjust(top=title_adj)
+
+            fg.map_dataframe(
+                sns.lineplot, x="real_date", y="cum_value", hue=plot_by,
+                hue_order=labels, estimator=None, lw=1
+            )
+            for ax in fg.axes.flat:
+                ax.axhline(y=0, color="black", linestyle='--', linewidth=1)
+
+            fg.set_titles(row_template='', col_template='{col_name}')
+            fg.set_axis_labels(x_var="Year", y_var="% of risk capital, no compounding")
+        
+        else:
+            ax = sns.lineplot(
+                data=dfx, x='real_date', y='cum_value', hue=plot_by,
+                hue_order=labels, estimator=None, lw=1
+            )
+
             leg = ax.axes.get_legend()
-            leg.set_title('Cross Sections')
+            leg.set_title(legend_title)
+            plt.title(title, fontsize=20)
 
-        plt.title(title, fontsize=16)
-        plt.xlabel('')
-        plt.ylabel('% of risk capital, no compounding')
+            plt.xlabel("Year")
+            plt.ylabel("% of risk capital, no compounding")
+
         plt.axhline(y=0, color='black', linestyle='--', lw=1)
         plt.show()
 
@@ -609,7 +655,7 @@ class NaivePnL:
         assert isinstance(freq, str) and freq in ['m', 'q'], error_time
 
         metric_error = "The metric must either be 'direction' or 'strength'."
-        assert metric in ['direction', 'strength'], metric_error
+        assert metric in ['direction', "strength"], metric_error
 
         if title is None:
             title = f"Directional Bar Chart of {pnl_name}."
@@ -629,18 +675,18 @@ class NaivePnL:
         # down-sampling frequency.
         df_s = dfw.sum(axis=1)
         index = np.array(df_s.index)
-        df_signal = pd.DataFrame(data=df_s.to_numpy(), columns=['aggregate_signal'],
+        df_signal = pd.DataFrame(data=df_s.to_numpy(), columns=["aggregate_signal"],
                                  index=index)
 
         df_signal = df_signal.reset_index(level=0)
-        df_signal = df_signal.rename({'index': ''}, axis='columns')
+        df_signal = df_signal.rename({"index": ""}, axis="columns")
         dates = [pd.Timestamp(d) for d in df_signal['']]
         df_signal[''] = np.array(dates)
 
-        plt.style.use('ggplot')
+        plt.style.use("ggplot")
 
         fig, ax = plt.subplots()
-        df_signal.plot.bar(x='', y='aggregate_signal', ax=ax, title=title,
+        df_signal.plot.bar(x="", y="aggregate_signal", ax=ax, title=title,
                            ylabel=y_label, legend=False)
 
         ticklabels = [''] * len(df_signal)
@@ -730,11 +776,18 @@ class NaivePnL:
         df.iloc[4, :] = dfw.rolling(21).sum().min()
         df.iloc[5, :] = dfw.rolling(6*21).sum().min()
         if len(list_for_dfbm) > 0:
-            bm_df = pd.concat(list(self._bm_dict.values()),
-                              axis=1)
+            bm_df = pd.concat(
+                list(self._bm_dict.values()),
+                axis=1
+            )
             for i, bm in enumerate(list_for_dfbm):
-                correlation = dfw.corrwith(bm_df.iloc[:, i], axis=0,
-                                           method='pearson')
+                index = dfw.index.intersection(bm_df.index)
+                correlation = dfw.loc[index].corrwith(
+                    bm_df.loc[index].iloc[:, i],
+                    axis=0,
+                    method='pearson',
+                    drop=True
+                )
                 df.iloc[6 + i, :] = correlation
 
         df.iloc[6 + len(list_for_dfbm), :] = dfw.resample('M').sum().count()
@@ -811,4 +864,8 @@ if __name__ == "__main__":
 
     pnl.agg_signal_bars(
         pnl_name="PNL_GROWTH_NEG", freq="m", metric="direction", title=None,
+    )
+
+    pnl.plot_pnls(
+        pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=False, xcat_labels=["S_1", "S_2"]
     )

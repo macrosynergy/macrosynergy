@@ -30,12 +30,13 @@ Typing :: Typed
 Operating System :: Microsoft :: Windows
 Operating System :: POSIX
 Operating System :: MacOS
+Development Status :: 4 - Beta
 """
 
 MAJOR = 0
 MINOR = 0
-MICRO = 17
-ISRELEASED = False
+MICRO = 21
+ISRELEASED = True
 VERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
 
 if sys.version_info >= (3, 10):
@@ -155,6 +156,7 @@ def setup_package():
         project_urls={
             "Bug Tracker": "https://github.com/macrosynergy/macrosynergy/issues",
             "Source Code": "https://github.com/macrosynergy/macrosynergy",
+            "Documentation": "https://docs.macrosynergy.com"
         },
         classifiers=[_f for _f in CLASSIFIERS.split('\n') if _f],
         platforms=["Windows", "Linux", "Mac OS-X"],

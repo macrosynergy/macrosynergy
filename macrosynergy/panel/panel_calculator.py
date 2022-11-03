@@ -107,8 +107,15 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None,
 
     # A. Asserts
 
-    cols = ['cid', 'xcat', 'real_date', 'value']
-    assert set(cols).issubset(set(df.columns))
+    cols = ["cid", "xcat", "real_date", "value"]
+
+    col_error = f"The DataFrame must contain the necessary columns: {cols}."
+    assert set(cols).issubset(set(df.columns)), col_error
+    # Removes any columns beyond the required.
+    df = df.loc[:, cols]
+
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+
     assert isinstance(calcs, list), "List of functions expected."
 
     error_formula = "Each formula in the panel calculation list must be a string."

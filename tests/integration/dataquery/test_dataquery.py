@@ -34,7 +34,7 @@ class TestDataQueryOAuth(unittest.TestCase):
 
         data = dq.download(
                 tickers="EUR_FXXR_NSA",
-                start_date=(datetime.date.today() - datetime.timedelta(days=10)).isoformat()
+                start_date=(datetime.date.today() - datetime.timedelta(days=30)).isoformat()
             )
         self.assertIsInstance(data, pd.DataFrame)
 

@@ -1,3 +1,4 @@
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -84,13 +85,16 @@ class CategoryRelations(object):
         assert len(xcats) == 2, "Expects two fields."
 
         # Select the cross-sections available for both categories.
+        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+
         shared_cids = CategoryRelations.intersection_cids(df, xcats, cids)
 
         # Will potentially contain NaN values if the two categories are defined over
         # time-periods.
-        df = categories_df(df, xcats, shared_cids, val, start=start,
-                           end=end, freq=freq, blacklist=blacklist, years=years,
-                           lag=lag, fwin=fwin, xcat_aggs=xcat_aggs)
+        df = categories_df(
+            df, xcats, shared_cids, val=val, start=start, end=end, freq=freq,
+            blacklist=blacklist, years=years, lag=lag, fwin=fwin, xcat_aggs=xcat_aggs
+        )
 
         if xcat1_chg is not None:
 
@@ -553,6 +557,7 @@ if __name__ == "__main__":
     df_xcats.loc['INFL'] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    dfd["grading"] = np.ones(dfd.shape[0])
     black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
 
     # All AUD GROWTH locations.
@@ -566,10 +571,10 @@ if __name__ == "__main__":
 
     cidx = ['AUD', 'CAD', 'GBP', 'USD']
 
-    cr = CategoryRelations(dfdx, xcats=["CRY", "XR"], freq="M", lag=1,
-                           cids=cidx, xcat_aggs=["mean", "sum"],
-                           start="2001-01-01", blacklist=black,
-                           years=None)
+    cr = CategoryRelations(
+        dfdx, xcats=["CRY", "XR"], freq="M", lag=1, cids=cidx, xcat_aggs=["mean", "sum"],
+        start="2001-01-01", blacklist=black, years=None
+    )
 
     cr.reg_scatter(
         labels=False, separator=None, title="Carry and Return", xlab="Carry",

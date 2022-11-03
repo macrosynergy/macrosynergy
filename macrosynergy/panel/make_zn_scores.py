@@ -115,6 +115,7 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
     df_out.columns.name = 'cid'
     return df_out
 
+
 def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
                    start: str = None, end: str = None, blacklist: dict = None,
                    sequential: bool = True, min_obs: int = 261, max_wind: int = None,
@@ -171,9 +172,15 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         Lowest possible value is 0, i.e. parameters are all specific to cross section.
     :param <str> postfix: string appended to category name for output; default is "ZN".
 
-    :return <pd.Dataframe>: standardized dataframe with the zn-scores of the chosen xcat:
+    :return <pd.Dataframe>: standardized DataFrame with the zn-scores of the chosen xcat:
         'cid', 'xcat', 'real_date' and 'value'.
     """
+
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+
+    expected_columns = ["cid", "xcat", "real_date", "value"]
+    col_error = f"The DataFrame must contain the necessary columns: {expected_columns}."
+    assert set(expected_columns).issubset(set(df.columns)), col_error
 
     # --- Assertions
 
@@ -208,9 +215,11 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
     # --- Prepare re-estimation dates and time-series DataFrame.
 
-    df = df.loc[:, ['cid', 'xcat', 'real_date', 'value']]
-    df = reduce_df(df, xcats=[xcat], cids=cids,
-                   start=start, end=end, blacklist=blacklist)
+    # Remove any additional metrics defined in the DataFrame.
+    df = df.loc[:, expected_columns]
+    df = reduce_df(
+        df, xcats=[xcat], cids=cids, start=start, end=end, blacklist=blacklist
+    )
 
     s_date = min(df['real_date'])
     e_date = max(df['real_date'])
@@ -300,10 +309,31 @@ if __name__ == "__main__":
              'GBP': ['2018-01-01', '2100-01-01']}
 
     dfd = make_qdf(df_cids, df_xcats, back_ar = 0.75)
+    dfd["grading"] = np.ones(dfd.shape[0])
 
     # Monthly: panel + cross.
-    # Apply the maximum window.
-    dfzm = make_zn_scores(
-        dfd, xcat='XR', sequential=True, cids=cids, blacklist=black, iis=True,
-        neutral='mean', pan_weight=0.75, min_obs=261, max_wind=500, est_freq="q"
-    )
+
+    dfzm = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids,
+                          blacklist=black, iis=True, neutral='mean',
+                          pan_weight=0.75, min_obs=261, est_freq="m")
+    print(dfzm)
+
+    # Weekly: panel + cross.
+    dfzw = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids,
+                          blacklist=black, iis=False, neutral='mean',
+                          pan_weight=0.5, min_obs=261, est_freq="w")
+
+    # Daily: panel. Neutral and standard deviation will be computed daily.
+    dfzd = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids,
+                          blacklist=black, iis=True, neutral='mean',
+                          pan_weight=1.0, min_obs=261, est_freq="d")
+
+    # Daily: cross.
+    dfd['ticker'] = dfd["cid"] + "_" + dfd["xcat"]
+    dfzd = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids,
+                          blacklist=black, iis=True, neutral='mean',
+                          pan_weight=0.0, min_obs=261, est_freq="d")
+
+    panel_df = make_zn_scores(dfd, 'CRY', cids, start="2010-01-04", blacklist=black,
+                              sequential=False, min_obs=0, neutral='mean',
+                              iis=True, thresh=None, pan_weight=0.75, postfix='ZN')

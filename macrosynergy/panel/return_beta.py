@@ -183,7 +183,7 @@ def return_beta(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     """
     Estimate sensitivities (betas) of return category with respect to single return.
     
-    :param <pd.Dataframe> df: standardized data frame with the necessary columns:
+    :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
         'cid', 'xcats', 'real_date' and 'value.
     :param <str> xcat:  return category based on the type of positions that are
         to be hedged.
@@ -231,6 +231,7 @@ def return_beta(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     """
 
     # Assertions.
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
     cols = ['cid', 'xcat', 'real_date', 'value']
     assert list(df.columns) == cols, f"Requires the columns: " \
@@ -268,16 +269,16 @@ def return_beta(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         warnings.warn(f"Return to be hedged for cross section {cid_hedge} is the hedge "
                       f"return and has been removed from the panel.")
 
-    # Wide time series dataframe of unhedged and benchmark returns.
+    # Wide time series DataFrame of unhedged and benchmark returns.
 
-    # --- Time series dataframe of unhedged returns.
+    # --- Time series DataFrame of unhedged returns.
 
     dfp = reduce_df(df, xcats=[xcat], cids=cids, start=start, end=end,
                     blacklist=blacklist)
     dfp_w = dfp.pivot(index='real_date', columns='cid', values='value')
     dfp_w = dfp_w.dropna(axis=0, how="all")
 
-    # --- Time series dataframe of benchmark return for relevant dates.
+    # --- Time series DataFrame of benchmark return for relevant dates.
 
     # The asset being used as the hedge could only be defined over a shorter time-period.
     dfh = reduce_df(df, xcats=[xcat_hedge], cids=cid_hedge,
@@ -327,7 +328,7 @@ def beta_display(df_hedge: pd.DataFrame, subplots: bool = False,
     Method used to visualise the hedging ratios across the panel: assumes a single
     category is used to hedge the primary asset.
 
-    :param <pd.DataFrame> df_hedge: dataframe with hedge ratios.
+    :param <pd.DataFrame> df_hedge: DataFrame with hedge ratios.
     :param <bool> subplots: matplotlib parameter to determine if each hedging series is
         displayed on separate subplots.
     :param <str> hr_name: label used to distinguish the hedged returns in the DataFrame.
