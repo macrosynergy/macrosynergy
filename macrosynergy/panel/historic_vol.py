@@ -4,6 +4,7 @@ import pandas as pd
 from typing import List, Union, Tuple
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
+from datetime import timedelta
 
 
 def expo_weights(lback_periods: int = 21, half_life: int = 11):
@@ -71,17 +72,15 @@ def flat_std(x: np.ndarray, remove_zeros: bool = True):
     mabs = np.mean(np.abs(x))
     return mabs
 
-def agg_by_cycle(df: pd.DataFrame, freq: str = "m", agg : str = "mean") -> pd.DataFrame:
+def get_cycles(dates_df: pd.DataFrame, freq: str = "m") -> pd.DataFrame:
     """Returns a DataFrame with values aggregated by the frequency specified.
 
-    :param <pd.DataFrame>  df: standardized DataFrame with the following necessary columns:
+    :param <pd.DataFrame>  dates_df: standardized DataFrame with the following necessary columns:
         'cid', 'xcats', 'real_date' and 'value'. Will contain all of the data across all
         macroeconomic fields.
         
     :param <str> freq: Frequency of the data. Options are 'm' for monthly, 'q' for
         quarterly and 'a' for annual. Default is 'm'.
-    :param <str> agg: Aggregation method. Options are 'mean' and 'sum'. Default is 'mean'.
-        'last' means that the last value in the period is used.
     """
         
     def years_btwn_dates(start_date : pd.Timestamp, end_date : pd.Timestamp):
@@ -103,9 +102,9 @@ def agg_by_cycle(df: pd.DataFrame, freq: str = "m", agg : str = "mean") -> pd.Da
         return (end_date - next_monday).days // 7 + 1
     
     # should these be lambdas?
-        
-    freq, agg = freq.lower(), agg.lower()
-    dfc = df.copy()
+    
+    freq = freq.lower()
+    dfc = dates_df.copy()
     start_date = dfc['real_date'].min()
     group_func = {  
                     'y': years_btwn_dates,
@@ -114,10 +113,15 @@ def agg_by_cycle(df: pd.DataFrame, freq: str = "m", agg : str = "mean") -> pd.Da
                     'w': weeks_btwn_dates,
                     'd': lambda x, y: (y - x).days}[freq]
     dfc['cycleCount'] = dfc['real_date'].apply(lambda x: group_func(start_date, x))
-    
-    dfc = dfc.groupby(['cycleCount', 'cid', 'xcat']).agg({'real_date': 'last', 'value': agg}).reset_index()
-    dfc.drop(columns=['cycleCount'], inplace=True)
-    return dfc
+
+    triggers = dfc['cycleCount'].shift(-1) != dfc['cycleCount']
+    # triggers is now a boolean mask which is True where the calculation is triggered
+    # ____-____-____-____-_... <-- triggers (_ = False, - = True)
+
+    return triggers
+    # dfw.loc[dfw.index[triggers], :] gets all the rows and cols where triggers is True
+
+
 
 
 def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
@@ -175,23 +179,42 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     df = reduce_df(
         df, xcats=[xcat], cids=cids, start=start, end=end, blacklist=blacklist
     )
-
-    df = agg_by_cycle(df, freq=est_freq, agg='last')
     
     dfw = df.pivot(index='real_date', columns='cid', values='value')
 
+    dates_df = pd.DataFrame({'real_date': dfw.index})
+    triggers = get_cycles(dates_df, freq=est_freq)
+    trigger_dates = pd.DataFrame({'real_date': dfw.index[triggers]})
+    trigger_indices = trigger_dates.index
+    dates_df = None
+
     # The pandas in-built method df.rolling() will account for NaNs and start from the
     # "first valid index".
+    # if lback_meth == 'xma':
+    #     weights = expo_weights(lback_periods, half_life)
+    #     dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(
+    #         expo_std, w=weights, remove_zeros=remove_zeros
+    #     )
+    # else:
+    #     dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(
+    #         flat_std, remove_zeros=remove_zeros
+    #     )
+
+    dfwa = pd.DataFrame(index=dfw.index, columns=dfw.columns)
     if lback_meth == 'xma':
         weights = expo_weights(lback_periods, half_life)
-        dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(
-            expo_std, w=weights, remove_zeros=remove_zeros
-        )
+        for i in trigger_indices:
+            dfwa.loc[i, :] = np.sqrt(252) * dfw.loc[i-lback_periods:i, :].agg(
+                expo_std, w=weights, remove_zeros=remove_zeros
+            )
     else:
-        dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(
-            flat_std, remove_zeros=remove_zeros
-        )
+        for i in trigger_indices:
+            dfwa.loc[i, :] = np.sqrt(252) * dfw.loc[i-lback_periods:i, :].agg(
+                flat_std, remove_zeros=remove_zeros
+            )
 
+    # there is 100% a faster way to do this. find it. fix it. 
+            
     df_out = dfwa.stack().to_frame("value").reset_index()
 
     df_out['xcat'] = xcat + postfix
