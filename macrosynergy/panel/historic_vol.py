@@ -71,11 +71,80 @@ def flat_std(x: np.ndarray, remove_zeros: bool = True):
     mabs = np.mean(np.abs(x))
     return mabs
 
+def group_by_freq(df: pd.DataFrame, freq: str = "m", agg : str = "mean"):
+    """Returns a DataFrame with values aggregated by the frequency specified.
+
+    :param <pd.DataFrame>  df: standardized DataFrame with the following necessary columns:
+        'cid', 'xcats', 'real_date' and 'value'. Will contain all of the data across all
+        macroeconomic fields.
+        
+    :param <str> freq: Frequency of the data. Options are 'm' for monthly, 'q' for
+        quarterly and 'a' for annual. Default is 'm'.
+    :param <str> agg: Aggregation method. Options are 'mean' and 'sum'. Default is 'mean'.
+        'last' means that the last value in the period is used.
+    """
+    def months_btwn_dates(start_date : pd.Timestamp, end_date : pd.Timestamp):
+        """Returns the number of months between two dates."""
+        return (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month)
+
+    def quarters_btwn_dates(start_date : pd.Timestamp, end_date : pd.Timestamp):
+        """Returns the number of quarters between two dates."""
+        return (end_date.year - start_date.year) * 4 + (end_date.quarter - start_date.quarter)
+
+    def years_btwn_dates(start_date : pd.Timestamp, end_date : pd.Timestamp):
+        """Returns the number of years between two dates."""
+        return end_date.year - start_date.year
+
+    def weeks_btwn_dates(start_date : pd.Timestamp, end_date : pd.Timestamp):
+        """Returns the number of business weeks between two dates."""
+        # start date is any date. the next business day is the next Monday
+        next_monday = start_date + pd.offsets.BDay(7 - start_date.weekday())
+        return abs((end_date - next_monday).days) // 7
+    
+    # should these be lambdas?
+        
+    freq = freq.lower()
+    dfc = df.copy()
+    
+    start_date = dfc['real_date'].min()
+    group_func = {'m': months_btwn_dates,
+                    'q': quarters_btwn_dates,
+                    'a': years_btwn_dates,
+                    'w': weeks_btwn_dates,
+                    'd': lambda x, y: (y - x).days}[freq]
+    dfc['cycleCount'] = dfc['real_date'].apply(lambda x: group_func(start_date, x))
+    
+    # dfh = dfc[['cycleCount', 'real_date']]
+    # dfh = dfh.groupby('cycleCount').agg({'real_date': 'last'})
+    # dfc.drop(['real_date'], axis=1, inplace=True)
+        
+    
+    if agg == "mean":
+        # don't apply mean to 'cycleCount' or 'real_date'
+        dfc = dfc.groupby('cycleCount').mean()
+    elif agg == "sum":
+        dfc = dfc.groupby('cycleCount').sum()
+    elif agg == "last":
+        dfc = dfc.groupby('cycleCount').last()
+    
+    # dfc['real_date'] = dfh['real_date']
+    # set index
+        
+    return dfc
+        
+    
+                                        
+
+        
+    
+
+    
+
 
 def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                  lback_periods: int = 21, lback_meth: str = 'ma', half_life=11,
-                 start: str = None, end: str = None, blacklist: dict = None,
-                 remove_zeros: bool = True, postfix='ASD'):
+                 start: str = None, end: str = None, est_freq: str = 'd', 
+                 blacklist: dict = None, remove_zeros: bool = True, postfix='ASD'):
 
     """
     Estimate historic annualized standard deviations of asset returns. User Function.
@@ -99,6 +168,8 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df is
         used.
+    :param <str> est_freq: Frequency of the data. Options are 'd' for daily, 'm' for monthly,
+        'w' for weekly and 'q' for quarterly. Default is 'd'.    
     :param <dict> blacklist: cross sections with date ranges that should be excluded from
         the data frame. If one cross section has several blacklist periods append numbers
         to the cross section code.
