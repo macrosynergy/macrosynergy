@@ -182,11 +182,12 @@ class CertAuth(object):
         :param <dict> params: dictionary containing the required parameters for the
             ticker series.
         """
-        js, self.last_response, self.last_url = dq_request(
+        # js, self.last_response, self.last_url, msg 
+        js, success, self.last_url, msg= dq_request(
             url=url, cert=(self.crt, self.key), headers=self.headers, params=params
         )
 
-        return js
+        return js, msg, success
 
 
 class OAuth(object):
@@ -266,7 +267,7 @@ class OAuth(object):
 
         if not self._valid_token():
 
-            js, self.last_response, self.last_url = dq_request(
+            js, self.last_response, self.last_url, msg = dq_request(
                 url=self.__token_url,
                 data=self.token_data,
                 proxies={},
