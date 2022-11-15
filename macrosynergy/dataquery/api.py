@@ -126,7 +126,7 @@ class Interface(object):
         else:
             return True
 
-    def _fetch_threading(self, endpoint, params: dict, server_count: int = 5):
+    def _fetch_threading(self, endpoint, params: dict, server_count: int = 5) -> List[dict]:
         """
         Method responsible for requesting Tickers from the API. Able to pass in 20
         Tickers in a single request. If there is a request failure, the function will
@@ -279,6 +279,7 @@ class Interface(object):
                 for f in concurrent.futures.as_completed(thread_output):
                     try:
                         response = f.result()
+                        # TODO why?
                         if f.__dict__["_result"] is None:
                             return None
 

@@ -16,7 +16,7 @@ OAUTH_TOKEN_URL: str = "https://authe.jpmchase.com/as/token.oauth2"
 OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
 
 
-def valid_response(r: requests.Response) -> dict:
+def valid_response(r: requests.Response) -> Tuple[dict, bool, Optional[dict]]:
     """
     Prior to requesting any data, the function will confirm if a connection to the
     DataQuery API is able to be established given the credentials passed. If the status
@@ -34,43 +34,23 @@ def valid_response(r: requests.Response) -> dict:
             response_object=r,
         )
 
-
-    elif r.text[0] != "{":
-
-        # Authentication check.
-        condition: str = r.text.split("-")[1].strip().split("<")[0]
-        if condition == "Authentication Failure":
-            # raise RuntimeError(
-            #     condition + " - unable to access DataQuery. Password expired."
-            # )
-            raise DQException(
-                message=condition + " - unable to access DataQuery. Password/token expired.",
-                url = r.url,
-                status_code = r.status_code,
-                headers = r.headers,
-                base_exception=RuntimeError,
-                response_object = r,
-                # is this a good idea?
-            )
-
-
-
     # assert r.ok, (
     #     f"Access issue status code {r.status_code},"
     #     f" headers: {r.headers}, text: {r.text} for url {r.url}."
     # )
-
+    msg: Optional[dict] = None
     if not r.ok:
-        raise DQException(
-            message=f"Access issue status code {r.status_code}",
-            headers=r.headers,
-            text=r.text,
-            url=r.url,
-            response_object=r
-            # again; is this a good idea?
-        )
+        msg: Dict[str, str] = {
+            "headers": r.headers,
+            "status_code": r.status_code,
+            "text": r.text,
+            "url": r.url
+        }
+        js: Optional[dict] = None
+    else:
+        js = r.json()
 
-    return r.json()
+    return js, r.ok, msg
 
 
 def dq_request(
@@ -80,7 +60,7 @@ def dq_request(
     method: str = "get",
     cert: Optional[Tuple[str, str]] = None,
     **kwargs
-) -> Tuple[dict, str, str]:
+) -> Tuple[dict, str, str, Optional[dict]]:
     """Will return the request from DataQuery.
 
     """
@@ -90,7 +70,7 @@ def dq_request(
         raise DQException(
             message=request_error,
             base_exception=RuntimeError,
-                    )
+        )
 
     with requests.request(
         method=method,
@@ -102,9 +82,9 @@ def dq_request(
     ) as r:
         text: str = r.text
         last_url: str = r.url
-        js: dict = valid_response(r=r)
+        js, success, msg = valid_response(r=r)
 
-    return js, text, last_url
+    return js, success, last_url, msg
 
 
 class CertAuth(object):
@@ -299,19 +279,18 @@ class OAuth(object):
 
         return self._stored_token["access_token"]
 
-    def get_dq_api_result(self, url: str, params: dict = None) -> dict:
+    def get_dq_api_result(self, url: str, params: dict = None) -> Tuple[Optional[dict], Optional[dict], bool]:
         """Method used exclusively to request data from the API.
 
         :param <str> url: url to access DQ API.
         :param <dict> params: dictionary containing the required parameters for the
             ticker series.
         """
-
-        js, self.last_response, self.last_url = dq_request(
+        js, success, self.last_response, msg = dq_request(
             url=url,
             params=params,
             headers={"Authorization": "Bearer " + self._get_token()},
             proxies={},
         )
 
-        return js
+        return js, msg, success
