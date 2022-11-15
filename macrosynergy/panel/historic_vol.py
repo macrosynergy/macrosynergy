@@ -184,8 +184,9 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
     dates_df = pd.DataFrame({'real_date': dfw.index})
     triggers = get_cycles(dates_df, freq=est_freq)
-    trigger_dates = pd.DataFrame({'real_date': dfw.index[triggers]})
-    trigger_indices = trigger_dates.index
+    # trigger_dates = pd.DataFrame({'real_date': dfw.index[triggers]})
+    # trigger_indices = trigger_dates.index
+    trigger_indices = dfw.index[triggers]
     dates_df = None
 
     # The pandas in-built method df.rolling() will account for NaNs and start from the
@@ -200,20 +201,35 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     #         flat_std, remove_zeros=remove_zeros
     #     )
 
-    dfwa = pd.DataFrame(index=dfw.index, columns=dfw.columns)
-    if lback_meth == 'xma':
-        weights = expo_weights(lback_periods, half_life)
-        for i in trigger_indices:
-            dfwa.loc[i, :] = np.sqrt(252) * dfw.loc[i-lback_periods:i, :].agg(
+
+    # this if-else block simply allows using rolling for daily data
+    # rolling would be faster for daily data, but tricky for other dates
+    
+    if est_freq == 'd':
+        if lback_meth == 'xma':
+            weights = expo_weights(lback_periods, half_life)
+            dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(
                 expo_std, w=weights, remove_zeros=remove_zeros
             )
-    else:
-        for i in trigger_indices:
-            dfwa.loc[i, :] = np.sqrt(252) * dfw.loc[i-lback_periods:i, :].agg(
+        else:
+            dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(
                 flat_std, remove_zeros=remove_zeros
             )
-
-    # there is 100% a faster way to do this. find it. fix it. 
+    else:
+        # there is 100% a faster way to do this. find it. fix it. TODO
+        dfwa = pd.DataFrame(index=dfw.index, columns=dfw.columns)
+        if lback_meth == 'xma':
+            weights = expo_weights(lback_periods, half_life)
+            for i in trigger_indices:
+                dfwa.loc[i, :] = np.sqrt(252) * dfw.loc[i - pd.Timedelta(days=lback_periods):i, :].agg(
+                    expo_std, w=weights, remove_zeros=remove_zeros
+                )
+        else:
+            for i in trigger_indices:
+                dfwa.loc[i, :] = np.sqrt(252) * dfw.loc[i - pd.Timedelta(days=lback_periods):i, :].agg(
+                    flat_std, remove_zeros=remove_zeros
+                )
+    
             
     df_out = dfwa.stack().to_frame("value").reset_index()
 
