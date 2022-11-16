@@ -107,7 +107,7 @@ class Interface(object):
 
         :return <bool> server_response:
         """
-
+        # assert select in response.keys(), raise DQException?
         try:
             response[select]
         except KeyError:
@@ -135,14 +135,14 @@ class Interface(object):
         # method chosen.
         url = self.access.base_url + endpoint
         select = "instruments"
+        response = {}
 
         results = []
         counter = 0
-        while counter <= server_count:
+        while not self.server_retry(response, select) and (counter <= server_count):
             try:
                 # The required fields will already be instantiated on the instance of the
                 # Class.
-                # response: dict = self.access.get_dq_api_result(url=url, params=params)
                 response, msg, status = self.access.get_dq_api_result(url=url, params=params)
             except ConnectionResetError:
                 counter += 1
@@ -150,18 +150,7 @@ class Interface(object):
                 print(f"Server error: will retry. Attempt number: {counter}.")
                 continue
 
-            count = 0
-            while not self.server_retry(response, select):
-                count += 1
-                if count > 5:
-                    # raise RuntimeError("All servers are down.")
-                    raise DQException(
-                        message="All servers are down.",
-                        url=url,
-                        response=response,
-                        base_exception=RuntimeError("All servers are down.")  # is this a good idea?
-                    )
-
+            # TODO use status bool to determine if the request was successful.
             if select in response.keys():
                 results.extend(response[select])
 
