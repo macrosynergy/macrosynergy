@@ -108,7 +108,7 @@ class Interface(object):
         # TODO: reimplement
         # NOTE: Thihs function is only useful for unit testing, debugging and
         #       logging.
-        # Else it can just be mimicked by :
+        # Else it can just be mimicked by : (or am I missing something?)
         # assert select in response.keys(), raise DQException?
         try:
             response[select]
@@ -146,7 +146,7 @@ class Interface(object):
 
         results = []
         counter = 0
-        # use server_retry if makes sense
+        # TODO use server_retry here if makes sense
         while (not (select in response.keys())) and (counter <= server_count):
             try:
                 # The required fields will already be instantiated on the instance of the
@@ -157,7 +157,10 @@ class Interface(object):
             except ConnectionResetError:
                 counter += 1
                 time.sleep(0.05)
-                print(f"Server error: will retry. Attempt number: {counter}.")
+                # print(f"Server error: will retry. Attempt number: {counter}.")
+                logger.warning(
+                    f"Server error: will retry. Attempt number: {counter}."
+                )
                 continue
 
             # TODO use status bool to determine if the request was successful.
@@ -191,7 +194,7 @@ class Interface(object):
         frequency: str = "FREQ_DAY",
         conversion: str = "CONV_LASTBUS_ABS",
         nan_treatment: str = "NA_NOTHING",
-    ):
+    ): # returns a list of results, and a list of error messages
         """
         Method designed to concurrently request tickers from the API. Each initiated
         thread will handle batches of 20 tickers, and 10 threads will be active
@@ -258,9 +261,9 @@ class Interface(object):
             # not relevant to add url and response here.
             # is this a ValueError?
 
-        thread_output = []
-        final_output = []
-        tickers_server = []  # problem tickers; tickers to retry
+        thread_output   = []
+        final_output    = []
+        tickers_server  = []  # problem tickers; tickers to retry
         if self.concurrent:
 
             with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -286,10 +289,14 @@ class Interface(object):
                         # passing it back to get_ts_expression
                         # This "None" is thus a valid result returned by the API.
 
-                        if f.__dict__["_result"] is None:
+
+                        # TODO This might be redundant, as the _fetch_threading method
+                        #      already checks the type of request, and returns an empty#
+                        #      list if the request is unsuccessful in some way.
+                        if f.__dict__["_result"][0] is None:
                             return None
                         if dq_api_result[-1] and isinstance(dq_api_result[0], list):
-                            final_output.extend(dq_api_result[0])
+                            final_output.extend(dq_api_result)
                         else:
                             tickers_server.extend(f.__dict__[str(id(f))])
 
@@ -307,10 +314,11 @@ class Interface(object):
             # subsets is not required.
             for elem in tick_list_compr:
                 params["expressions"] = elem
-                results, msg, status = self._fetch_threading(
-                    endpoint=endpoint, params=params
-                )
-                final_output.extend(results)
+                dq_api_result = self._fetch_threading(endpoint, params)
+                if dq_api_result[-1] and isinstance(dq_api_result[0], list):
+                    final_output.extend(dq_api_result)
+                else:
+                    tickers_server.extend(elem)
 
         tickers_server = list(chain(*tickers_server))
 
@@ -405,7 +413,7 @@ class Interface(object):
         results = None
 
         while results is None:
-            results, msg, status = self._request(
+            results = self._request(
                 endpoint="/expressions/time-series",
                 tickers=expression,
                 params={},
@@ -414,8 +422,17 @@ class Interface(object):
             )
             c_delay += 0.1
 
+        tickers_output, error_msgs = [], []
+        for result in results:
+            if result[-1]: # last one is the success-bool
+                tickers_output.append(result)
+            else:
+                error_msgs.append(result)
+        
+        print(error_msgs)
+
         # print(results)
-        return results
+        return tickers_output
         # here starts the parsing of the results.
 
     def tickers(
