@@ -175,19 +175,22 @@ class CertAuth(object):
 
         return directory
 
-    def get_dq_api_result(self, url: str, params: dict = None) -> dict:
+    def get_dq_api_result(self, url: str, params: dict = None) -> Tuple[Optional[dict], bool, Optional[dict]]:
         """Method used exclusively to request data from the API.
 
         :param <str> url: url to access DQ API.
         :param <dict> params: dictionary containing the required parameters for the
             ticker series.
         """
-        # js, self.last_response, self.last_url, msg 
+
         js, success, self.last_url, msg= dq_request(
             url=url, cert=(self.crt, self.key), headers=self.headers, params=params
         )
-
-        return js, msg, success
+        # when using get_dq_api_result, always think [js, success, msg].
+        # this nicely allows the 3 to be returned as a list, 
+        # and then unpacked in funcs that are calling this func
+        # makes it easier to run concurrent.futures
+        return [js, success, msg]
 
 
 class OAuth(object):
@@ -280,18 +283,18 @@ class OAuth(object):
 
         return self._stored_token["access_token"]
 
-    def get_dq_api_result(self, url: str, params: dict = None) -> Tuple[Optional[dict], Optional[dict], bool]:
+    def get_dq_api_result(self, url: str, params: dict = None) -> Tuple[Optional[dict], bool, Optional[dict]]:
         """Method used exclusively to request data from the API.
 
         :param <str> url: url to access DQ API.
         :param <dict> params: dictionary containing the required parameters for the
             ticker series.
         """
-        js, success, self.last_response, msg = dq_request(
+        js, success, self.last_url, msg = dq_request(
             url=url,
             params=params,
             headers={"Authorization": "Bearer " + self._get_token()},
             proxies={},
         )
 
-        return js, msg, success
+        return [js, success, msg]

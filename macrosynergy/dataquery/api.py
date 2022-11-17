@@ -38,20 +38,20 @@ class Interface(object):
         debug: bool = False,
         concurrent: bool = True,
         batch_size: int = 20,
-        **kwargs
+        **kwargs,
     ):
 
         if oauth:
             self.access: OAuth = OAuth(
                 client_id=kwargs.pop("client_id"),
-                client_secret=kwargs.pop("client_secret")
+                client_secret=kwargs.pop("client_secret"),
             )
         else:
             self.access: CertAuth = CertAuth(
                 username=kwargs.pop("username"),
                 password=kwargs.pop("password"),
                 crt=kwargs.pop("crt"),
-                key=kwargs.pop("key")
+                key=kwargs.pop("key"),
             )
 
         self.debug: bool = debug
@@ -69,28 +69,26 @@ class Interface(object):
             print(f"Execution {exc_type} with value (exc_value):\n{exc_value}")
 
     def check_connection(self) -> Tuple[bool, dict]:
-        """Check connection (heartbeat) to DataQuery.
-        """
+        """Check connection (heartbeat) to DataQuery."""
         endpoint = "/services/heartbeat"
-        js, msg, status = self.access.get_dq_api_result(
-            url=self.access.base_url + endpoint,
-            params={"data": "NO_REFERENCE_DATA"}
+        dq_api_result = self.access.get_dq_api_result(
+            url=self.access.base_url + endpoint, params={"data": "NO_REFERENCE_DATA"}
         )
+        js, success, msg = dq_api_result
+        if success:
+            try:
+                results: dict = js["info"]
+            except KeyError:
+                url = self.access.last_url
+                raise DQException(
+                    message="DataQuery request error response",
+                    url=url,
+                    response=self.access.headers,
+                    base_exception=ConnectionError,
+                )
+            else:
 
-        try:
-            results: dict = js["info"]
-        except KeyError:
-            url = self.access.last_url
-            raise DQException(
-                message="DataQuery request error response",
-                url=url,
-                response=self.access.headers,
-                base_exception=ConnectionError
-            )
-        else:
-
-            return int(results["code"]) == 200, results
-            # if results["code"] != "200", the URL and entire response should be returned. ? 
+                return int(results["code"]) == 200, results
 
     @staticmethod
     def server_retry(response: dict, select: str):
@@ -107,17 +105,26 @@ class Interface(object):
 
         :return <bool> server_response:
         """
+        # TODO: reimplement
+        # NOTE: Thihs function is only useful for unit testing, debugging and
+        #       logging.
+        # Else it can just be mimicked by :
         # assert select in response.keys(), raise DQException?
         try:
             response[select]
         except KeyError:
-            print(f"Key {select} not found in response: {response} --- will retry "
-                  f"download.")
+            if response:
+                logger.warning(
+                    f"Key {select} not found in response: {response} --- will "
+                    f"retry download."
+                )
             return False
         else:
             return True
 
-    def _fetch_threading(self, endpoint, params: dict, server_count: int = 5) -> List[dict]:
+    def _fetch_threading(
+        self, endpoint, params: dict, server_count: int = 5
+    ) -> List[dict]:
         """
         Method responsible for requesting Tickers from the API. Able to pass in 20
         Tickers in a single request. If there is a request failure, the function will
@@ -139,12 +146,14 @@ class Interface(object):
 
         results = []
         counter = 0
-        # use server_retry if makes sense 
+        # use server_retry if makes sense
         while (not (select in response.keys())) and (counter <= server_count):
             try:
                 # The required fields will already be instantiated on the instance of the
                 # Class.
-                response, msg, status = self.access.get_dq_api_result(url=url, params=params)
+                response, msg, status = self.access.get_dq_api_result(
+                    url=url, params=params
+                )
             except ConnectionResetError:
                 counter += 1
                 time.sleep(0.05)
@@ -152,6 +161,9 @@ class Interface(object):
                 continue
 
             # TODO use status bool to determine if the request was successful.
+            # NOTE or would using the status bool be problematic?
+            #       as the status bool is only a representative of the actual response
+
             if select in response.keys():
                 results.extend(response[select])
 
@@ -162,15 +174,24 @@ class Interface(object):
             params = {}
 
         if isinstance(results, list):
-            return results, msg, status
+            return [results, msg, status]
         else:
-            return [], msg, status
+            return [[], msg, status]
 
-    def _request(self, endpoint: str, tickers: List[str], params: dict,
-                 delay: int = 0, count: int = 0, start_date: str = None,
-                 end_date: str = None, calendar: str = "CAL_ALLDAYS",
-                 frequency: str = "FREQ_DAY", conversion: str = "CONV_LASTBUS_ABS",
-                 nan_treatment: str = "NA_NOTHING"):
+    def _request(
+        self,
+        endpoint: str,
+        tickers: List[str],
+        params: dict,
+        delay: int = 0,
+        count: int = 0,
+        start_date: str = None,
+        end_date: str = None,
+        calendar: str = "CAL_ALLDAYS",
+        frequency: str = "FREQ_DAY",
+        conversion: str = "CONV_LASTBUS_ABS",
+        nan_treatment: str = "NA_NOTHING",
+    ):
         """
         Method designed to concurrently request tickers from the API. Each initiated
         thread will handle batches of 20 tickers, and 10 threads will be active
@@ -204,7 +225,7 @@ class Interface(object):
                 message=error_delay,
                 url=endpoint,
                 # response=None,
-                base_exception=RuntimeError(error_delay)
+                base_exception=RuntimeError(error_delay),
             )
             # only the endpoint is available in this scope, so it is used as the url.
             # response is not available in this scope.
@@ -221,28 +242,25 @@ class Interface(object):
                 "frequency": frequency,
                 "conversion": conversion,
                 "nan_treatment": nan_treatment,
-                "data": "NO_REFERENCE_DATA"
+                "data": "NO_REFERENCE_DATA",
             }
             params.update(params_)
 
         b = self.batch_size
         iterations = ceil(no_tickers / b)
-        tick_list_compr = [tickers[(i * b): (i * b) + b] for i in range(iterations)]
+        tick_list_compr = [tickers[(i * b) : (i * b) + b] for i in range(iterations)]
 
         unpack = list(chain(*tick_list_compr))
         # assert len(unpack) == len(set(unpack)), "List comprehension incorrect."
         if len(unpack) != len(set(unpack)):
             error = "List comprehension incorrect."
-            raise DQException(
-                message=error,
-                base_exception=RuntimeError(error)
-            )
+            raise DQException(message=error, base_exception=RuntimeError(error))
             # not relevant to add url and response here.
             # is this a ValueError?
 
         thread_output = []
         final_output = []
-        tickers_server = []
+        tickers_server = []  # problem tickers; tickers to retry
         if self.concurrent:
 
             with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -250,36 +268,48 @@ class Interface(object):
 
                     params_copy = params.copy()
                     params_copy["expressions"] = r_list
-                    results, msg, status = executor.submit(
+                    dq_api_results = executor.submit(
                         self._fetch_threading, endpoint, params_copy
                     )
 
                     time.sleep(delay)
-                    results.__dict__[str(id(results))] = r_list
-                    thread_output.append(results)
+                    dq_api_results.__dict__[str(id(dq_api_results))] = r_list
+                    thread_output.append(dq_api_results)
 
                 for f in concurrent.futures.as_completed(thread_output):
                     try:
-                        response = f.result()
-                        # TODO why?
-                        # if f.__dict__["_result"] is None:
-                        #     return None
+                        dq_api_result = f.result()
 
+                        # NOTE: if the _result is None, the request has failed.
+                        # this is because they were being sent too frequently.
+                        # the return None terminates the execution of _request func,
+                        # passing it back to get_ts_expression
+                        # This "None" is thus a valid result returned by the API.
+
+                        if f.__dict__["_result"] is None:
+                            return None
+                        if dq_api_result[-1] and isinstance(dq_api_result[0], list):
+                            final_output.extend(dq_api_result[0])
+                        else:
+                            tickers_server.extend(f.__dict__[str(id(f))])
+
+                    # NOTE: ValueError occurs when the thread hangs/dies/corrupts.
+                    # This is a rare occurrence, but it is important to handle it.
+                    # Any other exception is still raised.
                     except ValueError:
                         delay += 0.05
-                        tickers_server.append(f.__dict__[str(id(f))])
-                    else:
-                        if isinstance(response, list):
-                            final_output.extend(response)
-                        else:
-                            continue
+                        tickers_server.extend(f.__dict__[str(id(f))])
+
+
 
         else:
             # Runs through the Tickers sequentially. Thus, breaking the requests into
             # subsets is not required.
             for elem in tick_list_compr:
                 params["expressions"] = elem
-                results, msg, status = self._fetch_threading(endpoint=endpoint, params=params)
+                results, msg, status = self._fetch_threading(
+                    endpoint=endpoint, params=params
+                )
                 final_output.extend(results)
 
         tickers_server = list(chain(*tickers_server))
@@ -295,7 +325,8 @@ class Interface(object):
                         endpoint=endpoint,
                         tickers=list(set(tickers_server)),
                         params=params,
-                        delay=delay, count=count
+                        delay=delay,
+                        count=count,
                     )
                 except TypeError:
                     continue
@@ -335,6 +366,7 @@ class Interface(object):
         """
         Functionality used to convert tickers into formal JPMaQS expressions.
         """
+        # NOTE: Why not?
         # return [f"DB(JPMAQS,{ticker},{metric})" for ticker in tickers for metric in metrics]
         dq_tix = []
         for metric in metrics:
@@ -343,7 +375,7 @@ class Interface(object):
         return dq_tix
 
     def get_ts_expression(
-            self, expression, original_metrics, suppress_warning, **kwargs
+        self, expression, original_metrics, suppress_warning, **kwargs
     ):
         """
         Main driver function. Receives the Tickers and returns the respective dataframe.
@@ -364,12 +396,9 @@ class Interface(object):
                     message=error,
                 )
 
-
         unique_tix = list(set(expression))
 
-        dq_tix = self.jpmaqs_indicators(
-            metrics=original_metrics, tickers=unique_tix
-        )
+        dq_tix = self.jpmaqs_indicators(metrics=original_metrics, tickers=unique_tix)
         expression = dq_tix
 
         c_delay = self.delay_compute(len(dq_tix))
@@ -380,8 +409,8 @@ class Interface(object):
                 endpoint="/expressions/time-series",
                 tickers=expression,
                 params={},
-                delay = c_delay,
-                **kwargs
+                delay=c_delay,
+                **kwargs,
             )
             c_delay += 0.1
 
@@ -392,9 +421,9 @@ class Interface(object):
     def tickers(
         self,
         tickers: list,
-        metrics: list = ['value'],
-        start_date: str = '2000-01-01',
-        suppress_warning=False
+        metrics: list = ["value"],
+        start_date: str = "2000-01-01",
+        suppress_warning=False,
     ):
         """
         Returns standardized dataframe of specified base tickers and metric. Will also
@@ -420,7 +449,7 @@ class Interface(object):
                 expression=tickers,
                 original_metrics=metrics,
                 start_date=start_date,
-                suppress_warning=suppress_warning
+                suppress_warning=suppress_warning,
             )
 
             if isinstance(df, pd.DataFrame):
@@ -429,17 +458,18 @@ class Interface(object):
             return df
         else:
             logger.error(
-                "DataQuery response %s with description: %s", results["message"],
-                results["description"]
+                "DataQuery response %s with description: %s",
+                results["message"],
+                results["description"],
             )
             error = "Unable to connect to DataQuery. Reach out to DQ Support."
             # raise ConnectionError(error)
-            endpoint = "/services/heartbeat"  # to be removed once  check_connection() is changed. 
+            endpoint = "/services/heartbeat"  # to be removed once  check_connection() is changed.
             raise DQException(
                 message=error,
                 url=self.access.base_url + endpoint,
                 header=self.access.headers,
-                base_exception=ConnectionError
+                base_exception=ConnectionError,
             )
 
     def download(
@@ -447,9 +477,9 @@ class Interface(object):
         tickers=None,
         xcats=None,
         cids=None,
-        metrics=['value'],
-        start_date='2000-01-01',
-        suppress_warning=False
+        metrics=["value"],
+        start_date="2000-01-01",
+        suppress_warning=False,
     ):
         """
         Returns standardized dataframe of specified base tickers and metrics.
@@ -473,13 +503,41 @@ class Interface(object):
         """
 
         if (cids is None) & (xcats is not None):
-            cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NOK", "NZD", "SEK",
-                         "USD"]  # DM currency areas
+            cids_dmca = [
+                "AUD",
+                "CAD",
+                "CHF",
+                "EUR",
+                "GBP",
+                "JPY",
+                "NOK",
+                "NZD",
+                "SEK",
+                "USD",
+            ]  # DM currency areas
             cids_dmec = ["DEM", "ESP", "FRF", "ITL", "NLG"]  # DM euro area countries
             cids_latm = ["BRL", "COP", "CLP", "MXN", "PEN"]  # Latam countries
-            cids_emea = ["HUF", "ILS", "PLN", "RON", "RUB", "TRY", "ZAR"]  # EMEA countries
-            cids_emas = ["CZK", "CNY", "IDR", "INR", "KRW", "MYR", "PHP", "SGD", "THB",
-                         "TWD"]  # EM Asia countries
+            cids_emea = [
+                "HUF",
+                "ILS",
+                "PLN",
+                "RON",
+                "RUB",
+                "TRY",
+                "ZAR",
+            ]  # EMEA countries
+            cids_emas = [
+                "CZK",
+                "CNY",
+                "IDR",
+                "INR",
+                "KRW",
+                "MYR",
+                "PHP",
+                "SGD",
+                "THB",
+                "TWD",
+            ]  # EM Asia countries
             cids_dm = cids_dmca + cids_dmec
             cids_em = cids_latm + cids_emea + cids_emas
             cids = sorted(cids_dm + cids_em)  # Standard default.
@@ -492,8 +550,7 @@ class Interface(object):
         # assert isinstance(tickers, list)
         if not isinstance(tickers, list):
             raise DQException(
-                message="'tickers' must be a list of strings",
-                base_exception=TypeError
+                message="'tickers' must be a list of strings", base_exception=TypeError
             )
 
         if isinstance(xcats, str):
@@ -510,7 +567,7 @@ class Interface(object):
             if not isinstance(xcats, (list, tuple)):
                 raise DQException(
                     message="'xcats' must be a list of strings",
-                    base_exception=TypeError
+                    base_exception=TypeError,
                 )
 
             add_tix = [cid + "_" + xcat for xcat in xcats for cid in cids]
@@ -520,9 +577,9 @@ class Interface(object):
             tickers,
             metrics=metrics,
             suppress_warning=suppress_warning,
-            start_date=start_date
+            start_date=start_date,
         )
-        
+
         # if not isinstance(df, pd.DataFrame) or df.empty:
         #     raise DQException(
         #         message="No/corrupt data returned from DataQuery",
