@@ -139,7 +139,8 @@ class Interface(object):
 
         results = []
         counter = 0
-        while not self.server_retry(response, select) and (counter <= server_count):
+        # use server_retry if makes sense 
+        while (not (select in response.keys())) and (counter <= server_count):
             try:
                 # The required fields will already be instantiated on the instance of the
                 # Class.
@@ -161,9 +162,9 @@ class Interface(object):
             params = {}
 
         if isinstance(results, list):
-            return results
+            return results, msg, status
         else:
-            return None
+            return [], msg, status
 
     def _request(self, endpoint: str, tickers: List[str], params: dict,
                  delay: int = 0, count: int = 0, start_date: str = None,
@@ -249,7 +250,7 @@ class Interface(object):
 
                     params_copy = params.copy()
                     params_copy["expressions"] = r_list
-                    results = executor.submit(
+                    results, msg, status = executor.submit(
                         self._fetch_threading, endpoint, params_copy
                     )
 
@@ -261,8 +262,8 @@ class Interface(object):
                     try:
                         response = f.result()
                         # TODO why?
-                        if f.__dict__["_result"] is None:
-                            return None
+                        # if f.__dict__["_result"] is None:
+                        #     return None
 
                     except ValueError:
                         delay += 0.05
@@ -278,7 +279,7 @@ class Interface(object):
             # subsets is not required.
             for elem in tick_list_compr:
                 params["expressions"] = elem
-                results = self._fetch_threading(endpoint=endpoint, params=params)
+                results, msg, status = self._fetch_threading(endpoint=endpoint, params=params)
                 final_output.extend(results)
 
         tickers_server = list(chain(*tickers_server))
@@ -334,7 +335,7 @@ class Interface(object):
         """
         Functionality used to convert tickers into formal JPMaQS expressions.
         """
-
+        # return [f"DB(JPMAQS,{ticker},{metric})" for ticker in tickers for metric in metrics]
         dq_tix = []
         for metric in metrics:
             dq_tix += ["DB(JPMAQS," + tick + f",{metric})" for tick in tickers]
@@ -375,7 +376,7 @@ class Interface(object):
         results = None
 
         while results is None:
-            results = self._request(
+            results, msg, status = self._request(
                 endpoint="/expressions/time-series",
                 tickers=expression,
                 params={},
