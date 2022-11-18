@@ -64,7 +64,8 @@ class TestDataQueryInterface(unittest.TestCase):
             self.assertTrue(clause)
             mock_p_request.assert_called_with(
                 url=dq.access.base_url +"/services/heartbeat",
-                params={'data': 'NO_REFERENCE_DATA'}
+                params={'data': 'NO_REFERENCE_DATA'},
+                proxy=None,
             )
 
         mock_p_request.assert_called_once()
@@ -87,7 +88,8 @@ class TestDataQueryInterface(unittest.TestCase):
             self.assertTrue(not clause)
             mock_p_fail.assert_called_with(
                 url=dq.access.base_url + "/services/heartbeat",
-                params={"data": "NO_REFERENCE_DATA"}
+                params={"data": "NO_REFERENCE_DATA"},
+                proxy=None,
             )
 
         mock_p_fail.assert_called_once()
