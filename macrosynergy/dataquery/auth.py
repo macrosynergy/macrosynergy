@@ -137,15 +137,16 @@ class CertAuth(object):
 
         return directory
 
-    def get_dq_api_result(self, url: str, params: dict = None) -> dict:
+    def get_dq_api_result(self, url: str, params: dict = None, proxy: Optional[dict] = None) -> dict:
         """Method used exclusively to request data from the API.
 
         :param <str> url: url to access DQ API.
         :param <dict> params: dictionary containing the required parameters for the
             ticker series.
+        :param <dict> proxy: proxy settings for request.
         """
         js, self.last_response, self.last_url = dq_request(
-            url=url, cert=(self.crt, self.key), headers=self.headers, params=params
+            url=url, cert=(self.crt, self.key), headers=self.headers, params=params, proxies=proxy
         )
 
         return js
@@ -167,7 +168,8 @@ class OAuth(object):
         client_secret: str,
         url: str = OAUTH_BASE_URL,
         token_url: str = OAUTH_TOKEN_URL,
-        dq_resource_id: str = OAUTH_DQ_RESOURCE_ID
+        dq_resource_id: str = OAUTH_DQ_RESOURCE_ID,
+        token_proxy: Optional[dict] = None,
     ):
 
         self.base_url: str = url
@@ -194,6 +196,7 @@ class OAuth(object):
         self.status_code: Optional[int] = None
         self.last_response: Optional[str] = None
         self.last_url: Optional[str] = None
+        self.token_proxy: Optional[dict] = token_proxy
 
     def _active_token(self) -> bool:
         """Confirms if the token being used has not expired.
@@ -217,8 +220,9 @@ class OAuth(object):
             js, self.last_response, self.last_url = dq_request(
                 url=self.__token_url,
                 data=self.token_data,
-                proxies={},
-                method="post")
+                method="post",
+                proxies=self.token_proxy,
+            )
             self._stored_token: dict = {
                 "created_at": datetime.now(),
                 "access_token": js["access_token"],
@@ -227,19 +231,20 @@ class OAuth(object):
 
         return self._stored_token["access_token"]
 
-    def get_dq_api_result(self, url: str, params: dict = None) -> dict:
+    def get_dq_api_result(self, url: str, params: dict = None, proxy: Optional[dict] = None) -> dict:
         """Method used exclusively to request data from the API.
 
         :param <str> url: url to access DQ API.
         :param <dict> params: dictionary containing the required parameters for the
             ticker series.
+        :param <Optional[dict]> proxy: dictionary of proxy server.
         """
 
         js, self.last_response, self.last_url = dq_request(
             url=url,
             params=params,
             headers={"Authorization": "Bearer " + self._get_token()},
-            proxies={},
+            proxies=proxy,
         )
 
         return js
