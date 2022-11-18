@@ -480,8 +480,8 @@ class NaivePnL:
             elif len(pnl_cats) == 0:
                 raise ValueError("There are not any valid PnL(s) to display given the "
                                  "request.")
-
-        assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
+        error_message = "Either pnl_cats or pnl_cids must be a list of length 1"
+        assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1), error_message
         error_message = "The number of custom labels must match the defined number of " \
                         "categories in pnl_cats."
 
@@ -512,6 +512,8 @@ class NaivePnL:
         else:
             plot_by = "cid"
             col_order = labels = pnl_cids
+            if xcat_labels is not None:
+                labels = xcat_labels
             legend_title = "Cross Section(s)"
 
         dfx['cum_value'] = dfx.groupby(plot_by).cumsum()

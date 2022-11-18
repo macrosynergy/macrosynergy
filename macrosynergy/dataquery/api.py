@@ -13,7 +13,9 @@ from math import ceil, floor
 from collections import defaultdict
 from itertools import chain
 from typing import Optional
-from macrosynergy.dataquery.auth import CertAuth, OAuth
+from macrosynergy.dataquery.auth import (
+    CertAuth, OAuth, CERT_BASE_URL, OAUTH_BASE_URL, OAUTH_TOKEN_URL, OAUTH_DQ_RESOURCE_ID
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,9 @@ class Interface(object):
         sent to DQ API. Each request will be handled concurrently by DataQuery.
     :param <str> client_id: optional argument required for OAuth authentication
     :param <str> client_secret: optional argument required for OAuth authentication
+    :param <dict> kwargs: dictionary of optional arguments such as OAuth client_id <str>, client_secret <str>,
+        base_url <str>, token_url <str> (OAuth), resource_id <str> (OAuth), and username, password, crt, and key
+        (SSL certificate authentication).
 
     """
 
@@ -40,17 +45,24 @@ class Interface(object):
         **kwargs
     ):
 
+        self.proxy = kwargs.pop("proxy", None)
+
         if oauth:
             self.access: OAuth = OAuth(
                 client_id=kwargs.pop("client_id"),
-                client_secret=kwargs.pop("client_secret")
+                client_secret=kwargs.pop("client_secret"),
+                url=kwargs.pop("base_url", OAUTH_BASE_URL),
+                token_url=kwargs.pop("token_url", OAUTH_TOKEN_URL),
+                dq_resource_id=kwargs.pop("resource_id", OAUTH_DQ_RESOURCE_ID),
+                token_proxy=kwargs.pop("token_proxy", self.proxy)
             )
         else:
             self.access: CertAuth = CertAuth(
                 username=kwargs.pop("username"),
                 password=kwargs.pop("password"),
                 crt=kwargs.pop("crt"),
-                key=kwargs.pop("key")
+                key=kwargs.pop("key"),
+                base_url=kwargs.pop("base_url", CERT_BASE_URL),
             )
 
         self.debug: bool = debug
@@ -73,7 +85,8 @@ class Interface(object):
         endpoint = "/services/heartbeat"
         js: dict = self.access.get_dq_api_result(
             url=self.access.base_url + endpoint,
-            params={"data": "NO_REFERENCE_DATA"}
+            params={"data": "NO_REFERENCE_DATA"},
+            proxy=self.proxy
         )
 
         try:
@@ -141,7 +154,7 @@ class Interface(object):
             try:
                 # The required fields will already be instantiated on the instance of the
                 # Class.
-                response: dict = self.access.get_dq_api_result(url=url, params=params)
+                response: dict = self.access.get_dq_api_result(url=url, params=params, proxy=self.proxy)
             except ConnectionResetError:
                 counter += 1
                 time.sleep(0.05)

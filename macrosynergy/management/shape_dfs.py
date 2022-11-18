@@ -3,7 +3,9 @@ import pandas as pd
 from typing import List
 import random
 from macrosynergy.management.simulate_quantamental_data import make_qdf
+
 from itertools import product
+
 
 def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
               start: str = None, end: str = None, blacklist: dict = None,
@@ -71,6 +73,7 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
     else:
         return dfx.drop_duplicates()
 
+
 def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str = None,
                         end: str = None, blacklist: dict = None):
     """
@@ -110,6 +113,7 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
     dfx = dfx[dfx["ticker"].isin(ticks)]
 
     return dfx.drop_duplicates()
+
 
 def aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
     """
