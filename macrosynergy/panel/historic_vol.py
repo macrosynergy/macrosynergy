@@ -82,10 +82,6 @@ def get_cycles(dates_df: pd.DataFrame, freq: str = "m") -> pd.DataFrame:
     :param <str> freq: Frequency of the data. Options are 'm' for monthly, 'q' for
         quarterly and 'a' for annual. Default is 'm'.
     """
-        
-    def years_btwn_dates(start_date : pd.Timestamp, end_date : pd.Timestamp):
-        """Returns the number of years between two dates."""
-        return end_date.year - start_date.year
 
     def quarters_btwn_dates(start_date : pd.Timestamp, end_date : pd.Timestamp):
         """Returns the number of quarters between two dates."""
@@ -106,8 +102,7 @@ def get_cycles(dates_df: pd.DataFrame, freq: str = "m") -> pd.DataFrame:
     freq = freq.lower()
     dfc = dates_df.copy()
     start_date = dfc['real_date'].min()
-    group_func = {  
-                    'y': years_btwn_dates,
+    group_func = {
                     'q': quarters_btwn_dates,
                     'm': months_btwn_dates,
                     'w': weeks_btwn_dates,
@@ -120,6 +115,7 @@ def get_cycles(dates_df: pd.DataFrame, freq: str = "m") -> pd.DataFrame:
 
     return triggers
     # dfw.loc[dfw.index[triggers], :] gets all the rows and cols where triggers is True
+
 
 
 
@@ -151,8 +147,9 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df is
         used.
-    :param <str> est_freq: Frequency of the data. Options are 'd' for daily, 'm' for monthly,
-        'w' for weekly and 'q' for quarterly. Default is 'd'.    
+    :param <str> est_freq: Frequency of (re-)estimation of volatility. Options are 'd'
+        for end of each day (default), 'w' for end of each work week, 'm' for end of each month,
+         and 'q' for end of each week.
     :param <dict> blacklist: cross sections with date ranges that should be excluded from
         the data frame. If one cross section has several blacklist periods append numbers
         to the cross section code.
@@ -184,26 +181,9 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
     dates_df = pd.DataFrame({'real_date': dfw.index})
     triggers = get_cycles(dates_df, freq=est_freq)
-    # trigger_dates = pd.DataFrame({'real_date': dfw.index[triggers]})
-    # trigger_indices = trigger_dates.index
+    # TODO: check that last date of dfw that has a value is always included as trigger
     trigger_indices = dfw.index[triggers]
     dates_df = None
-
-    # The pandas in-built method df.rolling() will account for NaNs and start from the
-    # "first valid index".
-    # if lback_meth == 'xma':
-    #     weights = expo_weights(lback_periods, half_life)
-    #     dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(
-    #         expo_std, w=weights, remove_zeros=remove_zeros
-    #     )
-    # else:
-    #     dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(
-    #         flat_std, remove_zeros=remove_zeros
-    #     )
-
-
-    # this if-else block simply allows using rolling for daily data
-    # rolling would be faster for daily data, but tricky for other dates
     
     if est_freq == 'd':
         if lback_meth == 'xma':
@@ -229,10 +209,10 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                 dfwa.loc[i, :] = np.sqrt(252) * dfw.loc[i - pd.Timedelta(days=lback_periods):i, :].agg(
                     flat_std, remove_zeros=remove_zeros
                 )
-    
-            
-    df_out = dfwa.stack().to_frame("value").reset_index()
+        fills = {'d': 1, 'w': 5, 'm': 24, 'q': 64}
+        dfwa = dfwa.reindex(dfw.index).fillna(method='ffill', limit=fills[est_freq])
 
+    df_out = dfwa.unstack().reset_index().rename({0: 'value'}, axis=1)
     df_out['xcat'] = xcat + postfix
 
     return df_out[df.columns].sort_values(['cid', 'xcat', 'real_date'])
@@ -263,6 +243,7 @@ if __name__ == "__main__":
     weights = expo_weights(lback_periods=21, half_life=11)
 
     df = historic_vol(
-        dfd, cids=cids, xcat='XR', lback_periods=21, lback_meth='ma', half_life=11,
+        dfd, cids=cids, xcat='XR', lback_periods=21, lback_meth='ma', est_freq="w",
+        half_life=11,
         remove_zeros=True
     )
