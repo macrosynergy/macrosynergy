@@ -662,52 +662,6 @@ class Interface(object):
         df.real_date = pd.to_datetime(df.real_date)
         return df
 
-    def tickers(
-        self,
-        tickers: list,
-        metrics: list = ['value'],
-        start_date: str = '2000-01-01',
-        suppress_warning=False
-    ):
-        """
-        Returns standardized dataframe of specified base tickers and metric. Will also
-        validate the connection to DataQuery through the api using the method
-        .check_connection().
-
-        :param <List[str]> tickers: JPMaQS ticker of form <cid>_<xcat>.
-        :param <List[str]> metrics: must choose one or more from 'value', 'eop_lag',
-            'mop_lag', or 'grading'. Default is ['value'].
-        :param <str> start_date: first date in ISO 8601 string format.
-        :param <bool> suppress_warning: used to suppress warning of any invalid
-            ticker received by DataQuery.
-
-        :return <pd.Dataframe> standardized dataframe with columns 'cid', 'xcats',
-            'real_date' and chosen metrics.
-        """
-
-        clause, results = self.check_connection()
-        if clause:
-            print(results["description"])
-
-            df = self.get_ts_expression(
-                expression=tickers,
-                original_metrics=metrics,
-                start_date=start_date,
-                suppress_warning=suppress_warning
-            )
-
-            if isinstance(df, pd.DataFrame):
-                df = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
-
-            return df
-        else:
-            logger.error(
-                "DataQuery response %s with description: %s", results["message"],
-                results["description"]
-            )
-            error = "Unable to connect to DataQuery. Reach out to DQ Support."
-            raise ConnectionError(error)
-
     def download(
         self,
         tickers=None,
@@ -771,11 +725,29 @@ class Interface(object):
             add_tix = [cid + "_" + xcat for xcat in xcats for cid in cids]
             tickers = tickers + add_tix
 
-        df = self.tickers(
-            tickers,
-            metrics=metrics,
-            suppress_warning=suppress_warning,
-            start_date=start_date
-        )
+        # clause is a bool, checking if the returned json is valid.
+        # results are the 'info' key of the returned json.
+        clause, results = self.check_connection()
+        if clause:
+            print(results["description"])
 
-        return df
+        # get_ts_expression is the main driver function
+
+            df = self.get_ts_expression(
+                expression=tickers,
+                original_metrics=metrics,
+                start_date=start_date,
+                suppress_warning=suppress_warning
+            )
+
+            if isinstance(df, pd.DataFrame):
+                df = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
+
+            return df
+        else:
+            logger.error(
+                "DataQuery response %s with description: %s", results["message"],
+                results["description"]
+            )
+            error = "Unable to connect to DataQuery. Reach out to DQ Support."
+            raise ConnectionError(error)
