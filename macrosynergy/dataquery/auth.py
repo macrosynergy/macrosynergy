@@ -60,7 +60,7 @@ def dq_request(
     method: str = "get",
     cert: Optional[Tuple[str, str]] = None,
     **kwargs
-) -> Tuple[dict, str, str, Optional[dict]]:
+) -> Tuple[dict, bool, str, Optional[dict]]:
     """Will return the request from DataQuery.
 
     """
