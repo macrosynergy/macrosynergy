@@ -14,7 +14,7 @@ OAUTH_TOKEN_URL: str = "https://authe.jpmchase.com/as/token.oauth2"
 OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
 
 
-def valid_response(r: requests.Response) -> dict:
+def valid_response(r: requests.Response) -> Tuple[dict, bool, Optional[dict]]:
     """
     Prior to requesting any data, the function will confirm if a connection to the
     DataQuery API is able to be established given the credentials passed. If the status
@@ -25,21 +25,19 @@ def valid_response(r: requests.Response) -> dict:
             f"Authentication error - unable to access DataQuery:\n{r.text}"
         )
 
-    elif r.text[0] != "{":
+    msg: Optional[dict] = None
+    if not r.ok:
+        msg: Dict[str, str] = {
+            "headers": r.headers,
+            "status_code": r.status_code,
+            "text": r.text,
+            "url": r.url
+        }
+        js: Optional[dict] = None
+    else:
+        js = r.json()
 
-        # Authentication check.
-        condition: str = r.text.split("-")[1].strip().split("<")[0]
-        if condition == "Authentication Failure":
-            raise RuntimeError(
-                condition + " - unable to access DataQuery. Password expired."
-            )
-
-    assert r.ok, (
-        f"Access issue status code {r.status_code},"
-        f" headers: {r.headers}, text: {r.text} for url {r.url}."
-    )
-
-    return r.json()
+    return js, r.ok, msg
 
 
 def dq_request(
@@ -66,9 +64,9 @@ def dq_request(
     ) as r:
         text: str = r.text
         last_url: str = r.url
-        js: dict = valid_response(r=r)
+        js, success, msg = valid_response(r=r)
 
-    return js, text, last_url
+    return js, success, last_url, msg
 
 
 class CertAuth(object):
@@ -145,11 +143,11 @@ class CertAuth(object):
             ticker series.
         :param <dict> proxy: proxy settings for request.
         """
-        js, self.last_response, self.last_url = dq_request(
+        js, success, self.last_url, msg = dq_request(
             url=url, cert=(self.crt, self.key), headers=self.headers, params=params, proxies=proxy
         )
 
-        return js
+        return js, success, msg
 
 
 class OAuth(object):
@@ -240,11 +238,11 @@ class OAuth(object):
         :param <Optional[dict]> proxy: dictionary of proxy server.
         """
 
-        js, self.last_response, self.last_url = dq_request(
+        js, success, self.last_url, msg = dq_request(
             url=url,
             params=params,
             headers={"Authorization": "Bearer " + self._get_token()},
             proxies=proxy,
         )
 
-        return js
+        return js, success, msg
