@@ -355,13 +355,6 @@ class Interface(object):
         :return: <pd.DataFrame> df: ['cid', 'xcat', 'real_date'] + [original_metrics].
         """
 
-        for metric in original_metrics:
-            assert metric in [
-                "value",
-                "eop_lag",
-                "mop_lag",
-                "grading"], f"Incorrect metric passed: {metric}."
-
         unique_tix = list(set(expression))
 
         dq_tix = self.jpmaqs_indicators(
@@ -370,16 +363,9 @@ class Interface(object):
         expression = dq_tix
 
         c_delay = self.delay_compute(len(dq_tix))
-        results = self._request(
-            endpoint="/expressions/time-series",
-            tickers=expression,
-            params={},
-            delay=c_delay,
-            **kwargs
-        )
+        results = None
 
         while results is None:
-            c_delay += 0.1
             results = self._request(
                 endpoint="/expressions/time-series",
                 tickers=expression,
@@ -387,6 +373,10 @@ class Interface(object):
                 delay = c_delay,
                 **kwargs
             )
+            c_delay += 0.1
+
+        # NOTE : At this point, results is a list of dictionaries.
+        # Here is a good entry point for conversion to a DataFrame.
 
         no_metrics = len(set([tick.split(",")[-1][:-1] for tick in expression]))
 
@@ -400,7 +390,7 @@ class Interface(object):
         # available, the Ticker will not be included in the output DataFrame.
         if s_list:
             sequential = True
-            self.__dict__["concurrent"] = False
+            self.concurrent = False
             results_seq = self._request(
                 endpoint="/expressions/time-series", tickers=s_list, params={}, **kwargs
             )
@@ -719,6 +709,13 @@ class Interface(object):
 
         if isinstance(metrics, str):
             metrics = [metrics]
+
+        for metric in metrics:
+            assert metric in [
+                "value",
+                "eop_lag",
+                "mop_lag",
+                "grading"], f"Incorrect metric passed: {metric}."
 
         if xcats is not None:
             assert isinstance(xcats, (list, tuple))
