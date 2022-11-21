@@ -16,6 +16,7 @@ from typing import Optional
 from macrosynergy.dataquery.auth import (
     CertAuth, OAuth, CERT_BASE_URL, OAUTH_BASE_URL, OAUTH_TOKEN_URL, OAUTH_DQ_RESOURCE_ID
 )
+import macrosynergy.dataquery.framer as framer
 
 logger = logging.getLogger(__name__)
 
@@ -378,9 +379,11 @@ class Interface(object):
         # NOTE : At this point, results is a list of dictionaries.
         # Here is a good entry point for conversion to a DataFrame.
 
+        # TODO: The rest of this function can be wrapped in framer.frame() or similar.
+
         no_metrics = len(set([tick.split(",")[-1][:-1] for tick in expression]))
 
-        results_dict, output_dict, s_list = self.isolate_timeseries(
+        results_dict, output_dict, s_list = framer.isolate_timeseries(
             results, original_metrics, self.debug, False
         )
 
@@ -394,12 +397,12 @@ class Interface(object):
             results_seq = self._request(
                 endpoint="/expressions/time-series", tickers=s_list, params={}, **kwargs
             )
-            r_dict, o_dict, s_list = self.isolate_timeseries(
+            r_dict, o_dict, s_list = framer.isolate_timeseries(
                 results_seq, original_metrics, debug=False, sequential=sequential
             )
             results_dict = {**results_dict, **r_dict}
 
-        results_dict = self.valid_ticker(results_dict, suppress_warning, self.debug)
+        results_dict = framer.valid_ticker(results_dict, suppress_warning, self.debug)
 
         results_copy = results_dict.copy()
         try:
@@ -409,7 +412,7 @@ class Interface(object):
             print("None of the tickers are available in the Database.")
             return
         else:
-            return self.dataframe_wrapper(results_dict, no_metrics, original_metrics)
+            return framer.dataframe_wrapper(results_dict, no_metrics, original_metrics)
 
 
     def download(
