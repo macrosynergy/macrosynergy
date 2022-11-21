@@ -151,22 +151,18 @@ class Interface(object):
 
         results = []
         counter = 0
-        while counter <= server_count:
+        while (not (select in response.keys())) and (counter <= server_count):
             try:
                 # The required fields will already be instantiated on the instance of the
                 # Class.
-                response: dict = self.access.get_dq_api_result(url=url, params=params, proxy=self.proxy)
+                response, msg, status = self.access.get_dq_api_result(url=url, params=params, 
+                                                                    proxy=self.proxy)
             except ConnectionResetError:
                 counter += 1
                 time.sleep(0.05)
                 print(f"Server error: will retry. Attempt number: {counter}.")
                 continue
 
-            count = 0
-            while not self.server_retry(response, select):
-                count += 1
-                if count > 5:
-                    raise RuntimeError("All servers are down.")
 
             if select in response.keys():
                 results.extend(response[select])
@@ -178,9 +174,9 @@ class Interface(object):
             params = {}
 
         if isinstance(results, list):
-            return results
+            return results, msg, status
         else:
-            return None
+            return [], msg, status
 
     def _request(self, endpoint: str, tickers: List[str], params: dict,
                  delay: int = 0, count: int = 0, start_date: str = None,
@@ -242,31 +238,31 @@ class Interface(object):
 
         thread_output = []
         final_output = []
-        tickers_server = []
+        error_tickers = []
         if self.concurrent:
 
             with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = []
+
                 for r_list in tick_list_compr:
 
                     params_copy = params.copy()
                     params_copy["expressions"] = r_list
-                    results = executor.submit(
-                        self._fetch_threading, endpoint, params_copy
-                    )
+                    futures.append([executor.submit(
+                        self._fetch_threading, endpoint, params_copy), r_list])
 
                     time.sleep(delay)
-                    results.__dict__[str(id(results))] = r_list
-                    thread_output.append(results)
+                    thread_output.append(futures[-1][0])
 
-                for f in concurrent.futures.as_completed(thread_output):
+                for i, f in enumerate(futures):
                     try:
-                        response = f.result()
-                        if f.__dict__["_result"] is None:
+                        response, msg, status = f[0].result()
+                        if f[0]._result is None:
                             return None
-
                     except ValueError:
                         delay += 0.05
-                        tickers_server.append(f.__dict__[str(id(f))])
+                        error_tickers.extend(f[1])
+                        # TODO - add logging here.
                     else:
                         if isinstance(response, list):
                             final_output.extend(response)
@@ -281,9 +277,9 @@ class Interface(object):
                 results = self._fetch_threading(endpoint=endpoint, params=params)
                 final_output.extend(results)
 
-        tickers_server = list(chain(*tickers_server))
+        error_tickers = list(chain(*error_tickers))
 
-        if tickers_server:
+        if error_tickers:
             count += 1
             recursive_call = True
             while recursive_call:
@@ -292,7 +288,7 @@ class Interface(object):
                 try:
                     recursive_output = final_output + self._request(
                         endpoint=endpoint,
-                        tickers=list(set(tickers_server)),
+                        tickers=list(set(error_tickers)),
                         params=params,
                         delay=delay, count=count
                     )
@@ -302,7 +298,7 @@ class Interface(object):
                     recursive_call = False
 
             return recursive_output
-
+        # TODO return error tickers somehow.
         return final_output
 
     @staticmethod
