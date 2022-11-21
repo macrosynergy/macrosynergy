@@ -84,26 +84,26 @@ class Interface(object):
         """Check connection (heartbeat) to DataQuery.
         """
         endpoint = "/services/heartbeat"
-        js: dict = self.access.get_dq_api_result(
+        js, success, msg = self.access.get_dq_api_result(
             url=self.access.base_url + endpoint,
             params={"data": "NO_REFERENCE_DATA"},
             proxy=self.proxy
         )
 
-        try:
-            results: dict = js["info"]
-        except KeyError:
-            # dq_url = self.access.base_url
-            # print("base url:", dq_url)
-            # ip_addr = socket.gethostbyname(dq_url)
-            url = self.access.last_url
-            now = datetime.datetime.utcnow()
-            raise ConnectionError(
-                f"DataQuery request {url:s} error response at {now.isoformat()}: {js}"
-            )
+        if success:
+            try:
+                results: dict = js["info"]
+            except KeyError:
+                url = self.access.last_url
+                now = datetime.datetime.utcnow()
+                raise ConnectionError(
+                    f"DataQuery request {url:s} error response at {now.isoformat()}: {js}"
+                )
+            else:
+                return int(results["code"]) == 200, results
         else:
-
-            return int(results["code"]) == 200, results
+            # TODO msg?
+            return False, {}
 
     @staticmethod
     def server_retry(response: dict, select: str):
