@@ -16,7 +16,8 @@ from typing import Optional
 from macrosynergy.dataquery.auth import (
     CertAuth, OAuth, CERT_BASE_URL, OAUTH_BASE_URL, OAUTH_TOKEN_URL, OAUTH_DQ_RESOURCE_ID
 )
-import macrosynergy.dataquery.framer as framer
+# import macrosynergy.dataquery.framer as framer
+from macrosynergy.dataquery import framer
 
 logger = logging.getLogger(__name__)
 

@@ -214,8 +214,7 @@ class OAuth(object):
         """
 
         if not self._valid_token():
-
-            js, self.last_response, self.last_url = dq_request(
+            js, success, self.last_url, msg = dq_request(
                 url=self.__token_url,
                 data=self.token_data,
                 method="post",
