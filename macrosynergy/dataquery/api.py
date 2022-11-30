@@ -385,6 +385,8 @@ class Interface(object):
                 **kwargs
             )
             c_delay += 0.1
+        
+        results, error_tickers, error_messages = results
 
         # NOTE : At this point, results is a list of dictionaries.
         # Here is a good entry point for conversion to a DataFrame.
