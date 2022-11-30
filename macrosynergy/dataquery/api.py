@@ -148,14 +148,14 @@ class Interface(object):
         # method chosen.
         url = self.access.base_url + endpoint
         select = "instruments"
-
+        response = {}
         results = []
         counter = 0
         while (not (select in response.keys())) and (counter <= server_count):
             try:
                 # The required fields will already be instantiated on the instance of the
                 # Class.
-                response, msg, status = self.access.get_dq_api_result(url=url, params=params, 
+                response, status, msg  = self.access.get_dq_api_result(url=url, params=params, 
                                                                     proxy=self.proxy)
             except ConnectionResetError:
                 counter += 1
@@ -174,9 +174,9 @@ class Interface(object):
             params = {}
 
         if isinstance(results, list):
-            return results, msg, status
+            return results, status, msg
         else:
-            return [], msg, status
+            return [], status, msg
 
     def _request(self, endpoint: str, tickers: List[str], params: dict,
                  delay: int = 0, count: int = 0, start_date: str = None,
@@ -239,6 +239,7 @@ class Interface(object):
         thread_output = []
         final_output = []
         error_tickers = []
+        error_messages = []
         if self.concurrent:
 
             with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -254,20 +255,27 @@ class Interface(object):
                     time.sleep(delay)
                     thread_output.append(futures[-1][0])
 
-                for i, f in enumerate(futures):
+                for i, fto in enumerate(concurrent.futures.as_completed(thread_output)):
                     try:
-                        response, msg, status = f[0].result()
-                        if f[0]._result is None:
+                        response, status, msg = fto.result()
+                        if not status:
+                            error_tickers.extend(tick_list_compr[i])
+                            error_messages.append(msg)
+                            logger.warning(f"Error in requestion tickers: {', '.join(futures[i][1])}.")
+                        
+                        if fto.__dict__["_result"][0] is None:
                             return None
                     except ValueError:
                         delay += 0.05
-                        error_tickers.extend(f[1])
-                        # TODO - add logging here.
+                        error_tickers.extend(futures[i][1])
+                        logger.warning(f"Error requesting tickers: {', '.join(futures[i][1])}.")
                     else:
                         if isinstance(response, list):
                             final_output.extend(response)
                         else:
                             continue
+                            # error_tickers.extend(futures[i][1])
+                            # error_messages.append(msg)                           
 
         else:
             # Runs through the Tickers sequentially. Thus, breaking the requests into
@@ -283,23 +291,29 @@ class Interface(object):
             count += 1
             recursive_call = True
             while recursive_call:
-
                 delay += 0.1
                 try:
-                    recursive_output = final_output + self._request(
+                    rec_final_output, rec_error_tickers, rec_error_messages = self._request(
                         endpoint=endpoint,
                         tickers=list(set(error_tickers)),
                         params=params,
                         delay=delay, count=count
                     )
+                    # NOTE: now the new error tickers are the only error tickers, 
+                    # but error messages and final_output are appended
+                    error_tickers = rec_error_tickers
+                    error_messages.extend(rec_error_messages)
+                    final_output.extend(rec_final_output)
+                    if not error_tickers:
+                        recursive_call = False
+                    elif count > 5:
+                        recursive_call = False
+                        logger.warning(f"Error requesting tickers: {', '.join(error_tickers)}. No longer retrying.")
+
                 except TypeError:
                     continue
-                else:
-                    recursive_call = False
 
-            return recursive_output
-        # TODO return error tickers somehow.
-        return final_output
+        return final_output, error_tickers, error_messages
 
     @staticmethod
     def delay_compute(no_tickers):
