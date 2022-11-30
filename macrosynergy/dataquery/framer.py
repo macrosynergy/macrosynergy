@@ -7,6 +7,7 @@ from collections import defaultdict
 import warnings
 
 
+@staticmethod
 def array_construction(metrics: List[str], output_dict: dict,
                         debug: bool, sequential: bool):
     """
@@ -139,6 +140,7 @@ def isolate_timeseries(
 
     return modified_dict, output_dict, ticker_list
 
+@staticmethod
 def column_check(v, col, no_cols, debug):
     """
     Checking the values of the returned TimeSeries.
@@ -198,6 +200,7 @@ def valid_ticker(
     print(f"Number of missing time-series from the Database: {ticker_missing}.")
     return dict_copy
 
+@staticmethod
 def dataframe_wrapper(_dict, no_metrics, original_metrics):
     """
     Receives a Dictionary containing every Ticker and the respective time-series data
