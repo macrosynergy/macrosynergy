@@ -387,6 +387,9 @@ class Interface(object):
             c_delay += 0.1
         
         results, error_tickers, error_messages = results
+        if error_tickers:
+            logger.warning(f"Request failed for tickers: {', '.join(error_tickers)}.")
+            logger.warning(f"Error messages: [{', '.join(error_messages)}].")
 
         # NOTE : At this point, results is a list of dictionaries.
         # Here is a good entry point for conversion to a DataFrame.
