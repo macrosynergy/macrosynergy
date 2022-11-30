@@ -1,5 +1,6 @@
 from macrosynergy.dataquery import api
 from macrosynergy.dataquery.auth import OAuth, CertAuth
+from macrosynergy.dataquery import framer
 from typing import List
 from unittest import mock
 from random import random
@@ -50,7 +51,7 @@ class TestDataQueryInterface(unittest.TestCase):
 
     @mock.patch(
         "macrosynergy.dataquery.auth.OAuth.get_dq_api_result",
-        return_value={"info": {"code": 200}}
+        return_value=({"info": {"code": 200}}, True, None)
     )
     def test_check_connection(self, mock_p_request):
         # If the connection to DataQuery is working, the response code will invariably be
@@ -72,8 +73,16 @@ class TestDataQueryInterface(unittest.TestCase):
 
     @mock.patch(
         "macrosynergy.dataquery.auth.OAuth.get_dq_api_result",
-        return_value={"info": {"code": 400}}
-    )
+        return_value=(
+                    {"info": {"code": 400}}, 
+                    False, 
+                    {"headers": "{'Content-Type': 'application/json'}",
+                        "status_code": 400,
+                        "text": "{'error': 'invalid_request', 'error_description': 'The request is somehow corrupt.'}",
+                        "url": "https://api-developer.jpmorgan.com/research/dataquery-authe/api/v2/ **SOMETHING**"
+                    }
+                    )
+            )
     def test_check_connection_fail(self, mock_p_fail):
 
         # Opposite of above method: if the connection to DataQuery fails, the error code
@@ -147,7 +156,7 @@ class TestDataQueryInterface(unittest.TestCase):
 
         # Therefore, assert that the dictionary contains the expected tickers and that
         # each value is a three-dimensional DataFrame: real_date, value, grade.
-        results_dict, output_dict, s_list = dq.isolate_timeseries(
+        results_dict, output_dict, s_list = framer.isolate_timeseries(
             final_output, ['value', 'grading'], False, False
         )
 
@@ -182,7 +191,7 @@ class TestDataQueryInterface(unittest.TestCase):
 
         # All tickers held in the dictionary are valid tickers. Therefore, confirm the
         # keys for the two dictionary, received & returned, match.
-        results_dict = dq.valid_ticker(
+        results_dict = framer.valid_ticker(
             _dict=self.results_dict, suppress_warning=True, debug=False
         )
         self.assertTrue(len(results_dict.keys()) == len(self.results_dict.keys()))
@@ -199,7 +208,7 @@ class TestDataQueryInterface(unittest.TestCase):
         data = np.array([None] * (shape[0] * shape[1]))
 
         results_dict["DB(JPMAQS,USD_FXXR_NSA"] = data.reshape(shape)
-        results_dict_USD = dq.valid_ticker(
+        results_dict_USD = framer.valid_ticker(
             self.results_dict, suppress_warning=True, debug=False
         )
         # Ticker should be removed from the dictionary.
@@ -226,7 +235,7 @@ class TestDataQueryInterface(unittest.TestCase):
         )
 
         results_dict = self.results_dict
-        trial_df = dq.dataframe_wrapper(
+        trial_df = framer.dataframe_wrapper(
             _dict=results_dict, no_metrics=2, original_metrics=["value", "grading"]
         )
 
