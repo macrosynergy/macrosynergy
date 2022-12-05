@@ -316,7 +316,7 @@ class JPMaQSDownload(object):
             raise exc_type(exc_value)
         else:
             return True
-        
+    
     def download(self,
                     tickers=None,
                     xcats=None,
