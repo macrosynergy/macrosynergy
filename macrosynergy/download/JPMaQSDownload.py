@@ -1,4 +1,4 @@
-""" Functions to transform data from JSONs to standardized JPMaQS DataFrames. """
+""" JPMaQS Download Interface """
 
 from typing import List
 import pandas as pd
@@ -248,3 +248,9 @@ def dataframe_wrapper(_dict, no_metrics, original_metrics):
 
     df.real_date = pd.to_datetime(df.real_date)
     return df
+
+
+
+class JPMaQSDownload(object):
+    def __init__(self) -> None:
+        pass
