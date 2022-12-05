@@ -5,7 +5,12 @@ import pandas as pd
 import numpy as np
 from collections import defaultdict
 import warnings
+import json, yaml
+import os
+from macrosynergy.download import dq_api
 
+import logging
+logger = logging.getLogger(__name__)
 
 def array_construction(metrics: List[str], output_dict: dict,
                         debug: bool, sequential: bool):
@@ -252,5 +257,122 @@ def dataframe_wrapper(_dict, no_metrics, original_metrics):
 
 
 class JPMaQSDownload(object):
-    def __init__(self) -> None:
-        pass
+    def import_credentials(self, credentials_file : str):
+        if not os.path.exists(credentials_file):
+            raise FileNotFoundError(f"Credentials file not found at {credentials_file}")
+    
+        if credentials_file.endswith(".json"):
+            with open(credentials_file, "r") as f:
+                credentials = json.load(f)
+        elif credentials_file.endswith(".yaml"):
+            with open(credentials_file, "r") as f:
+                credentials = yaml.load(f, Loader=yaml.FullLoader)
+        else:
+            raise ValueError("Credentials file must be either a JSON or YAML file")
+        
+        client_id = credentials["client_id"]
+        client_secret = credentials["client_secret"]
+        return client_id, client_secret            
+
+            
+
+        
+    def __init__(
+            self, 
+            oauth : bool =True,
+            credentials_file : str = 'client_credentials.json',
+            debug : bool =False,
+            suppress_warning : bool =False,
+            **kwargs):
+
+        self.debug = debug
+        self.suppress_warning = suppress_warning
+        
+        proxy = kwargs.get('proxy', None)
+        
+        if oauth:
+            client_id, client_secret = self.import_credentials(credentials_file)
+            dq_args = {'client_id': client_id, 'client_secret': client_secret, 'proxy': proxy}
+        else:
+            username = kwargs.get('username', None)
+            password = kwargs.get('password', None)
+            crt = kwargs.get('crt', None)
+            key = kwargs.get('key', None)
+            dq_args = {'username': username, 'password': password, 'crt': crt, 'key': key, 'proxy': proxy}
+        
+        dq_args['debug'] = debug
+        dq_args['suppress_warning'] = suppress_warning
+        dq_args['oauth'] = oauth
+        
+        self.dq_args = dq_args
+        
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, exc_type, exc_value, traceback):
+        if exc_type:
+            e_str = f"{exc_type} {exc_value} {traceback}"
+            logger.error(e_str)
+            raise exc_type(exc_value)
+        else:
+            return True
+        
+    def download(self,
+                    tickers=None,
+                    xcats=None,
+                    cids=None,
+                    metrics=['value'],
+                    start_date='2000-01-01',
+                    end_date=None,
+                    suppress_warning=False,
+                    debug=False
+    ):
+        if (cids is None) & (xcats is not None):
+            cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NOK", "NZD", "SEK",
+                            "USD"]  # DM currency areas
+            cids_dmec = ["DEM", "ESP", "FRF", "ITL", "NLG"]  # DM euro area countries
+            cids_latm = ["BRL", "COP", "CLP", "MXN", "PEN"]  # Latam countries
+            cids_emea = ["HUF", "ILS", "PLN", "RON", "RUB", "TRY", "ZAR"]  # EMEA countries
+            cids_emas = ["CZK", "CNY", "IDR", "INR", "KRW", "MYR", "PHP", "SGD", "THB",
+                            "TWD"]  # EM Asia countries
+            cids_dm = cids_dmca + cids_dmec
+            cids_em = cids_latm + cids_emea + cids_emas
+            cids = sorted(cids_dm + cids_em)  # Standard default.
+            
+        if isinstance(metrics, str):
+            metrics = [metrics]
+        if isinstance(xcats, str):
+            xcats = [xcats]
+        if isinstance(cids, str):
+            cids = [cids]
+        
+        if isinstance(tickers, str):
+            tickers = [tickers]
+        elif tickers is None:
+            tickers = []
+                
+        assert isinstance(metrics, list), "Metrics must be a list of strings"
+        assert isinstance(xcats, list), "Xcats must be a list of strings"
+        assert isinstance(cids, list), "Cids must be a list of strings"
+        assert isinstance(tickers, list), "Tickers must be a list of strings"
+
+        for metric in metrics:
+            assert metric in [
+                "value",
+                "eop_lag",
+                "mop_lag",
+                "grading"], f"Incorrect metric passed: {metric}."
+        
+        if xcats is not None:
+            add_tix = [cid + "_" + xcat for cid in cids for xcat in xcats]
+            tickers = tickers + add_tix
+
+        with dq_api.Interface(**self.dq_args) as dq:
+            df = dq.get_data(tickers=tickers, metrics=metrics, start_date=start_date, end_date=end_date)
+            
+            if (not isinstance(df, pd.DataFrame)) or (df.empty):
+                logger.warning("No data returned from DataQuery")
+                raise ValueError("No data returned from DataQuery")
+
+            
+        
