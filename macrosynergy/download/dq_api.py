@@ -341,15 +341,12 @@ class Interface(object):
 
         :return: <pd.DataFrame> df: ['cid', 'xcat', 'real_date'] + [original_metrics].
         """
-
-        unique_tix = list(set(expression))
-
-        dq_tix = self.jpmaqs_indicators(
-            metrics=original_metrics, tickers=unique_tix
-        )
-        expression = dq_tix
-
-        c_delay = self.delay_compute(len(dq_tix))
+        clause, results = self.check_connection()
+        if not clause:
+            logger.error(f"Connection failed. Error message: {results}.")
+            return None 
+        
+        c_delay = self.delay_compute(len(expression))
         results = None
 
         while results is None:
@@ -366,6 +363,9 @@ class Interface(object):
         if error_tickers:
             logger.warning(f"Request failed for tickers: {', '.join(error_tickers)}.")
             logger.warning(f"Error messages: [{', '.join(error_messages)}].")
+
+        r = {'results' : results, 'error_tickers' : error_tickers, 'error_messages' : error_messages}
+        return r
 
         # NOTE : At this point, results is a list of dictionaries.
         # Here is a good entry point for conversion to a DataFrame.
@@ -405,100 +405,3 @@ class Interface(object):
         else:
             return framer.dataframe_wrapper(results_dict, no_metrics, original_metrics)
 
-
-    def download(
-        self,
-        tickers=None,
-        xcats=None,
-        cids=None,
-        metrics=['value'],
-        start_date='2000-01-01',
-        suppress_warning=False
-    ):
-        """
-        Returns standardized dataframe of specified base tickers and metrics.
-
-        :param <List[str]> tickers: JPMaQS ticker of form <cid>_<xcat>. Can be combined
-            with selection of categories.
-        :param <List[str]> xcats: JPMaQS category codes. Downloaded for all standard
-            cross sections identifiers available (if cids are not specified) or those
-            selected (if cids are specified). Standard cross sections here include major
-            developed and emerging currency markets. See JPMaQS documentation.
-        :param <List[str]> cids: JPMaQS cross-section identifiers, typically based  on
-            currency code. See JPMaQS documentation.
-        :param <str> metrics: must choose one or more from 'value', 'eop_lag', 'mop_lag',
-            or 'grading'. Default is ['value'].
-        :param <str> start_date: first date in ISO 8601 string format.
-        :param <bool> suppress_warning: used to suppress warning of any invalid
-            ticker received by DataQuery.
-
-        :return <pd.Dataframe> df: standardized dataframe with columns 'cid', 'xcats',
-            'real_date' and chosen metrics.
-        """
-
-        if (cids is None) & (xcats is not None):
-            cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NOK", "NZD", "SEK",
-                         "USD"]  # DM currency areas
-            cids_dmec = ["DEM", "ESP", "FRF", "ITL", "NLG"]  # DM euro area countries
-            cids_latm = ["BRL", "COP", "CLP", "MXN", "PEN"]  # Latam countries
-            cids_emea = ["HUF", "ILS", "PLN", "RON", "RUB", "TRY", "ZAR"]  # EMEA countries
-            cids_emas = ["CZK", "CNY", "IDR", "INR", "KRW", "MYR", "PHP", "SGD", "THB",
-                         "TWD"]  # EM Asia countries
-            cids_dm = cids_dmca + cids_dmec
-            cids_em = cids_latm + cids_emea + cids_emas
-            cids = sorted(cids_dm + cids_em)  # Standard default.
-
-        if isinstance(tickers, str):
-            tickers = [tickers]
-        elif tickers is None:
-            tickers = []
-
-        assert isinstance(tickers, list)
-
-        if isinstance(xcats, str):
-            xcats = [xcats]
-
-        if isinstance(cids, str):
-            cids = [cids]
-
-        if isinstance(metrics, str):
-            metrics = [metrics]
-
-        for metric in metrics:
-            assert metric in [
-                "value",
-                "eop_lag",
-                "mop_lag",
-                "grading"], f"Incorrect metric passed: {metric}."
-
-        if xcats is not None:
-            assert isinstance(xcats, (list, tuple))
-            add_tix = [cid + "_" + xcat for xcat in xcats for cid in cids]
-            tickers = tickers + add_tix
-
-        # clause is a bool, checking if the returned json is valid.
-        # results are the 'info' key of the returned json.
-        clause, results = self.check_connection()
-        if clause:
-            print(results["description"])
-
-        # get_ts_expression is the main driver function
-
-            df = self.get_ts_expression(
-                expression=tickers,
-                original_metrics=metrics,
-                start_date=start_date,
-                suppress_warning=suppress_warning
-            )
-
-            if isinstance(df, pd.DataFrame):
-                df = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
-
-            return df
-        else:
-            logger.error(
-                "DataQuery response %s with description: %s", results["message"],
-                results["description"]
-            )
-            error = "Unable to connect to DataQuery. Reach out to DQ Support."
-            raise ConnectionError(error)

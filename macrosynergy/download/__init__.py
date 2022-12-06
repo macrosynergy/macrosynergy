@@ -1,3 +1,3 @@
-from .api import Interface
+from .jpmaqs import JPMaQSDownload
 
-__all__ = ["Interface"]
+__all__ = ["JPMaQSDownload"]

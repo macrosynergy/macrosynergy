@@ -298,6 +298,15 @@ class JPMaQSDownload(object):
             raise exc_type(exc_value)
         else:
             return True
+
+    @staticmethod
+    def jpmaqs_indicators(metrics, tickers):
+        """
+        Functionality used to convert tickers into formal JPMaQS expressions.
+        """
+        return [f"DB(JPMAQS,{tick},{metric})" 
+                    for tick in tickers 
+                        for metric in metrics]       
     
     def download(self,
                     tickers=None,
@@ -350,12 +359,30 @@ class JPMaQSDownload(object):
             tickers = tickers + add_tix
         self.dq_args['suppress_warning'] = suppress_warning
         self.dq_args['debug'] = debug
+        
+        tickers = list(set(tickers)) # Should this be stored in a copy?
+        expressions = self.jpmaqs_indicators(metrics=metrics, tickers=tickers)
+
         with dq_api.Interface(**self.dq_args) as dq:
-            df = dq.download(tickers=tickers, metrics=metrics, start_date=start_date, end_date=end_date)
-            
-            if (not isinstance(df, pd.DataFrame)) or (df.empty):
-                logger.warning("No data returned from DataQuery")
-                raise ValueError("No data returned from DataQuery")
+            dq_result_dict = dq.get_ts_expression(expression=expressions, original_metrics=metrics, 
+                                            start_date=start_date, end_date=end_date,
+                                            suppress_warning=suppress_warning, debug=debug)
+        
+        results         = dq_result_dict['results']
+        error_tickers   = dq_result_dict['error_tickers']
+        error_messages  = dq_result_dict['error_messages']
+
+        # TODO : parse to DF method here
+        # ...
+
+        df = None
+        if (not isinstance(df, pd.DataFrame)) or (df.empty):
+            logger.warning("No data returned from DataQuery")
+            raise ValueError("No data returned from DataQuery")
+        else:
+            df = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
+            return df
+
 
             
         
