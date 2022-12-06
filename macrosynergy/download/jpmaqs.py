@@ -1,6 +1,6 @@
 """ JPMaQS Download Interface """
 
-from typing import List
+from typing import List, Optional, Union, Dict, Any
 import pandas as pd
 import numpy as np
 from collections import defaultdict
@@ -257,31 +257,12 @@ def dataframe_wrapper(_dict, no_metrics, original_metrics):
 
 
 class JPMaQSDownload(object):
-    def import_credentials(self, credentials_file : str):
-        if not os.path.exists(credentials_file):
-            raise FileNotFoundError(f"Credentials file not found at {credentials_file}")
-    
-        if credentials_file.endswith(".json"):
-            with open(credentials_file, "r") as f:
-                credentials = json.load(f)
-        elif credentials_file.endswith(".yaml"):
-            with open(credentials_file, "r") as f:
-                credentials = yaml.load(f, Loader=yaml.FullLoader)
-        else:
-            raise ValueError("Credentials file must be either a JSON or YAML file")
-        
-        client_id = credentials["client_id"]
-        client_secret = credentials["client_secret"]
-        return client_id, client_secret            
-
-            
-
-        
     def __init__(
             self, 
-            oauth : bool =True,
-            credentials_file : str = 'client_credentials.json',
-            debug : bool =False,
+            oauth : bool = True,
+            client_id : Optional[str] = None,
+            client_secret : Optional[str] = None,
+            debug : bool = False,
             suppress_warning : bool =False,
             **kwargs):
 
@@ -291,7 +272,8 @@ class JPMaQSDownload(object):
         proxy = kwargs.get('proxy', None)
         
         if oauth:
-            client_id, client_secret = self.import_credentials(credentials_file)
+            client_id = kwargs.get('client_id', None)
+            client_secret = kwargs.get('client_secret', None)
             dq_args = {'client_id': client_id, 'client_secret': client_secret, 'proxy': proxy}
         else:
             username = kwargs.get('username', None)
@@ -366,9 +348,10 @@ class JPMaQSDownload(object):
         if xcats is not None:
             add_tix = [cid + "_" + xcat for cid in cids for xcat in xcats]
             tickers = tickers + add_tix
-
+        self.dq_args['suppress_warning'] = suppress_warning
+        self.dq_args['debug'] = debug
         with dq_api.Interface(**self.dq_args) as dq:
-            df = dq.get_data(tickers=tickers, metrics=metrics, start_date=start_date, end_date=end_date)
+            df = dq.download(tickers=tickers, metrics=metrics, start_date=start_date, end_date=end_date)
             
             if (not isinstance(df, pd.DataFrame)) or (df.empty):
                 logger.warning("No data returned from DataQuery")
