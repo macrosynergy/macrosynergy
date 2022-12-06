@@ -20,11 +20,6 @@ def valid_response(r: requests.Response) -> Tuple[dict, bool, Optional[dict]]:
     DataQuery API is able to be established given the credentials passed. If the status
     code is 200, able to access DataQuery's API.
     """
-    if r.status_code == 401:
-        raise RuntimeError(
-            f"Authentication error - unable to access DataQuery:\n{r.text}"
-        )
-
     msg: Optional[dict] = None
     if not r.ok:
         msg: Dict[str, str] = {
