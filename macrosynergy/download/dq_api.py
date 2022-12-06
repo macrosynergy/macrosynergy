@@ -106,31 +106,6 @@ class Interface(object):
             # TODO msg?
             return False, {}
 
-    @staticmethod
-    def server_retry(response: dict, select: str):
-        """Server retry.
-
-        DQ requests are powered by four servers. Therefore, if a single server is failing
-        try the remaining three servers for a request. In theory, trying the sample space
-        of servers should invariably result in a successful request: assuming all four
-        servers are not concurrently down. The number of trials is five: the sample space
-        of servers should be exhausted.
-
-        :param <dict> response: server response.
-        :param <str> select: key hosting the server's response in the dictionary.
-
-        :return <bool> server_response:
-        """
-
-        try:
-            response[select]
-        except KeyError:
-            print(f"Key {select} not found in response: {response} --- will retry "
-                  f"download.")
-            return False
-        else:
-            return True
-
     def _fetch_threading(self, endpoint, params: dict, server_count: int = 5):
         """
         Method responsible for requesting Tickers from the API. Able to pass in 20
