@@ -83,12 +83,30 @@ with api.Interface(
         username="<dq_username>",
         password="<dq_password>"
 ) as dq:
-    data = dq.download(tickers="tickers, start_date="2022-01-01")
+    data = dq.download(tickers=tickers, start_date="2022-01-01")
 
 assert isinstance(data, pd.DataFrame) and not data.empty
 
 assert data.shape[0] > 0
 data.info()
+```
+It is also possible to use a proxy server with the Dataquery interface. Here's an example:
+```python
+from macrosynergy.dataquery import api
+import pandas as pd
+
+oauth_proxy="http://proxy.example.com:port"
+proxy = {"http": oauth_proxy}
+
+with api.Interface(
+        oauth=True,
+        client_id = "<dq_client_id>",
+        client_secret = "<dq_client_secret>",
+        proxy = proxy
+) as dq:
+    data = dq.download(tickers = tickers, start_date="2022-01-01", suppress_warning=False)
+
+assert isinstance(data, pd.DataFrame) and not df.empty
 ```
 ### Management 
 In order to use the rest of the package without access to the api you can [simulate](./macrosynergy/management/simulate_quantamental_data.py) quantamental data using the 
