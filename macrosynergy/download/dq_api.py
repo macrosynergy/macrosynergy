@@ -156,7 +156,7 @@ class Interface(object):
                  delay: int = 0, count: int = 0, start_date: str = None,
                  end_date: str = None, calendar: str = "CAL_ALLDAYS",
                  frequency: str = "FREQ_DAY", conversion: str = "CONV_LASTBUS_ABS",
-                 nan_treatment: str = "NA_NOTHING"):
+                 nan_treatment: str = "NA_NOTHING", debug : bool = False):
         """
         Method designed to concurrently request tickers from the API. Each initiated
         thread will handle batches of 20 tickers, and 10 threads will be active

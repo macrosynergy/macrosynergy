@@ -272,8 +272,9 @@ class JPMaQSDownload(object):
         proxy = kwargs.get('proxy', None)
         
         if oauth:
-            client_id = kwargs.get('client_id', None)
-            client_secret = kwargs.get('client_secret', None)
+            if not (isinstance(client_id, str) and isinstance(client_secret, str)):
+                raise ValueError("client_id and client_secret must be strings.")
+
             dq_args = {'client_id': client_id, 'client_secret': client_secret, 'proxy': proxy}
         else:
             username = kwargs.get('username', None)
@@ -343,8 +344,6 @@ class JPMaQSDownload(object):
             tickers = []
                 
         assert isinstance(metrics, list), "Metrics must be a list of strings"
-        assert isinstance(xcats, list), "Xcats must be a list of strings"
-        assert isinstance(cids, list), "Cids must be a list of strings"
         assert isinstance(tickers, list), "Tickers must be a list of strings"
 
         for metric in metrics:
@@ -355,6 +354,7 @@ class JPMaQSDownload(object):
                 "grading"], f"Incorrect metric passed: {metric}."
         
         if xcats is not None:
+            assert isinstance(xcats, list), "Xcats must be a list of strings"
             add_tix = [cid + "_" + xcat for cid in cids for xcat in xcats]
             tickers = tickers + add_tix
         self.dq_args['suppress_warning'] = suppress_warning
