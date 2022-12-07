@@ -95,6 +95,10 @@ It is also possible to use a proxy server with the Dataquery interface. Here's a
 from macrosynergy.dataquery import api
 import pandas as pd
 
+cids = ['EUR','GBP','USD']
+xcats = ['FXXR_NSA','EQXR_NSA']
+tickers = [cid+"_"+xcat for cid in cids for xcat in xcats]
+
 oauth_proxy="http://proxy.example.com:port"
 proxy = {"http": oauth_proxy}
 
