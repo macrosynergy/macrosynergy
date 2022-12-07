@@ -372,8 +372,6 @@ class JPMaQSDownload(object):
         error_tickers   = dq_result_dict['error_tickers']
         error_messages  = dq_result_dict['error_messages']
 
-        # TODO : parse to DF method here
-        # ...
         if error_tickers:
             logger.error(f"Error tickers: {error_tickers}")
             logger.error(f"Error messages: {error_messages}")
@@ -384,7 +382,20 @@ class JPMaQSDownload(object):
                 metrics=metrics,
                 debug=debug, 
                 sequential=True)
-                       
+
+            if s_list:
+                logger.warning(f"Warning tickers: {s_list}")
+                logger.warning("Warning messages: Some of the tickers are not available in the Database.")
+                if suppress_warning:
+                    logger.warning("Warning suppressed.")
+                if not debug:
+                    raise Exception("The database has missing entries for some tickers. See log for details.")
+                else:
+                    logger.warning("Debug mode is on; adding download ouput to JPMaQSDownload.download_output")
+                    logger.warning("Debug mode is on; adding parsed output to JPMaQSDownload.parsed_output")
+                    self.download_output = dq_result_dict
+                    self.parsed_output = {'results': results_dict, 'results_nested_dictionary': output_dict, 's_list': s_list}
+            
             results_dict = valid_ticker(results_dict, suppress_warning, self.debug)
             
             results_copy = results_dict.copy()
