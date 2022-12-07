@@ -374,14 +374,36 @@ class JPMaQSDownload(object):
 
         # TODO : parse to DF method here
         # ...
-
-        df = None
-        if (not isinstance(df, pd.DataFrame)) or (df.empty):
-            logger.warning("No data returned from DataQuery")
-            raise ValueError("No data returned from DataQuery")
+        if error_tickers:
+            logger.error(f"Error tickers: {error_tickers}")
+            logger.error(f"Error messages: {error_messages}")
+            raise Exception("Failed to download data for some tickers. See log for details.")
         else:
-            df = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
-            return df
+            results_dict, output_dict, s_list = isolate_timeseries(
+                list_= results,
+                metrics=metrics,
+                debug=debug, 
+                sequential=True)
+                       
+            results_dict = valid_ticker(results_dict, suppress_warning, self.debug)
+            
+            results_copy = results_dict.copy()
+            try:
+                results_copy.popitem()
+            except Exception as err:
+                logger.error(f"Error: {err}")
+                logger.error("None of the tickers are available in the Database.")
+                df = None
+            else:
+                no_metrics = len(set([tick.split(",")[-1][:-1] for tick in expressions]))
+                df = dataframe_wrapper(_dict=results_dict, no_metrics=no_metrics, original_metrics=metrics)
+            
+            if (not isinstance(df, pd.DataFrame)) or (df.empty):
+                logger.warning("No data returned from DataQuery")
+                raise ValueError("No data returned from DataQuery")
+            else:
+                df = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
+                return df
 
 
             

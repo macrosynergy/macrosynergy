@@ -16,8 +16,6 @@ from typing import Optional
 from macrosynergy.dataquery.auth import (
     CertAuth, OAuth, CERT_BASE_URL, OAUTH_BASE_URL, OAUTH_TOKEN_URL, OAUTH_DQ_RESOURCE_ID
 )
-# import macrosynergy.dataquery.framer as framer
-from macrosynergy.dataquery import framer
 
 logger = logging.getLogger(__name__)
 
@@ -315,18 +313,6 @@ class Interface(object):
 
         return delay
 
-    @staticmethod
-    def jpmaqs_indicators(metrics, tickers):
-        """
-        Functionality used to convert tickers into formal JPMaQS expressions.
-        """
-
-        dq_tix = []
-        for metric in metrics:
-            dq_tix += ["DB(JPMAQS," + tick + f",{metric})" for tick in tickers]
-
-        return dq_tix
-
     def get_ts_expression(
             self, expression, original_metrics, suppress_warning, **kwargs
     ):
@@ -366,42 +352,4 @@ class Interface(object):
 
         r = {'results' : results, 'error_tickers' : error_tickers, 'error_messages' : error_messages}
         return r
-
-        # NOTE : At this point, results is a list of dictionaries.
-        # Here is a good entry point for conversion to a DataFrame.
-
-        # TODO: The rest of this function can be wrapped in framer.frame() or similar.
-
-        no_metrics = len(set([tick.split(",")[-1][:-1] for tick in expression]))
-
-        results_dict, output_dict, s_list = framer.isolate_timeseries(
-            results, original_metrics, self.debug, False
-        )
-
-        # Conditional statement which is only applicable if multiple metrics have been
-        # requested. If any Ticker is not defined over all requested metrics, run
-        # sequentially to confirm it is missing from the database. If all metrics are not
-        # available, the Ticker will not be included in the output DataFrame.
-        if s_list:
-            sequential = True
-            self.concurrent = False
-            results_seq = self._request(
-                endpoint="/expressions/time-series", tickers=s_list, params={}, **kwargs
-            )
-            r_dict, o_dict, s_list = framer.isolate_timeseries(
-                results_seq, original_metrics, debug=False, sequential=sequential
-            )
-            results_dict = {**results_dict, **r_dict}
-
-        results_dict = framer.valid_ticker(results_dict, suppress_warning, self.debug)
-
-        results_copy = results_dict.copy()
-        try:
-            results_copy.popitem()
-        except Exception as err:
-            print(err)
-            print("None of the tickers are available in the Database.")
-            return
-        else:
-            return framer.dataframe_wrapper(results_dict, no_metrics, original_metrics)
 
