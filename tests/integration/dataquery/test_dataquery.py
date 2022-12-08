@@ -1,3 +1,6 @@
+import sys
+sys.path.append('../macrosynergy')
+
 import unittest
 import os
 import pandas as pd
