@@ -60,7 +60,7 @@ jobs:
     - name: Build a binary wheel and a source tarball
       run: python -m build --sdist --wheel --outdir dist/ .
 
-    - name: Check and Upload to TestPyPI
+    - name: Check and Upload to PyPI
       run: |
         pip install twine
         twine check dist/*
