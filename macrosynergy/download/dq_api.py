@@ -13,7 +13,7 @@ from math import ceil, floor
 from collections import defaultdict
 from itertools import chain
 from typing import Optional
-from macrosynergy.dataquery.auth import (
+from macrosynergy.download.dq_auth import (
     CertAuth, OAuth, CERT_BASE_URL, OAUTH_BASE_URL, OAUTH_TOKEN_URL, OAUTH_DQ_RESOURCE_ID
 )
 
