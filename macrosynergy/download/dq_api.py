@@ -35,7 +35,7 @@ def valid_response(r: requests.Response) -> Tuple[dict, bool, Optional[dict]]:
             "headers": r.headers,
             "status_code": r.status_code,
             "text": r.text,
-            "url": r.url
+            "url": r.url,
         }
         js: Optional[dict] = None
     else:
@@ -50,11 +50,9 @@ def dq_request(
     params: dict = None,
     method: str = "get",
     cert: Optional[Tuple[str, str]] = None,
-    **kwargs
+    **kwargs,
 ) -> Tuple[dict, str, str]:
-    """Will return the request from DataQuery.
-
-    """
+    """Will return the request from DataQuery."""
     request_error = f"Unknown request method {method} not in ('get', 'post')."
     assert method in ("get", "post"), request_error
 
@@ -93,7 +91,7 @@ class CertAuth(object):
         password: str,
         crt: str = "api_macrosynergy_com.crt",
         key: str = "api_macrosynergy_com.key",
-        base_url: str = CERT_BASE_URL
+        base_url: str = CERT_BASE_URL,
     ):
 
         error_user = f"username must be a <str> and not <{type(username)}>."
@@ -130,7 +128,7 @@ class CertAuth(object):
         dir_error = f"{file_type:s} file must be a <str> not <{type(directory)}>."
         assert isinstance(directory, str), dir_error
 
-        condition = (os.path.exists(directory) and os.path.isfile(directory))
+        condition = os.path.exists(directory) and os.path.isfile(directory)
         if not condition:
             raise OSError(
                 f"The directory received, {directory}, does not contain the "
@@ -139,7 +137,9 @@ class CertAuth(object):
 
         return directory
 
-    def get_dq_api_result(self, url: str, params: dict = None, proxy: Optional[dict] = None) -> dict:
+    def get_dq_api_result(
+        self, url: str, params: dict = None, proxy: Optional[dict] = None
+    ) -> dict:
         """Method used exclusively to request data from the API.
 
         :param <str> url: url to access DQ API.
@@ -148,7 +148,11 @@ class CertAuth(object):
         :param <dict> proxy: proxy settings for request.
         """
         js, success, self.last_url, msg = dq_request(
-            url=url, cert=(self.crt, self.key), headers=self.headers, params=params, proxies=proxy
+            url=url,
+            cert=(self.crt, self.key),
+            headers=self.headers,
+            params=params,
+            proxies=proxy,
         )
 
         return js, success, msg
@@ -191,7 +195,7 @@ class OAuth(object):
             "grant_type": "client_credentials",
             "client_id": self.client_id,
             "client_secret": self.client_secret,
-            "aud": self.__dq_api_resource_id
+            "aud": self.__dq_api_resource_id,
         }
 
         # For debugging purposes save last request response.
@@ -201,21 +205,18 @@ class OAuth(object):
         self.token_proxy: Optional[dict] = token_proxy
 
     def _active_token(self) -> bool:
-        """Confirms if the token being used has not expired.
-        """
+        """Confirms if the token being used has not expired."""
         created: datetime = self._stored_token["created_at"]
         expires: int = self._stored_token["expires_in"]
 
         return (datetime.now() - created).total_seconds() / 60 >= (expires - 1)
 
     def _valid_token(self) -> bool:
-        """Confirms if the credentials passed correspond to a valid token.
-        """
+        """Confirms if the credentials passed correspond to a valid token."""
         return not (self._stored_token is None or self._active_token())
 
     def _get_token(self) -> str:
-        """Retrieves the token which is used to access DataQuery via OAuth method.
-        """
+        """Retrieves the token which is used to access DataQuery via OAuth method."""
 
         if not self._valid_token():
             js, success, self.last_url, msg = dq_request(
@@ -227,12 +228,14 @@ class OAuth(object):
             self._stored_token: dict = {
                 "created_at": datetime.now(),
                 "access_token": js["access_token"],
-                "expires_in": js["expires_in"]
+                "expires_in": js["expires_in"],
             }
 
         return self._stored_token["access_token"]
 
-    def get_dq_api_result(self, url: str, params: dict = None, proxy: Optional[dict] = None) -> dict:
+    def get_dq_api_result(
+        self, url: str, params: dict = None, proxy: Optional[dict] = None
+    ) -> dict:
         """Method used exclusively to request data from the API.
 
         :param <str> url: url to access DQ API.
@@ -273,7 +276,7 @@ class Interface(object):
         debug: bool = False,
         concurrent: bool = True,
         batch_size: int = 20,
-        **kwargs
+        **kwargs,
     ):
 
         self.proxy = kwargs.pop("proxy", None)
@@ -285,7 +288,7 @@ class Interface(object):
                 url=kwargs.pop("base_url", OAUTH_BASE_URL),
                 token_url=kwargs.pop("token_url", OAUTH_TOKEN_URL),
                 dq_resource_id=kwargs.pop("resource_id", OAUTH_DQ_RESOURCE_ID),
-                token_proxy=kwargs.pop("token_proxy", self.proxy)
+                token_proxy=kwargs.pop("token_proxy", self.proxy),
             )
         else:
             self.access: CertAuth = CertAuth(
@@ -311,13 +314,12 @@ class Interface(object):
             print(f"Execution {exc_type} with value (exc_value):\n{exc_value}")
 
     def check_connection(self) -> Tuple[bool, dict]:
-        """Check connection (heartbeat) to DataQuery.
-        """
+        """Check connection (heartbeat) to DataQuery."""
         endpoint = "/services/heartbeat"
         js, success, msg = self.access.get_dq_api_result(
             url=self.access.base_url + endpoint,
             params={"data": "NO_REFERENCE_DATA"},
-            proxy=self.proxy
+            proxy=self.proxy,
         )
 
         if success:
@@ -360,14 +362,14 @@ class Interface(object):
             try:
                 # The required fields will already be instantiated on the instance of the
                 # Class.
-                response, status, msg  = self.access.get_dq_api_result(url=url, params=params, 
-                                                                    proxy=self.proxy)
+                response, status, msg = self.access.get_dq_api_result(
+                    url=url, params=params, proxy=self.proxy
+                )
             except ConnectionResetError:
                 counter += 1
                 time.sleep(0.05)
                 print(f"Server error: will retry. Attempt number: {counter}.")
                 continue
-
 
             if select in response.keys():
                 results.extend(response[select])
@@ -383,11 +385,21 @@ class Interface(object):
         else:
             return [], status, msg
 
-    def _request(self, endpoint: str, tickers: List[str], params: dict,
-                 delay: int = 0, count: int = 0, start_date: str = None,
-                 end_date: str = None, calendar: str = "CAL_ALLDAYS",
-                 frequency: str = "FREQ_DAY", conversion: str = "CONV_LASTBUS_ABS",
-                 nan_treatment: str = "NA_NOTHING", debug : bool = False):
+    def _request(
+        self,
+        endpoint: str,
+        tickers: List[str],
+        params: dict,
+        delay: int = 0,
+        count: int = 0,
+        start_date: str = None,
+        end_date: str = None,
+        calendar: str = "CAL_ALLDAYS",
+        frequency: str = "FREQ_DAY",
+        conversion: str = "CONV_LASTBUS_ABS",
+        nan_treatment: str = "NA_NOTHING",
+        debug: bool = False,
+    ):
         """
         Method designed to concurrently request tickers from the API. Each initiated
         thread will handle batches of 20 tickers, and 10 threads will be active
@@ -430,13 +442,13 @@ class Interface(object):
                 "frequency": frequency,
                 "conversion": conversion,
                 "nan_treatment": nan_treatment,
-                "data": "NO_REFERENCE_DATA"
+                "data": "NO_REFERENCE_DATA",
             }
             params.update(params_)
 
         b = self.batch_size
         iterations = ceil(no_tickers / b)
-        tick_list_compr = [tickers[(i * b): (i * b) + b] for i in range(iterations)]
+        tick_list_compr = [tickers[(i * b) : (i * b) + b] for i in range(iterations)]
 
         unpack = list(chain(*tick_list_compr))
         assert len(unpack) == len(set(unpack)), "List comprehension incorrect."
@@ -454,8 +466,14 @@ class Interface(object):
 
                     params_copy = params.copy()
                     params_copy["expressions"] = r_list
-                    futures.append([executor.submit(
-                        self._fetch_threading, endpoint, params_copy), r_list])
+                    futures.append(
+                        [
+                            executor.submit(
+                                self._fetch_threading, endpoint, params_copy
+                            ),
+                            r_list,
+                        ]
+                    )
 
                     time.sleep(delay)
                     thread_output.append(futures[-1][0])
@@ -466,21 +484,25 @@ class Interface(object):
                         if not status:
                             error_tickers.extend(tick_list_compr[i])
                             error_messages.append(msg)
-                            logger.warning(f"Error in requestion tickers: {', '.join(futures[i][1])}.")
-                        
+                            logger.warning(
+                                f"Error in requestion tickers: {', '.join(futures[i][1])}."
+                            )
+
                         if fto.__dict__["_result"][0] is None:
                             return None
                     except ValueError:
                         delay += 0.05
                         error_tickers.extend(futures[i][1])
-                        logger.warning(f"Error requesting tickers: {', '.join(futures[i][1])}.")
+                        logger.warning(
+                            f"Error requesting tickers: {', '.join(futures[i][1])}."
+                        )
                     else:
                         if isinstance(response, list):
                             final_output.extend(response)
                         else:
                             continue
                             # error_tickers.extend(futures[i][1])
-                            # error_messages.append(msg)                           
+                            # error_messages.append(msg)
 
         else:
             # Runs through the Tickers sequentially. Thus, breaking the requests into
@@ -498,13 +520,18 @@ class Interface(object):
             while recursive_call:
                 delay += 0.1
                 try:
-                    rec_final_output, rec_error_tickers, rec_error_messages = self._request(
+                    (
+                        rec_final_output,
+                        rec_error_tickers,
+                        rec_error_messages,
+                    ) = self._request(
                         endpoint=endpoint,
                         tickers=list(set(error_tickers)),
                         params=params,
-                        delay=delay, count=count
+                        delay=delay,
+                        count=count,
                     )
-                    # NOTE: now the new error tickers are the only error tickers, 
+                    # NOTE: now the new error tickers are the only error tickers,
                     # but error messages and final_output are appended
                     error_tickers = rec_error_tickers
                     error_messages.extend(rec_error_messages)
@@ -513,7 +540,9 @@ class Interface(object):
                         recursive_call = False
                     elif count > 5:
                         recursive_call = False
-                        logger.warning(f"Error requesting tickers: {', '.join(error_tickers)}. No longer retrying.")
+                        logger.warning(
+                            f"Error requesting tickers: {', '.join(error_tickers)}. No longer retrying."
+                        )
 
                 except TypeError:
                     continue
@@ -545,7 +574,7 @@ class Interface(object):
         return delay
 
     def get_ts_expression(
-            self, expression, original_metrics, suppress_warning, **kwargs
+        self, expression, original_metrics, suppress_warning, **kwargs
     ):
         """
         Main driver function. Receives the Tickers and returns the respective dataframe.
@@ -561,8 +590,8 @@ class Interface(object):
         clause, results = self.check_connection()
         if not clause:
             logger.error(f"Connection failed. Error message: {results}.")
-            return None 
-        
+            return None
+
         c_delay = self.delay_compute(len(expression))
         results = None
 
@@ -571,16 +600,19 @@ class Interface(object):
                 endpoint="/expressions/time-series",
                 tickers=expression,
                 params={},
-                delay = c_delay,
-                **kwargs
+                delay=c_delay,
+                **kwargs,
             )
             c_delay += 0.1
-        
+
         results, error_tickers, error_messages = results
         if error_tickers:
             logger.warning(f"Request failed for tickers: {', '.join(error_tickers)}.")
             logger.warning(f"Error messages: [{', '.join(error_messages)}].")
 
-        r = {'results' : results, 'error_tickers' : error_tickers, 'error_messages' : error_messages}
+        r = {
+            "results": results,
+            "error_tickers": error_tickers,
+            "error_messages": error_messages,
+        }
         return r
-
