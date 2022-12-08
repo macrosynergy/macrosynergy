@@ -100,9 +100,9 @@ cids = ['EUR','GBP','USD']
 xcats = ['FXXR_NSA','EQXR_NSA']
 tickers = [cid+"_"+xcat for cid in cids for xcat in xcats]
 
-oauth_proxy="https://proxy.example.com:port"
+oauth_proxy="https://seucreproxy.example.com:port"
 proxy = {"https": oauth_proxy}
-# or proxy = {"http": oauth_proxy}
+# or proxy = {"http": "http://proxy.example.com:port"}
 with api.Interface(
         oauth=True,
         client_id = "<dq_client_id>",
