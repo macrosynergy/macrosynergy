@@ -1,12 +1,10 @@
-from macrosynergy.dataquery import api
-from macrosynergy.dataquery.auth import OAuth, CertAuth
-from macrosynergy.dataquery import framer
+from macrosynergy.download import dq_api
+from macrosynergy.download import JPMaQSDownload
 from typing import List
 from unittest import mock
 from random import random
 import unittest
 import numpy as np
-
 
 class TestCertAuth(unittest.TestCase):
     def test_something(self):
@@ -15,9 +13,9 @@ class TestCertAuth(unittest.TestCase):
 
 class TestOAuth(unittest.TestCase):
     def test_init(self):
-        oauth = auth.OAuth(client_id="test-id", client_secret="SECRET")
+        oauth = dq_api.OAuth(client_id="test-id", client_secret="SECRET")
 
-        self.assertEqual(auth.OAUTH_BASE_URL, oauth.base_url)
+        self.assertEqual(dq_api.OAUTH_BASE_URL, oauth.base_url)
         self.assertEqual("test-id", oauth.client_id)
         self.assertEqual("SECRET", oauth.client_secret)
 
@@ -27,17 +25,18 @@ class TestOAuth(unittest.TestCase):
 
     def test_invalid_dtype_client_id(self):
         with self.assertRaises(AssertionError):
-            auth.OAuth(client_id=b"test-id", client_secret="SECRET")
+            dq_api.OAuth(client_id=b"test-id", client_secret="SECRET")
 
     def test_invalid_dtype_client_secret(self):
         with self.assertRaises(AssertionError):
-            auth.OAuth(client_id="test-id", client_secret=b"SECRET")
+            dq_api.OAuth(client_id="test-id", client_secret=b"SECRET")
 
     def test_valid_token(self):
-        oauth = auth.OAuth(client_id="test-id", client_secret="SECRET")
+        oauth = dq_api.OAuth(client_id="test-id", client_secret="SECRET")
         self.assertFalse(oauth._valid_token())
-        
-        
+
+
+
 class TestDataQueryInterface(unittest.TestCase):
 
     @staticmethod
@@ -81,7 +80,7 @@ class TestDataQueryInterface(unittest.TestCase):
         return aggregator
 
     @mock.patch(
-        "macrosynergy.dataquery.auth.OAuth.get_dq_api_result",
+        "macrosynergy.download.dq_api.OAuth.get_dq_api_result",
         return_value=({"info": {"code": 200}}, True, None)
     )
     def test_check_connection(self, mock_p_request):
@@ -89,21 +88,22 @@ class TestDataQueryInterface(unittest.TestCase):
         # 200. Therefore, use the Interface Object's method to check DataQuery
         # connections.
 
-        with api.Interface(client_id="client1",
+        with JPMaQSDownload(client_id="client1",
                            client_secret="123",
-                           oauth=True) as dq:
-            clause, results = dq.check_connection()
-            self.assertTrue(clause)
-            mock_p_request.assert_called_with(
-                url=dq.access.base_url +"/services/heartbeat",
-                params={'data': 'NO_REFERENCE_DATA'},
-                proxy=None,
-            )
+                           oauth=True) as jpmaqs_download:
+            with dq_api.Interface(**jpmaqs_download.dq_args) as dq:
+                clause, results = dq.check_connection()
+                self.assertTrue(clause)
+                mock_p_request.assert_called_with(
+                    url=dq.access.base_url + "/services/heartbeat",
+                    params={"data": "NO_REFERENCE_DATA"},
+                    proxy=None,
+                )
 
         mock_p_request.assert_called_once()
 
     @mock.patch(
-        "macrosynergy.dataquery.auth.OAuth.get_dq_api_result",
+        "macrosynergy.download.dq_api.OAuth.get_dq_api_result",
         return_value=(
                     {"info": {"code": 400}}, 
                     False, 
@@ -119,21 +119,21 @@ class TestDataQueryInterface(unittest.TestCase):
         # Opposite of above method: if the connection to DataQuery fails, the error code
         # will be 400.
 
-        with api.Interface(client_id="client1",
+        with JPMaQSDownload(client_id="client1",
                            client_secret="123",
-                           oauth=True) as dq:
+                           oauth=True) as jpmaqs_download:
             # Method returns a Boolean. In this instance, the method should return False
             # (unable to connect).
-            clause, results = dq.check_connection()
-            self.assertTrue(not clause)
-            mock_p_fail.assert_called_with(
-                url=dq.access.base_url + "/services/heartbeat",
-                params={"data": "NO_REFERENCE_DATA"},
-                proxy=None,
-            )
+            with dq_api.Interface(**jpmaqs_download.dq_args) as dq:            
+                clause, results = dq.check_connection()
+                self.assertTrue(not clause)
+                mock_p_fail.assert_called_with(
+                    url=dq.access.base_url + "/services/heartbeat",
+                    params={"data": "NO_REFERENCE_DATA"},
+                    proxy=None,
+                )
 
         mock_p_fail.assert_called_once()
-
     def test_oauth_condition(self):
 
         # Accessing DataQuery can be achieved via two methods: OAuth or Certificates /
@@ -142,11 +142,12 @@ class TestDataQueryInterface(unittest.TestCase):
         # parameter "oauth".
         # First check is that the DataQuery instance is using an OAuth Object if the
         # parameter "oauth" is set to to True.
-        dq_access = api.Interface(
+        jpmaqs_download = JPMaQSDownload(
             oauth=True, client_id="client1", client_secret="123"
         )
         
-        self.assertIsInstance(dq_access.access, OAuth)
+        with dq_api.Interface(**jpmaqs_download.dq_args) as dq:
+            self.assertIsInstance(dq.access, dq_api.OAuth)
 
     def test_certauth_condition(self):
 
@@ -157,10 +158,12 @@ class TestDataQueryInterface(unittest.TestCase):
         # Given the certificate and key will not point to valid directories, the expected
         # behaviour is for an OSError to be thrown.
         with self.assertRaises(OSError):
-            dq_access = api.Interface(
+            with JPMaQSDownload(
                 username="user1", password="123", crt="/api_macrosynergy_com.crt",
                 key="/api_macrosynergy_com.key"
-            )
+            ) as downloader:
+                with dq_api.Interface(**downloader.dq_args) as dq:
+                    pass
 
     def test_isolate_timeseries(self):
 
@@ -169,13 +172,13 @@ class TestDataQueryInterface(unittest.TestCase):
 
         tickers = [cid + "_" + xcat for xcat in xcats for cid in cids_dmca]
 
-        dq = api.Interface(
+        jpmaqs_download = JPMaQSDownload(
             oauth=True, client_id="client_id", client_secret="client_secret"
         )
 
         # First replicate the api.Interface()._request() method using the associated
         # JPMaQS expression.
-        expression = dq.jpmaqs_indicators(
+        expression = jpmaqs_download.jpmaqs_indicators(
             metrics=["value", "grading"], tickers=tickers
         )
         final_output = self.dq_request(dq_expressions=expression)
@@ -187,8 +190,8 @@ class TestDataQueryInterface(unittest.TestCase):
 
         # Therefore, assert that the dictionary contains the expected tickers and that
         # each value is a three-dimensional DataFrame: real_date, value, grade.
-        results_dict, output_dict, s_list = framer.isolate_timeseries(
-            final_output, ['value', 'grading'], False, False
+        results_dict, output_dict, s_list = jpmaqs_download.isolate_timeseries(
+            list_ = final_output, metrics = ['value', 'grading'], debug = False, sequential = False
         )
 
         self.__dict__["results_dict"] = results_dict
@@ -210,7 +213,7 @@ class TestDataQueryInterface(unittest.TestCase):
         # associated method, isolate_timeseries().
         self.test_isolate_timeseries()
 
-        dq = api.Interface(
+        jpmaqs_download = JPMaQSDownload(
             oauth=True, client_id="client_id", client_secret="client_secret"
         )
 
@@ -222,7 +225,7 @@ class TestDataQueryInterface(unittest.TestCase):
 
         # All tickers held in the dictionary are valid tickers. Therefore, confirm the
         # keys for the two dictionary, received & returned, match.
-        results_dict = framer.valid_ticker(
+        results_dict = jpmaqs_download.valid_ticker(
             _dict=self.results_dict, suppress_warning=True, debug=False
         )
         self.assertTrue(len(results_dict.keys()) == len(self.results_dict.keys()))
@@ -239,7 +242,7 @@ class TestDataQueryInterface(unittest.TestCase):
         data = np.array([None] * (shape[0] * shape[1]))
 
         results_dict["DB(JPMAQS,USD_FXXR_NSA"] = data.reshape(shape)
-        results_dict_USD = framer.valid_ticker(
+        results_dict_USD = jpmaqs_download.valid_ticker(
             self.results_dict, suppress_warning=True, debug=False
         )
         # Ticker should be removed from the dictionary.
@@ -261,12 +264,12 @@ class TestDataQueryInterface(unittest.TestCase):
         # be valid by design.
         self.test_isolate_timeseries()
 
-        dq = api.Interface(
+        jpmaqs_download = JPMaQSDownload(
             oauth=True, client_id="client_id", client_secret="client_secret"
         )
 
         results_dict = self.results_dict
-        trial_df = framer.dataframe_wrapper(
+        trial_df = jpmaqs_download.dataframe_wrapper(
             _dict=results_dict, no_metrics=2, original_metrics=["value", "grading"]
         )
 
