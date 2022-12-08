@@ -72,10 +72,11 @@ of the daily timeseries of EUR FX excess returns.
 
 Using the api you can also access a panel of tickers from different countries like so.
 ```python
+import pandas as pd
+from macrosynergy.dataquery import api
+
 cids = ['EUR','GBP','USD']
-
 xcats = ['FXXR_NSA','EQXR_NSA']
-
 tickers = [cid+"_"+xcat for cid in cids for xcat in xcats]
 
 with api.Interface(
@@ -92,26 +93,45 @@ data.info()
 ```
 It is also possible to use a proxy server with the Dataquery interface. Here's an example:
 ```python
-from macrosynergy.dataquery import api
 import pandas as pd
+from macrosynergy.dataquery import api
 
 cids = ['EUR','GBP','USD']
 xcats = ['FXXR_NSA','EQXR_NSA']
 tickers = [cid+"_"+xcat for cid in cids for xcat in xcats]
 
-oauth_proxy="http://proxy.example.com:port"
-proxy = {"http": oauth_proxy}
-
+oauth_proxy="https://proxy.example.com:port"
+proxy = {"https": oauth_proxy}
+# or proxy = {"http": oauth_proxy}
 with api.Interface(
         oauth=True,
         client_id = "<dq_client_id>",
         client_secret = "<dq_client_secret>",
         proxy = proxy
 ) as dq:
-    data = dq.download(tickers = tickers, start_date="2022-01-01", suppress_warning=False)
+    data = dq.download(tickers = tickers, start_date="2022-01-01")
 
 assert isinstance(data, pd.DataFrame) and not df.empty
 ```
+or, 
+```python
+...
+proxies = {
+    "http": "http://proxy.example.com:port",
+    "https": "https://seucreproxy.example.com:port",
+}
+with api.Interface(
+        oauth=True,
+        client_id = "<dq_client_id>",
+        client_secret = "<dq_client_secret>",
+        proxy = proxies
+) as dq:
+    data = dq.download(tickers = tickers)
+...
+```
+
+
+
 ### Management 
 In order to use the rest of the package without access to the api you can [simulate](./macrosynergy/management/simulate_quantamental_data.py) quantamental data using the 
 
