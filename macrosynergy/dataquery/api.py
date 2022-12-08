@@ -45,7 +45,7 @@ class Interface(object):
         **kwargs
     ):
 
-        self.proxy = kwargs.pop("proxy", None)
+        self.proxy = kwargs.pop("proxy", kwargs.pop("proxies", None))
 
         if oauth:
             self.access: OAuth = OAuth(
