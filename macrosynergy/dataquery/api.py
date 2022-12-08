@@ -42,10 +42,12 @@ class Interface(object):
         debug: bool = False,
         concurrent: bool = True,
         batch_size: int = 20,
+        heartbeat: bool = False,
         **kwargs
     ):
 
         self.proxy = kwargs.pop("proxy", kwargs.pop("proxies", None))
+        self.heartbeat = heartbeat
 
         if oauth:
             self.access: OAuth = OAuth(
@@ -685,10 +687,13 @@ class Interface(object):
             'real_date' and chosen metrics.
         """
 
-        clause, results = self.check_connection()
-        if clause:
-            print(results["description"])
+        if self.heartbeat:
+            clause, results = self.check_connection()
+        else:
+            results = None
+            clause = True
 
+        if clause:
             df = self.get_ts_expression(
                 expression=tickers,
                 original_metrics=metrics,

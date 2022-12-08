@@ -187,7 +187,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None,
 
     for new_xcat, formula in ops.items():
         dfw_add = eval(formula)
-        df_add = pd.melt(dfw_add.reset_index(), id_vars=['real_date'])
+        df_add = pd.melt(dfw_add.reset_index(), id_vars=['real_date']).rename({'variable': 'cid'}, axis=1)
         df_add['xcat'] = new_xcat
         if new_xcat == list(ops.keys())[0]:
             df_out = df_add[cols]
@@ -231,13 +231,37 @@ if __name__ == "__main__":
     filt1 = (dfd['xcat'] == 'XR') | (dfd['xcat'] == 'CRY')
     dfdx = dfd[filt1]
 
-    # Start of the testing. Various testcases included to understand the capabilities of
-    # the designed function.
+    # Bugfix
 
-    # First testcase.
-    formula = "NEW1 = GROWTH - INFL"
-    formula_3 = "NEW2 = XR - iUSD_NEW1"
-    formulas = [formula, formula_3]
+    # load into IDE
+
+    path = "C://Users//RSueppel//OneDrive//Documents//Business//Macrosynergy//notebooks//classified//data//feathers//"
+    dfx = pd.read_csv(f"{path}df_bug.csv")
+    dfx["real_date"] = pd.to_datetime(dfx["real_date"])
+
+    # other required parameters
+
+    cids_dmsc = ["AUD", "CAD", "CHF", "GBP", "NOK", "NZD", "SEK"]  # DM small currency areas
+    cids_latm = ["BRL", "COP", "CLP", "MXN", "PEN"]  # Latam
+    cids_emea = ["CZK", "HUF", "ILS", "PLN", "RON", "RUB", "TRY", "ZAR"]  # EMEA
+    cids_emas = ["IDR", "INR", "KRW", "MYR", "PHP", "THB", "TWD"]  # EM Asia flex
+    cids_apeg = ["CNY", "HKD", "SGD"]  # EM Asia peg
+    cids_fx = ["JPY"] + cids_dmsc + cids_latm + cids_emea + cids_emas
+
+    # error/bug cade
+
+    calcs = ["VTI_GCRRESILv6MMA = iGXA_VI_P5DMAv6MMA * RESIL_CSN"]
+    dfa = panel_calculator(dfx, calcs=calcs, cids=cids_fx)
+
+
+    # Examples.
+
+    f1 = "NEW_VAR1 = GROWTH - iEUR_INFL"
+    formulas = [f1]
+    cidx = ["AUD", "CAD"]
+    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cidx, start=start, end=end)
+
+
 
     # Second testcase: EUR is not passed in as one of the cross-sections in "cids"
     # parameter but is defined in the dataframe. Therefore, code will not break.
