@@ -1,7 +1,3 @@
-
-import sys
-sys.path.append('../macrosynergy')
-
 # from macrosynergy.dataquery import api
 from macrosynergy.download import JPMaQSDownload
 import warnings
