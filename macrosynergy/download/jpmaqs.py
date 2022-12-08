@@ -29,6 +29,9 @@ class JPMaQSDownload(object):
 
         proxy = kwargs.get("proxy", None)
 
+        if client_id is None and client_secret is None:
+            oauth = False
+
         if oauth:
             if not (isinstance(client_id, str) and isinstance(client_secret, str)):
                 raise ValueError("client_id and client_secret must be strings.")
