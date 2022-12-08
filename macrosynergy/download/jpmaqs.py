@@ -1,6 +1,6 @@
 """ JPMaQS Download Interface """
 
-from typing import List, Optional, Union, Dict, Any
+from typing import List, Optional, Tuple
 import pandas as pd
 import numpy as np
 from collections import defaultdict
@@ -309,7 +309,11 @@ class JPMaQSDownload(object):
 
         df.real_date = pd.to_datetime(df.real_date)
         return df
-
+    
+    def check_connection(self)-> Tuple[bool, dict]:
+        with dq_api.Interface(**self.dq_args) as dq:
+            return dq.check_connection()
+    
     @staticmethod
     def jpmaqs_indicators(metrics, tickers):
         """
