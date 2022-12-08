@@ -5,8 +5,6 @@ import pandas as pd
 import numpy as np
 from collections import defaultdict
 import warnings
-import json, yaml
-import os
 from macrosynergy.download import dq_api
 import logging
 
