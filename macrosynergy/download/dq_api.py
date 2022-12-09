@@ -126,12 +126,10 @@ class CertAuth(object):
         """
         assert isinstance(file_path, str), "file_path must be a <str>."
         assert isinstance(file_type, str), "file_type must be a <str>."
-        file_exists = os.path.exists(file_path)
-        file_is_file = os.path.isfile(file_path)
-        if not file_exists:
+        if not os.path.exists(file_path):
             raise FileNotFoundError(f"The path '{file_path}' does not exist.")
         
-        if not file_is_file:
+        if not os.path.isfile(file_path):
             raise FileNotFoundError(f"The path '{file_path}' is not a file.")
 
         return file_path
