@@ -25,7 +25,9 @@ class JPMaQSDownload(object):
         self.debug = debug
         self.suppress_warning = suppress_warning
 
-        proxy = kwargs.get("proxy", None)
+        self.proxy = kwargs.pop("proxy", kwargs.pop("proxies", None))
+        if self.proxy is None:
+            self.proxy = kwargs.pop("token_proxy", None)
 
         if client_id is None and client_secret is None:
             oauth = False
@@ -37,7 +39,7 @@ class JPMaQSDownload(object):
             dq_args = {
                 "client_id": client_id,
                 "client_secret": client_secret,
-                "proxy": proxy,
+                "proxy": self.proxy,
             }
         else:
             username = kwargs.get("username", None)
@@ -49,7 +51,7 @@ class JPMaQSDownload(object):
                 "password": password,
                 "crt": crt,
                 "key": key,
-                "proxy": proxy,
+                "proxy": self.proxy,
             }
 
         dq_args["debug"] = debug
