@@ -116,7 +116,7 @@ class CertAuth(object):
         self.last_url: Optional[str] = None
 
     @staticmethod
-    def valid_path(directory: str, file_type: str) -> Optional[str]:
+    def valid_path(file_path: str, file_type: str) -> Optional[str]:
         """Validates the key & certificate exist in the referenced directory.
 
         :param <str> directory: directory hosting the respective files.
@@ -124,17 +124,17 @@ class CertAuth(object):
             key being received.
 
         """
-        dir_error = f"{file_type:s} file must be a <str> not <{type(directory)}>."
-        assert isinstance(directory, str), dir_error
+        assert isinstance(file_path, str), "file_path must be a <str>."
+        assert isinstance(file_type, str), "file_type must be a <str>."
+        file_exists = os.path.exists(file_path)
+        file_is_file = os.path.isfile(file_path)
+        if not file_exists:
+            raise FileNotFoundError(f"The path '{file_path}' does not exist.")
+        
+        if not file_is_file:
+            raise FileNotFoundError(f"The path '{file_path}' is not a file.")
 
-        condition = os.path.exists(directory) and os.path.isfile(directory)
-        if not condition:
-            raise OSError(
-                f"The directory received, {directory}, does not contain the "
-                f"respective file, {file_type}."
-            )
-
-        return directory
+        return file_path
 
     def get_dq_api_result(
         self, url: str, params: dict = None, proxy: Optional[dict] = None
