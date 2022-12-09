@@ -25,8 +25,7 @@ class JPMaQSDownload(object):
 
         self.debug = debug
         self.suppress_warning = suppress_warning
-        self.check_connection = check_connection
-
+        
         self.proxy = kwargs.pop("proxy", kwargs.pop("proxies", None))
         if self.proxy is None:
             self.proxy = kwargs.pop("token_proxy", None)
@@ -55,7 +54,7 @@ class JPMaQSDownload(object):
                 "key": key,
                 "proxy": self.proxy,
             }
-
+        dq_args["heartbeat"] = check_connection
         dq_args["debug"] = debug
         dq_args["suppress_warning"] = suppress_warning
         dq_args["oauth"] = oauth
@@ -415,7 +414,6 @@ class JPMaQSDownload(object):
                 end_date=end_date,
                 suppress_warning=suppress_warning,
                 debug=debug,
-                heartbeat=self.check_connection
             )
 
         results = dq_result_dict["results"]
