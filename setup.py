@@ -23,6 +23,8 @@ Programming Language :: Python :: 3.6
 Programming Language :: Python :: 3.7
 Programming Language :: Python :: 3.8
 Programming Language :: Python :: 3.9
+Programming Language :: Python :: 3.10
+Programming Language :: Python :: 3.11
 Programming Language :: Python :: 3 :: Only
 Topic :: Software Development
 Topic :: Scientific/Engineering
@@ -39,7 +41,7 @@ MICRO = 23
 ISRELEASED = True
 VERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
 
-if sys.version_info >= (3, 10):
+if sys.version_info >= (3, 12):
     # The first version not in the `Programming Language :: Python :: ...` classifiers above
     warnings.warn(
         f"Macrosynergy {VERSION} may not yet support Python "
