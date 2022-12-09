@@ -332,21 +332,18 @@ class Interface(object):
             params={"data": "NO_REFERENCE_DATA"},
             proxy=self.proxy,
         )
-
-        if success:
-            try:
-                results: dict = js["info"]
-            except KeyError:
-                url = self.access.last_url
-                now = datetime.utcnow()
-                raise ConnectionError(
-                    f"DataQuery request {url:s} error response at {now.isoformat()}: {js}"
-                )
-            else:
-                return int(results["code"]) == 200, results
-        else:
-            # TODO msg?
+        
+        if not success:
             return False, {}
+
+        if "info" not in js:
+            raise ValueError(f"Invalid response from DataQuery."\
+                            "'info' missing from response.keys():"\
+                            f"{js.keys()}, request {self.last_url:s} error response at {datetime.datetime.utcnow().isoformat()}: {js}")
+        
+        results : dict = js["info"]
+        assert results["code"] == 200, f"Error message from DataQuery: {results}"
+        return int(results["code"]) == 200, results
 
     def _fetch_threading(self, endpoint, params: dict, server_count: int = 5):
         """
