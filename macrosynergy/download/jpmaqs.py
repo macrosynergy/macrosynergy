@@ -19,11 +19,13 @@ class JPMaQSDownload(object):
         client_secret: Optional[str] = None,
         debug: bool = False,
         suppress_warning: bool = False,
+        check_connection: bool = False,
         **kwargs,
     ):
 
         self.debug = debug
         self.suppress_warning = suppress_warning
+        self.check_connection = check_connection
 
         self.proxy = kwargs.pop("proxy", kwargs.pop("proxies", None))
         if self.proxy is None:
@@ -413,6 +415,7 @@ class JPMaQSDownload(object):
                 end_date=end_date,
                 suppress_warning=suppress_warning,
                 debug=debug,
+                heartbeat=self.check_connection
             )
 
         results = dq_result_dict["results"]

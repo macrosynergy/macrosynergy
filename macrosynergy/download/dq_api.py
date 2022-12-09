@@ -284,11 +284,13 @@ class Interface(object):
         debug: bool = False,
         concurrent: bool = True,
         batch_size: int = 20,
+        heartbeat: bool = False,
         **kwargs,
     ):
 
         self.proxy = kwargs.pop("proxy", kwargs.pop("proxies", None))
-
+        self.heartbeat = heartbeat
+        
         if oauth:
             self.access: OAuth = OAuth(
                 client_id=kwargs.pop("client_id"),
@@ -592,7 +594,11 @@ class Interface(object):
 
         :return: <pd.DataFrame> df: ['cid', 'xcat', 'real_date'] + [original_metrics].
         """
-        clause, results = self.check_connection()
+        if self.heartbeat:    
+            clause, results = self.check_connection()
+        else:
+            clause, results = True, None
+            
         if not clause:
             logger.error(f"Connection failed. Error message: {results}.")
             return None
