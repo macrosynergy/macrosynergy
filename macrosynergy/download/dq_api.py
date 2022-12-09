@@ -64,7 +64,6 @@ def dq_request(
         params=params,
         **kwargs,
     ) as r:
-        text: str = r.text
         last_url: str = r.url
         js, success, msg = valid_response(r=r)
 
