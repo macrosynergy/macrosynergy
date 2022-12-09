@@ -376,7 +376,7 @@ class Interface(object):
             except ConnectionResetError:
                 counter += 1
                 time.sleep(0.05)
-                print(f"Server error: will retry. Attempt number: {counter}.")
+                logger.warning(f"Server error: will retry. Attempt number: {counter}.")
                 continue
 
             if select in response.keys():
