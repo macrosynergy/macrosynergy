@@ -339,7 +339,7 @@ class Interface(object):
                             f"{js.keys()}, request {self.last_url:s} error response at {datetime.datetime.utcnow().isoformat()}: {js}")
         
         results : dict = js["info"]
-        assert results["code"] == 200, f"Error message from DataQuery: {results}"
+        assert int(results["code"]) == 200, f"Error message from DataQuery: {results}"
         return int(results["code"]) == 200, results
 
     def _fetch_threading(self, endpoint, params: dict, server_count: int = 5):
