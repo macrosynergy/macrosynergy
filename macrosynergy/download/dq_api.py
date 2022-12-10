@@ -128,7 +128,7 @@ class CertAuth(object):
         assert isinstance(file_type, str), "file_type must be a <str>."
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"The path '{file_path}' does not exist.")
-        
+
         if not os.path.isfile(file_path):
             raise FileNotFoundError(f"The path '{file_path}' is not a file.")
 
@@ -224,7 +224,7 @@ class OAuth(object):
                 proxies=self.token_proxy,
             )
             i += 1
-            
+
         runtime_error = RuntimeError(f"Unable to retrieve token. Error: {msg}. ")
         if success:
             try:
@@ -290,7 +290,7 @@ class Interface(object):
 
         self.proxy = kwargs.pop("proxy", kwargs.pop("proxies", None))
         self.heartbeat = heartbeat
-        
+
         if oauth:
             self.access: OAuth = OAuth(
                 client_id=kwargs.pop("client_id"),
@@ -331,16 +331,18 @@ class Interface(object):
             params={"data": "NO_REFERENCE_DATA"},
             proxy=self.proxy,
         )
-        
+
         if not success:
             return False, {}
 
         if "info" not in js:
-            raise ValueError(f"Invalid response from DataQuery."\
-                            "'info' missing from response.keys():"\
-                            f"{js.keys()}, request {self.last_url:s} error response at {datetime.datetime.utcnow().isoformat()}: {js}")
-        
-        results : dict = js["info"]
+            raise ValueError(
+                f"Invalid response from DataQuery."
+                "'info' missing from response.keys():"
+                f"{js.keys()}, request {self.last_url:s} error response at {datetime.datetime.utcnow().isoformat()}: {js}"
+            )
+
+        results: dict = js["info"]
         assert int(results["code"]) == 200, f"Error message from DataQuery: {results}"
         return int(results["code"]) == 200, results
 
@@ -594,11 +596,11 @@ class Interface(object):
 
         :return: <pd.DataFrame> df: ['cid', 'xcat', 'real_date'] + [original_metrics].
         """
-        if self.heartbeat:    
+        if self.heartbeat:
             clause, results = self.check_connection()
         else:
             clause, results = True, None
-            
+
         if not clause:
             logger.error(f"Connection failed. Error message: {results}.")
             return None
