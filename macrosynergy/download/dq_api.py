@@ -23,7 +23,7 @@ OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
 logger = logging.getLogger(__name__)
 
 
-def valid_response(r: requests.Response) -> Tuple[dict, bool, Optional[dict]]:
+def valid_response(r: requests.Response) -> Tuple[Optional[dict], bool, Optional[dict]]:
     """
     Prior to requesting any data, the function will confirm if a connection to the
     DataQuery API is able to be established given the credentials passed. If the status
@@ -51,7 +51,7 @@ def dq_request(
     method: str = "get",
     cert: Optional[Tuple[str, str]] = None,
     **kwargs,
-) -> Tuple[dict, str, str]:
+) -> Tuple[Optional[dict], bool, str, Optional[dict]]:
     """Will return the request from DataQuery."""
     request_error = f"Unknown request method {method} not in ('get', 'post')."
     assert method in ("get", "post"), request_error
@@ -151,7 +151,7 @@ class CertAuth(object):
             params=params,
             proxies=proxy,
         )
-
+        self.last_response = {"json": js, "success": success, "msg": msg}
         return js, success, msg
 
 
@@ -258,7 +258,7 @@ class OAuth(object):
             headers={"Authorization": "Bearer " + self._get_token()},
             proxies=proxy,
         )
-
+        self.last_response = {"json": js, "success": success, "msg": msg}
         return js, success, msg
 
 
@@ -367,32 +367,85 @@ class Interface(object):
         response = {}
         results = []
         counter = 0
-        while (not (select in response.keys())) and (counter <= server_count):
+        invalid_responses = 0
+        while (
+            (not (select in response.keys()))
+            and (counter <= server_count)
+            and (invalid_responses <= server_count)
+        ):
             try:
                 # The required fields will already be instantiated on the instance of the
                 # Class.
                 response, status, msg = self.access.get_dq_api_result(
                     url=url, params=params, proxy=self.proxy
                 )
+                if not int(response["info"]["code"]) == 200:
+                    logger.warning(
+                        f"respone returned with HTTP Status Code {response['info']['code']}. (!= 200)"
+                        "response : {response},"
+                        "status : {status},"
+                        "msg : {msg},"
+                        "url : {url},"
+                        "params : {params},"
+                        "dq_api.Interface.last_url : {self.last_url},"
+                        "status_code : {response['info']['code']}"
+                    )
+                    raise ValueError(
+                        f"Invalid response from DataQuery. response : {response}"
+                    )
+
+                if (response is None) and (status == True):
+                    # When these conditions are true, the endpoint is actively returning None.
+                    # This is an indication that the delay is too short.
+                    # triggers a retry with a longer delay
+                    return None
+
             except ConnectionResetError:
                 counter += 1
                 time.sleep(0.05)
-                logger.warning(f"Server error: will retry. Attempt number: {counter}.")
+                logger.warning(
+                    f"Server error: will retry. Retry number: {counter+invalid_responses}."
+                    "ConnectionResetError count: {counter},"
+                    "invalid_responses count: {invalid_responses},"
+                    "dq_api.Interface.last_url : {self.last_url},"
+                    "dq_api.Interface.last_response : {self.last_response},"
+                )
                 continue
+            except ValueError:
+                invalid_responses += 1
+                time.sleep(0.05)
+                logger.warning(
+                    f"Server error: Invalid response received. Retry number: {counter+invalid_responses}."
+                    "ConnectionResetError count: {counter}."
+                    "invalid_responses count: {invalid_responses}."
+                    "response : {response},"
+                    "status : {status},"
+                    "msg : {msg},"
+                    "url : {url},"
+                    "params : {params},"
+                    "dq_api.Interface.last_url : {self.last_url}"
+                )
+            else:
+                if select in response.keys():
+                    results.extend(response[select])
 
-            if select in response.keys():
-                results.extend(response[select])
+                if response["links"][1]["next"] is None:
+                    break
 
-            if response["links"][1]["next"] is None:
-                break
+                url = f"{self.access.base_url:s}{response['links'][1]['next']:s}"
+                params = {}
 
-            url = f"{self.access.base_url:s}{response['links'][1]['next']:s}"
-            params = {}
+        if (counter > server_count) or (invalid_responses > server_count):
+            raise ConnectionError(
+                f"Connection to DataQuery failed. counter: {counter}, invalid_responses: {invalid_responses}"
+                "dq_api.Interface.last_url : {self.last_url},"
+                "dq_api.Interface.last_response : {self.last_response},"
+            )
 
-        if isinstance(results, list):
-            return results, status, msg
+        if None in results:
+            return None
         else:
-            return [], status, msg
+            return results, status, msg
 
     def _request(
         self,
