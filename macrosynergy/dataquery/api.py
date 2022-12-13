@@ -1,4 +1,4 @@
-"""(semi) Old DataQuery Interface path"""
+"""Old DataQuery Interface path"""
 import warnings
 from ..download.jpmaqs import JPMaQSDownload as Interface
 
