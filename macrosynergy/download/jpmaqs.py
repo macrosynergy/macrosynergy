@@ -21,6 +21,21 @@ logger = logging.getLogger(__name__)
 
 
 class JPMaQSDownload(object):
+    """JPMaQS Download Interface Object
+    :param <bool> oauth: True if using oauth, False if using username/password with crt/key
+    :param <str> client_id: oauth client_id, required if oauth=True
+    :param <str> client_secret: oauth client_secret, required if oauth=True
+    :param <bool> debug: True if debug mode, False if not
+    :param <bool> suppress_warning: True if suppress warning, False if not
+    :param <bool> check_connection: True if the interface should check the connection to
+        the server before sending requests, False if not. False by default.
+    :param <dict> kwargs: additional arguments to pass to the DataQuery API object such as
+        <str> crt: path to crt file, <str> key: path to key file, <str> username: username
+        for certificate based authentication, <str> password : paired with username for
+        certificatem, <dict> proxy: proxy server(s) to be used for requests, <str> token_proxy: token proxy,
+        <str> token_url: token url, <str> base_url, etc.
+    """
+
     def __init__(
         self,
         oauth: bool = True,
@@ -325,6 +340,11 @@ class JPMaQSDownload(object):
         return df
 
     def check_connection(self) -> Tuple[bool, dict]:
+        """
+        Interface to the DQ API's check_connection method,
+        which in turn checks the connection (heartbeat) to the DQ API.
+        """
+
         with dq_api.Interface(**self.dq_args) as dq:
             return dq.check_connection()
 
@@ -346,6 +366,27 @@ class JPMaQSDownload(object):
         suppress_warning=False,
         debug=False,
     ):
+        """
+        Downloads and returns a standardised DataFrame of the specified base tickers and metrics.
+
+        :param <List[str]> tickers: JPMaQS ticker of form <cid>_<xcat>. Can be combined
+            with selection of categories.
+        :param <List[str]> xcats: JPMaQS category codes. Downloaded for all standard
+            cross sections identifiers available (if cids are not specified) or those
+            selected (if cids are specified). Standard cross sections here include major
+            developed and emerging currency markets. See JPMaQS documentation.
+        :param <List[str]> cids: JPMaQS cross-section identifiers, typically based  on
+            currency code. See JPMaQS documentation.
+        :param <str> metrics: must choose one or more from 'value', 'eop_lag', 'mop_lag',
+            or 'grading'. Default is ['value'].
+        :param <str> start_date: first date in ISO 8601 string format.
+        :param <bool> suppress_warning: used to suppress warning of any invalid
+            ticker received by DataQuery.
+
+        :return <pd.Dataframe> df: standardized dataframe with columns 'cid', 'xcats',
+            'real_date' and chosen metrics.
+        """
+
         if (cids is None) & (xcats is not None):
             cids_dmca = [
                 "AUD",
