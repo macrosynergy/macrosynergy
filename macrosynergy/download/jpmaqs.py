@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 from collections import defaultdict
 import warnings
-from macrosynergy.download import dq_api
+from macrosynergy.download import dataquery
 import logging
 import sys
 
@@ -345,7 +345,7 @@ class JPMaQSDownload(object):
         which in turn checks the connection (heartbeat) to the DQ API.
         """
 
-        with dq_api.Interface(**self.dq_args) as dq:
+        with dataquery.Interface(**self.dq_args) as dq:
             return dq.check_connection()
 
     @staticmethod
@@ -466,7 +466,7 @@ class JPMaQSDownload(object):
             f"Start date: {start_date}. End date: {end_date}."
         )
 
-        with dq_api.Interface(**self.dq_args) as dq:
+        with dataquery.Interface(**self.dq_args) as dq:
             dq_result_dict = dq.get_ts_expression(
                 expression=expressions,
                 original_metrics=metrics,
