@@ -19,6 +19,7 @@ if not logging.getLogger().hasHandlers():
     )
 logger = logging.getLogger(__name__)
 
+
 class JPMaQSDownload(object):
     def __init__(
         self,
@@ -62,8 +63,8 @@ class JPMaQSDownload(object):
                 "key": key,
                 "proxy": self.proxy,
             }
-        if 'heartbeat' in kwargs:
-            check_connection = kwargs.pop('heartbeat')
+        if "heartbeat" in kwargs:
+            check_connection = kwargs.pop("heartbeat")
         dq_args["heartbeat"] = check_connection
         dq_args["debug"] = debug
         dq_args["suppress_warning"] = suppress_warning
@@ -133,7 +134,7 @@ class JPMaQSDownload(object):
                         f"'{missing_metrics}'. These will not be returned."
                         f"Check JPMaQSDownload."
                     )
-                    
+
             elif sequential and debug:
                 logger.warning(
                     f"The ticker, {k}, is missing from the API after "
@@ -418,10 +419,11 @@ class JPMaQSDownload(object):
         tickers = list(set(tickers))  # Should this be stored in a copy?
         expressions = self.jpmaqs_indicators(metrics=metrics, tickers=tickers)
 
-        logger.info(f"Downloading {len(expressions)} expressions from JPMaQS"
-                    f"for {len(tickers)} tickers & {len(metrics)} metrics."
-                    f"Start date: {start_date}. End date: {end_date}.")
-
+        logger.info(
+            f"Downloading {len(expressions)} expressions from JPMaQS"
+            f"for {len(tickers)} tickers & {len(metrics)} metrics."
+            f"Start date: {start_date}. End date: {end_date}."
+        )
 
         with dq_api.Interface(**self.dq_args) as dq:
             dq_result_dict = dq.get_ts_expression(

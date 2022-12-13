@@ -58,12 +58,11 @@ def dq_request(
     """Will return the request from DataQuery."""
     request_error = f"Unknown request method {method} not in ('get', 'post')."
     assert method in ("get", "post"), request_error
-    
-    # form the URL for the request with the params and encode it for the request
+
     log_url = f"{url}?{requests.compat.urlencode(params)}" if params else url
     log_url = requests.compat.quote(log_url, safe="%/:=&?~#+!$,;'@()*[]")
     logger.info(f"Requesting URL: {log_url}")
-        
+
     with requests.request(
         method=method,
         url=url,
@@ -74,11 +73,13 @@ def dq_request(
     ) as r:
         last_url: str = r.url
         js, success, msg = valid_response(r=r)
-        
+
     if not success:
-        logger.error(f"Request failed for URL: {last_url}"
-                     f" with message: {msg}"
-                     f" and response: {js}")
+        logger.error(
+            f"Request failed for URL: {last_url}"
+            f" with message: {msg}"
+            f" and response: {js}"
+        )
 
     return js, success, last_url, msg
 
@@ -350,8 +351,10 @@ class Interface(object):
             return False, {}
 
         if "info" not in js:
-            logger.error(f"Invalid response from DataQuery. {js}"
-                         f"request {self.last_url:s} error response at {datetime.datetime.utcnow().isoformat()}: {js}")            
+            logger.error(
+                f"Invalid response from DataQuery. {js}"
+                f"request {self.last_url:s} error response at {datetime.datetime.utcnow().isoformat()}: {js}"
+            )
             raise ValueError(
                 f"Invalid response from DataQuery."
                 "'info' missing from response.keys():"
@@ -392,30 +395,37 @@ class Interface(object):
             try:
                 # The required fields will already be instantiated on the instance of the
                 # Class.
-                logger.info(f"Requesting {url} with params {params}" \
-                    + (f"with proxy {self.proxy}" if self.proxy else ""))
-                logger.info(f"Failed requests counter: {counter}, invalid_responses: {invalid_responses}")
+                logger.info(
+                    f"Requesting {url} with params {params}"
+                    + (f"with proxy {self.proxy}" if self.proxy else "")
+                )
+                logger.info(
+                    f"Failed requests counter: {counter}, invalid_responses: {invalid_responses}"
+                )
                 response, status, msg = self.access.get_dq_api_result(
                     url=url, params=params, proxy=self.proxy
                 )
-                                      
+
                 if status:
                     if response is None:
                         # When these conditions are true, the endpoint is actively returning None.
                         # This is an indication that the delay is too short.
                         # triggers a retry with a longer delay
-                        return None                        
+                        return None
                 else:
                     logger.warning(
-                            f"respone returned with HTTP Status Code {int(msg['status_code'])}."
-                            f"response : {response},"
-                            f"status_code : {int(msg['status_code'])},"
-                            f"msg : {msg},"
-                            f"url : {url},"
-                            f"params : {params},"
-                            f"dq_api.Interface.last_url : {self.last_url},"
-                            f"status_code : {int(msg['status_code'])}")
-                    raise ValueError(f"Invalid response from DataQuery. response : {response}")
+                        f"respone returned with HTTP Status Code {int(msg['status_code'])}."
+                        f"response : {response},"
+                        f"status_code : {int(msg['status_code'])},"
+                        f"msg : {msg},"
+                        f"url : {url},"
+                        f"params : {params},"
+                        f"dq_api.Interface.last_url : {self.last_url},"
+                        f"status_code : {int(msg['status_code'])}"
+                    )
+                    raise ValueError(
+                        f"Invalid response from DataQuery. response : {response}"
+                    )
 
             except ConnectionResetError:
                 counter += 1
@@ -426,7 +436,6 @@ class Interface(object):
                     f"invalid_responses count: {invalid_responses},"
                     f"dq_api.Interface.last_url : {self.last_url},"
                     f"dq_api.Interface.last_response : {self.last_response},"
-        
                 )
                 continue
             except ValueError:
@@ -512,8 +521,8 @@ class Interface(object):
             raise RuntimeError(error_delay)
 
         no_tickers = len(tickers)
-        print(f"Number of expressions requested {no_tickers}.")
-        logger.info(f"Number of expressions requested {no_tickers}.")
+        print(f"Number of expressions requested :\t {no_tickers}")
+        logger.info(f"Number of expressions requested : {no_tickers}")
 
         if not count:
             params_ = {
@@ -682,7 +691,7 @@ class Interface(object):
 
         c_delay = self.delay_compute(len(expression))
         results = None
-        
+
         while results is None:
             results = self._request(
                 endpoint="/expressions/time-series",
@@ -694,6 +703,40 @@ class Interface(object):
             c_delay += 0.1
 
         results, error_tickers, error_messages = results
+
+        unavailable_expressions, invalid_expressions = [], []
+        for i, res in enumerate(results):
+            if res["attributes"][0]["time-series"] is None:
+                if (
+                    res["attributes"][0]["message"].strip()
+                    == "FAILED - Error in parsing JSON data"
+                ):
+                    invalid_expressions.append(res["attributes"][0]["expression"])
+                elif (
+                    res["attributes"][0]["message"]
+                    .strip()
+                    .startswith("No data available for")
+                ):
+                    unavailable_expressions.append(res["attributes"][0]["expression"])
+
+        valid_results_count = (
+            len(results) - len(invalid_expressions) - len(unavailable_expressions)
+        )
+        logger.warning(f"Invalid expressions: {', '.join(invalid_expressions)}")
+        logger.warning(f"Number of invalid expressions: {len(invalid_expressions)}")
+        logger.warning(f"Unavailable expressions: {', '.join(unavailable_expressions)}")
+        logger.warning(
+            f"Number of unavailable expressions: {len(unavailable_expressions)}"
+        )
+        logger.warning(f"Number of expressions returned : {valid_results_count}")
+        print(f"(Number of unavailable expressions: {len(unavailable_expressions)})")
+        print(f"(Number of invalid expressions: {len(invalid_expressions)})")
+        print(f"Number of expressions returned :\t {valid_results_count}")
+        if valid_results_count < len(expression):
+            print(
+                "Some expressions were not returned. Checker logger output for more details."
+            )
+
         if error_tickers:
             logger.warning(f"Request failed for tickers: {', '.join(error_tickers)}.")
             logger.warning(f"Error messages: [{', '.join(error_messages)}].")
