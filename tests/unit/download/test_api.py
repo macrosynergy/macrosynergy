@@ -80,7 +80,7 @@ class TestDataQueryInterface(unittest.TestCase):
         return aggregator
 
     @mock.patch(
-        "macrosynergy.download.dataquery.OAuth.get_dataquery_result",
+        "macrosynergy.download.dataquery.OAuth.get_dq_api_result",
         return_value=({"info": {"code": 200}}, True, None)
     )
     def test_check_connection(self, mock_p_request):
@@ -103,7 +103,7 @@ class TestDataQueryInterface(unittest.TestCase):
         mock_p_request.assert_called_once()
 
     @mock.patch(
-        "macrosynergy.download.dataquery.OAuth.get_dataquery_result",
+        "macrosynergy.download.dataquery.OAuth.get_dq_api_result",
         return_value=(
                     {"info": {"code": 400}}, 
                     False, 
