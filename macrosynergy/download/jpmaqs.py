@@ -7,11 +7,13 @@ from collections import defaultdict
 import warnings
 from macrosynergy.download import dq_api
 import logging
+import sys
 
 # check if parent logger exists. else, create it.
 if not logging.getLogger().hasHandlers():
     logging.basicConfig(
-        level=logging.INFO,
+        stream=sys.stderr,
+        level=logging.WARNING,
         format="%(asctime)s - %(levelname)s - %(funcName)s - %(message)s",
         datefmt="%m/%d/%Y %I:%M:%S %p",
     )
