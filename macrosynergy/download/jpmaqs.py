@@ -70,9 +70,7 @@ class JPMaQSDownload(object):
         dq_args["oauth"] = oauth
 
         self.dq_args = dq_args.copy()
-        dq_args["client_secret"] = dq_args["client_secret"][0:4] + "..."
         logger.info("JPMaQSDownload object created.")
-        logger.info(f"JPMaQSDownload object created with the following arguments: {dq_args}")
 
     def __enter__(self):
         return self
@@ -463,10 +461,8 @@ class JPMaQSDownload(object):
                     )
                 else:
                     logger.warning(
-                        "Debug mode is on; adding download ouput to JPMaQSDownload.download_output"
-                    )
-                    logger.warning(
-                        "Debug mode is on; adding parsed output to JPMaQSDownload.parsed_output"
+                        f"Debug mode is on; adding download ouput to JPMaQSDownload.download_output"
+                        f"Debug mode is on; adding parsed output to JPMaQSDownload.parsed_output"
                     )
                     self.download_output = dq_result_dict
                     self.parsed_output = {
