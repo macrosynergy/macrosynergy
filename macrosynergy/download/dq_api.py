@@ -228,32 +228,21 @@ class OAuth(object):
 
     def _get_token(self) -> str:
         """Retrieves the token which is used to access DataQuery via OAuth method."""
-        i = 0
-        success = False
-        while (not success) and (i < 3):
+        
+        if not self._valid_token():
             js, success, self.last_url, msg = dq_request(
                 url=self.__token_url,
                 data=self.token_data,
                 method="post",
                 proxies=self.token_proxy,
             )
-            i += 1
+            self._stored_token: dict = {
+                "created_at": datetime.now(),
+                "access_token": js["access_token"],
+                "expires_in": js["expires_in"]
+            }
 
-        runtime_error = RuntimeError(f"Unable to retrieve token. Error: {msg}. ")
-        if success:
-            try:
-                self._stored_token: dict = {
-                    "created_at": datetime.now(),
-                    "access_token": js["access_token"],
-                    "expires_in": js["expires_in"],
-                }
-            except:
-                raise runtime_error
-            else:
-                if self._valid_token():
-                    return self._stored_token["access_token"]
-        else:
-            raise runtime_error
+        return self._stored_token["access_token"]
 
     def get_dq_api_result(
         self, url: str, params: dict = None, proxy: Optional[dict] = None

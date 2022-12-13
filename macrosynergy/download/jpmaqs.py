@@ -32,8 +32,8 @@ class JPMaQSDownload(object):
     :param <dict> kwargs: additional arguments to pass to the DataQuery API object such as
         <str> crt: path to crt file, <str> key: path to key file, <str> username: username
         for certificate based authentication, <str> password : paired with username for
-        certificatem, <dict> proxy: proxy server(s) to be used for requests, <str> token_proxy: token proxy,
-        <str> token_url: token url, <str> base_url, etc.
+        certificatem, <dict> proxy: proxy server(s) to be used for requests, 
+        <str> token_proxy: token proxy,  <str> base_url, etc.
     """
 
     def __init__(
