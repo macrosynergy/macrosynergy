@@ -1,4 +1,4 @@
-from macrosynergy.download import dq_api
+from macrosynergy.download import dataquery
 from macrosynergy.download import JPMaQSDownload
 from typing import List
 from unittest import mock
@@ -13,9 +13,9 @@ class TestCertAuth(unittest.TestCase):
 
 class TestOAuth(unittest.TestCase):
     def test_init(self):
-        oauth = dq_api.OAuth(client_id="test-id", client_secret="SECRET")
+        oauth = dataquery.OAuth(client_id="test-id", client_secret="SECRET")
 
-        self.assertEqual(dq_api.OAUTH_BASE_URL, oauth.base_url)
+        self.assertEqual(dataquery.OAUTH_BASE_URL, oauth.base_url)
         self.assertEqual("test-id", oauth.client_id)
         self.assertEqual("SECRET", oauth.client_secret)
 
@@ -25,14 +25,14 @@ class TestOAuth(unittest.TestCase):
 
     def test_invalid_dtype_client_id(self):
         with self.assertRaises(AssertionError):
-            dq_api.OAuth(client_id=b"test-id", client_secret="SECRET")
+            dataquery.OAuth(client_id=b"test-id", client_secret="SECRET")
 
     def test_invalid_dtype_client_secret(self):
         with self.assertRaises(AssertionError):
-            dq_api.OAuth(client_id="test-id", client_secret=b"SECRET")
+            dataquery.OAuth(client_id="test-id", client_secret=b"SECRET")
 
     def test_valid_token(self):
-        oauth = dq_api.OAuth(client_id="test-id", client_secret="SECRET")
+        oauth = dataquery.OAuth(client_id="test-id", client_secret="SECRET")
         self.assertFalse(oauth._valid_token())
 
 
@@ -80,7 +80,7 @@ class TestDataQueryInterface(unittest.TestCase):
         return aggregator
 
     @mock.patch(
-        "macrosynergy.download.dq_api.OAuth.get_dq_api_result",
+        "macrosynergy.download.dataquery.OAuth.get_dataquery_result",
         return_value=({"info": {"code": 200}}, True, None)
     )
     def test_check_connection(self, mock_p_request):
@@ -91,7 +91,7 @@ class TestDataQueryInterface(unittest.TestCase):
         with JPMaQSDownload(client_id="client1",
                            client_secret="123",
                            oauth=True) as jpmaqs_download:
-            with dq_api.Interface(**jpmaqs_download.dq_args) as dq:
+            with dataquery.Interface(**jpmaqs_download.dq_args) as dq:
                 clause, results = dq.check_connection()
                 self.assertTrue(clause)
                 mock_p_request.assert_called_with(
@@ -103,7 +103,7 @@ class TestDataQueryInterface(unittest.TestCase):
         mock_p_request.assert_called_once()
 
     @mock.patch(
-        "macrosynergy.download.dq_api.OAuth.get_dq_api_result",
+        "macrosynergy.download.dataquery.OAuth.get_dataquery_result",
         return_value=(
                     {"info": {"code": 400}}, 
                     False, 
@@ -124,7 +124,7 @@ class TestDataQueryInterface(unittest.TestCase):
                            oauth=True) as jpmaqs_download:
             # Method returns a Boolean. In this instance, the method should return False
             # (unable to connect).
-            with dq_api.Interface(**jpmaqs_download.dq_args) as dq:            
+            with dataquery.Interface(**jpmaqs_download.dq_args) as dq:            
                 clause, results = dq.check_connection()
                 self.assertTrue(not clause)
                 mock_p_fail.assert_called_with(
@@ -146,8 +146,8 @@ class TestDataQueryInterface(unittest.TestCase):
             oauth=True, client_id="client1", client_secret="123"
         )
         
-        with dq_api.Interface(**jpmaqs_download.dq_args) as dq:
-            self.assertIsInstance(dq.access, dq_api.OAuth)
+        with dataquery.Interface(**jpmaqs_download.dq_args) as dq:
+            self.assertIsInstance(dq.access, dataquery.OAuth)
 
     def test_certauth_condition(self):
 
@@ -162,7 +162,7 @@ class TestDataQueryInterface(unittest.TestCase):
                 username="user1", password="123", crt="/api_macrosynergy_com.crt",
                 key="/api_macrosynergy_com.key"
             ) as downloader:
-                with dq_api.Interface(**downloader.dq_args) as dq:
+                with dataquery.Interface(**downloader.dq_args) as dq:
                     pass
 
     def test_isolate_timeseries(self):
