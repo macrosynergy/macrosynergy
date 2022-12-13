@@ -8,8 +8,14 @@ import warnings
 from macrosynergy.download import dq_api
 import logging
 
+# check if parent logger exists. else, create it.
+if not logging.getLogger().hasHandlers():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(funcName)s - %(message)s",
+        datefmt="%m/%d/%Y %I:%M:%S %p",
+    )
 logger = logging.getLogger(__name__)
-
 
 class JPMaQSDownload(object):
     def __init__(
@@ -54,12 +60,17 @@ class JPMaQSDownload(object):
                 "key": key,
                 "proxy": self.proxy,
             }
+        if 'heartbeat' in kwargs:
+            check_connection = kwargs.pop('heartbeat')
         dq_args["heartbeat"] = check_connection
         dq_args["debug"] = debug
         dq_args["suppress_warning"] = suppress_warning
         dq_args["oauth"] = oauth
 
-        self.dq_args = dq_args
+        self.dq_args = dq_args.copy()
+        dq_args["client_secret"] = dq_args["client_secret"][0:4] + "..."
+        logger.info("JPMaQSDownload object created.")
+        logger.info(f"JPMaQSDownload object created with the following arguments: {dq_args}")
 
     def __enter__(self):
         return self
@@ -117,13 +128,14 @@ class JPMaQSDownload(object):
                 ticker_list += temp_list
 
                 if debug:
-                    print(
+                    logger.warning(
                         f"The ticker, {k}, is missing the metric(s) "
-                        f"'{missing_metrics}' whilst the requests are running "
-                        f"concurrently - will check the API sequentially."
+                        f"'{missing_metrics}'. These will not be returned."
+                        f"Check JPMaQSDownload."
                     )
+                    
             elif sequential and debug:
-                print(
+                logger.warning(
                     f"The ticker, {k}, is missing from the API after "
                     f"running sequentially - will not be in the returned "
                     f"DataFrame."
@@ -406,6 +418,11 @@ class JPMaQSDownload(object):
         tickers = list(set(tickers))  # Should this be stored in a copy?
         expressions = self.jpmaqs_indicators(metrics=metrics, tickers=tickers)
 
+        logger.info(f"Downloading {len(expressions)} expressions from JPMaQS"
+                    f"for {len(tickers)} tickers & {len(metrics)} metrics."
+                    f"Start date: {start_date}. End date: {end_date}.")
+
+
         with dq_api.Interface(**self.dq_args) as dq:
             dq_result_dict = dq.get_ts_expression(
                 expression=expressions,
@@ -440,7 +457,7 @@ class JPMaQSDownload(object):
                     logger.warning("Warning suppressed.")
                 if not debug:
                     raise Exception(
-                        "The database has missing entries for some tickers. See log for details."
+                        "The database has missing entries for some expressions. See log for details."
                     )
                 else:
                     logger.warning(

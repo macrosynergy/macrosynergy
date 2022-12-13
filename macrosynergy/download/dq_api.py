@@ -58,7 +58,12 @@ def dq_request(
     """Will return the request from DataQuery."""
     request_error = f"Unknown request method {method} not in ('get', 'post')."
     assert method in ("get", "post"), request_error
-
+    
+    # form the URL for the request with the params and encode it for the request
+    log_url = f"{url}?{requests.compat.urlencode(params)}" if params else url
+    log_url = requests.compat.quote(log_url, safe="%/:=&?~#+!$,;'@()*[]")
+    logger.info(f"Requesting URL: {log_url}")
+        
     with requests.request(
         method=method,
         url=url,
@@ -69,6 +74,11 @@ def dq_request(
     ) as r:
         last_url: str = r.url
         js, success, msg = valid_response(r=r)
+        
+    if not success:
+        logger.error(f"Request failed for URL: {last_url}"
+                     f" with message: {msg}"
+                     f" and response: {js}")
 
     return js, success, last_url, msg
 
@@ -325,6 +335,7 @@ class Interface(object):
     def __exit__(self, exc_type, exc_value, exc_traceback):
         if exc_type:
             print(f"Execution {exc_type} with value (exc_value):\n{exc_value}")
+            logger.error(f"Execution {exc_type} with value (exc_value):\n{exc_value}")
 
     def check_connection(self) -> Tuple[bool, dict]:
         """Check connection (heartbeat) to DataQuery."""
@@ -339,6 +350,8 @@ class Interface(object):
             return False, {}
 
         if "info" not in js:
+            logger.error(f"Invalid response from DataQuery. {js}"
+                         f"request {self.last_url:s} error response at {datetime.datetime.utcnow().isoformat()}: {js}")            
             raise ValueError(
                 f"Invalid response from DataQuery."
                 "'info' missing from response.keys():"
@@ -379,11 +392,21 @@ class Interface(object):
             try:
                 # The required fields will already be instantiated on the instance of the
                 # Class.
+                logger.info(f"Requesting {url} with params {params}" \
+                    + (f"with proxy {self.proxy}" if self.proxy else ""))
+                logger.info(f"Failed requests counter: {counter}, invalid_responses: {invalid_responses}")
                 response, status, msg = self.access.get_dq_api_result(
                     url=url, params=params, proxy=self.proxy
                 )
-                if not status:
-                        logger.warning(
+                                      
+                if status:
+                    if response is None:
+                        # When these conditions are true, the endpoint is actively returning None.
+                        # This is an indication that the delay is too short.
+                        # triggers a retry with a longer delay
+                        return None                        
+                else:
+                    logger.warning(
                             f"respone returned with HTTP Status Code {int(msg['status_code'])}."
                             f"response : {response},"
                             f"status_code : {int(msg['status_code'])},"
@@ -391,17 +414,8 @@ class Interface(object):
                             f"url : {url},"
                             f"params : {params},"
                             f"dq_api.Interface.last_url : {self.last_url},"
-                            f"status_code : {int(msg['status_code'])}"
-                        )
-                        raise ValueError(
-                            f"Invalid response from DataQuery. response : {response}"
-                        )
-
-                if (response is None) and (status == True):
-                    # When these conditions are true, the endpoint is actively returning None.
-                    # This is an indication that the delay is too short.
-                    # triggers a retry with a longer delay
-                    return None
+                            f"status_code : {int(msg['status_code'])}")
+                    raise ValueError(f"Invalid response from DataQuery. response : {response}")
 
             except ConnectionResetError:
                 counter += 1
@@ -430,6 +444,7 @@ class Interface(object):
                     f"dq_api.Interface.last_url : {self.last_url}"
                 )
             else:
+                logger.info(f"Request successful.")
                 if select in response.keys():
                     results.extend(response[select])
 
@@ -498,6 +513,7 @@ class Interface(object):
 
         no_tickers = len(tickers)
         print(f"Number of expressions requested {no_tickers}.")
+        logger.info(f"Number of expressions requested {no_tickers}.")
 
         if not count:
             params_ = {
@@ -655,6 +671,7 @@ class Interface(object):
         :return: <pd.DataFrame> df: ['cid', 'xcat', 'real_date'] + [original_metrics].
         """
         if self.heartbeat:
+            logger.info("Checking connection using heartbeat")
             clause, results = self.check_connection()
         else:
             clause, results = True, None
@@ -665,7 +682,7 @@ class Interface(object):
 
         c_delay = self.delay_compute(len(expression))
         results = None
-
+        
         while results is None:
             results = self._request(
                 endpoint="/expressions/time-series",
