@@ -38,6 +38,9 @@ def valid_response(r: requests.Response) -> Tuple[Optional[dict], bool, Optional
             "url": r.url,
         }
         js: Optional[dict] = None
+
+        logger.error(f"Request failed: {msg}")
+
     else:
         js = r.json()
 
@@ -379,20 +382,20 @@ class Interface(object):
                 response, status, msg = self.access.get_dq_api_result(
                     url=url, params=params, proxy=self.proxy
                 )
-                if not int(response["info"]["code"]) == 200:
-                    logger.warning(
-                        f"respone returned with HTTP Status Code {response['info']['code']}. (!= 200)"
-                        "response : {response},"
-                        "status : {status},"
-                        "msg : {msg},"
-                        "url : {url},"
-                        "params : {params},"
-                        "dq_api.Interface.last_url : {self.last_url},"
-                        "status_code : {response['info']['code']}"
-                    )
-                    raise ValueError(
-                        f"Invalid response from DataQuery. response : {response}"
-                    )
+                if not status:
+                        logger.warning(
+                            f"respone returned with HTTP Status Code {int(msg['status_code'])}."
+                            f"response : {response},"
+                            f"status_code : {int(msg['status_code'])},"
+                            f"msg : {msg},"
+                            f"url : {url},"
+                            f"params : {params},"
+                            f"dq_api.Interface.last_url : {self.last_url},"
+                            f"status_code : {int(msg['status_code'])}"
+                        )
+                        raise ValueError(
+                            f"Invalid response from DataQuery. response : {response}"
+                        )
 
                 if (response is None) and (status == True):
                     # When these conditions are true, the endpoint is actively returning None.
@@ -405,10 +408,11 @@ class Interface(object):
                 time.sleep(0.05)
                 logger.warning(
                     f"Server error: will retry. Retry number: {counter+invalid_responses}."
-                    "ConnectionResetError count: {counter},"
-                    "invalid_responses count: {invalid_responses},"
-                    "dq_api.Interface.last_url : {self.last_url},"
-                    "dq_api.Interface.last_response : {self.last_response},"
+                    f"ConnectionResetError count: {counter},"
+                    f"invalid_responses count: {invalid_responses},"
+                    f"dq_api.Interface.last_url : {self.last_url},"
+                    f"dq_api.Interface.last_response : {self.last_response},"
+        
                 )
                 continue
             except ValueError:
@@ -416,14 +420,14 @@ class Interface(object):
                 time.sleep(0.05)
                 logger.warning(
                     f"Server error: Invalid response received. Retry number: {counter+invalid_responses}."
-                    "ConnectionResetError count: {counter}."
-                    "invalid_responses count: {invalid_responses}."
-                    "response : {response},"
-                    "status : {status},"
-                    "msg : {msg},"
-                    "url : {url},"
-                    "params : {params},"
-                    "dq_api.Interface.last_url : {self.last_url}"
+                    f"ConnectionResetError count: {counter}."
+                    f"invalid_responses count: {invalid_responses}."
+                    f"response : {response},"
+                    f"status : {status},"
+                    f"msg : {msg},"
+                    f"url : {url},"
+                    f"params : {params},"
+                    f"dq_api.Interface.last_url : {self.last_url}"
                 )
             else:
                 if select in response.keys():
@@ -438,11 +442,11 @@ class Interface(object):
         if (counter > server_count) or (invalid_responses > server_count):
             raise ConnectionError(
                 f"Connection to DataQuery failed. counter: {counter}, invalid_responses: {invalid_responses}"
-                "dq_api.Interface.last_url : {self.last_url},"
-                "dq_api.Interface.last_response : {self.last_response},"
+                f"dq_api.Interface.last_url : {self.last_url},"
+                f"dq_api.Interface.last_response : {self.last_response},"
             )
 
-        if None in results:
+        if (len(results) == 0) or (None in results):
             return None
         else:
             return results, status, msg
@@ -548,6 +552,7 @@ class Interface(object):
                             error_messages.append(msg)
                             logger.warning(
                                 f"Error in requestion tickers: {', '.join(futures[i][1])}."
+                                f"Error details: {msg}"
                             )
 
                         if fto.__dict__["_result"][0] is None:
