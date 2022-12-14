@@ -423,14 +423,14 @@ class Interface(object):
                         return None
                 else:
                     logger.warning(
-                        f"respone returned with HTTP Status Code {int(msg['status_code'])}."
-                        f"response : {response},"
-                        f"status_code : {int(msg['status_code'])},"
-                        f"msg : {msg},"
-                        f"url : {url},"
+                        f"respone returned with HTTP Status Code {int(msg['status_code'])}. "
+                        f"response : {response}, "
+                        f"status_code : {int(msg['status_code'])}, "
+                        f"msg : {msg}, "
+                        f"url : {url}, "
                         f"params : {params},"
-                        f"dq_api.Interface.last_url : {self.last_url},"
-                        f"status_code : {int(msg['status_code'])}"
+                        f"dq_api.Interface.last_url : {self.last_url}, "
+                        f"status_code : {int(msg['status_code'])} "
                     )
                     raise ValueError(
                         f"Invalid response from DataQuery. response : {response}"
@@ -440,25 +440,25 @@ class Interface(object):
                 counter += 1
                 time.sleep(0.05)
                 logger.warning(
-                    f"Server error: will retry. Retry number: {counter+invalid_responses}."
-                    f"ConnectionResetError count: {counter},"
-                    f"invalid_responses count: {invalid_responses},"
-                    f"dq_api.Interface.last_url : {self.last_url},"
-                    f"dq_api.Interface.last_response : {self.last_response},"
+                    f"Server error: will retry. Retry number: {counter+invalid_responses}. "
+                    f"ConnectionResetError count: {counter}, "
+                    f"invalid_responses count: {invalid_responses}, "
+                    f"dq_api.Interface.last_url : {self.last_url}, "
+                    f"dq_api.Interface.last_response : {self.last_response}, "
                 )
                 continue
             except ValueError:
                 invalid_responses += 1
                 time.sleep(0.05)
                 logger.warning(
-                    f"Server error: Invalid response received. Retry number: {counter+invalid_responses}."
-                    f"ConnectionResetError count: {counter}."
-                    f"invalid_responses count: {invalid_responses}."
-                    f"response : {response},"
-                    f"status : {status},"
-                    f"msg : {msg},"
-                    f"url : {url},"
-                    f"params : {params},"
+                    f"Server error: Invalid response received. Retry number: {counter+invalid_responses}. "
+                    f"ConnectionResetError count: {counter}. "
+                    f"invalid_responses count: {invalid_responses}. "
+                    f"response : {response}, "
+                    f"status : {status}, "
+                    f"msg : {msg}, "
+                    f"url : {url}, "
+                    f"params : {params}, "
                     f"dq_api.Interface.last_url : {self.last_url}"
                 )
             else:
