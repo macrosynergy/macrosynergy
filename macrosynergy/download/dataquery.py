@@ -116,8 +116,8 @@ class CertAuth(object):
         crt: str = "api_macrosynergy_com.crt",
         key: str = "api_macrosynergy_com.key",
         base_url: str = CERT_BASE_URL,
-        proxy: Optional[dict] = None,    
-        ):
+        proxy: Optional[dict] = None,
+    ):
 
         error_user = f"username must be a <str> and not {type(username)}."
         assert isinstance(username, str), error_user
@@ -141,7 +141,6 @@ class CertAuth(object):
         self.last_response: Optional[str] = None
         self.last_url: Optional[str] = None
         self.proxy: Optional[dict] = proxy
-
 
     @staticmethod
     def valid_path(file_path: str, file_type: str) -> Optional[str]:
@@ -531,7 +530,7 @@ class Interface(object):
             raise RuntimeError(error_delay)
 
         no_tickers = len(tickers)
-        print(f"Number of expressions requested :\t {no_tickers}")
+        print(f"Number of expressions requested : {no_tickers}")
         logger.info(f"Number of expressions requested : {no_tickers}")
 
         if not count:
@@ -714,37 +713,22 @@ class Interface(object):
 
         results, error_tickers, error_messages = results
 
-        unavailable_expressions, invalid_expressions = [], []
+        invalid_expressions = []
         for i, res in enumerate(results):
             if res["attributes"][0]["time-series"] is None:
-                if (
-                    res["attributes"][0]["message"].strip()
-                    == "FAILED - Error in parsing JSON data"
-                ):
+                if "message" in res["attributes"][0]:
                     invalid_expressions.append(res["attributes"][0]["expression"])
-                elif (
-                    res["attributes"][0]["message"]
-                    .strip()
-                    .startswith("No data available for")
-                ):
-                    unavailable_expressions.append(res["attributes"][0]["expression"])
 
-        valid_results_count = (
-            len(results) - len(invalid_expressions) - len(unavailable_expressions)
-        )
+        valid_results_count = len(results) - len(invalid_expressions)
         logger.warning(f"Invalid expressions: {', '.join(invalid_expressions)}")
         logger.warning(f"Number of invalid expressions: {len(invalid_expressions)}")
-        logger.warning(f"Unavailable expressions: {', '.join(unavailable_expressions)}")
-        logger.warning(
-            f"Number of unavailable expressions: {len(unavailable_expressions)}"
-        )
         logger.warning(f"Number of expressions returned : {valid_results_count}")
-        print(f"(Number of unavailable expressions: {len(unavailable_expressions)})")
-        print(f"(Number of invalid expressions: {len(invalid_expressions)})")
-        print(f"Number of expressions returned :\t {valid_results_count}")
+        print(f"Number of expressions returned  : {valid_results_count}")
+        print(f"(Number of invalid expressions  : {len(invalid_expressions)})")
         if valid_results_count < len(expression):
             print(
-                "Some expressions were not returned. Checker logger output for more details."
+                "Some expressions were invalid, and were not returned.\n"
+                "Check logger output for more details."
             )
 
         if error_tickers:
