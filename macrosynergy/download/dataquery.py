@@ -39,7 +39,7 @@ def valid_response(r: requests.Response) -> Tuple[Optional[dict], bool, Optional
         }
         js: Optional[dict] = None
 
-        logger.error(f"Request failed: {msg}")
+        logger.error(f"Request failed. msg : {msg}")
 
     else:
         js = r.json()
@@ -80,6 +80,14 @@ def dq_request(
             f" with message: {msg}"
             f" and response: {js}"
         )
+        if msg['status_code'] == 401:
+            logger.error(
+                f"Invalid credentials."
+                f"Request failed for URL: {last_url}"
+                f" with message: {msg}"
+                f" and response: {js}"
+            )
+            raise Exception("Invalid credentials for DataQuery API.")
 
     return js, success, last_url, msg
 
@@ -107,10 +115,10 @@ class CertAuth(object):
         base_url: str = CERT_BASE_URL,
     ):
 
-        error_user = f"username must be a <str> and not <{type(username)}>."
+        error_user = f"username must be a <str> and not {type(username)}."
         assert isinstance(username, str), error_user
 
-        error_password = f"password must be a <str> and not <{type(password)}>."
+        error_password = f"password must be a <str> and not {type(password)}."
         assert isinstance(password, str), error_password
 
         self.auth: str = base64.b64encode(
@@ -193,11 +201,11 @@ class OAuth(object):
         self.__token_url: str = token_url
         self.__dq_api_resource_id: str = dq_resource_id
 
-        id_error = f"client_id argument must be a <str> and not <{type(client_id)}>."
+        id_error = f"client_id argument must be a <str> and not {type(client_id)}."
         assert isinstance(client_id, str), id_error
         self.client_id: str = client_id
 
-        secret_error = f"client_secret must be a str and not <{type(client_secret)}>."
+        secret_error = f"client_secret must be a str and not {type(client_secret)}."
         assert isinstance(client_secret, str), secret_error
 
         self.client_secret: str = client_secret
