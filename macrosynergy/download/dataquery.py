@@ -12,6 +12,7 @@ import os
 import requests
 from typing import List, Optional, Dict, Tuple
 from datetime import datetime
+from macrosynergy.download.exceptions import *
 
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 OAUTH_BASE_URL: str = (
@@ -80,14 +81,16 @@ def dq_request(
             f" with message: {msg}"
             f" and response: {js}"
         )
-        if msg['status_code'] == 401:
+        if msg["status_code"] == 401:
             logger.error(
                 f"Invalid credentials."
                 f"Request failed for URL: {last_url}"
                 f" with message: {msg}"
                 f" and response: {js}"
             )
-            raise Exception("Invalid credentials for DataQuery API.")
+            raise AuthenticationError(
+                Exception("Invalid credentials for DataQuery API.")
+            )
 
     return js, success, last_url, msg
 
@@ -236,7 +239,7 @@ class OAuth(object):
 
     def _get_token(self) -> str:
         """Retrieves the token which is used to access DataQuery via OAuth method."""
-        
+
         if not self._valid_token():
             js, success, self.last_url, msg = dq_request(
                 url=self.__token_url,
@@ -244,10 +247,16 @@ class OAuth(object):
                 method="post",
                 proxies=self.token_proxy,
             )
+            if not success:
+                raise AuthenticationError(
+                    RuntimeError(
+                        f"Unable to retrieve authenticationn token. Error details: {msg}"
+                    )
+                )
             self._stored_token: dict = {
                 "created_at": datetime.now(),
                 "access_token": js["access_token"],
-                "expires_in": js["expires_in"]
+                "expires_in": js["expires_in"],
             }
 
         return self._stored_token["access_token"]
