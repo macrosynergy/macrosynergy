@@ -116,7 +116,8 @@ class CertAuth(object):
         crt: str = "api_macrosynergy_com.crt",
         key: str = "api_macrosynergy_com.key",
         base_url: str = CERT_BASE_URL,
-    ):
+        proxy: Optional[dict] = None,    
+        ):
 
         error_user = f"username must be a <str> and not {type(username)}."
         assert isinstance(username, str), error_user
@@ -139,6 +140,8 @@ class CertAuth(object):
         self.status_code: Optional[int] = None
         self.last_response: Optional[str] = None
         self.last_url: Optional[str] = None
+        self.proxy: Optional[dict] = proxy
+
 
     @staticmethod
     def valid_path(file_path: str, file_type: str) -> Optional[str]:
@@ -197,7 +200,7 @@ class OAuth(object):
         url: str = OAUTH_BASE_URL,
         token_url: str = OAUTH_TOKEN_URL,
         dq_resource_id: str = OAUTH_DQ_RESOURCE_ID,
-        token_proxy: Optional[dict] = None,
+        proxy: Optional[dict] = None,
     ):
 
         self.base_url: str = url
@@ -224,7 +227,7 @@ class OAuth(object):
         self.status_code: Optional[int] = None
         self.last_response: Optional[str] = None
         self.last_url: Optional[str] = None
-        self.token_proxy: Optional[dict] = token_proxy
+        self.proxy: Optional[dict] = proxy
 
     def _active_token(self) -> bool:
         """Confirms if the token being used has not expired."""
@@ -245,7 +248,7 @@ class OAuth(object):
                 url=self.__token_url,
                 data=self.token_data,
                 method="post",
-                proxies=self.token_proxy,
+                proxies=self.proxy,
             )
             if not success:
                 raise AuthenticationError(
@@ -318,7 +321,7 @@ class Interface(object):
                 url=kwargs.pop("base_url", OAUTH_BASE_URL),
                 token_url=kwargs.pop("token_url", OAUTH_TOKEN_URL),
                 dq_resource_id=kwargs.pop("resource_id", OAUTH_DQ_RESOURCE_ID),
-                token_proxy=kwargs.pop("token_proxy", self.proxy),
+                proxy=self.proxy,
             )
         else:
             self.access: CertAuth = CertAuth(
@@ -327,6 +330,7 @@ class Interface(object):
                 crt=kwargs.pop("crt"),
                 key=kwargs.pop("key"),
                 base_url=kwargs.pop("base_url", CERT_BASE_URL),
+                proxy=self.proxy,
             )
 
         self.debug: bool = debug

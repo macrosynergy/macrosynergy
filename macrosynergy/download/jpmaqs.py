@@ -33,7 +33,7 @@ class JPMaQSDownload(object):
         <str> crt: path to crt file, <str> key: path to key file, <str> username: username
         for certificate based authentication, <str> password : paired with username for
         certificatem, <dict> proxy: proxy server(s) to be used for requests, 
-        <str> token_proxy: token proxy,  <str> base_url, etc.
+        <str> base_url, etc.
     """
 
     def __init__(
@@ -49,10 +49,7 @@ class JPMaQSDownload(object):
 
         self.debug = debug
         self.suppress_warning = suppress_warning
-
         self.proxy = kwargs.pop("proxy", kwargs.pop("proxies", None))
-        if self.proxy is None:
-            self.proxy = kwargs.pop("token_proxy", None)
 
         if client_id is None and client_secret is None:
             oauth = False
