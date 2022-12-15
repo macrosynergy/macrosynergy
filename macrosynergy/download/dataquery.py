@@ -6,7 +6,7 @@ import datetime
 import logging
 from math import ceil, floor
 from itertools import chain
-
+import uuid
 import base64
 import os
 import requests
@@ -24,7 +24,9 @@ OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
 logger = logging.getLogger(__name__)
 
 
-def valid_response(r: requests.Response) -> Tuple[Optional[dict], bool, Optional[dict]]:
+def valid_response(
+    r: requests.Response, track_id: Optional[str] = None
+) -> Tuple[Optional[dict], bool, Optional[dict]]:
     """
     Prior to requesting any data, the function will confirm if a connection to the
     DataQuery API is able to be established given the credentials passed. If the status
@@ -34,13 +36,15 @@ def valid_response(r: requests.Response) -> Tuple[Optional[dict], bool, Optional
     if not r.ok:
         msg: Dict[str, str] = {
             "headers": r.headers,
-            "status_code": r.status_code,
-            "text": r.text,
             "url": r.url,
+            "status_code": r.status_code,
+            "reason": r.reason,
+            "text": r.text,
+            "log_track_id": track_id,
         }
         js: Optional[dict] = None
 
-        logger.error(f"Request failed. msg : {msg}")
+        logger.error(f"Request failed. msg : {msg}" + track_id)
 
     else:
         js = r.json()
@@ -54,15 +58,19 @@ def dq_request(
     params: dict = None,
     method: str = "get",
     cert: Optional[Tuple[str, str]] = None,
+    track_id: Optional[str] = None,
     **kwargs,
 ) -> Tuple[Optional[dict], bool, str, Optional[dict]]:
     """Will return the request from DataQuery."""
-    request_error = f"Unknown request method {method} not in ('get', 'post')."
+    track_id = track_id or ""  # ts = ti if ti else ""
+    request_error = (
+        f"Unknown request method {method} not in ('get', 'post'). " + track_id
+    )
     assert method in ("get", "post"), request_error
 
     log_url = f"{url}?{requests.compat.urlencode(params)}" if params else url
     log_url = requests.compat.quote(log_url, safe="%/:=&?~#+!$,;'@()*[]")
-    logger.info(f"Requesting URL: {log_url}")
+    logger.info(f"Requesting URL: {log_url} " + track_id)
 
     with requests.request(
         method=method,
@@ -73,7 +81,7 @@ def dq_request(
         **kwargs,
     ) as r:
         last_url: str = r.url
-        js, success, msg = valid_response(r=r)
+        js, success, msg = valid_response(r=r, track_id=track_id)
 
     if not success:
         logger.error(
@@ -162,7 +170,11 @@ class CertAuth(object):
         return file_path
 
     def get_dq_api_result(
-        self, url: str, params: dict = None, proxy: Optional[dict] = None
+        self,
+        url: str,
+        params: dict = None,
+        proxy: Optional[dict] = None,
+        track_id: Optional[str] = None,
     ) -> dict:
         """Method used exclusively to request data from the API.
 
@@ -177,6 +189,7 @@ class CertAuth(object):
             headers=self.headers,
             params=params,
             proxies=proxy,
+            track_id=track_id,
         )
         self.last_response = {"json": js, "success": success, "msg": msg}
         return js, success, msg
@@ -264,7 +277,11 @@ class OAuth(object):
         return self._stored_token["access_token"]
 
     def get_dq_api_result(
-        self, url: str, params: dict = None, proxy: Optional[dict] = None
+        self,
+        url: str,
+        params: dict = None,
+        proxy: Optional[dict] = None,
+        track_id: Optional[str] = None,
     ) -> dict:
         """Method used exclusively to request data from the API.
 
@@ -279,6 +296,7 @@ class OAuth(object):
             params=params,
             headers={"Authorization": "Bearer " + self._get_token()},
             proxies=proxy,
+            track_id=track_id,
         )
         self.last_response = {"json": js, "success": success, "msg": msg}
         return js, success, msg
@@ -344,8 +362,8 @@ class Interface(object):
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         if exc_type:
-            print(f"Execution {exc_type} with value (exc_value):\n{exc_value}")
-            logger.error(f"Execution {exc_type} with value (exc_value):\n{exc_value}")
+            print(f"Execution {exc_type} with value (exc_value):\n\t {exc_value}")
+            logger.error(f"Execution {exc_type} with value (exc_value): {exc_value}")
 
     def check_connection(self) -> Tuple[bool, dict]:
         """Check connection (heartbeat) to DataQuery."""
@@ -374,7 +392,9 @@ class Interface(object):
         assert int(results["code"]) == 200, f"Error message from DataQuery: {results}"
         return int(results["code"]) == 200, results
 
-    def _fetch_threading(self, endpoint, params: dict, server_count: int = 5):
+    def _fetch_threading(
+        self, endpoint, params: dict, server_count: int = 5, track_id: str = None
+    ) -> dict:
         """
         Method responsible for requesting Tickers from the API. Able to pass in 20
         Tickers in a single request. If there is a request failure, the function will
@@ -404,15 +424,19 @@ class Interface(object):
             try:
                 # The required fields will already be instantiated on the instance of the
                 # Class.
+                track_id = f"--track_id={track_id if track_id else str(uuid.uuid4())}"
                 logger.info(
                     f"Requesting {url} with params {params}"
                     + (f"with proxy {self.proxy}" if self.proxy else "")
+                    + f" {track_id}"
                 )
-                logger.info(
-                    f"Failed requests counter: {counter}, invalid_responses: {invalid_responses}"
-                )
+                if counter + invalid_responses:
+                    logger.info(
+                        f"Failed requests counter: {counter}, invalid_responses: {invalid_responses}"
+                        + f" {track_id}"
+                    )
                 response, status, msg = self.access.get_dq_api_result(
-                    url=url, params=params, proxy=self.proxy
+                    url=url, params=params, proxy=self.proxy, track_id=track_id
                 )
 
                 if status:
@@ -462,7 +486,7 @@ class Interface(object):
                     f"dq_api.Interface.last_url : {self.last_url}"
                 )
             else:
-                logger.info(f"Request successful.")
+                logger.info(f"Request successful. {track_id}")
                 if select in response.keys():
                     results.extend(response[select])
 
@@ -608,10 +632,16 @@ class Interface(object):
         else:
             # Runs through the Tickers sequentially. Thus, breaking the requests into
             # subsets is not required.
+            final_output, error_tickers, error_messages = [], [], []
             for elem in tick_list_compr:
                 params["expressions"] = elem
-                results = self._fetch_threading(endpoint=endpoint, params=params)
-                final_output.extend(results)
+                uTemp = self._fetch_threading(endpoint=endpoint, params=params)
+                if uTemp is None:
+                    logger.warning(f"Error requesting tickers: {', '.join(elem)}.")
+                seq_output, seq_err_tick, seq_err_msg = uTemp
+                final_output.extend(seq_output)
+                error_tickers.extend(seq_err_tick)
+                error_messages.extend(seq_err_msg)
 
         error_tickers = list(chain(*error_tickers))
 
@@ -725,6 +755,7 @@ class Interface(object):
         logger.warning(f"Number of expressions returned : {valid_results_count}")
         print(f"Number of expressions returned  : {valid_results_count}")
         print(f"(Number of invalid expressions  : {len(invalid_expressions)})")
+
         if valid_results_count < len(expression):
             print(
                 "Some expressions were invalid, and were not returned.\n"

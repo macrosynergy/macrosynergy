@@ -6,17 +6,10 @@ import numpy as np
 from collections import defaultdict
 import warnings
 from macrosynergy.download import dataquery
+from macrosynergy.download.exceptions import *
 import logging
 import sys
 
-# check if parent logger exists. else, create it.
-if not logging.getLogger().hasHandlers():
-    logging.basicConfig(
-        stream=sys.stderr,
-        level=logging.WARNING,
-        format="%(asctime)s - %(levelname)s - %(funcName)s - %(message)s",
-        datefmt="%m/%d/%Y %I:%M:%S %p",
-    )
 logger = logging.getLogger(__name__)
 
 
@@ -32,7 +25,7 @@ class JPMaQSDownload(object):
     :param <dict> kwargs: additional arguments to pass to the DataQuery API object such as
         <str> crt: path to crt file, <str> key: path to key file, <str> username: username
         for certificate based authentication, <str> password : paired with username for
-        certificatem, <dict> proxy: proxy server(s) to be used for requests, 
+        certificatem, <dict> proxy: proxy server(s) to be used for requests,
         <str> base_url, etc.
     """
 
@@ -473,13 +466,24 @@ class JPMaQSDownload(object):
                 debug=debug,
             )
 
+        if dq_result_dict is None:
+            logger.error("Failed to download data.")
+            logger.error("Appending error messages to JPMaQSDownload.download_output")
+            self.download_output = dq_result_dict.copy()
+            raise Exception(
+                "Failed to download data for some tickers. See log for details."
+            )
+
         results = dq_result_dict["results"]
         error_tickers = dq_result_dict["error_tickers"]
         error_messages = dq_result_dict["error_messages"]
 
         if error_tickers:
             logger.error(f"Error tickers: {error_tickers}")
+            logger.error(f"Failed to download above tickers.")
             logger.error(f"Error messages: {error_messages}")
+            logger.error("Appending error messages to JPMaQSDownload.download_output")
+            self.download_output = dq_result_dict.copy()
             raise Exception(
                 "Failed to download data for some tickers. See log for details."
             )
@@ -508,7 +512,7 @@ class JPMaQSDownload(object):
                     self.parsed_output = {
                         "results": results_dict,
                         "results_nested_dictionary": output_dict,
-                        "s_list": s_list,
+                        "missing_tickers": s_list,
                     }
 
             results_dict = self.valid_ticker(results_dict, suppress_warning, self.debug)
@@ -529,8 +533,9 @@ class JPMaQSDownload(object):
                 )
 
             if (not isinstance(df, pd.DataFrame)) or (df.empty):
-                logger.warning("No data returned from DataQuery")
-                raise ValueError("No data returned from DataQuery")
+                logger.error("No data returned from DataQuery")
+                print("No data returned from DataQuery")
+                raise InvalidDataframeError("No data returned from DataQuery")
             else:
                 df = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
                 return df
