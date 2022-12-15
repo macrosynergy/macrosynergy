@@ -132,8 +132,8 @@ class TestDataQueryInterface(unittest.TestCase):
                     params={"data": "NO_REFERENCE_DATA"},
                     proxy=None,
                 )
-
         mock_p_fail.assert_called_once()
+
     def test_oauth_condition(self):
 
         # Accessing DataQuery can be achieved via two methods: OAuth or Certificates /

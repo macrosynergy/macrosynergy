@@ -458,7 +458,7 @@ class JPMaQSDownload(object):
 
         with dataquery.Interface(**self.dq_args) as dq:
             dq_result_dict = dq.get_ts_expression(
-                expression=expressions,
+                expressions=expressions,
                 original_metrics=metrics,
                 start_date=start_date,
                 end_date=end_date,

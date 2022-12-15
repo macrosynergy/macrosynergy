@@ -96,9 +96,7 @@ def dq_request(
                 f" with message: {msg}"
                 f" and response: {js}"
             )
-            raise AuthenticationError(
-                Exception("Invalid credentials for DataQuery API.")
-            )
+            raise AuthenticationError(msg)
 
     return js, success, last_url, msg
 
@@ -141,8 +139,8 @@ class CertAuth(object):
         self.base_url: str = base_url
 
         # Key and Certificate.
-        self.key: str = self.valid_path(key, "key")
-        self.crt: str = self.valid_path(crt, "crt")
+        self.key: str = self.valid_file(key)
+        self.crt: str = self.valid_file(crt)
 
         # For debugging purposes save last request response.
         self.status_code: Optional[int] = None
@@ -151,22 +149,15 @@ class CertAuth(object):
         self.proxy: Optional[dict] = proxy
 
     @staticmethod
-    def valid_path(file_path: str, file_type: str) -> Optional[str]:
+    def valid_file(file_path: str) -> Optional[str]:
         """Validates the key & certificate exist in the referenced directory.
+        :param <str> file_path: file_path to the key or certificate.
 
-        :param <str> directory: directory hosting the respective files.
-        :param <str> file_type: parameter used to distinguish between the certificate or
-            key being received.
-
+        :return <str>: path to the file.
         """
-        assert isinstance(file_path, str), "file_path must be a <str>."
-        assert isinstance(file_type, str), "file_type must be a <str>."
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"The path '{file_path}' does not exist.")
-
         if not os.path.isfile(file_path):
-            raise FileNotFoundError(f"The path '{file_path}' is not a file.")
-
+            raise FileNotFoundError(f"The file '{file_path}' is not a file.")
+        
         return file_path
 
     def get_dq_api_result(
@@ -264,9 +255,7 @@ class OAuth(object):
             )
             if not success:
                 raise AuthenticationError(
-                    RuntimeError(
                         f"Unable to retrieve authenticationn token. Error details: {msg}"
-                    )
                 )
             self._stored_token: dict = {
                 "created_at": datetime.now(),
@@ -375,7 +364,7 @@ class Interface(object):
         )
 
         if not success:
-            return False, {}
+            return False, msg
 
         if "info" not in js:
             logger.error(
@@ -393,7 +382,7 @@ class Interface(object):
         return int(results["code"]) == 200, results
 
     def _fetch_threading(
-        self, endpoint, params: dict, server_count: int = 5, track_id: str = None
+        self, endpoint, params: dict, max_retries: int = 5, track_id: str = None
     ) -> dict:
         """
         Method responsible for requesting Tickers from the API. Able to pass in 20
@@ -403,7 +392,7 @@ class Interface(object):
 
         :param <str> endpoint:
         :param <dict> params: dictionary containing the required parameters.
-        :param <int> server_count: count of servers to be retried.
+        :param <int> max_retries: count of servers to be retried.
 
         return <dict>: singular dictionary obtaining maximum 20 elements.
         """
@@ -414,12 +403,12 @@ class Interface(object):
         select = "instruments"
         response = {}
         results = []
-        counter = 0
+        conxn_errors = 0
         invalid_responses = 0
         while (
             (not (select in response.keys()))
-            and (counter <= server_count)
-            and (invalid_responses <= server_count)
+            and (conxn_errors <= max_retries)
+            and (invalid_responses <= max_retries)
         ):
             try:
                 # The required fields will already be instantiated on the instance of the
@@ -430,9 +419,9 @@ class Interface(object):
                     + (f"with proxy {self.proxy}" if self.proxy else "")
                     + f" {track_id}"
                 )
-                if counter + invalid_responses:
+                if conxn_errors + invalid_responses:
                     logger.info(
-                        f"Failed requests counter: {counter}, invalid_responses: {invalid_responses}"
+                        f"Failed requests counter: {conxn_errors}, invalid_responses: {invalid_responses}"
                         + f" {track_id}"
                     )
                 response, status, msg = self.access.get_dq_api_result(
@@ -461,11 +450,11 @@ class Interface(object):
                     )
 
             except ConnectionResetError:
-                counter += 1
+                conxn_errors += 1
                 time.sleep(0.05)
                 logger.warning(
-                    f"Server error: will retry. Retry number: {counter+invalid_responses}. "
-                    f"ConnectionResetError count: {counter}, "
+                    f"Server error: will retry. Retry number: {conxn_errors+invalid_responses}. "
+                    f"ConnectionResetError count: {conxn_errors}, "
                     f"invalid_responses count: {invalid_responses}, "
                     f"dq_api.Interface.last_url : {self.last_url}, "
                     f"dq_api.Interface.last_response : {self.last_response}, "
@@ -475,8 +464,8 @@ class Interface(object):
                 invalid_responses += 1
                 time.sleep(0.05)
                 logger.warning(
-                    f"Server error: Invalid response received. Retry number: {counter+invalid_responses}. "
-                    f"ConnectionResetError count: {counter}. "
+                    f"Server error: Invalid response received. Retry number: {conxn_errors+invalid_responses}. "
+                    f"ConnectionResetError count: {conxn_errors}. "
                     f"invalid_responses count: {invalid_responses}. "
                     f"response : {response}, "
                     f"status : {status}, "
@@ -496,9 +485,9 @@ class Interface(object):
                 url = f"{self.access.base_url:s}{response['links'][1]['next']:s}"
                 params = {}
 
-        if (counter > server_count) or (invalid_responses > server_count):
+        if (conxn_errors > max_retries) or (invalid_responses > max_retries):
             raise ConnectionError(
-                f"Connection to DataQuery failed. counter: {counter}, invalid_responses: {invalid_responses}"
+                f"Connection to DataQuery failed. counter: {conxn_errors}, invalid_responses: {invalid_responses}"
                 f"dq_api.Interface.last_url : {self.last_url},"
                 f"dq_api.Interface.last_response : {self.last_response},"
             )
@@ -511,7 +500,7 @@ class Interface(object):
     def _request(
         self,
         endpoint: str,
-        tickers: List[str],
+        expressions: List[str],
         params: dict,
         delay: int = 0,
         count: int = 0,
@@ -553,7 +542,7 @@ class Interface(object):
             error_delay = "Issue with DataQuery - requests should not be throttled."
             raise RuntimeError(error_delay)
 
-        no_tickers = len(tickers)
+        no_tickers = len(expressions)
         print(f"Number of expressions requested : {no_tickers}")
         logger.info(f"Number of expressions requested : {no_tickers}")
 
@@ -572,7 +561,7 @@ class Interface(object):
 
         b = self.batch_size
         iterations = ceil(no_tickers / b)
-        tick_list_compr = [tickers[(i * b) : (i * b) + b] for i in range(iterations)]
+        tick_list_compr = [expressions[(i * b) : (i * b) + b] for i in range(iterations)]
 
         unpack = list(chain(*tick_list_compr))
         assert len(unpack) == len(set(unpack)), "List comprehension incorrect."
@@ -657,7 +646,7 @@ class Interface(object):
                         rec_error_messages,
                     ) = self._request(
                         endpoint=endpoint,
-                        tickers=list(set(error_tickers)),
+                        expressions=list(set(error_tickers)),
                         params=params,
                         delay=delay,
                         count=count,
@@ -705,12 +694,12 @@ class Interface(object):
         return delay
 
     def get_ts_expression(
-        self, expression, original_metrics, suppress_warning, **kwargs
+        self, expressions, original_metrics, suppress_warning, **kwargs
     ):
         """
         Main driver function. Receives the Tickers and returns the respective dataframe.
 
-        :param <List[str]> expression: categories & respective cross-sections requested.
+        :param <List[str]> expressions: categories & respective cross-sections requested.
         :param <List[str]> original_metrics: List of required metrics: the returned
             DataFrame will reflect the order of the received List.
         :param <bool> suppress_warning: required for debugging.
@@ -728,13 +717,13 @@ class Interface(object):
             logger.error(f"Connection failed. Error message: {results}.")
             return None
 
-        c_delay = self.delay_compute(len(expression))
+        c_delay = self.delay_compute(len(expressions))
         results = None
 
         while results is None:
             results = self._request(
                 endpoint="/expressions/time-series",
-                tickers=expression,
+                expressions=expressions,
                 params={},
                 delay=c_delay,
                 **kwargs,
@@ -756,7 +745,7 @@ class Interface(object):
         print(f"Number of expressions returned  : {valid_results_count}")
         print(f"(Number of invalid expressions  : {len(invalid_expressions)})")
 
-        if valid_results_count < len(expression):
+        if valid_results_count < len(expressions):
             print(
                 "Some expressions were invalid, and were not returned.\n"
                 "Check logger output for more details."
