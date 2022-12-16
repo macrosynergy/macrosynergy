@@ -11,3 +11,8 @@ class InvalidDataframeError(Exception):
     """Raised when a dataframe is not valid."""
 
     pass
+
+class MissingDataError(Exception):
+    """Raised when data is missing from a requested dataframe."""
+
+    pass

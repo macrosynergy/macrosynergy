@@ -157,7 +157,7 @@ class CertAuth(object):
         """
         if not os.path.isfile(file_path):
             raise FileNotFoundError(f"The file '{file_path}' is not a file.")
-        
+
         return file_path
 
     def get_dq_api_result(
@@ -254,9 +254,7 @@ class OAuth(object):
                 proxies=self.proxy,
             )
             if not success:
-                raise AuthenticationError(
-                        f"Unable to retrieve authenticationn token. Error details: {msg}"
-                )
+                raise AuthenticationError(msg)
             self._stored_token: dict = {
                 "created_at": datetime.now(),
                 "access_token": js["access_token"],
@@ -561,7 +559,9 @@ class Interface(object):
 
         b = self.batch_size
         iterations = ceil(no_tickers / b)
-        tick_list_compr = [expressions[(i * b) : (i * b) + b] for i in range(iterations)]
+        tick_list_compr = [
+            expressions[(i * b) : (i * b) + b] for i in range(iterations)
+        ]
 
         unpack = list(chain(*tick_list_compr))
         assert len(unpack) == len(set(unpack)), "List comprehension incorrect."
@@ -739,13 +739,12 @@ class Interface(object):
                     invalid_expressions.append(res["attributes"][0]["expression"])
 
         valid_results_count = len(results) - len(invalid_expressions)
-        logger.warning(f"Invalid expressions: {', '.join(invalid_expressions)}")
-        logger.warning(f"Number of invalid expressions: {len(invalid_expressions)}")
-        logger.warning(f"Number of expressions returned : {valid_results_count}")
-        print(f"Number of expressions returned  : {valid_results_count}")
-        print(f"(Number of invalid expressions  : {len(invalid_expressions)})")
-
         if valid_results_count < len(expressions):
+            logger.warning(f"Invalid expressions: {', '.join(invalid_expressions)}")
+            logger.warning(f"Number of invalid expressions: {len(invalid_expressions)}")
+            logger.warning(f"Number of expressions returned : {valid_results_count}")
+            print(f"Number of expressions returned  : {valid_results_count}")
+            print(f"(Number of invalid expressions  : {len(invalid_expressions)})")
             print(
                 "Some expressions were invalid, and were not returned.\n"
                 "Check logger output for more details."

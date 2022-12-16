@@ -484,7 +484,7 @@ class JPMaQSDownload(object):
             logger.error(f"Error messages: {error_messages}")
             logger.error("Appending error messages to JPMaQSDownload.download_output")
             self.download_output = dq_result_dict.copy()
-            raise Exception(
+            raise InvalidDataframeError(
                 "Failed to download data for some tickers. See log for details."
             )
         else:
@@ -500,7 +500,7 @@ class JPMaQSDownload(object):
                 if suppress_warning:
                     logger.warning("Warning suppressed.")
                 if not debug:
-                    raise Exception(
+                    raise InvalidDataframeError(
                         "The database has missing entries for some expressions. See log for details."
                     )
                 else:
