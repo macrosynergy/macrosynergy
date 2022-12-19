@@ -369,7 +369,7 @@ class Interface(object):
                 f"Invalid response from DataQuery. {js}"
                 f"request {self.last_url:s} error response at {datetime.datetime.utcnow().isoformat()}: {js}"
             )
-            raise ValueError(
+            raise InvalidResponseError(
                 f"Invalid response from DataQuery."
                 "'info' missing from response.keys():"
                 f"{js.keys()}, request {self.last_url:s} error response at {datetime.datetime.utcnow().isoformat()}: {js}"
@@ -443,7 +443,7 @@ class Interface(object):
                         f"dq_api.Interface.last_url : {self.last_url}, "
                         f"status_code : {int(msg['status_code'])} "
                     )
-                    raise ValueError(
+                    raise InvalidResponseError(
                         f"Invalid response from DataQuery. response : {response}"
                     )
 
@@ -732,19 +732,19 @@ class Interface(object):
 
         results, error_tickers, error_messages = results
 
-        invalid_expressions = []
+        unavailable_expressions = []
         for i, res in enumerate(results):
             if res["attributes"][0]["time-series"] is None:
                 if "message" in res["attributes"][0]:
-                    invalid_expressions.append(res["attributes"][0]["expression"])
+                    unavailable_expressions.append(res["attributes"][0]["expression"])
 
-        valid_results_count = len(results) - len(invalid_expressions)
+        valid_results_count = len(results) - len(unavailable_expressions)
         if valid_results_count < len(expressions):
-            logger.warning(f"Invalid expressions: {', '.join(invalid_expressions)}")
-            logger.warning(f"Number of invalid expressions: {len(invalid_expressions)}")
+            logger.warning(f"Invalid expressions: {', '.join(unavailable_expressions)}")
+            logger.warning(f"Number of invalid expressions: {len(unavailable_expressions)}")
             logger.warning(f"Number of expressions returned : {valid_results_count}")
             print(f"Number of expressions returned  : {valid_results_count}")
-            print(f"(Number of invalid expressions  : {len(invalid_expressions)})")
+            print(f"(Number of invalid expressions  : {len(unavailable_expressions)})")
             print(
                 "Some expressions were invalid, and were not returned.\n"
                 "Check logger output for more details."
@@ -758,5 +758,6 @@ class Interface(object):
             "results": results,
             "error_tickers": error_tickers,
             "error_messages": error_messages,
+            "unavailable_expressions": unavailable_expressions,
         }
         return r
