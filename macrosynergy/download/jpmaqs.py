@@ -43,7 +43,7 @@ class JPMaQSDownload(object):
         self.debug = debug
         self.suppress_warning = suppress_warning
         self.proxy = kwargs.pop("proxy", kwargs.pop("proxies", None))
-
+        self.unavailable_tickers = []
         if client_id is None and client_secret is None:
             oauth = False
 
@@ -463,7 +463,6 @@ class JPMaQSDownload(object):
 
         tickers = list(set(tickers))  # Should this be stored in a copy?
         expressions = self.jpmaqs_indicators(metrics=metrics, tickers=tickers)
-        self.unavailable_tickers = []
 
         logger.info(
             f"Downloading {len(expressions)} expressions from JPMaQS"
