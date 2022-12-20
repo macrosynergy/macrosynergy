@@ -62,7 +62,7 @@ def dq_request(
     **kwargs,
 ) -> Tuple[Optional[dict], bool, str, Optional[dict]]:
     """Will return the request from DataQuery."""
-    track_id = track_id or ""  # ts = ti if ti else ""
+    track_id = track_id or str(0) # x = y if y else "0"
     request_error = (
         f"Unknown request method {method} not in ('get', 'post'). " + track_id
     )
@@ -70,7 +70,7 @@ def dq_request(
 
     log_url = f"{url}?{requests.compat.urlencode(params)}" if params else url
     log_url = requests.compat.quote(log_url, safe="%/:=&?~#+!$,;'@()*[]")
-    logger.info(f"Requesting URL: {log_url} " + track_id)
+    logger.info(f"Requesting URL: {log_url} , track_id: {track_id}")
 
     with requests.request(
         method=method,
@@ -84,11 +84,6 @@ def dq_request(
         js, success, msg = valid_response(r=r, track_id=track_id)
 
     if not success:
-        # logger.error(
-        #     f"Request failed for URL: {last_url}"
-        #     f" with message: {msg}"
-        #     f" and response: {js}"
-        # )
         logger.error(
             "Request failed for URL: %s with message: %s and response: %s",
             last_url,
@@ -259,6 +254,7 @@ class OAuth(object):
                 data=self.token_data,
                 method="post",
                 proxies=self.proxy,
+                track_id="get_oauth_token"
             )
             if not success:
                 raise AuthenticationError(msg)
@@ -366,6 +362,7 @@ class Interface(object):
             url=self.access.base_url + endpoint,
             params={"data": "NO_REFERENCE_DATA"},
             proxy=self.proxy,
+            track_id="heartbeat",
         )
 
         if not success:

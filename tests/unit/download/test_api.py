@@ -98,6 +98,7 @@ class TestDataQueryInterface(unittest.TestCase):
                     url=dq.access.base_url + "/services/heartbeat",
                     params={"data": "NO_REFERENCE_DATA"},
                     proxy=None,
+                    track_id='heartbeat'
                 )
 
         mock_p_request.assert_called_once()
@@ -131,6 +132,7 @@ class TestDataQueryInterface(unittest.TestCase):
                     url=dq.access.base_url + "/services/heartbeat",
                     params={"data": "NO_REFERENCE_DATA"},
                     proxy=None,
+                    track_id='heartbeat'
                 )
         mock_p_fail.assert_called_once()
 
