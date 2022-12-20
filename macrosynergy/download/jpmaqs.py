@@ -220,7 +220,7 @@ class JPMaQSDownload(object):
                 f"{unavailable_tickers}. "
                 "Appending list to JPMaQSDownload.unavailable_tickers."
             )
-            
+
         self.unavailable_tickers += unavailable_tickers
 
         return modified_dict, output_dict, ticker_list
@@ -341,7 +341,7 @@ class JPMaQSDownload(object):
             return dq.check_connection()
 
     @staticmethod
-    def remove_jpmaqs_expr_formatting(expressions : List[str]) -> List[Tuple[str, str]]:
+    def remove_jpmaqs_expr_formatting(expressions: List[str]) -> List[Tuple[str, str]]:
 
         """
         Removes the DB(JPMAQS, <ticker>, <metric>) formatting from a list of JPMaQS expressions.
@@ -350,7 +350,9 @@ class JPMaQSDownload(object):
         :return <List[Tuple[str, str]]>: List of tuples containing the ticker and metric.
         """
 
-        return [e.replace("DB(JPMAQS,", "").replace(")", "").split(",") for e in expressions]
+        return [
+            e.replace("DB(JPMAQS,", "").replace(")", "").split(",") for e in expressions
+        ]
 
     @staticmethod
     def jpmaqs_indicators(metrics, tickers):
@@ -485,7 +487,6 @@ class JPMaQSDownload(object):
             logger.error("Appending error messages to JPMaQSDownload.download_output")
             self.download_output = dq_result_dict.copy()
             raise DownloadError(ConnectionError, "Failed to download data.")
-            
 
         if dq_result_dict is None:
             logger.error("Failed to download data.")
@@ -498,7 +499,9 @@ class JPMaQSDownload(object):
         results = dq_result_dict["results"]
         error_tickers = dq_result_dict["error_tickers"]
         error_messages = dq_result_dict["error_messages"]
-        unavailable_expressions = self.remove_jpmaqs_expr_formatting(dq_result_dict["unavailable_expressions"])
+        unavailable_expressions = self.remove_jpmaqs_expr_formatting(
+            dq_result_dict["unavailable_expressions"]
+        )
         self.unavailable_expressions = unavailable_expressions.copy()
         if error_tickers:
             logger.error(f"Error tickers: {error_tickers}")
@@ -512,7 +515,7 @@ class JPMaQSDownload(object):
         else:
             results_dict, output_dict, s_list = self.isolate_timeseries(
                 list_=results, metrics=metrics, debug=debug, sequential=True
-            ) # 
+            )  #
 
             if s_list:
                 logger.warning(f"Warning tickers: {s_list}")
@@ -536,7 +539,6 @@ class JPMaQSDownload(object):
                         "results_nested_dictionary": output_dict,
                         "missing_tickers": s_list,
                     }
-                    
 
             results_dict = self.valid_ticker(results_dict, suppress_warning, self.debug)
 
@@ -569,7 +571,9 @@ class JPMaQSDownload(object):
                         "missing_tickers": s_list,
                     }
                 print("No data returned from DataQuery")
-                raise InvalidDataframeError("No data returned from DataQuery. See log for details.")
+                raise InvalidDataframeError(
+                    "No data returned from DataQuery. See log for details."
+                )
             else:
                 df = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
                 return df

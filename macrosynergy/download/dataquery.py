@@ -84,17 +84,24 @@ def dq_request(
         js, success, msg = valid_response(r=r, track_id=track_id)
 
     if not success:
+        # logger.error(
+        #     f"Request failed for URL: {last_url}"
+        #     f" with message: {msg}"
+        #     f" and response: {js}"
+        # )
         logger.error(
-            f"Request failed for URL: {last_url}"
-            f" with message: {msg}"
-            f" and response: {js}"
+            "Request failed for URL: %s with message: %s and response: %s",
+            last_url,
+            msg,
+            js,
         )
         if msg["status_code"] == 401:
             logger.error(
-                f"Invalid credentials."
-                f"Request failed for URL: {last_url}"
-                f" with message: {msg}"
-                f" and response: {js}"
+                "Invalid credentials. Request failed for URL: %s"
+                "with message: %s and response: %s",
+                last_url,
+                msg,
+                js,
             )
             raise AuthenticationError(msg)
 
@@ -366,8 +373,10 @@ class Interface(object):
 
         if "info" not in js:
             logger.error(
-                f"Invalid response from DataQuery. {js}"
-                f"request {self.last_url:s} error response at {datetime.datetime.utcnow().isoformat()}: {js}"
+                "Invalid response from DataQuery. %s"
+                "request %s error response at "
+                "%s: %s",
+                js, self.last_url, datetime.datetime.utcnow().isoformat(), js
             )
             raise InvalidResponseError(
                 f"Invalid response from DataQuery."
@@ -741,7 +750,9 @@ class Interface(object):
         valid_results_count = len(results) - len(unavailable_expressions)
         if valid_results_count < len(expressions):
             logger.warning(f"Invalid expressions: {', '.join(unavailable_expressions)}")
-            logger.warning(f"Number of invalid expressions: {len(unavailable_expressions)}")
+            logger.warning(
+                f"Number of invalid expressions: {len(unavailable_expressions)}"
+            )
             logger.warning(f"Number of expressions returned : {valid_results_count}")
             print(f"Number of expressions returned  : {valid_results_count}")
             print(f"(Number of invalid expressions  : {len(unavailable_expressions)})")
