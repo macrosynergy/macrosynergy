@@ -223,51 +223,28 @@ if __name__ == "__main__":
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
+    # Example blacklist.
     black = {'AUD': ['2000-01-01', '2003-12-31']}
 
     start = '2010-01-01'
     end = '2020-12-31'
-
+    
+    # Example filter for dataframe.
     filt1 = (dfd['xcat'] == 'XR') | (dfd['xcat'] == 'CRY')
     dfdx = dfd[filt1]
 
-    # Bugfix
-
-    # load into IDE
-
-    path = "C://Users//RSueppel//OneDrive//Documents//Business//Macrosynergy//notebooks//classified//data//feathers//"
-    dfx = pd.read_csv(f"{path}df_bug.csv")
-    dfx["real_date"] = pd.to_datetime(dfx["real_date"])
-
-    # other required parameters
-
-    cids_dmsc = ["AUD", "CAD", "CHF", "GBP", "NOK", "NZD", "SEK"]  # DM small currency areas
-    cids_latm = ["BRL", "COP", "CLP", "MXN", "PEN"]  # Latam
-    cids_emea = ["CZK", "HUF", "ILS", "PLN", "RON", "RUB", "TRY", "ZAR"]  # EMEA
-    cids_emas = ["IDR", "INR", "KRW", "MYR", "PHP", "THB", "TWD"]  # EM Asia flex
-    cids_apeg = ["CNY", "HKD", "SGD"]  # EM Asia peg
-    cids_fx = ["JPY"] + cids_dmsc + cids_latm + cids_emea + cids_emas
-
-    # error/bug cade
-
-    calcs = ["VTI_GCRRESILv6MMA = iGXA_VI_P5DMAv6MMA * RESIL_CSN"]
-    dfa = panel_calculator(dfx, calcs=calcs, cids=cids_fx)
-
-
-    # Examples.
+    # First testcase.
 
     f1 = "NEW_VAR1 = GROWTH - iEUR_INFL"
     formulas = [f1]
     cidx = ["AUD", "CAD"]
-    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cidx, start=start, end=end)
-
-
-
+    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cidx, 
+                               start=start, end=end, blacklist=black)
     # Second testcase: EUR is not passed in as one of the cross-sections in "cids"
     # parameter but is defined in the dataframe. Therefore, code will not break.
     cids = ['AUD', 'CAD', 'GBP', 'USD', 'NZD']
     formula = "NEW1 = XR - iUSD_XR"
     formula_2 = "NEW2 = GROWTH - iEUR_INFL"
     formulas = [formula, formula_2]
-    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
-
+    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, 
+                               start=start, end=end, blacklist=black)
