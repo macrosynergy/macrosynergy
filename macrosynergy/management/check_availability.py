@@ -75,18 +75,12 @@ def business_day_dif(df: pd.DataFrame, maxdate: pd.Timestamp):
         series.
 
     """
-    year_df = (maxdate.year - df.apply(lambda x: x.dt.year))
-    year_df *= 52
-
-    week_max = maxdate.week
-    week_df = week_max - df.apply(lambda x: x.dt.isocalendar().week)
-
+    year_df = (maxdate.year - df.apply(lambda x: x.dt.isocalendar().year)) * 52
+    week_df = (maxdate.week - df.apply(lambda x: x.dt.isocalendar().week))
     # Account for difference over a year.
     week_df += year_df
-
     # Account for weekends.
     week_df *= 2
-
     df = (maxdate - df).apply(lambda x: x.dt.days)
     return df - week_df
 
