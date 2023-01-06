@@ -4,7 +4,6 @@ import unittest
 from macrosynergy.signal.signal_return import SignalReturnRelations
 
 from tests.simulate import make_qdf
-from sklearn.metrics import accuracy_score, precision_score
 from scipy import stats
 import random
 import pandas as pd
