@@ -52,7 +52,6 @@ exclude_patterns = ["_build"]
 source_suffix = ".rst"
 master_doc = "index"
 
-autodoc_mock_imports = ['sklearn']
 # The reST default role (used for this markup: `text`) to use for all
 # documents.
 # default_role = None
