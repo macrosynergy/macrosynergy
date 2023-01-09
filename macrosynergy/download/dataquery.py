@@ -84,10 +84,13 @@ def dq_request(
             last_url: str = r.url
             js, success, msg = valid_response(r=r, track_id=track_id)
     except requests.exceptions.ChunkedEncodingError as e:
-        logger.error(f"ChunkedEncodingError: {e}")
+        logger.error(
+            f"ChunkedEncodingError: {e}," f"URL: {log_url}, track_id: {track_id}"
+        )
         js, success, msg = None, False, None
         raise InvalidResponseError(
-            e, f"at URL: {last_url} , thread track-d: {track_id}"
+            e,
+            f"URL : {log_url}",
         )
 
     if not success:
