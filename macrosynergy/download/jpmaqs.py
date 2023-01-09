@@ -526,7 +526,7 @@ class JPMaQSDownload(object):
                 )
                 if suppress_warning:
                     logger.warning("Warning suppressed.")
-                if not debug:
+                if debug:
                     raise InvalidDataframeError(
                         "The database has missing entries for some expressions. See log for details."
                     )
