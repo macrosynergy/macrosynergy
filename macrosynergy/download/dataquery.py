@@ -385,13 +385,13 @@ class Interface(object):
                 "%s: %s",
                 js,
                 self.last_url,
-                datetime.datetime.utcnow().isoformat(),
+                datetime.utcnow().isoformat(),
                 js,
             )
             raise InvalidResponseError(
                 f"Invalid response from DataQuery."
                 "'info' missing from response.keys():"
-                f"{js.keys()}, request {self.last_url:s} error response at {datetime.datetime.utcnow().isoformat()}: {js}"
+                f"{js.keys()}, request {self.last_url:s} error response at {datetime.utcnow().isoformat()}: {js}"
             )
 
         results: dict = js["info"]
@@ -743,6 +743,8 @@ class Interface(object):
         c_delay = self.delay_compute(len(expressions))
         results = None
 
+        print(datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] + " UTC")
+
         while results is None:
             results = self._request(
                 endpoint="/expressions/time-series",
@@ -755,23 +757,35 @@ class Interface(object):
 
         results, error_tickers, error_messages = results
 
-        unavailable_expressions = []
+        unavailable_expressions = {"expressions": [], "messages": []}
         for i, res in enumerate(results):
             if res["attributes"][0]["time-series"] is None:
                 if "message" in res["attributes"][0]:
-                    unavailable_expressions.append(res["attributes"][0]["expression"])
+                    unavailable_expressions["expressions"].append(
+                        res["attributes"][0]["expression"]
+                    )
+                    unavailable_expressions["messages"].append(
+                        res["attributes"][0]["message"]
+                    )
 
-        valid_results_count = len(results) - len(unavailable_expressions)
+        valid_results_count = len(results) - len(unavailable_expressions["expressions"])
         if valid_results_count < len(expressions):
-            logger.warning(f"Invalid expressions: {', '.join(unavailable_expressions)}")
+            unavarr = [
+                f"{str(unavailable_expressions['expressions'][ix])} - {str(unavailable_expressions['messages'][ix])}"
+                for ix in range(len(unavailable_expressions["expressions"]))
+            ]
+            logger.warning(f"Unavailable expressions: [{', '.join(unavarr)}].")
+            print(f"Unavailable expressions: [{'|'.join(unavarr)}].")
             logger.warning(
-                f"Number of invalid expressions: {len(unavailable_expressions)}"
+                f"Number of unavailable expressions: {len(unavailable_expressions['expressions'])}"
             )
             logger.warning(f"Number of expressions returned : {valid_results_count}")
             print(f"Number of expressions returned  : {valid_results_count}")
-            print(f"(Number of invalid expressions  : {len(unavailable_expressions)})")
             print(
-                "Some expressions were invalid, and were not returned.\n"
+                f"(Number of unavailable expressions  : {len(unavailable_expressions['expressions'])})"
+            )
+            print(
+                "Some expressions were unavailable, and were not returned.\n"
                 "Check logger output for more details."
             )
 
