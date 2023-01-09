@@ -214,7 +214,7 @@ class JPMaQSDownload(object):
             debug=debug,
             sequential=sequential,
         )
-        if debug:
+        if debug and len(unavailable_tickers) > 0:
             logger.warning(
                 f"The following tickers were not returned from the API; as they are either invalid or unavailable: "
                 f"{unavailable_tickers}. "
