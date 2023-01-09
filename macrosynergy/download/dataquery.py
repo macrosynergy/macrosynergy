@@ -62,7 +62,7 @@ def dq_request(
     **kwargs,
 ) -> Tuple[Optional[dict], bool, str, Optional[dict]]:
     """Will return the request from DataQuery."""
-    track_id = track_id or str(0) # x = y if y else "0"
+    track_id = track_id or str(0)  # x = y if y else "0"
     request_error = (
         f"Unknown request method {method} not in ('get', 'post'). " + track_id
     )
@@ -72,16 +72,23 @@ def dq_request(
     log_url = requests.compat.quote(log_url, safe="%/:=&?~#+!$,;'@()*[]")
     logger.info(f"Requesting URL: {log_url} , track_id: {track_id}")
 
-    with requests.request(
-        method=method,
-        url=url,
-        cert=cert,
-        headers=headers,
-        params=params,
-        **kwargs,
-    ) as r:
-        last_url: str = r.url
-        js, success, msg = valid_response(r=r, track_id=track_id)
+    try:
+        with requests.request(
+            method=method,
+            url=url,
+            cert=cert,
+            headers=headers,
+            params=params,
+            **kwargs,
+        ) as r:
+            last_url: str = r.url
+            js, success, msg = valid_response(r=r, track_id=track_id)
+    except requests.exceptions.ChunkedEncodingError as e:
+        logger.error(f"ChunkedEncodingError: {e}")
+        js, success, msg = None, False, None
+        raise InvalidResponseError(
+            e, f"at URL: {last_url} , thread track-d: {track_id}"
+        )
 
     if not success:
         logger.error(
@@ -254,7 +261,7 @@ class OAuth(object):
                 data=self.token_data,
                 method="post",
                 proxies=self.proxy,
-                track_id="get_oauth_token"
+                track_id="get_oauth_token",
             )
             if not success:
                 raise AuthenticationError(msg)
@@ -373,7 +380,10 @@ class Interface(object):
                 "Invalid response from DataQuery. %s"
                 "request %s error response at "
                 "%s: %s",
-                js, self.last_url, datetime.datetime.utcnow().isoformat(), js
+                js,
+                self.last_url,
+                datetime.datetime.utcnow().isoformat(),
+                js,
             )
             raise InvalidResponseError(
                 f"Invalid response from DataQuery."
@@ -482,6 +492,15 @@ class Interface(object):
                 logger.info(f"Request successful. {track_id}")
                 if select in response.keys():
                     results.extend(response[select])
+
+                if "links" not in response.keys():
+                    raise InvalidResponseError(
+                        f"Invalid response from DataQuery. response : {response}"
+                        f"links missing from response.keys():"
+                        f"Status Code: {int(msg['status_code'])}"
+                        f"msg : {msg}"
+                        f"url : {url}"
+                    )
 
                 if response["links"][1]["next"] is None:
                     break
@@ -689,15 +708,10 @@ class Interface(object):
 
         :return <float> delay: internally computed value.
         """
-
-        if not floor(no_tickers / 100):
-            delay = 0.05
-        elif not floor(no_tickers / 1000):
-            delay = 0.2
+        if no_tickers < 1000:
+            return 0.2
         else:
-            delay = 0.3
-
-        return delay
+            return 0.3
 
     def get_ts_expression(
         self, expressions, original_metrics, suppress_warning, **kwargs
