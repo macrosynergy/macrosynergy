@@ -394,7 +394,7 @@ class JPMaQSDownload(object):
         """
         if self.suppress_warning != suppress_warning:
             self.suppress_warning = suppress_warning
-        
+
         if (cids is None) & (xcats is not None):
             cids_dmca = [
                 "AUD",
