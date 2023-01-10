@@ -767,13 +767,15 @@ class Interface(object):
 
         valid_results_count = len(results) - len(unavailable_expressions)
         if valid_results_count < len(expressions):
-            logger.warning(
-                f"Unavailable expressions: [{', '.join([str(elem) for elem in unavailable_expressions])}]."
-            )
-            logger.warning(
-                f"Number of unavailable expressions: {len(unavailable_expressions)}."
-            )
-            logger.warning(f"Number of expressions returned : {valid_results_count}")
+            logger.warning("Supressing")
+            if not suppress_warning:
+                logger.warning(
+                    f"Unavailable expressions: [{', '.join([str(elem) for elem in unavailable_expressions])}]."
+                )
+                logger.warning(
+                    f"Number of unavailable expressions: {len(unavailable_expressions)}."
+                )
+                logger.warning(f"Number of expressions returned : {valid_results_count}")
             print(f"Number of expressions returned  : {valid_results_count}")
             print(
                 f"(Number of unavailable expressions  : {len(unavailable_expressions)})"

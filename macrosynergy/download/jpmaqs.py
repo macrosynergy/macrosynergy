@@ -35,7 +35,7 @@ class JPMaQSDownload(object):
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
         debug: bool = False,
-        suppress_warning: bool = False,
+        suppress_warning: bool = True,
         check_connection: bool = False,
         **kwargs,
     ):
@@ -214,7 +214,7 @@ class JPMaQSDownload(object):
             debug=debug,
             sequential=sequential,
         )
-        if debug and len(unavailable_tickers) > 0:
+        if debug and not (self.suppress_warning) and len(unavailable_tickers) > 0:
             logger.warning(
                 f"The following tickers were not returned from the API; as they are either invalid or unavailable: "
                 f"{unavailable_tickers}. "
@@ -369,7 +369,7 @@ class JPMaQSDownload(object):
         metrics=["value"],
         start_date="2000-01-01",
         end_date=None,
-        suppress_warning=False,
+        suppress_warning=True,
         debug=False,
     ):
         """
@@ -392,7 +392,9 @@ class JPMaQSDownload(object):
         :return <pd.Dataframe> df: standardized dataframe with columns 'cid', 'xcats',
             'real_date' and chosen metrics.
         """
-
+        if self.suppress_warning != suppress_warning:
+            self.suppress_warning = suppress_warning
+        
         if (cids is None) & (xcats is not None):
             cids_dmca = [
                 "AUD",
