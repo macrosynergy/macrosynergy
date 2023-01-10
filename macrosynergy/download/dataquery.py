@@ -581,7 +581,7 @@ class Interface(object):
                 "frequency": frequency,
                 "conversion": conversion,
                 "nan_treatment": nan_treatment,
-                "data": "NO_REFERENCE_DATA",
+                "data": "ALL",
             }
             params.update(params_)
 
