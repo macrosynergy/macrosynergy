@@ -500,9 +500,7 @@ class JPMaQSDownload(object):
         error_tickers = dq_result_dict["error_tickers"]
         error_messages = dq_result_dict["error_messages"]
         unavailable_expressions = dq_result_dict["unavailable_expressions"]
-        unavailable_expressions["expressions"] = self.remove_jpmaqs_expr_formatting(
-            unavailable_expressions["expressions"]
-        )
+        unavailable_expressions_list = list(u[0] for u in unavailable_expressions)
 
         self.unavailable_expressions = unavailable_expressions.copy()
         if error_tickers:

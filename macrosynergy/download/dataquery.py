@@ -757,32 +757,26 @@ class Interface(object):
 
         results, error_tickers, error_messages = results
 
-        unavailable_expressions = {"expressions": [], "messages": []}
-        for i, res in enumerate(results):
-            if res["attributes"][0]["time-series"] is None:
-                if "message" in res["attributes"][0]:
-                    unavailable_expressions["expressions"].append(
-                        res["attributes"][0]["expression"]
-                    )
-                    unavailable_expressions["messages"].append(
-                        res["attributes"][0]["message"]
-                    )
+        unavailable_expressions: List[Tuple(str, str)] = []
+        unavailable_expressions = [
+            (res["attributes"][0]["expression"], res["attributes"][0]["message"])
+            for res in results
+            if res["attributes"][0]["time-series"] is None
+            and "message" in res["attributes"][0]
+        ]
 
         valid_results_count = len(results) - len(unavailable_expressions["expressions"])
         if valid_results_count < len(expressions):
-            unavarr = [
-                f"{str(unavailable_expressions['expressions'][ix])} - {str(unavailable_expressions['messages'][ix])}"
-                for ix in range(len(unavailable_expressions["expressions"]))
-            ]
-            logger.warning(f"Unavailable expressions: [{', '.join(unavarr)}].")
-            print(f"Unavailable expressions: [{'|'.join(unavarr)}].")
             logger.warning(
-                f"Number of unavailable expressions: {len(unavailable_expressions['expressions'])}"
+                f"Unavailable expressions: [{', '.join(unavailable_expressions)}]."
+            )
+            logger.warning(
+                f"Number of unavailable expressions: {len(unavailable_expressions)}."
             )
             logger.warning(f"Number of expressions returned : {valid_results_count}")
             print(f"Number of expressions returned  : {valid_results_count}")
             print(
-                f"(Number of unavailable expressions  : {len(unavailable_expressions['expressions'])})"
+                f"(Number of unavailable expressions  : {len(unavailable_expressions)})"
             )
             print(
                 "Some expressions were unavailable, and were not returned.\n"
