@@ -2,7 +2,7 @@ seaborn
 matplotlib
 pandas
 statsmodels
-sklearn
+scikit-learn
 numpy
 sphinx_book_theme
 sphinx_rtd_theme
