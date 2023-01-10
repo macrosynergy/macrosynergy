@@ -765,7 +765,7 @@ class Interface(object):
             and "message" in res["attributes"][0]
         ]
 
-        valid_results_count = len(results) - len(unavailable_expressions["expressions"])
+        valid_results_count = len(results) - len(unavailable_expressions)
         if valid_results_count < len(expressions):
             logger.warning(
                 f"Unavailable expressions: [{', '.join(unavailable_expressions)}]."
