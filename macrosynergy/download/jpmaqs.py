@@ -35,7 +35,7 @@ class JPMaQSDownload(object):
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
         debug: bool = False,
-        suppress_warning: bool = False,
+        suppress_warning: bool = True,
         check_connection: bool = False,
         **kwargs,
     ):
@@ -214,7 +214,7 @@ class JPMaQSDownload(object):
             debug=debug,
             sequential=sequential,
         )
-        if debug:
+        if debug and not (self.suppress_warning) and len(unavailable_tickers) > 0:
             logger.warning(
                 f"The following tickers were not returned from the API; as they are either invalid or unavailable: "
                 f"{unavailable_tickers}. "
@@ -369,7 +369,7 @@ class JPMaQSDownload(object):
         metrics=["value"],
         start_date="2000-01-01",
         end_date=None,
-        suppress_warning=False,
+        suppress_warning=True,
         debug=False,
     ):
         """
@@ -392,6 +392,8 @@ class JPMaQSDownload(object):
         :return <pd.Dataframe> df: standardized dataframe with columns 'cid', 'xcats',
             'real_date' and chosen metrics.
         """
+        if self.suppress_warning != suppress_warning:
+            self.suppress_warning = suppress_warning
 
         if (cids is None) & (xcats is not None):
             cids_dmca = [
@@ -499,9 +501,9 @@ class JPMaQSDownload(object):
         results = dq_result_dict["results"]
         error_tickers = dq_result_dict["error_tickers"]
         error_messages = dq_result_dict["error_messages"]
-        unavailable_expressions = self.remove_jpmaqs_expr_formatting(
-            dq_result_dict["unavailable_expressions"]
-        )
+        unavailable_expressions = dq_result_dict["unavailable_expressions"]
+        unavailable_expressions_list = list(u[0] for u in unavailable_expressions)
+
         self.unavailable_expressions = unavailable_expressions.copy()
         if error_tickers:
             logger.error(f"Error tickers: {error_tickers}")
@@ -524,7 +526,7 @@ class JPMaQSDownload(object):
                 )
                 if suppress_warning:
                     logger.warning("Warning suppressed.")
-                if not debug:
+                if debug:
                     raise InvalidDataframeError(
                         "The database has missing entries for some expressions. See log for details."
                     )

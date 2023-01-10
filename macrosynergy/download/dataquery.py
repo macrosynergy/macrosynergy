@@ -2,7 +2,6 @@
 import warnings
 import concurrent.futures
 import time
-import datetime
 import logging
 from math import ceil, floor
 from itertools import chain
@@ -20,6 +19,7 @@ OAUTH_BASE_URL: str = (
 )
 OAUTH_TOKEN_URL: str = "https://authe.jpmchase.com/as/token.oauth2"
 OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
+API_DELAY_PARAM: float = 0.3  # 300ms delay between requests
 
 logger = logging.getLogger(__name__)
 
@@ -385,13 +385,13 @@ class Interface(object):
                 "%s: %s",
                 js,
                 self.last_url,
-                datetime.datetime.utcnow().isoformat(),
+                datetime.utcnow().isoformat(),
                 js,
             )
             raise InvalidResponseError(
                 f"Invalid response from DataQuery."
                 "'info' missing from response.keys():"
-                f"{js.keys()}, request {self.last_url:s} error response at {datetime.datetime.utcnow().isoformat()}: {js}"
+                f"{js.keys()}, request {self.last_url:s} error response at {datetime.utcnow().isoformat()}: {js}"
             )
 
         results: dict = js["info"]
@@ -697,25 +697,6 @@ class Interface(object):
 
         return final_output, error_tickers, error_messages
 
-    @staticmethod
-    def delay_compute(no_tickers):
-        """
-        DataQuery is only able to handle a request every 200 milliseconds. However, given
-        the erratic behaviour of threads, the time delay between the release of each
-        request must be a function of the size of the request: the smaller the request,
-        the closer the delay parameter can be to the limit of 200 milliseconds.
-        Therefore, the function adjusts the delay parameter to the number of tickers
-        requested.
-
-        :param <int> no_tickers: number of tickers requested.
-
-        :return <float> delay: internally computed value.
-        """
-        if no_tickers < 1000:
-            return 0.2
-        else:
-            return 0.3
-
     def get_ts_expression(
         self, expressions, original_metrics, suppress_warning, **kwargs
     ):
@@ -740,8 +721,10 @@ class Interface(object):
             logger.error(f"Connection failed. Error message: {results}.")
             return None
 
-        c_delay = self.delay_compute(len(expressions))
+        c_delay = API_DELAY_PARAM
         results = None
+
+        print(datetime.utcnow().isoformat(), " UTC")
 
         while results is None:
             results = self._request(
@@ -755,23 +738,32 @@ class Interface(object):
 
         results, error_tickers, error_messages = results
 
-        unavailable_expressions = []
-        for i, res in enumerate(results):
-            if res["attributes"][0]["time-series"] is None:
-                if "message" in res["attributes"][0]:
-                    unavailable_expressions.append(res["attributes"][0]["expression"])
+        unavailable_expressions: List[Tuple(str, str)] = []
+        unavailable_expressions = [
+            (res["attributes"][0]["expression"], res["attributes"][0]["message"])
+            for res in results
+            if res["attributes"][0]["time-series"] is None
+            and "message" in res["attributes"][0]
+        ]
 
         valid_results_count = len(results) - len(unavailable_expressions)
         if valid_results_count < len(expressions):
-            logger.warning(f"Invalid expressions: {', '.join(unavailable_expressions)}")
-            logger.warning(
-                f"Number of invalid expressions: {len(unavailable_expressions)}"
-            )
-            logger.warning(f"Number of expressions returned : {valid_results_count}")
+            if not suppress_warning:
+                logger.warning(
+                    f"Unavailable expressions: [{', '.join([str(elem) for elem in unavailable_expressions])}]."
+                )
+                logger.warning(
+                    f"Number of unavailable expressions: {len(unavailable_expressions)}."
+                )
+                logger.warning(
+                    f"Number of expressions returned : {valid_results_count}"
+                )
             print(f"Number of expressions returned  : {valid_results_count}")
-            print(f"(Number of invalid expressions  : {len(unavailable_expressions)})")
             print(
-                "Some expressions were invalid, and were not returned.\n"
+                f"(Number of unavailable expressions  : {len(unavailable_expressions)})"
+            )
+            print(
+                "Some expressions were unavailable, and were not returned.\n"
                 "Check logger output for more details."
             )
 
