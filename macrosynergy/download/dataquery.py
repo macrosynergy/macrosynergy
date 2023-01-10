@@ -767,7 +767,6 @@ class Interface(object):
 
         valid_results_count = len(results) - len(unavailable_expressions)
         if valid_results_count < len(expressions):
-            logger.warning("Supressing")
             if not suppress_warning:
                 logger.warning(
                     f"Unavailable expressions: [{', '.join([str(elem) for elem in unavailable_expressions])}]."
