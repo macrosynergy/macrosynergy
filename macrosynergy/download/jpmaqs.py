@@ -99,11 +99,10 @@ class JPMaQSDownload(object):
             debug_stream_handler.stream.flush()
             debug_stream_handler.stream.seek(0)
             self.msg_errors += debug_stream_handler.stream.readlines()
-            print("-" * 24, " DEBUG DATA ", "-" * 24)
+            print("-" * 23, " DEBUG DATA ", "-" * 23)
             print("-" * 60)
             for m in self.msg_errors:
-                if len(m.strip()) > 0:
-                    print(m.strip())
+                print(m.strip())
             print(("-" * 60 + "\n") * 2)
 
         if exc_type:
@@ -416,7 +415,9 @@ class JPMaQSDownload(object):
         :return <pd.Dataframe> df: standardized dataframe with columns 'cid', 'xcats',
             'real_date' and chosen metrics.
         """
-        self.print_debug_data = print_debug_data
+        self.debug = self.debug or debug
+        self.print_debug_data = self.print_debug_data or print_debug_data
+        
         if self.suppress_warning != suppress_warning:
             self.suppress_warning = suppress_warning
 
@@ -510,7 +511,7 @@ class JPMaQSDownload(object):
                     debug=debug,
                 )
             dq_msg_errors = dq.msg_errors
-            debug_stream_handler.stream.write("\n".join(dq_msg_errors))
+            debug_stream_handler.stream.write("\n".join(dq_msg_errors) + "\n")
             logger.info("Download complete. DataQuery interface closed.")
 
         except ConnectionError:
