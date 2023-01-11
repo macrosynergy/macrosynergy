@@ -185,5 +185,5 @@ if __name__ == "__main__":
 
     xxcats = xcats + ['TREND']
     xxcids = cids + ['USD']
-    import pdb; pdb.set_trace()
+    
     check_availability(df=dfd, xcats=xcats, cids=cids, missing_recent=False)
