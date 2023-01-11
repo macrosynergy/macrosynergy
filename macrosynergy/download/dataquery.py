@@ -371,7 +371,6 @@ class Interface(object):
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         if exc_type:
-            # print(f"Execution {exc_type} with value (exc_value):\n\t {exc_value}")
             logger.error(f"Execution {exc_type} with value (exc_value): {exc_value}")
         debug_stream_handler.stream.flush()
         debug_stream_handler.stream.seek(0)

@@ -105,7 +105,6 @@ class JPMaQSDownload(object):
                 if len(m.strip()) > 0:
                     print(m.strip())
             print(("-" * 60 + "\n") * 2)
-            
 
         if exc_type:
             logger.error(e_str)
@@ -511,7 +510,6 @@ class JPMaQSDownload(object):
                     debug=debug,
                 )
             dq_msg_errors = dq.msg_errors
-            # debug_stream_handler.stream.flush()
             debug_stream_handler.stream.write("\n".join(dq_msg_errors))
             logger.info("Download complete. DataQuery interface closed.")
 
