@@ -591,7 +591,7 @@ class JPMaQSDownload(object):
                     _dict=results_dict, no_metrics=no_metrics, original_metrics=metrics
                 )
             logger.info(
-                "Data validation complete. Starting to create and validate dataframe"
+                "Data validation complete. Creating and validating dataframe."
             )
 
             if (not isinstance(df, pd.DataFrame)) or (df.empty):
