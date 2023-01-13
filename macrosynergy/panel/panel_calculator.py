@@ -187,7 +187,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None,
 
     for new_xcat, formula in ops.items():
         dfw_add = eval(formula)
-        df_add = pd.melt(dfw_add.reset_index(), id_vars=['real_date'])
+        df_add = pd.melt(dfw_add.reset_index(), id_vars=['real_date']).rename({'variable': 'cid'}, axis=1)
         df_add['xcat'] = new_xcat
         if new_xcat == list(ops.keys())[0]:
             df_out = df_add[cols]
@@ -223,27 +223,28 @@ if __name__ == "__main__":
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
+    # Example blacklist.
     black = {'AUD': ['2000-01-01', '2003-12-31']}
 
     start = '2010-01-01'
     end = '2020-12-31'
-
+    
+    # Example filter for dataframe.
     filt1 = (dfd['xcat'] == 'XR') | (dfd['xcat'] == 'CRY')
     dfdx = dfd[filt1]
 
-    # Start of the testing. Various testcases included to understand the capabilities of
-    # the designed function.
-
     # First testcase.
-    formula = "NEW1 = GROWTH - INFL"
-    formula_3 = "NEW2 = XR - iUSD_NEW1"
-    formulas = [formula, formula_3]
 
+    f1 = "NEW_VAR1 = GROWTH - iEUR_INFL"
+    formulas = [f1]
+    cidx = ["AUD", "CAD"]
+    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cidx, 
+                               start=start, end=end, blacklist=black)
     # Second testcase: EUR is not passed in as one of the cross-sections in "cids"
     # parameter but is defined in the dataframe. Therefore, code will not break.
     cids = ['AUD', 'CAD', 'GBP', 'USD', 'NZD']
     formula = "NEW1 = XR - iUSD_XR"
     formula_2 = "NEW2 = GROWTH - iEUR_INFL"
     formulas = [formula, formula_2]
-    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, start=start, end=end)
-
+    df_calc = panel_calculator(df=dfd, calcs=formulas, cids=cids, 
+                               start=start, end=end, blacklist=black)
