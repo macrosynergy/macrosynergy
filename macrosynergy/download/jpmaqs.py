@@ -8,9 +8,17 @@ import warnings
 from macrosynergy.download import dataquery
 from macrosynergy.download.exceptions import *
 import logging
-import sys
+import io
 
 logger = logging.getLogger(__name__)
+debug_stream_handler = logging.StreamHandler(io.StringIO())
+debug_stream_handler.setLevel(logging.NOTSET)
+debug_stream_handler.setFormatter(
+    logging.Formatter(
+        "%(asctime)s - %(levelname)s - %(module)s - %(funcName)s :: %(message)s"
+    )
+)
+logger.addHandler(debug_stream_handler)
 
 
 class JPMaQSDownload(object):
@@ -34,13 +42,15 @@ class JPMaQSDownload(object):
         oauth: bool = True,
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
-        debug: bool = False,
         suppress_warning: bool = True,
+        debug: bool = False,
+        print_debug_data: bool = False,
         check_connection: bool = False,
         **kwargs,
     ):
-
         self.debug = debug
+        self.print_debug_data = print_debug_data
+        self.msg_errors: List[str] = []
         self.suppress_warning = suppress_warning
         self.proxy = kwargs.pop("proxy", kwargs.pop("proxies", None))
         self.unavailable_tickers = []
@@ -82,9 +92,20 @@ class JPMaQSDownload(object):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        e_str = f"{exc_type} {exc_value} {traceback}"
         if exc_type:
-            e_str = f"{exc_type} {exc_value} {traceback}"
             logger.error(e_str)
+        if self.print_debug_data or exc_type:
+            debug_stream_handler.stream.flush()
+            debug_stream_handler.stream.seek(0)
+            self.msg_errors += debug_stream_handler.stream.readlines()
+            print("-" * 23, " DEBUG DATA ", "-" * 23)
+            print("-" * 60)
+            for m in self.msg_errors:
+                print(m.strip())
+            print(("-" * 60 + "\n") * 2)
+
+        if exc_type:
             raise exc_type(exc_value)
         else:
             return True
@@ -371,6 +392,7 @@ class JPMaQSDownload(object):
         end_date=None,
         suppress_warning=True,
         debug=False,
+        print_debug_data=False,
     ):
         """
         Downloads and returns a standardised DataFrame of the specified base tickers and metrics.
@@ -392,6 +414,9 @@ class JPMaQSDownload(object):
         :return <pd.Dataframe> df: standardized dataframe with columns 'cid', 'xcats',
             'real_date' and chosen metrics.
         """
+        self.debug = self.debug or debug
+        self.print_debug_data = self.print_debug_data or print_debug_data
+
         if self.suppress_warning != suppress_warning:
             self.suppress_warning = suppress_warning
 
@@ -469,8 +494,8 @@ class JPMaQSDownload(object):
         expressions = self.jpmaqs_indicators(metrics=metrics, tickers=tickers)
 
         logger.info(
-            f"Downloading {len(expressions)} expressions from JPMaQS"
-            f"for {len(tickers)} tickers & {len(metrics)} metrics."
+            f"Downloading {len(expressions)} expressions from JPMaQS "
+            f"for {len(tickers)} tickers & {len(metrics)} metrics. "
             f"Start date: {start_date}. End date: {end_date}."
         )
 
@@ -484,6 +509,10 @@ class JPMaQSDownload(object):
                     suppress_warning=suppress_warning,
                     debug=debug,
                 )
+            dq_msg_errors = dq.msg_errors
+            debug_stream_handler.stream.write("\n".join(dq_msg_errors) + "\n")
+            logger.info("Download complete. DataQuery interface closed.")
+
         except ConnectionError:
             logger.error("Failed to download data. ConnectionError.")
             logger.error("Appending error messages to JPMaQSDownload.download_output")
@@ -515,6 +544,7 @@ class JPMaQSDownload(object):
                 "Failed to download data for some tickers. See log for details."
             )
         else:
+            logger.info("No error tickers; Starting to data parse.")
             results_dict, output_dict, s_list = self.isolate_timeseries(
                 list_=results, metrics=metrics, debug=debug, sequential=True
             )  #
@@ -532,15 +562,17 @@ class JPMaQSDownload(object):
                     )
                 else:
                     logger.warning(
-                        f"Debug mode is on; adding download ouput to JPMaQSDownload.download_output"
-                        f"Debug mode is on; adding parsed output to JPMaQSDownload.parsed_output"
+                        f"Debug mode is off; adding download ouput to JPMaQSDownload.download_output"
+                        f"Debug mode is off; adding parsed output to JPMaQSDownload.parsed_output"
                     )
-                    self.download_output = dq_result_dict
-                    self.parsed_output = {
-                        "results": results_dict,
-                        "results_nested_dictionary": output_dict,
-                        "missing_tickers": s_list,
-                    }
+                self.download_output = dq_result_dict
+                self.parsed_output = {
+                    "results": results_dict,
+                    "results_nested_dictionary": output_dict,
+                    "missing_tickers": s_list,
+                }
+
+            logger.info("Data parse complete. Starting data validation.")
 
             results_dict = self.valid_ticker(results_dict, suppress_warning, self.debug)
 
@@ -558,6 +590,7 @@ class JPMaQSDownload(object):
                 df = self.dataframe_wrapper(
                     _dict=results_dict, no_metrics=no_metrics, original_metrics=metrics
                 )
+            logger.info("Data validation complete. Creating and validating dataframe.")
 
             if (not isinstance(df, pd.DataFrame)) or (df.empty):
                 logger.error("No data returned from DataQuery")
@@ -578,4 +611,6 @@ class JPMaQSDownload(object):
                 )
             else:
                 df = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
+                logger.info("Dataframe created and validated.")
+                logger.info("Returning dataframe and exiting JPMaQSDownload.download.")
                 return df

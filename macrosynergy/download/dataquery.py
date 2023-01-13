@@ -7,7 +7,7 @@ from math import ceil, floor
 from itertools import chain
 import uuid
 import base64
-import os
+import os, io
 import requests
 from typing import List, Optional, Dict, Tuple
 from datetime import datetime
@@ -22,6 +22,14 @@ OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
 API_DELAY_PARAM: float = 0.3  # 300ms delay between requests
 
 logger = logging.getLogger(__name__)
+debug_stream_handler = logging.StreamHandler(io.StringIO())
+debug_stream_handler.setLevel(logging.NOTSET)
+debug_stream_handler.setFormatter(
+    logging.Formatter(
+        "%(asctime)s - %(levelname)s - %(module)s - %(funcName)s :: %(message)s"
+    )
+)
+logger.addHandler(debug_stream_handler)
 
 
 def valid_response(
@@ -330,6 +338,7 @@ class Interface(object):
 
         self.proxy = kwargs.pop("proxy", kwargs.pop("proxies", None))
         self.heartbeat = heartbeat
+        self.msg_errors: List[str] = []
 
         if oauth:
             self.access: OAuth = OAuth(
@@ -362,8 +371,12 @@ class Interface(object):
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         if exc_type:
-            print(f"Execution {exc_type} with value (exc_value):\n\t {exc_value}")
             logger.error(f"Execution {exc_type} with value (exc_value): {exc_value}")
+        debug_stream_handler.stream.flush()
+        debug_stream_handler.stream.seek(0)
+        self.msg_errors = debug_stream_handler.stream.getvalue().splitlines()
+        # NOTE: Don't close the stream, as it causes can issues with parent/logging modules.
+        # NOTE: DO NOT try and close/delete self or pass it to gc.collect() here.
 
     def check_connection(self) -> Tuple[bool, dict]:
         """Check connection (heartbeat) to DataQuery."""
@@ -725,7 +738,7 @@ class Interface(object):
         results = None
 
         print(datetime.utcnow().isoformat(), " UTC")
-
+        logger.info(f"Starting request for {len(expressions)} expressions.")
         while results is None:
             results = self._request(
                 endpoint="/expressions/time-series",
@@ -737,6 +750,7 @@ class Interface(object):
             c_delay += 0.1
 
         results, error_tickers, error_messages = results
+        logger.info(f"Finished request for {len(expressions)} expressions.")
 
         unavailable_expressions: List[Tuple(str, str)] = []
         unavailable_expressions = [
@@ -766,6 +780,8 @@ class Interface(object):
                 "Some expressions were unavailable, and were not returned.\n"
                 "Check logger output for more details."
             )
+        else:
+            logger.info(f"All requested expressions were available.")
 
         if error_tickers:
             logger.warning(f"Request failed for tickers: {', '.join(error_tickers)}.")
