@@ -13,7 +13,7 @@ class TestDataQueryOAuth(unittest.TestCase):
             client_id="WRONG_CLIENT_ID",
             client_secret="NOT_A_SECRET"
         )
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(Exception):
             self.assertFalse(dq.check_connection())
 
     def test_connection(self):

@@ -19,4 +19,4 @@ Module contents
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: signal_return, target_positions
+   :exclude-members:

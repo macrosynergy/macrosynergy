@@ -8,13 +8,14 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![codecov](https://codecov.io/github/macrosynergy/macrosynergy/branch/develop/graph/badge.svg?token=BX4IKVD07R)](https://codecov.io/github/macrosynergy/macrosynergy)
 
-The Macrosynergy package supports financial market research and the development of trading strategies based on formats and conventions of the J.P. Morgan Macrosynergy  Quantamental System (JPMaQS). JPMaQS provides quantitative-fundamental (quantamental) and market data in simple daily formats in accordance with the information state of markets. The Macrosynergy package consists of five sub-packages:
+The Macrosynergy package supports financial market research and the development of trading strategies based on formats and conventions of the J.P. Morgan Macrosynergy  Quantamental System (JPMaQS). JPMaQS provides quantitative-fundamental (quantamental) and market data in simple daily formats in accordance with the information state of markets. The Macrosynergy package consists of six sub-packages:
 
 1. [management](./macrosynergy/management): simulates, analyses and reshapes standard quantamental dataframes.
 2. [panel](./macrosynergy/panel): analyses and visualizes panels of quantamental data.
 3. [signal](./macrosynergy/signal): transforms quantamental indicators into trading signals and does naive analysis.
 4. [pnl](./macrosynergy/pnl): constructs portfolios based on signals, applies risk management and analyses realistic PnLs.
-5. [dataquery](./macrosynergy/dataquery): interface for downloading data from JP Morgan DataQuery, with main module [api.py](./macrosynergy/dataquery/api.py). 
+5. [download](./macrosynergy/download): interface for downloading data from JP Morgan DataQuery, with main module [jpmaqs.py](./macrosynergy/download/jpmaqs.py). 
+6. [dataquery](./macrosynergy/dataquery): [DEPRECATED] interface for downloading data from JP Morgan DataQuery, with main module [api.py](./macrosynergy/dataquery/api.py). 
 
 ## Installation
 The easiest method for installing the package is to use the [PyPI](https://pypi.org/project/macrosynergy/) installation method:
@@ -28,18 +29,18 @@ pip install git+https://github.com/macrosynergy/macrosynergy@develop
 ```
 ## Usage
 ### DataQuery Interface
-To download data from JP Morgan DataQuery, you can use the DataQuery [Interface](./macrosynergy/dataquery/api.py)
-together with your OAuth authentication credentials:
+To download data from JP Morgan DataQuery, you can use the [JPMaQSDownload Object](./macrosynergy/download/jpmaqs.py)
+together with your OAuth authentication credentials (default):
 ```python
 import pandas as pd
-from macrosynergy.dataquery import api
+from macrosynergy.download import JPMaQSDownload
 
-with api.Interface(
-        oauth=True,
+with JPMaQSDownload(
         client_id="<dq_client_id>",
         client_secret="<dq_client_secret>"
-) as dq:
-    data = dq.download(tickers="EUR_FXXR_NSA", start_date="2022-01-01")
+) as downloader:
+    data = downloader.download(tickers="EUR_FXXR_NSA", 
+                                start_date="2022-01-01")
 
 assert isinstance(data, pd.DataFrame) and not data.empty
 
@@ -50,16 +51,17 @@ data.info()
 Alternatively, you can also the certificate and private key pair, to access DataQuery as:
 ```python
 import pandas as pd
-from macrosynergy.dataquery import api
+from macrosynergy.download import JPMaQSDownload
 
-with api.Interface(
+with JPMaQSDownload(
         oauth=False,
         username="<dq_username>",
         password="<dq_password>",
         crt="<path_to_dq_certificate>",
         key="<path_to_dq_key>"
-) as dq:
-    data = dq.download(tickers="EUR_FXXR_NSA", start_date="2022-01-01")
+) as downloader:
+    data = downloader.download(tickers="EUR_FXXR_NSA", 
+                                start_date="2022-01-01")
 
 assert isinstance(data, pd.DataFrame) and not data.empty
 
@@ -70,30 +72,80 @@ data.info()
 Both of the above example will download a snippet of example data from the premium JPMaQS dataset
 of the daily timeseries of EUR FX excess returns.
 
-Using the api you can also access a panel of tickers from different countries like so.
+Using the API you can also access a panel of tickers from different countries like so.
 ```python
+import pandas as pd
+from macrosynergy.download import JPMaQSDownload
+
 cids = ['EUR','GBP','USD']
-
 xcats = ['FXXR_NSA','EQXR_NSA']
-
 tickers = [cid+"_"+xcat for cid in cids for xcat in xcats]
 
-with api.Interface(
-        oauth=True,
-        username="<dq_username>",
-        password="<dq_password>"
-) as dq:
-    data = dq.download(tickers="tickers, start_date="2022-01-01")
+with JPMaQSDownload(
+        client_id="<dq_client_id>",
+        client_secret="<dq_client_secret>"
+) as downloader:
+    data = downloader.download(tickers=tickers,
+                                start_date="2022-01-01")
 
 assert isinstance(data, pd.DataFrame) and not data.empty
 
 assert data.shape[0] > 0
 data.info()
 ```
-### Management 
-In order to use the rest of the package without access to the api you can [simulate](./macrosynergy/management/simulate_quantamental_data.py) quantamental data using the 
+It is also possible to use a proxy server with the Dataquery interface. Here's an example:
+```python
+import pandas as pd
+from macrosynergy.download import JPMaQSDownload
 
-management sub-package. 
+cids = ['EUR','GBP','USD']
+xcats = ['FXXR_NSA','EQXR_NSA']
+tickers = [cid+"_"+xcat for cid in cids for xcat in xcats]
+
+oauth_proxy="https://seucreproxy.example.com:port"
+proxy = {"https": oauth_proxy}
+# or proxy = {"http": "http://proxy.example.com:port"}
+with JPMaQSDownload(
+        client_id = "<dq_client_id>",
+        client_secret = "<dq_client_secret>",
+        proxy = proxy
+) as downloader:
+    data = downloader.download(tickers = tickers, start_date="2022-01-01")
+
+assert isinstance(data, pd.DataFrame) and not df.empty
+```
+or, 
+```python
+...
+proxies = {
+    "http": "http://proxy.example.com:port",
+    "https": "https://seucreproxy.example.com:port",
+}
+with JPMaQSDownload(
+        client_id = "<dq_client_id>",
+        client_secret = "<dq_client_secret>",
+        proxy = proxies
+) as downloader:
+    data = downloader.download(tickers = tickers)
+...
+```
+The deprecated DataQuery interface internally makes use of the JPMaQSDownload object. Using the deprecated path will raise a deprecation warning. The path and module will be removed in v0.1.0. Here's an example of the deprecated interface:
+```python
+...
+from macrosynergy.dataquery import api
+...
+with api.Interface(
+        oauth=True,
+        username="<dq_username>",
+        password="<dq_password>"
+) as dq:
+    data = dq.download(tickers=tickers, start_date="2022-01-01")
+...
+```
+
+
+### Management 
+In order to use the rest of the package without access to the API you can [simulate](./macrosynergy/management/simulate_quantamental_data.py) quantamental data using the management sub-package. 
 ```python
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
