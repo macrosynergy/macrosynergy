@@ -93,9 +93,9 @@ class JPMaQSDownload(object):
 
     def __exit__(self, exc_type, exc_value, traceback):
         e_str = f"{exc_type} {exc_value} {traceback}"
-        if self.print_debug_data or (self.debug and exc_type):
-            if exc_type:
-                logger.error(e_str)
+        if exc_type:
+            logger.error(e_str)
+        if self.print_debug_data or exc_type:
             debug_stream_handler.stream.flush()
             debug_stream_handler.stream.seek(0)
             self.msg_errors += debug_stream_handler.stream.readlines()
@@ -106,7 +106,6 @@ class JPMaQSDownload(object):
             print(("-" * 60 + "\n") * 2)
 
         if exc_type:
-            logger.error(e_str)
             raise exc_type(exc_value)
         else:
             return True
@@ -417,7 +416,7 @@ class JPMaQSDownload(object):
         """
         self.debug = self.debug or debug
         self.print_debug_data = self.print_debug_data or print_debug_data
-        
+
         if self.suppress_warning != suppress_warning:
             self.suppress_warning = suppress_warning
 
@@ -591,9 +590,7 @@ class JPMaQSDownload(object):
                 df = self.dataframe_wrapper(
                     _dict=results_dict, no_metrics=no_metrics, original_metrics=metrics
                 )
-            logger.info(
-                "Data validation complete. Creating and validating dataframe."
-            )
+            logger.info("Data validation complete. Creating and validating dataframe.")
 
             if (not isinstance(df, pd.DataFrame)) or (df.empty):
                 logger.error("No data returned from DataQuery")

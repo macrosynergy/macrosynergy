@@ -375,6 +375,9 @@ class Interface(object):
         debug_stream_handler.stream.flush()
         debug_stream_handler.stream.seek(0)
         self.msg_errors = debug_stream_handler.stream.getvalue().splitlines()
+        # NOTE: Close the stream to avoid memory leaks.
+        # NOTE: DO NOT try and close/delete self or pass it to gc.collect() here.
+        debug_stream_handler.stream.close()
 
     def check_connection(self) -> Tuple[bool, dict]:
         """Check connection (heartbeat) to DataQuery."""
