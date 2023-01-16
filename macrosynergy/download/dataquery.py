@@ -2,13 +2,12 @@
 import warnings
 import concurrent.futures
 import time
-import datetime
 import logging
 from math import ceil, floor
 from itertools import chain
 import uuid
 import base64
-import os
+import os, io
 import requests
 from typing import List, Optional, Dict, Tuple
 from datetime import datetime
@@ -20,8 +19,17 @@ OAUTH_BASE_URL: str = (
 )
 OAUTH_TOKEN_URL: str = "https://authe.jpmchase.com/as/token.oauth2"
 OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
+API_DELAY_PARAM: float = 0.3  # 300ms delay between requests
 
 logger = logging.getLogger(__name__)
+debug_stream_handler = logging.StreamHandler(io.StringIO())
+debug_stream_handler.setLevel(logging.NOTSET)
+debug_stream_handler.setFormatter(
+    logging.Formatter(
+        "%(asctime)s - %(levelname)s - %(module)s - %(funcName)s :: %(message)s"
+    )
+)
+logger.addHandler(debug_stream_handler)
 
 
 def valid_response(
@@ -62,7 +70,7 @@ def dq_request(
     **kwargs,
 ) -> Tuple[Optional[dict], bool, str, Optional[dict]]:
     """Will return the request from DataQuery."""
-    track_id = track_id or str(0) # x = y if y else "0"
+    track_id = track_id or str(0)  # x = y if y else "0"
     request_error = (
         f"Unknown request method {method} not in ('get', 'post'). " + track_id
     )
@@ -72,16 +80,26 @@ def dq_request(
     log_url = requests.compat.quote(log_url, safe="%/:=&?~#+!$,;'@()*[]")
     logger.info(f"Requesting URL: {log_url} , track_id: {track_id}")
 
-    with requests.request(
-        method=method,
-        url=url,
-        cert=cert,
-        headers=headers,
-        params=params,
-        **kwargs,
-    ) as r:
-        last_url: str = r.url
-        js, success, msg = valid_response(r=r, track_id=track_id)
+    try:
+        with requests.request(
+            method=method,
+            url=url,
+            cert=cert,
+            headers=headers,
+            params=params,
+            **kwargs,
+        ) as r:
+            last_url: str = r.url
+            js, success, msg = valid_response(r=r, track_id=track_id)
+    except requests.exceptions.ChunkedEncodingError as e:
+        logger.error(
+            f"ChunkedEncodingError: {e}," f"URL: {log_url}, track_id: {track_id}"
+        )
+        js, success, msg = None, False, None
+        raise InvalidResponseError(
+            e,
+            f"URL : {log_url}",
+        )
 
     if not success:
         logger.error(
@@ -254,7 +272,7 @@ class OAuth(object):
                 data=self.token_data,
                 method="post",
                 proxies=self.proxy,
-                track_id="get_oauth_token"
+                track_id="get_oauth_token",
             )
             if not success:
                 raise AuthenticationError(msg)
@@ -320,6 +338,7 @@ class Interface(object):
 
         self.proxy = kwargs.pop("proxy", kwargs.pop("proxies", None))
         self.heartbeat = heartbeat
+        self.msg_errors: List[str] = []
 
         if oauth:
             self.access: OAuth = OAuth(
@@ -352,8 +371,12 @@ class Interface(object):
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         if exc_type:
-            print(f"Execution {exc_type} with value (exc_value):\n\t {exc_value}")
             logger.error(f"Execution {exc_type} with value (exc_value): {exc_value}")
+        debug_stream_handler.stream.flush()
+        debug_stream_handler.stream.seek(0)
+        self.msg_errors = debug_stream_handler.stream.getvalue().splitlines()
+        # NOTE: Don't close the stream, as it causes can issues with parent/logging modules.
+        # NOTE: DO NOT try and close/delete self or pass it to gc.collect() here.
 
     def check_connection(self) -> Tuple[bool, dict]:
         """Check connection (heartbeat) to DataQuery."""
@@ -373,12 +396,15 @@ class Interface(object):
                 "Invalid response from DataQuery. %s"
                 "request %s error response at "
                 "%s: %s",
-                js, self.last_url, datetime.datetime.utcnow().isoformat(), js
+                js,
+                self.last_url,
+                datetime.utcnow().isoformat(),
+                js,
             )
             raise InvalidResponseError(
                 f"Invalid response from DataQuery."
                 "'info' missing from response.keys():"
-                f"{js.keys()}, request {self.last_url:s} error response at {datetime.datetime.utcnow().isoformat()}: {js}"
+                f"{js.keys()}, request {self.last_url:s} error response at {datetime.utcnow().isoformat()}: {js}"
             )
 
         results: dict = js["info"]
@@ -482,6 +508,15 @@ class Interface(object):
                 logger.info(f"Request successful. {track_id}")
                 if select in response.keys():
                     results.extend(response[select])
+
+                if "links" not in response.keys():
+                    raise InvalidResponseError(
+                        f"Invalid response from DataQuery. response : {response}"
+                        f"links missing from response.keys():"
+                        f"Status Code: {int(msg['status_code'])}"
+                        f"msg : {msg}"
+                        f"url : {url}"
+                    )
 
                 if response["links"][1]["next"] is None:
                     break
@@ -675,30 +710,6 @@ class Interface(object):
 
         return final_output, error_tickers, error_messages
 
-    @staticmethod
-    def delay_compute(no_tickers):
-        """
-        DataQuery is only able to handle a request every 200 milliseconds. However, given
-        the erratic behaviour of threads, the time delay between the release of each
-        request must be a function of the size of the request: the smaller the request,
-        the closer the delay parameter can be to the limit of 200 milliseconds.
-        Therefore, the function adjusts the delay parameter to the number of tickers
-        requested.
-
-        :param <int> no_tickers: number of tickers requested.
-
-        :return <float> delay: internally computed value.
-        """
-
-        if not floor(no_tickers / 100):
-            delay = 0.05
-        elif not floor(no_tickers / 1000):
-            delay = 0.2
-        else:
-            delay = 0.3
-
-        return delay
-
     def get_ts_expression(
         self, expressions, original_metrics, suppress_warning, **kwargs
     ):
@@ -723,9 +734,11 @@ class Interface(object):
             logger.error(f"Connection failed. Error message: {results}.")
             return None
 
-        c_delay = self.delay_compute(len(expressions))
+        c_delay = API_DELAY_PARAM
         results = None
 
+        print(datetime.utcnow().isoformat(), " UTC")
+        logger.info(f"Starting request for {len(expressions)} expressions.")
         while results is None:
             results = self._request(
                 endpoint="/expressions/time-series",
@@ -737,26 +750,38 @@ class Interface(object):
             c_delay += 0.1
 
         results, error_tickers, error_messages = results
+        logger.info(f"Finished request for {len(expressions)} expressions.")
 
-        unavailable_expressions = []
-        for i, res in enumerate(results):
-            if res["attributes"][0]["time-series"] is None:
-                if "message" in res["attributes"][0]:
-                    unavailable_expressions.append(res["attributes"][0]["expression"])
+        unavailable_expressions: List[Tuple(str, str)] = []
+        unavailable_expressions = [
+            (res["attributes"][0]["expression"], res["attributes"][0]["message"])
+            for res in results
+            if res["attributes"][0]["time-series"] is None
+            and "message" in res["attributes"][0]
+        ]
 
         valid_results_count = len(results) - len(unavailable_expressions)
         if valid_results_count < len(expressions):
-            logger.warning(f"Invalid expressions: {', '.join(unavailable_expressions)}")
-            logger.warning(
-                f"Number of invalid expressions: {len(unavailable_expressions)}"
-            )
-            logger.warning(f"Number of expressions returned : {valid_results_count}")
+            if not suppress_warning:
+                logger.warning(
+                    f"Unavailable expressions: [{', '.join([str(elem) for elem in unavailable_expressions])}]."
+                )
+                logger.warning(
+                    f"Number of unavailable expressions: {len(unavailable_expressions)}."
+                )
+                logger.warning(
+                    f"Number of expressions returned : {valid_results_count}"
+                )
             print(f"Number of expressions returned  : {valid_results_count}")
-            print(f"(Number of invalid expressions  : {len(unavailable_expressions)})")
             print(
-                "Some expressions were invalid, and were not returned.\n"
+                f"(Number of unavailable expressions  : {len(unavailable_expressions)})"
+            )
+            print(
+                "Some expressions were unavailable, and were not returned.\n"
                 "Check logger output for more details."
             )
+        else:
+            logger.info(f"All requested expressions were available.")
 
         if error_tickers:
             logger.warning(f"Request failed for tickers: {', '.join(error_tickers)}.")
