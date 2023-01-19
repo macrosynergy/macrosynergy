@@ -69,6 +69,8 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
         print("WARNING: signs must be 1 or -1. They will be coerced to 1 or -1.")
         # signs = np.where(signs >= 0, 1, -1)
         signs  = abs(signs) / signs # should be faster?
+        
+    # main function is here and below.
     
     weights = weights * signs
     
@@ -80,28 +82,29 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
     out_df = pd.DataFrame(data=0, columns=new_cid(cids),
                           index=df['real_date'].unique(),)
     
-    # TODO : Add options to use only complete xcats or use available xcats
-    
-    # ideally, this should be how complete_xcats is determined
+  
     uxcats_set = set([f"{c}_{x}" for c in cids for x in xcats]) # user specified cids_xcats
     dfxcats_set = set(dfc['cid'] + '_' + dfc['xcat']) # available cids_xcats in df
-
-    # xcats_w_nas = 
     
     for ic, cid in enumerate(cids):
         cid_mask = (dfc['cid'] == cid)
+        curr_weights = weights
         if not(set(dfc['xcat'][cid_mask].unique()) == set(xcats)):
+            print(f"WARNING: {cid} does not have all xcats. Weights will be adjusted.")
             avail_bools = np.isin(xcats, dfc['xcat'][cid_mask].unique())
             new_weights = weights + weights[~avail_bools] / np.sum(avail_bools)
             new_weights[~avail_bools] = 0
             curr_weights = new_weights
-        else:
-            curr_weights = weights
+            
         for ix, xcat in enumerate(xcats):
-            xcat_mask = cid_mask & (dfc['xcat'] == xcat)
-            dfcurr = dfc.loc[xcat_mask, ['real_date', 'value']].set_index('real_date')
-            out_df.loc[dfcurr.index, new_cid(cid)] += dfcurr['value'] * curr_weights[ix]
-
+                xcat_mask = cid_mask & (dfc['xcat'] == xcat)
+                dfcurr = dfc.loc[xcat_mask, ['real_date', 'value']].set_index('real_date')
+                if complete_xcats:
+                    if dfcurr.isna().any().any():
+                        print(f"WARNING: {cid} does not have {xcat} for all dates. Skipping.")
+                        continue # skip next lines and goto next iteration (xcat)
+                out_df.loc[dfcurr.index, new_cid(cid)] += dfcurr['value'] * curr_weights[ix]
+                
     return out_df    
     
 if __name__ == "__main__":
