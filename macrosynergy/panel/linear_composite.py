@@ -71,21 +71,39 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
         signs  = abs(signs) / signs # should be faster?
         
     # main function is here and below.
-    
-    weights = weights * signs
+    weights = pd.Series(weights * signs, index=xcats)
     
     if end is None:
         end = df['real_date'].max()
     
     dfc: pd.DataFrame = reduce_df(df, cids=cids, xcats=xcats, start=start, end=end)
+    # creating a dataframe with the xcats as columns. each row is an observation for a combination CID-Date
+    dfc_wide = dfc.set_index(['cid', 'real_date', 'xcat'])['value'].unstack(level=2)
+    # creating a dataframe for the weights with the same index as dfc_wide. 
+    # each column will be a weight, with the same value all along
+    weights_wide = pd.DataFrame(data=[weights.sort_index()], index=dfc_wide.index, columns=dfc_wide.columns)
+    # boolean mask to help us work out the calcs
+    mask = dfc_wide.isna()
+    # pandas series with an index equal to the index of dfc_wide, and a value equal to the sum of the weights
+    weights_sum = weights_wide[~mask].sum(axis=1)
+    # reweighting the weights to sum to 1 considering the available xcats
+    adj_weights_wide = weights_wide.div(weights_sum, axis=0)
+    # final single series: the linear combination of the xcats and the weights
+    out_df = (dfc_wide * adj_weights_wide).sum(axis=1)
     
+    if complete_xcats:
+        obs_with_missing_xcats = mask.sum(axis=1) > 0
+        out_df[obs_with_missing_xcats] = np.NaN
+           
     out_df = pd.DataFrame(data=0, columns=new_cid(cids),
                           index=df['real_date'].unique(),)
     
   
     uxcats_set = set([f"{c}_{x}" for c in cids for x in xcats]) # user specified cids_xcats
     dfxcats_set = set(dfc['cid'] + '_' + dfc['xcat']) # available cids_xcats in df
-    
+    # if len(uxcats_set - dfxcats_set) > 0:
+    #     print("INVALID CID_XCAT COMBINATIONS.")
+    #     return None
     for ic, cid in enumerate(cids):
         cid_mask = (dfc['cid'] == cid)
         curr_weights = weights
@@ -99,7 +117,7 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
         for ix, xcat in enumerate(xcats):
                 xcat_mask = cid_mask & (dfc['xcat'] == xcat)
                 dfcurr = dfc.loc[xcat_mask, ['real_date', 'value']].set_index('real_date')
-                if complete_xcats:
+                if not complete_xcats:
                     if dfcurr.isna().any().any():
                         print(f"WARNING: {cid} does not have {xcat} for all dates. Skipping.")
                         continue # skip next lines and goto next iteration (xcat)
