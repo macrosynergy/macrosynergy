@@ -39,9 +39,11 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
             raise TypeError("cids must be str")
         
     weights = [1, 100, 150]
+    listtypes = (list, np.ndarray, pd.Series)
     # checking inputs; casting weights and signs to np.array    
     if weights is not None:
-        assert isinstance(weights, list) | isinstance(weights, np.ndarray) | isinstance(weights, pd.Series), "weights must be list, np.ndarray or pd.Series"
+        # assert isinstance(weights, list) | isinstance(weights, np.ndarray) | isinstance(weights, pd.Series), "weights must be list, np.ndarray or pd.Series"
+        assert isinstance(weights, listtypes), "weights must be list, np.ndarray or pd.Series"
         if isinstance(weights, np.ndarray):
             assert weights.ndim == 1, "weights must be 1-dimensional if passed as np.ndarray"
         else:
@@ -83,10 +85,26 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
     # TODO : If runs slow, use groupby and apply. Or concurrent.futures ?
     # See https://stackoverflow.com/questions/17071871/select-rows-from-a-dataframe-based-on-values-in-a-column-in-pandas
     
-    for ic, cid in enumerate(cids):
-        for ix, xcat in enumerate(xcats):
-            dfcurr = dfc.loc[(dfc['cid'] == cid) & (dfc['xcat'] == xcat), ['real_date', 'value']].set_index('real_date')
-            out_df.loc[dfcurr.index, comb_cid(cid)] += dfcurr['value'] * weights[ix]
+    # ideally, this should be how complete_xcats is determined
+    uxcats_set = set([f"{c}_{x}" for c in cids for x in xcats])
+    dfxcats_set = set(dfc['cid'] + '_' + dfc['xcat'])
+    diff_set = uxcats_set - dfxcats_set
+    if len(diff_set) == 0:
+        # all xcats are available for all cids
+        for ic, cid in enumerate(cids):
+            for ix, xcat in enumerate(xcats):
+                dfcurr = dfc.loc[(dfc['cid'] == cid) & (dfc['xcat'] == xcat), ['real_date', 'value']].set_index('real_date')
+                out_df.loc[dfcurr.index, comb_cid(cid)] += dfcurr['value'] * weights[ix]
+
+    else:
+        pass
+
+    # check total available xcats.
+    # for every cid, check the number of xcats available.
+    # if all xcats not available, then use available xcats;
+    # populate the missing xcats with someFunc(weights, xcats) ~> mean(weights) for now
+
+    # allow passing df, or generator(), or iterator[List] to allow custom/easy to load weights.
             
     return out_df    
     
