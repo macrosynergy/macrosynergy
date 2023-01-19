@@ -1,13 +1,14 @@
 import numpy as np
 import pandas as pd
-from typing import List
+from typing import *
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 
 def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=None,
                      cids: List[str] = None, start: str = '2001-01-01', end: str = None,
-                     complete_xcats: bool = True, new_xcat="NEW"):
+                     complete_xcats: bool = True, nan_treatment: Optional[Union[str, int]] = None,
+                     new_xcat="NEW"):
     """
     Returns new category panel as linear combination of others as standard dataframe
 
@@ -29,19 +30,21 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
     :param <bool> complete_xcats: If True combinations are only calculated for
         observation dates on which all xcats are available. If False a combination of the
         available categories is used.
+    :param <str> nan_treatment: If an integer is passed, the NaNs are replaced by the integer.
+        Passing "drop" will drop all rows with NaNs. Default is None and no treatment is done.        
     :param <str> new_xcat: name of new composite xcat. Default is "NEW".
 
     """
-    def comb_cid(cid, new_xcat=new_xcat):
+    listtypes = (list, np.ndarray, pd.Series)
+    def new_cid(cid, new_xcat=new_xcat):
         if isinstance(cid, str):
             return f"{cid}_{new_xcat}"
-        else:
-            raise TypeError("cids must be str")
+        elif isinstance(cid, listtypes):
+            return [new_cid(c) for c in cid]
         
-    weights = [1, 100, 150]
     # checking inputs; casting weights and signs to np.array    
     if weights is not None:
-        assert isinstance(weights, list) | isinstance(weights, np.ndarray) | isinstance(weights, pd.Series), "weights must be list, np.ndarray or pd.Series"
+        assert isinstance(weights, listtypes), "weights must be list, np.ndarray or pd.Series"
         if isinstance(weights, np.ndarray):
             assert weights.ndim == 1, "weights must be 1-dimensional if passed as np.ndarray"
         else:
@@ -50,7 +53,7 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
         weights = np.ones(len(xcats)) * (1 / len(xcats))
     
     if signs is not None:
-        assert isinstance(signs, list) | isinstance(signs, np.ndarray) | isinstance(signs, pd.Series), "signs must be list, np.ndarray or pd.Series"
+        assert isinstance(signs, listtypes), "signs must be list, np.ndarray or pd.Series"
         if isinstance(signs, np.ndarray):
             assert signs.ndim == 1, "signs must be 1-dimensional if passed as np.ndarray"
         if isinstance(signs, list):
@@ -59,15 +62,13 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
         signs = np.ones(len(xcats))
         
     assert len(xcats) == len(weights) == len(signs), "xcats, weights, and signs must have same length"
-    # assert np.isclose(np.sum(weights), 1), "weights must sum to 1"
     if not np.isclose(np.sum(weights), 1):
         print("WARNING: weights do not sum to 1. They will be coerced to sum to 1. w←w/∑w")
         weights = weights / np.sum(weights)
-
-    # assert np.all(np.isin(signs, [1, -1])), "signs must be 1 or -1"
     if not np.all(np.isin(signs, [1, -1])):
         print("WARNING: signs must be 1 or -1. They will be coerced to 1 or -1.")
-        signs = np.where(signs >= 0, 1, -1)
+        # signs = np.where(signs >= 0, 1, -1)
+        signs  = abs(signs) / signs # should be faster?
     
     weights = weights * signs
     
@@ -76,23 +77,36 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
     
     dfc: pd.DataFrame = reduce_df(df, cids=cids, xcats=xcats, start=start, end=end)
     
-    out_df = pd.DataFrame(data=0, columns=[comb_cid(cid) for cid in cids],
+    out_df = pd.DataFrame(data=0, columns=new_cid(cids),
                           index=df['real_date'].unique(),)
     
     # TODO : Add options to use only complete xcats or use available xcats
-    # TODO : If runs slow, use groupby and apply. Or concurrent.futures ?
-    # See https://stackoverflow.com/questions/17071871/select-rows-from-a-dataframe-based-on-values-in-a-column-in-pandas
+    
+    # ideally, this should be how complete_xcats is determined
+    uxcats_set = set([f"{c}_{x}" for c in cids for x in xcats]) # user specified cids_xcats
+    dfxcats_set = set(dfc['cid'] + '_' + dfc['xcat']) # available cids_xcats in df
+
+    # xcats_w_nas = 
     
     for ic, cid in enumerate(cids):
+        cid_mask = (dfc['cid'] == cid)
+        if not(set(dfc['xcat'][cid_mask].unique()) == set(xcats)):
+            avail_bools = np.isin(xcats, dfc['xcat'][cid_mask].unique())
+            new_weights = weights + weights[~avail_bools] / np.sum(avail_bools)
+            new_weights[~avail_bools] = 0
+            curr_weights = new_weights
+        else:
+            curr_weights = weights
         for ix, xcat in enumerate(xcats):
-            dfcurr = dfc.loc[(dfc['cid'] == cid) & (dfc['xcat'] == xcat), ['real_date', 'value']].set_index('real_date')
-            out_df.loc[dfcurr.index, comb_cid(cid)] += dfcurr['value'] * weights[ix]
-            
+            xcat_mask = cid_mask & (dfc['xcat'] == xcat)
+            dfcurr = dfc.loc[xcat_mask, ['real_date', 'value']].set_index('real_date')
+            out_df.loc[dfcurr.index, new_cid(cid)] += dfcurr['value'] * curr_weights[ix]
+
     return out_df    
     
 if __name__ == "__main__":
     cids = ['AUD', 'CAD', 'GBP', 'NZD']
-    xcats = ['XR', 'CRY', 'INFL']
+    xcats = ['XR', 'CRY', 'INFL', 'BXBGDPRATIO']
     df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
                                                 'sd_mult'])
     # df_cids.loc['AUD', ] = ['2010-01-01', '2020-12-31', 0.2, 0.2]
@@ -112,8 +126,14 @@ if __name__ == "__main__":
     df_xcats.loc['XR', ] = ['2010-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
     df_xcats.loc['INFL', ] = ['2015-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
     df_xcats.loc['CRY', ] = ['2013-01-01', '2020-10-30', 1, 2, 0.95, 0.5]
+    df_xcats.loc['BXBGDPRATIO', ] = ['2013-01-01', '2020-10-30', 1, 2, 0.95, 0.5]
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    
+    # drop rows where cids=AUD and xcats=XR as a test
+    dfd = dfd.loc[~((dfd['cid'] == 'GBP') & (dfd['xcat'] == 'XR')), :]
+    weights = [1, 100, 150, 200]
 
-    df = linear_composite(df=dfd, xcats=xcats, cids=cids, start='2015-01-01', end='2020-12-31')
+    df = linear_composite(df=dfd, xcats=xcats, cids=cids, start='2015-01-01', end='2020-12-31', 
+                          weights=weights, complete_xcats=True)
     
     print(df)
