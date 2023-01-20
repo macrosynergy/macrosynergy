@@ -6,7 +6,7 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 
 def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=None,
-                     cids: List[str] = None, start: str = '2001-01-01', end: str = None,
+                     cids: List[str] = None, start: str = None, end: str = None,
                      complete_xcats: bool = True, nan_treatment: Optional[Union[str, int]] = None,
                      new_xcat="NEW"):
     """
@@ -74,6 +74,8 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
     # main function is here and below.
     weights = pd.Series(weights * signs, index=xcats)
     
+    if start is None:
+        start = df['real_date'].min()
     if end is None:
         end = df['real_date'].max()
     
@@ -93,9 +95,14 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
     adj_weights_wide = weights_wide.div(weights_sum, axis=0)
     # final single series: the linear combination of the xcats and the weights
     
-    out_df = (dfc_wide * adj_weights_wide).sum(axis=1).reset_index().rename(columns={0: 'value'})
+    out_df = (dfc_wide * adj_weights_wide).sum(axis=1)
+    
+    if complete_xcats:
+        out_df[mask.any(axis=1)] = np.NaN
+    
+    out_df = out_df.reset_index().rename(columns={0: 'value'})
     out_df['xcat'] = make_new_xcat(out_df['cid'])
-    out_df = out_df[['real_date', 'cid', 'xcat', 'value']]
+    out_df = out_df[['cid', 'xcat', 'real_date', 'value']]
 
     return out_df    
     
@@ -129,11 +136,28 @@ if __name__ == "__main__":
     weights = [1, 100, 150, 200]
     print(dfd)
     
-    df = linear_composite(df=dfd, xcats=xcats, cids=cids, start='2015-01-01', end='2020-12-31', 
-                          weights=weights, complete_xcats=True)
+    # dflc = linear_composite(df=dfd, xcats=xcats, cids=cids, start='2015-01-01', end='2020-12-31', 
+    #                       weights=weights, complete_xcats=True)
     
-    print(df)
+    # print(dflc)
     
     
     # TODO: simpler test
+    # NOTE: pd.NA and np.NaN are not the same thing
+    cids = ['AUD', 'CAD', 'GBP']
+    xcats = ['XR', 'CRY', 'INFL']
+    dates  = pd.date_range('2000-01-01', '2000-01-03')
+    randomints = np.random.randint(low=1, high=6, size=len(cids) * len(xcats) * len(dates)).tolist()
+
+    lx = [[cid, xcat, date, randomints.pop()] for cid in cids for xcat in xcats for date in dates]
+    dfst = pd.DataFrame(lx, columns=['cid', 'xcat', 'real_date', 'value'])
+    dfst['value'].iloc[9] = np.NaN       # CAD XR 2000-01-01
+    # therefore CAD XR 2000-01-01 is missing; so the weights should be adjusted
+    dfst['value'].iloc[[18, 19, 20]] = np.NaN  # GBP XR 2000-01-01, 2000-01-02, 2000-01-03
+    # therefore for GBP all of XR is missing; again, the weights should be adjusted
     
+    print(dfst)
+    weights = [1, 2, 3]
+    dflc = linear_composite(df=dfst, xcats=xcats, cids=cids, weights=weights)
+    print(dflc)
+                
