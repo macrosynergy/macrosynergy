@@ -36,11 +36,13 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
 
     """
     listtypes = (list, np.ndarray, pd.Series)
-    def new_cid(cid, new_xcat=new_xcat):
+    def make_new_xcat(cid : Union[str, List[str]], new_xcat : str = new_xcat) -> Union[str, List[str]]:
         if isinstance(cid, str):
             return f"{cid}_{new_xcat}"
+        elif isinstance(cid, pd.Series):
+            return cid.apply(make_new_xcat)
         elif isinstance(cid, listtypes):
-            return [new_cid(c) for c in cid]
+            return [make_new_xcat(c) for c in cid]
         
     # checking inputs; casting weights and signs to np.array    
     if weights is not None:
@@ -67,8 +69,7 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
         weights = weights / np.sum(weights)
     if not np.all(np.isin(signs, [1, -1])):
         print("WARNING: signs must be 1 or -1. They will be coerced to 1 or -1.")
-        # signs = np.where(signs >= 0, 1, -1)
-        signs  = abs(signs) / signs # should be faster?
+        signs = np.abs(signs) / signs # should be faster?
         
     # main function is here and below.
     weights = pd.Series(weights * signs, index=xcats)
@@ -77,6 +78,8 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
         end = df['real_date'].max()
     
     dfc: pd.DataFrame = reduce_df(df, cids=cids, xcats=xcats, start=start, end=end)
+    
+    # @mikiinterfiore 's version
     # creating a dataframe with the xcats as columns. each row is an observation for a combination CID-Date
     dfc_wide = dfc.set_index(['cid', 'real_date', 'xcat'])['value'].unstack(level=2)
     # creating a dataframe for the weights with the same index as dfc_wide. 
@@ -89,40 +92,11 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
     # reweighting the weights to sum to 1 considering the available xcats
     adj_weights_wide = weights_wide.div(weights_sum, axis=0)
     # final single series: the linear combination of the xcats and the weights
-    out_df = (dfc_wide * adj_weights_wide).sum(axis=1)
     
-    if complete_xcats:
-        obs_with_missing_xcats = mask.sum(axis=1) > 0
-        out_df[obs_with_missing_xcats] = np.NaN
-           
-    out_df = pd.DataFrame(data=0, columns=new_cid(cids),
-                          index=df['real_date'].unique(),)
-    
-  
-    uxcats_set = set([f"{c}_{x}" for c in cids for x in xcats]) # user specified cids_xcats
-    dfxcats_set = set(dfc['cid'] + '_' + dfc['xcat']) # available cids_xcats in df
-    # if len(uxcats_set - dfxcats_set) > 0:
-    #     print("INVALID CID_XCAT COMBINATIONS.")
-    #     return None
-    for ic, cid in enumerate(cids):
-        cid_mask = (dfc['cid'] == cid)
-        curr_weights = weights
-        if not(set(dfc['xcat'][cid_mask].unique()) == set(xcats)):
-            print(f"WARNING: {cid} does not have all xcats. Weights will be adjusted.")
-            avail_bools = np.isin(xcats, dfc['xcat'][cid_mask].unique())
-            new_weights = weights + weights[~avail_bools] / np.sum(avail_bools)
-            new_weights[~avail_bools] = 0
-            curr_weights = new_weights
-            
-        for ix, xcat in enumerate(xcats):
-                xcat_mask = cid_mask & (dfc['xcat'] == xcat)
-                dfcurr = dfc.loc[xcat_mask, ['real_date', 'value']].set_index('real_date')
-                if not complete_xcats:
-                    if dfcurr.isna().any().any():
-                        print(f"WARNING: {cid} does not have {xcat} for all dates. Skipping.")
-                        continue # skip next lines and goto next iteration (xcat)
-                out_df.loc[dfcurr.index, new_cid(cid)] += dfcurr['value'] * curr_weights[ix]
-                
+    out_df = (dfc_wide * adj_weights_wide).sum(axis=1).reset_index().rename(columns={0: 'value'})
+    out_df['xcat'] = make_new_xcat(out_df['cid'])
+    out_df = out_df[['real_date', 'cid', 'xcat', 'value']]
+
     return out_df    
     
 if __name__ == "__main__":
@@ -153,8 +127,13 @@ if __name__ == "__main__":
     # drop rows where cids=AUD and xcats=XR as a test
     dfd = dfd.loc[~((dfd['cid'] == 'GBP') & (dfd['xcat'] == 'XR')), :]
     weights = [1, 100, 150, 200]
-
+    print(dfd)
+    
     df = linear_composite(df=dfd, xcats=xcats, cids=cids, start='2015-01-01', end='2020-12-31', 
                           weights=weights, complete_xcats=True)
     
     print(df)
+    
+    
+    # TODO: simpler test
+    
