@@ -36,6 +36,7 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
 
     """
     listtypes = (list, np.ndarray, pd.Series)
+
     def make_new_xcat(cid : Union[str, List[str]], new_xcat : str = new_xcat) -> Union[str, List[str]]:
         if isinstance(cid, str):
             return f"{cid}_{new_xcat}"
@@ -92,14 +93,16 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
     # pandas series with an index equal to the index of dfc_wide, and a value equal to the sum of the weights
     weights_sum = weights_wide[~mask].sum(axis=1)
     # reweighting the weights to sum to 1 considering the available xcats
-    adj_weights_wide = weights_wide.div(weights_sum, axis=0)
+    adj_weights_wide = weights_wide[~mask].div(weights_sum, axis=0)
     # final single series: the linear combination of the xcats and the weights
     
     out_df = (dfc_wide * adj_weights_wide).sum(axis=1)
     
     if complete_xcats:
         out_df[mask.any(axis=1)] = np.NaN
-    
+    else:
+        out_df[mask.all(axis=1)] = np.NaN
+
     out_df = out_df.reset_index().rename(columns={0: 'value'})
     out_df['xcat'] = make_new_xcat(out_df['cid'])
     out_df = out_df[['cid', 'xcat', 'real_date', 'value']]
@@ -155,9 +158,10 @@ if __name__ == "__main__":
     # therefore CAD XR 2000-01-01 is missing; so the weights should be adjusted
     dfst['value'].iloc[[18, 19, 20]] = np.NaN  # GBP XR 2000-01-01, 2000-01-02, 2000-01-03
     # therefore for GBP all of XR is missing; again, the weights should be adjusted
-    
-    print(dfst)
+
     weights = [1, 2, 3]
-    dflc = linear_composite(df=dfst, xcats=xcats, cids=cids, weights=weights)
+    dfst.loc[25:26, 'value'] = np.nan
+    dfst.loc[23, 'value'] = np.nan
+    dflc = linear_composite(df=dfst, xcats=xcats, cids=cids, weights=weights, complete_xcats=False)
     print(dflc)
                 
