@@ -91,8 +91,8 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
     # boolean mask to help us work out the calcs
     mask = dfc_wide.isna()
     # pandas series with an index equal to the index of dfc_wide, and a value equal to the sum of the weights
-    weights_sum = weights_wide[~mask].sum(axis=1)
-    # reweighting the weights to sum to 1 considering the available xcats
+    weights_sum = weights_wide[~mask].abs().sum(axis=1)
+    # re-weighting the weights to sum to 1 considering the available xcats
     adj_weights_wide = weights_wide[~mask].div(weights_sum, axis=0)
     # final single series: the linear combination of the xcats and the weights
     
@@ -160,8 +160,10 @@ if __name__ == "__main__":
     # therefore for GBP all of XR is missing; again, the weights should be adjusted
 
     weights = [1, 2, 3]
+    signs = [-1, 1, 1]
     dfst.loc[25:26, 'value'] = np.nan
     dfst.loc[23, 'value'] = np.nan
-    dflc = linear_composite(df=dfst, xcats=xcats, cids=cids, weights=weights, complete_xcats=False)
+    dflc = linear_composite(df=dfst, xcats=xcats, cids=cids, weights=weights, signs=signs,
+                            complete_xcats=False)
     print(dflc)
                 
