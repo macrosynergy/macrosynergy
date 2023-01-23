@@ -3,6 +3,7 @@ from .category_relations import CategoryRelations
 from .converge_row import ConvergeRow
 from .return_beta import return_beta, beta_display
 from .historic_vol import historic_vol
+from .linear_composite import linear_composite
 from .make_blacklist import make_blacklist
 from .make_relative_value import make_relative_value
 from .make_zn_scores import make_zn_scores
