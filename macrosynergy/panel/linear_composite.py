@@ -104,7 +104,7 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
         out_df[mask.all(axis=1)] = np.NaN
 
     out_df = out_df.reset_index().rename(columns={0: 'value'})
-    out_df['xcat'] = make_new_xcat(out_df['cid'])
+    out_df['xcat'] = new_xcat # make_new_xcat(out_df['cid'])
     out_df = out_df[['cid', 'xcat', 'real_date', 'value']]
 
     return out_df    
@@ -137,7 +137,7 @@ if __name__ == "__main__":
     # drop rows where cids=AUD and xcats=XR as a test
     dfd = dfd.loc[~((dfd['cid'] == 'GBP') & (dfd['xcat'] == 'XR')), :]
     weights = [1, 100, 150, 200]
-    print(dfd)
+    # print(dfd)
     
     # dflc = linear_composite(df=dfd, xcats=xcats, cids=cids, start='2015-01-01', end='2020-12-31', 
     #                       weights=weights, complete_xcats=True)
@@ -150,20 +150,19 @@ if __name__ == "__main__":
     cids = ['AUD', 'CAD', 'GBP']
     xcats = ['XR', 'CRY', 'INFL']
     dates  = pd.date_range('2000-01-01', '2000-01-03')
-    randomints = np.random.randint(low=1, high=6, size=len(cids) * len(xcats) * len(dates)).tolist()
-
+    total_entries = len(cids) * len(xcats) * len(dates)
+    randomints = list(np.arange(total_entries) - total_entries // 2)
     lx = [[cid, xcat, date, randomints.pop()] for cid in cids for xcat in xcats for date in dates]
     dfst = pd.DataFrame(lx, columns=['cid', 'xcat', 'real_date', 'value'])
-    dfst['value'].iloc[9] = np.NaN       # CAD XR 2000-01-01
-    # therefore CAD XR 2000-01-01 is missing; so the weights should be adjusted
-    dfst['value'].iloc[[18, 19, 20]] = np.NaN  # GBP XR 2000-01-01, 2000-01-02, 2000-01-03
-    # therefore for GBP all of XR is missing; again, the weights should be adjusted
+    dfst.loc[[9, 18, 19, 20], 'value'] = np.NaN
+    dfst.loc[[23, 25, 26], 'value'] = np.NaN
 
     weights = [1, 2, 3]
     signs = [-1, 1, 1]
-    dfst.loc[25:26, 'value'] = np.nan
-    dfst.loc[23, 'value'] = np.nan
+    
     dflc = linear_composite(df=dfst, xcats=xcats, cids=cids, weights=weights, signs=signs,
-                            complete_xcats=False)
+                            complete_xcats=True)
     print(dflc)
+    for i in dflc['value']:
+        print(i)
                 
