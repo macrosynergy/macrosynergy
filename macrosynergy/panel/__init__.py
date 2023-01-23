@@ -15,6 +15,6 @@ from .view_timelines import view_timelines
 
 
 __all__ = ['Basket', 'CategoryRelations', 'ConvergeRow', 'return_beta',
-           'beta_display', 'historic_vol',
+           'beta_display', 'historic_vol', 'linear_composite',
            'make_blacklist', 'make_relative_value', 'make_zn_scores', 'panel_calculator',
            'correl_matrix', 'heatmap_grades', 'view_ranges', 'view_timelines']
