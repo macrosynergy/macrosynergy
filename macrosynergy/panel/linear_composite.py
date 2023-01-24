@@ -87,7 +87,8 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
     dfc_wide = dfc.set_index(['cid', 'real_date', 'xcat'])['value'].unstack(level=2)
     # creating a dataframe for the weights with the same index as dfc_wide. 
     # each column will be a weight, with the same value all along
-    weights_wide = pd.DataFrame(data=[weights.sort_index()], index=dfc_wide.index, columns=dfc_wide.columns)
+    weights_wide = pd.DataFrame(data=[weights.sort_index()], 
+                    index=dfc_wide.index, columns=dfc_wide.columns)
     # boolean mask to help us work out the calcs
     mask = dfc_wide.isna()
     # pandas series with an index equal to the index of dfc_wide, and a value equal to the sum of the weights
@@ -110,59 +111,23 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
     return out_df    
     
 if __name__ == "__main__":
-    cids = ['AUD', 'CAD', 'GBP', 'NZD']
-    xcats = ['XR', 'CRY', 'INFL', 'BXBGDPRATIO']
-    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
-                                                'sd_mult'])
-    # df_cids.loc['AUD', ] = ['2010-01-01', '2020-12-31', 0.2, 0.2]
-    # df_cids.loc['CAD', ] = ['2011-01-01', '2020-11-30', 0, 1]
-    # df_cids.loc['GBP', ] = ['2012-01-01', '2020-11-30', 0, 2]
-    # df_cids.loc['NZD', ] = ['2012-01-01', '2020-09-30', -0.1, 3]
-
-    df_cids.loc['CAD', ] = ['2011-01-01', '2020-11-30', 0, 1]
-    df_cids.loc['GBP', ] = ['2011-01-01', '2020-11-30', 0, 2]
-    df_cids.loc['NZD', ] = ['2011-01-01', '2020-11-30', -0.1, 3]
-    df_cids.loc['AUD', ] = ['2011-01-01', '2020-11-30', 0.2, 0.2]
-    
-
-    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
-                                                  'sd_mult', 'ar_coef', 'back_coef'])
-
-    df_xcats.loc['XR', ] = ['2010-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
-    df_xcats.loc['INFL', ] = ['2015-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
-    df_xcats.loc['CRY', ] = ['2013-01-01', '2020-10-30', 1, 2, 0.95, 0.5]
-    df_xcats.loc['BXBGDPRATIO', ] = ['2013-01-01', '2020-10-30', 1, 2, 0.95, 0.5]
-    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-    
-    # drop rows where cids=AUD and xcats=XR as a test
-    dfd = dfd.loc[~((dfd['cid'] == 'GBP') & (dfd['xcat'] == 'XR')), :]
-    weights = [1, 100, 150, 200]
-    # print(dfd)
-    
-    # dflc = linear_composite(df=dfd, xcats=xcats, cids=cids, start='2015-01-01', end='2020-12-31', 
-    #                       weights=weights, complete_xcats=True)
-    
-    # print(dflc)
-    
-    
-    # TODO: simpler test
-    # NOTE: pd.NA and np.NaN are not the same thing
     cids = ['AUD', 'CAD', 'GBP']
     xcats = ['XR', 'CRY', 'INFL']
     dates  = pd.date_range('2000-01-01', '2000-01-03')
     total_entries = len(cids) * len(xcats) * len(dates)
     randomints = list(np.arange(total_entries) - total_entries // 2)
-    lx = [[cid, xcat, date, randomints.pop()] for cid in cids for xcat in xcats for date in dates]
+    lx = [[cid, xcat, date, randomints.pop()] 
+            for cid in cids 
+            for xcat in xcats 
+            for date in dates]
     dfst = pd.DataFrame(lx, columns=['cid', 'xcat', 'real_date', 'value'])
-    dfst.loc[[9, 18, 19, 20], 'value'] = np.NaN
-    dfst.loc[[23, 25, 26], 'value'] = np.NaN
+    missing_idx = [9, 18, 19, 20, 23, 25, 26]
+    dfst.loc[missing_idx, 'value'] = np.NaN
 
     weights = [1, 2, 3]
     signs = [-1, 1, 1]
     
-    dflc = linear_composite(df=dfst, xcats=xcats, cids=cids, weights=weights, signs=signs,
+    dflc = linear_composite(df=dfst, xcats=xcats, cids=cids, 
+                            weights=weights, signs=signs,
                             complete_xcats=True)
     print(dflc)
-    for i in dflc['value']:
-        print(i)
-                
