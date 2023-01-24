@@ -69,7 +69,7 @@ class TestAll(unittest.TestCase):
         self.assertFalse(np.any((vals * 2).astype(bool)[::2]))
 
 
-    def test_linear_composite_withNans(self):
+    def test_linear_composite_with_nans(self):
         cids = ["AUD", "CAD", "GBP"]
         xcats = ["XR", "CRY", "INFL", "RIR"]
         dates = pd.date_range("2023-01-01", "2023-01-30")
@@ -97,9 +97,24 @@ class TestAll(unittest.TestCase):
             np.sum(np.array(outdf['value'])[1::nans_offset]), 
             0.5 * len(cids) * len(dates) // nans_offset
         )
+        
+        # now test the same with complete_xcats=True
+        outdf = linear_composite(
+            df=df_test, xcats=xcats, cids=cids, weights=weights, signs=signs,
+            complete_xcats=True, new_xcat="testCase"
+        )
+        
+        # check if the nans are in some particular places
+        # again, this is a very specific test case
+        self.assertTrue(np.all(np.isnan(np.array(outdf['value'])[::nans_offset])))
+        self.assertTrue(np.all(outdf.loc[np.isnan(outdf['value']), :].index.values \
+                               == np.arange(6) * nans_offset))
+        
+        return True        
 
 
-    def test_linear_composite_hc_sample(self):
+    def test_linear_composite_hc(self):
+        # hard coded test
         cids = ["AUD", "CAD", "GBP"]
         xcats = ["XR", "CRY", "INFL"]
         missing_idx = [9, 18, 19, 20, 23, 25, 26]
