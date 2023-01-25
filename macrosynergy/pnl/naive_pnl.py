@@ -534,9 +534,8 @@ class NaivePnL:
             fg.fig.subplots_adjust(top=title_adj)
 
             fg.map_dataframe(
-                sns.lineplot, x="real_date", y="cum_value", 
-                hue=plot_by, hue_order=col_order,
-                estimator=None, lw=1
+                sns.lineplot, x="real_date", y="cum_value", hue=plot_by,
+                hue_order=labels, estimator=None, lw=1
             )
             for ax in fg.axes.flat:
                 ax.axhline(y=0, color="black", linestyle='--', linewidth=1)
@@ -548,7 +547,7 @@ class NaivePnL:
             # if no_cids == 1:
             #     fg.add_legend()
 
-            fg.set_titles(row_template="", col_template="{col_name}")
+            fg.set_titles(row_template='', col_template='{col_name}')
             fg.set_axis_labels(x_var="Year", y_var="% of risk capital, no compounding")
         
         else:
@@ -562,14 +561,14 @@ class NaivePnL:
             plt.xlabel("Year")
             plt.ylabel("% of risk capital, no compounding")
 
-        plt.axhline(y=0, color="black", linestyle="--", lw=1)
+        plt.axhline(y=0, color='black', linestyle='--', lw=1)
         plt.show()
 
     def signal_heatmap(self, pnl_name: str, pnl_cids: List[str] = None,
                        start: str = None, end: str = None, freq: str = 'm',
                        title: str = "Average applied signal values",
                        x_label: str = "", y_label: str = "",
-                       figsize: Optional[Tuple[int, int]] = None,):
+                       figsize: Optional[Tuple[float, float]] = None):
 
         """
         Display heatmap of signals across times and cross-sections.
