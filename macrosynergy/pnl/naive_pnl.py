@@ -4,7 +4,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 
-from typing import List, Union, Tuple
+from typing import List, Union, Tuple, Optional
 from itertools import product
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
@@ -450,7 +450,9 @@ class NaivePnL:
         :param <bool> facet: parameter to control whether each PnL series is plotted on
             its own respective grid using Seaborn's FacetGrid. Default is False and all
             series will be plotted in the same graph.
-        :param <int> ncol: number of columns in facet grid. Default is 3.
+        :param <int> ncol: number of columns in facet grid. Default is 3. If the total
+            number of PnLs is less than ncol, the number of columns will be adjusted on
+            runtime.
         :param <bool> same_y: if True (default) all plots in facet grid share same y axis.
         :param <str> title: allows entering text for a custom chart header.
         :param <List[str]> xcat_labels: custom labels to be used for the PnLs.
@@ -480,23 +482,28 @@ class NaivePnL:
             elif len(pnl_cats) == 0:
                 raise ValueError("There are not any valid PnL(s) to display given the "
                                  "request.")
+
         error_message = "Either pnl_cats or pnl_cids must be a list of length 1"
         assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1), error_message
-        error_message = "The number of custom labels must match the defined number of " \
-                        "categories in pnl_cats."
+
+        # adjust ncols of the facetgrid if necessary
+        if max([len(pnl_cats), len(pnl_cids)]) < ncol:
+            ncol = max([len(pnl_cats), len(pnl_cids)])
 
         dfx = reduce_df(
             self.df, pnl_cats, pnl_cids, start, end, self.black, out_all=False
         )
 
+        if max([len(pnl_cats), len(pnl_cids)]) < ncol:
+            ncol = max([len(pnl_cats), len(pnl_cids)])
+
+        error_message = "The number of custom labels must match the defined number of " \
+                        "categories in pnl_cats."
         if xcat_labels is not None:
             assert(len(xcat_labels) == len(pnl_cats)), error_message
 
-            xcat_label_dict = dict(zip(pnl_cats, xcat_labels))
-            dfx = dfx.replace(xcat_label_dict)
         else:
-            pnl_cats_c = pnl_cats.copy()
-            xcat_labels = pnl_cats_c
+            xcat_labels = pnl_cats.copy()
 
         no_cids = len(pnl_cids)
 
@@ -511,9 +518,10 @@ class NaivePnL:
             legend_title = "PnL Category(s)"
         else:
             plot_by = "cid"
-            col_order = labels = pnl_cids
+            col_order = pnl_cids
             if xcat_labels is not None:
                 labels = xcat_labels
+            # labels = [f"{cid}_{pnl_cats[0]}" for cid in pnl_cids]
             legend_title = "Cross Section(s)"
 
         dfx['cum_value'] = dfx.groupby(plot_by).cumsum()
@@ -521,7 +529,7 @@ class NaivePnL:
         if facet:
             fg = sns.FacetGrid(
                 data=dfx, col=plot_by, col_wrap=ncol, sharey=same_y, aspect=aspect,
-                height=height, col_order=labels, legend_out=True
+                height=height, col_order=col_order, legend_out=True
             )
             fg.fig.suptitle(title, fontsize=20, x=0.4)
 
@@ -534,16 +542,21 @@ class NaivePnL:
             for ax in fg.axes.flat:
                 ax.axhline(y=0, color="black", linestyle='--', linewidth=1)
 
+            # TODO: find a better legend solution
+            # fg.add_legend(
+            #     legend_data={pb : lbl for pb, lbl in zip((pnl_cids if len(pnl_cids) > 1 else pnl_cats), labels)},
+            # )
+            # if no_cids == 1:
+            #     fg.add_legend()
+
             fg.set_titles(row_template='', col_template='{col_name}')
             fg.set_axis_labels(x_var="Year", y_var="% of risk capital, no compounding")
         
         else:
-            ax = sns.lineplot(
-                data=dfx, x='real_date', y='cum_value', hue=plot_by,
-                hue_order=labels, estimator=None, lw=1
-            )
+            fg = sns.lineplot(data=dfx, x="real_date", y="cum_value", hue=plot_by, 
+                                hue_order=col_order, estimator=None, lw=1)
 
-            leg = ax.axes.get_legend()
+            leg = fg.axes.get_legend()
             leg.set_title(legend_title)
             plt.title(title, fontsize=20)
 
@@ -557,7 +570,7 @@ class NaivePnL:
                        start: str = None, end: str = None, freq: str = 'm',
                        title: str = "Average applied signal values",
                        x_label: str = "", y_label: str = "",
-                       figsize: (float, float) = None):
+                       figsize: Optional[Tuple[float, float]] = None):
 
         """
         Display heatmap of signals across times and cross-sections.
@@ -867,7 +880,17 @@ if __name__ == "__main__":
     pnl.agg_signal_bars(
         pnl_name="PNL_GROWTH_NEG", freq="m", metric="direction", title=None,
     )
-
+    
     pnl.plot_pnls(
         pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=False, xcat_labels=["S_1", "S_2"]
     )
+    pnl.plot_pnls(
+        pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=True, xcat_labels=["S_1", "S_2"]
+    )
+
+    pnl.plot_pnls(  pnl_cats=["PNL_GROWTH_NEG"], 
+                    pnl_cids=cids,
+                    facet=True,
+                    xcat_labels=None
+                    
+                    )

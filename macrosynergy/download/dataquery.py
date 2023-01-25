@@ -12,6 +12,7 @@ import requests
 from typing import List, Optional, Dict, Tuple
 from datetime import datetime
 from macrosynergy.download.exceptions import *
+from tqdm import tqdm
 
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 OAUTH_BASE_URL: str = (
@@ -549,6 +550,7 @@ class Interface(object):
         frequency: str = "FREQ_DAY",
         conversion: str = "CONV_LASTBUS_ABS",
         nan_treatment: str = "NA_NOTHING",
+        show_progress: bool = False,
         debug: bool = False,
     ):
         """
@@ -572,7 +574,7 @@ class Interface(object):
         :param <str> frequency: frequency metric - default is daily.
         :param <str> conversion:
         :param <str> nan_treatment:
-
+        :param <bool> show_progress: used to show progress bar.
         return <dict>: single dictionary containing all the requested Tickers and their
             respective time-series over the defined dates.
         """
@@ -616,7 +618,11 @@ class Interface(object):
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 futures = []
 
-                for r_list in tick_list_compr:
+                for r_list in tqdm(
+                    tick_list_compr,
+                    disable=not show_progress,
+                    desc="Requesting data : ",
+                ):
 
                     params_copy = params.copy()
                     params_copy["expressions"] = r_list
@@ -632,7 +638,12 @@ class Interface(object):
                     time.sleep(delay)
                     thread_output.append(futures[-1][0])
 
-                for i, fto in enumerate(concurrent.futures.as_completed(thread_output)):
+                for i, fto in tqdm(
+                    enumerate(concurrent.futures.as_completed(thread_output)),
+                    disable=not show_progress,
+                    desc="Downloading data : ",
+                    total=len(thread_output),
+                ):
                     try:
                         response, status, msg = fto.result()
                         if not status:
@@ -711,7 +722,7 @@ class Interface(object):
         return final_output, error_tickers, error_messages
 
     def get_ts_expression(
-        self, expressions, original_metrics, suppress_warning, **kwargs
+        self, expressions, original_metrics, suppress_warning, show_progress, **kwargs
     ):
         """
         Main driver function. Receives the Tickers and returns the respective dataframe.
@@ -721,7 +732,7 @@ class Interface(object):
             DataFrame will reflect the order of the received List.
         :param <bool> suppress_warning: required for debugging.
         :param <dict> kwargs: dictionary of additional arguments.
-
+        :param <bool> show_progress: used to show progress bar.
         :return: <pd.DataFrame> df: ['cid', 'xcat', 'real_date'] + [original_metrics].
         """
         if self.heartbeat:
@@ -745,6 +756,7 @@ class Interface(object):
                 expressions=expressions,
                 params={},
                 delay=c_delay,
+                show_progress=show_progress,
                 **kwargs,
             )
             c_delay += 0.1
