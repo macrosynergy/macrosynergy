@@ -481,7 +481,16 @@ class NaivePnL:
                 raise ValueError("There are not any valid PnL(s) to display given the "
                                  "request.")
 
-        assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
+        error_message = "Either pnl_cats or pnl_cids must be a list of length 1"
+        assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1), error_message
+
+        # adjust ncols of the facetgrid if necessary
+        if max([len(pnl_cats), len(pnl_cids)]) < ncol:
+            ncol = max([len(pnl_cats), len(pnl_cids)])
+
+        dfx = reduce_df(
+            self.df, pnl_cats, pnl_cids, start, end, self.black, out_all=False
+        )
 
         if max([len(pnl_cats), len(pnl_cids)]) < ncol:
             ncol = max([len(pnl_cats), len(pnl_cids)])
@@ -535,11 +544,12 @@ class NaivePnL:
             for ax in fg.axes.flat:
                 ax.axhline(y=0, color="black", linestyle="--", linewidth=1)
 
-            # TODO: fix legend
+            # TODO: find a better legend solution
             # fg.add_legend(
             #     legend_data={pb : lbl for pb, lbl in zip((pnl_cids if len(pnl_cids) > 1 else pnl_cats), labels)},
             # )
-            fg.add_legend()
+            # if no_cids == 1:
+            #     fg.add_legend()
 
             fg.set_titles(row_template="", col_template="{col_name}")
             fg.set_axis_labels(x_var="Year", y_var="% of risk capital, no compounding")
@@ -876,9 +886,12 @@ if __name__ == "__main__":
     pnl.plot_pnls(
         pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=False, xcat_labels=["S_1", "S_2"]
     )
+    pnl.plot_pnls(
+        pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=True, xcat_labels=["S_1", "S_2"]
+    )
 
     pnl.plot_pnls(  pnl_cats=["PNL_GROWTH_NEG"], 
-                    pnl_cids=cids[:2],
+                    pnl_cids=cids,
                     facet=True,
                     xcat_labels=None
                     
