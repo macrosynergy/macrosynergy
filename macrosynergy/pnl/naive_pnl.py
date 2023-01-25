@@ -476,7 +476,7 @@ class NaivePnL:
             dif = set(pnl_cats_copy).difference(set(pnl_cats))
             if dif:
                 print(f"The PnL(s) requested, {dif}, have not been defined on the "
-                      f"Class.")
+                      f"Class. The defined PnL(s) are {self.pnl_names}.")
             elif len(pnl_cats) == 0:
                 raise ValueError("There are not any valid PnL(s) to display given the "
                                  "request.")
@@ -502,9 +502,6 @@ class NaivePnL:
 
         else:
             xcat_labels = pnl_cats.copy()
-
-        dfx = reduce_df(self.df, pnl_cats, pnl_cids, start,
-                        end, self.black, out_all=False)
 
         no_cids = len(pnl_cids)
 
@@ -542,7 +539,7 @@ class NaivePnL:
                 estimator=None, lw=1
             )
             for ax in fg.axes.flat:
-                ax.axhline(y=0, color="black", linestyle="--", linewidth=1)
+                ax.axhline(y=0, color="black", linestyle='--', linewidth=1)
 
             # TODO: find a better legend solution
             # fg.add_legend(
@@ -553,7 +550,7 @@ class NaivePnL:
 
             fg.set_titles(row_template="", col_template="{col_name}")
             fg.set_axis_labels(x_var="Year", y_var="% of risk capital, no compounding")
-            
+        
         else:
             fg = sns.lineplot(data=dfx, x="real_date", y="cum_value", hue=plot_by, 
                                 hue_order=col_order, estimator=None, lw=1)
