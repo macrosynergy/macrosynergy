@@ -450,7 +450,9 @@ class NaivePnL:
         :param <bool> facet: parameter to control whether each PnL series is plotted on
             its own respective grid using Seaborn's FacetGrid. Default is False and all
             series will be plotted in the same graph.
-        :param <int> ncol: number of columns in facet grid. Default is 3.
+        :param <int> ncol: number of columns in facet grid. Default is 3. If the total
+            number of PnLs is less than ncol, the number of columns will be adjusted on
+            runtime.
         :param <bool> same_y: if True (default) all plots in facet grid share same y axis.
         :param <str> title: allows entering text for a custom chart header.
         :param <List[str]> xcat_labels: custom labels to be used for the PnLs.
