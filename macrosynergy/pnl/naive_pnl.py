@@ -4,7 +4,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 
-from typing import List, Union, Tuple
+from typing import List, Union, Tuple, Optional
 from itertools import product
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
@@ -447,7 +447,9 @@ class NaivePnL:
             date in df is used.
         :param <str> end: latest date in ISO format. Default is None and latest date
             in df is used.
-        :param <bool> facet: whether to facet the plot by cross section. Default is False.
+        :param <bool> facet: parameter to control whether each PnL series is plotted on
+            its own respective grid using Seaborn's FacetGrid. Default is False and all
+            series will be plotted in the same graph.
         :param <int> ncol: number of columns in facet grid. Default is 3.
         :param <bool> same_y: if True (default) all plots in facet grid share same y axis.
         :param <str> title: allows entering text for a custom chart header.
@@ -480,14 +482,17 @@ class NaivePnL:
                                  "request.")
 
         assert (len(pnl_cats) == 1) | (len(pnl_cids) == 1)
+
+        if max([len(pnl_cats), len(pnl_cids)]) < ncol:
+            ncol = max([len(pnl_cats), len(pnl_cids)])
+
         error_message = "The number of custom labels must match the defined number of " \
                         "categories in pnl_cats."
         if xcat_labels is not None:
             assert(len(xcat_labels) == len(pnl_cats)), error_message
 
         else:
-            pnl_cats_c = pnl_cats.copy()
-            xcat_labels = pnl_cats_c
+            xcat_labels = pnl_cats.copy()
 
         dfx = reduce_df(self.df, pnl_cats, pnl_cids, start,
                         end, self.black, out_all=False)
@@ -505,10 +510,10 @@ class NaivePnL:
             legend_title = "PnL Category(s)"
         else:
             plot_by = "cid"
-            labels = pnl_cids
             col_order = pnl_cids
-            # if xcat_labels is not None:
-            #     labels = xcat_labels
+            if xcat_labels is not None:
+                labels = xcat_labels
+            # labels = [f"{cid}_{pnl_cats[0]}" for cid in pnl_cids]
             legend_title = "Cross Section(s)"
 
         dfx['cum_value'] = dfx.groupby(plot_by).cumsum()
@@ -530,17 +535,17 @@ class NaivePnL:
             for ax in fg.axes.flat:
                 ax.axhline(y=0, color="black", linestyle="--", linewidth=1)
 
+            # TODO: fix legend
             # fg.add_legend(
-            #     title=legend_title, bbox_to_anchor=(0.5, -label_adj), ncol=ncol,
-            #     labels=labels
+            #     legend_data={pb : lbl for pb, lbl in zip((pnl_cids if len(pnl_cids) > 1 else pnl_cats), labels)},
             # )
             fg.add_legend()
 
-            fg.set_titles(row_template='', col_template='{col_name}')
+            fg.set_titles(row_template="", col_template="{col_name}")
             fg.set_axis_labels(x_var="Year", y_var="% of risk capital, no compounding")
             
         else:
-            fg = sns.lineplot(data=dfx, x='real_date', y='cum_value', hue=plot_by, 
+            fg = sns.lineplot(data=dfx, x="real_date", y="cum_value", hue=plot_by, 
                                 hue_order=col_order, estimator=None, lw=1)
 
             leg = fg.axes.get_legend()
@@ -550,14 +555,14 @@ class NaivePnL:
             plt.xlabel("Year")
             plt.ylabel("% of risk capital, no compounding")
 
-        plt.axhline(y=0, color='black', linestyle='--', lw=1)
+        plt.axhline(y=0, color="black", linestyle="--", lw=1)
         plt.show()
 
     def signal_heatmap(self, pnl_name: str, pnl_cids: List[str] = None,
                        start: str = None, end: str = None, freq: str = 'm',
                        title: str = "Average applied signal values",
                        x_label: str = "", y_label: str = "",
-                       figsize: (float, float) = None):
+                       figsize: Optional[Tuple[int, int]] = None,):
 
         """
         Display heatmap of signals across times and cross-sections.
@@ -860,17 +865,21 @@ if __name__ == "__main__":
 
     pnl.make_long_pnl(vol_scale=10, label="Long")
 
-    # df_eval = pnl.evaluate_pnls(
-    #     pnl_cats=["PNL_GROWTH_NEG"], start="2015-01-01", end="2020-12-31"
-    # )
+    df_eval = pnl.evaluate_pnls(
+        pnl_cats=["PNL_GROWTH_NEG"], start="2015-01-01", end="2020-12-31"
+    )
 
-    # pnl.agg_signal_bars(
-    #     pnl_name="PNL_GROWTH_NEG", freq="m", metric="direction", title=None,
-    # )
+    pnl.agg_signal_bars(
+        pnl_name="PNL_GROWTH_NEG", freq="m", metric="direction", title=None,
+    )
+    
+    pnl.plot_pnls(
+        pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=False, xcat_labels=["S_1", "S_2"]
+    )
 
     pnl.plot_pnls(  pnl_cats=["PNL_GROWTH_NEG"], 
-                    pnl_cids=cids, 
+                    pnl_cids=cids[:2],
                     facet=True,
-                    xcat_labels=["E1"],
+                    xcat_labels=None
                     
                     )
