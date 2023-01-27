@@ -393,6 +393,7 @@ class JPMaQSDownload(object):
         suppress_warning=True,
         debug=False,
         print_debug_data=False,
+        show_progress=False,
     ):
         """
         Downloads and returns a standardised DataFrame of the specified base tickers and metrics.
@@ -410,6 +411,9 @@ class JPMaQSDownload(object):
         :param <str> start_date: first date in ISO 8601 string format.
         :param <bool> suppress_warning: used to suppress warning of any invalid
             ticker received by DataQuery.
+        :param <bool> debug: used to print out the tickers that are being downloaded.
+        :param <bool> print_debug_data: used to print out debug information.
+        :param <bool> show_progress: used to show progress bar. Default is False.
 
         :return <pd.Dataframe> df: standardized dataframe with columns 'cid', 'xcats',
             'real_date' and chosen metrics.
@@ -508,6 +512,7 @@ class JPMaQSDownload(object):
                     end_date=end_date,
                     suppress_warning=suppress_warning,
                     debug=debug,
+                    show_progress=show_progress,
                 )
             dq_msg_errors = dq.msg_errors
             debug_stream_handler.stream.write("\n".join(dq_msg_errors) + "\n")

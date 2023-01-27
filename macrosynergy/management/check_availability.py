@@ -126,7 +126,8 @@ def visual_paneldates(df: pd.DataFrame, size: Tuple[float] = None):
 
 def check_availability(df: pd.DataFrame, xcats: List[str] = None,
                        cids: List[str] = None, start: str = None,
-                       start_size: Tuple[float] = None, end_size: Tuple[float] = None):
+                       start_size: Tuple[float] = None, end_size: Tuple[float] = None,
+                       start_years: bool = True, missing_recent: bool = True):
     """
     Wrapper for visualizing start and end dates of a filtered DataFrame.
 
@@ -141,14 +142,24 @@ def check_availability(df: pd.DataFrame, xcats: List[str] = None,
         the start years heatmap. Default is None (format adjusted to data).
     :param <Tuple[float]> end_size: tuple of floats with width/length of
         the end dates heatmap. Default is None (format adjusted to data).
-
+    :param <bool> start_years: boolean indicating whether or not to display a chart 
+        of starting years for each cross-section and indicator.
+        Default is True (display start years).
+    :param <bool> missing_recent: boolean indicating whether or not to display a chart 
+        of missing date numbers for each cross-section and indicator.
+        Default is True (display missing days).
     """
+    assert isinstance(start_years, bool), f"<bool> object expected and not {type(start_years)}."
+    assert isinstance(missing_recent, bool), f"<bool> object expected and not {type(missing_recent)}."
+
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start)
-    dfs = check_startyears(dfx)
-    visual_paneldates(dfs, size=start_size)
-    dfe = check_enddates(dfx)
-    plt.figure()
-    visual_paneldates(dfe, size=end_size)
+    if start_years:
+        dfs = check_startyears(dfx)
+        visual_paneldates(dfs, size=start_size)
+    if missing_recent:
+        dfe = check_enddates(dfx)
+        plt.figure()
+        visual_paneldates(dfe, size=end_size)
 
 
 if __name__ == "__main__":
@@ -174,5 +185,5 @@ if __name__ == "__main__":
 
     xxcats = xcats + ['TREND']
     xxcids = cids + ['USD']
-
-    check_availability(df=dfd, xcats=xcats, cids=cids)
+    
+    check_availability(df=dfd, xcats=xcats, cids=cids, missing_recent=False)
