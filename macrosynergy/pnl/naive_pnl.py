@@ -537,7 +537,7 @@ class NaivePnL:
 
             fg.map_dataframe(
                 sns.lineplot, x="real_date", y="cum_value", hue=plot_by,
-                hue_order=labels, estimator=None, lw=1
+                hue_order=col_order, estimator=None, lw=1
             )
             for ax in fg.axes.flat:
                 ax.axhline(y=0, color="black", linestyle='--', linewidth=1)
