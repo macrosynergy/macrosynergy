@@ -539,30 +539,31 @@ class NaivePnL:
                 sns.lineplot, x="real_date", y="cum_value", hue=plot_by,
                 hue_order=col_order, estimator=None, lw=1
             )
-            for ax in fg.axes.flat:
+            for ix, ax in enumerate(fg.axes.flat):
                 ax.axhline(y=0, color="black", linestyle='--', linewidth=1)
-
-            # TODO: find a better legend solution
-            # fg.add_legend(
-            #     legend_data={pb : lbl for pb, lbl in zip((pnl_cids if len(pnl_cids) > 1 else pnl_cats), labels)},
-            # )
-            # if no_cids == 1:
-            #     fg.add_legend()
-
-            fg.set_titles(row_template='', col_template='{col_name}')
+                if no_cids == 1:
+                    ax.set_title(xcat_labels[ix])
+            
+            if no_cids > 1:
+                fg.set_titles(row_template='', col_template='{col_name}')
+            
+            
             fg.set_axis_labels(x_var="Year", y_var="% of risk capital, no compounding")
         
         else:
             fg = sns.lineplot(data=dfx, x="real_date", y="cum_value", hue=plot_by, 
                                 hue_order=col_order, estimator=None, lw=1)
 
-            leg = fg.axes.get_legend()
-            leg.set_title(legend_title)
             plt.title(title, fontsize=20)
 
             plt.xlabel("Year")
             plt.ylabel("% of risk capital, no compounding")
 
+        if no_cids == 1:
+            if facet:
+                labels = labels[::-1]
+            plt.legend(title=legend_title, loc='center right', labels=labels,)
+            
         plt.axhline(y=0, color='black', linestyle='--', lw=1)
         plt.show()
 
