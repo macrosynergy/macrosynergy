@@ -553,7 +553,8 @@ class NaivePnL:
         else:
             fg = sns.lineplot(data=dfx, x="real_date", y="cum_value", hue=plot_by, 
                                 hue_order=col_order, estimator=None, lw=1)
-
+            leg = fg.axes.get_legend()
+            leg.set_title(legend_title)
             plt.title(title, fontsize=20)
 
             plt.xlabel("Year")
@@ -562,7 +563,8 @@ class NaivePnL:
         if no_cids == 1:
             if facet:
                 labels = labels[::-1]
-            plt.legend(title=legend_title, loc='center right', labels=labels,)
+            
+            # TODO : Legend for facetgrid is not working
             
         plt.axhline(y=0, color='black', linestyle='--', lw=1)
         plt.show()
