@@ -10,11 +10,12 @@ from macrosynergy.management.check_availability import reduce_df
 
 
 def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
-                   intersect: bool = False, val: str = 'value',
+                   intersect: bool = False, val: str = 'value', 
                    cumsum: bool = False, start: str = '2000-01-01', end: str = None,
                    ncol: int = 3, same_y: bool = True, all_xticks: bool = False,
-                   title: str = None, title_adj: float = 0.95,
-                   xcat_labels: List[str] = None, label_adj: float = 0.05,
+                   xcat_grid: bool = False, xcat_labels: List[str] = None,
+                   label_adj: float = 0.05,
+                   title: str = None, title_adj: float = 0.8,
                    cs_mean: bool = False, size: Tuple[float] = (12, 7),
                    aspect: float = 1.7, height: float = 3):
 
@@ -36,11 +37,14 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
     :param <bool> same_y: if True (default) all plots in facet grid share same y axis.
     :param <bool> all_xticks:  if True x-axis tick labels are added to all plots in grid.
         Default is False, i.e only the lowest row displays the labels.
+    :param <bool> xcat_grid: if True, shows a facet grid of line charts for each xcat 
+        for a single cross section. Default is False, only one cross section is allowed 
+        with this option.
+    :param <List[str]> xcat_labels: labels to be used for xcats. If not defined, the
+        labels will be identical to extended categories.
     :param <str> title: chart heading. Default is no title.
     :param <float> title_adj: parameter that sets top of figure to accommodate title.
         Default is 0.95.
-    :param <List[str]> xcat_labels: labels to be used for xcats. If not defined, the
-        labels will be identical to extended categories.
     :param <float> label_adj: parameter that sets bottom of figure to fit the label.
         Default is 0.05.
     :param <bool> cs_mean: if True this adds a line of cross-sectional averages to
@@ -64,6 +68,13 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
 
     df, xcats, cids = reduce_df(df, xcats, cids, start, end,
                                 out_all=True, intersect=intersect)
+    
+    # NOTE: casting var(cids) to list if it is a string is dependent on the reduce_df function
+
+    assert isinstance(xcat_grid, bool), "xcat_grid parameter must be a Boolean Object."
+    if xcat_grid:
+        assert (len(cids) == 1), \
+        "xcat_grid can only be set to True if a single cross-section is passed."
 
     if cumsum:
         df[val] = df.sort_values(['cid', 'xcat',
@@ -72,19 +83,40 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
 
     sns.set(style='darkgrid')
     if len(cids) == 1:
-        sns.set(rc={'figure.figsize': size})
-        ax = sns.lineplot(data=df, x='real_date', y=val,
-                          hue='xcat', estimator=None, sizes=size)
+        if xcat_grid:
+            fg = sns.FacetGrid(data=df, col='xcat', col_wrap=ncol,
+                        sharey=same_y, aspect=aspect,
+                        height=height, col_order=xcats)
+            fg.map_dataframe(sns.lineplot, x='real_date', y=val,
+                                hue='xcat', hue_order=xcats, estimator=None)
 
-        plt.axhline(y=0, c=".5")
-        handles, labels = ax.get_legend_handles_labels()
-        label = labels[0:] if xcat_labels is None else xcat_labels
-        ax.legend(handles=handles[0:], labels=label)
-        ax.set_xlabel("")
-        ax.set_ylabel("")
+            fg.map(plt.axhline, y=0, c=".5")
+            fg.set_axis_labels("", "")
+            if xcat_labels is None:
+                xcat_labels = xcats
+            for ax, tx in zip(fg.axes.flat, xcat_labels):
+                ax.set_title(tx)
+            
+            if title is not None:
+                fg.fig.suptitle(title,)
+                fg.fig.subplots_adjust(top=title_adj)
 
-        if title is not None:
-            plt.title(title)
+        else:
+            
+            sns.set(rc={'figure.figsize': size})
+            ax = sns.lineplot(data=df, x='real_date', y=val,
+                            hue='xcat', estimator=None, sizes=size)
+
+            plt.axhline(y=0, c=".5")
+            handles, labels = ax.get_legend_handles_labels()
+            label = labels[0:] if xcat_labels is None else xcat_labels
+            ax.legend(handles=handles[0:], labels=label)
+            ax.set_xlabel("")
+            ax.set_ylabel("")
+
+            if title is not None:
+                plt.title(title)
+
     else:
         # Utilise a Facet Grid for instances where a large number of cross-sections are
         # defined & plotted. Otherwise the line chart becomes too congested.
@@ -164,6 +196,7 @@ if __name__ == "__main__":
                    size=(10, 5), title='AUD Return and Carry')
 
     view_timelines(dfd, xcats=['XR', 'CRY', 'INFL'], cids=cids[0],
+                   xcat_grid=True, title_adj=0.8,
                    xcat_labels=['Return', 'Carry', 'Inflation'],
                    title='AUD Return, Carry & Inflation')
 
