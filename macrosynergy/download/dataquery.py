@@ -12,7 +12,7 @@ import requests
 from typing import List, Optional, Dict, Tuple
 from datetime import datetime
 from macrosynergy.download.exceptions import *
-from tqdm import tqdm
+from tqdm.autonotebook import tqdm
 
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 OAUTH_BASE_URL: str = (
