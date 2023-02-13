@@ -13,8 +13,9 @@ class TestAll(unittest.TestCase):
 
     def dataframe_generator(self):
 
-        self.__dict__['cids'] = ['AUD', 'CAD', 'GBP']
-        self.__dict__['xcats'] = ['CRY', 'XR']
+        self.cids : List[str] = ['AUD', 'CAD', 'GBP']
+        self.xcats : List[str] = ['CRY', 'XR']
+
         df_cids = pd.DataFrame(index=self.cids,
                                columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
         df_cids.loc['AUD', :] = ['2010-01-01', '2020-12-31', 0.5, 2]
@@ -29,7 +30,7 @@ class TestAll(unittest.TestCase):
         df_xcats.loc['XR', :] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
 
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-        self.__dict__['dfd'] = dfd
+        self.dfd : pd.DataFrame = dfd
 
     def test_expo_weights(self):
         lback_periods = 21
@@ -81,6 +82,17 @@ class TestAll(unittest.TestCase):
 
         output = flat_std(data, True)
         self.assertIsInstance(output, float)  # test type
+        
+    def test_get_cycles(self):
+        test_dates_df = pd.DataFrame(columns=['value', 'real_date'])
+        daterange1 = pd.date_range(start='2023-01-28', end='2023-02-02')
+        test_case_1 = pd.DataFrame(columns=['real_date'], data=daterange1)
+        
+        test_result_1 = get_cycles(test_case_1, freq='M')
+        # expected results : 2023-01-31 (last of cycle), 2023-02-02 (last of timeseries)
+        self.assertEqual(set(test_case_1[test_result_1.values]) ^ set([pd.Timestamp('2023-01-31'), pd.Timestamp('2023-02-02')]), set())
+
+        # self.assertFalse(
 
     def test_historic_vol(self):
 
@@ -112,14 +124,12 @@ class TestAll(unittest.TestCase):
         # period minus one.
         # Test the above logic.
 
-        # Reduce the dataframe to the singular xcat to test the dimensionality reduction.
-        df_reduce = reduce_df(self.dfd, xcats=[xcat], cids=self.cids, start=None,
+        # select 1 cross-section and 1 xcat to test the dimensionality reduction.
+        df_reduce = reduce_df(df=self.dfd, xcats=[xcat], cids=self.cids, start=None,
                               end=None, blacklist=None)
-        no_rows_input = df_reduce.shape[0]
-        no_rows_output = df_output.shape[0]
-        difference = len(self.cids) * (lback_periods - 1)
 
-        self.assertTrue((no_rows_input - no_rows_output) == difference)
+        # the shape of the df_output should be the same as the shape of reduce_df.
+        self.assertTrue(df_output[['cid', 'xcat', 'real_date']].shape == df_reduce[['cid', 'xcat', 'real_date']].shape)
 
         with self.assertRaises(AssertionError):
             historic_vol(self.dfd, 'XR', self.cids, lback_periods=7, lback_meth='ma',

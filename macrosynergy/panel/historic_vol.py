@@ -169,9 +169,11 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
     df = df[["cid", "xcat", "real_date", "value"]]
-
+    in_df = df.copy()
     assert lback_periods > half_life, "Half life must be shorter than lookback period."
     assert lback_meth in ['xma', 'ma'], "Incorrect request."
+    est_freq = est_freq.lower()
+    assert est_freq in ['d', 'w', 'm', 'q'], "Estimation frequency must be one of 'd', 'w', 'm', 'q'."
 
     df = reduce_df(
         df, xcats=[xcat], cids=cids, start=start, end=end, blacklist=blacklist
@@ -215,6 +217,16 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     df_out = dfwa.unstack().reset_index().rename({0: 'value'}, axis=1)
     df_out['xcat'] = xcat + postfix
 
+    # iteratively ensure that each cid has the same date entries as the input df
+    df_out_copy = df_out.copy()
+    df_out = pd.DataFrame(columns=df_out.columns)
+
+    for cid in cids:
+        date_list = in_df[in_df['cid'] == cid]['real_date'].unique()
+        date_range = pd.date_range(date_list.min(), date_list.max())
+        # only copy over values that are in the date range
+        df_out = pd.concat([df_out, df_out_copy[df_out_copy['real_date'].isin(date_range) & (df_out_copy['cid'] == cid)]])
+        
     return df_out[df.columns].sort_values(['cid', 'xcat', 'real_date'])
 
 
@@ -247,3 +259,9 @@ if __name__ == "__main__":
         half_life=11,
         remove_zeros=True
     )
+    
+    dfd = reduce_df(df=dfd, xcats=['XR'], cids=cids)
+    
+    assert df[['cid', 'xcat', 'real_date', 'value']].shape == dfd[['cid', 'xcat', 'real_date', 'value']].shape
+    
+    print("Test passed.")
