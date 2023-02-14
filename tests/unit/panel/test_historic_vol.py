@@ -84,15 +84,67 @@ class TestAll(unittest.TestCase):
         self.assertIsInstance(output, float)  # test type
         
     def test_get_cycles(self):
-        test_dates_df = pd.DataFrame(columns=['value', 'real_date'])
-        daterange1 = pd.date_range(start='2023-01-28', end='2023-02-02')
-        test_case_1 = pd.DataFrame(columns=['real_date'], data=daterange1)
-        
-        test_result_1 = get_cycles(test_case_1, freq='M')
-        # expected results : 2023-01-31 (last of cycle), 2023-02-02 (last of timeseries)
-        self.assertEqual(set(test_case_1[test_result_1.values]) ^ set([pd.Timestamp('2023-01-31'), pd.Timestamp('2023-02-02')]), set())
+        daterange1 = pd.bdate_range(start="2023-01-28", end="2023-02-02")
+        test_case_1 = pd.DataFrame({"real_date": pd.Series(daterange1)})
+        # NOTE: get_cycles(freq=...) is case insensitive
+        test_result_1 = get_cycles(test_case_1, freq="M")
+        # expected results : 2023-01-31 (last of cycle), last index
 
-        # self.assertFalse(
+        expc_vals = set(
+            np.array(
+                [pd.Timestamp("2023-01-31"), daterange1[-1]], dtype="datetime64[ns]"
+            ).tolist()
+        )
+        test_vals = set(test_case_1[test_result_1]["real_date"].values.tolist())
+        self.assertEqual(expc_vals, test_vals)
+
+        daterange2 = pd.bdate_range(start="2023-03-20", end="2023-07-10")
+        test_case_2 = pd.DataFrame({"real_date": pd.Series(daterange2)})
+        test_result_2 = get_cycles(test_case_2, freq="q")
+        # expected results : 2023-03-31 (last of cycle), 2023-06-30 (last of cycle), last index
+
+        expc_vals = set(
+            np.array(
+                [pd.Timestamp("2023-03-31"), pd.Timestamp("2023-06-30"), daterange2[-1]],
+                dtype="datetime64[ns]",
+            ).tolist()
+        )
+        test_vals = set(test_case_2[test_result_2]["real_date"].values.tolist())
+        self.assertEqual(expc_vals, test_vals)
+
+        daterange3 = pd.bdate_range(start="2000-01-01", end="2023-07-10")
+        test_case_3 = pd.DataFrame({"real_date": pd.Series(daterange3)})
+        test_result_3 = get_cycles(test_case_3, freq="m")
+
+        # expc_vals = set(
+        # print(test_case_3[test_result_3]["real_date"].values.tolist())
+        expc_vals = []
+        r_start_date = pd.Timestamp("2000-01-01")
+        r_end_date = pd.Timestamp("2023-07-10")
+
+        expc_no_cycles = (r_end_date.year - r_start_date.year) * 12 + (
+            r_end_date.month - r_start_date.month
+        )
+        self.assertEqual(
+            int(expc_no_cycles), int(sum(test_result_3) - 1)
+        )  # -1 as last index is always True
+
+        test_vals = [
+            [pd.Timestamp("2023-01-31"), True],
+            [pd.Timestamp("2016-02-29"), True],
+            # [pd.Timestamp("2023-02-29"), False],
+            # this timestamp doesn't exist and will raise an Exception
+            [pd.Timestamp("2023-02-28"), True],
+            [pd.Timestamp("2023-03-20"), False],
+            [pd.Timestamp("2005-12-30"), True],
+            [pd.Timestamp("2000-12-29"), True],
+        ]
+        for tval in test_vals:
+            self.assertEqual(
+                test_result_3[test_case_3["real_date"] == tval[0]].values[0], tval[1]
+            )
+
+
 
     def test_historic_vol(self):
 
@@ -130,6 +182,18 @@ class TestAll(unittest.TestCase):
 
         # the shape of the df_output should be the same as the shape of reduce_df.
         self.assertTrue(df_output[['cid', 'xcat', 'real_date']].shape == df_reduce[['cid', 'xcat', 'real_date']].shape)
+        lback_periods = 20
+        half_life = 8
+        for freqst in ["d", "w", "m", "q"]:
+            for xcatt in ['XR', 'CRY']:
+                df_test_res = historic_vol(self.dfd, xcatt, self.cids, lback_periods=lback_periods,
+                                             lback_meth='ma', half_life=half_life, start=None,
+                                             end=None, blacklist=None, remove_zeros=True,
+                                                postfix='ASD', est_freq=freqst)
+                df_reduce = reduce_df(df=self.dfd, xcats=[xcatt], cids=self.cids, start=None,
+                                      end=None, blacklist=None)
+                self.assertTrue(df_test_res[['cid', 'xcat', 'real_date']].shape == df_reduce[['cid', 'xcat', 'real_date']].shape)
+
 
         with self.assertRaises(AssertionError):
             historic_vol(self.dfd, 'XR', self.cids, lback_periods=7, lback_meth='ma',

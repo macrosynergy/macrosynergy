@@ -107,6 +107,7 @@ def get_cycles(dates_df: pd.DataFrame, freq: str = "m") -> pd.DataFrame:
                     'm': months_btwn_dates,
                     'w': weeks_btwn_dates,
                     'd': lambda x, y: (y - x).days}[freq]
+                    # NOTE: actual days not business days
     dfc['cycleCount'] = dfc['real_date'].apply(lambda x: group_func(start_date, x))
 
     triggers = dfc['cycleCount'].shift(-1) != dfc['cycleCount']
