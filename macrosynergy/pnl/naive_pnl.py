@@ -431,8 +431,9 @@ class NaivePnL:
                   facet: bool = False,
                   ncol: int = 3, same_y: bool = True,
                   title: str = "Cumulative Naive PnL", xcat_labels: List[str] = None,
-                  x_axis_label: str = "Year", y_axis_label: str = ("% of risk capital"
-                  ", no compounding"), share_axis_labels: bool = True,
+                  xlab: str = "",
+                  ylab: str = "% of risk capital, no compounding",
+                  share_axis_labels: bool = True,
                   figsize: Tuple = (12, 7), aspect: float = 1.7,
                   height: float = 3, label_adj: float = 0.05,
                   title_adj: float = 0.95, y_label_adj: float = 0.95,) -> None:
@@ -458,9 +459,9 @@ class NaivePnL:
         :param <bool> same_y: if True (default) all plots in facet grid share same y axis.
         :param <str> title: allows entering text for a custom chart header.
         :param <List[str]> xcat_labels: custom labels to be used for the PnLs.
-        :param <str> x_axis_label: label for x-axis of the plot (or subplots if faceted),
-            default is 'Year'.
-        :param <str> y_axis_label: label for y-axis of the plot (or subplots if faceted),
+        :param <str> xlab: label for x-axis of the plot (or subplots if faceted),
+            default is None (empty string)..
+        :param <str> ylab: label for y-axis of the plot (or subplots if faceted),
             default is '% of risk capital, no compounding'.
         :param <bool> share_axis_labels: if True (default) the axis labels are shared by
             all subplots in the facet grid.
@@ -560,10 +561,10 @@ class NaivePnL:
             
             if share_axis_labels:
                 fg.set_axis_labels("", "")
-                fg.fig.supxlabel(x_axis_label)
-                fg.fig.supylabel(y_axis_label)
+                fg.fig.supxlabel(xlab)
+                fg.fig.supylabel(ylab)
             else:
-                fg.set_axis_labels(x_axis_label, y_axis_label)
+                fg.set_axis_labels(xlab, ylab)
             
 
         else:
@@ -573,17 +574,16 @@ class NaivePnL:
             leg.set_title(legend_title)
             plt.title(title, fontsize=20)
 
-            plt.xlabel("Year")
-            plt.ylabel("% of risk capital, no compounding")
+            plt.xlabel(xlab)
+            plt.ylabel(ylab)
 
-        # TODO : Legend for FacetGrid graphs. Is there any use cases for it?
         if no_cids == 1:
             if facet:
                 labels = labels[::-1]
         
         # set axis labels for the whole figure using plt
-        # fg.supxlabel(x_axis_label)
-        # fg.supylabel(y_axis_label)
+        # fg.supxlabel(xlab)
+        # fg.supylabel(ylab)
         
             
             
@@ -906,7 +906,8 @@ if __name__ == "__main__":
     )
     
     pnl.plot_pnls(
-        pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=False, xcat_labels=["S_1", "S_2"]
+        pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=False, xcat_labels=["S_1", "S_2"],
+        xlab="date", ylab="%"
     )
     pnl.plot_pnls(
         pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=True, xcat_labels=["S_1", "S_2"]
@@ -921,13 +922,13 @@ if __name__ == "__main__":
                     xcat_labels=None
                     )
     
-    pnl.plot_pnls(  pnl_cats=["PNL_GROWTH_NEG"], 
+    pnl.plot_pnls(  pnl_cats=["PNL_GROWTH_NEG"],
                     same_y=True,
                     pnl_cids=cids,
                     facet=True,
                     xcat_labels=None,
                     share_axis_labels=False,
-                    x_axis_label='Date',
-                    y_axis_label='PnL',
+                    xlab='Date',
+                    ylab='PnL',
                     y_label_adj=0.1,)
 
