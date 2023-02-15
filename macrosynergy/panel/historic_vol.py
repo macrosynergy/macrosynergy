@@ -96,9 +96,10 @@ def get_cycles(dates_df: pd.DataFrame, freq: str = "m", lback_periods : int = 21
         """Returns the number of business weeks between two dates."""
         next_monday = start_date + pd.offsets.Week(weekday=0)
         ea = (end_date - next_monday).days // 7 + 1
-        eb = (end_date.week - start_date.week) + (end_date.year - start_date.year) * 52
-        assert ea == eb, "inclined plane"
-        return (end_date.week - start_date.week) + (end_date.year - start_date.year) * 52
+        # eb = (end_date.week - start_date.week) + (end_date.year - start_date.year) * 52
+        # assert ea == eb, f"weeks_btwn_dates: {ea} != {eb}. dates in question: {start_date}, {end_date}"
+        # test with dates 2010-01-01 and 2010-01-04 to understand why
+        return ea
     # should these be lambdas?
     
     freq = freq.lower()
@@ -184,7 +185,7 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     assert est_freq in ['d', 'w', 'm', 'q'], "Estimation frequency must be one of 'd', 'w', 'm', 'q'."
 
     df = reduce_df(
-        df, xcats=[xcat], cids=cids, start='2015-10-01', end='2015-10-31', blacklist=blacklist
+        df, xcats=[xcat], cids=cids, start=start, end=end, blacklist=blacklist
     )
     
     dfw = df.pivot(index='real_date', columns='cid', values='value')
@@ -199,21 +200,21 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     def single_calc(row, dfw : pd.DataFrame, lback_periods, roll_func, remove_zeros, weights=None):
         
         # target_dates = pd.date_range(end=row['real_date'], periods=lback_periods, freq='d')
-        target_dates = pd.bdate_range(end=row['real_date'], periods=lback_periods+1)
+        target_dates = pd.bdate_range(end=row['real_date'], periods=lback_periods)
         # assert len(target_dates) == lback_periods, "Incorrect number of dates."
         # NOTE: even though the calculation is done for real dates, the dates in source data are business days
         target_df : pd.DataFrame = dfw.loc[dfw.index.isin(target_dates)]
-        # mask = (target_df.isna().sum(axis=0) == 0) & (len(target_df) >= lback_periods)
+        mask = (target_df.isna().sum(axis=0) == 0) # & (len(target_df) >= lback_periods)
         
         if weights is not None:
             out = np.sqrt(252) * target_df.agg(roll_func, w=weights, remove_zeros=remove_zeros)
         else:
             out = np.sqrt(252) * target_df.agg(roll_func, remove_zeros=remove_zeros)
 
-        if (len(target_df) < lback_periods):
-            out.iloc[:] = np.NaN
+        # if (len(target_df) < lback_periods):
+        #     out.iloc[:] = np.NaN
 
-        # out[~mask] = np.nan
+        out[~mask] = np.nan
   
         return out
     

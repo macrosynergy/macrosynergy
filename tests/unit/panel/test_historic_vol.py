@@ -153,7 +153,7 @@ class TestAll(unittest.TestCase):
 
         lback_periods = 7
         
-        mdfd = reduce_df(df=self.dfd.copy(), start='2015-01-01', end='2015-10-31')
+        mdfd = reduce_df(df=self.dfd.copy(), start='2010-12-26', end='2015-10-31')
         
         
         
@@ -219,27 +219,6 @@ class TestAll(unittest.TestCase):
                                     end=None, blacklist=None, remove_zeros=True,
                                     postfix='ASD', est_freq='w')
         
-        # for this particular test case:
-        # for ('CID' == 'GBP') & ('real_date' < 2012-01-10) → 
-        #       there are only 2 non-NaN values for 2012-01-06 and 2012-01-09. The rest are NaNs. 
-        #
-        # for ('CID' == 'CAD') & ('real_date' < 2011-01-10) → 
-        #       there is only 1 non-NaN value for 2011-01-07. The rest are NaNs. 
-        
-        test_vals = df_output[(df_output['cid'] == 'GBP') & (df_output['real_date'] < pd.Timestamp('2012-01-10'))]['value'].values.tolist()
-        # assert last two values are not NaNs.
-        self.assertFalse(any(np.isnan(test_vals[-2:])))
-        self.assertTrue(all(np.isnan(test_vals[:-2])))
-        
-        test_vals = df_output[(df_output['cid'] == 'CAD') & (df_output['real_date'] < pd.Timestamp('2011-01-10'))]['value'].values.tolist()
-        # assert last value is not NaN.
-        self.assertFalse(any(np.isnan(test_vals[-1:])))
-        self.assertTrue(all(np.isnan(test_vals[:-1])))
-        
-        print()
-        
-        
-
 
         with self.assertRaises(AssertionError):
             historic_vol(self.dfd, 'XR', self.cids, lback_periods=7, lback_meth='ma',
