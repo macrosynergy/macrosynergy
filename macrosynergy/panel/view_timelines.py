@@ -15,7 +15,7 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
                    ncol: int = 3, same_y: bool = True, all_xticks: bool = False,
                    xcat_grid: bool = False, xcat_labels: List[str] = None,
                    label_adj: float = 0.05,
-                   title: str = None, title_adj: float = 0.8,
+                   title: str = None, title_adj: float = 0.95,
                    cs_mean: bool = False, size: Tuple[float] = (12, 7),
                    aspect: float = 1.7, height: float = 3):
 
