@@ -151,35 +151,21 @@ class TestAll(unittest.TestCase):
         self.dataframe_generator()
         xcat = 'XR'
 
-        lback_periods = 7
-        
-        mdfd = reduce_df(df=self.dfd.copy(), start='2010-12-26', end='2015-10-31')
-        
-        
-        
-        dfA = historic_vol(df=mdfd, xcat=xcat, cids=self.cids, lback_periods=7,
-                           lback_meth='ma', half_life=3, start=None, end=None,
-                           blacklist=None, remove_zeros=True, postfix='ASD', est_freq='w',)
-
-        dfB = historic_vol(df=mdfd, xcat=xcat, cids=self.cids, lback_periods=7,
-                            lback_meth='ma', half_life=3, start=None, end=None,
-                            blacklist=None, remove_zeros=True, postfix='ASD', est_freq='w',)
-
-        dfA, dfB = dfA.reset_index(drop=True), dfB.reset_index(drop=True)
-        dfC, dfD = dfA[dfA['cid'] == 'CAD'], dfB[dfB['cid'] == 'CAD']
-        seps = pd.Series(['|'] * len(dfC))
-        dfC = pd.concat([dfA, seps, dfB, seps, dfC, seps, dfD], axis=1)
-
+        lback_periods = 21
+        half_life = 14        
         df_output = historic_vol(self.dfd, xcat, self.cids, lback_periods=lback_periods,
-                                 lback_meth='ma', half_life=3, start=None,
+                                 lback_meth='xma', half_life=3, start=None,
                                  end=None, blacklist=None, remove_zeros=True,
-                                 postfix='ASD', est_freq='w')
+                                 postfix='ASD', est_freq='w', nan_tolerance=0)
 
         # Test correct column names.
         self.assertTrue(all(df_output.columns == self.dfd.columns))
         cross_sections = sorted(list(set(df_output['cid'].values)))
         self.assertTrue(cross_sections == self.cids)
         self.assertTrue(all(df_output['xcat'] == xcat + 'ASD'))
+
+        # assert that the first (lback_periods - 1) rows of df_output are NaN.
+        # TODO: implement tests
 
         # Test the stacking procedure to reconstruct the standardised dataframe from the
         # pivoted counterpart.

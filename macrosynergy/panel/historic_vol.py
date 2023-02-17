@@ -125,7 +125,7 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                  lback_periods: int = 21, lback_meth: str = 'ma', half_life=11,
                  start: str = None, end: str = None, est_freq: str = 'd', 
                  blacklist: dict = None, remove_zeros: bool = True, postfix='ASD',
-                 nan_tolerance: float = 0.1,):
+                 nan_tolerance: float = 0.25,):
 
     """
     Estimate historic annualized standard deviations of asset returns. User Function.
@@ -162,7 +162,7 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         window instead.
     :param <str> postfix: string appended to category name for output; default is "ASD".
     :param <float> nan_tolerance: minimum ratio of NaNs to non-NaNs in a lookback window,
-        if exceeded the resulting volatility is set to NaN. Default is 0.1. If an integer
+        if exceeded the resulting volatility is set to NaN. Default is 0.25. If an integer
         is passed, it is interpreted as the maximum number of NaNs allowed in a lookback
         window.
 
@@ -199,6 +199,7 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     trigger_indices = dfw.index[get_cycles(pd.DataFrame({'real_date': dfw.index}), 
                                            freq=est_freq, lback_periods=lback_periods)]
     # TODO: check that last date of dfw that has a value is always included as trigger
+    # DONE: as the last_date != last_date+1, the last date is always included as trigger
     
     def single_calc(row, dfw : pd.DataFrame, lback_periods : int, 
                     nan_tolerance : float, roll_func : callable,
@@ -218,6 +219,8 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
             mask = ((target_df.isna().sum(axis=0) + (lback_periods - len(target_df))) / len(target_df)) <= nan_tolerance
         out[~mask] = np.nan
         
+        # TODO : ensure 0s are included in the NA count
+        
         # TODO: rewrite like so
         # lenfactor = len(target_df) if nan_tolerance.is_integer() else 1.0
         # out[((target_df.isna().sum(axis=0) + (lback_periods - len(target_df))) / lenfactor) > nan_tolerance] = np.nan
@@ -236,32 +239,23 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                 flat_std, remove_zeros=remove_zeros
             )
     else:
-        # there is 100% a faster way to do this. find it. fix it. TODO
         dfwa = pd.DataFrame(index=dfw.index, columns=dfw.columns)
         if lback_meth == 'xma':
             weights = expo_weights(lback_periods, half_life)
-            # for i in trigger_indices:
-            #     dfwa.loc[i, :] = np.sqrt(252) * dfw.loc[i - pd.offsets.BDay(lback_periods-1):i, :].agg(
-            #         expo_std, w=weights, remove_zeros=remove_zeros
-            #     )
-
-            dfwa.loc[trigger_indices, :] = dfwa.loc[trigger_indices, :].reset_index(False) \
-                                                .apply(lambda row: single_calc(row=row, dfw=dfw, lback_periods=lback_periods, 
-                                                                               nan_tolerance=nan_tolerance, roll_func=expo_std,
-                                                                               remove_zeros=remove_zeros, weights=weights), axis=1) \
-                                                .set_index(trigger_indices)
+            dfwa.loc[trigger_indices, :] =  dfwa.loc[trigger_indices, :].reset_index(False) \
+                                            .apply(lambda row: single_calc(
+                                                row=row, dfw=dfw, lback_periods=lback_periods, 
+                                                nan_tolerance=nan_tolerance, roll_func=expo_std,
+                                                remove_zeros=remove_zeros, weights=weights), axis=1) \
+                                            .set_index(trigger_indices)
 
         else:
-            # for i in trigger_indices:
-            #     dfwa.loc[i, :] = np.sqrt(252) * dfw.loc[i - pd.offsets.BDay(lback_periods-1):i, :].agg(
-            #         flat_std, remove_zeros=remove_zeros
-            #     )
-            
             dfwa.loc[trigger_indices, :] =  dfwa.loc[trigger_indices, :].reset_index(False) \
-                                                .apply(lambda row: single_calc( row=row, dfw=dfw, lback_periods=lback_periods,
-                                                                                nan_tolerance=nan_tolerance, roll_func=flat_std,
-                                                                                remove_zeros=remove_zeros), axis=1) \
-                                                .set_index(trigger_indices)
+                                            .apply(lambda row: single_calc( 
+                                                row=row, dfw=dfw, lback_periods=lback_periods,
+                                                nan_tolerance=nan_tolerance, roll_func=flat_std,
+                                                remove_zeros=remove_zeros), axis=1) \
+                                            .set_index(trigger_indices)
 
 
         fills = {'d': 1, 'w': 5, 'm': 24, 'q': 64}
@@ -305,16 +299,17 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfd["grading"] = np.ones(dfd.shape[0])
 
-    weights = expo_weights(lback_periods=21, half_life=11)
 
+    print("Calculating historic volatility with the moving average method")
     df = historic_vol(
         dfd, cids=cids, xcat='XR', lback_periods=7, lback_meth='ma', est_freq="w",
-        half_life=3,
-        remove_zeros=True
-    )
-    
-    dfd = reduce_df(df=dfd, xcats=['XR'], cids=cids)
-    
-    assert df[['cid', 'xcat', 'real_date', 'value']].shape == dfd[['cid', 'xcat', 'real_date', 'value']].shape
-    
-    print("Test passed.")
+        half_life=3, remove_zeros=True)
+
+    print(df.head(10))
+
+    print("Calculating historic volatility with the exponential moving average method")
+    weights = expo_weights(lback_periods=21, half_life=11)
+    df = historic_vol(dfd, cids=cids, xcat='XR', lback_periods=21, lback_meth='xma',
+                        est_freq="w", half_life=11, remove_zeros=True, weights=weights)
+
+    print(df.head(10))
