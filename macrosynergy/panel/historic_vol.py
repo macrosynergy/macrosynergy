@@ -106,7 +106,7 @@ def get_cycles(dates_df: pd.DataFrame, freq: str = "m", lback_periods : int = 21
     funcs = {'q': quarters_btwn_dates,
                 'm': months_btwn_dates,
                 'w': weeks_btwn_dates,
-                'd': lambda x, y: (y - x).days}
+                'd': lambda x, y: len(pd.bdate_range(x, y)) - 1}
     group_func = funcs[freq]
                     # NOTE: actual days not business days
     dfc['cycleCount'] = dfc['real_date'].apply(lambda x: group_func(start_date, x))
@@ -162,9 +162,7 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         window instead.
     :param <str> postfix: string appended to category name for output; default is "ASD".
     :param <float> nan_tolerance: minimum ratio of NaNs to non-NaNs in a lookback window,
-        if exceeded the resulting volatility is set to NaN. Default is 0.25. If an integer
-        is passed, it is interpreted as the maximum number of NaNs allowed in a lookback
-        window.
+        if exceeded the resulting volatility is set to NaN. Default is 0.25.
 
     :return <pd.DataFrame>: standardized DataFrame with the estimated annualized standard
         deviations of the chosen xcat.
@@ -177,15 +175,16 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     df = df[["cid", "xcat", "real_date", "value"]]
     in_df = df.copy()
     est_freq = est_freq.lower()
-    assert lback_periods > half_life, "Half life must be shorter than lookback period."
-    assert lback_meth in ['xma', 'ma'], "Incorrect request."
+    assert lback_meth in ['xma', 'ma'], ("Lookback method must be either 'xma' "
+                                         "(exponential moving average) or 'ma' (moving average).")
+    if lback_meth == 'xma':
+        assert lback_periods > half_life, "Half life must be shorter than lookback period."
+        assert half_life > 0, "Half life must be greater than 0."
     assert est_freq in ['d', 'w', 'm', 'q'], "Estimation frequency must be one of 'd', 'w', 'm', 'q'."
     
     # assert nan tolerance is an int or float. must be >0. if >1 must be int
     assert isinstance(nan_tolerance, (int, float)), "nan_tolerance must be an int or float."
-    assert nan_tolerance >= 0.0, "nan_tolerance must be greater than or equal to 0."
-    if nan_tolerance >= 1.0:
-        assert nan_tolerance.is_integer(), "nan_tolerance must be an integer if >= 1."
+    assert 0 <= nan_tolerance <= 1, "nan_tolerance must be between 0.0 and 1.0 inclusive."
     
     df = reduce_df(
         df, xcats=[xcat], cids=cids, start=start, end=end, blacklist=blacklist
@@ -209,22 +208,26 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         target_df : pd.DataFrame = dfw.loc[dfw.index.isin(target_dates)]
         
         if weights is None:
-            out = np.sqrt(252) * target_df.agg(roll_func, remove_zeros=remove_zeros)
+            out = np.sqrt(252) * \
+                target_df.agg(roll_func, remove_zeros=remove_zeros)
         else:
-            out = np.sqrt(252) * target_df.agg(roll_func, w=weights, remove_zeros=remove_zeros)
+            if len(weights) == len(target_df):
+                out = np.sqrt(252) * \
+                    target_df.agg(roll_func, w=weights, remove_zeros=remove_zeros)
+            else:
+                # out = pd.Series(np.nan, index=target_df.columns)
+                # return out
+                return pd.Series(np.nan, index=target_df.columns)
 
-        if nan_tolerance.is_integer():
-            mask = ((target_df.isna().sum(axis=0) + (lback_periods - len(target_df))) <= nan_tolerance)
-        else:
-            mask = ((target_df.isna().sum(axis=0) + (lback_periods - len(target_df))) / len(target_df)) <= nan_tolerance
-        out[~mask] = np.nan
-        
+        mask = ((target_df.isna().sum(axis=0) + 
+                    (target_df == 0).sum(axis=0) + 
+                    (lback_periods - len(target_df))) 
+                / lback_periods) <= nan_tolerance
         # TODO : ensure 0s are included in the NA count
-        
-        # TODO: rewrite like so
-        # lenfactor = len(target_df) if nan_tolerance.is_integer() else 1.0
-        # out[((target_df.isna().sum(axis=0) + (lback_periods - len(target_df))) / lenfactor) > nan_tolerance] = np.nan
-          
+        # dates with NaNs, dates with missing entries, and dates with 0s
+        # are all treated as missing data and trigger a NaN in the output        
+        out[~mask] = np.nan
+
         return out
     
     
@@ -308,8 +311,7 @@ if __name__ == "__main__":
     print(df.head(10))
 
     print("Calculating historic volatility with the exponential moving average method")
-    weights = expo_weights(lback_periods=21, half_life=11)
-    df = historic_vol(dfd, cids=cids, xcat='XR', lback_periods=21, lback_meth='xma',
-                        est_freq="w", half_life=11, remove_zeros=True, weights=weights)
+    df = historic_vol(dfd, cids=cids, xcat='XR', lback_periods=7, lback_meth='xma',
+                        est_freq="w", half_life=3, remove_zeros=True,)
 
     print(df.head(10))
