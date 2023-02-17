@@ -159,15 +159,16 @@ class TestAll(unittest.TestCase):
         
         dfA = historic_vol(df=mdfd, xcat=xcat, cids=self.cids, lback_periods=7,
                            lback_meth='ma', half_life=3, start=None, end=None,
-                           blacklist=None, remove_zeros=True, postfix='ASD', est_freq='w', twm=False)
+                           blacklist=None, remove_zeros=True, postfix='ASD', est_freq='w',)
 
         dfB = historic_vol(df=mdfd, xcat=xcat, cids=self.cids, lback_periods=7,
                             lback_meth='ma', half_life=3, start=None, end=None,
-                            blacklist=None, remove_zeros=True, postfix='ASD', est_freq='w', twm=True)
+                            blacklist=None, remove_zeros=True, postfix='ASD', est_freq='w',)
 
-        # print(dfA, dfB)
-        # make a series the same length as dfA and dfB and fill it with "|"
-        conc = pd.concat([dfA, pd.Series(["|"] * len(dfA), index=dfA.index), dfB], axis=1).head(60)
+        dfA, dfB = dfA.reset_index(drop=True), dfB.reset_index(drop=True)
+        dfC, dfD = dfA[dfA['cid'] == 'CAD'], dfB[dfB['cid'] == 'CAD']
+        seps = pd.Series(['|'] * len(dfC))
+        dfC = pd.concat([dfA, seps, dfB, seps, dfC, seps, dfD], axis=1)
 
         df_output = historic_vol(self.dfd, xcat, self.cids, lback_periods=lback_periods,
                                  lback_meth='ma', half_life=3, start=None,

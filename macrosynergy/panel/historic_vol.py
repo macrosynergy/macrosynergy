@@ -1,7 +1,7 @@
 
 import numpy as np
 import pandas as pd
-from typing import List, Union, Tuple
+from typing import List, Union, Tuple, Optional
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 from datetime import timedelta
@@ -95,14 +95,12 @@ def get_cycles(dates_df: pd.DataFrame, freq: str = "m", lback_periods : int = 21
     def weeks_btwn_dates(start_date : pd.Timestamp, end_date : pd.Timestamp):
         """Returns the number of business weeks between two dates."""
         next_monday = start_date + pd.offsets.Week(weekday=0)
-        ea = (end_date - next_monday).days // 7 + 1
-        # eb = (end_date.week - start_date.week) + (end_date.year - start_date.year) * 52
-        # assert ea == eb, f"weeks_btwn_dates: {ea} != {eb}. dates in question: {start_date}, {end_date}"
+        dif = (end_date - next_monday).days // 7 + 1
+        # altcalc = (end_date.week - start_date.week) + (end_date.year - start_date.year) * 52
+        # assert altcalc == dif, f"weeks_btwn_dates: {altcalc} != {dif}. dates in question: {start_date}, {end_date}"
         # test with dates 2010-01-01 and 2010-01-04 to understand why
-        return ea
-    # should these be lambdas?
+        return dif
     
-    freq = freq.lower()
     dfc = dates_df.copy()
     start_date = dfc['real_date'].min()
     funcs = {'q': quarters_btwn_dates,
@@ -117,11 +115,6 @@ def get_cycles(dates_df: pd.DataFrame, freq: str = "m", lback_periods : int = 21
     # triggers is now a boolean mask which is True where the calculation is triggered
     # ____-____-____-____-_... <-- triggers (_ = False, - = True)
     
-    # if the distance(0, first_trigger) is less than (0, lookback_periods - 1), then delete the first trigger
-
-    # while abs(funcs['d'](dfc['real_date'].iat[min(triggers[triggers].index)], dfc['real_date'].min())) < lback_periods:
-    #     triggers.iat[min(triggers[triggers].index)] = False
-    
     return triggers
 
 
@@ -132,7 +125,7 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                  lback_periods: int = 21, lback_meth: str = 'ma', half_life=11,
                  start: str = None, end: str = None, est_freq: str = 'd', 
                  blacklist: dict = None, remove_zeros: bool = True, postfix='ASD',
-                 twm=True):
+                 nan_tolerance: float = 0.1,):
 
     """
     Estimate historic annualized standard deviations of asset returns. User Function.
@@ -168,6 +161,10 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         not be included in the lookback window and prior non-zero values are added to the
         window instead.
     :param <str> postfix: string appended to category name for output; default is "ASD".
+    :param <float> nan_tolerance: minimum ratio of NaNs to non-NaNs in a lookback window,
+        if exceeded the resulting volatility is set to NaN. Default is 0.1. If an integer
+        is passed, it is interpreted as the maximum number of NaNs allowed in a lookback
+        window.
 
     :return <pd.DataFrame>: standardized DataFrame with the estimated annualized standard
         deviations of the chosen xcat.
@@ -179,43 +176,52 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
     df = df[["cid", "xcat", "real_date", "value"]]
     in_df = df.copy()
+    est_freq = est_freq.lower()
     assert lback_periods > half_life, "Half life must be shorter than lookback period."
     assert lback_meth in ['xma', 'ma'], "Incorrect request."
-    est_freq = est_freq.lower()
     assert est_freq in ['d', 'w', 'm', 'q'], "Estimation frequency must be one of 'd', 'w', 'm', 'q'."
-
+    
+    # assert nan tolerance is an int or float. must be >0. if >1 must be int
+    assert isinstance(nan_tolerance, (int, float)), "nan_tolerance must be an int or float."
+    assert nan_tolerance >= 0.0, "nan_tolerance must be greater than or equal to 0."
+    if nan_tolerance >= 1.0:
+        assert nan_tolerance.is_integer(), "nan_tolerance must be an integer if >= 1."
+    
     df = reduce_df(
         df, xcats=[xcat], cids=cids, start=start, end=end, blacklist=blacklist
     )
     
     dfw = df.pivot(index='real_date', columns='cid', values='value')
 
-    dates_df = pd.DataFrame({'real_date': dfw.index})
-    triggers = get_cycles(dates_df, freq=est_freq, lback_periods=lback_periods)
+    # dates_df = pd.DataFrame({'real_date': dfw.index})
+    # triggers = get_cycles(dates_df, freq=est_freq, lback_periods=lback_periods)
+    # trigger_indices = dfw.index[triggers]
+    trigger_indices = dfw.index[get_cycles(pd.DataFrame({'real_date': dfw.index}), 
+                                           freq=est_freq, lback_periods=lback_periods)]
     # TODO: check that last date of dfw that has a value is always included as trigger
-    trigger_indices = dfw.index[triggers]
     
-    
-    # def single_rebalance_func(row, dfw, lback_periods, roll_calc, remove_zeros):
-    def single_calc(row, dfw : pd.DataFrame, lback_periods, roll_func, remove_zeros, weights=None):
-        
-        # target_dates = pd.date_range(end=row['real_date'], periods=lback_periods, freq='d')
+    def single_calc(row, dfw : pd.DataFrame, lback_periods : int, 
+                    nan_tolerance : float, roll_func : callable,
+                    remove_zeros : bool, weights : Optional[np.ndarray] = None):
+
         target_dates = pd.bdate_range(end=row['real_date'], periods=lback_periods)
-        # assert len(target_dates) == lback_periods, "Incorrect number of dates."
-        # NOTE: even though the calculation is done for real dates, the dates in source data are business days
         target_df : pd.DataFrame = dfw.loc[dfw.index.isin(target_dates)]
-        mask = (target_df.isna().sum(axis=0) == 0) # & (len(target_df) >= lback_periods)
         
-        if weights is not None:
-            out = np.sqrt(252) * target_df.agg(roll_func, w=weights, remove_zeros=remove_zeros)
-        else:
+        if weights is None:
             out = np.sqrt(252) * target_df.agg(roll_func, remove_zeros=remove_zeros)
+        else:
+            out = np.sqrt(252) * target_df.agg(roll_func, w=weights, remove_zeros=remove_zeros)
 
-        # if (len(target_df) < lback_periods):
-        #     out.iloc[:] = np.NaN
-
+        if nan_tolerance.is_integer():
+            mask = ((target_df.isna().sum(axis=0) + (lback_periods - len(target_df))) <= nan_tolerance)
+        else:
+            mask = ((target_df.isna().sum(axis=0) + (lback_periods - len(target_df))) / len(target_df)) <= nan_tolerance
         out[~mask] = np.nan
-  
+        
+        # TODO: rewrite like so
+        # lenfactor = len(target_df) if nan_tolerance.is_integer() else 1.0
+        # out[((target_df.isna().sum(axis=0) + (lback_periods - len(target_df))) / lenfactor) > nan_tolerance] = np.nan
+          
         return out
     
     
@@ -232,34 +238,31 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     else:
         # there is 100% a faster way to do this. find it. fix it. TODO
         dfwa = pd.DataFrame(index=dfw.index, columns=dfw.columns)
-        dfwb = pd.DataFrame(index=dfw.index, columns=dfw.columns)
         if lback_meth == 'xma':
             weights = expo_weights(lback_periods, half_life)
-            for i in trigger_indices:
-                dfwa.loc[i, :] = np.sqrt(252) * dfw.loc[i - pd.offsets.BDay(lback_periods):i, :].agg(
-                    expo_std, w=weights, remove_zeros=remove_zeros
-                )
+            # for i in trigger_indices:
+            #     dfwa.loc[i, :] = np.sqrt(252) * dfw.loc[i - pd.offsets.BDay(lback_periods-1):i, :].agg(
+            #         expo_std, w=weights, remove_zeros=remove_zeros
+            #     )
 
-            dfwb.loc[dfw.index[triggers], :] = dfwb.loc[dfw.index[triggers], :].reset_index(False) \
-                                                .apply(lambda row: single_calc(row, dfw, lback_periods, expo_std, remove_zeros, weights), axis=1) \
-                                                .set_index(dfw.index[triggers])
+            dfwa.loc[trigger_indices, :] = dfwa.loc[trigger_indices, :].reset_index(False) \
+                                                .apply(lambda row: single_calc(row=row, dfw=dfw, lback_periods=lback_periods, 
+                                                                               nan_tolerance=nan_tolerance, roll_func=expo_std,
+                                                                               remove_zeros=remove_zeros, weights=weights), axis=1) \
+                                                .set_index(trigger_indices)
 
         else:
-            for i in trigger_indices:
-                dfwa.loc[i, :] = np.sqrt(252) * dfw.loc[i - pd.offsets.BDay(lback_periods):i, :].agg(
-                    flat_std, remove_zeros=remove_zeros
-                )
+            # for i in trigger_indices:
+            #     dfwa.loc[i, :] = np.sqrt(252) * dfw.loc[i - pd.offsets.BDay(lback_periods-1):i, :].agg(
+            #         flat_std, remove_zeros=remove_zeros
+            #     )
+            
+            dfwa.loc[trigger_indices, :] =  dfwa.loc[trigger_indices, :].reset_index(False) \
+                                                .apply(lambda row: single_calc( row=row, dfw=dfw, lback_periods=lback_periods,
+                                                                                nan_tolerance=nan_tolerance, roll_func=flat_std,
+                                                                                remove_zeros=remove_zeros), axis=1) \
+                                                .set_index(trigger_indices)
 
-            dfwb.loc[dfw.index[triggers], :] = dfwb.loc[dfw.index[triggers], :].reset_index(False) \
-                                                .apply(lambda row: single_calc(row, dfw, lback_periods, flat_std, remove_zeros), axis=1) \
-                                                .set_index(dfw.index[triggers])
-
-        # assert dfwa.equals(dfwb), "Something mismatches in the two methods."
-        # # NOTE: this is meant to fail currently. the two methods are not equivalent.
-        
-        if twm:
-            dfwa = dfwb.copy()
-        
 
         fills = {'d': 1, 'w': 5, 'm': 24, 'q': 64}
         dfwa = dfwa.reindex(dfw.index).fillna(method='ffill', limit=fills[est_freq])
