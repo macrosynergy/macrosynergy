@@ -660,12 +660,15 @@ class Interface(object):
 
                         if fto.__dict__["_result"][0] is None:
                             return None
-                    except ValueError:
-                        delay += 0.05
+
+                    except Exception as exc:
                         error_tickers.extend(futures[i][1])
+                        error_messages.append(msg)
                         logger.warning(
-                            f"Error requesting tickers: {', '.join(futures[i][1])}."
+                            f"Error in requestion tickers: {', '.join(futures[i][1])}."
+                            f"Error details: {msg}"
                         )
+
                     else:
                         if isinstance(response, list):
                             final_output.extend(response)
@@ -688,7 +691,7 @@ class Interface(object):
                 error_tickers.extend(seq_err_tick)
                 error_messages.extend(seq_err_msg)
 
-        error_tickers = list(chain(*error_tickers))
+        # running error_tickers again
 
         if error_tickers:
             count += 1
