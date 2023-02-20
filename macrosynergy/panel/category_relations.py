@@ -414,15 +414,13 @@ class CategoryRelations(object):
 
             assert isinstance(single_chart, bool)
 
-            index_cids = dfx.index.get_level_values(0)
-            cids_in_df = list(index_cids.unique())
-            n_cids = len(cids_in_df)
+            dfx_copy = dfx.reset_index(level=1)
+            n_cids = len(dfx_copy['cid'].unique())
 
             error_cids = "There must be more than one cross-section to use " \
                          "separator = 'cids'."
             assert n_cids > 1, error_cids
 
-            dfx['cid'] = index_cids
             # “Wrap” the column variable at this width, so that the column facets span
             # multiple rows. Used to determine the number of grids on each row.
             dict_coln = {2: 2, 5: 3, 8: 4, 30: 5}
@@ -431,12 +429,9 @@ class CategoryRelations(object):
             key = keys_ar[keys_ar <= n_cids][-1]
             col_number = dict_coln[key]
 
-            # Convert the DataFrame to a standardised DataFrame. Three columns: two
+            # The DataFrame is already a standardised DataFrame. Three columns: two
             # categories (dependent & explanatory variable) and the respective
             # cross-sections. The index will be the date timestamp.
-            dfx_copy = dfx.copy()
-            dfx_copy = dfx_copy.droplevel(0, axis="index")
-            dfx_copy = dfx_copy.reset_index(level=0)
 
             fg = sns.FacetGrid(data=dfx_copy, col='cid', col_wrap=col_number)
             fg.map(
@@ -572,11 +567,17 @@ if __name__ == "__main__":
     cidx = ['AUD', 'CAD', 'GBP', 'USD']
 
     cr = CategoryRelations(
-        dfdx, xcats=["CRY", "XR"], freq="M", lag=1, cids=cidx, xcat_aggs=["mean", "sum"],
-        start="2001-01-01", blacklist=black, years=None
+        dfdx, xcats=["CRY", "XR"], 
+        xcat1_chg="diff",
+        freq="M", 
+        lag=1, 
+        cids=cidx, 
+        xcat_aggs=["mean", "sum"],
+        start="2001-01-01", 
+        blacklist=black, years=None
     )
 
     cr.reg_scatter(
-        labels=False, separator=None, title="Carry and Return", xlab="Carry",
+        labels=False, separator="cids", title="Carry and Return", xlab="Carry",
         ylab="Return", coef_box="lower left"
     )
