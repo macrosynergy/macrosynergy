@@ -478,6 +478,10 @@ class Interface(object):
                     )
                     raise InvalidResponseError(
                         f"Invalid response from DataQuery. response : {response}"
+                        f"status_code : {int(msg['status_code'])}, "
+                        f"msg : {msg}, "
+                        f"url : {url}, "
+                        f"params : {params},"
                     )
 
             except ConnectionResetError:
