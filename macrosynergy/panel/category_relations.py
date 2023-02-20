@@ -567,6 +567,16 @@ if __name__ == "__main__":
     cidx = ['AUD', 'CAD', 'GBP', 'USD']
 
     cr = CategoryRelations(
+        dfdx, xcats=["CRY", "XR"], freq="M", lag=1, cids=cidx, xcat_aggs=["mean", "sum"],
+        start="2001-01-01", blacklist=black, years=None
+    )
+
+    cr.reg_scatter(
+        labels=False, separator=None, title="Carry and Return", xlab="Carry",
+        ylab="Return", coef_box="lower left"
+    )
+
+    cr = CategoryRelations(
         dfdx, xcats=["CRY", "XR"], 
         xcat1_chg="diff",
         freq="M", 
