@@ -102,7 +102,7 @@ cids = ['EUR','GBP','USD']
 xcats = ['FXXR_NSA','EQXR_NSA']
 tickers = [cid+"_"+xcat for cid in cids for xcat in xcats]
 
-oauth_proxy="https://seucreproxy.example.com:port"
+oauth_proxy="https://secureproxy.example.com:port"
 proxy = {"https": oauth_proxy}
 # or proxy = {"http": "http://proxy.example.com:port"}
 with JPMaQSDownload(
@@ -119,7 +119,7 @@ or,
 ...
 proxies = {
     "http": "http://proxy.example.com:port",
-    "https": "https://seucreproxy.example.com:port",
+    "https": "https://secucreproxy.example.com:port",
 }
 with JPMaQSDownload(
         client_id = "<dq_client_id>",
