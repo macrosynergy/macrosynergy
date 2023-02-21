@@ -185,7 +185,9 @@ class TestAll(unittest.TestCase):
                               end=None, blacklist=None)
 
         # the shape of the df_output should be the same as the shape of reduce_df.
-        self.assertTrue(df_output[['cid', 'xcat', 'real_date']].shape == df_reduce[['cid', 'xcat', 'real_date']].shape)
+        self.assertTrue(df_output[['cid', 'xcat', 'real_date']].shape \
+                        == df_reduce[['cid', 'xcat', 'real_date']].shape)
+
         lback_periods = 20
         half_life = 8
         for freqst in ["m", "q"]:
@@ -196,22 +198,105 @@ class TestAll(unittest.TestCase):
                                                 postfix='ASD', est_freq=freqst)
                 df_reduce = reduce_df(df=self.dfd, xcats=[xcatt], cids=self.cids, start=None,
                                       end=None, blacklist=None)
-                self.assertTrue(df_test_res[['cid', 'xcat', 'real_date']].shape == df_reduce[['cid', 'xcat', 'real_date']].shape)
+                self.assertTrue(df_test_res[['cid', 'xcat', 'real_date']].shape ==\
+                                df_reduce[['cid', 'xcat', 'real_date']].shape)
                 
                 
         # Test the number of NaN values in the long format dataframe.
         
-        df_output = historic_vol(self.dfd, xcat, self.cids, lback_periods=20,
-                                    lback_meth='ma', half_life=11, start=None,
-                                    end=None, blacklist=None, remove_zeros=True,
-                                    postfix='ASD', est_freq='w')
-        
+        df_nas_test = historic_vol(self.dfd, xcat, self.cids, 
+                                        lback_periods=lback_periods,
+                                        lback_meth='ma', half_life=half_life, start=None,
+                                        end=None, blacklist=None, remove_zeros=True,
+                                        postfix='ASD', est_freq='w', nan_tolerance=0)
 
+        
+        # NOTE: ideally, one would use the get_cycles() function in conjunction with the
+        # est_freq behaviour to determine the number of NaN values in the long format.
+        # The below approach also works;
+        
+        # for GBP, from 2012-01-01 to 2012-02-01, there should only be 4 non-NaN values.
+        nas_test_res = df_nas_test[(df_nas_test['cid'] == 'GBP') & 
+                                   (df_nas_test['real_date'].isin(
+                                       pd.bdate_range('2012-01-01','2012-02-01')))
+                                   ]['value']
+        
+        self.assertTrue(nas_test_res.notna().sum() == 4)
+        self.assertTrue(nas_test_res.isna().sum() == 19)
+        
+        # since the last 4 are non-NaNs, the 5th to last is a NaN value.
+        self.assertTrue(nas_test_res.isna().tolist()[-5] == True)
+        self.assertFalse(any(nas_test_res.isna().tolist()[-4:]))
+        
+        # test again, but for CAD from 2011-01-01 to 2011-02-01.
+        # this case should have 3 non-NaN values (last 3) and 19 NaN values.
+        nas_test_res = df_nas_test[(df_nas_test['cid'] == 'CAD') & 
+                                   (df_nas_test['real_date'].isin(
+                                       pd.bdate_range('2011-01-01', '2011-02-01')))
+                                   ]['value']
+
+        self.assertTrue(nas_test_res.notna().sum() == 3)
+        self.assertTrue(nas_test_res.isna().sum() == 19)
+        
+        # since the last 3 are non-NaNs, the 4th to last is a NaN value.
+        self.assertTrue(nas_test_res.isna().tolist()[-4] == True)
+        self.assertFalse(any(nas_test_res.isna().tolist()[-3:]))
+        
+        # repeat the test for the 'xma' method but use monthly estimation frequency.
+        df_nas_test = historic_vol(self.dfd, xcat, self.cids, lback_periods=25,
+                                        lback_meth='xma', half_life=10, start=None,
+                                        end=None, blacklist=None, remove_zeros=True,
+                                        postfix='ASD', est_freq='m', nan_tolerance=0)
+
+        nas_test_res = df_nas_test[(df_nas_test['cid'] == 'CAD') & 
+                                   (df_nas_test['real_date'].isin(
+                                       pd.bdate_range('2011-01-01', '2011-03-01')))]
+
+        self.assertTrue(nas_test_res.set_index('real_date')['value']
+                            .first_valid_index() == pd.Timestamp('2011-02-28'))
+        
+        df_nas_test = historic_vol(self.dfd, xcat, self.cids, lback_periods=50,
+                                lback_meth='xma', half_life=10, start=None,
+                                end=None, blacklist=None, remove_zeros=True,
+                                postfix='ASD', est_freq='m', nan_tolerance=0)
+        
+        nas_test_res = df_nas_test[(df_nas_test['cid'] == 'CAD') & 
+                            (df_nas_test['real_date'].isin(
+                                pd.bdate_range('2011-01-01', '2011-05-01')))]
+        
+        # the first valid index should be 2011-03-31.
+        self.assertTrue(nas_test_res.set_index('real_date')['value']
+                            .first_valid_index() == pd.Timestamp('2011-03-31'))
+        
+        
+        # run with the same args, but est_freq='q'. should have the same first valid index.
+        df_nas_test = historic_vol(self.dfd, xcat, self.cids, lback_periods=50,
+                                lback_meth='xma', half_life=10, start=None,
+                                end=None, blacklist=None, remove_zeros=True,
+                                postfix='ASD', est_freq='q', nan_tolerance=0)
+
+        nas_test_res = df_nas_test[(df_nas_test['cid'] == 'CAD') &
+                            (df_nas_test['real_date'].isin(
+                                pd.bdate_range('2011-01-01', '2011-05-01')))]
+
+        self.assertTrue(nas_test_res.set_index('real_date')['value']
+                            .first_valid_index() == pd.Timestamp('2011-03-31'))
+              
+        
+        # pass a half-life value that is greater than the lookback period. to see errors
+        # this case should not raise an error ('ma' unaffected by half-life).
+        self.assertTrue(isinstance(historic_vol(self.dfd, 'XR', self.cids, 
+                        lback_periods=7, lback_meth='ma',half_life=11, 
+                        start=None, end=None, blacklist=None, est_freq='m',
+                        remove_zeros=True, postfix='ASD'), pd.DataFrame))
+        
+        # same args but with 'xma' method should raise an error.
         with self.assertRaises(AssertionError):
-            historic_vol(self.dfd, 'XR', self.cids, lback_periods=7, lback_meth='ma',
+            historic_vol(self.dfd, 'XR', self.cids, lback_periods=7, lback_meth='xma',
                          half_life=11, start=None, end=None, blacklist=None,
                          remove_zeros=True, postfix='ASD')
 
+        # this should raise an error as the lbakc_meth is invalid.
         with self.assertRaises(AssertionError):
             historic_vol(self.dfd, 'CRY', self.cids, lback_periods=7, lback_meth='ema',
                          half_life=11, start=None, end=None, blacklist=None,
