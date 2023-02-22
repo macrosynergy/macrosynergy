@@ -9,22 +9,19 @@
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
-#
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
+
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../../../'))
-sys.path.insert(0, os.path.abspath('../../../macrosynergy'))
-sys.path.insert(0, os.path.abspath('../../../latest'))
+
+sys.path.insert(0, os.path.abspath("../../"))
+
 from setup import VERSION, ISRELEASED
 import macrosynergy
 
 # -- Project information -----------------------------------------------------
 
 project = 'macrosynergy'
-copyright = '2021, Macrosynergy Quant Research Team'
+copyright = '2022, Macrosynergy Quant Research Team'
 author = 'Macrosynergy Quant Research Team'
 version = VERSION if ISRELEASED else f"{VERSION:s}.dev"
 release = VERSION if ISRELEASED else f"{VERSION:s}.dev"
@@ -55,7 +52,6 @@ exclude_patterns = ["_build"]
 source_suffix = ".rst"
 master_doc = "index"
 
-
 # The reST default role (used for this markup: `text`) to use for all
 # documents.
 # default_role = None
@@ -85,7 +81,7 @@ todo_include_todos = True
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_book_theme'
+html_theme = 'sphinx_rtd_theme'
 # html_theme = 'sphinxdoc'
 
 # Add any paths that contain custom static files (such as style sheets) here,

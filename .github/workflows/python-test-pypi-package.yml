@@ -1,0 +1,85 @@
+# This is a basic workflow to help you get started with Actions
+
+name: Test & Upload to TestPyPI
+
+# Controls when the action will run. 
+on:
+  # Triggers the workflow on push to the test branch. Merge events also trigger the workflow, as they trigger a push event.
+  push:
+    branches: [ test ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest            # can also use windows-latest
+    strategy:
+      matrix:
+        python-version:   [3.8]       # For multiple: [3.7, 3.8]
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    
+
+    - uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 pytest sphinx pytest-cov
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Lint with flake8
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Test with pytest
+      run: |
+        # Options: --ignore=tests/specific.py --ignore-glob=tests/ignore-pattern
+        pytest -rEf tests/unit/ --cov macrosynergy -p no:warnings --verbose
+
+    - name: Run integration tests with pytest
+      env:
+        DQ_CLIENT_ID: ${{ secrets.DQ_CLIENT_ID }}
+        DQ_CLIENT_SECRET: ${{ secrets.DQ_CLIENT_SECRET }}
+      run: |
+        echo 'Run Integration tests'
+        pytest tests/integration/
+        # echo "Integration test temporarily disabled."
+        echo 'Integration test complete'
+
+    - name: Install pypa/build
+      run: python -m pip install build --user
+
+    - name: Build a binary wheel and a source tarball
+      run: python -m build --sdist --wheel --outdir dist/ .
+
+    - name: Check and Upload to TestPyPI
+      run: |
+        pip install twine
+        twine check dist/*
+        # twine upload -r testpypi dist/*
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+        TWINE_REPOSITORY: testpypi
+
+
+# thank you arnu515, https://dev.to/arnu515/create-a-pypi-pip-package-test-it-and-publish-it-using-github-actions-part-2-1o83 
+
+# also look at https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions
+
+# https://github.com/actions/setup-python , specifies using actions/setup-python@v4
+
+# https://twine.readthedocs.io/en/stable/#using-twine

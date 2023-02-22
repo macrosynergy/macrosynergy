@@ -23,6 +23,8 @@ Programming Language :: Python :: 3.6
 Programming Language :: Python :: 3.7
 Programming Language :: Python :: 3.8
 Programming Language :: Python :: 3.9
+Programming Language :: Python :: 3.10
+Programming Language :: Python :: 3.11
 Programming Language :: Python :: 3 :: Only
 Topic :: Software Development
 Topic :: Scientific/Engineering
@@ -30,15 +32,16 @@ Typing :: Typed
 Operating System :: Microsoft :: Windows
 Operating System :: POSIX
 Operating System :: MacOS
+Development Status :: 4 - Beta
 """
 
 MAJOR = 0
 MINOR = 0
-MICRO = 17
+MICRO = 25
 ISRELEASED = True
 VERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
 
-if sys.version_info >= (3, 10):
+if sys.version_info >= (3, 12):
     # The first version not in the `Programming Language :: Python :: ...` classifiers above
     warnings.warn(
         f"Macrosynergy {VERSION} may not yet support Python "
@@ -155,6 +158,7 @@ def setup_package():
         project_urls={
             "Bug Tracker": "https://github.com/macrosynergy/macrosynergy/issues",
             "Source Code": "https://github.com/macrosynergy/macrosynergy",
+            "Documentation": "https://docs.macrosynergy.com"
         },
         classifiers=[_f for _f in CLASSIFIERS.split('\n') if _f],
         platforms=["Windows", "Linux", "Mac OS-X"],

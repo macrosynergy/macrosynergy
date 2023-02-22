@@ -3,6 +3,7 @@ from .category_relations import CategoryRelations
 from .converge_row import ConvergeRow
 from .return_beta import return_beta, beta_display
 from .historic_vol import historic_vol
+from .linear_composite import linear_composite
 from .make_blacklist import make_blacklist
 from .make_relative_value import make_relative_value
 from .make_zn_scores import make_zn_scores
@@ -14,6 +15,6 @@ from .view_timelines import view_timelines
 
 
 __all__ = ['Basket', 'CategoryRelations', 'ConvergeRow', 'return_beta',
-           'beta_display', 'historic_vol',
+           'beta_display', 'historic_vol', 'linear_composite',
            'make_blacklist', 'make_relative_value', 'make_zn_scores', 'panel_calculator',
            'correl_matrix', 'heatmap_grades', 'view_ranges', 'view_timelines']

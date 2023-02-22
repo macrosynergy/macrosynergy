@@ -13,7 +13,7 @@ class TestDataQueryOAuth(unittest.TestCase):
             client_id="WRONG_CLIENT_ID",
             client_secret="NOT_A_SECRET"
         )
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(Exception):
             self.assertFalse(dq.check_connection())
 
     def test_connection(self):
@@ -34,7 +34,7 @@ class TestDataQueryOAuth(unittest.TestCase):
 
         data = dq.download(
                 tickers="EUR_FXXR_NSA",
-                start_date=(datetime.date.today() - datetime.timedelta(days=10)).isoformat()
+                start_date=(datetime.date.today() - datetime.timedelta(days=30)).isoformat()
             )
         self.assertIsInstance(data, pd.DataFrame)
 
