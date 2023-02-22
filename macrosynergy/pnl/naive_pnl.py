@@ -571,9 +571,9 @@ class NaivePnL:
             fg = sns.lineplot(data=dfx, x="real_date", y="cum_value", hue=plot_by, 
                                 hue_order=col_order, estimator=None, lw=1)
             leg = fg.axes.get_legend()
-            leg.set_title(legend_title)
+            # leg.set_title(legend_title)
             plt.title(title, fontsize=20)
-
+            plt.legend(labels=labels, title=legend_title,)
             plt.xlabel(xlab)
             plt.ylabel(ylab)
 
@@ -904,7 +904,11 @@ if __name__ == "__main__":
     pnl.agg_signal_bars(
         pnl_name="PNL_GROWTH_NEG", freq="m", metric="direction", title=None,
     )
-    
+
+    pnl.plot_pnls(
+        pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=False,
+        xlab="date", ylab="%",)
+
     pnl.plot_pnls(
         pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=False, xcat_labels=["S_1", "S_2"],
         xlab="date", ylab="%"
