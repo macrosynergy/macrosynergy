@@ -59,6 +59,16 @@ class CategoryRelations(object):
         for the two respective categories. Observations with higher values will be
         trimmed, i.e. removed from the analysis (not winsorized!). Default is None
         for both. Trimming is applied after all other transformations.
+    :param <int> slip: lag (delay of arrival) of first (explanatory) category in days
+        prior to any frequency conversion. Default is 0. This simulates time elapsed 
+        between observing data and using them for market positioning.
+        This is different from and complementary to  the `lag` argument which delays 
+        the explanatory variable by the periods of the investigated sample, which 
+        often is downsampled. Importantly, for analyses with explanatory and dependent 
+        categories, the first category takes the role of the explanatory and a positive 
+        lag means that the explanatory values will be deferred into the future, 
+        i.e. relate to future values of the explained variable.
+
     """
 
     def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
@@ -66,7 +76,7 @@ class CategoryRelations(object):
                  blacklist: dict = None, years = None, freq: str = 'M', lag: int = 0,
                  fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean'),
                  xcat1_chg: str = None, n_periods: int = 1,
-                 xcat_trims: List[float] = [None, None]):
+                 xcat_trims: List[float] = [None, None], slip: int = 0,):
         """ Initializes CategoryRelations """
 
         self.xcats = xcats
