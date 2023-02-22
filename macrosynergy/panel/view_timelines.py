@@ -201,6 +201,7 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
         for ax in fg.axes.flatten():
             ax.tick_params(labelbottom=True, pad=0)
 
+    fg.fig.set_size_inches(size)
     plt.show()
 
 
