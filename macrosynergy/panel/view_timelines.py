@@ -14,7 +14,7 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
                    cumsum: bool = False, start: str = '2000-01-01', end: str = None,
                    ncol: int = 3, same_y: bool = True, all_xticks: bool = False,
                    xcat_grid: bool = False, xcat_labels: List[str] = None,
-                   label_adj: float = 0.05,
+                   single_chart: bool = False, label_adj: float = 0.05,
                    title: str = None, title_adj: float = 0.95,
                    cs_mean: bool = False, size: Tuple[float] = (12, 7),
                    aspect: float = 1.7, height: float = 3):
@@ -42,6 +42,7 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
         with this option.
     :param <List[str]> xcat_labels: labels to be used for xcats. If not defined, the
         labels will be identical to extended categories.
+    :param <bool> single_chart: if True, all lines are plotted in a single chart.
     :param <str> title: chart heading. Default is no title.
     :param <float> title_adj: parameter that sets top of figure to accommodate title.
         Default is 0.95.
@@ -65,6 +66,10 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
             f"received categories are {xcats}."
     if cs_mean:
         assert (len(xcats) == 1), error
+        
+    assert isinstance(xcat_grid, bool), "xcat_grid parameter must be a Boolean Object."
+    assert isinstance(single_chart, bool), "single_chart parameter must be a Boolean Object."
+    assert not (xcat_grid and single_chart), "xcat_grid and single_chart cannot both be True."
 
     df, xcats, cids = reduce_df(df, xcats, cids, start, end,
                                 out_all=True, intersect=intersect)
@@ -120,43 +125,71 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
     else:
         # Utilise a Facet Grid for instances where a large number of cross-sections are
         # defined & plotted. Otherwise the line chart becomes too congested.
-        fg = sns.FacetGrid(data=df, col='cid', col_wrap=ncol,
-                           sharey=same_y, aspect=aspect,
-                           height=height, col_order=cids)
-        fg.map_dataframe(sns.lineplot, x='real_date', y=val,
-                         hue='xcat', hue_order=xcats, estimator=None)
+        if not single_chart:
+        
+            fg = sns.FacetGrid(data=df, col='cid', col_wrap=ncol,
+                            sharey=same_y, aspect=aspect,
+                            height=height, col_order=cids)
+            fg.map_dataframe(sns.lineplot, x='real_date', y=val,
+                            hue='xcat', hue_order=xcats, estimator=None)
 
-        if cs_mean:
-            axes = fg.axes.flatten()
+            if cs_mean:
+                axes = fg.axes.flatten()
 
-            dfw = df.pivot(index='real_date', columns='cid',
-                           values='value')
-            cross_mean = dfw.mean(axis=1)
-            cross_mean = pd.DataFrame(data=cross_mean.to_numpy(),
-                                      index=cross_mean.index,
-                                      columns=['average'])
-            cross_mean = cross_mean.reset_index(level=0)
-            for ax in axes:
+                dfw = df.pivot(index='real_date', columns='cid',
+                            values='value')
+                cross_mean = dfw.mean(axis=1)
+                cross_mean = pd.DataFrame(data=cross_mean.to_numpy(),
+                                        index=cross_mean.index,
+                                        columns=['average'])
+                cross_mean = cross_mean.reset_index(level=0)
+                for ax in axes:
+                    sns.lineplot(data=cross_mean, x='real_date', y='average', color='red',
+                                ax=ax, label=f"cross-sectional average of {xcats[0]}.")
+
+                handles, labels = ax.get_legend_handles_labels()
+
+            fg.map(plt.axhline, y=0, c=".5")
+            fg.set_titles(col_template='{col_name}')
+            fg.set_axis_labels('', '')
+
+            if title is not None:
+                fg.fig.suptitle(title, fontsize=20)
+                fg.fig.subplots_adjust(top=title_adj)
+
+            if len(xcats) > 1:
+                handles = fg._legend_data.values()
+                if xcat_labels is None:
+                    labels = fg._legend_data.keys()
+                else:
+                    labels = xcat_labels
+
+        else:
+            ax = sns.lineplot(data=df, x='real_date', y=val,
+                            hue='cid', hue_order=cids, estimator=None)
+            
+            if cs_mean:
+                dfw = df.pivot(index='real_date', columns='cid',
+                            values='value')
+                cross_mean = dfw.mean(axis=1)
+                cross_mean = pd.DataFrame(data=cross_mean.to_numpy(),
+                                        index=cross_mean.index,
+                                        columns=['average'])
+                cross_mean = cross_mean.reset_index(level=0)
                 sns.lineplot(data=cross_mean, x='real_date', y='average', color='red',
-                             ax=ax, label=f"cross-sectional average of {xcats[0]}.")
+                            ax=ax, label=f"cross-sectional average of {xcats[0]}.")
 
-            handles, labels = ax.get_legend_handles_labels()
-
-        fg.map(plt.axhline, y=0, c=".5")
-        fg.set_titles(col_template='{col_name}')
-        fg.set_axis_labels('', '')
-
-        if title is not None:
-            fg.fig.suptitle(title, fontsize=20)
-            fg.fig.subplots_adjust(top=title_adj)
-
-        if len(xcats) > 1:
-            handles = fg._legend_data.values()
-            if xcat_labels is None:
-                labels = fg._legend_data.keys()
-            else:
-                labels = xcat_labels
-
+            
+            if title is not None:
+                plt.title(title)
+            
+            if len(xcats) > 1:
+                handles, labels = ax.get_legend_handles_labels()
+                if xcat_labels is None:
+                    labels = fg._legend_data.keys()
+                else:
+                    labels = xcat_labels
+        
         if len(xcats) > 1 or cs_mean:
             fg.fig.legend(handles=handles, labels=labels,
                           loc='lower center', ncol=3)
@@ -205,5 +238,8 @@ if __name__ == "__main__":
 
     view_timelines(dfd, xcats=['XR'], cids=cids, ncol=2,
                    cumsum=True, same_y=False, aspect=2)
+    
+    view_timelines(dfd, xcats=['XR'], cids=cids, ncol=2,
+                cumsum=True, same_y=False, aspect=2, single_chart=True)
 
     dfd.info()
