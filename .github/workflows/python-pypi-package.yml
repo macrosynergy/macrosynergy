@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest            # can also use windows-latest
     strategy:
       matrix:
-        python-version: [3.7, 3.8, 3.9, 3.10, 3.11]       # For multiple: [3.7, 3.8]
+        python-version: [3.7, 3.8, 3.9, '3.10', 3.11]       # For multiple: [3.7, 3.8]
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
