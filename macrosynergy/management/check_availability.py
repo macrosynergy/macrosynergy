@@ -113,7 +113,7 @@ def visual_paneldates(df: pd.DataFrame, size: Tuple[float] = None):
         header = "Start years of quantamental indicators."
 
     if size is None:
-        size = (max(df.shape[0] / 2, 15), max(1, df.shape[1]/ 2))
+        size = (max(df.shape[0] / 2, 18), max(1, df.shape[1]/ 2))
 
     sns.set(rc={'figure.figsize': size})
     sns.heatmap(df.T, cmap='YlOrBr', center=df.stack().mean(), annot=True, fmt='.0f',

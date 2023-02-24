@@ -431,9 +431,12 @@ class NaivePnL:
                   facet: bool = False,
                   ncol: int = 3, same_y: bool = True,
                   title: str = "Cumulative Naive PnL", xcat_labels: List[str] = None,
+                  xlab: str = "",
+                  ylab: str = "% of risk capital, no compounding",
+                  share_axis_labels: bool = True,
                   figsize: Tuple = (12, 7), aspect: float = 1.7,
                   height: float = 3, label_adj: float = 0.05,
-                  title_adj: float = 0.95):
+                  title_adj: float = 0.95, y_label_adj: float = 0.95,) -> None:
         """
         Plot line chart of cumulative PnLs, single PnL, multiple PnL types per
         cross section, or multiple cross sections per PnL type.
@@ -456,6 +459,12 @@ class NaivePnL:
         :param <bool> same_y: if True (default) all plots in facet grid share same y axis.
         :param <str> title: allows entering text for a custom chart header.
         :param <List[str]> xcat_labels: custom labels to be used for the PnLs.
+        :param <str> xlab: label for x-axis of the plot (or subplots if faceted),
+            default is None (empty string)..
+        :param <str> ylab: label for y-axis of the plot (or subplots if faceted),
+            default is '% of risk capital, no compounding'.
+        :param <bool> share_axis_labels: if True (default) the axis labels are shared by
+            all subplots in the facet grid.
         :param <tuple> figsize: tuple of plot width and height. Default is (12 , 7).
         :param <float> aspect: width-height ratio for plots in facet. Default is 1.7.
         :param <float> height: height of plots in facet. Default is 3.
@@ -463,6 +472,7 @@ class NaivePnL:
             Default is 0.05.
         :param <float> title_adj: parameter that sets top of figure to accommodate title.
             Default is 0.95.
+        :param <float> y_label_adj: parameter that sets left of figure to fit the y-label.
         """
 
         if pnl_cats is None:
@@ -521,7 +531,6 @@ class NaivePnL:
             col_order = pnl_cids
             if xcat_labels is not None:
                 labels = xcat_labels
-            # labels = [f"{cid}_{pnl_cats[0]}" for cid in pnl_cids]
             legend_title = "Cross Section(s)"
 
         dfx['cum_value'] = dfx.groupby(plot_by).cumsum()
@@ -531,38 +540,42 @@ class NaivePnL:
                 data=dfx, col=plot_by, col_wrap=ncol, sharey=same_y, aspect=aspect,
                 height=height, col_order=col_order, legend_out=True
             )
-            fg.fig.suptitle(title, fontsize=20, x=0.4)
+            fg.fig.suptitle(title, fontsize=20,)
 
-            fg.fig.subplots_adjust(top=title_adj)
+            fg.fig.subplots_adjust(top=title_adj, bottom=label_adj, left=y_label_adj)
 
             fg.map_dataframe(
                 sns.lineplot, x="real_date", y="cum_value", hue=plot_by,
-                hue_order=labels, estimator=None, lw=1
+                hue_order=col_order, estimator=None, lw=1
             )
-            for ax in fg.axes.flat:
+            for ix, ax in enumerate(fg.axes.flat):
                 ax.axhline(y=0, color="black", linestyle='--', linewidth=1)
-
-            # TODO: find a better legend solution
-            # fg.add_legend(
-            #     legend_data={pb : lbl for pb, lbl in zip((pnl_cids if len(pnl_cids) > 1 else pnl_cats), labels)},
-            # )
-            # if no_cids == 1:
-            #     fg.add_legend()
-
-            fg.set_titles(row_template='', col_template='{col_name}')
-            fg.set_axis_labels(x_var="Year", y_var="% of risk capital, no compounding")
-        
+                if no_cids == 1:
+                    ax.set_title(xcat_labels[ix])
+            
+            if no_cids > 1:
+                fg.set_titles(row_template='', col_template='{col_name}')
+            
+            if share_axis_labels:
+                fg.set_axis_labels("", "")
+                fg.fig.supxlabel(xlab)
+                fg.fig.supylabel(ylab)
+            else:
+                fg.set_axis_labels(xlab, ylab)
+            
         else:
             fg = sns.lineplot(data=dfx, x="real_date", y="cum_value", hue=plot_by, 
                                 hue_order=col_order, estimator=None, lw=1)
-
             leg = fg.axes.get_legend()
-            leg.set_title(legend_title)
             plt.title(title, fontsize=20)
+            plt.legend(labels=labels, title=legend_title,)
+            plt.xlabel(xlab)
+            plt.ylabel(ylab)
 
-            plt.xlabel("Year")
-            plt.ylabel("% of risk capital, no compounding")
-
+        if no_cids == 1:
+            if facet:
+                labels = labels[::-1]
+        
         plt.axhline(y=0, color='black', linestyle='--', lw=1)
         plt.show()
 
@@ -880,17 +893,34 @@ if __name__ == "__main__":
     pnl.agg_signal_bars(
         pnl_name="PNL_GROWTH_NEG", freq="m", metric="direction", title=None,
     )
-    
     pnl.plot_pnls(
-        pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=False, xcat_labels=["S_1", "S_2"]
+        pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=False,
+        xlab="date", ylab="%",
+        )
+    pnl.plot_pnls(
+        pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=False, xcat_labels=["S_1", "S_2"],
+        xlab="date", ylab="%"
     )
     pnl.plot_pnls(
         pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=True, xcat_labels=["S_1", "S_2"]
+    )    
+    pnl.plot_pnls(
+        pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=True,
     )
 
     pnl.plot_pnls(  pnl_cats=["PNL_GROWTH_NEG"], 
                     pnl_cids=cids,
                     facet=True,
                     xcat_labels=None
-                    
                     )
+    
+    pnl.plot_pnls(  pnl_cats=["PNL_GROWTH_NEG"],
+                    same_y=True,
+                    pnl_cids=cids,
+                    facet=True,
+                    xcat_labels=None,
+                    share_axis_labels=False,
+                    xlab='Date',
+                    ylab='PnL',
+                    y_label_adj=0.1,)
+
