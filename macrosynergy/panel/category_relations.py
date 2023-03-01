@@ -414,7 +414,7 @@ class CategoryRelations(object):
 
             assert isinstance(single_chart, bool)
 
-            dfx_copy = dfx.reset_index(level=1)
+            dfx_copy = dfx.reset_index()
             n_cids = len(dfx_copy['cid'].unique())
 
             error_cids = "There must be more than one cross-section to use " \
