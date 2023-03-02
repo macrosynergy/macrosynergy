@@ -57,6 +57,18 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
     :param <float> height: height of plots in facet. Default is 3.
 
     """
+    
+    if not set(df.columns).issuperset({'cid', 'xcat', 'real_date', val}):
+        fail_str :str =(f"Error : Tried to standardize DataFrame but failed."
+                f"DataFrame not in the correct format. Please ensure " \
+                f"that the DataFrame has the following columns: " 
+                f"'cid', 'xcat', 'real_date' and column='{val}'.")
+        try:
+            dft = df.reset_index()
+            assert set(dft.columns).issuperset({'cid', 'xcat', 'real_date', val})
+            df = dft.copy()
+        except:
+            raise ValueError(fail_str)
 
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
@@ -240,6 +252,7 @@ if __name__ == "__main__":
     view_timelines(dfd, xcats=['XR'], cids=cids, ncol=2,
                    cumsum=True, same_y=False, aspect=2)
     
+    dfd = dfd.set_index('real_date')    
     view_timelines(dfd, xcats=['XR'], cids=cids, ncol=2,
                 cumsum=True, same_y=False, aspect=2, single_chart=True)
 

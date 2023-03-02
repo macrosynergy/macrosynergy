@@ -53,6 +53,19 @@ class TestAll(unittest.TestCase):
             view_timelines(dfd, xcats=[xcats[0]], cids=cids, ncol=2,
                         cumsum=True, same_y=False, aspect=2, single_chart=True)
             
+            # test that any indexing of the  works
+            for c in dfd.columns:
+                dfdr = dfd.copy().set_index(c)
+                view_timelines(dfdr, xcats=[xcats[0]], cids=cids, ncol=2,
+                            cumsum=True, same_y=False, aspect=2, single_chart=True)
+            
+            dfdr = dfd.copy().set_index('real_date')
+            # rename column 'value' to 'qwerty'
+            dfdr = dfdr.rename(columns={'value': 'qwerty'})
+            view_timelines(dfdr, xcats=[xcats[0]], cids=cids, ncol=2,
+                        cumsum=True, same_y=False, aspect=2, single_chart=True,
+                        val='qwerty')
+                        
         except Exception as e:
             self.fail(e)
             
