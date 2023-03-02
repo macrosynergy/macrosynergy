@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 
 def facet_grid(
         df : pd.DataFrame,
+        facet_type : Optional[str] = 'line',
+        facet_plot_kwargs : Optional[Dict] = None,
         plot_by_tickers : Optional[bool] = False,
         plot_by_cid : Optional[str] = None,
         plot_xcats : Optional[List[str]] = None,
@@ -40,6 +42,11 @@ def facet_grid(
     """
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
+    :param <str> facet_type: type of facet plot to be used. Options: 'line', 'bar', 
+        'reg', 'resid', 'kde', 'hist', 'box', 'violin', 'strip', 'swarm', 'point'.
+    :param <dict> facet_plot_kwargs: kwargs to be passed to the facet plot. Look at
+        the documentation for the facet plot type for the available kwargs for each
+        plot type.
     :param <str> plot_by_tickers: plot all cid_xcat tickers from the DataFrame,
         with one ticker per facet.
     :param <str> plot_by_cid: plot all xcats for the specified cid from the DataFrame,
@@ -95,8 +102,10 @@ def facet_grid(
     assert (plot_by_cid is None) ^ (plot_by_xcat is None), 'Please specify either plot_by_cid or plot_by_xcat.'
     if plot_by_cid is not None:
         assert plot_by_cid in df['cid'].unique(), 'The specified cid is not present in the DataFrame.'
+        plot_by = 'cid'
     if plot_by_xcat is not None:
         assert plot_by_xcat in df['xcats'].unique(), 'The specified xcat is not present in the DataFrame.'
+        plot_by = 'xcat'
 
     if figsize is None:
         assert isinstance(aspect, (int, float)), 'The aspect ratio must be a float or integer.'
@@ -117,7 +126,7 @@ def facet_grid(
     if plot_by_tickers:
         raise NotImplementedError('plot_by_tickers is not implemented yet.')
         # form a helper column called 'tickers'
-        # df['tickers'] = df['cid'] + '_' + df['xcats']
+        # df['tickers'] = df['cid'] + '_' + df['xcat']
         # simply plot the tickers to a facet grid
         # g = sns.FacetGrid(df, col='tickers', col_wrap=ncols,
         #                   sharey=sharey, sharex=sharex,
@@ -129,10 +138,10 @@ def facet_grid(
         df = df[df['cid'] == plot_by_cid]
         # plot the xcats to a facet grid
         if xcat_labels is not None:
-            assert len(xcat_labels) == len(df['xcats'].unique()), 'The number of xcat labels must be equal to the number of xcats.'
-            df['xcats'] = df['xcats'].replace(dict(zip(df['xcats'].unique(), xcat_labels)))
+            assert len(xcat_labels) == len(df['xcat'].unique()), 'The number of xcat labels must be equal to the number of xcats.'
+            df['xcat'] = df['xcat'].replace(dict(zip(df['xcat'].unique(), xcat_labels)))
 
-        fg = sns.FacetGrid(df, col='xcats', col_wrap=ncols,
+        fg = sns.FacetGrid(df, col='xcat', col_wrap=ncols,
                             sharey=sharey, sharex=sharex,
                             height=height, aspect=aspect)
 
