@@ -110,7 +110,7 @@ class TestAll(unittest.TestCase):
                 title='AUD Return, Carry & Inflation', 
                 single_chart=True, xcat_grid=True) # (xcat_grid && single_chart) must be False
             
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(Exception):
             dfdr = dfd.copy().set_index('real_date').drop('cid', axis=1)
             view_timelines(dfdr, xcats=xcats, cids=cids[0],
                 title_adj=0.8, same_y=True,
