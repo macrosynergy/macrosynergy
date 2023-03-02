@@ -109,6 +109,15 @@ class TestAll(unittest.TestCase):
                 xcat_labels=['Return', 'Carry', 'Inflation'],
                 title='AUD Return, Carry & Inflation', 
                 single_chart=True, xcat_grid=True) # (xcat_grid && single_chart) must be False
+            
+        with self.assertRaises(AssertionError):
+            dfdr = dfd.copy().set_index('real_date').drop('cid', axis=1)
+            view_timelines(dfdr, xcats=xcats, cids=cids[0],
+                title_adj=0.8, same_y=True,
+                xcat_labels=['Return', 'Carry', 'Inflation'],
+                title='AUD Return, Carry & Inflation',
+                xcat_grid=True) # df must have a column named 'cid'
+
 
         
 if __name__ == '__main__':
