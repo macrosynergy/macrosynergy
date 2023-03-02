@@ -65,7 +65,9 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
                 f"'cid', 'xcat', 'real_date' and column='{val}'.")
         try:
             dft = df.reset_index()
-            assert set(dft.columns).issuperset({'cid', 'xcat', 'real_date', val})
+            assert set(dft.columns).issuperset({'cid', 'xcat', 'real_date', val}),\
+                fail_str
+
             df = dft.copy()
         except:
             raise ValueError(fail_str)
