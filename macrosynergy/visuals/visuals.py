@@ -15,7 +15,7 @@ def facet_grid(
         df : pd.DataFrame,
         facet_type : Optional[str] = 'line',
         facet_plot_kwargs : Optional[Dict] = None,
-        plot_by_tickers : Optional[bool] = False,
+        plot_tickers : Optional[bool] = False,
         plot_by_cid : Optional[str] = None,
         plot_xcats : Optional[List[str]] = None,
         xcat_labels : Optional[List[str]] = None,
@@ -47,7 +47,7 @@ def facet_grid(
     :param <dict> facet_plot_kwargs: kwargs to be passed to the facet plot. Look at
         the documentation for the facet plot type for the available kwargs for each
         plot type.
-    :param <str> plot_by_tickers: plot all cid_xcat tickers from the DataFrame,
+    :param <str> plot_tickers: plot all cid_xcat tickers from the DataFrame,
         with one ticker per facet.
     :param <str> plot_by_cid: plot all xcats for the specified cid from the DataFrame,
         with one xcat per facet. Paired args : `xcat_labels`, `plot_xcats`.
@@ -123,8 +123,8 @@ def facet_grid(
         assert all([isinstance(i, int) for i in figsize]), 'The figsize must be a tuple of integers.'
 
     
-    if plot_by_tickers:
-        raise NotImplementedError('plot_by_tickers is not implemented yet.')
+    if plot_tickers:
+        raise NotImplementedError('plot_tickers is not implemented yet.')
         # form a helper column called 'tickers'
         # df['tickers'] = df['cid'] + '_' + df['xcat']
         # simply plot the tickers to a facet grid
