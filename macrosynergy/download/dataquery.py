@@ -591,6 +591,9 @@ class Interface(object):
         print(f"Number of expressions requested : {no_tickers}")
         logger.info(f"Number of expressions requested : {no_tickers}")
 
+        if count > 5:
+            raise DownloadError(f"Unable to continue download as max_retries have been exceeded. Check logger output for details")
+
         if not count:
             params_ = {
                 "format": "JSON",
@@ -663,10 +666,12 @@ class Interface(object):
 
                     except Exception as exc:
                         error_tickers.extend(futures[i][1])
-                        error_messages.append(msg)
                         logger.warning(
                             f"Error in requestion tickers: {', '.join(futures[i][1])}."
-                            f"Error details: {msg}"
+                            f"Error accessing {self.access.base_url + endpoint} with "
+                            f"tickers : {futures[i][1]}"
+                            f"start-date : {start_date}"
+                            f"end-date : {end_date}"
                         )
 
                     else:
