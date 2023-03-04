@@ -625,8 +625,8 @@ class JPMaQSDownload(object):
             else:
                 df = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
                 
-                # remove any entries for after "today""
-                df = df[df["real_date"].isin(pd.date_range(start=start_date, end=end_date))]
+                # remove any entries for after "today"
+                df = df[df["real_date"].isin(pd.date_range(start=start_date, end=datetime.datetime.today()))]
                 
                 logger.info("Dataframe created and validated.")
                 logger.info("Returning dataframe and exiting JPMaQSDownload.download.")
