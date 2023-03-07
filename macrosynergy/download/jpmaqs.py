@@ -134,7 +134,6 @@ class JPMaQSDownload(object):
 
         ticker_list = []
         for k, v in output_dict.items():
-
             available_metrics = set(v.keys())
             expected_metrics = set(d_frame_order)
 
@@ -202,7 +201,6 @@ class JPMaQSDownload(object):
         # Each element inside the List will be a dictionary for an individual Ticker
         # returned by DataQuery.
         for r in list_:
-
             dictionary = r["attributes"][0]
             ticker = dictionary["expression"].split(",")
             metric = ticker[-1][:-1]
@@ -323,7 +321,6 @@ class JPMaQSDownload(object):
 
         i = 0
         for k, v in _dict.items():
-
             ticker = k.split("_")
 
             cid = ticker[0]
@@ -364,7 +361,6 @@ class JPMaQSDownload(object):
 
     @staticmethod
     def remove_jpmaqs_expr_formatting(expressions: List[str]) -> List[Tuple[str, str]]:
-
         """
         Removes the DB(JPMAQS, <ticker>, <metric>) formatting from a list of JPMaQS expressions.
 
@@ -487,12 +483,18 @@ class JPMaQSDownload(object):
                 "mop_lag",
                 "grading",
             ], f"Incorrect metric passed: {metric}."
-            
-        assert isinstance(start_date, str), "Start date must be a string in the format YYYY-MM-DD"
+
+        assert isinstance(
+            start_date, str
+        ), "Start date must be a string in the format YYYY-MM-DD"
         if end_date is not None:
-            assert isinstance(end_date, str), "End date must be a string in the format YYYY-MM-DD"
+            assert isinstance(
+                end_date, str
+            ), "End date must be a string in the format YYYY-MM-DD"
         else:
-            end_date = (datetime.datetime.today() + pd.offsets.BusinessDay(2)).strftime("%Y%m%d")
+            end_date = (datetime.datetime.today() + pd.offsets.BusinessDay(2)).strftime(
+                "%Y%m%d"
+            )
 
         # remove dashes from dates to convert to DQ format
         start_date = start_date.replace("-", "")
@@ -627,6 +629,11 @@ class JPMaQSDownload(object):
                 )
             else:
                 df = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
+                
+                # ensure entries are only for before "today"
+                lbd = (datetime.datetime.today() - pd.offsets.BusinessDay()).date()
+                df = df[df["real_date"].isin(pd.date_range(start=start_date, end=lbd,))]
+
                 logger.info("Dataframe created and validated.")
                 logger.info("Returning dataframe and exiting JPMaQSDownload.download.")
                 return df
