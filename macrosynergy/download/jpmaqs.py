@@ -7,6 +7,7 @@ from collections import defaultdict
 import warnings
 from macrosynergy.download import dataquery
 from macrosynergy.download.exceptions import *
+import datetime
 import logging
 import io
 
@@ -486,6 +487,16 @@ class JPMaQSDownload(object):
                 "mop_lag",
                 "grading",
             ], f"Incorrect metric passed: {metric}."
+            
+        assert isinstance(start_date, str), "Start date must be a string in the format YYYY-MM-DD"
+        if end_date is not None:
+            assert isinstance(end_date, str), "End date must be a string in the format YYYY-MM-DD"
+        else:
+            end_date = (datetime.datetime.today() + pd.offsets.BusinessDay(2)).strftime("%Y%m%d")
+
+        # remove dashes from dates to convert to DQ format
+        start_date = start_date.replace("-", "")
+        end_date = end_date.replace("-", "")
 
         if xcats is not None:
             assert isinstance(xcats, list), "Xcats must be a list of strings"
