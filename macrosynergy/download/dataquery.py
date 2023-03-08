@@ -665,14 +665,18 @@ class Interface(object):
                             return None
 
                     except Exception as exc:
-                        error_tickers.extend(futures[i][1])
-                        logger.warning(
-                            f"Error in requestion tickers: {', '.join(futures[i][1])}."
-                            f"Error accessing {self.access.base_url + endpoint} with "
-                            f"tickers : {futures[i][1]}"
-                            f"start-date : {start_date}"
-                            f"end-date : {end_date}"
-                        )
+                        if isinstance(exc, InvalidResponseError):
+                            error_tickers.extend(futures[i][1])
+                            logger.warning(
+                                f"Error in requestion tickers: {', '.join(futures[i][1])}."
+                                f"Error accessing {self.access.base_url + endpoint} with "
+                                f"tickers : {futures[i][1]}"
+                                f"start-date : {start_date}"
+                                f"end-date : {end_date}"
+                            )
+                            continue 
+                        else:
+                            raise exc
 
                     else:
                         if isinstance(response, list):
