@@ -46,7 +46,7 @@ class JPMaQSDownload(object):
         suppress_warning: bool = True,
         debug: bool = False,
         print_debug_data: bool = False,
-        check_connection: bool = False,
+        check_connection: bool = True,
         **kwargs,
     ):
         self.debug = debug
