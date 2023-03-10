@@ -19,3 +19,7 @@ class DownloadError(Exception):
 
 class InvalidResponseError(Exception):
     """Raised when a response is not valid."""
+
+
+class HeartbeatError(Exception):
+    """Raised when a heartbeat fails."""
