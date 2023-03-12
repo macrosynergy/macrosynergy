@@ -41,6 +41,7 @@ debug_stream_handler.setFormatter(
 logger.addHandler(debug_stream_handler)
 
 
+# exceptions specific to this module
 class AuthenticationError(Exception):
     """Raised when authentication fails."""
 
@@ -633,18 +634,18 @@ class DataQueryInterface(object):
     def validate_download_args(
         self,
         expressions: List[str],
-        start_date: str = "2000-01-01",
-        end_date: str = None,
-        show_progress: bool = False,
-        endpoint: str = TIMESERIES_ENDPOINT,
-        calender: str = "CAL_ALLDAYS",
-        frequency: str = "FREQ_DAY",
-        conversion: str = "CONV_LASTBUS_ABS",
-        nan_treatment: str = "NA_NOTHING",
-        reference_data: str = "NO_REFERENCE_DATA",
-        retry_counter: int = 0,
-        delay_param: int = API_DELAY_PARAM,
-        tracking_id: str = None,
+        start_date: str,
+        end_date: str,
+        show_progress: bool,
+        endpoint: str,
+        calender: str,
+        frequency: str,
+        conversion: str,
+        nan_treatment: str,
+        reference_data: str,
+        retry_counter: int,
+        delay_param: int,
+        tracking_id: str,
     ):
         """
         Validate the arguments passed to the download_data method.
@@ -683,7 +684,7 @@ class DataQueryInterface(object):
             assert is_valid_date(start_date), (
                 "`start_date` must be a string in " "the ISO-8601 format (YYYY-MM-DD)."
             )
-            assert is_valid_date(end_date), (
+            assert is_valid_date(end_date) or end_date is None, (
                 "`end_date` must be a string in " "the ISO-8601 format (YYYY-MM-DD)."
             )
             assert isinstance(show_progress, bool), "`show_progress` must be a boolean."
@@ -751,22 +752,24 @@ class DataQueryInterface(object):
         :raises <Exception>: other exceptions may be raised by underlying functions.
         """
 
-        if not self.validate_download_args(
-            expressions=expressions,
-            start_date=start_date,
-            end_date=end_date,
-            show_progress=show_progress,
-            endpoint=endpoint,
-            calender=calender,
-            frequency=frequency,
-            conversion=conversion,
-            nan_treatment=nan_treatment,
-            reference_data=reference_data,
-            retry_counter=retry_counter,
-            delay_param=delay_param,
-            tracking_id=tracking_id,
-        ):
-            raise ValueError("Invalid arguments passed to download_data method.")
+        try:
+            self.validate_download_args(
+                expressions=expressions,
+                start_date=start_date,
+                end_date=end_date,
+                show_progress=show_progress,
+                endpoint=endpoint,
+                calender=calender,
+                frequency=frequency,
+                conversion=conversion,
+                nan_treatment=nan_treatment,
+                reference_data=reference_data,
+                retry_counter=retry_counter,
+                delay_param=delay_param,
+                tracking_id=tracking_id,
+            )
+        except Exception as e:
+            raise e
 
         if end_date is None:
             end_date = datetime.today().strftime("%Y-%m-%d")

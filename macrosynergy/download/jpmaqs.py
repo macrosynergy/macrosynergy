@@ -1,11 +1,11 @@
 """ JPMaQS Download Interface """
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 import pandas as pd
 import numpy as np
 from collections import defaultdict
 import warnings
-from macrosynergy.download import dataquery
+from macrosynergy.download.dataquery import DataQueryInterface
 from macrosynergy.download.exceptions import *
 import datetime
 import logging
@@ -24,18 +24,29 @@ logger.addHandler(debug_stream_handler)
 
 class JPMaQSDownload(object):
     """JPMaQS Download Interface Object
-    :param <bool> oauth: True if using oauth, False if using username/password with crt/key
-    :param <str> client_id: oauth client_id, required if oauth=True
-    :param <str> client_secret: oauth client_secret, required if oauth=True
-    :param <bool> debug: True if debug mode, False if not
-    :param <bool> suppress_warning: True if suppress warning, False if not
+    :param <bool> oauth: True if using oauth, False if using username/password with crt/key.
+    :param <str> client_id: oauth client_id, required if oauth=True.
+    :param <str> client_secret: oauth client_secret, required if oauth=True.
+    :param <bool> debug: True if debug mode, False if not.
+    :param <bool> suppress_warning: True if suppressing warnings, False if not.
     :param <bool> check_connection: True if the interface should check the connection to
         the server before sending requests, False if not. False by default.
+    :param <dict> proxy: proxy to use for requests, None if not using proxy (default).
+    :param <bool> print_debug_data: True if debug data should be printed, False if not
+        (default).
+    :param <dict> dq_kwargs: additional arguments to pass to the DataQuery API object such
+        `calender` and `frequency` for the DataQuery API. For more fine-grained usage,
+        initialize the DataQueryInterface object explicitly.
     :param <dict> kwargs: additional arguments to pass to the DataQuery API object such as
         <str> crt: path to crt file, <str> key: path to key file, <str> username: username
         for certificate based authentication, <str> password : paired with username for
-        certificatem, <dict> proxy: proxy server(s) to be used for requests,
-        <str> base_url, etc.
+        certificate.
+        See macrosynergy.download.dataquery.DataQueryInterface for more.
+
+    :return <JPMaQSDownload>: JPMaQSDownload object
+
+    :raises <ValueError>: if provided arguments are invalid or semantically incorrect.
+
     """
 
     def __init__(
@@ -43,597 +54,357 @@ class JPMaQSDownload(object):
         oauth: bool = True,
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
+        check_connection: bool = True,
+        proxy: Optional[Dict] = None,
         suppress_warning: bool = True,
         debug: bool = False,
         print_debug_data: bool = False,
-        check_connection: bool = True,
+        dq_download_kwargs: dict = {},
         **kwargs,
     ):
+        try:
+            assert isinstance(oauth, bool), "`oauth` must be a boolean."
+            assert isinstance(
+                check_connection, bool
+            ), "`check_connection` must be a boolean."
+            assert isinstance(
+                suppress_warning, bool
+            ), "`suppress_warning` must be a boolean."
+            assert isinstance(debug, bool), "`debug` must be a boolean."
+            assert isinstance(
+                print_debug_data, bool
+            ), "`print_debug_data` must be a boolean."
+            assert (
+                isinstance(proxy, dict) or proxy is None
+            ), "`proxy` must be a dictionary or None."
+            assert isinstance(
+                dq_download_kwargs, dict
+            ), "`dq_download_kwargs` must be a dictionary."
+        except AssertionError as e:
+            raise ValueError(e)
+        except Exception as e:
+            raise e
+
+        self.suppress_warning = suppress_warning
         self.debug = debug
         self.print_debug_data = print_debug_data
-        self.msg_errors: List[str] = []
-        self.suppress_warning = suppress_warning
-        self.proxy = kwargs.pop("proxy", kwargs.pop("proxies", None))
-        self.unavailable_tickers = []
-        if client_id is None and client_secret is None:
-            oauth = False
+        self._check_connection = check_connection
+        self.dq_download_kwargs = dq_download_kwargs
 
         if oauth:
-            if not (isinstance(client_id, str) and isinstance(client_secret, str)):
-                raise ValueError("client_id and client_secret must be strings.")
-
-            dq_args = {
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "proxy": self.proxy,
-            }
+            self.dq_interface: DataQueryInterface = DataQueryInterface(
+                oauth=oauth,
+                client_id=client_id,
+                client_secret=client_secret,
+                check_connection=check_connection,
+                proxy=proxy,
+                **kwargs,
+            )
         else:
-            username = kwargs.get("username", None)
-            password = kwargs.get("password", None)
-            crt = kwargs.get("crt", None)
-            key = kwargs.get("key", None)
-            dq_args = {
-                "username": username,
-                "password": password,
-                "crt": crt,
-                "key": key,
-                "proxy": self.proxy,
-            }
-        if "heartbeat" in kwargs:
-            check_connection = kwargs.pop("heartbeat")
-        dq_args["heartbeat"] = check_connection
-        dq_args["debug"] = debug
-        dq_args["suppress_warning"] = suppress_warning
-        dq_args["oauth"] = oauth
+            # ensure "crt", "key", "username", and "password" are in kwargs
+            for key in ["crt", "key", "username", "password"]:
+                if key not in kwargs:
+                    raise ValueError(f"Missing required argument {key}")
 
-        self.dq_args = dq_args.copy()
-        logger.info("JPMaQSDownload object created.")
+            crt = kwargs.pop("crt")
+            key = kwargs.pop("key")
+            username = kwargs.pop("username")
+            password = kwargs.pop("password")
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        e_str = f"{exc_type} {exc_value} {traceback}"
-        if exc_type:
-            logger.error(e_str)
-        if self.print_debug_data or exc_type:
-            debug_stream_handler.stream.flush()
-            debug_stream_handler.stream.seek(0)
-            self.msg_errors += debug_stream_handler.stream.readlines()
-            print("-" * 23, " DEBUG DATA ", "-" * 23)
-            print("-" * 60)
-            for m in self.msg_errors:
-                print(m.strip())
-            print(("-" * 60 + "\n") * 2)
-
-        if exc_type:
-            raise exc_type(exc_value)
-        else:
-            return True
-
-    def array_construction(
-        self, metrics: List[str], output_dict: dict, debug: bool, sequential: bool
-    ):
-        """
-        Helper function that will pass through the dictionary and aggregate each
-        time-series stored in the interior dictionary. Will return a single dictionary
-        where the keys are the tickers and the values are the aggregated time-series.
-
-        :param <List[str]> metrics: metrics requested from the API.
-        :param <dict> output_dict: nested dictionary where the keys are the tickers and
-            the value is itself a dictionary. The interior dictionary's keys will be the
-            associated metrics and the values will be their respective time-series.
-        :param <bool> debug: used to understand any underlying issue.
-        :param <bool> sequential: if series are not returned, potentially the fault of
-            the threading mechanism, isolate each Ticker and run sequentially.
-
-        """
-
-        modified_dict = {}
-        d_frame_order = ["real_date"] + metrics
-
-        ticker_list = []
-        for k, v in output_dict.items():
-            available_metrics = set(v.keys())
-            expected_metrics = set(d_frame_order)
-
-            missing_metrics = list(expected_metrics.difference(available_metrics))
-            if not missing_metrics:
-                # Aggregates across all metrics requested and order according to the
-                # prescribed list.
-                ticker_df = pd.DataFrame.from_dict(v)[d_frame_order]
-
-                modified_dict[k] = ticker_df.to_numpy()
-
-            elif missing_metrics and not sequential:
-                # If a requested metric has not been returned, its absence could be
-                # ascribed to a potential data leak from multithreading. Therefore,
-                # collect the respective tickers, defined over each metric, and run
-                # the requests sequentially to avoid any scope for data leakage.
-
-                temp_list = ["DB(JPMAQS," + k + "," + m + ")" for m in metrics]
-                ticker_list += temp_list
-
-                if debug:
-                    logger.warning(
-                        f"The ticker, {k}, is missing the metric(s) "
-                        f"'{missing_metrics}'. These will not be returned."
-                        f"Check JPMaQSDownload."
-                    )
-
-            elif sequential and debug:
-                logger.warning(
-                    f"The ticker, {k}, is missing from the API after "
-                    f"running sequentially - will not be in the returned "
-                    f"DataFrame."
-                )
-            else:
-                continue
-
-        return modified_dict, ticker_list
-
-    def isolate_timeseries(
-        self, list_, metrics: List[str], debug: bool, sequential: bool
-    ):
-        """
-        Isolates the metrics, across all categories & cross-sections, held in the List,
-        and concatenates the time-series, column-wise, into a single structure, and
-        subsequently stores that structure in a dictionary where the dictionary's
-        keys will be each Ticker.
-        Will validate that each requested metric is available, in the data dictionary,
-        for each Ticker. If not, will run the Tickers sequentially to confirm the issue
-        is not ascribed to multithreading overloading the load balancer.
-
-        :param <List[dict]> list_: returned from DataQuery.
-        :param <List[str]> metrics: metrics requested from the API.
-        :param <bool> debug: used to understand any underlying issue.
-        :param <bool> sequential: if series are not returned, potentially the fault of
-            the threading mechanism, isolate each Ticker and run sequentially.
-
-        :return: <dict> modified_dict.
-        """
-        output_dict = defaultdict(dict)
-        size = len(list_)
-        # if debug:
-        #     print(f"Number of returned expressions from JPMaQS: {size}.")
-
-        unavailable_tickers = []
-        # Each element inside the List will be a dictionary for an individual Ticker
-        # returned by DataQuery.
-        for r in list_:
-            dictionary = r["attributes"][0]
-            ticker = dictionary["expression"].split(",")
-            metric = ticker[-1][:-1]
-
-            ticker_split = ",".join(ticker[1:-1])
-            ts_arr = np.array(dictionary["time-series"])
-
-            # Catches tickers that are defined correctly but will not have a valid
-            # associated series. For example, "USD_FXXR_NSA" or "NLG_FXCRR_VT10". The
-            # request to the API will return the expression but the "time-series" value
-            # will be a None Object.
-            # Occasionally, on large requests, DataQuery will incorrectly return a None
-            # Object for a series that is available in the database.
-            if ts_arr.size == 1:
-                unavailable_tickers.append(ticker_split)
-
-            else:
-                if ticker_split not in output_dict.keys():
-                    output_dict[ticker_split]["real_date"] = ts_arr[:, 0]
-                    output_dict[ticker_split][metric] = ts_arr[:, 1]
-                # Each encountered metric should be unique and one of "value", "grading",
-                # "eop_lag" or "mop_lag".
-                else:
-                    output_dict[ticker_split][metric] = ts_arr[:, 1]
-
-        output_dict_c = output_dict.copy()
-
-        modified_dict, ticker_list = self.array_construction(
-            metrics=metrics,
-            output_dict=output_dict_c,
-            debug=debug,
-            sequential=sequential,
-        )
-        if debug and not (self.suppress_warning) and len(unavailable_tickers) > 0:
-            logger.warning(
-                f"The following tickers were not returned from the API; as they are either invalid or unavailable: "
-                f"{unavailable_tickers}. "
-                "Appending list to JPMaQSDownload.unavailable_tickers."
+            self.dq_interface: DataQueryInterface = DataQueryInterface(
+                oauth=oauth,
+                check_connection=check_connection,
+                crt=crt,
+                key=key,
+                username=username,
+                password=password,
+                proxy=proxy,
+                **kwargs,
             )
 
-        self.unavailable_tickers += unavailable_tickers
-
-        return modified_dict, output_dict, ticker_list
-
-    def column_check(self, v, col, no_cols, debug):
-        """
-        Checking the values of the returned TimeSeries.
-
-        :param <np.array> v:
-        :param <integer> col: used to isolate the column being checked.
-        :param <integer> no_cols: number of metrics requested.
-        :param <bool> debug:
-
-        :return <bool> condition.
-        """
-        returns = list(v[:, col])
-        condition = all([isinstance(elem, type(None)) for elem in returns])
-
-        if condition:
-            other_metrics = list(v[:, 2:no_cols].flatten())
-
-            if debug and all([isinstance(e, type(None)) for e in other_metrics]):
-                warnings.warn("Error has occurred in the Database.")
-
-        return condition
-
-    def valid_ticker(self, _dict, suppress_warning, debug):
-        """
-        Iterates through each Ticker and determines whether the Ticker is held in the
-        Database or not. The validation mechanism will isolate each column, in all the
-        Tickers held in the dictionary, where the columns reflect the metrics passed,
-        and validates that each value is not a NoneType Object. If all values are
-        NoneType Objects, the Ticker is not valid, and it will be popped from the
-        dictionary.
-
-        :param <dict> _dict:
-        :param <bool> suppress_warning:
-        :param <bool> debug:
-
-        :return: <dict> dict_copy.
-        """
-
-        ticker_missing = 0
-        dict_copy = _dict.copy()
-
-        for k, v in _dict.items():
-            no_cols = v.shape[1]
-            condition = self.column_check(v, col=1, no_cols=no_cols, debug=debug)
-
-            if condition:
-                ticker_missing += 1
-                dict_copy.pop(k)
-
-                if not suppress_warning:
-                    print(f"The ticker, {k}), does not exist in the Database.")
-
-        print(f"Number of missing time-series from the Database: {ticker_missing}.")
-        return dict_copy
-
-    def dataframe_wrapper(self, _dict, no_metrics, original_metrics):
-        """
-        Receives a Dictionary containing every Ticker and the respective time-series data
-        held inside an Array. Will iterate through the dictionary and stack each Array
-        into a single DataFrame retaining the order both row-wise, in terms of cross-
-        sections, and column-wise, in terms of the metrics.
-
-        :param <dict> _dict:
-        :param <Integer> no_metrics: Number of metrics requested.
-        :param <List[str]> original_metrics: Order of the metrics passed.
-
-        :return: pd.DataFrame: ['cid', 'xcat', 'real_date'] + [original_metrics]
-        """
-
-        tickers_no = len(_dict.keys())
-        length = list(_dict.values())[0].shape[0]
-
-        arr = np.empty(shape=(length * tickers_no, 3 + no_metrics), dtype=object)
-
-        i = 0
-        for k, v in _dict.items():
-            ticker = k.split("_")
-
-            cid = ticker[0]
-            xcat = "_".join(ticker[1:])
-
-            cid_broad = np.repeat(cid, repeats=v.shape[0])
-            xcat_broad = np.repeat(xcat, repeats=v.shape[0])
-            data = np.column_stack((cid_broad, xcat_broad, v))
-
-            row = i * v.shape[0]
-            arr[row : row + v.shape[0], :] = data
-            i += 1
-
-        columns = ["cid", "xcat", "real_date"]
-        cols_output = columns + original_metrics
-
-        df = pd.DataFrame(data=arr, columns=cols_output)
-
-        df["real_date"] = pd.to_datetime(df["real_date"], yearfirst=True)
-        df = df[df["real_date"].dt.dayofweek < 5]
-        df = df.fillna(value=np.nan)
-        df = df.reset_index(drop=True)
-
-        for m in original_metrics:
-            df[m] = df[m].astype(dtype=np.float32)
-
-        df.real_date = pd.to_datetime(df.real_date)
-        return df
-
-    def check_connection(self) -> Tuple[bool, dict]:
-        """
-        Interface to the DQ API's check_connection method,
-        which in turn checks the connection (heartbeat) to the DQ API.
-        """
-
-        with dataquery.Interface(**self.dq_args) as dq:
-            return dq.check_connection()
+        if self._check_connection:
+            self.check_connection()
 
     @staticmethod
-    def remove_jpmaqs_expr_formatting(expressions: List[str]) -> List[Tuple[str, str]]:
-        """
-        Removes the DB(JPMAQS, <ticker>, <metric>) formatting from a list of JPMaQS expressions.
+    def construct_expressions(
+        tickers: Optional[List[str]] = None,
+        cids: Optional[List[str]] = None,
+        xcats: Optional[List[str]] = None,
+        metrics: Optional[List[str]] = None,
+    ) -> List[str]:
+        """Construct expressions from the provided arguments.
 
-        :param <List[str]> expressions: List of JPMaQS expressions.
-        :return <List[Tuple[str, str]]>: List of tuples containing the ticker and metric.
+        :param <list[str]> tickers: list of tickers.
+        :param <list[str]> cids: list of cids.
+        :param <list[str]> xcats: list of xcats.
+        :param <list[str]> metrics: list of metrics.
+
+        :return <list[str]>: list of expressions.
         """
 
-        return [
-            e.replace("DB(JPMAQS,", "").replace(")", "").split(",") for e in expressions
+        if tickers is None:
+            tickers = []
+        if cids is not None and xcats is not None:
+            tickers += [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+
+        if expressions is None:
+            expressions = []
+        expressions += [
+            f"DB(JPMAQS,{tick},{metric})" for tick in tickers for metric in metrics
         ]
 
-    @staticmethod
-    def jpmaqs_indicators(metrics, tickers):
+        return expressions
+
+    def time_series_to_df(self, dicts_list: List[Dict]) -> pd.DataFrame:
         """
-        Functionality used to convert tickers into formal JPMaQS expressions.
+        Convert the downloaded data to a pandas DataFrame.
+        Parameters
+        :param dicts_list <list>: List of dictionaries containing time series
+            data from the DataQuery API
+        Returns
+        :return <pd.DataFrame>: DataFrame containing the data
         """
-        return [f"DB(JPMAQS,{tick},{metric})" for tick in tickers for metric in metrics]
+        # TODO : make sure all metrics are supported
+        dfs: List = []
+        for d in dicts_list:
+            df = pd.DataFrame(
+                d["attributes"][0]["time-series"], columns=["real_date", "value"]
+            )
+            df["expression"] = d["attributes"][0]["expression"]
+            dfs += [df]
+
+        return_df = pd.concat(dfs, axis=0).reset_index(drop=True)[
+            ["real_date", "expression", "value"]
+        ]
+        return_df["real_date"] = pd.to_datetime(return_df["real_date"])
+        return return_df
+
+    def validate_downloaded_df(
+        self, data_df: pd.DataFrame, expressions: List[str], verbose: bool = True
+    ) -> bool:
+        """Validate the downloaded data.
+        :param data_df <pd.DataFrame>: DataFrame containing the downloaded data.
+        :param expressions <list>: List of expressions used to download the data.
+        :param verbose <bool>: Whether to print the validation results.
+
+        :return <bool>: True if valid, False if not.
+        """
+        # TODO : Complete this function to report number of missing values
+        # if verbose print number of reqd. expressions and num of actual expressions in df
+        if data_df.empty:
+            return False
+        return True
+
+    def check_connection(self, verbose: bool = False) -> bool:
+        """Check if the interface is connected to the server.
+        :return <bool>: True if connected, False if not.
+        """
+        return self.dq_interface.check_connection(verbose=verbose)
+
+    def validate_download_args(
+        self,
+        tickers: List[str],
+        cids: List[str],
+        xcats: List[str],
+        metrics: List[str],
+        start_date: str,
+        end_date: str,
+        expressions: List[str],
+        show_progress: bool,
+        as_dataframe: bool,
+    ) -> bool:
+        """Validate the arguments passed to the download function.
+
+        :params -- see macrosynergy.download.jpmaqs.JPMaQSDownload.download()
+
+        :return <bool>: True if valid.
+
+        :raises <ValueError>: if provided arguments are invalid or
+            semantically incorrect.
+        """
+
+        def is_valid_date(date: str) -> bool:
+            try:
+                datetime.datetime.strptime(date, "%Y-%m-%d")
+                return True
+            except ValueError:
+                return False
+
+        try:
+            assert (
+                isinstance(tickers, list) or tickers is None
+            ), "`tickers` must be a list of strings."
+            if tickers is not None:
+                assert all(
+                    [isinstance(ticker, str) for ticker in tickers]
+                ), "`tickers` must be a list of strings."
+            assert (
+                isinstance(cids, list) or cids is None
+            ), "`cids` must be a list of strings."
+            if cids is not None:
+                assert all(
+                    [isinstance(cid, str) for cid in cids]
+                ), "`cids` must be a list of strings."
+            assert (
+                isinstance(xcats, list) or xcats is None
+            ), "`xcats` must be a list of strings."
+            if xcats is not None:
+                assert all(
+                    [isinstance(xcat, str) for xcat in xcats]
+                ), "`xcats` must be a list of strings."
+
+            # if specifying cids then xcats must be not be None and vice versa
+            estr = (
+                "If specifying `cids`, `xcats` must also be specified and "
+                "vice versa. Both can also be None."
+            )
+            if cids is not None:
+                assert xcats is not None, estr
+            else:
+                assert xcats is None, estr
+
+            assert isinstance(metrics, list), "`metrics` must be a list of strings."
+            assert (
+                all([isinstance(metric, str) for metric in metrics])
+                and len(metrics) > 0
+            ), "`metrics` must be a list of strings."
+            assert (
+                isinstance(expressions, list) or expressions is None
+            ), "`expressions` must be a list of strings."
+            if expressions is not None:
+                assert all(
+                    [isinstance(expression, str) for expression in expressions]
+                ), "`expressions` must be a list of strings."
+            assert isinstance(show_progress, bool), "`show_progress` must be a boolean."
+            assert isinstance(as_dataframe, bool), "`as_dataframe` must be a boolean."
+            assert is_valid_date(
+                start_date
+            ), "`start_date` must be a valid date in the format YYYY-MM-DD."
+            assert (
+                is_valid_date(end_date) or end_date is None
+            ), "`end_date` must be a valid date in the format YYYY-MM-DD."
+
+            if (
+                tickers is None
+                and cids is None
+                and xcats is None
+                and expressions is None
+            ):
+                raise ValueError(
+                    "Must provide at least one of `tickers`, "
+                    "`expressions`, or `cids` and `xcats` together."
+                )
+
+        except AssertionError as e:
+            raise ValueError(e)
+
+        except Exception as e:
+            raise e
+
+        return True
 
     def download(
         self,
         tickers=None,
-        xcats=None,
         cids=None,
+        xcats=None,
         metrics=["value"],
         start_date="2000-01-01",
         end_date=None,
-        suppress_warning=True,
-        debug=False,
-        print_debug_data=False,
+        expressions=None,
         show_progress=False,
-    ):
+        as_dataframe=True,
+    ) -> Optional[pd.DataFrame | List[Dict]]:
+        """Driver function to download data from JPMaQS via the DataQuery API.
+        Timeseries data can be requested using `tickers` with `metrics`, or
+        passing formed DataQuery expressions.
+        `cids` and `xcats` (along with `metrics`) are used to construct
+        expressions, which are ultimately passed to the DataQuery Interface.
+
+        :param <list[str]> tickers: list of tickers.
+        :param <list[str]> cids: list of cids.
+        :param <list[str]> xcats: list of xcats.
+        :param <list[str]> metrics: list of metrics, one of "value", "grading",
+            "eop_lag", "mop_lag".
+        :param <str> start_date: start date of the data to download, in the
+            ISO format - YYYY-MM-DD.
+        :param <str> end_date: end date of the data to download in the ISO
+            format - YYYY-MM-DD.
+        :param <list[str]> expressions: list of DataQuery expressions.
+        :param <bool> show_progress: True if progress bar should be shown,
+            False if not (default).
+        :param <bool> suppress_warning: True if suppressing warnings. Default
+            is True.
+        :param <bool> debug: True if debug mode, False if not (default).
+        :param <bool> print_debug_data: True if debug data should be printed,
+            False if not (default). If debug=True, this is set to True.
+        :param <bool> as_dataframe: Return a dataframe if True (default),
+            a list of dictionaries if False.
+
+        :return <pd.DataFrame|list[Dict]>: dataframe of data if
+            `as_dataframe` is True, list of dictionaries if False.
+
+        :raises <ValueError>: if provided arguments are invalid or
+            semantically incorrect (see
+            macrosynergy.download.jpmaqs.JPMaQSDownload.validate_download_args()).
+
         """
-        Downloads and returns a standardised DataFrame of the specified base tickers and metrics.
 
-        :param <List[str]> tickers: JPMaQS ticker of form <cid>_<xcat>. Can be combined
-            with selection of categories.
-        :param <List[str]> xcats: JPMaQS category codes. Downloaded for all standard
-            cross sections identifiers available (if cids are not specified) or those
-            selected (if cids are specified). Standard cross sections here include major
-            developed and emerging currency markets. See JPMaQS documentation.
-        :param <List[str]> cids: JPMaQS cross-section identifiers, typically based  on
-            currency code. See JPMaQS documentation.
-        :param <str> metrics: must choose one or more from 'value', 'eop_lag', 'mop_lag',
-            or 'grading'. Default is ['value'].
-        :param <str> start_date: first date in ISO 8601 string format.
-        :param <bool> suppress_warning: used to suppress warning of any invalid
-            ticker received by DataQuery.
-        :param <bool> debug: used to print out the tickers that are being downloaded.
-        :param <bool> print_debug_data: used to print out debug information.
-        :param <bool> show_progress: used to show progress bar. Default is False.
+        if all([_arg is None for _arg in [tickers, cids, xcats, expressions]]):
+            expressions: List[str] = [
+                "DB(JPMAQS,USD_EQXR_VT10,value)",
+                "DB(JPMAQS,AUD_EXALLOPENNESS_NSA_1YMA,value)",
+            ]
+        # NOTE : This is simply so that we can test the download() function
+        #   without having to pass in a bunch of arguments.
 
-        :return <pd.Dataframe> df: standardized dataframe with columns 'cid', 'xcats',
-            'real_date' and chosen metrics.
-        """
-        self.debug = self.debug or debug
-        self.print_debug_data = self.print_debug_data or print_debug_data
+        # Validate arguments.
+        if not self.validate_download_args(
+            tickers=tickers,
+            cids=cids,
+            xcats=xcats,
+            metrics=metrics,
+            start_date=start_date,
+            end_date=end_date,
+            expressions=expressions,
+            show_progress=show_progress,
+            as_dataframe=as_dataframe,
+        ):
+            raise ValueError("Invalid arguments passed to download().")
 
-        if self.suppress_warning != suppress_warning:
-            self.suppress_warning = suppress_warning
-
-        if (cids is None) & (xcats is not None):
-            cids_dmca = [
-                "AUD",
-                "CAD",
-                "CHF",
-                "EUR",
-                "GBP",
-                "JPY",
-                "NOK",
-                "NZD",
-                "SEK",
-                "USD",
-            ]  # DM currency areas
-            cids_dmec = ["DEM", "ESP", "FRF", "ITL", "NLG"]  # DM euro area countries
-            cids_latm = ["BRL", "COP", "CLP", "MXN", "PEN"]  # Latam countries
-            cids_emea = [
-                "HUF",
-                "ILS",
-                "PLN",
-                "RON",
-                "RUB",
-                "TRY",
-                "ZAR",
-            ]  # EMEA countries
-            cids_emas = [
-                "CZK",
-                "CNY",
-                "IDR",
-                "INR",
-                "KRW",
-                "MYR",
-                "PHP",
-                "SGD",
-                "THB",
-                "TWD",
-            ]  # EM Asia countries
-            cids_dm = cids_dmca + cids_dmec
-            cids_em = cids_latm + cids_emea + cids_emas
-            cids = sorted(cids_dm + cids_em)  # Standard default.
-
-        if isinstance(metrics, str):
-            metrics = [metrics]
-        if isinstance(xcats, str):
-            xcats = [xcats]
-        if isinstance(cids, str):
-            cids = [cids]
-
-        if isinstance(tickers, str):
-            tickers = [tickers]
-        elif tickers is None:
-            tickers = []
-
-        assert isinstance(metrics, list), "Metrics must be a list of strings"
-        assert isinstance(tickers, list), "Tickers must be a list of strings"
-
-        for metric in metrics:
-            assert metric in [
-                "value",
-                "eop_lag",
-                "mop_lag",
-                "grading",
-            ], f"Incorrect metric passed: {metric}."
-
-        assert isinstance(
-            start_date, str
-        ), "Start date must be a string in the format YYYY-MM-DD"
-        if end_date is not None:
-            assert isinstance(
-                end_date, str
-            ), "End date must be a string in the format YYYY-MM-DD"
-        else:
-            end_date = (datetime.datetime.today() + pd.offsets.BusinessDay(2)).strftime(
-                "%Y%m%d"
-            )
-
-        # remove dashes from dates to convert to DQ format
-        start_date = start_date.replace("-", "")
-        end_date = end_date.replace("-", "")
-
-        if xcats is not None:
-            assert isinstance(xcats, list), "Xcats must be a list of strings"
-            add_tix = [cid + "_" + xcat for cid in cids for xcat in xcats]
-            tickers = tickers + add_tix
-        self.dq_args["suppress_warning"] = suppress_warning
-        self.dq_args["debug"] = debug
-
-        tickers = list(set(tickers))  # Should this be stored in a copy?
-        expressions = self.jpmaqs_indicators(metrics=metrics, tickers=tickers)
-
-        logger.info(
-            f"Downloading {len(expressions)} expressions from JPMaQS "
-            f"for {len(tickers)} tickers & {len(metrics)} metrics. "
-            f"Start date: {start_date}. End date: {end_date}."
+        # Construct expressions.
+        expressions = self.construct_expressions(
+            tickers=tickers,
+            cids=cids,
+            xcats=xcats,
+            metrics=metrics,
         )
 
-        try:
-            with dataquery.Interface(**self.dq_args) as dq:
-                dq_result_dict = dq.get_ts_expression(
-                    expressions=expressions,
-                    original_metrics=metrics,
-                    start_date=start_date,
-                    end_date=end_date,
-                    suppress_warning=suppress_warning,
-                    debug=debug,
-                    show_progress=show_progress,
-                )
-            dq_msg_errors = dq.msg_errors
-            debug_stream_handler.stream.write("\n".join(dq_msg_errors) + "\n")
-            logger.info("Download complete. DataQuery interface closed.")
+        if end_date is None:
+            end_date = (datetime.datetime.today() + pd.offsets.BusinessDay(2)).strftime(
+                "%Y-%m-%d"
+            )
+            # NOTE : due to timezone conflicts, we choose to request data for 2 days in the future.
+            # NOTE : DataQuery specifies YYYYMMDD as the date format, but we use YYYY-MM-DD for consistency.
+            #   This is date is cast to YYYYMMDD in macrosynergy.download.dataquery.py.
 
-        except ConnectionError:
-            logger.error("Failed to download data. ConnectionError.")
-            logger.error("Appending error messages to JPMaQSDownload.download_output")
-            self.download_output = dq_result_dict.copy()
-            raise DownloadError(ConnectionError, "Failed to download data.")
-
-        if dq_result_dict is None:
-            logger.error("Failed to download data.")
-            logger.error("Appending error messages to JPMaQSDownload.download_output")
-            self.download_output = dq_result_dict.copy()
-            raise DownloadError(
-                "Failed to download data for some tickers. See log for details."
+        # Download data.
+        with self.dq_interface as dq:
+            print(
+                "Downloading data from JPMaQS. Timestamp UTC: ",
+                datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+            )
+            data: List[Dict] = dq.download_data(
+                expressions=expressions,
+                start_date=start_date,
+                end_date=end_date,
+                show_progress=show_progress,
+                **self.dq_download_kwargs,
             )
 
-        results = dq_result_dict["results"]
-        error_tickers = dq_result_dict["error_tickers"]
-        error_messages = dq_result_dict["error_messages"]
-        unavailable_expressions = dq_result_dict["unavailable_expressions"]
-        unavailable_expressions_list = list(u[0] for u in unavailable_expressions)
+        if as_dataframe:
+            data = self.time_series_to_df(dicts_list=data)
+            if not self.validate_downloaded_df(data=data, expressions=expressions):
+                raise ValueError("Invalid dataframe returned by download().")
 
-        self.unavailable_expressions = unavailable_expressions.copy()
-        if error_tickers:
-            logger.error(f"Error tickers: {error_tickers}")
-            logger.error(f"Failed to download above tickers.")
-            logger.error(f"Error messages: {error_messages}")
-            logger.error("Appending error messages to JPMaQSDownload.download_output")
-            self.download_output = dq_result_dict.copy()
-            raise DownloadError(
-                "Failed to download data for some tickers. See log for details."
-            )
-        else:
-            logger.info("No error tickers; Starting to data parse.")
-            results_dict, output_dict, s_list = self.isolate_timeseries(
-                list_=results, metrics=metrics, debug=debug, sequential=True
-            )  #
-
-            if s_list:
-                logger.warning(f"Warning tickers: {s_list}")
-                logger.warning(
-                    "Warning messages: Some of the tickers are not available in the Database."
-                )
-                if suppress_warning:
-                    logger.warning("Warning suppressed.")
-                if debug:
-                    raise InvalidDataframeError(
-                        "The database has missing entries for some expressions. See log for details."
-                    )
-                else:
-                    logger.warning(
-                        f"Debug mode is off; adding download ouput to JPMaQSDownload.download_output"
-                        f"Debug mode is off; adding parsed output to JPMaQSDownload.parsed_output"
-                    )
-                self.download_output = dq_result_dict
-                self.parsed_output = {
-                    "results": results_dict,
-                    "results_nested_dictionary": output_dict,
-                    "missing_tickers": s_list,
-                }
-
-            logger.info("Data parse complete. Starting data validation.")
-
-            results_dict = self.valid_ticker(results_dict, suppress_warning, self.debug)
-
-            results_copy = results_dict.copy()
-            try:
-                results_copy.popitem()
-            except Exception as err:
-                logger.error(f"Error: {err}")
-                logger.error("None of the tickers are available in the Database.")
-                df = None
-            else:
-                no_metrics = len(
-                    set([tick.split(",")[-1][:-1] for tick in expressions])
-                )
-                df = self.dataframe_wrapper(
-                    _dict=results_dict, no_metrics=no_metrics, original_metrics=metrics
-                )
-            logger.info("Data validation complete. Creating and validating dataframe.")
-
-            if (not isinstance(df, pd.DataFrame)) or (df.empty):
-                logger.error("No data returned from DataQuery")
-                if debug:
-                    logger.error(
-                        f"Debug mode is on; adding download ouput to JPMaQSDownload.download_output"
-                        f"Debug mode is on; adding parsed output to JPMaQSDownload.parsed_output"
-                    )
-                    self.download_output = dq_result_dict
-                    self.parsed_output = {
-                        "results": results_dict,
-                        "results_nested_dictionary": output_dict,
-                        "missing_tickers": s_list,
-                    }
-                print("No data returned from DataQuery")
-                raise InvalidDataframeError(
-                    "No data returned from DataQuery. See log for details."
-                )
-            else:
-                df = df.sort_values(["cid", "xcat", "real_date"]).reset_index(drop=True)
-                
-                # ensure entries are only for before "today"
-                lbd = (datetime.datetime.today() - pd.offsets.BusinessDay()).date()
-                df = df[df["real_date"].isin(pd.date_range(start=start_date, end=lbd,))]
-
-                logger.info("Dataframe created and validated.")
-                logger.info("Returning dataframe and exiting JPMaQSDownload.download.")
-                return df
+        return data
