@@ -534,8 +534,8 @@ class DataQueryInterface(object):
     def __exit__(self, exc_type, exc_value, traceback):
         if exc_type:
             print(f"Exception: {exc_type} {exc_value}")
-        return True
-
+            raise exc_type(exc_value)
+        
     def check_connection(self, verbose=False) -> bool:
         """
         Check the connection to the DataQuery API using the Heartbeat endpoint.
@@ -892,12 +892,13 @@ class DataQueryInterface(object):
                             raise exc
                         else:
                             continue
-
+        
+        retried_output = []
         if len(failed_batches) > 0:
             flat_failed_batches: List[str] = list(
                 itertools.chain.from_iterable(failed_batches)
             )
-            self.download_data(
+            retried_output = self.download_data(
                 expressions=flat_failed_batches,
                 start_date=start_date,
                 end_date=end_date,
@@ -913,6 +914,8 @@ class DataQueryInterface(object):
             )
 
         final_output: List[Dict] = list(itertools.chain.from_iterable(download_outputs))
+        final_output += retried_output # extend retried output
+
         return final_output
 
 
