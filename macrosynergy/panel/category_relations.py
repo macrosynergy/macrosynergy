@@ -249,7 +249,7 @@ class CategoryRelations(object):
                 groups = df_i.reset_index().real_date
                 re = sm.MixedLM(y, X, groups, ).fit(reml=False)  # random effects est
                 pval = 1 - float(re.summary().tables[1].iloc[1, 3])
-            row = [np.round(coeff, 3), np.round(1 - pval, 3)]
+            row = [np.round(coeff, 3), np.round(pval, 3)]
             cpl.append(row)
         return cpl
 
@@ -410,7 +410,10 @@ class CategoryRelations(object):
 
             if coef_box is not None:
                 data_table = self.corr_probability(
-                    df_probability=[dfx1, dfx2], time_period="", coef_box_loc=coef_box
+                    df_probability=[dfx1, dfx2],
+                    time_period="",
+                    coef_box_loc=coef_box,
+                    prob_est=prob_est
                 )
                 data_table.scale(0.4, 2.5)
                 data_table.set_fontsize(14)
@@ -545,6 +548,60 @@ class CategoryRelations(object):
 
 
 if __name__ == "__main__":
+
+    # Notebook investigation
+
+    cids_g3 = ["EUR", "JPY", "USD"]
+    cids_dmsc_du = ["AUD", "CAD", "CHF", "GBP", "NOK", "NZD", "SEK"]
+    cids_dmdu = cids_g3 + cids_dmsc_du
+    ms = "CPIH_SA_P1M1ML12_XR"  # main signal
+
+    dict_dudi = {
+        "sig": ms,
+        "rivs": None,
+        "targ": "DU02YXR_VT10",
+        "cidx": cids_dmdu,
+        "black": None,
+        "srr": None,
+        "pnls": None,
+    }
+
+    path_to_feather = "C:/Users/Ralph/OneDrive/Documents/Business/" \
+                      "Macrosynergy/notebooks/classified/data/feathers/"
+    dfx = pd.read_csv(f"{path_to_feather}dfx_infov.csv")
+    dfx["real_date"] = pd.to_datetime(dfx["real_date"])
+
+    dix = dict_dudi
+
+    sig = dix["sig"]
+    targ = dix["targ"]
+    cidx = dix["cidx"]
+    blax = dix["black"]
+
+    crx = CategoryRelations(
+        dfx,
+        xcats=[sig, targ],
+        cids=cidx,
+        freq="M",
+        lag=1,
+        xcat_aggs=["last", "sum"],
+        start="2000-01-01",
+        blacklist=blax,
+        xcat_trims=[None, None],
+    )
+    crx.reg_scatter(
+        labels=False,
+        coef_box="lower left",
+        # separator=2011,
+        xlab=None,
+        ylab=None,
+        title=None,
+        size=(10, 6),
+        prob_est="map",
+    )
+
+
+    # Regular playground
 
     cids = ['AUD', 'CAD', 'GBP', 'NZD', 'USD']
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
