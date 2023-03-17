@@ -248,8 +248,8 @@ class CategoryRelations(object):
                 y = df_i.loc[:, self.xcats[1]]
                 groups = df_i.reset_index().real_date
                 re = sm.MixedLM(y, X, groups, ).fit(reml=False)  # random effects est
-                pval = 1 - float(re.summary().tables[1].iloc[1, 3])
-            row = [np.round(coeff, 3), np.round(pval, 3)]
+                pval = float(re.summary().tables[1].iloc[1, 3])
+            row = [np.round(coeff, 3), np.round(1 - pval, 3)]
             cpl.append(row)
         return cpl
 
@@ -553,25 +553,27 @@ if __name__ == "__main__":
 
     cids_g3 = ["EUR", "JPY", "USD"]
     cids_dmsc_du = ["AUD", "CAD", "CHF", "GBP", "NOK", "NZD", "SEK"]
+    cids_dmsc_eq = ["AUD", "CAD", "CHF", "GBP", "SEK"]
     cids_dmdu = cids_g3 + cids_dmsc_du
-    ms = "CPIH_SA_P1M1ML12_XR"  # main signal
+    cids_dmeq = cids_g3 + cids_dmsc_eq
+    ms = "CPIC_SJA_P6M6ML6AR_XR" # "CPIH_SA_P1M1ML12_XR"  # main signal
 
-    dict_dudi = {
+    dict_eqdi = {
         "sig": ms,
         "rivs": None,
-        "targ": "DU02YXR_VT10",
-        "cidx": cids_dmdu,
+        "targ": "EQXR_VT10",
+        "cidx": ["EUR", "USD"],
         "black": None,
         "srr": None,
         "pnls": None,
     }
 
-    path_to_feather = "C:/Users/Ralph/OneDrive/Documents/Business/" \
-                      "Macrosynergy/notebooks/classified/data/feathers/"
+    path_to_feather = "C:/Users/RSueppel/OneDrive/Documents/Business/Macrosynergy/" \
+                      "notebooks/classified/data/feathers/"
     dfx = pd.read_csv(f"{path_to_feather}dfx_infov.csv")
     dfx["real_date"] = pd.to_datetime(dfx["real_date"])
 
-    dix = dict_dudi
+    dix = dict_eqdi
 
     sig = dix["sig"]
     targ = dix["targ"]
