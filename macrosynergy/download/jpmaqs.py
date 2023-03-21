@@ -2,8 +2,9 @@
 
 from typing import List, Optional, Dict, Union
 import pandas as pd
-import numpy as np
 import warnings
+import yaml
+import json
 import traceback as tb
 from macrosynergy.download.dataquery import DataQueryInterface, HeartbeatError
 import datetime
@@ -19,6 +20,34 @@ debug_stream_handler.setFormatter(
     )
 )
 logger.addHandler(debug_stream_handler)
+
+def oauth_credential_loader(path_to_credentials : str) -> dict:
+    """Load oauth credentials from a yaml file.
+    :param <str> path_to_credentials: path to yaml file containing credentials.
+    :return <dict>: dictionary containing credentials.
+    """
+    # if ends with yml, yaml try:
+    if path_to_credentials.endswith("yml") or path_to_credentials.endswith("yaml"):
+        with open(path_to_credentials, "r") as f:
+            credentials = yaml.safe_load(f)
+
+    if path_to_credentials.endswith("json"):
+        with open(path_to_credentials, "r") as f:
+            credentials = json.load(f)
+
+    # look for client_id and client_secret substrings
+    for key in credentials.keys():
+        if "client_id" in key:
+            client_id = credentials[key]
+        if "client_secret" in key:
+            client_secret = credentials[key]
+        
+    credentials = {
+        "client_id": client_id,
+        "client_secret": client_secret
+    }
+
+    return credentials
 
 
 class InvalidDataframeError(Exception):
@@ -47,6 +76,7 @@ class JPMaQSDownload(object):
     :param <bool> suppress_warning: True if suppressing warnings, False if not.
     :param <bool> check_connection: True if the interface should check the connection to
         the server before sending requests, False if not. False by default.
+    
     :param <dict> proxy: proxy to use for requests, None if not using proxy (default).
     :param <bool> print_debug_data: True if debug data should be printed, False if not
         (default).
@@ -54,9 +84,8 @@ class JPMaQSDownload(object):
         `calender` and `frequency` for the DataQuery API. For more fine-grained usage,
         initialize the DataQueryInterface object explicitly.
     :param <dict> kwargs: additional arguments to pass to the DataQuery API object such as
-        <str> crt: path to crt file, <str> key: path to key file, <str> username: username
-        for certificate based authentication, <str> password : paired with username for
-        certificate.
+        base_url, timeout, etc. For more fine-grained usage, initialize the 
+        DataQueryInterface object explicitly.
         See macrosynergy.download.dataquery.DataQueryInterface for more.
 
     :return <JPMaQSDownload>: JPMaQSDownload object
@@ -75,6 +104,7 @@ class JPMaQSDownload(object):
         username: Optional[str] = None,
         password: Optional[str] = None,
         check_connection: bool = True,
+        oauth_config: Optional[str] = None,
         proxy: Optional[Dict] = None,
         suppress_warning: bool = True,
         debug: bool = False,
@@ -100,6 +130,16 @@ class JPMaQSDownload(object):
 
         if not isinstance(dq_download_kwargs, dict):
             raise ValueError("`dq_download_kwargs` must be a dictionary.")
+        
+        if (client_id is None) or (client_secret is None):
+            if oauth_config is None:
+                raise ValueError("If using oauth, `client_id` and `client_secret` must be provided."
+                                 " Alternatively, provide a path to a yaml file containing the credentials "
+                                 "using the `oauth_config` argument.")
+            else:
+                credentials = oauth_credential_loader(oauth_config)
+                client_id = credentials["client_id"]
+                client_secret = credentials["client_secret"]
 
         self.suppress_warning = suppress_warning
         self.debug = debug
