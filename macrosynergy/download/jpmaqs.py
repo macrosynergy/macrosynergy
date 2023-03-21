@@ -141,6 +141,7 @@ class JPMaQSDownload(object):
                 proxy=proxy,
                 **kwargs,
             )
+        self.valid_metrics = ["value", "grading", "eop_lag", "mop_lag"]
 
         if self._check_connection:
             self.check_connection()
@@ -380,13 +381,6 @@ class JPMaQSDownload(object):
 
         """
 
-        valid_metrics: List[str] = [
-            "value",
-            "grading",
-            "eop_lag",
-            "mop_lag",
-        ]
-
         def is_valid_date(date: str) -> bool:
             try:
                 datetime.datetime.strptime(date, "%Y-%m-%d")
@@ -422,8 +416,8 @@ class JPMaQSDownload(object):
         if metrics is None:
             raise ValueError("`metrics` must be a non-empty list of strings.")
         else:
-            if all([metric not in valid_metrics for metric in metrics]):
-                raise ValueError(f"`metrics` must be a subset of {valid_metrics}.")
+            if all([metric not in self.valid_metrics for metric in metrics]):
+                raise ValueError(f"`metrics` must be a subset of {self.valid_metrics}.")
 
         if cids is not None:
             if xcats is None:
@@ -506,7 +500,7 @@ class JPMaQSDownload(object):
 
         if len(metrics) == 1:
             if metrics[0] == "all":
-                metrics = ["value", "grading" "eop_lag", "mop_lag"]
+                metrics = self.valid_metrics
 
         if end_date is None:
             end_date = (datetime.datetime.today() + pd.offsets.BusinessDay(2)).strftime(
