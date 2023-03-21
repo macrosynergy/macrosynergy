@@ -1,6 +1,6 @@
 """ JPMaQS Download Interface """
 
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Union
 import pandas as pd
 import numpy as np
 import warnings
@@ -457,7 +457,7 @@ class JPMaQSDownload(object):
         expressions=None,
         show_progress=False,
         as_dataframe=True,
-    ) -> Optional[pd.DataFrame | List[Dict]]:
+    ) -> Union[pd.DataFrame , List[Dict]]:
         """Driver function to download data from JPMaQS via the DataQuery API.
         Timeseries data can be requested using `tickers` with `metrics`, or
         passing formed DataQuery expressions.
