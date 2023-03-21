@@ -26,23 +26,23 @@ class TestOAuth(unittest.TestCase):
     # def test_invalid_args_passed(self):
     def test_invalid_init_args(self):
         # test invalid client_id
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             dataquery.OAuth(client_id=123, client_secret="SECRET")
 
         # test invalid client_secret
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             dataquery.OAuth(client_id="test-id", client_secret=123)
 
         # test invalid base_url
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             dataquery.OAuth(client_id="test-id", client_secret="SECRET", base_url=None)
 
         # test invalid token_url
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             dataquery.OAuth(client_id="test-id", client_secret="SECRET", token_url=None)
 
         # test invalid dq_resource_id
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             dataquery.OAuth(
                 client_id="test-id", client_secret="SECRET", dq_resource_id=None
             )

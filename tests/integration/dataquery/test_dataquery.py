@@ -33,7 +33,7 @@ class TestDataQueryOAuth(unittest.TestCase):
             client_secret=os.getenv("DQ_CLIENT_SECRET"))
 
         data = dq.download(
-                tickers="EUR_FXXR_NSA",
+                tickers=["EUR_FXXR_NSA"],
                 start_date=(datetime.date.today() - datetime.timedelta(days=30)).isoformat()
             )
         self.assertIsInstance(data, pd.DataFrame)
