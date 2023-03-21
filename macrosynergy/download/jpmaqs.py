@@ -500,6 +500,10 @@ class JPMaQSDownload(object):
         # NOTE : This is simply so that we can test the download() function
         #   without having to pass in a bunch of arguments.
 
+        for varx in [tickers, cids, xcats, expressions]:
+            if isinstance(varx, str):
+                varx = [varx]
+
         if len(metrics) == 1:
             if metrics[0] == "all":
                 metrics = ["value", "grading" "eop_lag", "mop_lag"]
