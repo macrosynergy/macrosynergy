@@ -24,6 +24,7 @@ logger.addHandler(debug_stream_handler)
 class InvalidDataframeError(Exception):
     """Raised when a dataframe is not valid."""
 
+
 class MissingDataError(Exception):
     """Raised when data is missing from a requested dataframe."""
 
@@ -105,6 +106,12 @@ class JPMaQSDownload(object):
         self.print_debug_data = print_debug_data
         self._check_connection = check_connection
         self.dq_download_kwargs = dq_download_kwargs
+        if oauth and (
+            (not isinstance(client_id, str)) or (not isinstance(client_secret, str))
+        ):
+            raise ValueError(
+                "If using oauth, `client_id` and `client_secret` must be provided."
+            )
 
         if oauth:
             self.dq_interface: DataQueryInterface = DataQueryInterface(
@@ -117,9 +124,12 @@ class JPMaQSDownload(object):
             )
         else:
             # ensure "crt", "key", "username", and "password" are in kwargs
-            for key in ["crt", "key", "username", "password"]:
-                if key not in kwargs:
-                    raise ValueError(f"Missing required argument {key}")
+            for varx, namex in zip(
+                [crt, key, username, password],
+                ["crt", "key", "username", "password"],
+            ):
+                if not isinstance(varx, str):
+                    raise ValueError(f"`{namex}` must be a string.")
 
             self.dq_interface: DataQueryInterface = DataQueryInterface(
                 oauth=oauth,
