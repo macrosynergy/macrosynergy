@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import warnings
 import traceback as tb
-from macrosynergy.download.dataquery import DataQueryInterface
+from macrosynergy.download.dataquery import DataQueryInterface, HeartbeatError
 import datetime
 import logging
 import io
@@ -345,11 +345,17 @@ class JPMaQSDownload(object):
 
         return return_df
 
-    def check_connection(self, verbose: bool = False) -> bool:
+    def check_connection(
+        self, verbose: bool = False, raise_error: bool = False
+    ) -> bool:
         """Check if the interface is connected to the server.
         :return <bool>: True if connected, False if not.
         """
-        return self.dq_interface.check_connection(verbose=verbose)
+
+        res = self.dq_interface.check_connection(verbose=verbose)
+        if raise_error and not res:
+            raise ConnectionError(HeartbeatError("Heartbeat failed."))
+        return res
 
     def validate_download_args(
         self,

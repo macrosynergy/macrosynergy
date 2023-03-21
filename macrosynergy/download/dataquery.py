@@ -240,7 +240,7 @@ class OAuth(object):
         dq_resource_id: str = OAUTH_DQ_RESOURCE_ID,
     ):
         for varx, namex in zip(
-            [client_id, client_secret, proxy, base_url, token_url, dq_resource_id],
+            [client_id, client_secret, base_url, token_url, dq_resource_id],
             [
                 "client_id",
                 "client_secret",
@@ -251,7 +251,7 @@ class OAuth(object):
         ):
             if not isinstance(varx, str):
                 raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
-        
+
         if not isinstance(proxy, dict) and proxy is not None:
             raise TypeError(f"proxy must be a <dict> and not {type(proxy)}.")
 
