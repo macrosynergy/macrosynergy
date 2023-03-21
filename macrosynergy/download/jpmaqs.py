@@ -131,15 +131,7 @@ class JPMaQSDownload(object):
         if not isinstance(dq_download_kwargs, dict):
             raise ValueError("`dq_download_kwargs` must be a dictionary.")
         
-        if (client_id is None) or (client_secret is None):
-            if oauth_config is None:
-                raise ValueError("If using oauth, `client_id` and `client_secret` must be provided."
-                                 " Alternatively, provide a path to a yaml file containing the credentials "
-                                 "using the `oauth_config` argument.")
-            else:
-                credentials = oauth_credential_loader(oauth_config)
-                client_id = credentials["client_id"]
-                client_secret = credentials["client_secret"]
+
 
         self.suppress_warning = suppress_warning
         self.debug = debug
@@ -149,9 +141,14 @@ class JPMaQSDownload(object):
         if oauth and (
             (not isinstance(client_id, str)) or (not isinstance(client_secret, str))
         ):
-            raise ValueError(
-                "If using oauth, `client_id` and `client_secret` must be provided."
-            )
+            if oauth_config is None:
+                raise ValueError("If using oauth, `client_id` and `client_secret` must be provided."
+                                 " Alternatively, provide a path to a yaml file containing the credentials "
+                                 "using the `oauth_config` argument.")
+            else:
+                credentials = oauth_credential_loader(oauth_config)
+                client_id = credentials["client_id"]
+                client_secret = credentials["client_secret"]
 
         if oauth:
             self.dq_interface: DataQueryInterface = DataQueryInterface(
