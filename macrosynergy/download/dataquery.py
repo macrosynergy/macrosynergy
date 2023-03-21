@@ -225,7 +225,8 @@ class OAuth(object):
 
     :return <OAuth>: OAuth object.
 
-    :raises <ValueError>: if client_id or client_secret are not strings.
+    :raises <ValueError>: if any of the parameters are semantically incorrect.
+    :raises <TypeError>: if any of the parameters are of the wrong type.
     :raises <Exception>: other exceptions may be raised by underlying functions.
     """
 
@@ -238,31 +239,25 @@ class OAuth(object):
         token_url: str = OAUTH_TOKEN_URL,
         dq_resource_id: str = OAUTH_DQ_RESOURCE_ID,
     ):
-        try:
-            id_error = f"client_id argument must be a <str> and not {type(client_id)}."
-            assert isinstance(client_id, str), id_error
-            secret_error = (
-                f"client_secret must be a <str> and not {type(client_secret)}."
-            )
-            assert isinstance(client_secret, str), secret_error
-            proxy_error = f"proxy must be a <dict> and not {type(proxy)}."
-            assert isinstance(proxy, dict) or proxy is None, proxy_error
-            url_error = f"base_url must be a <str> and not {type(base_url)}."
-            assert isinstance(base_url, str), url_error
-            token_url_error = f"token_url must be a <str> and not {type(token_url)}."
-            assert isinstance(token_url, str), token_url_error
-            dq_resource_id_error = (
-                f"dq_resource_id must be a <str> and not {type(dq_resource_id)}."
-            )
-            assert isinstance(dq_resource_id, str), dq_resource_id_error
+        for varx, namex in zip(
+            [client_id, client_secret, proxy, base_url, token_url, dq_resource_id],
+            [
+                "client_id",
+                "client_secret",
+                "proxy",
+                "base_url",
+                "token_url",
+                "dq_resource_id",
+            ],
+        ):
+            if not isinstance(varx, str) and varx is not None:
+                raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
+        if not isinstance(proxy, dict) and proxy is not None:
+            raise TypeError(f"proxy must be a <dict> and not {type(proxy)}.")
 
-        except AssertionError as exc:
-            raise ValueError(exc)
-        except Exception as exc:
-            raise exc
         self.base_url: str = base_url
-        self.__token_url: str = token_url
-        self.__dq_api_resource_id: str = dq_resource_id
+        self.token_url: str = token_url
+        self.dq_resource_id: str = dq_resource_id
         self.proxy: Optional[dict] = proxy
 
         self.client_id: str = client_id
@@ -274,7 +269,7 @@ class OAuth(object):
             "grant_type": "client_credentials",
             "client_id": self.client_id,
             "client_secret": self.client_secret,
-            "aud": self.__dq_api_resource_id,
+            "aud": self.dq_resource_id,
         }
 
     def _valid_token(self) -> bool:
@@ -299,7 +294,7 @@ class OAuth(object):
         """
         if not self._valid_token():
             js = request_wrapper(
-                url=self.__token_url,
+                url=self.token_url,
                 data=self.token_data,
                 method="post",
                 proxies=self.proxy,
@@ -360,7 +355,8 @@ class CertAuth(object):
 
     :return <CertAuth>: CertAuth object.
 
-    :raises <ValueError>: if parameters are not of the correct type.
+    :raises <TypeError>: if any of the parameters are of the wrong type.
+    :raises <ValueError>: if any of the parameters are semantically incorrect.
     :raises <Exception>: other exceptions may be raised by underlying functions.
     """
 
@@ -373,23 +369,14 @@ class CertAuth(object):
         base_url: str = CERT_BASE_URL,
         proxy: Optional[dict] = None,
     ):
-        try:
-            error_user = f"username must be a <str> and not {type(username)}."
-            assert isinstance(username, str), error_user
-            error_password = f"password must be a <str> and not {type(password)}."
-            assert isinstance(password, str), error_password
-            error_crt = f"crt must be a <str> and not {type(crt)}."
-            assert isinstance(crt, str), error_crt
-            error_key = f"key must be a <str> and not {type(key)}."
-            assert isinstance(key, str), error_key
-            error_base_url = f"base_url must be a <str> and not {type(base_url)}."
-            assert isinstance(base_url, str), error_base_url
-            error_proxy = f"proxy must be a <dict> and not {type(proxy)}."
-            assert isinstance(proxy, dict) or proxy is None, error_proxy
-        except AssertionError as e:
-            raise ValueError(e)
-        except Exception as e:
-            raise e
+        for varx, namex in zip(
+            [username, password, crt, key, base_url],
+            ["username", "password", "crt", "key", "base_url"],
+        ):
+            if not isinstance(varx, str):
+                raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
+        if not isinstance(proxy, dict) and proxy is not None:
+            raise TypeError(f"proxy must be a <dict> and not {type(proxy)}.")
 
         self.auth: str = base64.b64encode(
             bytes(f"{username:s}:{password:s}", "utf-8")
@@ -443,7 +430,8 @@ class DataQueryInterface(object):
     :param <bool> oauth: whether to use OAuth authentication. Defaults to True.
     :param <bool> debug: whether to print debug messages. Defaults to False.
     :param <bool> concurrent: whether to use concurrent requests. Defaults to True.
-    :param <int> batch_size: number of expressions to send in a single request. Defaults to API_EXPR_LIMIT.
+    :param <int> batch_size: number of expressions to send in a single request.
+        Defaults to API_EXPR_LIMIT.
     :param <bool> heartbeat: whether to send a heartbeat request. Defaults to True.
     :param <bool> suppress_warnings: whether to suppress warnings. Defaults to True.
 
@@ -463,8 +451,8 @@ class DataQueryInterface(object):
 
     :return <DataQueryInterface>: DataQueryInterface object.
 
-    :raises <AssertionError>: if the parameters are not valid for the chosen
-        authentication method.
+    :raises <TypeError>: if any of the parameters are of the wrong type.
+    :raises <ValueError>: if any of the parameters are semantically incorrect.
     :raises <InvalidResponseError>: if the response from the server is not valid.
     :raises <DownloadError>: if the download fails to complete after a number of retries.
     :raises <HeartbeatError>: if the heartbeat (check connection) fails.
@@ -478,6 +466,7 @@ class DataQueryInterface(object):
         concurrent: bool = True,
         batch_size: int = API_EXPR_LIMIT,
         heartbeat: bool = True,
+        base_url: str = OAUTH_BASE_URL,
         suppress_warnings: bool = True,
         **kwargs,
     ):
@@ -492,18 +481,17 @@ class DataQueryInterface(object):
 
         if oauth:
             # ensure that we have a client_id and client_secret
-            try:
-                for k in ["client_id", "client_secret"]:
-                    assert k in kwargs, f"{k} must be provided."
-            except AssertionError as e:
-                raise ValueError(e)
-            except Exception as e:
-                raise e
+
+            for k in ["client_id", "client_secret"]:
+                if not (k in kwargs):
+                    raise ValueError(
+                        f"{k} must be provided for " "OAuth authentication."
+                    )
 
             self.access_method: OAuth = OAuth(
                 client_id=kwargs["client_id"],
                 client_secret=kwargs["client_secret"],
-                base_url=OAUTH_BASE_URL,
+                base_url=base_url,
                 token_url=OAUTH_TOKEN_URL,
                 dq_resource_id=OAUTH_DQ_RESOURCE_ID,
                 proxy=self.proxy,
@@ -511,20 +499,22 @@ class DataQueryInterface(object):
 
         else:
             # ensure that we have a username and password, crt and key
-            try:
-                for k in ["username", "password", "crt", "key"]:
-                    assert k in kwargs, f"{k} must be provided."
-            except AssertionError as e:
-                raise ValueError(e)
-            except Exception as e:
-                raise e
+            for k in ["username", "password", "crt", "key"]:
+                if not (k in kwargs):
+                    raise ValueError(
+                        f"{k} must be provided for " "certificate authentication."
+                    )
+
+            if base_url == OAUTH_BASE_URL:
+                print("Changing OAUTH_BASE_URL to CERT_BASE_URL")
+                base_url = CERT_BASE_URL
 
             self.access_method: CertAuth = CertAuth(
                 username=kwargs["username"],
                 password=kwargs["password"],
                 crt=kwargs["crt"],
                 key=kwargs["key"],
-                base_url=CERT_BASE_URL,
+                base_url=base_url,
                 proxy=self.proxy,
             )
 
@@ -534,8 +524,9 @@ class DataQueryInterface(object):
     def __exit__(self, exc_type, exc_value, traceback):
         if exc_type:
             print(f"Exception: {exc_type} {exc_value}")
+            print(traceback)
             raise exc_type(exc_value)
-        
+
     def check_connection(self, verbose=False) -> bool:
         """
         Check the connection to the DataQuery API using the Heartbeat endpoint.
@@ -654,55 +645,66 @@ class DataQueryInterface(object):
 
         :returns True if all arguments are valid.
 
-        :raises <ValueError>: if any arguments are of invalid type or value.
-        :raises <Exception>: any other exceptions may be raised.
+        :raises <TypeError>: if any of the arguments are of the wrong type.
+        :raises <ValueError>: if any of the arguments are semantically incorrect.
         """
 
         def is_valid_date(date: str) -> bool:
-            """
-            Check if a date is in the ISO-8601 format (YYYY-MM-DD).
-
-            :param <str> date: date to check.
-
-            :return <bool>: True if the date is valid, False otherwise.
-            """
             try:
                 datetime.strptime(date, "%Y-%m-%d")
                 return True
             except ValueError:
                 return False
 
-        try:
-            assert isinstance(
-                expressions, list
-            ), "`expressions` must be a list of strings."
-            assert all(
-                isinstance(expr, str) for expr in expressions
-            ), "`expressions` must be a list of strings."
-            assert isinstance(start_date, str), "`start_date` must be a string."
-            assert isinstance(end_date, str), "`end_date` must be a string."
-            assert is_valid_date(start_date), (
-                "`start_date` must be a string in " "the ISO-8601 format (YYYY-MM-DD)."
-            )
-            assert is_valid_date(end_date) or end_date is None, (
-                "`end_date` must be a string in " "the ISO-8601 format (YYYY-MM-DD)."
-            )
-            assert isinstance(show_progress, bool), "`show_progress` must be a boolean."
-            assert isinstance(endpoint, str), "`endpoint` must be a string."
-            assert isinstance(calender, str), "`calender` must be a string."
-            assert isinstance(frequency, str), "`frequency` must be a string."
-            assert isinstance(conversion, str), "`conversion` must be a string."
-            assert isinstance(nan_treatment, str), "`nan_treatment` must be a string."
-            assert isinstance(reference_data, str), "`reference_data` must be a string."
-            assert isinstance(retry_counter, int), "`retry_counter` must be an integer."
-            assert isinstance(delay_param, float), "`delay_param` must be an integer."
-            assert isinstance(tracking_id, str) or (
-                tracking_id is None
-            ), "`tracking_id` must be a string or None."
-        except AssertionError as e:
-            raise ValueError(e)
-        except Exception as e:
-            raise e
+        if expressions is None:
+            raise ValueError("`expressions` must be a list of strings.")
+        if not isinstance(expressions, list):
+            raise TypeError("`expressions` must be a list of strings.")
+        if not all(isinstance(expr, str) for expr in expressions):
+            raise TypeError("`expressions` must be a list of strings.")
+
+        for varx, namex in zip([start_date, end_date], ["start_date", "end_date"]):
+            if (varx is None) or not isinstance(varx, str):
+                raise TypeError(f"`{namex}` must be a string.")
+            if not is_valid_date(varx):
+                raise ValueError(
+                    f"`{namex}` must be a string in the ISO-8601 format (YYYY-MM-DD)."
+                )
+
+        if not isinstance(show_progress, bool):
+            raise TypeError("`show_progress` must be a boolean.")
+
+        if not isinstance(retry_counter, int):
+            raise TypeError("`retry_counter` must be an integer.")
+
+        if not isinstance(delay_param, float):
+            raise TypeError("`delay_param` must be a positive float >=0.2 (seconds).")
+        elif delay_param < 0.2:
+            raise ValueError("`delay_param` must be a positive float >=0.2 (seconds).")
+
+        for varx, namex in zip(
+            [
+                endpoint,
+                calender,
+                frequency,
+                conversion,
+                nan_treatment,
+                reference_data,
+            ],
+            [
+                "endpoint",
+                "calender",
+                "frequency",
+                "conversion",
+                "nan_treatment",
+                "reference_data",
+            ],
+        ):
+            if not isinstance(varx, str):
+                raise TypeError(f"`{namex}` must be a string.")
+
+        if not isinstance(tracking_id, str) and tracking_id is not None:
+            raise TypeError("`tracking_id` must be a string or None.")
 
         return True
 
@@ -722,7 +724,7 @@ class DataQueryInterface(object):
         delay_param: int = API_DELAY_PARAM,
         tracking_id: str = None,
         # filter_from_catalogue: bool = True,
-    ):
+    ) -> List[Dict]:
         """
         Download data from the DataQuery API.
 
@@ -752,29 +754,26 @@ class DataQueryInterface(object):
         :raises <Exception>: other exceptions may be raised by underlying functions.
         """
 
-        try:
-            self.validate_download_args(
-                expressions=expressions,
-                start_date=start_date,
-                end_date=end_date,
-                show_progress=show_progress,
-                endpoint=endpoint,
-                calender=calender,
-                frequency=frequency,
-                conversion=conversion,
-                nan_treatment=nan_treatment,
-                reference_data=reference_data,
-                retry_counter=retry_counter,
-                delay_param=delay_param,
-                tracking_id=tracking_id,
-            )
-        except Exception as e:
-            raise e
-
         if end_date is None:
             end_date = datetime.today().strftime("%Y-%m-%d")
-            # if "future dates" are passed, they must be passed by parent functions
+            # NOTE : if "future dates" are passed, they must be passed by parent functions
             # see jpmaqs.py
+
+        self.validate_download_args(
+            expressions=expressions,
+            start_date=start_date,
+            end_date=end_date,
+            show_progress=show_progress,
+            endpoint=endpoint,
+            calender=calender,
+            frequency=frequency,
+            conversion=conversion,
+            nan_treatment=nan_treatment,
+            reference_data=reference_data,
+            retry_counter=retry_counter,
+            delay_param=delay_param,
+            tracking_id=tracking_id,
+        )
 
         # remove dashes from dates to match DQ format
         start_date = start_date.replace("-", "")
@@ -789,6 +788,7 @@ class DataQueryInterface(object):
                 f"No longer retrying."
             )
 
+        # check heartbeat before each "batch" of requests
         if self.heartbeat:
             if not self.check_connection():
                 raise ConnectionError(
@@ -892,7 +892,8 @@ class DataQueryInterface(object):
                             raise exc
                         else:
                             continue
-        
+
+        final_output: List[Dict] = list(itertools.chain.from_iterable(download_outputs))
         retried_output = []
         if len(failed_batches) > 0:
             flat_failed_batches: List[str] = list(
@@ -913,8 +914,7 @@ class DataQueryInterface(object):
                 delay_param=delay_param + 0.1,
             )
 
-        final_output: List[Dict] = list(itertools.chain.from_iterable(download_outputs))
-        final_output += retried_output # extend retried output
+        final_output += retried_output  # extend retried output
 
         return final_output
 
