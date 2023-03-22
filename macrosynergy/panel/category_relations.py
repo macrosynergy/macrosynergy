@@ -549,62 +549,6 @@ class CategoryRelations(object):
 
 if __name__ == "__main__":
 
-    # Notebook investigation
-
-    cids_g3 = ["EUR", "JPY", "USD"]
-    cids_dmsc_du = ["AUD", "CAD", "CHF", "GBP", "NOK", "NZD", "SEK"]
-    cids_dmsc_eq = ["AUD", "CAD", "CHF", "GBP", "SEK"]
-    cids_dmdu = cids_g3 + cids_dmsc_du
-    cids_dmeq = cids_g3 + cids_dmsc_eq
-    ms = "CPIC_SJA_P6M6ML6AR_XR" # "CPIH_SA_P1M1ML12_XR"  # main signal
-
-    dict_eqdi = {
-        "sig": ms,
-        "rivs": None,
-        "targ": "EQXR_VT10",
-        "cidx": ["EUR", "USD"],
-        "black": None,
-        "srr": None,
-        "pnls": None,
-    }
-
-    path_to_feather = "C:/Users/RSueppel/OneDrive/Documents/Business/Macrosynergy/" \
-                      "notebooks/classified/data/feathers/"
-    dfx = pd.read_csv(f"{path_to_feather}dfx_infov.csv")
-    dfx["real_date"] = pd.to_datetime(dfx["real_date"])
-
-    dix = dict_eqdi
-
-    sig = dix["sig"]
-    targ = dix["targ"]
-    cidx = dix["cidx"]
-    blax = dix["black"]
-
-    crx = CategoryRelations(
-        dfx,
-        xcats=[sig, targ],
-        cids=cidx,
-        freq="M",
-        lag=1,
-        xcat_aggs=["last", "sum"],
-        start="2000-01-01",
-        blacklist=blax,
-        xcat_trims=[None, None],
-    )
-    crx.reg_scatter(
-        labels=False,
-        coef_box="lower left",
-        # separator=2011,
-        xlab=None,
-        ylab=None,
-        title=None,
-        size=(10, 6),
-        prob_est="map",
-    )
-
-
-    # Regular playground
-
     cids = ['AUD', 'CAD', 'GBP', 'NZD', 'USD']
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
     df_cids = pd.DataFrame(index=cids,
