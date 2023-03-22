@@ -721,7 +721,7 @@ class DataQueryInterface(object):
         nan_treatment: str = "NA_NOTHING",
         reference_data: str = "NO_REFERENCE_DATA",
         retry_counter: int = 0,
-        delay_param: int = API_DELAY_PARAM,
+        delay_param: float = API_DELAY_PARAM,
         tracking_id: str = None,
         # filter_from_catalogue: bool = True,
     ) -> List[Dict]:
@@ -741,7 +741,7 @@ class DataQueryInterface(object):
         :param <str> nan_treatment: NaN treatment setting to use for the download.
         :param <str> reference_data: reference data to pass to the API kwargs.
         :param <int> retry_counter: number of times the download has been retried.
-        :param <int> delay_param: delay between requests to the API.
+        :param <float> delay_param: delay between requests to the API.
         :param <str> tracking_id: Optional tracking ID to use for the download
             (used for debugging purposes)(default : YYYYMMDD_HHMMSS-OS.PID).
 
@@ -797,7 +797,7 @@ class DataQueryInterface(object):
                         f" {datetime.utcnow().isoformat()}"
                     )
                 )
-            time.sleep(API_DELAY_PARAM)
+            time.sleep(delay_param)
 
         params_dict: Dict = {
             "format": "JSON",
@@ -842,6 +842,7 @@ class DataQueryInterface(object):
                             tracking_id=f"request_{ib}",
                         )
                     )
+                    time.sleep(delay_param)
                 for ib, future in tqdm(
                     enumerate(future_objects),
                     desc="Downloading data",

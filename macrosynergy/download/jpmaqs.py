@@ -487,7 +487,7 @@ class JPMaQSDownload(object):
         end_date=None,
         expressions=None,
         show_progress=False,
-        suppress_warnings=True,
+        suppress_warning=True,
         as_dataframe=True,
     ) -> Union[pd.DataFrame , List[Dict]]:
         """Driver function to download data from JPMaQS via the DataQuery API.
@@ -525,8 +525,8 @@ class JPMaQSDownload(object):
 
         """
 
-        if suppress_warnings != self.suppress_warnings:
-            self.suppress_warnings = suppress_warnings
+        if suppress_warning != self.suppress_warning:
+            self.suppress_warning = suppress_warning
             # self.set_logging_level()
 
         if all([_arg is None for _arg in [tickers, cids, xcats, expressions]]):
