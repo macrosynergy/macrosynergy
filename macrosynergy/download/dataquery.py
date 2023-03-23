@@ -17,7 +17,14 @@ import requests
 from typing import List, Optional, Dict
 from datetime import datetime
 from tqdm import tqdm
-from macrosynergy import version as ms_version_info
+# from macrosynergy import version as ms_version_info
+try:
+    from ...setup import VERSION as ms_version_info
+except ImportError:
+    from macrosynergy import version as msvi
+    ms_version_info : str = msvi.full_version
+
+
 
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 OAUTH_BASE_URL: str = (
@@ -158,7 +165,7 @@ def request_wrapper(
     # insert tracking info in headers
     if headers is None:
         headers: Dict = {}
-    headers["User-Agent"] = f"MacrosynergyPackage/{ms_version_info.full_version}"
+    headers["User-Agent"] = f"MacrosynergyPackage/{ms_version_info}"
 
     uuid_str: str = str(uuid.uuid4())
     if (tracking_id is None) or (tracking_id == ""):
