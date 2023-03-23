@@ -10,6 +10,7 @@ from macrosynergy.download.dataquery import DataQueryInterface, HeartbeatError
 import datetime
 import logging
 import io
+from timeit import default_timer as timer
 
 logger = logging.getLogger(__name__)
 debug_stream_handler = logging.StreamHandler(io.StringIO())
@@ -21,12 +22,14 @@ debug_stream_handler.setFormatter(
 )
 logger.addHandler(debug_stream_handler)
 
-def oauth_credential_loader(path_to_credentials : str) -> dict:
+
+def oauth_credential_loader(path_to_credentials: str) -> dict:
     """Load oauth credentials from a yaml file.
     :param <str> path_to_credentials: path to yaml file containing credentials.
     :return <dict>: dictionary containing credentials.
     """
-    # if ends with yml, yaml try:
+
+    credentials: Dict[str, str] = {}
     if path_to_credentials.endswith("yml") or path_to_credentials.endswith("yaml"):
         with open(path_to_credentials, "r") as f:
             credentials = yaml.safe_load(f)
@@ -41,11 +44,8 @@ def oauth_credential_loader(path_to_credentials : str) -> dict:
             client_id = credentials[key]
         if "client_secret" in key:
             client_secret = credentials[key]
-        
-    credentials = {
-        "client_id": client_id,
-        "client_secret": client_secret
-    }
+
+    credentials = {"client_id": client_id, "client_secret": client_secret}
 
     return credentials
 
@@ -76,7 +76,7 @@ class JPMaQSDownload(object):
     :param <bool> suppress_warning: True if suppressing warnings, False if not.
     :param <bool> check_connection: True if the interface should check the connection to
         the server before sending requests, False if not. False by default.
-    
+
     :param <dict> proxy: proxy to use for requests, None if not using proxy (default).
     :param <bool> print_debug_data: True if debug data should be printed, False if not
         (default).
@@ -84,7 +84,7 @@ class JPMaQSDownload(object):
         `calender` and `frequency` for the DataQuery API. For more fine-grained usage,
         initialize the DataQueryInterface object explicitly.
     :param <dict> kwargs: additional arguments to pass to the DataQuery API object such as
-        base_url, timeout, etc. For more fine-grained usage, initialize the 
+        base_url, timeout, etc. For more fine-grained usage, initialize the
         DataQueryInterface object explicitly.
         See macrosynergy.download.dataquery.DataQueryInterface for more.
 
@@ -130,8 +130,6 @@ class JPMaQSDownload(object):
 
         if not isinstance(dq_download_kwargs, dict):
             raise ValueError("`dq_download_kwargs` must be a dictionary.")
-        
-
 
         self.suppress_warning = suppress_warning
         self.debug = debug
@@ -142,9 +140,11 @@ class JPMaQSDownload(object):
             (not isinstance(client_id, str)) or (not isinstance(client_secret, str))
         ):
             if oauth_config is None:
-                raise ValueError("If using oauth, `client_id` and `client_secret` must be provided."
-                                 " Alternatively, provide a path to a yaml file containing the credentials "
-                                 "using the `oauth_config` argument.")
+                raise ValueError(
+                    "If using oauth, `client_id` and `client_secret` must be provided."
+                    " Alternatively, provide a path to a yaml file containing the credentials "
+                    "using the `oauth_config` argument."
+                )
             else:
                 credentials = oauth_credential_loader(oauth_config)
                 client_id = credentials["client_id"]
@@ -217,51 +217,43 @@ class JPMaQSDownload(object):
         return [f"DB(JPMAQS,{tick},{metric})" for tick in tickers for metric in metrics]
 
     @staticmethod
-    def deconstruct_expressions(
-        expressions: List[str], as_tickers=False
-    ) -> List[List[str]]:
-        """Deconstruct expressions into tickers and metrics, or cids, xcats, and metrics."""
+    def deconstruct_expression(expression: Union[str, List[str]]) -> List[str]:
+        """
+        Deconstruct an expression into a list of cid, xcat, and metric.
+        Coupled with to JPMaQSDownload.time_series_to_df(), achieves the inverse of
+        JPMaQSDownload.construct_expressions().
 
-        expressions = [
-            exp.replace("DB(JPMAQS,", "").replace(")", "") for exp in expressions
-        ]
+        :param <str> expression: expression to deconstruct. If a list is provided,
+            each element will be deconstructed and returned as a list of lists.
 
-        if as_tickers:
-            return [exp.split(",") for exp in expressions]
+        :return <list[str]>: list of cid, xcat, and metric.
+        """
+
+        if isinstance(expression, list):
+            return [
+                JPMaQSDownload.deconstruct_expression(exprx) for exprx in expression
+            ]
         else:
-            r: List[List[str]] = []
-            for exp in expressions:
-                tick, metric = exp.split(",")
-                cid, xcat = tick.split("_", 1)
-                r += [[cid, xcat, metric]]
-            return r
+            exprx = expression.replace("DB(JPMAQS,", "").replace(")", "")
+            ticker, metric = exprx.split(",")
+            return ticker.split("_", 1) + [metric]
 
     def validate_downloaded_df(
         self,
         data_df: pd.DataFrame,
         expected_expressions: List[str],
+        found_expressions: List[str],
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         verbose: bool = True,
     ) -> bool:
-        """Validate the downloaded data.
-        :param data_df <pd.DataFrame>: DataFrame containing the downloaded data.
-        :param expressions <list>: List of expressions used to download the data.
-        :param start_date <str>: Start date of the data.
-        :param end_date <str>: End date of the data.
-        :param verbose <bool>: Whether to print the validation results.
-
-        :return <bool>: True if valid, False if not.
-        """
-        # TODO : Complete this function to report number of missing values
-        # if verbose print number of reqd. expressions and num of actual expressions in df
         if not isinstance(data_df, pd.DataFrame):
             return False
         if data_df.empty:
             return False
 
         # check if all expressions are present in the df
-        exprs_f = set(data_df["expression"])
+        exprs_f = set(found_expressions)
         expr_expected = set(expected_expressions)
         expr_missing = expr_expected - exprs_f
 
@@ -275,13 +267,12 @@ class JPMaQSDownload(object):
                 print(log_str)
 
         # check if all dates are present in the df
-        dates_f = data_df["real_date"]
         dates_expected = pd.bdate_range(start=start_date, end=end_date)
+        dates_missing = len(data_df) - len(
+            data_df[data_df["real_date"].isin(dates_expected)]
+        )
 
-        # check that all expected dates are in the df
-        dates_missing = set(dates_expected) - set(dates_f)
-
-        if dates_missing:
+        if dates_missing > 0:
             log_str = (
                 f"Some dates are missing from the downloaded data. \n"
                 f"{len(dates_missing)} out of {len(dates_expected)} dates are missing."
@@ -290,15 +281,12 @@ class JPMaQSDownload(object):
             if verbose:
                 print(log_str)
 
-        bday_data_df = data_df[data_df["real_date"].isin(dates_expected)]
-
-        # find any "NA" values in the df
-        na_values = bday_data_df.isna().sum().sum()
-        if na_values > 0:
-            log_str = (
-                "Missing values found in the downloaded data. \n"
-                f"{na_values} missing values (NAs). Check output dataframe for details."
-            )
+        # check number of nas in each column
+        nas = data_df.isna().sum(axis=0)
+        nas = nas[nas > 0]
+        if len(nas) > 0:
+            log_str = f"Some columns have missing values. \n" f"{nas}"
+            logger.warning(log_str)
             if verbose:
                 print(log_str)
 
@@ -321,67 +309,59 @@ class JPMaQSDownload(object):
         Returns
         :return <pd.DataFrame>: DataFrame containing the data
         """
-        dfs: List = []
+        dfs: List[pd.DataFrame] = []
+        cid: str
+        xcat: str
+        metric: str
+        # metrics_found: set = set()
         for d in dicts_list:
-            df = pd.DataFrame(
-                d["attributes"][0]["time-series"], columns=["real_date", "observation"]
+            cid, xcat, metric = JPMaQSDownload.deconstruct_expression(
+                d["attributes"][0]["expression"]
+            )
+
+            df: pd.DataFrame = pd.DataFrame(
+                d["attributes"][0]["time-series"], columns=["real_date", metric]
             )
             df["expression"] = d["attributes"][0]["expression"]
-            dfs += [df]
+            df[["cid", "xcat"]] = cid, xcat
+            df = df[["real_date", "cid", "xcat", "expression", metric]]
+            dfs.append(df)
 
-        temp_df = pd.concat(dfs, axis=0).reset_index(drop=True)[
-            ["real_date", "expression", "observation"]
+        data_df: pd.DataFrame = pd.concat(dfs, axis=0, ignore_index=True)
+        data_df["real_date"] = pd.to_datetime(data_df["real_date"])
+        data_df = data_df[
+            data_df["real_date"].isin(pd.bdate_range(start=start_date, end=end_date))
         ]
-        temp_df["real_date"] = pd.to_datetime(temp_df["real_date"])
+        exprs_f: List[str] = list(data_df["expression"].unique())
+        data_df = data_df.drop(columns=["expression"])
+        data_df = data_df.drop_duplicates(subset=["cid", "xcat", "real_date"])
 
-        # split expression into cid, xcat, and metric using deconstruct_expressions()
-        temp_df[["cid", "xcat", "metric"]] = pd.DataFrame(
-            self.deconstruct_expressions(temp_df["expression"].tolist())
-        )
-        # drop expression column
-        if not self.validate_downloaded_df(
-            expected_expressions=expected_expressions,
-            data_df=temp_df,
-            start_date=start_date,
-            end_date=end_date,
-            verbose=verbose,
-        ):
-            if validate_df:
+        if validate_df:
+            vdf = self.validate_downloaded_df(
+                data_df=data_df,
+                expected_expressions=expected_expressions,
+                found_expressions=exprs_f,
+                start_date=start_date,
+                end_date=end_date,
+                verbose=verbose,
+            )
+            if not vdf:
+                self.downloaded_data: Dict = {
+                    "data_df": data_df,
+                    "expected_expressions": expected_expressions,
+                    "found_expressions": exprs_f,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "downloaded_dicts": dicts_list,
+                }
+
                 raise InvalidDataframeError(
-                    "The downloaded data is not valid. Please check the logs for details."
+                    "The downloaded data is not valid. "
+                    "Please check JPMaQSDownload.downloaded_data "
+                    "(dict) for more information."
                 )
 
-        # form df into long format, with cid, xcat, and <metric> as columns
-        temp_df.drop(columns=["expression"], inplace=True)
-        # use metric as column name, and observation as value
-        return_df = (
-            temp_df.pivot_table(
-                index=["real_date", "cid", "xcat"],
-                columns="metric",
-                values="observation",
-            )
-            .reset_index()
-            .rename_axis(None, axis=1)
-        )
-
-        # only business days should be in the df
-        bdates = pd.bdate_range(
-            start=return_df["real_date"].min(), end=return_df["real_date"].max()
-        )
-        return_df = return_df[return_df["real_date"].isin(bdates)]
-
-        # sort
-        return_df = return_df.sort_values(by=["cid", "xcat", "real_date"]).reset_index(
-            drop=True
-        )
-
-        # format as cid, xcat, real_date, <metric>
-        _metrics = list(
-            set(return_df.columns.tolist()) - set(["cid", "xcat", "real_date"])
-        )
-        return_df = return_df[["cid", "xcat", "real_date"] + _metrics]
-
-        return return_df
+        return data_df
 
     def check_connection(
         self, verbose: bool = False, raise_error: bool = False
@@ -584,6 +564,7 @@ class JPMaQSDownload(object):
                 "Downloading data from JPMaQS.\nTimestamp UTC: ",
                 datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
             )
+            print(f"Number of expressions requested: {len(expressions)}")
             data = dq.download_data(
                 expressions=expressions,
                 start_date=start_date,
@@ -615,8 +596,8 @@ if __name__ == "__main__":
     cids = ["USD", "AUD"]
     xcats = ["EQXR_VT10", "EXALLOPENNESS_NSA_1YMA"]
     metrics = ["value", "grading"]
-    start_date: str = "2020-01-25"
-    end_date: str = "2023-02-05"
+    start_date: str = "2023-03-01"
+    end_date: str = "2023-03-20"
 
     with JPMaQSDownload(
         client_id=client_id,
