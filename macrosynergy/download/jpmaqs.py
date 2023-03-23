@@ -8,6 +8,7 @@ import json
 import traceback as tb
 
 import sys
+
 sys.path.append("/Users/palashtyagi/Work/Code/macrosynergy/")
 
 from macrosynergy.download.dataquery import DataQueryInterface, HeartbeatError
@@ -268,7 +269,6 @@ class JPMaQSDownload(object):
         :raises <TypeError>: if `data_df` is not a dataframe.
         """
 
-
         if not isinstance(data_df, pd.DataFrame):
             raise TypeError("`data_df` must be a dataframe.")
         if data_df.empty:
@@ -307,9 +307,12 @@ class JPMaQSDownload(object):
         nas = data_df.isna().sum(axis=0)
         nas = nas[nas > 0]
         if len(nas) > 0:
-            log_str = (f"Total rows : {len(data_df)} \n"
-            "Some columns have missing values.\n"
-            "Missing values by column:\n" f"{nas.head(10)}")
+            log_str = (
+                f"Total rows : {len(data_df)} \n"
+                "Some columns have missing values.\n"
+                "Missing values by column:\n"
+                f"{nas.head(10)}"
+            )
             logger.warning(log_str)
             if verbose:
                 print(log_str)
@@ -340,28 +343,37 @@ class JPMaQSDownload(object):
         dfs: List[pd.DataFrame] = []
         cid: str
         xcat: str
-        found_expressions : List[str] = []
+        found_expressions: List[str] = []
         for d in dicts_list:
             cid, xcat, metricx = JPMaQSDownload.deconstruct_expression(
                 d["attributes"][0]["expression"]
             )
             found_expressions.append(d["attributes"][0]["expression"])
-            df: pd.DataFrame = pd.DataFrame(
-                d["attributes"][0]["time-series"], columns=["real_date", metricx]
-            ).assign(cid=cid, xcat=xcat, metric=metricx).rename(columns={metricx: "obs"})
+            df: pd.DataFrame = (
+                pd.DataFrame(
+                    d["attributes"][0]["time-series"], columns=["real_date", metricx]
+                )
+                .assign(cid=cid, xcat=xcat, metric=metricx)
+                .rename(columns={metricx: "obs"})
+            )
             df = df[["real_date", "cid", "xcat", "obs", "metric"]]
             dfs.append(df)
 
         final_df: pd.DataFrame = pd.concat(dfs, ignore_index=True)
 
-        final_df = final_df.set_index(["real_date", "cid", "xcat", "metric"])["obs"]\
-            .unstack(3).rename_axis(None, axis=1).reset_index() # thank you @mikiinterfiore
-         
+        final_df = (
+            final_df.set_index(["real_date", "cid", "xcat", "metric"])["obs"]
+            .unstack(3)
+            .rename_axis(None, axis=1)
+            .reset_index()
+        )  # thank you @mikiinterfiore
+
         final_df["real_date"] = pd.to_datetime(final_df["real_date"])
 
-        final_df = final_df[final_df["real_date"].isin(pd.bdate_range(start=start_date, end=end_date))]
+        final_df = final_df[
+            final_df["real_date"].isin(pd.bdate_range(start=start_date, end=end_date))
+        ]
         final_df = final_df.sort_values(["real_date", "cid", "xcat"])
-
 
         if validate_df:
             vdf = self.validate_downloaded_df(
@@ -496,7 +508,7 @@ class JPMaQSDownload(object):
         show_progress=False,
         suppress_warning=True,
         as_dataframe=True,
-    ) -> Union[pd.DataFrame , List[Dict]]:
+    ) -> Union[pd.DataFrame, List[Dict]]:
         """Driver function to download data from JPMaQS via the DataQuery API.
         Timeseries data can be requested using `tickers` with `metrics`, or
         passing formed DataQuery expressions.
@@ -606,7 +618,7 @@ class JPMaQSDownload(object):
                 expected_expressions=expressions,
                 start_date=start_date,
                 end_date=end_date,
-                verbose= not(self.suppress_warning),
+                verbose=not (self.suppress_warning),
             )
             return data_df
         else:
@@ -619,8 +631,28 @@ if __name__ == "__main__":
     client_id = os.environ["JPMAQS_API_CLIENT_ID"]
     client_secret = os.environ["JPMAQS_API_CLIENT_SECRET"]
 
-    cids  = ['AUD', 'BRL', 'CAD', 'CHF', 'CLP', 'CNY', 'COP', 'CZK', 'DEM', 'ESP', 'EUR', 'FRF', 'GBP']
-    xcats = ['RIR_NSA', 'FXXR_NSA', 'FXXR_VT10', 'DU05YXR_NSA', 'DU05YXR_VT10',]
+    cids = [
+        "AUD",
+        "BRL",
+        "CAD",
+        "CHF",
+        "CLP",
+        "CNY",
+        "COP",
+        "CZK",
+        "DEM",
+        "ESP",
+        "EUR",
+        "FRF",
+        "GBP",
+    ]
+    xcats = [
+        "RIR_NSA",
+        "FXXR_NSA",
+        "FXXR_VT10",
+        "DU05YXR_NSA",
+        "DU05YXR_VT10",
+    ]
     metrics = ["all"]
     start_date: str = "2023-03-01"
     end_date: str = "2023-03-20"
