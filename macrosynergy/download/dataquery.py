@@ -11,11 +11,13 @@ import logging
 import itertools
 import base64
 import os
+import uuid
 import io
 import requests
 from typing import List, Optional, Dict
 from datetime import datetime
 from tqdm import tqdm
+from macrosynergy import version as ms_version_info
 
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 OAUTH_BASE_URL: str = (
@@ -126,12 +128,12 @@ def request_wrapper(
     headers: Optional[Dict] = None,
     params: Optional[Dict] = None,
     method: str = "get",
+    tracking_id: Optional[str] = None,
     **kwargs,
 ) -> dict:
     """
     Wrapper for requests.request() that handles retries and logging.
-    All paramaters and kwargs are passed to requests.request() (except for
-    "tracking_id", which is used for logging purposes only).
+    All paramaters and kwargs are passed to requests.request().
 
     :param <str> url: URL to request.
     :param <dict> headers: headers to pass to requests.request().
@@ -150,15 +152,26 @@ def request_wrapper(
     :raises <Exception>: other exceptions may be raised by requests.request().
     """
 
-    tracking_id = kwargs.pop("tracking_id", "")
     if not method in ["get", "post"]:
         raise ValueError(f"Invalid method: {method}")
 
-    log_url = form_full_url(url, params)
+    # insert tracking info in headers
+    if headers is None:
+        headers: Dict = {}
+    headers["User-Agent"] = f"MacrosynergyPackage/{ms_version_info.full_version}"
+
+    uuid_str: str = str(uuid.uuid4())
+    if (tracking_id is None) or (tracking_id == ""):
+        tracking_id = uuid_str
+    else:
+        tracking_id = f"uuid::{uuid_str}::{tracking_id}"
+
+    headers["X-Tracking-Id"] = tracking_id
+
+    log_url: str = form_full_url(url, params)
     logger.info(f"Requesting URL: {log_url} , tracking_id: {tracking_id}")
 
-    retry_count = 0
-    # if kwards contains "tracking_id", use that, otherwise generate a new one
+    retry_count: int = 0
     while retry_count < API_RETRY_COUNT:
         try:
             response = requests.request(
@@ -298,7 +311,7 @@ class OAuth(object):
                 data=self.token_data,
                 method="post",
                 proxies=self.proxy,
-                tracking_id="get_oauth_token",
+                tracking_id="oauth",
             )
             time.sleep(API_DELAY_PARAM)
             # TODO : Is sleep needed here?
@@ -636,7 +649,6 @@ class DataQueryInterface(object):
         reference_data: str,
         retry_counter: int,
         delay_param: int,
-        tracking_id: str,
     ):
         """
         Validate the arguments passed to the download_data method.
@@ -703,9 +715,6 @@ class DataQueryInterface(object):
             if not isinstance(varx, str):
                 raise TypeError(f"`{namex}` must be a string.")
 
-        if not isinstance(tracking_id, str) and tracking_id is not None:
-            raise TypeError("`tracking_id` must be a string or None.")
-
         return True
 
     def download_data(
@@ -722,7 +731,6 @@ class DataQueryInterface(object):
         reference_data: str = "NO_REFERENCE_DATA",
         retry_counter: int = 0,
         delay_param: float = API_DELAY_PARAM,
-        tracking_id: str = None,
         # filter_from_catalogue: bool = True,
     ) -> List[Dict]:
         """
@@ -742,8 +750,6 @@ class DataQueryInterface(object):
         :param <str> reference_data: reference data to pass to the API kwargs.
         :param <int> retry_counter: number of times the download has been retried.
         :param <float> delay_param: delay between requests to the API.
-        :param <str> tracking_id: Optional tracking ID to use for the download
-            (used for debugging purposes)(default : YYYYMMDD_HHMMSS-OS.PID).
 
         :return <List[Dict]>: list of dictionaries containing the response data.
 
@@ -753,7 +759,7 @@ class DataQueryInterface(object):
         :raises <ConnectionError(HeartbeatError)>: if the heartbeat fails.
         :raises <Exception>: other exceptions may be raised by underlying functions.
         """
-
+        tracking_id: str = "timeseries"
         if end_date is None:
             end_date = datetime.today().strftime("%Y-%m-%d")
             # NOTE : if "future dates" are passed, they must be passed by parent functions
@@ -772,15 +778,11 @@ class DataQueryInterface(object):
             reference_data=reference_data,
             retry_counter=retry_counter,
             delay_param=delay_param,
-            tracking_id=tracking_id,
         )
 
         # remove dashes from dates to match DQ format
         start_date = start_date.replace("-", "")
         end_date = end_date.replace("-", "")
-
-        if tracking_id is None:
-            tracking_id = f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}-{os.getpid()}"
 
         if retry_counter > HL_RETRY_COUNT:
             raise DownloadError(
@@ -839,7 +841,7 @@ class DataQueryInterface(object):
                             url=self.access_method.base_url + endpoint,
                             params=curr_params,
                             proxy=self.proxy,
-                            tracking_id=f"request_{ib}",
+                            tracking_id=tracking_id,
                         )
                     )
                     time.sleep(delay_param)
@@ -850,8 +852,7 @@ class DataQueryInterface(object):
                     total=len(future_objects),
                 ):
                     try:
-                        result = future.result()
-                        download_outputs.append(result)
+                        download_outputs.append(future.result())
                     except Exception as exc:
                         if isinstance(exc, (KeyboardInterrupt, AuthenticationError)):
                             raise exc
@@ -878,7 +879,7 @@ class DataQueryInterface(object):
                         url=self.access_method.base_url + endpoint,
                         params=curr_params,
                         proxy=self.proxy,
-                        tracking_id=f"request_{ib}",
+                        tracking_id=tracking_id,
                     )
                     download_outputs.append(result)
                 except Exception as exc:

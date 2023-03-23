@@ -6,11 +6,6 @@ import warnings
 import yaml
 import json
 import traceback as tb
-
-import sys
-
-sys.path.append("/Users/palashtyagi/Work/Code/macrosynergy/")
-
 from macrosynergy.download.dataquery import DataQueryInterface, HeartbeatError
 import datetime
 import logging
@@ -308,8 +303,8 @@ class JPMaQSDownload(object):
         nas = nas[nas > 0]
         if len(nas) > 0:
             log_str = (
-                f"Total rows : {len(data_df)} \n"
                 "Some columns have missing values.\n"
+                f"Total rows : {len(data_df)} \n"
                 "Missing values by column:\n"
                 f"{nas.head(10)}"
             )
@@ -374,6 +369,13 @@ class JPMaQSDownload(object):
             final_df["real_date"].isin(pd.bdate_range(start=start_date, end=end_date))
         ]
         final_df = final_df.sort_values(["real_date", "cid", "xcat"])
+
+        found_metrics = sorted(
+            list(set(final_df.columns) - {"real_date", "cid", "xcat"}),
+            key=lambda x: self.valid_metrics.index(x),
+        )
+        # sort found_metrics in the order of self.valid_metrics, then re-order the columns
+        final_df = final_df[["real_date", "cid", "xcat"] + found_metrics]
 
         if validate_df:
             vdf = self.validate_downloaded_df(
@@ -602,6 +604,7 @@ class JPMaQSDownload(object):
                 "Downloading data from JPMaQS.\nTimestamp UTC: ",
                 datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
             )
+            self.dq_interface.check_connection(verbose=True)
             print(f"Number of expressions requested: {len(expressions)}")
             data = dq.download_data(
                 expressions=expressions,
@@ -662,8 +665,6 @@ if __name__ == "__main__":
         client_secret=client_secret,
         debug=True,
     ) as jpmaqs:
-        jpmaqs.check_connection(verbose=True)
-
         data = jpmaqs.download(
             cids=cids,
             xcats=xcats,
