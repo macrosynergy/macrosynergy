@@ -622,12 +622,7 @@ class JPMaQSDownload(object):
 
             if len(self.dq_interface.msg_errors) > 0:
                 self.msg_errors += self.dq_interface.msg_errors
-                if not self.suppress_warning:
-                    print(
-                        f"WARNING: {len(self.dq_interface.msg_errors)} errors encountered.\n "
-                        "Errors did not compromise the download. "
-                        "Check jpmaqs.msg_errors for more.")
-                    
+
             if len(self.dq_interface.msg_warnings) > 0:
                 self.msg_warnings += self.dq_interface.msg_warnings
 
@@ -654,6 +649,12 @@ class JPMaQSDownload(object):
             print(f"Time taken to download data: \t{download_time_taken:.2f} seconds.")
             if as_dataframe:
                 print(f"Time taken to convert to dataframe: \t{dfs_time_taken:.2f} seconds.")
+
+        if len(self.msg_errors) > 0:
+            if not (self.suppress_warning):
+                print(f"{len(self.msg_errors)} errors encountered during the download. \n"
+                    f"The errors did not compromise the download. \n"
+                    f"Please check `JPMaQSDownload.msg_errors` for more information.")
             
         return data
 
