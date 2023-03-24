@@ -504,17 +504,18 @@ class JPMaQSDownload(object):
 
     def download(
         self,
-        tickers=None,
-        cids=None,
-        xcats=None,
-        metrics=["value"],
-        start_date="2000-01-01",
-        end_date=None,
-        expressions=None,
-        show_progress=False,
-        suppress_warning=True,
-        as_dataframe=True,
-        report_time_taken=False,
+        tickers : Optional[List[str]] = None,
+        cids : Optional[List[str]] = None,
+        xcats : Optional[List[str]] = None,
+        metrics : List[str] = ["value"],
+        start_date  : str = "2000-01-01",
+        end_date : Optional[str] = None,
+        expressions : Optional[List[str]] = None,
+        show_progress : bool = True,
+        debug : bool = False,
+        suppress_warning : bool = False,
+        as_dataframe : bool = True,
+        report_time_taken : bool = True,
     ) -> Union[pd.DataFrame, List[Dict]]:
         """Driver function to download data from JPMaQS via the DataQuery API.
         Timeseries data can be requested using `tickers` with `metrics`, or
@@ -536,7 +537,8 @@ class JPMaQSDownload(object):
             False if not (default).
         :param <bool> suppress_warning: True if suppressing warnings. Default
             is True.
-        :param <bool> debug: True if debug mode, False if not (default).
+        :param <bool> debug: Override the debug behaviour of the JPMaQSDownload
+            class. If True, debug mode is enabled.
         :param <bool> print_debug_data: True if debug data should be printed,
             False if not (default). If debug=True, this is set to True.
         :param <bool> as_dataframe: Return a dataframe if True (default),
@@ -551,8 +553,9 @@ class JPMaQSDownload(object):
 
         """
 
-        # override the default warning behaviour
+        # override the default warning behaviour and debug behaviour
         self.suppress_warning = suppress_warning
+        self.debug = debug
 
         if all([_arg is None for _arg in [tickers, cids, xcats, expressions]]):
             cids = ["USD", "AUD"]
