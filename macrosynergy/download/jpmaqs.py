@@ -181,6 +181,7 @@ class JPMaQSDownload(object):
             )
         self.valid_metrics  : List[str] = ["value", "grading", "eop_lag", "mop_lag"]
         self.msg_errors : List[str] = []
+        self.downloaded_data : Dict = {}
 
         if self._check_connection:
             self.check_connection()
