@@ -17,10 +17,7 @@ import requests
 from typing import List, Optional, Dict
 from datetime import datetime
 from tqdm import tqdm
-# from macrosynergy import version as ms_version_info
-
 from macrosynergy import __version__ as ms_version_info
-
 
 
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
@@ -180,7 +177,8 @@ def request_wrapper(
 
     log_url: str = form_full_url(url, params)
     logger.info(f"Requesting URL: {log_url} , tracking_id: {tracking_id}")
-
+    raised_exceptions: List[Exception] = []
+    error_statement: str = ""
     retry_count: int = 0
     while retry_count < API_RETRY_COUNT:
         try:
@@ -191,6 +189,7 @@ def request_wrapper(
 
         except Exception as exc:
             # if keyboard interrupt, raise as usual
+            raised_exceptions.append(exc)
             if isinstance(exc, KeyboardInterrupt):
                 print("KeyboardInterrupt -- halting download")
                 raise exc
@@ -220,6 +219,8 @@ def request_wrapper(
                 requests.exceptions.InvalidURL,
                 requests.exceptions.InvalidSchema,
                 requests.exceptions.ChunkedEncodingError,
+                # NOTE : HeartBeat is a special case
+                HeartbeatError,
             ]
 
             if any([isinstance(exc, e) for e in known_exceptions]):
@@ -229,9 +230,15 @@ def request_wrapper(
             else:
                 raise exc
 
+    if isinstance(raised_exceptions[-1], HeartbeatError):
+        raise HeartbeatError(error_statement)
+
+    errs_str = "\n".join(["\t" + str(e) for e in raised_exceptions])
     raise DownloadError(
-        f"Request to {log_url} failed with status code {response.status_code}. "
-        "No longer retrying."
+        f"Request to {log_url} failed with status code {response.status_code}.\n"
+        "No longer retrying.\n"
+        "Exceptions raised:\n"
+        f"{errs_str}"
     )
 
 
@@ -559,17 +566,17 @@ class DataQueryInterface(object):
             is successful. Useful for debugging. Defaults to False.
 
         :return <bool>: True if the connection is successful, False otherwise.
-        
+
         :raises <HeartbeatError>: if the heartbeat fails.
         """
 
         try:
             js = self.access_method._request(
-            url=self.access_method.base_url + HEARTBEAT_ENDPOINT,
-            params={"data": "NO_REFERENCE_DATA"},
-            proxy=self.proxy,
-            tracking_id=HEARTBEAT_TRACKING_ID,
-        )
+                url=self.access_method.base_url + HEARTBEAT_ENDPOINT,
+                params={"data": "NO_REFERENCE_DATA"},
+                proxy=self.proxy,
+                tracking_id=HEARTBEAT_TRACKING_ID,
+            )
         except Exception as e:
             if isinstance(e, KeyboardInterrupt):
                 raise e
@@ -734,23 +741,25 @@ class DataQueryInterface(object):
                 raise TypeError(f"`{namex}` must be a string.")
 
         return True
-    
+
     def get_unavailable_expressions(
-            self,
-            expected_exprs: List[str],
-            dicts_list: List[Dict],
-        ) -> List[str]:
+        self,
+        expected_exprs: List[str],
+        dicts_list: List[Dict],
+    ) -> List[str]:
         """
         Method to get the expressions that are not available in the response.
-        Looks at the dict["attributes"][0]["expression"] field of each dict 
+        Looks at the dict["attributes"][0]["expression"] field of each dict
         in the list.
 
         :param <List[str]> expected_exprs: list of expressions that were requested.
         :param <List[Dict]> dicts_list: list of dicts to search for the expressions.
-        
+
         :return <List[str]>: list of expressions that were not found in the dicts.
         """
-        found_exprs: List[str] = [curr_dict["attributes"][0]["expression"] for curr_dict in dicts_list]
+        found_exprs: List[str] = [
+            curr_dict["attributes"][0]["expression"] for curr_dict in dicts_list
+        ]
         return list(set(expected_exprs) - set(found_exprs))
 
     def download_data(
@@ -800,6 +809,10 @@ class DataQueryInterface(object):
             end_date = datetime.today().strftime("%Y-%m-%d")
             # NOTE : if "future dates" are passed, they must be passed by parent functions
             # see jpmaqs.py
+
+        # NOTE : args validated only on first call, not on retries
+        # this is because the args can be modified by the retry mechanism
+        # (eg. date format)
         if retry_counter == 0:
             self.validate_download_args(
                 expressions=expressions,

@@ -179,11 +179,11 @@ class JPMaQSDownload(object):
                 proxy=proxy,
                 **kwargs,
             )
-        self.valid_metrics  : List[str] = ["value", "grading", "eop_lag", "mop_lag"]
-        self.msg_errors : List[str] = []
-        self.msg_warnings : List[str] = []
-        self.unavailable_expressions : List[str] = []
-        self.downloaded_data : Dict = {}
+        self.valid_metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+        self.msg_errors: List[str] = []
+        self.msg_warnings: List[str] = []
+        self.unavailable_expressions: List[str] = []
+        self.downloaded_data: Dict = {}
 
         if self._check_connection:
             self.check_connection()
@@ -603,7 +603,7 @@ class JPMaQSDownload(object):
         )
 
         # Download data.
-        download_time_taken : float = timer()
+        download_time_taken: float = timer()
         data: List[Dict] = []
         with self.dq_interface as dq:
             print(
@@ -627,12 +627,13 @@ class JPMaQSDownload(object):
                 self.msg_warnings += self.dq_interface.msg_warnings
 
             if len(self.dq_interface.unavailable_expressions) > 0:
-                self.unavailable_expressions += self.dq_interface.unavailable_expressions
+                self.unavailable_expressions += (
+                    self.dq_interface.unavailable_expressions
+                )
 
-        download_time_taken : float = timer() - download_time_taken
-        dfs_time_taken : float = timer()
+        download_time_taken: float = timer() - download_time_taken
+        dfs_time_taken: float = timer()
         if as_dataframe:
-
             data_df: pd.DataFrame = self.time_series_to_df(
                 dicts_list=data,
                 validate_df=True,
@@ -642,23 +643,25 @@ class JPMaQSDownload(object):
                 verbose=not (self.suppress_warning),
             )
             data = data_df
-        
-        dfs_time_taken : float = timer() - dfs_time_taken
-        
+
+        dfs_time_taken: float = timer() - dfs_time_taken
+
         if report_time_taken:
             print(f"Time taken to download data: \t{download_time_taken:.2f} seconds.")
             if as_dataframe:
-                print(f"Time taken to convert to dataframe: \t{dfs_time_taken:.2f} seconds.")
+                print(
+                    f"Time taken to convert to dataframe: \t{dfs_time_taken:.2f} seconds."
+                )
 
         if len(self.msg_errors) > 0:
             if not (self.suppress_warning):
-                print(f"{len(self.msg_errors)} errors encountered during the download. \n"
+                print(
+                    f"{len(self.msg_errors)} errors encountered during the download. \n"
                     f"The errors did not compromise the download. \n"
-                    f"Please check `JPMaQSDownload.msg_errors` for more information.")
-            
-        return data
+                    f"Please check `JPMaQSDownload.msg_errors` for more information."
+                )
 
-            
+        return data
 
 
 if __name__ == "__main__":
