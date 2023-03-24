@@ -35,6 +35,9 @@ HL_RETRY_COUNT: int = 5  # retry count for "high-level" requests
 API_EXPR_LIMIT: int = 20  # 20 is the max number of expressions per API call
 HEARTBEAT_ENDPOINT: str = "/services/heartbeat"
 TIMESERIES_ENDPOINT: str = "/expressions/time-series"
+HEARTBEAT_TRACKING_ID: str = "heartbeat"
+OAUTH_TRACKING_ID: str = "oauth"
+TIMESERIES_TRACKING_ID: str = "timeseries"
 
 logger = logging.getLogger(__name__)
 debug_stream_handler = logging.StreamHandler(io.StringIO())
@@ -105,6 +108,9 @@ def validate_response(response: requests.Response) -> dict:
     else:
         if response.status_code == 401:
             raise AuthenticationError(error_str)
+
+        if HEARTBEAT_ENDPOINT in response.request.url:
+            raise HeartbeatError(error_str)
 
         raise InvalidResponseError(
             f"Request did not return a 200 status code.\n{error_str}"
@@ -315,7 +321,7 @@ class OAuth(object):
                 data=self.token_data,
                 method="post",
                 proxies=self.proxy,
-                tracking_id="oauth",
+                tracking_id=OAUTH_TRACKING_ID,
             )
             time.sleep(API_DELAY_PARAM)
             # TODO : Is sleep needed here?
@@ -553,16 +559,23 @@ class DataQueryInterface(object):
             is successful. Useful for debugging. Defaults to False.
 
         :return <bool>: True if the connection is successful, False otherwise.
+        
+        :raises <HeartbeatError>: if the heartbeat fails.
         """
 
-        js = self.access_method._request(
+        try:
+            js = self.access_method._request(
             url=self.access_method.base_url + HEARTBEAT_ENDPOINT,
             params={"data": "NO_REFERENCE_DATA"},
             proxy=self.proxy,
-            tracking_id="heartbeat",
+            tracking_id=HEARTBEAT_TRACKING_ID,
         )
-        # if "info" not in js:
-        #   raise ConnectionError(HeartbeatError("Heartbeat failed."))
+        except Exception as e:
+            if isinstance(e, KeyboardInterrupt):
+                raise e
+            if isinstance(e, HeartbeatError):
+                raise e
+
         result = "info" in js
         if verbose:
             print("Heartbeat successful!" if result else "Heartbeat failed.")
@@ -782,7 +795,7 @@ class DataQueryInterface(object):
         :raises <ConnectionError(HeartbeatError)>: if the heartbeat fails.
         :raises <Exception>: other exceptions may be raised by underlying functions.
         """
-        tracking_id: str = "timeseries"
+        tracking_id: str = TIMESERIES_TRACKING_ID
         if end_date is None:
             end_date = datetime.today().strftime("%Y-%m-%d")
             # NOTE : if "future dates" are passed, they must be passed by parent functions
