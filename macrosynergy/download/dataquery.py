@@ -768,21 +768,21 @@ class DataQueryInterface(object):
             end_date = datetime.today().strftime("%Y-%m-%d")
             # NOTE : if "future dates" are passed, they must be passed by parent functions
             # see jpmaqs.py
-
-        self.validate_download_args(
-            expressions=expressions,
-            start_date=start_date,
-            end_date=end_date,
-            show_progress=show_progress,
-            endpoint=endpoint,
-            calender=calender,
-            frequency=frequency,
-            conversion=conversion,
-            nan_treatment=nan_treatment,
-            reference_data=reference_data,
-            retry_counter=retry_counter,
-            delay_param=delay_param,
-        )
+        if retry_counter == 0:
+            self.validate_download_args(
+                expressions=expressions,
+                start_date=start_date,
+                end_date=end_date,
+                show_progress=show_progress,
+                endpoint=endpoint,
+                calender=calender,
+                frequency=frequency,
+                conversion=conversion,
+                nan_treatment=nan_treatment,
+                reference_data=reference_data,
+                retry_counter=retry_counter,
+                delay_param=delay_param,
+            )
 
         # remove dashes from dates to match DQ format
         start_date = start_date.replace("-", "")
