@@ -18,11 +18,8 @@ from typing import List, Optional, Dict
 from datetime import datetime
 from tqdm import tqdm
 # from macrosynergy import version as ms_version_info
-try:
-    from ...setup import VERSION as ms_version_info
-except ImportError:
-    from macrosynergy import version as msvi
-    ms_version_info : str = msvi.full_version
+
+from macrosynergy import __version__ as ms_version_info
 
 
 
