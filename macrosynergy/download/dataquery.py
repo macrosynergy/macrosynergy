@@ -491,6 +491,7 @@ class DataQueryInterface(object):
         self.heartbeat: bool = heartbeat
         self.msg_errors: List[str] = []
         self.msg_warnings: List[str] = []
+        self.unavailable_expressions: List[str] = []
         self.debug: bool = debug
         self.concurrent: bool = concurrent
         self.suppress_warnings: bool = suppress_warnings
@@ -720,6 +721,24 @@ class DataQueryInterface(object):
                 raise TypeError(f"`{namex}` must be a string.")
 
         return True
+    
+    def get_unavailable_expressions(
+            self,
+            expected_exprs: List[str],
+            dicts_list: List[Dict],
+        ) -> List[str]:
+        """
+        Method to get the expressions that are not available in the response.
+        Looks at the dict["attributes"][0]["expression"] field of each dict 
+        in the list.
+
+        :param <List[str]> expected_exprs: list of expressions that were requested.
+        :param <List[Dict]> dicts_list: list of dicts to search for the expressions.
+        
+        :return <List[str]>: list of expressions that were not found in the dicts.
+        """
+        found_exprs: List[str] = [curr_dict["attributes"][0]["expression"] for curr_dict in dicts_list]
+        return list(set(expected_exprs) - set(found_exprs))
 
     def download_data(
         self,
@@ -921,6 +940,8 @@ class DataQueryInterface(object):
             )
 
         final_output += retried_output  # extend retried output
+
+        self.unavailable_expressions += self.get_unavailable_expressions(final_output)
 
         return final_output
 

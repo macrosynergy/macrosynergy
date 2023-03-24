@@ -181,6 +181,8 @@ class JPMaQSDownload(object):
             )
         self.valid_metrics  : List[str] = ["value", "grading", "eop_lag", "mop_lag"]
         self.msg_errors : List[str] = []
+        self.msg_warnings : List[str] = []
+        self.unavailable_expressions : List[str] = []
         self.downloaded_data : Dict = {}
 
         if self._check_connection:
@@ -625,6 +627,12 @@ class JPMaQSDownload(object):
                         f"WARNING: {len(self.dq_interface.msg_errors)} errors encountered.\n "
                         "Errors did not compromise the download. "
                         "Check jpmaqs.msg_errors for more.")
+                    
+            if len(self.dq_interface.msg_warnings) > 0:
+                self.msg_warnings += self.dq_interface.msg_warnings
+
+            if len(self.dq_interface.unavailable_expressions) > 0:
+                self.unavailable_expressions += self.dq_interface.unavailable_expressions
 
         download_time_taken : float = timer() - download_time_taken
         dfs_time_taken : float = timer()
