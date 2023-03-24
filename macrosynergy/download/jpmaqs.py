@@ -179,7 +179,8 @@ class JPMaQSDownload(object):
                 proxy=proxy,
                 **kwargs,
             )
-        self.valid_metrics = ["value", "grading", "eop_lag", "mop_lag"]
+        self.valid_metrics  : List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+        self.msg_errors : List[str] = []
 
         if self._check_connection:
             self.check_connection()
@@ -510,6 +511,7 @@ class JPMaQSDownload(object):
         show_progress=False,
         suppress_warning=True,
         as_dataframe=True,
+        report_time_taken=False,
     ) -> Union[pd.DataFrame, List[Dict]]:
         """Driver function to download data from JPMaQS via the DataQuery API.
         Timeseries data can be requested using `tickers` with `metrics`, or
@@ -598,6 +600,7 @@ class JPMaQSDownload(object):
         )
 
         # Download data.
+        download_time_taken : float = timer()
         data: List[Dict] = []
         with self.dq_interface as dq:
             print(
@@ -614,7 +617,18 @@ class JPMaQSDownload(object):
                 **self.dq_download_kwargs,
             )
 
+            if len(self.dq_interface.msg_errors) > 0:
+                self.msg_errors += self.dq_interface.msg_errors
+                if not self.suppress_warning:
+                    print(
+                        f"WARNING: {len(self.dq_interface.msg_errors)} errors encountered.\n "
+                        "Errors did not compromise the download. "
+                        "Check jpmaqs.msg_errors for more.")
+
+        download_time_taken : float = timer() - download_time_taken
+        dfs_time_taken : float = timer()
         if as_dataframe:
+
             data_df: pd.DataFrame = self.time_series_to_df(
                 dicts_list=data,
                 validate_df=True,
@@ -623,9 +637,18 @@ class JPMaQSDownload(object):
                 end_date=end_date,
                 verbose=not (self.suppress_warning),
             )
-            return data_df
-        else:
-            return data
+            data = data_df
+        
+        dfs_time_taken : float = timer() - dfs_time_taken
+        
+        if report_time_taken:
+            print(f"Time taken to download data: \t{download_time_taken:.2f} seconds.")
+            if as_dataframe:
+                print(f"Time taken to convert to dataframe: \t{dfs_time_taken:.2f} seconds.")
+            
+        return data
+
+            
 
 
 if __name__ == "__main__":
