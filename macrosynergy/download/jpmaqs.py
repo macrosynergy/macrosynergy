@@ -504,18 +504,18 @@ class JPMaQSDownload(object):
 
     def download(
         self,
-        tickers : Optional[List[str]] = None,
-        cids : Optional[List[str]] = None,
-        xcats : Optional[List[str]] = None,
-        metrics : List[str] = ["value"],
-        start_date  : str = "2000-01-01",
-        end_date : Optional[str] = None,
-        expressions : Optional[List[str]] = None,
-        show_progress : bool = True,
-        debug : bool = False,
-        suppress_warning : bool = False,
-        as_dataframe : bool = True,
-        report_time_taken : bool = True,
+        tickers: Optional[List[str]] = None,
+        cids: Optional[List[str]] = None,
+        xcats: Optional[List[str]] = None,
+        metrics: List[str] = ["value"],
+        start_date: str = "2000-01-01",
+        end_date: Optional[str] = None,
+        expressions: Optional[List[str]] = None,
+        show_progress: bool = True,
+        debug: bool = False,
+        suppress_warning: bool = False,
+        as_dataframe: bool = True,
+        report_time_taken: bool = True,
     ) -> Union[pd.DataFrame, List[Dict]]:
         """Driver function to download data from JPMaQS via the DataQuery API.
         Timeseries data can be requested using `tickers` with `metrics`, or

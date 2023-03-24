@@ -967,7 +967,9 @@ class DataQueryInterface(object):
 
         final_output += retried_output  # extend retried output
 
-        self.unavailable_expressions += self.get_unavailable_expressions(final_output)
+        self.unavailable_expressions += self.get_unavailable_expressions(
+            expected_exprs=expressions, dicts_list=final_output
+        )
 
         return final_output
 
