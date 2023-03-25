@@ -578,10 +578,7 @@ class DataQueryInterface(object):
                 tracking_id=HEARTBEAT_TRACKING_ID,
             )
         except Exception as e:
-            if isinstance(e, KeyboardInterrupt):
-                raise e
-            if isinstance(e, HeartbeatError):
-                raise e
+            raise e
 
         result = "info" in js
         if verbose:
