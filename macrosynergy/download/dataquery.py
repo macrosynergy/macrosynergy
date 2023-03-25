@@ -569,7 +569,7 @@ class DataQueryInterface(object):
 
         :raises <HeartbeatError>: if the heartbeat fails.
         """
-
+        js : dict = {}
         try:
             js = self.access_method._request(
                 url=self.access_method.base_url + HEARTBEAT_ENDPOINT,
