@@ -831,6 +831,11 @@ class DataQueryInterface(object):
                 retry_counter=retry_counter,
                 delay_param=delay_param,
             )
+            # if end_date is before start_date, swap them
+            if datetime.strptime(end_date, "%Y-%m-%d") < datetime.strptime(
+                start_date, "%Y-%m-%d"
+            ):
+                start_date, end_date = end_date, start_date
 
         # remove dashes from dates to match DQ format
         start_date = start_date.replace("-", "")
