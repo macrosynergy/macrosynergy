@@ -178,18 +178,20 @@ def request_wrapper(
     log_url: str = form_full_url(url, params)
     logger.info(f"Requesting URL: {log_url} , tracking_id: {tracking_id}")
     raised_exceptions: List[Exception] = []
+    error_statements : List[str] = []
     error_statement: str = ""
     retry_count: int = 0
+    response: Optional[requests.Response] = None
     while retry_count < API_RETRY_COUNT:
         try:
             response = requests.request(
                 method, url, headers=headers, params=params, **kwargs
             )
-            return validate_response(response)
+            if isinstance(response, requests.Response):
+                return validate_response(response)
 
         except Exception as exc:
             # if keyboard interrupt, raise as usual
-            raised_exceptions.append(exc)
             if isinstance(exc, KeyboardInterrupt):
                 print("KeyboardInterrupt -- halting download")
                 raise exc
@@ -198,14 +200,13 @@ def request_wrapper(
             if isinstance(exc, AuthenticationError):
                 raise exc
 
-            # NOTE: exceptions that need the code to break should be caught before this
-            # all other exceptions are caught here and retried after a delay
-
             error_statement = (
                 f"Request to {log_url} failed with error {exc}. "
                 f"Retry count: {retry_count}. "
                 f"Tracking ID: {tracking_id}"
             )
+            raised_exceptions.append(exc)
+            error_statements.append(error_statement)
 
             known_exceptions = [
                 requests.exceptions.ConnectionError,
@@ -222,6 +223,8 @@ def request_wrapper(
                 # NOTE : HeartBeat is a special case
                 HeartbeatError,
             ]
+            # NOTE: exceptions that need the code to break should be caught before this
+            # all other exceptions are caught here and retried after a delay
 
             if any([isinstance(exc, e) for e in known_exceptions]):
                 logger.warning(error_statement)
@@ -233,14 +236,17 @@ def request_wrapper(
     if isinstance(raised_exceptions[-1], HeartbeatError):
         raise HeartbeatError(error_statement)
 
-    errs_str = "\n".join(["\t" + str(e) for e in raised_exceptions])
-    raise DownloadError(
-        f"Request to {log_url} failed with status code {response.status_code}.\n"
-        "No longer retrying.\n"
-        "Exceptions raised:\n"
-        f"{errs_str}"
-    )
+    errs_str = "\n\n".join(("\t" + str(e) + " - \n\t\t" + est) 
+                            for e, est in zip(raised_exceptions, error_statements))
 
+    e_str = f"Request to {log_url} failed with error {raised_exceptions[-1]}. \n"
+    e_str += '-'*20 + '\n'
+    if isinstance(response, requests.Response):
+        e_str += f" Status code: {response.status_code}."
+    e_str +=(f" No longer retrying. Tracking ID: {tracking_id}"
+                f"Exceptions raised:\n{errs_str}")
+
+    raise DownloadError(e_str)
 
 class OAuth(object):
     """
