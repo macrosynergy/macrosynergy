@@ -621,7 +621,7 @@ class DataQueryInterface(object):
         current_params: Dict = params.copy()
         get_pagination: bool = True
         log_url: str = form_full_url(curr_url, current_params)
-
+        curr_response : Optional[Dict] = None
         while get_pagination:
             curr_response: Dict = self.access_method._request(
                 url=url,
