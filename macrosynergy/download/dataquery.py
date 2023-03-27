@@ -29,6 +29,7 @@ OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
 API_DELAY_PARAM: float = 0.3  # 300ms delay between requests
 API_RETRY_COUNT: int = 5  # retry count for transient errors
 HL_RETRY_COUNT: int = 5  # retry count for "high-level" requests
+MAX_CONTINUOUS_FAILURES: int = 5  # max number of continuous errors before stopping
 API_EXPR_LIMIT: int = 20  # 20 is the max number of expressions per API call
 HEARTBEAT_ENDPOINT: str = "/services/heartbeat"
 TIMESERIES_ENDPOINT: str = "/expressions/time-series"
@@ -902,6 +903,9 @@ class DataQueryInterface(object):
                         )
                     )
                     time.sleep(delay_param)
+
+                continuous_failures: int = 0
+                last_five_exc : List[Exception] = []
                 for ib, future in tqdm(
                     enumerate(future_objects),
                     desc="Downloading data",
@@ -910,6 +914,7 @@ class DataQueryInterface(object):
                 ):
                     try:
                         download_outputs.append(future.result())
+                        continuous_failures = 0
                     except Exception as exc:
                         if isinstance(exc, (KeyboardInterrupt, AuthenticationError)):
                             raise exc
@@ -918,6 +923,14 @@ class DataQueryInterface(object):
                             self.msg_errors.append(
                                 f"Batch {ib} failed with exception: {exc}"
                             )
+                            continuous_failures += 1
+                            last_five_exc.append(exc)
+                            if continuous_failures > MAX_CONTINUOUS_FAILURES:
+                                exc_str : str = "\n".join([str(e) for e in last_five_exc])
+                                raise DownloadError(
+                                    f"Failed {continuous_failures} times to download data."
+                                    f" Last five exceptions: \n{exc_str}"
+                                )
                             if self.debug:
                                 raise exc
                             else:
