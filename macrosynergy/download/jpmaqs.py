@@ -6,7 +6,12 @@ import warnings
 import yaml
 import json
 import traceback as tb
-from macrosynergy.download.dataquery import DataQueryInterface, HeartbeatError
+from macrosynergy.download.dataquery import DataQueryInterface
+from macrosynergy.download.exceptions import (
+    HeartbeatError,
+    InvalidDataframeError,
+    MissingDataError,
+)
 import datetime
 import logging
 import io
@@ -48,14 +53,6 @@ def oauth_credential_loader(path_to_credentials: str) -> dict:
     credentials = {"client_id": client_id, "client_secret": client_secret}
 
     return credentials
-
-
-class InvalidDataframeError(Exception):
-    """Raised when a dataframe is not valid."""
-
-
-class MissingDataError(Exception):
-    """Raised when data is missing from a requested dataframe."""
 
 
 class JPMaQSDownload(object):
@@ -234,14 +231,25 @@ class JPMaQSDownload(object):
             each element will be deconstructed and returned as a list of lists.
 
         :return <list[str]>: list of cid, xcat, and metric.
+
+        :raises TypeError: if `expression` is not a string or a list of strings.
+        :raises ValueError: if `expression` is an empty list.
         """
+        if not isinstance(expression, (str, list)):
+            raise TypeError("`expression` must be a string or a list of strings.")
 
         if isinstance(expression, list):
+            if not all(isinstance(exprx, str) for exprx in expression):
+                raise TypeError("All elements of `expression` must be strings.")
+            elif len(expression) == 0:
+                raise ValueError("`expression` must be a non-empty list.")
             return [
                 JPMaQSDownload.deconstruct_expression(exprx) for exprx in expression
             ]
         else:
-            exprx = expression.replace("DB(JPMAQS,", "").replace(")", "")
+            exprx: str = expression.replace("DB(JPMAQS,", "").replace(")", "")
+            ticker: str
+            metric: str
             ticker, metric = exprx.split(",")
             return ticker.split("_", 1) + [metric]
 
@@ -672,8 +680,8 @@ class JPMaQSDownload(object):
 if __name__ == "__main__":
     import os
 
-    client_id = os.environ["JPMAQS_API_CLIENT_ID"]
-    client_secret = os.environ["JPMAQS_API_CLIENT_SECRET"]
+    # client_id = os.environ["JPMAQS_API_CLIENT_ID"]
+    # client_secret = os.environ["JPMAQS_API_CLIENT_SECRET"]
 
     cids = [
         "AUD",
@@ -702,8 +710,9 @@ if __name__ == "__main__":
     end_date: str = "2023-03-20"
 
     with JPMaQSDownload(
-        client_id=client_id,
-        client_secret=client_secret,
+        # client_id=client_id,
+        # client_secret=client_secret,
+        oauth_config="./config.yml",
         debug=True,
     ) as jpmaqs:
         data = jpmaqs.download(

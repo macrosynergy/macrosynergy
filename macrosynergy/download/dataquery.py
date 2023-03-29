@@ -18,6 +18,12 @@ from typing import List, Optional, Dict
 from datetime import datetime
 from tqdm import tqdm
 from macrosynergy import __version__ as ms_version_info
+from macrosynergy.download.exceptions import (
+    AuthenticationError,
+    DownloadError,
+    InvalidResponseError,
+    HeartbeatError,
+)
 
 
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
@@ -46,23 +52,6 @@ debug_stream_handler.setFormatter(
     )
 )
 logger.addHandler(debug_stream_handler)
-
-
-# exceptions specific to this module
-class AuthenticationError(Exception):
-    """Raised when authentication fails."""
-
-
-class DownloadError(Exception):
-    """Raised when a download fails or is incomplete."""
-
-
-class InvalidResponseError(Exception):
-    """Raised when a response is not valid."""
-
-
-class HeartbeatError(Exception):
-    """Raised when a heartbeat fails."""
 
 
 def validate_response(response: requests.Response) -> dict:
@@ -179,7 +168,7 @@ def request_wrapper(
     log_url: str = form_full_url(url, params)
     logger.info(f"Requesting URL: {log_url} , tracking_id: {tracking_id}")
     raised_exceptions: List[Exception] = []
-    error_statements : List[str] = []
+    error_statements: List[str] = []
     error_statement: str = ""
     retry_count: int = 0
     response: Optional[requests.Response] = None
@@ -237,17 +226,22 @@ def request_wrapper(
     if isinstance(raised_exceptions[-1], HeartbeatError):
         raise HeartbeatError(error_statement)
 
-    errs_str = "\n\n".join(("\t" + str(e) + " - \n\t\t" + est) 
-                            for e, est in zip(raised_exceptions, error_statements))
+    errs_str = "\n\n".join(
+        ("\t" + str(e) + " - \n\t\t" + est)
+        for e, est in zip(raised_exceptions, error_statements)
+    )
 
     e_str = f"Request to {log_url} failed with error {raised_exceptions[-1]}. \n"
-    e_str += '-'*20 + '\n'
+    e_str += "-" * 20 + "\n"
     if isinstance(response, requests.Response):
         e_str += f" Status code: {response.status_code}."
-    e_str +=(f" No longer retrying. Tracking ID: {tracking_id}"
-                f"Exceptions raised:\n{errs_str}")
+    e_str += (
+        f" No longer retrying. Tracking ID: {tracking_id}"
+        f"Exceptions raised:\n{errs_str}"
+    )
 
     raise DownloadError(e_str)
+
 
 class OAuth(object):
     """
@@ -562,8 +556,6 @@ class DataQueryInterface(object):
     def __exit__(self, exc_type, exc_value, traceback):
         if exc_type:
             print(f"Exception: {exc_type} {exc_value}")
-            print(traceback)
-            raise exc_type(exc_value)
 
     def check_connection(self, verbose=False) -> bool:
         """
@@ -576,7 +568,7 @@ class DataQueryInterface(object):
 
         :raises <HeartbeatError>: if the heartbeat fails.
         """
-        js : dict = {}
+        js: dict = {}
         try:
             js = self.access_method._request(
                 url=self.access_method.base_url + HEARTBEAT_ENDPOINT,
@@ -621,7 +613,7 @@ class DataQueryInterface(object):
         current_params: Dict = params.copy()
         get_pagination: bool = True
         log_url: str = form_full_url(curr_url, current_params)
-        curr_response : Optional[Dict] = None
+        curr_response: Optional[Dict] = None
         while get_pagination:
             curr_response: Dict = self.access_method._request(
                 url=url,
@@ -905,7 +897,7 @@ class DataQueryInterface(object):
                     time.sleep(delay_param)
 
                 continuous_failures: int = 0
-                last_five_exc : List[Exception] = []
+                last_five_exc: List[Exception] = []
                 for ib, future in tqdm(
                     enumerate(future_objects),
                     desc="Downloading data",
@@ -926,7 +918,9 @@ class DataQueryInterface(object):
                             continuous_failures += 1
                             last_five_exc.append(exc)
                             if continuous_failures > MAX_CONTINUOUS_FAILURES:
-                                exc_str : str = "\n".join([str(e) for e in last_five_exc])
+                                exc_str: str = "\n".join(
+                                    [str(e) for e in last_five_exc]
+                                )
                                 raise DownloadError(
                                     f"Failed {continuous_failures} times to download data."
                                     f" Last five exceptions: \n{exc_str}"
