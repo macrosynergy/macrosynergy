@@ -693,8 +693,10 @@ class DataQueryInterface(object):
 
         if expressions is None:
             raise ValueError("`expressions` must be a list of strings.")
+        
         if not isinstance(expressions, list):
             raise TypeError("`expressions` must be a list of strings.")
+        
         if not all(isinstance(expr, str) for expr in expressions):
             raise TypeError("`expressions` must be a list of strings.")
 

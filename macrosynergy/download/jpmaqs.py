@@ -287,6 +287,11 @@ class JPMaQSDownload(object):
         exprs_f = set(found_expressions)
         expr_expected = set(expected_expressions)
         expr_missing = expr_expected - exprs_f
+        unexpected_exprs = exprs_f - expr_expected
+        if unexpected_exprs:
+            raise InvalidDataframeError(
+                f"Unexpected expressions were found in the downloaded data: {unexpected_exprs}"
+            )
 
         if expr_missing:
             log_str = (
