@@ -680,8 +680,8 @@ class JPMaQSDownload(object):
 if __name__ == "__main__":
     import os
 
-    # client_id = os.environ["JPMAQS_API_CLIENT_ID"]
-    # client_secret = os.environ["JPMAQS_API_CLIENT_SECRET"]
+    client_id = os.environ["JPMAQS_API_CLIENT_ID"]
+    client_secret = os.environ["JPMAQS_API_CLIENT_SECRET"]
 
     cids = [
         "AUD",
@@ -710,9 +710,8 @@ if __name__ == "__main__":
     end_date: str = "2023-03-20"
 
     with JPMaQSDownload(
-        # client_id=client_id,
-        # client_secret=client_secret,
-        oauth_config="./config.yml",
+        client_id=client_id,
+        client_secret=client_secret,
         debug=True,
     ) as jpmaqs:
         data = jpmaqs.download(

@@ -579,12 +579,14 @@ class DataQueryInterface(object):
         except Exception as e:
             raise e
 
-        result = "info" in js
+        result = (
+            js["code"] == "200" and js["message"] == "Service Available."
+        )
         if verbose:
-            print("Heartbeat successful!" if result else "Heartbeat failed.")
+            print("Connection successful!" if result else "Connection failed.")
         return result
 
-    def _request_thread(
+    def _fetch(
         self,
         url: str,
         params: dict = None,
@@ -887,7 +889,7 @@ class DataQueryInterface(object):
                     curr_params["expressions"] = expr_batch
                     future_objects.append(
                         executor.submit(
-                            self._request_thread,
+                            self._fetch,
                             url=self.access_method.base_url + endpoint,
                             params=curr_params,
                             proxy=self.proxy,
@@ -939,7 +941,7 @@ class DataQueryInterface(object):
                 curr_params: Dict = params_dict.copy()
                 curr_params["expressions"] = expr_batch
                 try:
-                    result = self._request_thread(
+                    result = self._fetch(
                         url=self.access_method.base_url + endpoint,
                         params=curr_params,
                         proxy=self.proxy,
