@@ -270,7 +270,7 @@ class OAuth(object):
         token_url: str = OAUTH_TOKEN_URL,
         dq_resource_id: str = OAUTH_DQ_RESOURCE_ID,
     ):
-        for varx, namex in zip(
+        vars_types_zip: zip = zip(
             [client_id, client_secret, base_url, token_url, dq_resource_id],
             [
                 "client_id",
@@ -279,7 +279,9 @@ class OAuth(object):
                 "token_url",
                 "dq_resource_id",
             ],
-        ):
+        )
+
+        for varx, namex in vars_types_zip:
             if not isinstance(varx, str):
                 raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
 
@@ -400,10 +402,11 @@ class CertAuth(object):
         base_url: str = CERT_BASE_URL,
         proxy: Optional[dict] = None,
     ):
-        for varx, namex in zip(
+        vars_types_zip: zip = zip(
             [username, password, crt, key, base_url],
             ["username", "password", "crt", "key", "base_url"],
-        ):
+        )
+        for varx, namex in vars_types_zip:
             if not isinstance(varx, str):
                 raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
         if not isinstance(proxy, dict) and proxy is not None:
@@ -724,7 +727,7 @@ class DataQueryInterface(object):
         elif delay_param < 0.2:
             raise ValueError("`delay_param` must be a positive float >=0.2 (seconds).")
 
-        for varx, namex in zip(
+        vars_types_zip: zip = zip(
             [
                 endpoint,
                 calender,
@@ -741,7 +744,8 @@ class DataQueryInterface(object):
                 "nan_treatment",
                 "reference_data",
             ],
-        ):
+        )
+        for varx, namex in vars_types_zip:
             if not isinstance(varx, str):
                 raise TypeError(f"`{namex}` must be a string.")
 

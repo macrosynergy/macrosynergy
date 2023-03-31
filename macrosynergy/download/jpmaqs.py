@@ -112,7 +112,7 @@ class JPMaQSDownload(object):
         dq_download_kwargs: dict = {},
         **kwargs,
     ):
-        for varx, namex in zip(
+        vars_types_zip: zip = zip(
             [oauth, check_connection, suppress_warning, debug, print_debug_data],
             [
                 "oauth",
@@ -121,7 +121,8 @@ class JPMaQSDownload(object):
                 "debug",
                 "print_debug_data",
             ],
-        ):
+        )
+        for varx, namex in vars_types_zip:
             if not isinstance(varx, bool):
                 raise TypeError(f"`{namex}` must be a boolean.")
 
@@ -476,11 +477,11 @@ class JPMaQSDownload(object):
                 "Must provide at least one of `tickers`, "
                 "`expressions`, or `cids` & `xcats` together."
             )
-
-        for varx, namex in zip(
-            [tickers, cids, xcats, expressions, metrics],
-            ["tickers", "cids", "xcats", "expressions", "metrics"],
-        ):
+        vars_types_zip: zip = zip(
+            [tickers, cids, xcats, expressions],
+            ["tickers", "cids", "xcats", "expressions"],
+        )
+        for varx, namex in vars_types_zip:
             if not isinstance(varx, list) and varx is not None:
                 raise TypeError(f"`{namex}` must be a list of strings.")
             if varx is not None:
