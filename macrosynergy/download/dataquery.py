@@ -723,9 +723,9 @@ class DataQueryInterface(object):
             raise TypeError("`retry_counter` must be an integer.")
 
         if not isinstance(delay_param, float):
-            raise TypeError("`delay_param` must be a positive float >=0.2 (seconds).")
+            raise TypeError("`delay_param` must be a float >=0.2 (seconds).")
         elif delay_param < 0.2:
-            raise ValueError("`delay_param` must be a positive float >=0.2 (seconds).")
+            raise ValueError("`delay_param` must be a float >=0.2 (seconds).")
 
         vars_types_zip: zip = zip(
             [
