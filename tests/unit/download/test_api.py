@@ -98,7 +98,7 @@ class TestDataQueryInterface(unittest.TestCase):
 
     @mock.patch(
         "macrosynergy.download.dataquery.OAuth._request",
-        return_value=({"info": {"code": 200}}),
+        return_value=({"info": {"code": 200, "message" : "Service Available."}}),
     )
     def test_check_connection(self, mock_p_request):
         # If the connection to DataQuery is working, the response code will invariably be
@@ -114,7 +114,7 @@ class TestDataQueryInterface(unittest.TestCase):
 
     @mock.patch(
         "macrosynergy.download.dataquery.OAuth._request",
-        return_value=({"info": {"code": 200}}),
+        return_value=({"info": {"code": 200, "message" : "Service Available."}}),
     )
     def test_check_connection_on_init(self, mock_p_request):
         # If the connection to DataQuery is working, the response code will invariably be

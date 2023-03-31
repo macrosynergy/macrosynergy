@@ -584,7 +584,7 @@ class DataQueryInterface(object):
             result = False
 
         if result:
-            result = (js["info"]["code"] == "200") and (
+            result = (int(js["info"]["code"]) == 200) and (
                 js["info"]["message"] == "Service Available."
             )
         if verbose:
