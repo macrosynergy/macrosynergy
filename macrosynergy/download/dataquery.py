@@ -579,9 +579,14 @@ class DataQueryInterface(object):
         except Exception as e:
             raise e
 
-        result = (
-            js["code"] == "200" and js["message"] == "Service Available."
-        )
+        result: bool = True
+        if (js is None) or (not isinstance(js, dict)) or ("info" not in js):
+            result = False
+
+        if result:
+            result = (js["info"]["code"] == "200") and (
+                js["info"]["message"] == "Service Available."
+            )
         if verbose:
             print("Connection successful!" if result else "Connection failed.")
         return result
@@ -693,10 +698,10 @@ class DataQueryInterface(object):
 
         if expressions is None:
             raise ValueError("`expressions` must be a list of strings.")
-        
+
         if not isinstance(expressions, list):
             raise TypeError("`expressions` must be a list of strings.")
-        
+
         if not all(isinstance(expr, str) for expr in expressions):
             raise TypeError("`expressions` must be a list of strings.")
 
