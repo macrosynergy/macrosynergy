@@ -838,6 +838,8 @@ class DataQueryInterface(object):
                 start_date, "%Y-%m-%d"
             ):
                 start_date, end_date = end_date, start_date
+        else:
+            print("Retrying failed downloads. Retry count:", retry_counter)
 
         # remove dashes from dates to match DQ format
         start_date = start_date.replace("-", "")
