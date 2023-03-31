@@ -42,6 +42,7 @@ def _prepare_basket(df: pd.DataFrame, xcat: str, basket: List[str],
     return dfb, cids_used
 
 def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
+                        cids_all: bool = False,
                         start: str = None, end: str = None, blacklist: dict = None,
                         basket: List[str] = None, complete_cross: bool = False,
                         rel_meth: str = 'subtract', rel_xcats: List[str] = None,
@@ -55,6 +56,9 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         be calculated.
     :param <List[str]> cids: cross-sections for which relative values are calculated.
         Default is all cross-section available for the respective category.
+    :param <bool> cids_all: boolean parameter that outlines whether all cross-sections
+        should be used for the relative value calculation. Default is False. If True,
+        the cids parameter is ignored.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         for which the respective category is available is used.
     :param <str> end: latest date in ISO format. Default is None and latest date for
@@ -125,9 +129,9 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         df, xcats, cids, start, end, blacklist, out_all=False
     )
 
-    if cids is None:
+    if (cids is None) or cids_all: 
         # All cross-sections available - union across categories.
-        cids = list(dfx['cid'].unique())
+        cids = dfx['cid'].unique().tolist()
 
     if basket is not None:
         # Basket must be a subset of the available cross-sections.
