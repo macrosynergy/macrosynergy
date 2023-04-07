@@ -89,6 +89,7 @@ class CategoryRelations(object):
         self.xcat1_chg = xcat1_chg
         self.n_periods = n_periods
         self.xcat_trims = xcat_trims
+        self.slip = slip
 
         assert self.freq in ['D', 'W', 'M', 'Q', 'A']
         assert {'cid', 'xcat', 'real_date', val}.issubset(set(df.columns))
@@ -103,7 +104,8 @@ class CategoryRelations(object):
         # time-periods.
         df = categories_df(
             df, xcats, shared_cids, val=val, start=start, end=end, freq=freq,
-            blacklist=blacklist, years=years, lag=lag, fwin=fwin, xcat_aggs=xcat_aggs
+            blacklist=blacklist, years=years, lag=lag-slip,
+            fwin=fwin, xcat_aggs=xcat_aggs
         )
 
         if xcat1_chg is not None:
