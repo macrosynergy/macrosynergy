@@ -531,7 +531,6 @@ class NaivePnL:
             col_order = pnl_cids
             if xcat_labels is not None:
                 labels = xcat_labels
-            # labels = [f"{cid}_{pnl_cats[0]}" for cid in pnl_cids]
             legend_title = "Cross Section(s)"
 
         dfx['cum_value'] = dfx.groupby(plot_by).cumsum()
@@ -557,8 +556,6 @@ class NaivePnL:
             if no_cids > 1:
                 fg.set_titles(row_template='', col_template='{col_name}')
             
-            # fg.set_axis_labels(x_var="Year", y_var="% of risk capital, no compounding", 
-            
             if share_axis_labels:
                 fg.set_axis_labels("", "")
                 fg.fig.supxlabel(xlab)
@@ -566,14 +563,12 @@ class NaivePnL:
             else:
                 fg.set_axis_labels(xlab, ylab)
             
-
         else:
             fg = sns.lineplot(data=dfx, x="real_date", y="cum_value", hue=plot_by, 
                                 hue_order=col_order, estimator=None, lw=1)
             leg = fg.axes.get_legend()
-            leg.set_title(legend_title)
             plt.title(title, fontsize=20)
-
+            plt.legend(labels=labels, title=legend_title,)
             plt.xlabel(xlab)
             plt.ylabel(ylab)
 
@@ -581,12 +576,6 @@ class NaivePnL:
             if facet:
                 labels = labels[::-1]
         
-        # set axis labels for the whole figure using plt
-        # fg.supxlabel(xlab)
-        # fg.supylabel(ylab)
-        
-            
-            
         plt.axhline(y=0, color='black', linestyle='--', lw=1)
         plt.show()
 
@@ -904,7 +893,10 @@ if __name__ == "__main__":
     pnl.agg_signal_bars(
         pnl_name="PNL_GROWTH_NEG", freq="m", metric="direction", title=None,
     )
-    
+    pnl.plot_pnls(
+        pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=False,
+        xlab="date", ylab="%",
+        )
     pnl.plot_pnls(
         pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=False, xcat_labels=["S_1", "S_2"],
         xlab="date", ylab="%"
