@@ -26,6 +26,7 @@ debug_stream_handler.setFormatter(
 logger.addHandler(debug_stream_handler)
 
 
+
 class JPMaQSDownload(object):
     """JPMaQS Download Interface Object
     :param <bool> oauth: True if using oauth, False if using username/password with crt/key.
