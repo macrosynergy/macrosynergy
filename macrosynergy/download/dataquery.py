@@ -55,6 +55,8 @@ debug_stream_handler.setFormatter(
 )
 logger.addHandler(debug_stream_handler)
 
+egress_logger : dict = {}
+
 
 def validate_response(response: requests.Response) -> dict:
     """
@@ -128,6 +130,7 @@ def request_wrapper(
     params: Optional[Dict] = None,
     method: str = "get",
     tracking_id: Optional[str] = None,
+    proxy: Optional[Dict] = None,
     **kwargs,
 ) -> dict:
     """
@@ -174,31 +177,37 @@ def request_wrapper(
     error_statement: str = ""
     retry_count: int = 0
     response: Optional[requests.Response] = None
-    upload_size: float = 0
-    download_size: float = 0
+    upload_size: int = 0
+    download_size: int = 0
     time_taken: float = 0
+    start_time: float = timer()
     while retry_count < API_RETRY_COUNT:
         try:
-            start_time: float = timer()
 
             prepared_request: requests.PreparedRequest = requests.Request(
                 method, url, headers=headers, params=params, **kwargs
+            ).prepare()
+
+            upload_size = prepared_request.headers.get("Content-Length", 0)
+
+            response = requests.Session().send(
+                prepared_request, proxies=proxy,
             )
-            if isinstance(prepared_request.body, bytes):
-                upload_size = len(prepared_request.body)
-            elif isinstance(prepared_request.body, str):
-                upload_size = len(prepared_request.body.encode("utf-8"))
-
-            # send the prepared request
-            session = requests.Session()
-            response = session.send(prepared_request)
+            
             # track the download size
-            if isinstance(response.content, bytes):
-                download_size = len(response.content)
-            elif isinstance(response.content, str):
-                download_size = len(response.content.encode("utf-8"))
+            if isinstance(response, requests.Response):
+                download_size = response.content.__sizeof__()
 
-            end_time = timer()
+            time_taken = timer() - start_time
+
+            egress_logger[tracking_id] = {
+                "url": log_url,
+                "upload_size": int(upload_size),
+                "download_size": int(download_size),
+                "time_taken": time_taken,
+            }
+
+
             if isinstance(response, requests.Response):
                 return validate_response(response)
 
@@ -239,11 +248,27 @@ def request_wrapper(
             # all other exceptions are caught here and retried after a delay
 
             if any([isinstance(exc, e) for e in known_exceptions]):
+                egress_logger[tracking_id] = {
+                    "url": log_url,
+                    "upload_size": upload_size,
+                    "download_size": download_size,
+                    "time_taken": time_taken,
+                    "error": f"{exc}",
+                }
                 logger.warning(error_statement)
                 retry_count += 1
                 time.sleep(API_DELAY_PARAM)
             else:
                 raise exc
+    
+        time_taken = timer() - start_time
+
+        egress_logger[tracking_id] = {
+            "url": log_url,
+            "upload_size": upload_size,
+            "download_size": download_size,
+            "time_taken": time_taken,
+        }
 
     if isinstance(raised_exceptions[-1], HeartbeatError):
         raise HeartbeatError(error_statement)
@@ -352,7 +377,7 @@ class OAuth(object):
                 url=self.token_url,
                 data=self.token_data,
                 method="post",
-                proxies=self.proxy,
+                proxy=self.proxy,
                 tracking_id=OAUTH_TRACKING_ID,
             )
             time.sleep(API_DELAY_PARAM)
@@ -392,7 +417,7 @@ class OAuth(object):
             url=url,
             params=params,
             headers={"Authorization": "Bearer " + self._get_token()},
-            proxies=proxy,
+            proxy=proxy,
             tracking_id=tracking_id,
         )
 
@@ -472,7 +497,7 @@ class CertAuth(object):
             cert=(self.crt, self.key),
             headers=self.headers,
             params=params,
-            proxies=proxy,
+            proxy=proxy,
             tracking_id=tracking_id,
         )
         return js
@@ -568,6 +593,8 @@ class DataQueryInterface(object):
             self.proxy = config_object.proxy()
         else:
             self.proxy = None
+
+        self.egress_data: dict = egress_logger
 
     def __enter__(self):
         return self
@@ -1009,7 +1036,8 @@ class DataQueryInterface(object):
         self.unavailable_expressions += self.get_unavailable_expressions(
             expected_exprs=expressions, dicts_list=final_output
         )
-
+        
+        self.egress_data = egress_logger
         return final_output
 
 

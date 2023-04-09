@@ -6,15 +6,14 @@ import warnings
 import yaml
 import json
 import traceback as tb
-
-from macrosynergy.download.dataquery import DataQueryInterface
-from macrosynergy.download.exceptions import *
-
-from macrosynergy.management.utils import is_valid_iso_date, JPMaQSAPIConfigObject
 import datetime
 import logging
 import io
 from timeit import default_timer as timer
+
+from macrosynergy.download.dataquery import DataQueryInterface
+from macrosynergy.download.exceptions import *
+from macrosynergy.management.utils import is_valid_iso_date, JPMaQSAPIConfigObject
 
 logger = logging.getLogger(__name__)
 debug_stream_handler = logging.StreamHandler(io.StringIO())
@@ -481,7 +480,8 @@ class JPMaQSDownload(object):
         debug: bool = False,
         suppress_warning: bool = False,
         as_dataframe: bool = True,
-        report_time_taken: bool = True,
+        report_time_taken: bool = False,
+        report_egress: bool = False,
     ) -> Union[pd.DataFrame, List[Dict]]:
         """Driver function to download data from JPMaQS via the DataQuery API.
         Timeseries data can be requested using `tickers` with `metrics`, or
@@ -572,8 +572,9 @@ class JPMaQSDownload(object):
         )
 
         # Download data.
-        download_time_taken: float = timer()
         data: List[Dict] = []
+        egress_data : Dict = {}
+        download_time_taken: float = timer()
         with self.dq_interface as dq:
             print(
                 "Downloading data from JPMaQS.\nTimestamp UTC: ",
@@ -599,6 +600,11 @@ class JPMaQSDownload(object):
                 self.unavailable_expressions += (
                     self.dq_interface.unavailable_expressions
                 )
+            
+            if report_egress:
+                egress_data = self.dq_interface.egress_data
+
+            
 
         download_time_taken: float = timer() - download_time_taken
         dfs_time_taken: float = timer()
@@ -621,6 +627,40 @@ class JPMaQSDownload(object):
                 print(
                     f"Time taken to convert to dataframe: \t{dfs_time_taken:.2f} seconds."
                 )
+
+        if report_egress:
+            """
+            # create averages for egress_data like this
+             egress_data[tracking_id] = {
+                "url": log_url,
+                "upload_size": upload_size,
+                "download_size": download_size,
+                "time_taken": time_taken,
+            }
+            """
+            total_upload : int = 0
+            total_download : int = 0
+            total_time_taken : float = 0
+            longest_time_taken : float = 0
+            longest_time_taken_url : str = ""
+            for tracking_id in egress_data:
+                total_upload += egress_data[tracking_id]["upload_size"]
+                total_download += egress_data[tracking_id]["download_size"]
+                total_time_taken += egress_data[tracking_id]["time_taken"]
+                if egress_data[tracking_id]["time_taken"] > longest_time_taken:
+                    longest_time_taken = egress_data[tracking_id]["time_taken"]
+                    longest_time_taken_url = egress_data[tracking_id]["url"]
+                
+            avg_upload_size_kb : float = total_upload / (1024)
+            avg_download_size_kb : float = total_download / (1024)
+            avg_time_taken : float = total_time_taken / len(egress_data)
+            avg_transfer_rate_kbit : float = (avg_download_size_kb + avg_upload_size_kb) * 8 / avg_time_taken
+            print(f"Average upload size: \t{avg_upload_size_kb:.2f} KB")
+            print(f"Average download size: \t{avg_download_size_kb:.2f} KB")
+            print(f"Average time taken: \t{avg_time_taken:.2f} seconds")
+            print(f"Longest time taken: \t{longest_time_taken:.2f} seconds")
+            print(f"Average transfer rate : \t{avg_transfer_rate_kbit:.2f} Kbps")
+
 
         if len(self.msg_errors) > 0:
             if not (self.suppress_warning):
@@ -677,6 +717,8 @@ if __name__ == "__main__":
             end_date=end_date,
             show_progress=True,
             suppress_warning=False,
+            report_time_taken=True,
+            report_egress=True,
         )
 
         print(data.head())
