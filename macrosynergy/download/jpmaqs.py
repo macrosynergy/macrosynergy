@@ -6,18 +6,14 @@ import warnings
 import yaml
 import json
 import traceback as tb
-
-import sys
-sys.path.append('/Users/palashtyagi/Work/Code/macrosynergy/')
-
-from macrosynergy.download.dataquery import DataQueryInterface
-from macrosynergy.download.exceptions import *
-
-from macrosynergy.management.utils import is_valid_iso_date, JPMaQSAPIConfigObject
 import datetime
 import logging
 import io
 from timeit import default_timer as timer
+
+from macrosynergy.download.dataquery import DataQueryInterface
+from macrosynergy.download.exceptions import *
+from macrosynergy.management.utils import is_valid_iso_date, JPMaQSAPIConfigObject
 
 logger = logging.getLogger(__name__)
 debug_stream_handler = logging.StreamHandler(io.StringIO())
@@ -28,6 +24,7 @@ debug_stream_handler.setFormatter(
     )
 )
 logger.addHandler(debug_stream_handler)
+
 
 
 class JPMaQSDownload(object):

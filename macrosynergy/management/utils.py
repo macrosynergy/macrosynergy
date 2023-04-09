@@ -330,7 +330,8 @@ class JPMaQSAPIConfigObject(object):
                     loaded_vars[pkx], dict
                 ), "Proxy settings must be a dictionary or JSON-like string."
 
-                r_auth["proxy"] = loaded_vars["proxy"]
+                r_auth[pkx] = loaded_vars[pkx]
+
 
         self._credentials: Dict[str, dict] = r_auth
 
@@ -385,30 +386,56 @@ class JPMaQSAPIConfigObject(object):
 
             return rdict
     
-    def proxy(self, mask : bool = False):
+    def proxy(self, mask : bool = True):
         if not(("proxy" in self._credentials) or ("proxies") in self._credentials):
             return None
         else:
-            rdict: Dict[str, dict] = {}
+            rdict: dict = {}
 
             for prx in ["proxy", "proxies"]:
                 if prx in self._credentials.keys():
-                    rdict[prx] = self._credentials[prx]
-
+                    for kx in self._credentials[prx].keys():
+                        rdict[kx] = self._credentials[prx][kx]
+                        if mask:
+                            rdict[kx] = "*" * len(rdict[kx])
             return rdict
 
 
+    def credentials(self, mask: bool = True,
+                    print_json: bool = False,
+                    print_yaml: bool = False,
+                    ) -> Dict[str, dict]:
+        
+        if not isinstance(mask, bool):
+            raise ValueError("`mask` must be a boolean.")
+        if not isinstance(print_json, bool):
+            raise ValueError("`print_json` must be a boolean.")
+        if not isinstance(print_yaml, bool):
+            raise ValueError("`print_yaml` must be a boolean.")
+        if print_json and print_yaml:
+            raise ValueError("Only one of `print_json` or `print_yaml` can be True.")
 
-    def credentials(self, mask: bool = False,) -> Dict[str, dict]:
-        rdict: Dict[str, dict] = {}
-        for k in self._credentials.keys():
-            rdict[k] = getattr(self, k)(mask=mask)
+        output_dict: Dict[str, dict] = {}
+        if "oauth" in self._credentials.keys():
+            output_dict["oauth"] = self.oauth(mask=mask)
+        if "cert" in self._credentials.keys():
+            output_dict["cert"] = self.cert(mask=mask)
+        if "proxy" in self._credentials.keys():
+            output_dict["proxy"] = self.proxy(mask=mask)
 
-        return rdict
+        if print_json:
+            print(json.dumps(output_dict, indent=4))
+            return
+
+        if print_yaml:
+            print(yaml.dump(output_dict, indent=4))
+            return
+
+        return output_dict
 
     def export_credentials(
         self,
-        format: str = "json",
+        format: str = "yaml",
         export_file: str = None,
         mask: bool = False,
         oauth_only: bool = False,
@@ -417,6 +444,8 @@ class JPMaQSAPIConfigObject(object):
     ):
         if format not in ["json", "yaml", "yml"]:
             raise ValueError("Format must be either `json`, `yaml` or `yml`.")
+        elif format == "yml":
+            format = "yaml"
 
         if oauth_only and cert_only:
             raise ValueError(
@@ -443,18 +472,17 @@ class JPMaQSAPIConfigObject(object):
             output_dict["cert"] = credentials["cert"]
 
         output: str
-        if format == "json":
+        if format == "yaml":
             output = json.dumps(output_dict, indent=2)
         else:
             output = yaml.dump(output_dict)
 
         if not any([export_file.endswith(ext) for ext in [".json", ".yaml", ".yml"]]):
+            fm = ".yml" if format == "yaml" else ".json"
+            export_file = f"{export_file}{fm}"
             print(
-                f"Adding file extension to export file : {format}\n"
-                f"Export file : {export_file}"
+                f"Exporting to file : {export_file}"
             )
-
-            export_file = f"{export_file}.{format}"
 
         with open(export_file, "w") as f:
             f.write(output)
