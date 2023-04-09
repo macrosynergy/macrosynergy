@@ -14,7 +14,7 @@ import os
 import uuid
 import io
 import requests
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Union
 from datetime import datetime
 from tqdm import tqdm
 from macrosynergy import __version__ as ms_version_info
@@ -25,6 +25,7 @@ from macrosynergy.download.exceptions import (
     HeartbeatError,
 )
 
+from macrosynergy.management.utils import is_valid_iso_date, JPMaQSAPIConfigObject
 
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 OAUTH_BASE_URL: str = (
@@ -502,9 +503,10 @@ class DataQueryInterface(object):
         heartbeat: bool = True,
         base_url: str = OAUTH_BASE_URL,
         suppress_warnings: bool = True,
+        config_object : Optional[JPMaQSAPIConfigObject] = None,
         **kwargs,
     ):
-        self.proxy = kwargs.pop("proxy", kwargs.pop("proxies", None))
+        # self.proxy = kwargs.pop("proxy", kwargs.pop("proxies", None))
         self.heartbeat: bool = heartbeat
         self.msg_errors: List[str] = []
         self.msg_warnings: List[str] = []
@@ -514,44 +516,38 @@ class DataQueryInterface(object):
         self.suppress_warnings: bool = suppress_warnings
         self.batch_size: int = batch_size
 
+        if config_object is None:
+            # raise value error saying config not provided. check macrosyenrgy.management.utils.JPMaQSAPIConfigObject
+            raise ValueError("config_object must be provided for DataQuery"
+                             "authentication. Check macrosyenrgy.management.utils.JPMaQSAPIConfigObject "
+                             "for more details.")
+        
+        self.access_method: Optional[Union[CertAuth, OAuth]] = None
         if oauth:
-            # ensure that we have a client_id and client_secret
-
-            for k in ["client_id", "client_secret"]:
-                if not (k in kwargs):
-                    raise ValueError(
-                        f"{k} must be provided for " "OAuth authentication."
-                    )
-
+            credentials : dict = config_object.oauth(mask=False)
             self.access_method: OAuth = OAuth(
-                client_id=kwargs["client_id"],
-                client_secret=kwargs["client_secret"],
+                **credentials,
                 base_url=base_url,
-                token_url=OAUTH_TOKEN_URL,
-                dq_resource_id=OAUTH_DQ_RESOURCE_ID,
-                proxy=self.proxy,
             )
-
         else:
-            # ensure that we have a username and password, crt and key
-            for k in ["username", "password", "crt", "key"]:
-                if not (k in kwargs):
-                    raise ValueError(
-                        f"{k} must be provided for " "certificate authentication."
-                    )
-
+            credentials : dict = config_object.cert(mask=False)
             if base_url == OAUTH_BASE_URL:
-                print("Changing OAUTH_BASE_URL to CERT_BASE_URL")
                 base_url = CERT_BASE_URL
 
             self.access_method: CertAuth = CertAuth(
-                username=kwargs["username"],
-                password=kwargs["password"],
-                crt=kwargs["crt"],
-                key=kwargs["key"],
-                base_url=base_url,
-                proxy=self.proxy,
-            )
+                **credentials,
+                base_url=base_url)
+                   
+        assert self.access_method is not None, \
+            "Failed to initialise access method. Check the config_object passed"
+        
+        self.proxy : Optional[dict] = None
+        if config_object.proxy() is not None:
+            self.proxy = config_object.proxy()
+        else:
+            self.proxy = None
+
+
 
     def __enter__(self):
         return self
@@ -692,13 +688,6 @@ class DataQueryInterface(object):
         :raises <ValueError>: if any of the arguments are semantically incorrect.
         """
 
-        def is_valid_date(date: str) -> bool:
-            try:
-                datetime.strptime(date, "%Y-%m-%d")
-                return True
-            except ValueError:
-                return False
-
         if expressions is None:
             raise ValueError("`expressions` must be a list of strings.")
 
@@ -711,7 +700,7 @@ class DataQueryInterface(object):
         for varx, namex in zip([start_date, end_date], ["start_date", "end_date"]):
             if (varx is None) or not isinstance(varx, str):
                 raise TypeError(f"`{namex}` must be a string.")
-            if not is_valid_date(varx):
+            if not is_valid_iso_date(varx):
                 raise ValueError(
                     f"`{namex}` must be a string in the ISO-8601 format (YYYY-MM-DD)."
                 )
