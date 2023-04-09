@@ -16,6 +16,7 @@ import io
 import requests
 from typing import List, Optional, Dict, Union
 from datetime import datetime
+from timeit import default_timer as timer
 from tqdm import tqdm
 from macrosynergy import __version__ as ms_version_info
 from macrosynergy.download.exceptions import (
@@ -173,11 +174,31 @@ def request_wrapper(
     error_statement: str = ""
     retry_count: int = 0
     response: Optional[requests.Response] = None
+    upload_size: float = 0
+    download_size: float = 0
+    time_taken: float = 0
     while retry_count < API_RETRY_COUNT:
         try:
-            response = requests.request(
+            start_time: float = timer()
+
+            prepared_request: requests.PreparedRequest = requests.Request(
                 method, url, headers=headers, params=params, **kwargs
             )
+            if isinstance(prepared_request.body, bytes):
+                upload_size = len(prepared_request.body)
+            elif isinstance(prepared_request.body, str):
+                upload_size = len(prepared_request.body.encode("utf-8"))
+
+            # send the prepared request
+            session = requests.Session()
+            response = session.send(prepared_request)
+            # track the download size
+            if isinstance(response.content, bytes):
+                download_size = len(response.content)
+            elif isinstance(response.content, str):
+                download_size = len(response.content.encode("utf-8"))
+
+            end_time = timer()
             if isinstance(response, requests.Response):
                 return validate_response(response)
 
@@ -503,7 +524,7 @@ class DataQueryInterface(object):
         heartbeat: bool = True,
         base_url: str = OAUTH_BASE_URL,
         suppress_warnings: bool = True,
-        config_object : Optional[JPMaQSAPIConfigObject] = None,
+        config_object: Optional[JPMaQSAPIConfigObject] = None,
         **kwargs,
     ):
         # self.proxy = kwargs.pop("proxy", kwargs.pop("proxies", None))
@@ -518,36 +539,35 @@ class DataQueryInterface(object):
 
         if config_object is None:
             # raise value error saying config not provided. check macrosyenrgy.management.utils.JPMaQSAPIConfigObject
-            raise ValueError("config_object must be provided for DataQuery"
-                             "authentication. Check macrosyenrgy.management.utils.JPMaQSAPIConfigObject "
-                             "for more details.")
-        
+            raise ValueError(
+                "config_object must be provided for DataQuery"
+                "authentication. Check macrosyenrgy.management.utils.JPMaQSAPIConfigObject "
+                "for more details."
+            )
+
         self.access_method: Optional[Union[CertAuth, OAuth]] = None
         if oauth:
-            credentials : dict = config_object.oauth(mask=False)
+            credentials: dict = config_object.oauth(mask=False)
             self.access_method: OAuth = OAuth(
                 **credentials,
                 base_url=base_url,
             )
         else:
-            credentials : dict = config_object.cert(mask=False)
+            credentials: dict = config_object.cert(mask=False)
             if base_url == OAUTH_BASE_URL:
                 base_url = CERT_BASE_URL
 
-            self.access_method: CertAuth = CertAuth(
-                **credentials,
-                base_url=base_url)
-                   
-        assert self.access_method is not None, \
-            "Failed to initialise access method. Check the config_object passed"
-        
-        self.proxy : Optional[dict] = None
+            self.access_method: CertAuth = CertAuth(**credentials, base_url=base_url)
+
+        assert (
+            self.access_method is not None
+        ), "Failed to initialise access method. Check the config_object passed"
+
+        self.proxy: Optional[dict] = None
         if config_object.proxy() is not None:
             self.proxy = config_object.proxy()
         else:
             self.proxy = None
-
-
 
     def __enter__(self):
         return self

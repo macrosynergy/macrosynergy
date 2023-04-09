@@ -7,9 +7,6 @@ import yaml
 import json
 import traceback as tb
 
-import sys
-sys.path.append('/Users/palashtyagi/Work/Code/macrosynergy/')
-
 from macrosynergy.download.dataquery import DataQueryInterface
 from macrosynergy.download.exceptions import *
 
@@ -106,7 +103,7 @@ class JPMaQSDownload(object):
 
         if not isinstance(dq_download_kwargs, dict):
             raise TypeError("`dq_download_kwargs` must be a dictionary.")
-        
+
         if not isinstance(oauth, bool):
             raise TypeError("`oauth` must be a boolean.")
 
@@ -119,16 +116,17 @@ class JPMaQSDownload(object):
         if credentials_config is not None:
             if not isinstance(credentials_config, str):
                 raise TypeError("`credentials_config` must be a string.")
-            
-        config_obj : JPMaQSAPIConfigObject = JPMaQSAPIConfigObject(config_path=credentials_config,
-                                                                    client_id=client_id,
-                                                                    client_secret=client_secret,
-                                                                    crt=crt,
-                                                                    key=key,
-                                                                    username=username,
-                                                                    password=password,
-                                                                    proxy=proxy,)
-        
+
+        config_obj: JPMaQSAPIConfigObject = JPMaQSAPIConfigObject(
+            config_path=credentials_config,
+            client_id=client_id,
+            client_secret=client_secret,
+            crt=crt,
+            key=key,
+            username=username,
+            password=password,
+            proxy=proxy,
+        )
 
         self.dq_interface: DataQueryInterface = DataQueryInterface(
             oauth=oauth,
