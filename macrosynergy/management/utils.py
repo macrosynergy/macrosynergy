@@ -4,13 +4,11 @@ Macrosynergy package and JPMaQS dataframes/data.
 """
 
 import pandas as pd
-import numpy as np
 import datetime
 import os
 import yaml
 import json
-from typing import Any, Union, List, Dict, Optional, Tuple
-import itertools
+from typing import Any, List, Dict, Optional
 
 
 ##############################

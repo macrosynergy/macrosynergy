@@ -2,9 +2,6 @@
 
 from typing import List, Optional, Dict, Union
 import pandas as pd
-import warnings
-import yaml
-import json
 import traceback as tb
 import datetime
 import logging
@@ -675,10 +672,6 @@ class JPMaQSDownload(object):
 
 
 if __name__ == "__main__":
-    import os
-
-    # client_id = os.environ["JPMAQS_API_CLIENT_ID"]
-    # client_secret = os.environ["JPMAQS_API_CLIENT_SECRET"]
 
     cids = [
         "AUD",

@@ -18,6 +18,7 @@ from typing import List, Optional, Dict, Union
 from datetime import datetime
 from timeit import default_timer as timer
 from tqdm import tqdm
+
 from macrosynergy import __version__ as ms_version_info
 from macrosynergy.download.exceptions import (
     AuthenticationError,
@@ -25,7 +26,6 @@ from macrosynergy.download.exceptions import (
     InvalidResponseError,
     HeartbeatError,
 )
-
 from macrosynergy.management.utils import is_valid_iso_date, JPMaQSAPIConfigObject
 
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
