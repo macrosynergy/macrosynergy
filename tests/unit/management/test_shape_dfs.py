@@ -33,7 +33,7 @@ class TestAll(unittest.TestCase):
 
         random.seed(1)
         np.random.seed(0)
-        self.__dict__['dfd'] = make_qdf(df_cids, df_xcats, back_ar=0.75)
+        self.dfd : pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     def test_reduce_df_general(self):
         self.dataframe_constructor()
@@ -199,8 +199,9 @@ class TestAll(unittest.TestCase):
         filt1 = (self.dfd['real_date'].dt.year == 2013) & \
                 (self.dfd['real_date'].dt.month.isin([10, 11, 12]))
         filt2 = (self.dfd['cid'] == 'AUD') & (self.dfd['xcat'] == 'XR')
-        x1 = round(float(np.mean(self.dfd[filt1 & filt2].set_index('real_date').
-                                 resample('M').mean())), 10)
+        x1 = round(float(np.mean(self.dfd[filt1 & filt2][['value', 'real_date']]\
+                                 .set_index('real_date')\
+                                 .resample('M').mean())), 10)
 
         x2 = round(float(dfc.loc[('AUD', '2013-10-31'), 'XR']), 10)
         self.assertAlmostEqual(x1, x2)

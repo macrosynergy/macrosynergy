@@ -10,8 +10,8 @@ from typing import List
 class TestAll(unittest.TestCase):
 
     def dataframe_generator(self, date = '2002-01-01'):
-        self.__dict__['cids'] = ['AUD', 'CAD', 'GBP', 'NZD', 'USD']
-        self.__dict__['xcats'] = ['XR', 'CRY', 'GROWTH', 'INFL']
+        self.cids : List[str] = ['AUD', 'CAD', 'GBP', 'NZD', 'USD']
+        self.xcats : List[str] = ['XR', 'CRY', 'GROWTH', 'INFL']
         df_cids = pd.DataFrame(index=self.cids,
                                columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
 
@@ -31,14 +31,14 @@ class TestAll(unittest.TestCase):
         df_xcats.loc['INFL'] = ['2011-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-        self.__dict__['dfd'] = dfd
+        self.dfd : pd.DataFrame = dfd
 
         black = {'AUD': ['2021-01-01', '2022-12-31'],
                  'GBP': ['2021-01-01', '2100-01-01']}
 
-        self.__dict__['blacklist'] = black
-        self.__dict__['start'] = '2010-01-01'
-        self.__dict__['end'] = '2020-12-31'
+        self.blacklist : dict = black
+        self.start : str = '2010-01-01'
+        self.end : str = '2020-12-31'
 
     @staticmethod
     def dataframe_pivot(df_calc: pd.DataFrame, xcat: str):

@@ -165,7 +165,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
             # Mean of (available) cross-sections at each point in time. If all
             # cross-sections defined in the "basket" data structure are not available for
             # a specific date, compute the mean over the available subset.
-            bm = dfb.groupby(by='real_date').mean()
+            bm = dfb.groupby(by='real_date').mean(numeric_only=True)
         elif len(basket) == 1:
             # Relative value is mapped against a single cross-section.
             bm = dfb.set_index('real_date')['value']

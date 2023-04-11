@@ -290,7 +290,9 @@ class TestAll(unittest.TestCase):
             median_cross = df_median.loc[:, cross]
             median_cross.dropna(axis=0, how='any', inplace=True)
             median_value = median_cross.unique()
-
+            print(i, " / ", len(self.cids))
+            print(median_value)
+            print(len(median_value))
             self.assertTrue(len(median_value) == 1)
 
             # Choose a random index to confirm the value.

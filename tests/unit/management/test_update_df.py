@@ -31,11 +31,11 @@ class TestAll(unittest.TestCase):
 
         random.seed(1)
         np.random.seed(0)
-        self.__dict__['dfd'] = make_qdf(df_cids, df_xcats, back_ar=0.75)
+        self.dfd : pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
         black = {'AUD': ['2000-01-01', '2003-12-31'],
                  'GBP': ['2018-01-01', '2100-01-01']}
-        self.__dict__['blacklist'] = black
+        self.blacklist : dict = black
 
     def test_update_tickers(self):
         """
