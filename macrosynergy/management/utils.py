@@ -9,7 +9,7 @@ import datetime
 import os
 import yaml
 import json
-from typing import Any, Union, List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional, Callable
 import itertools
 
 
@@ -282,7 +282,7 @@ class JPMaQSAPIConfigObject(object):
                 if loaded_vars["crt"] is None:
                     loaded_vars["crt"] = rec_search_dict(config_dict, "cert", True)
 
-        all_args_present: function = lambda x: all([v is not None for v in x])
+        all_args_present: Callable = lambda x: all([v is not None for v in x])
 
         # overwrite any loaded variables with any passed variables
         for pr_args in [oauth_vars, cert_vars, proxy_vars]:
