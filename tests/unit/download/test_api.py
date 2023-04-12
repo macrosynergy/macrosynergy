@@ -5,6 +5,7 @@ from unittest import mock
 from random import random
 import unittest
 import numpy as np
+import pandas as pd
 
 
 class TestCertAuth(unittest.TestCase):
@@ -69,7 +70,9 @@ class TestDataQueryInterface(unittest.TestCase):
             value = random()
         return value
 
-    def request_wrapper(self, dq_expressions: List[str]):
+    def request_wrapper(
+        self, dq_expressions: List[str], start_date: str, end_date: str
+    ):
         """
         Contrived request method to replicate output from DataQuery. Will replicate the
         form of a JPMaQS expression from DataQuery which will subsequently be used to
@@ -86,8 +89,11 @@ class TestDataQueryInterface(unittest.TestCase):
                         "label": None,
                         "attribute-id": None,
                         "attribute-name": None,
-                        "time-series": [["20220607", self.jpmaqs_value(elem)]],
-                    }
+                        "time-series": [
+                            [d.strftime("%Y%m%d"), self.jpmaqs_value(elem)]
+                            for d in pd.bdate_range(start_date, end_date)
+                        ],
+                    },
                 ],
                 "instrument-id": None,
                 "instrument-name": None,
@@ -98,7 +104,7 @@ class TestDataQueryInterface(unittest.TestCase):
 
     @mock.patch(
         "macrosynergy.download.dataquery.OAuth._request",
-        return_value=({"info": {"code": 200, "message" : "Service Available."}}),
+        return_value=({"info": {"code": 200, "message": "Service Available."}}),
     )
     def test_check_connection(self, mock_p_request):
         # If the connection to DataQuery is working, the response code will invariably be
@@ -114,7 +120,7 @@ class TestDataQueryInterface(unittest.TestCase):
 
     @mock.patch(
         "macrosynergy.download.dataquery.OAuth._request",
-        return_value=({"info": {"code": 200, "message" : "Service Available."}}),
+        return_value=({"info": {"code": 200, "message": "Service Available."}}),
     )
     def test_check_connection_on_init(self, mock_p_request):
         # If the connection to DataQuery is working, the response code will invariably be
@@ -191,132 +197,102 @@ class TestDataQueryInterface(unittest.TestCase):
             ) as downloader:
                 pass
 
-    # def test_isolate_timeseries(self):
-    #     cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY"]
-    #     xcats = ["EQXR_NSA", "FXXR_NSA"]
+    def test_timeseries_to_df(self):
+        cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY"]
+        xcats = ["EQXR_NSA", "FXXR_NSA"]
 
-    #     tickers = [cid + "_" + xcat for xcat in xcats for cid in cids_dmca]
+        tickers = [cid + "_" + xcat for xcat in xcats for cid in cids_dmca]
 
-    #     jpmaqs_download = JPMaQSDownload(
-    #         oauth=True, client_id="client_id", client_secret="client_secret"
-    #     )
+        jpmaqs_download = JPMaQSDownload(
+            oauth=True,
+            client_id="client_id",
+            client_secret="client_secret",
+            check_connection=False,
+        )
 
-    #     # First replicate the api.Interface()._request() method using the associated
-    #     # JPMaQS expression.
-    #     expression = jpmaqs_download.jpmaqs_indicators(
-    #         metrics=["value", "grading"], tickers=tickers
-    #     )
-    #     final_output = self.dq_request(dq_expressions=expression)
+        # First replicate the api.Interface()._request() method using the associated
+        # JPMaQS expression.
+        expression = jpmaqs_download.construct_expressions(
+            metrics=["value", "grading"], tickers=tickers
+        )
+        start_date: str = "2000-01-01"
+        end_date: str = "2020-01-01"
 
-    #     # The method, .isolate_timeseries(), will receive the returned dictionary from
-    #     # the ._request() method and return a dictionary where the keys are the tickers
-    #     # and the values are stacked DataFrames where each column represents the metrics
-    #     # that have been requested.
+        timeseries_output = self.request_wrapper(
+            dq_expressions=expression, start_date=start_date, end_date=end_date
+        )
 
-    #     # Therefore, assert that the dictionary contains the expected tickers and that
-    #     # each value is a three-dimensional DataFrame: real_date, value, grade.
-    #     results_dict, output_dict, s_list = jpmaqs_download.isolate_timeseries(
-    #         list_=final_output,
-    #         metrics=["value", "grading"],
-    #         debug=False,
-    #         sequential=False,
-    #     )
+        expressions_found: List[str] = [ts["attributes"][0]["expression"] for ts in timeseries_output]
 
-    #     self.__dict__["results_dict"] = results_dict
+        out_df: pd.DataFrame = jpmaqs_download.time_series_to_df(
+            dicts_list=timeseries_output,
+            expected_expressions=expressions_found,
+            start_date=start_date,
+            end_date=end_date,
+        )
 
-    #     self.assertTrue(len(results_dict.keys()) == len(tickers))
+        # Check that the output is a Pandas DataFrame
+        self.assertIsInstance(out_df, pd.DataFrame)
 
-    #     ticker_trunc = lambda t: t.split(",")[1]
-    #     test_keys = results_dict.keys()
+        # Check that the output has the correct number of rows and columns
+        # len(tickers)*len(pd.bdate_range(start_date, end_date)) = expected number of rows
+        # expected cols = [["real_date", "cid", "xcat", "value", "grading"]] = 5
+        self.assertEqual(out_df.shape, (len(tickers) * len(pd.bdate_range(start_date, end_date)), 5))
 
-    #     test_keys = sorted(test_keys)
-    #     self.assertTrue(test_keys == sorted(tickers))
+        # Check that the output has the correct columns
+        self.assertEqual(
+            set(out_df.columns.tolist()),
+            set(["real_date", "cid", "xcat", "value", "grading"]),)
+        
 
-    #     first_ticker = next(iter(results_dict.keys()))
-    #     self.assertTrue(results_dict[first_ticker].shape[1] == 3)
+    def test_construct_expressions(self):
+        jpmaqs_download = JPMaQSDownload(
+            oauth=True,
+            client_id="client_id",
+            client_secret="client_secret",
+            check_connection=False,
+        )
 
-    # def test_valid_ticker(self):
-    #     # Call test_isolate_timeseries() to obtain the dictionary produced from the
-    #     # associated method, isolate_timeseries().
-    #     self.test_isolate_timeseries()
+        cids = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY"]
+        xcats = ["EQXR_NSA", "FXXR_NSA"]
 
-    #     jpmaqs_download = JPMaQSDownload(
-    #         oauth=True, client_id="client_id", client_secret="client_secret"
-    #     )
+        tickers = [cid + "_" + xcat for xcat in xcats for cid in cids]
 
-    #     # The method, self.valid_ticker(), is used to delimit if each ticker has a valid
-    #     # time-series. To determine if a time-series is valid, pass through each date and
-    #     # confirm that the associated value is not a NoneType. If all dates contain NaN
-    #     # values, exclude the ticker from the DataFrame. For instance, USD_FXXR_NSA would
-    #     # be removed.
+        metrics = ["value", "grading"]
 
-    #     # All tickers held in the dictionary are valid tickers. Therefore, confirm the
-    #     # keys for the two dictionary, received & returned, match.
-    #     results_dict = jpmaqs_download.valid_ticker(
-    #         _dict=self.results_dict, suppress_warning=True, debug=False
-    #     )
-    #     self.assertTrue(len(results_dict.keys()) == len(self.results_dict.keys()))
+        set_a = jpmaqs_download.construct_expressions(
+            metrics=metrics, tickers=tickers
+        )
 
-    #     test = sorted(list(results_dict.keys()))
-    #     benchmark = sorted(list(self.results_dict.keys()))
-    #     self.assertTrue(test == benchmark)
+        set_b = jpmaqs_download.construct_expressions(
+            metrics=metrics, cids=cids, xcats=xcats)
+        
+        self.assertEqual(set(set_a), set(set_b))
 
-    #     # Add a ticker that does not have a "valid" time-series and will subsequently be
-    #     # removed. Confirm the series has been removed from the dictionary.
-    #     f_ticker = next(iter(results_dict.keys()))
-    #     shape = results_dict[f_ticker].shape
-    #     # Again, as described above, a series is not valid if all values are NoneType.
-    #     data = np.array([None] * (shape[0] * shape[1]))
 
-    #     results_dict["DB(JPMAQS,USD_FXXR_NSA"] = data.reshape(shape)
-    #     results_dict_USD = jpmaqs_download.valid_ticker(
-    #         self.results_dict, suppress_warning=True, debug=False
-    #     )
-    #     # Ticker should be removed from the dictionary.
-    #     self.assertTrue("DB(JPMAQS,USD_FXXR_NSA" not in results_dict_USD.keys())
+    def test_deconstruct_expressions(self):
+        jpmaqs_download = JPMaQSDownload(
+            oauth=True,
+            client_id="client_id",
+            client_secret="client_secret",
+            check_connection=False,
+        )
+        
+        cids = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY"]
+        xcats = ["EQXR_NSA", "FXXR_NSA"]
+        tickers = [cid + "_" + xcat for xcat in xcats for cid in cids]
+        metrics = ["value", "grading"]
+        tkms = [f"{ticker}_{metric}" for ticker in tickers for metric in metrics]
+        expressions = jpmaqs_download.construct_expressions(metrics=["value", "grading"], tickers=tickers)
+        deconstructed_expressions = jpmaqs_download.deconstruct_expression(expression=expressions)
+        dtkms = ["_".join(d) for d in deconstructed_expressions]
 
-    # def test_dataframe_wrapper(self):
-    #     cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY"]
-    #     xcats = ["EQXR_NSA", "FXXR_NSA"]
+        self.assertEqual(set(tkms), set(dtkms))
 
-    #     tickers = [cid + "_" + xcat for xcat in xcats for cid in cids_dmca]
 
-    #     # After the time-series have been isolated for each ticker and all the tickers
-    #     # have been validated, aggregate the results, still held in a dictionary, into
-    #     # a single DataFrame where the columns will be the passed metrics, 'value' &
-    #     # 'grading' plus the standardised JPMaQS columns: 'cid', 'xcat', 'real_date'.
-
-    #     # The method api.Interface.valid_ticker() is not required given each ticker will
-    #     # be valid by design.
-    #     self.test_isolate_timeseries()
-
-    #     jpmaqs_download = JPMaQSDownload(
-    #         oauth=True, client_id="client_id", client_secret="client_secret"
-    #     )
-
-    #     results_dict = self.results_dict
-    #     trial_df = jpmaqs_download.dataframe_wrapper(
-    #         _dict=results_dict, no_metrics=2, original_metrics=["value", "grading"]
-    #     )
-
-    #     # Confirm the dictionary is a standardised DataFrame plus the respective metrics
-    #     # passed.
-    #     expected_columns = ["cid", "xcat", "real_date", "value", "grading"]
-    #     self.assertEqual(sorted(expected_columns), sorted(list(trial_df.columns)))
-
-    #     # Next confirm that tickers held in the DataFrame are the complete set: i.e all
-    #     # the tickers defined in the constructor. All tickers are valid. Therefore,
-    #     # confirm there is not any inadvertent leakage from constructing the DataFrame
-    #     # and all tickers are included.
-
-    #     tickers_df = list(trial_df["cid"] + "_" + trial_df["xcat"])
-    #     self.assertTrue(sorted(tickers_df) == sorted(tickers))
-
-    #     # Given the constructed nature of the DataFrame, confirm all values in the
-    #     # 'grading' column are equal to 1.0.
-    #     # Confirms the columns have the expected values.
-
-    #     self.assertIn(next(iter((trial_df["grading"].unique()))), [1.0])
+        for tkm, expression in zip(tkms, expressions):
+            self.assertEqual(tkm, "_".join(jpmaqs_download.deconstruct_expression(expression=expression)))
+            
 
 
 if __name__ == "__main__":
