@@ -2,9 +2,6 @@
 
 from typing import List, Optional, Dict, Union
 import pandas as pd
-import warnings
-import yaml
-import json
 import traceback as tb
 import datetime
 import logging
@@ -439,6 +436,8 @@ class JPMaQSDownload(object):
         expressions: List[str],
         show_progress: bool,
         as_dataframe: bool,
+        report_time_taken: bool,
+        report_egress: bool,
     ) -> bool:
         """Validate the arguments passed to the download function.
 
@@ -456,6 +455,12 @@ class JPMaQSDownload(object):
 
         if not isinstance(as_dataframe, bool):
             raise TypeError("`as_dataframe` must be a boolean.")
+        
+        if not isinstance(report_time_taken, bool):
+            raise TypeError("`report_time_taken` must be a boolean.")
+        
+        if not isinstance(report_egress, bool):
+            raise TypeError("`report_egress` must be a boolean.")
 
         if all([tickers is None, cids is None, xcats is None, expressions is None]):
             raise ValueError(
@@ -516,7 +521,8 @@ class JPMaQSDownload(object):
         debug: bool = False,
         suppress_warning: bool = False,
         as_dataframe: bool = True,
-        report_time_taken: bool = True,
+        report_time_taken: bool = False,
+        report_egress: bool = False,
     ) -> Union[pd.DataFrame, List[Dict]]:
         """Driver function to download data from JPMaQS via the DataQuery API.
         Timeseries data can be requested using `tickers` with `metrics`, or
@@ -544,6 +550,10 @@ class JPMaQSDownload(object):
             False if not (default). If debug=True, this is set to True.
         :param <bool> as_dataframe: Return a dataframe if True (default),
             a list of dictionaries if False.
+        :param <bool> report_time_taken: If True, the time taken to download
+            and apply data transformations is reported.
+        :param <bool> report_egress: If True, the number of bytes downloaded
+            is reported along with the transmission speed in kilobits/second.
 
         :return <pd.DataFrame|list[Dict]>: dataframe of data if
             `as_dataframe` is True, list of dictionaries if False.
@@ -586,6 +596,8 @@ class JPMaQSDownload(object):
             expressions=expressions,
             show_progress=show_progress,
             as_dataframe=as_dataframe,
+            report_time_taken=report_time_taken,
+            report_egress=report_egress,
         ):
             raise ValueError("Invalid arguments passed to download().")
 
@@ -601,8 +613,9 @@ class JPMaQSDownload(object):
         )
 
         # Download data.
-        download_time_taken: float = timer()
         data: List[Dict] = []
+        egress_data : Dict = {}
+        download_time_taken: float = timer()
         with self.dq_interface as dq:
             print(
                 "Downloading data from JPMaQS.\nTimestamp UTC: ",
@@ -628,6 +641,11 @@ class JPMaQSDownload(object):
                 self.unavailable_expressions += (
                     self.dq_interface.unavailable_expressions
                 )
+            
+            if report_egress:
+                egress_data = self.dq_interface.egress_data
+
+            
 
         download_time_taken: float = timer() - download_time_taken
         dfs_time_taken: float = timer()
@@ -650,6 +668,40 @@ class JPMaQSDownload(object):
                 print(
                     f"Time taken to convert to dataframe: \t{dfs_time_taken:.2f} seconds."
                 )
+
+        if report_egress:
+            
+            # create averages for egress_data like
+            #  egress_data[tracking_id] = {
+            #     "url": log_url,
+            #     "upload_size": upload_size,
+            #     "download_size": download_size,
+            #     "time_taken": time_taken,
+            #   }
+            
+            total_upload : int = 0
+            total_download : int = 0
+            total_time_taken : float = 0
+            longest_time_taken : float = 0
+            longest_time_taken_url : str = ""
+            for tracking_id in egress_data:
+                total_upload += egress_data[tracking_id]["upload_size"]
+                total_download += egress_data[tracking_id]["download_size"]
+                total_time_taken += egress_data[tracking_id]["time_taken"]
+                if egress_data[tracking_id]["time_taken"] > longest_time_taken:
+                    longest_time_taken = egress_data[tracking_id]["time_taken"]
+                    longest_time_taken_url = egress_data[tracking_id]["url"]
+                
+            avg_upload_size_kb : float = total_upload / (1024)
+            avg_download_size_kb : float = total_download / (1024)
+            avg_time_taken : float = total_time_taken / len(egress_data)
+            avg_transfer_rate_kbit : float = (avg_download_size_kb + avg_upload_size_kb) * 8 / avg_time_taken
+            print(f"Average upload size: \t{avg_upload_size_kb:.2f} KB")
+            print(f"Average download size: \t{avg_download_size_kb:.2f} KB")
+            print(f"Average time taken: \t{avg_time_taken:.2f} seconds")
+            print(f"Longest time taken: \t{longest_time_taken:.2f} seconds")
+            print(f"Average transfer rate : \t{avg_transfer_rate_kbit:.2f} Kbps")
+
 
         if len(self.msg_errors) > 0:
             if not (self.suppress_warning):
@@ -702,6 +754,8 @@ if __name__ == "__main__":
             end_date=end_date,
             show_progress=True,
             suppress_warning=False,
+            report_time_taken=True,
+            report_egress=True,
         )
 
         print(data.head())
