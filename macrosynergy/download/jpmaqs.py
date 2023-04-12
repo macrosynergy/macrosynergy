@@ -222,7 +222,9 @@ class JPMaQSDownload(object):
         return [f"DB(JPMAQS,{tick},{metric})" for tick in tickers for metric in metrics]
 
     @staticmethod
-    def deconstruct_expression(expression: Union[str, List[str]]) -> Union[List[str], List[List[str]]]:
+    def deconstruct_expression(
+        expression: Union[str, List[str]]
+    ) -> Union[List[str], List[List[str]]]:
         """
         Deconstruct an expression into a list of cid, xcat, and metric.
         Coupled with to JPMaQSDownload.time_series_to_df(), achieves the inverse of
@@ -304,6 +306,13 @@ class JPMaQSDownload(object):
                 print(log_str)
 
         # check if all dates are present in the df
+        # NOTE : Hardcoded max start date to 1990-01-01. This is because the JPMAQS database
+        #        does not have data before this date.
+        if datetime.datetime.strptime(
+            start_date, "%Y-%m-%d"
+        ) < datetime.datetime.strptime("1990-01-01", "%Y-%m-%d"):
+            start_date = "1990-01-01"
+
         dates_expected = pd.bdate_range(start=start_date, end=end_date)
         dates_missing = len(data_df) - len(
             data_df[data_df["real_date"].isin(dates_expected)]
@@ -385,17 +394,29 @@ class JPMaQSDownload(object):
 
         final_df["real_date"] = pd.to_datetime(final_df["real_date"])
 
-        expected_dates = pd.bdate_range(start=start_date, end=end_date)
-        unexpected_dates = set(final_df["real_date"]) - set(expected_dates)
+        # list expected business dates, and non-business dates
+        expc_bdates: pd.DatetimeIndex = pd.bdate_range(start=start_date, end=end_date)
+        expc_nbdates: pd.DatetimeIndex = pd.DatetimeIndex(
+            list(set(pd.date_range(start=start_date, end=end_date)) - set(expc_bdates))
+        )
 
-        if unexpected_dates:
+        # check if any dates in the downloaded data are not in the expected dates (business + non-business)
+        dates_bools: pd.Series = final_df["real_date"].isin(expc_bdates) | final_df[
+            "real_date"
+        ].isin(expc_nbdates)
+
+        unexpected_dates: pd.DatetimeIndex = final_df[~dates_bools][
+            "real_date"
+        ].unique()
+
+        if any(~dates_bools):
             raise InvalidDataframeError(
                 f"Unexpected dates were found in the downloaded data: {unexpected_dates}"
             )
 
-        final_df = final_df[
-            final_df["real_date"].isin(expected_dates)]
-        
+        # finally, filter out the non-business dates
+        final_df = final_df[final_df["real_date"].isin(expc_bdates)]
+
         final_df = final_df.sort_values(["real_date", "cid", "xcat"])
 
         found_metrics = sorted(

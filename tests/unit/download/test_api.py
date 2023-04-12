@@ -222,7 +222,9 @@ class TestDataQueryInterface(unittest.TestCase):
             dq_expressions=expression, start_date=start_date, end_date=end_date
         )
 
-        expressions_found: List[str] = [ts["attributes"][0]["expression"] for ts in timeseries_output]
+        expressions_found: List[str] = [
+            ts["attributes"][0]["expression"] for ts in timeseries_output
+        ]
 
         out_df: pd.DataFrame = jpmaqs_download.time_series_to_df(
             dicts_list=timeseries_output,
@@ -237,13 +239,15 @@ class TestDataQueryInterface(unittest.TestCase):
         # Check that the output has the correct number of rows and columns
         # len(tickers)*len(pd.bdate_range(start_date, end_date)) = expected number of rows
         # expected cols = [["real_date", "cid", "xcat", "value", "grading"]] = 5
-        self.assertEqual(out_df.shape, (len(tickers) * len(pd.bdate_range(start_date, end_date)), 5))
+        self.assertEqual(
+            out_df.shape, (len(tickers) * len(pd.bdate_range(start_date, end_date)), 5)
+        )
 
         # Check that the output has the correct columns
         self.assertEqual(
             set(out_df.columns.tolist()),
-            set(["real_date", "cid", "xcat", "value", "grading"]),)
-        
+            set(["real_date", "cid", "xcat", "value", "grading"]),
+        )
 
     def test_construct_expressions(self):
         jpmaqs_download = JPMaQSDownload(
@@ -260,15 +264,13 @@ class TestDataQueryInterface(unittest.TestCase):
 
         metrics = ["value", "grading"]
 
-        set_a = jpmaqs_download.construct_expressions(
-            metrics=metrics, tickers=tickers
-        )
+        set_a = jpmaqs_download.construct_expressions(metrics=metrics, tickers=tickers)
 
         set_b = jpmaqs_download.construct_expressions(
-            metrics=metrics, cids=cids, xcats=xcats)
-        
-        self.assertEqual(set(set_a), set(set_b))
+            metrics=metrics, cids=cids, xcats=xcats
+        )
 
+        self.assertEqual(set(set_a), set(set_b))
 
     def test_deconstruct_expressions(self):
         jpmaqs_download = JPMaQSDownload(
@@ -277,22 +279,27 @@ class TestDataQueryInterface(unittest.TestCase):
             client_secret="client_secret",
             check_connection=False,
         )
-        
+
         cids = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY"]
         xcats = ["EQXR_NSA", "FXXR_NSA"]
         tickers = [cid + "_" + xcat for xcat in xcats for cid in cids]
         metrics = ["value", "grading"]
         tkms = [f"{ticker}_{metric}" for ticker in tickers for metric in metrics]
-        expressions = jpmaqs_download.construct_expressions(metrics=["value", "grading"], tickers=tickers)
-        deconstructed_expressions = jpmaqs_download.deconstruct_expression(expression=expressions)
+        expressions = jpmaqs_download.construct_expressions(
+            metrics=["value", "grading"], tickers=tickers
+        )
+        deconstructed_expressions = jpmaqs_download.deconstruct_expression(
+            expression=expressions
+        )
         dtkms = ["_".join(d) for d in deconstructed_expressions]
 
         self.assertEqual(set(tkms), set(dtkms))
 
-
         for tkm, expression in zip(tkms, expressions):
-            self.assertEqual(tkm, "_".join(jpmaqs_download.deconstruct_expression(expression=expression)))
-            
+            self.assertEqual(
+                tkm,
+                "_".join(jpmaqs_download.deconstruct_expression(expression=expression)),
+            )
 
 
 if __name__ == "__main__":
