@@ -38,6 +38,13 @@ class JPMaQSDownload(object):
     :param <str> username: username for certificate based authentication.
     :param <str> password : paired with username for certificate.
 
+    When using a config file:
+    :param <str> credentials_config: path to config file.
+    
+    The config file should contain the client_id and client_secret for oauth, or the
+    crt, key, username, and password for certificate based authentication.
+    (see macrosynergy.management.utils.JPMaQSAPIConfigObject)
+
     :param <bool> debug: True if debug mode, False if not.
     :param <bool> suppress_warning: True if suppressing warnings, False if not.
     :param <bool> check_connection: True if the interface should check the connection to
@@ -523,6 +530,10 @@ class JPMaQSDownload(object):
             False if not (default). If debug=True, this is set to True.
         :param <bool> as_dataframe: Return a dataframe if True (default),
             a list of dictionaries if False.
+        :param <bool> report_time_taken: If True, the time taken to download
+            and apply data transformations is reported.
+        :param <bool> report_egress: If True, the number of bytes downloaded
+            is reported along with the transmission speed in kilobits/second.
 
         :return <pd.DataFrame|list[Dict]>: dataframe of data if
             `as_dataframe` is True, list of dictionaries if False.
