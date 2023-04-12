@@ -222,7 +222,7 @@ class JPMaQSDownload(object):
         return [f"DB(JPMAQS,{tick},{metric})" for tick in tickers for metric in metrics]
 
     @staticmethod
-    def deconstruct_expression(expression: Union[str, List[str]]) -> List[str]:
+    def deconstruct_expression(expression: Union[str, List[str]]) -> Union[List[str], List[List[str]]]:
         """
         Deconstruct an expression into a list of cid, xcat, and metric.
         Coupled with to JPMaQSDownload.time_series_to_df(), achieves the inverse of
@@ -385,9 +385,17 @@ class JPMaQSDownload(object):
 
         final_df["real_date"] = pd.to_datetime(final_df["real_date"])
 
+        expected_dates = pd.bdate_range(start=start_date, end=end_date)
+        unexpected_dates = set(final_df["real_date"]) - set(expected_dates)
+
+        if unexpected_dates:
+            raise InvalidDataframeError(
+                f"Unexpected dates were found in the downloaded data: {unexpected_dates}"
+            )
+
         final_df = final_df[
-            final_df["real_date"].isin(pd.bdate_range(start=start_date, end=end_date))
-        ]
+            final_df["real_date"].isin(expected_dates)]
+        
         final_df = final_df.sort_values(["real_date", "cid", "xcat"])
 
         found_metrics = sorted(
