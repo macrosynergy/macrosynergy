@@ -590,7 +590,7 @@ class DataQueryInterface(object):
 
         self.proxy: Optional[dict] = None
         if config_object.proxy() is not None:
-            self.proxy = config_object.proxy()
+            self.proxy = config_object.proxy(mask=False)
         else:
             self.proxy = None
 

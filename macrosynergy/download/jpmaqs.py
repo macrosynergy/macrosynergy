@@ -409,6 +409,8 @@ class JPMaQSDownload(object):
         expressions: List[str],
         show_progress: bool,
         as_dataframe: bool,
+        report_time_taken: bool,
+        report_egress: bool,
     ) -> bool:
         """Validate the arguments passed to the download function.
 
@@ -426,6 +428,12 @@ class JPMaQSDownload(object):
 
         if not isinstance(as_dataframe, bool):
             raise TypeError("`as_dataframe` must be a boolean.")
+        
+        if not isinstance(report_time_taken, bool):
+            raise TypeError("`report_time_taken` must be a boolean.")
+        
+        if not isinstance(report_egress, bool):
+            raise TypeError("`report_egress` must be a boolean.")
 
         if all([tickers is None, cids is None, xcats is None, expressions is None]):
             raise ValueError(
@@ -563,6 +571,8 @@ class JPMaQSDownload(object):
             expressions=expressions,
             show_progress=show_progress,
             as_dataframe=as_dataframe,
+            report_time_taken=report_time_taken,
+            report_egress=report_egress,
         ):
             raise ValueError("Invalid arguments passed to download().")
 
