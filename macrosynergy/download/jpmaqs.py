@@ -6,16 +6,14 @@ import warnings
 import yaml
 import json
 import traceback as tb
-from macrosynergy.download.dataquery import DataQueryInterface
-from macrosynergy.download.exceptions import (
-    HeartbeatError,
-    InvalidDataframeError,
-    MissingDataError,
-)
 import datetime
 import logging
 import io
 from timeit import default_timer as timer
+
+from macrosynergy.download.dataquery import DataQueryInterface
+from macrosynergy.download.exceptions import *
+from macrosynergy.management.utils import is_valid_iso_date, JPMaQSAPIConfigObject
 
 logger = logging.getLogger(__name__)
 debug_stream_handler = logging.StreamHandler(io.StringIO())
@@ -26,33 +24,6 @@ debug_stream_handler.setFormatter(
     )
 )
 logger.addHandler(debug_stream_handler)
-
-
-def oauth_credential_loader(path_to_credentials: str) -> dict:
-    """Load oauth credentials from a yaml file.
-    :param <str> path_to_credentials: path to yaml file containing credentials.
-    :return <dict>: dictionary containing credentials.
-    """
-
-    credentials: Dict[str, str] = {}
-    if path_to_credentials.endswith("yml") or path_to_credentials.endswith("yaml"):
-        with open(path_to_credentials, "r") as f:
-            credentials = yaml.safe_load(f)
-
-    if path_to_credentials.endswith("json"):
-        with open(path_to_credentials, "r") as f:
-            credentials = json.load(f)
-
-    # look for client_id and client_secret substrings
-    for key in credentials.keys():
-        if "client_id" in key:
-            client_id = credentials[key]
-        if "client_secret" in key:
-            client_secret = credentials[key]
-
-    credentials = {"client_id": client_id, "client_secret": client_secret}
-
-    return credentials
 
 
 class JPMaQSDownload(object):
@@ -68,6 +39,13 @@ class JPMaQSDownload(object):
     :param <str> key: path to key file.
     :param <str> username: username for certificate based authentication.
     :param <str> password : paired with username for certificate.
+
+    When using a config file:
+    :param <str> credentials_config: path to config file.
+
+    The config file should contain the client_id and client_secret for oauth, or the
+    crt, key, username, and password for certificate based authentication.
+    (see macrosynergy.management.utils.JPMaQSAPIConfigObject)
 
     :param <bool> debug: True if debug mode, False if not.
     :param <bool> suppress_warning: True if suppressing warnings, False if not.
@@ -104,7 +82,7 @@ class JPMaQSDownload(object):
         username: Optional[str] = None,
         password: Optional[str] = None,
         check_connection: bool = True,
-        oauth_config: Optional[str] = None,
+        credentials_config: Optional[str] = None,
         proxy: Optional[Dict] = None,
         suppress_warning: bool = True,
         debug: bool = False,
@@ -132,53 +110,38 @@ class JPMaQSDownload(object):
         if not isinstance(dq_download_kwargs, dict):
             raise TypeError("`dq_download_kwargs` must be a dictionary.")
 
+        if not isinstance(oauth, bool):
+            raise TypeError("`oauth` must be a boolean.")
+
         self.suppress_warning = suppress_warning
         self.debug = debug
         self.print_debug_data = print_debug_data
         self._check_connection = check_connection
         self.dq_download_kwargs = dq_download_kwargs
-        if oauth and (
-            (not isinstance(client_id, str)) or (not isinstance(client_secret, str))
-        ):
-            if oauth_config is None:
-                raise ValueError(
-                    "If using oauth, `client_id` and `client_secret` must be provided."
-                    " Alternatively, provide a path to a yaml file containing the credentials "
-                    "using the `oauth_config` argument."
-                )
-            else:
-                credentials = oauth_credential_loader(oauth_config)
-                client_id = credentials["client_id"]
-                client_secret = credentials["client_secret"]
 
-        if oauth:
-            self.dq_interface: DataQueryInterface = DataQueryInterface(
-                oauth=oauth,
-                client_id=client_id,
-                client_secret=client_secret,
-                check_connection=check_connection,
-                proxy=proxy,
-                **kwargs,
-            )
-        else:
-            # ensure "crt", "key", "username", and "password" are in kwargs
-            for varx, namex in zip(
-                [crt, key, username, password],
-                ["crt", "key", "username", "password"],
-            ):
-                if not isinstance(varx, str):
-                    raise TypeError(f"`{namex}` must be a string.")
+        if credentials_config is not None:
+            if not isinstance(credentials_config, str):
+                raise TypeError("`credentials_config` must be a string.")
 
-            self.dq_interface: DataQueryInterface = DataQueryInterface(
-                oauth=oauth,
-                check_connection=check_connection,
-                crt=crt,
-                key=key,
-                username=username,
-                password=password,
-                proxy=proxy,
-                **kwargs,
-            )
+        config_obj: JPMaQSAPIConfigObject = JPMaQSAPIConfigObject(
+            config_path=credentials_config,
+            client_id=client_id,
+            client_secret=client_secret,
+            crt=crt,
+            key=key,
+            username=username,
+            password=password,
+            proxy=proxy,
+        )
+
+        self.dq_interface: DataQueryInterface = DataQueryInterface(
+            oauth=oauth,
+            check_connection=check_connection,
+            config_object=config_obj,
+            debug=debug,
+            **kwargs,
+        )
+
         self.valid_metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
         self.msg_errors: List[str] = []
         self.msg_warnings: List[str] = []
@@ -457,11 +420,6 @@ class JPMaQSDownload(object):
         self, verbose: bool = False, raise_error: bool = False
     ) -> bool:
         """Check if the interface is connected to the server.
-        
-        :param verbose <bool>: If True, print debug messages.
-        :param raise_error <bool>: If True, raise a ConnectionError if the
-            connection fails.
-
         :return <bool>: True if connected, False if not.
         """
 
@@ -492,13 +450,6 @@ class JPMaQSDownload(object):
         :raises <ValueError>: If any of the arguments are semantically incorrect.
 
         """
-
-        def is_valid_date(date: str) -> bool:
-            try:
-                datetime.datetime.strptime(date, "%Y-%m-%d")
-                return True
-            except ValueError:
-                return False
 
         if not isinstance(show_progress, bool):
             raise TypeError("`show_progress` must be a boolean.")
@@ -545,7 +496,7 @@ class JPMaQSDownload(object):
         for varx, namex in zip([start_date, end_date], ["start_date", "end_date"]):
             if not isinstance(varx, str):
                 raise TypeError(f"`{namex}` must be a string.")
-            if not is_valid_date(varx):
+            if not is_valid_iso_date(varx):
                 raise ValueError(
                     f"`{namex}` must be a valid date in the format YYYY-MM-DD."
                 )
@@ -712,10 +663,6 @@ class JPMaQSDownload(object):
 
 
 if __name__ == "__main__":
-    import os
-
-    client_id = os.environ["JPMAQS_API_CLIENT_ID"]
-    client_secret = os.environ["JPMAQS_API_CLIENT_SECRET"]
 
     cids = [
         "AUD",
@@ -744,8 +691,7 @@ if __name__ == "__main__":
     end_date: str = "2023-03-20"
 
     with JPMaQSDownload(
-        client_id=client_id,
-        client_secret=client_secret,
+        credentials_config="./config.yml",
         debug=True,
     ) as jpmaqs:
         data = jpmaqs.download(
