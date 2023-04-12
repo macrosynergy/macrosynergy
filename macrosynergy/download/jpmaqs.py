@@ -455,10 +455,10 @@ class JPMaQSDownload(object):
 
         if not isinstance(as_dataframe, bool):
             raise TypeError("`as_dataframe` must be a boolean.")
-        
+
         if not isinstance(report_time_taken, bool):
             raise TypeError("`report_time_taken` must be a boolean.")
-        
+
         if not isinstance(report_egress, bool):
             raise TypeError("`report_egress` must be a boolean.")
 
@@ -568,7 +568,6 @@ class JPMaQSDownload(object):
         self.suppress_warning = suppress_warning
         self.debug = debug
 
-
         for varx in [tickers, cids, xcats, expressions]:
             if isinstance(varx, str):
                 varx = [varx]
@@ -614,7 +613,7 @@ class JPMaQSDownload(object):
 
         # Download data.
         data: List[Dict] = []
-        egress_data : Dict = {}
+        egress_data: Dict = {}
         download_time_taken: float = timer()
         with self.dq_interface as dq:
             print(
@@ -641,11 +640,9 @@ class JPMaQSDownload(object):
                 self.unavailable_expressions += (
                     self.dq_interface.unavailable_expressions
                 )
-            
+
             if report_egress:
                 egress_data = self.dq_interface.egress_data
-
-            
 
         download_time_taken: float = timer() - download_time_taken
         dfs_time_taken: float = timer()
@@ -670,7 +667,6 @@ class JPMaQSDownload(object):
                 )
 
         if report_egress:
-            
             # create averages for egress_data like
             #  egress_data[tracking_id] = {
             #     "url": log_url,
@@ -678,12 +674,12 @@ class JPMaQSDownload(object):
             #     "download_size": download_size,
             #     "time_taken": time_taken,
             #   }
-            
-            total_upload : int = 0
-            total_download : int = 0
-            total_time_taken : float = 0
-            longest_time_taken : float = 0
-            longest_time_taken_url : str = ""
+
+            total_upload: int = 0
+            total_download: int = 0
+            total_time_taken: float = 0
+            longest_time_taken: float = 0
+            longest_time_taken_url: str = ""
             for tracking_id in egress_data:
                 total_upload += egress_data[tracking_id]["upload_size"]
                 total_download += egress_data[tracking_id]["download_size"]
@@ -691,17 +687,18 @@ class JPMaQSDownload(object):
                 if egress_data[tracking_id]["time_taken"] > longest_time_taken:
                     longest_time_taken = egress_data[tracking_id]["time_taken"]
                     longest_time_taken_url = egress_data[tracking_id]["url"]
-                
-            avg_upload_size_kb : float = total_upload / (1024)
-            avg_download_size_kb : float = total_download / (1024)
-            avg_time_taken : float = total_time_taken / len(egress_data)
-            avg_transfer_rate_kbit : float = (avg_download_size_kb + avg_upload_size_kb) * 8 / avg_time_taken
+
+            avg_upload_size_kb: float = total_upload / (1024)
+            avg_download_size_kb: float = total_download / (1024)
+            avg_time_taken: float = total_time_taken / len(egress_data)
+            avg_transfer_rate_kbit: float = (
+                (avg_download_size_kb + avg_upload_size_kb) * 8 / avg_time_taken
+            )
             print(f"Average upload size: \t{avg_upload_size_kb:.2f} KB")
             print(f"Average download size: \t{avg_download_size_kb:.2f} KB")
             print(f"Average time taken: \t{avg_time_taken:.2f} seconds")
             print(f"Longest time taken: \t{longest_time_taken:.2f} seconds")
             print(f"Average transfer rate : \t{avg_transfer_rate_kbit:.2f} Kbps")
-
 
         if len(self.msg_errors) > 0:
             if not (self.suppress_warning):
@@ -715,7 +712,6 @@ class JPMaQSDownload(object):
 
 
 if __name__ == "__main__":
-
     cids = [
         "AUD",
         "BRL",

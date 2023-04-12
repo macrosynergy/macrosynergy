@@ -26,7 +26,11 @@ from macrosynergy.download.exceptions import (
     InvalidResponseError,
     HeartbeatError,
 )
-from macrosynergy.management.utils import is_valid_iso_date, form_full_url,JPMaQSAPIConfigObject
+from macrosynergy.management.utils import (
+    is_valid_iso_date,
+    form_full_url,
+    JPMaQSAPIConfigObject,
+)
 
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 OAUTH_BASE_URL: str = (
@@ -55,7 +59,7 @@ debug_stream_handler.setFormatter(
 )
 logger.addHandler(debug_stream_handler)
 
-egress_logger : dict = {}
+egress_logger: dict = {}
 
 
 def validate_response(response: requests.Response) -> dict:
@@ -167,7 +171,6 @@ def request_wrapper(
     start_time: float = timer()
     while retry_count < API_RETRY_COUNT:
         try:
-
             prepared_request: requests.PreparedRequest = requests.Request(
                 method, url, headers=headers, params=params, **kwargs
             ).prepare()
@@ -175,9 +178,10 @@ def request_wrapper(
             upload_size = prepared_request.headers.get("Content-Length", 0)
 
             response = requests.Session().send(
-                prepared_request, proxies=proxy,
+                prepared_request,
+                proxies=proxy,
             )
-            
+
             # track the download size
             if isinstance(response, requests.Response):
                 download_size = response.content.__sizeof__()
@@ -190,7 +194,6 @@ def request_wrapper(
                 "download_size": int(download_size),
                 "time_taken": time_taken,
             }
-
 
             if isinstance(response, requests.Response):
                 return validate_response(response)
@@ -244,7 +247,7 @@ def request_wrapper(
                 time.sleep(API_DELAY_PARAM)
             else:
                 raise exc
-    
+
         time_taken = timer() - start_time
 
         egress_logger[tracking_id] = {
@@ -573,7 +576,7 @@ class DataQueryInterface(object):
             self.access_method is not None
         ), "Failed to initialise access method. Check the config_object passed"
 
-        self.proxy : Optional[dict] = config_object.proxy(mask=False)
+        self.proxy: Optional[dict] = config_object.proxy(mask=False)
 
     def __enter__(self):
         return self
@@ -1015,7 +1018,7 @@ class DataQueryInterface(object):
         self.unavailable_expressions += self.get_unavailable_expressions(
             expected_exprs=expressions, dicts_list=final_output
         )
-        
+
         self.egress_data = egress_logger
         return final_output
 
