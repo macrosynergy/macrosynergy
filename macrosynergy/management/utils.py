@@ -336,7 +336,8 @@ class JPMaQSAPIConfigObject(object):
         self._credentials: Dict[str, dict] = r_auth
 
         self._config_type: Optional[str] = "yaml"  # default
-        if config_path.endswith(".json"):
+        if (not isinstance(config_path, type(None))) \
+            and config_path.endswith(".json"):
             self._config_type = "json"
 
     def oauth(self, mask: bool = True):
