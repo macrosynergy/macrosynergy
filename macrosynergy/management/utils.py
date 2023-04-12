@@ -9,7 +9,7 @@ import datetime
 import os
 import yaml
 import json
-from typing import Any, List, Dict, Optional, Callable
+from typing import Any, List, Dict, Optional, Callable, Union
 import requests, requests.compat
 import itertools
 
@@ -17,6 +17,40 @@ import itertools
 ##############################
 #   Helpful Functions
 ##############################
+
+
+def generate_random_date(
+    start: Optional[Union[str, datetime.datetime, pd.Timestamp]] = "1990-01-01",
+    end: Optional[Union[str, datetime.datetime, pd.Timestamp]] = "2020-01-01",
+) -> str:
+    """
+    Generates a random date between two dates.
+
+    Parameters
+    :param <str> start: The start date, in the ISO format (YYYY-MM-DD).
+    :param <str> end: The end date, in the ISO format (YYYY-MM-DD).
+
+    Returns
+    :return <str>: The random date.
+    """
+
+    if not isinstance(start, (str, datetime.datetime, pd.Timestamp)):
+        raise TypeError(
+            "Argument `start` must be a string, datetime.datetime, or pd.Timestamp."
+        )
+    if not isinstance(end, (str, datetime.datetime, pd.Timestamp)):
+        raise TypeError(
+            "Argument `end` must be a string, datetime.datetime, or pd.Timestamp."
+        )
+
+    start: pd.Timestamp = pd.Timestamp(start)
+    end: pd.Timestamp = pd.Timestamp(end)
+    if start == end:
+        return start.strftime("%Y-%m-%d")
+    else:
+        return pd.Timestamp(
+            np.random.randint(start.value, end.value, dtype=np.int64)
+        ).strftime("%Y-%m-%d")
 
 
 def get_dict_max_depth(d: dict) -> int:
@@ -53,6 +87,8 @@ def rec_search_dict(d: dict, key: str, match_substring: bool = False) -> str:
     Returns
     :return <str>: The value associated with the key.
     """
+    if not isinstance(d, dict):
+        raise TypeError("Argument `d` must be a dictionary.")
     result: Any = None
     for k, v in d.items():
         if match_substring:
@@ -80,6 +116,7 @@ def is_valid_iso_date(date: str) -> bool:
 
 
 def convert_to_iso_format(date: Any = None) -> str:
+    raise NotImplementedError("This function is not yet implemented.")
     """
     Converts a datetime like object or string to an ISO date string.
 
@@ -95,12 +132,60 @@ def convert_to_iso_format(date: Any = None) -> str:
 
     r: Optional[str] = None
     if isinstance(date, str):
-        # try and load the string as dd/mm/yyyy
-        try:
-            r = datetime.datetime.strptime(date, "%d/%m/%Y").strftime("%Y-%m-%d")
-            return
-        except ValueError:
-            pass
+        r: Optional[str] = None
+        if is_valid_iso_date(date):
+            r = date
+        else:
+            if len(date) == 8:
+                try:
+                    r = convert_dq_to_iso(date)
+                except Exception as e:
+                    if isinstance(e, (ValueError, AssertionError)):
+                        pass
+            else:
+                for sep in ["-", "/", ".", " "]:
+                    if sep in date:
+                        try:
+                            sd = date.split(sep)
+                            dx = date
+                            if len(sd) == 3:
+                                if len(sd[1]) == 3:
+                                    sd[1] = {
+                                        "JAN": "01",
+                                        "FEB": "02",
+                                        "MAR": "03",
+                                        "APR": "04",
+                                        "MAY": "05",
+                                        "JUN": "06",
+                                        "JUL": "07",
+                                        "AUG": "08",
+                                        "SEP": "09",
+                                        "OCT": "10",
+                                        "NOV": "11",
+                                        "DEC": "12",
+                                    }[sd[1].upper()]
+                                    dx = sep.join(sd)
+                                r = datetime.datetime.strptime(
+                                    dx, "%d" + sep + "%m" + sep + "%Y"
+                                ).strftime("%Y-%m-%d")
+                                break
+                        except Exception as e:
+                            if isinstance(e, ValueError):
+                                pass
+                            else:
+                                raise e
+
+        if r is None:
+            raise RuntimeError("Could not convert date to ISO format.")
+    elif isinstance(date, (datetime.datetime, pd.Timestamp, np.datetime64)):
+        r = date.strftime("%Y-%m-%d")
+    else:
+        raise TypeError(
+            "Argument `date` must be a string, datetime.datetime, pd.Timestamp or np.datetime64."
+        )
+
+    assert is_valid_iso_date(r), "Failed to convert date to ISO format."
+    return r
 
 
 def convert_iso_to_dq(date: str) -> str:
@@ -114,12 +199,12 @@ def convert_iso_to_dq(date: str) -> str:
 
 def convert_dq_to_iso(date: str) -> str:
     if len(date) == 8:
-        r = date[:4] + "-" + date[4:6] + "-" + date[6:]
-        assert is_valid_iso_date(r), "Date format incorrect"
+        r = datetime.datetime.strptime(date, "%Y%m%d").strftime("%Y-%m-%d")
+        assert is_valid_iso_date(r), "Failed to format date"
         return r
     else:
         raise ValueError("Incorrect date format, should be YYYYMMDD")
-    
+
 
 def form_full_url(url: str, params: Dict = {}) -> str:
     """
@@ -294,6 +379,8 @@ class JPMaQSAPIConfigObject(object):
                 if not config_dict:
                     raise ValueError("Config file could not be loaded.")
                 else:
+                    # make all keys lowercase
+                    config_dict = {k.lower(): v for k, v in config_dict.items()}
                     for var in loaded_vars.keys():
                         loaded_vars[var] = rec_search_dict(config_dict, var, True)
 
@@ -348,13 +435,20 @@ class JPMaQSAPIConfigObject(object):
                     loaded_vars[pkx], dict
                 ), "Proxy settings must be a dictionary or JSON-like string."
 
-                r_auth["proxy"] = loaded_vars["proxy"]
+        if r_auth["proxy"] is not None:
+                if r_auth["proxy"]["proxies"] is not None:
+                    r_auth["proxy"].update(r_auth["proxy"]["proxies"])
+                    del r_auth["proxy"]["proxies"]
+                
+                if r_auth["proxy"]["proxy"] is not None:
+                    r_auth["proxy"].update(r_auth["proxy"]["proxy"])
+                    del r_auth["proxy"]["proxy"]
+
 
         self._credentials: Dict[str, dict] = r_auth
 
         self._config_type: Optional[str] = "yaml"  # default
-        if (not isinstance(config_path, type(None))) \
-            and config_path.endswith(".json"):
+        if (not isinstance(config_path, type(None))) and config_path.endswith(".json"):
             self._config_type = "json"
 
     def oauth(self, mask: bool = True):
@@ -403,25 +497,23 @@ class JPMaQSAPIConfigObject(object):
                     rdict[kx] = "*" * len(rdict[kx])
 
             return rdict
-    
-    def proxy(self, mask : bool = False):
-        if not(("proxy" in self._credentials) or ("proxies") in self._credentials):
+
+    def proxy(self, mask: bool = False):
+        if not (("proxy" in self._credentials) or ("proxies") in self._credentials):
             return None
         else:
             rdict: Dict[str, dict] = {}
-
-            for prx in ["proxy", "proxies"]:
-                if prx in self._credentials.keys():
-                    rdict[prx] = self._credentials[prx]
-                    if mask:
-                        for kx in rdict[prx].keys():
-                            rdict[prx][kx] = "*" * len(rdict[prx][kx])
+            for kx in self._credentials["proxy"].keys():
+                rdict[kx] = self._credentials["proxy"][kx]
+                if mask:
+                    rdict[kx] = "*" * len(rdict[kx])
 
             return rdict
 
-
-
-    def credentials(self, mask: bool = False,) -> Dict[str, dict]:
+    def credentials(
+        self,
+        mask: bool = False,
+    ) -> Dict[str, dict]:
         rdict: Dict[str, dict] = {}
         for k in self._credentials.keys():
             rdict[k] = getattr(self, k)(mask=mask)
