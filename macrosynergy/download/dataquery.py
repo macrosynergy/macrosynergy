@@ -26,7 +26,7 @@ from macrosynergy.download.exceptions import (
     InvalidResponseError,
     HeartbeatError,
 )
-from macrosynergy.management.utils import is_valid_iso_date, JPMaQSAPIConfigObject
+from macrosynergy.management.utils import is_valid_iso_date, form_full_url,JPMaQSAPIConfigObject
 
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 OAUTH_BASE_URL: str = (
@@ -106,22 +106,6 @@ def validate_response(response: requests.Response) -> dict:
         raise InvalidResponseError(
             f"Request did not return a 200 status code.\n{error_str}"
         )
-
-
-def form_full_url(url: str, params: Dict = {}) -> str:
-    """
-    Forms a full URL from a base URL and a dictionary of parameters.
-    Useful for logging and debugging.
-
-    :param <str> url: base URL.
-    :param <dict> params: dictionary of parameters.
-
-    :return <str>: full URL
-    """
-    return requests.compat.quote(
-        (f"{url}?{requests.compat.urlencode(params)}" if params else url),
-        safe="%/:=&?~#+!$,;'@()*[]",
-    )
 
 
 def request_wrapper(
