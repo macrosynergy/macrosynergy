@@ -457,6 +457,11 @@ class JPMaQSDownload(object):
         self, verbose: bool = False, raise_error: bool = False
     ) -> bool:
         """Check if the interface is connected to the server.
+        
+        :param verbose <bool>: If True, print debug messages.
+        :param raise_error <bool>: If True, raise a ConnectionError if the
+            connection fails.
+
         :return <bool>: True if connected, False if not.
         """
 
@@ -602,12 +607,6 @@ class JPMaQSDownload(object):
         self.suppress_warning = suppress_warning
         self.debug = debug
 
-        if all([_arg is None for _arg in [tickers, cids, xcats, expressions]]):
-            cids = ["USD", "AUD"]
-            xcats = ["EQXR_VT10", "EXALLOPENNESS_NSA_1YMA"]
-            metrics = ["value", "grading"]
-        # NOTE : This is simply so that we can test the download() function
-        #   without having to pass in a bunch of arguments.
 
         for varx in [tickers, cids, xcats, expressions]:
             if isinstance(varx, str):
