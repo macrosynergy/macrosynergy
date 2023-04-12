@@ -881,7 +881,7 @@ class DataQueryInterface(object):
         #     expressions = self.filter_exprs_from_catalogue(expressions)
 
         expr_batches: List[List[str]] = [
-            expressions[i : min(i + self.batch_size, len(expressions))]
+            expressions[i : i + self.batch_size]
             for i in range(0, len(expressions), self.batch_size)
         ]
 
