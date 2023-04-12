@@ -242,7 +242,7 @@ class JPMaQSAPIConfigObject(object):
                 (See https://requests.readthedocs.io/en/master/user/advanced/#proxies)
         """
 
-        if not isinstance(config_path, (str, None)):
+        if not isinstance(config_path, (str, type(None))):
             raise ValueError(
                 "Config file must be a string containing the path"
                 " to the config file or None. Use `env` to use"
@@ -259,28 +259,28 @@ class JPMaQSAPIConfigObject(object):
         loaded_vars: Dict[str, Optional[str]] = {
             var: None for var in oauth_var_names + cert_var_names + proxy_var_names
         }
-
-        if config_path == "env":
-            for var in loaded_vars.keys():
-                loaded_vars[var] = os.environ.get(f"JPMAQS_API_{var.upper()}", None)
-
-        else:
-            config_dict: Optional[dict] = None
-            if config_path.endswith(".json"):
-                with open(config_path, "r") as f:
-                    config_dict = json.load(f)
-            elif config_path.endswith(".yaml") or config_path.endswith(".yml"):
-                with open(config_path, "r") as f:
-                    config_dict = yaml.safe_load(f)
-
-            if not config_dict:
-                raise ValueError("Config file could not be loaded.")
-            else:
+        if not (config_path is None):
+            if config_path == "env":
                 for var in loaded_vars.keys():
-                    loaded_vars[var] = rec_search_dict(config_dict, var, True)
+                    loaded_vars[var] = os.environ.get(f"JPMAQS_API_{var.upper()}", None)
 
-                if loaded_vars["crt"] is None:
-                    loaded_vars["crt"] = rec_search_dict(config_dict, "cert", True)
+            elif not (config_path is None):
+                config_dict: Optional[dict] = None
+                if config_path.endswith(".json"):
+                    with open(config_path, "r") as f:
+                        config_dict = json.load(f)
+                elif config_path.endswith(".yaml") or config_path.endswith(".yml"):
+                    with open(config_path, "r") as f:
+                        config_dict = yaml.safe_load(f)
+
+                if not config_dict:
+                    raise ValueError("Config file could not be loaded.")
+                else:
+                    for var in loaded_vars.keys():
+                        loaded_vars[var] = rec_search_dict(config_dict, var, True)
+
+                    if loaded_vars["crt"] is None:
+                        loaded_vars["crt"] = rec_search_dict(config_dict, "cert", True)
 
         all_args_present: Callable = lambda x: all([v is not None for v in x])
 
