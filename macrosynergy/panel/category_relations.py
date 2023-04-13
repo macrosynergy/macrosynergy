@@ -70,6 +70,25 @@ class CategoryRelations(object):
         i.e. relate to future values of the explained variable.
 
     """
+    
+    def _apply_slip(self, df: pd.DataFrame, slip: int) -> pd.DataFrame:
+        # identify unique cid_xcat combinations
+        
+        df['tickers'] = df['cid'] + '_' + df['xcat']
+        unique_tickers : List[str] = (df['cid'] + '_' + df['xcat']).unique().tolist()
+        out_dfs : List[pd.DataFrame] = []
+        for ticker in unique_tickers:
+            sel_df : pd.DataFrame = df[df['tickers'] == ticker]
+            dates : pd.Series = pd.to_datetime(sel_df['real_date'])
+            values : pd.Series = sel_df[self.val]
+            sd = sel_df[sel_df[self.val].notna()]['real_date'].min()
+            ed = sel_df[sel_df[self.val].notna()]['real_date'].max()
+            values = values.shift(slip)[(dates >= sd) & (dates <= ed)]
+            sel_df.loc[values.index, self.val] = values
+            out_dfs.append(sel_df)
+        
+        out_df : pd.DataFrame = pd.concat(out_dfs, axis=0).drop(columns=['tickers'])
+        return out_df
 
     def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                  val: str = 'value', start: str = None, end: str = None,
@@ -97,6 +116,9 @@ class CategoryRelations(object):
 
         # Select the cross-sections available for both categories.
         df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+        
+        if self.slip != 0:
+            df = self._apply_slip(df, self.slip)
 
         shared_cids = CategoryRelations.intersection_cids(df, xcats, cids)
 
@@ -104,7 +126,7 @@ class CategoryRelations(object):
         # time-periods.
         df = categories_df(
             df, xcats, shared_cids, val=val, start=start, end=end, freq=freq,
-            blacklist=blacklist, years=years, lag=lag-slip,
+            blacklist=blacklist, years=years, lag=lag,
             fwin=fwin, xcat_aggs=xcat_aggs
         )
 
