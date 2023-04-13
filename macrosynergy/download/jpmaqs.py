@@ -250,6 +250,7 @@ class JPMaQSDownload(object):
         exprs_f = set(found_expressions)
         expr_expected = set(expected_expressions)
         expr_missing = expr_expected - exprs_f
+        self.unavailable_expressions += list(expr_missing)
         unexpected_exprs = exprs_f - expr_expected
         if unexpected_exprs:
             raise InvalidDataframeError(
@@ -332,16 +333,17 @@ class JPMaQSDownload(object):
             cid, xcat, metricx = JPMaQSDownload.deconstruct_expression(
                 d["attributes"][0]["expression"]
             )
-            found_expressions.append(d["attributes"][0]["expression"])
-            df: pd.DataFrame = (
-                pd.DataFrame(
-                    d["attributes"][0]["time-series"], columns=["real_date", metricx]
+            if d["attributes"][0]["time-series"] is not None:
+                found_expressions.append(d["attributes"][0]["expression"])
+                df: pd.DataFrame = (
+                    pd.DataFrame(
+                        d["attributes"][0]["time-series"], columns=["real_date", metricx]
+                    )
+                    .assign(cid=cid, xcat=xcat, metric=metricx)
+                    .rename(columns={metricx: "obs"})
                 )
-                .assign(cid=cid, xcat=xcat, metric=metricx)
-                .rename(columns={metricx: "obs"})
-            )
-            df = df[["real_date", "cid", "xcat", "obs", "metric"]]
-            dfs.append(df)
+                df = df[["real_date", "cid", "xcat", "obs", "metric"]]
+                dfs.append(df)
 
         final_df: pd.DataFrame = pd.concat(dfs, ignore_index=True)
 
@@ -729,6 +731,7 @@ if __name__ == "__main__":
         "EUR",
         "FRF",
         "GBP",
+        "USD"
     ]
     xcats = [
         "RIR_NSA",
