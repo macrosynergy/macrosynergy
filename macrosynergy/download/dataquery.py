@@ -715,7 +715,7 @@ class DataQueryInterface(object):
         """
         raise NotImplementedError("This method has not been implemented yet.")
 
-    def download(
+    def _download(
             self,
             expressions: List[str],
             params: dict,
@@ -801,7 +801,7 @@ class DataQueryInterface(object):
             flat_failed_batches: List[str] = list(
                 itertools.chain.from_iterable(failed_batches)
             )
-            retried_output: List[dict] = self.download(
+            retried_output: List[dict] = self._download(
                 expressions=flat_failed_batches,
                 params=params,
                 url=url,
@@ -919,7 +919,7 @@ class DataQueryInterface(object):
             "data": reference_data,
         }
 
-        final_output: List[dict] = self.download(
+        final_output: List[dict] = self._download(
             expressions=expressions,
             params=params_dict,
             url=self.base_url + endpoint,
