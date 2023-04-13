@@ -220,7 +220,7 @@ class CategoryRelations(object):
         return df
 
     def corr_prob_calc(self, df_probability: Union[pd.DataFrame, List[pd.DataFrame]],
-                       prob_bool: bool = True):
+                       prob_est):
         """
         Compute the correlation coefficient and probability statistics.
 
@@ -239,20 +239,22 @@ class CategoryRelations(object):
 
         cpl = []
         for i, df_i in enumerate(df_probability):
-            x = df_i[self.xcats[0]].to_numpy()
-            y = df_i[self.xcats[1]].to_numpy()
-            coeff, pval = stats.pearsonr(x, y)
-            if prob_bool:
-                row = [np.round(coeff, 3), np.round(1 - pval, 3)]
-            else:
-                row = [np.round(coeff, 3)]
-
+            feat = df_i[self.xcats[0]].to_numpy()
+            targ = df_i[self.xcats[1]].to_numpy()
+            coeff, pval = stats.pearsonr(feat, targ)
+            if prob_est == "map":
+                X = df_i.loc[:, self.xcats[0]]
+                X = sm.add_constant(X)
+                y = df_i.loc[:, self.xcats[1]]
+                groups = df_i.reset_index().real_date
+                re = sm.MixedLM(y, X, groups, ).fit(reml=False)  # random effects est
+                pval = float(re.summary().tables[1].iloc[1, 3])
+            row = [np.round(coeff, 3), np.round(1 - pval, 3)]
             cpl.append(row)
         return cpl
 
-    def corr_probability(self, df_probability, time_period: str = '',
-                         coef_box_loc: str = 'upper left',
-                         prob_bool: bool = True):
+    def corr_probability(self, df_probability, prob_est, time_period: str = '',
+                         coef_box_loc: str = 'upper left'):
         """
         Add the computed correlation coefficient and probability to a Matplotlib table.
 
@@ -272,12 +274,11 @@ class CategoryRelations(object):
         time_period_error = f"<str> expected - received {type(time_period)}."
         assert isinstance(time_period, str), time_period_error
 
-        cpl = self.corr_prob_calc(df_probability=df_probability, prob_bool=prob_bool)
-        if prob_bool:
-            fields = [f"Correlation\n coefficient {time_period}",
-                      f"Probability\n of significance {time_period}"]
-        else:
-            fields = ["Correlation\n coefficient"]
+        cpl = self.corr_prob_calc(df_probability=df_probability,
+                                  prob_est=prob_est)
+
+        fields = [f"Correlation\n coefficient {time_period}",
+                  f"Probability\n of significance {time_period}"]
 
         if isinstance(df_probability, list) and len(df_probability) == 2:
             row_headers = ["Before 2010", "After 2010"]
@@ -306,7 +307,8 @@ class CategoryRelations(object):
 
     def reg_scatter(self, title: str = None, labels: bool = False,
                     size: Tuple[float] = (12, 8), xlab: str = None, ylab: str = None,
-                    coef_box: str = None, fit_reg: bool = True, reg_ci: int = 95,
+                    coef_box: str = None, prob_est: str = "pool",
+                    fit_reg: bool = True, reg_ci: int = 95,
                     reg_order: int = 1, reg_robust: bool = False,
                     separator: Union[str, int] = None, title_adj: float = 1,
                     single_chart: bool = False):
@@ -334,6 +336,14 @@ class CategoryRelations(object):
             pseudo-boolean parameter. The options are standard, i.e. 'upper left',
             'lower right' and so forth. Default is None, i.e the statistics are not
             displayed.
+        :param <str> prob_est: type of estimator for probability of significant relation.
+            The default is "pool", which means that all observation pairs of a panel
+            are pooled and the probability is based on that pool.
+            The alternative is "map", denoting Macrosynergy panel test. This is based
+            on a panel regression with period-specific random effects and greatly
+            mitigates the issue of pseudo-replication if panel features and targets
+            are correlated across time.
+            See also https://research.macrosynergy.com/testing-macro-trading-factors/
         :param <Union[str, int]> separator: allows categorizing the scatter analysis by
             cross-section or integer. In the former case the argument is set to
             "cids" and in the latter case the argument is set to a year [2010, for
@@ -352,6 +362,8 @@ class CategoryRelations(object):
                              "location of the box: 'upper left', 'lower right' etc."
         if coef_box is not None:
             assert isinstance(coef_box, str), coef_box_loc_error
+
+        assert prob_est in ["pool", "map"], "prob_est must be 'pool' or 'map'"
 
         sns.set_theme(style="whitegrid")
         dfx = self.df.copy()
@@ -398,7 +410,10 @@ class CategoryRelations(object):
 
             if coef_box is not None:
                 data_table = self.corr_probability(
-                    df_probability=[dfx1, dfx2], time_period="", coef_box_loc=coef_box
+                    df_probability=[dfx1, dfx2],
+                    time_period="",
+                    coef_box_loc=coef_box,
+                    prob_est=prob_est
                 )
                 data_table.scale(0.4, 2.5)
                 data_table.set_fontsize(14)
@@ -481,7 +496,8 @@ class CategoryRelations(object):
 
             if coef_box is not None:
                 data_table = self.corr_probability(
-                    df_probability=self.df, coef_box_loc=coef_box
+                    df_probability=self.df, prob_est=prob_est,
+                    coef_box_loc=coef_box
                 )
                 data_table.scale(0.4, 2.5)
                 data_table.set_fontsize(12)
@@ -573,7 +589,7 @@ if __name__ == "__main__":
 
     cr.reg_scatter(
         labels=False, separator=None, title="Carry and Return", xlab="Carry",
-        ylab="Return", coef_box="lower left"
+        ylab="Return", coef_box="lower left", prob_est="map",
     )
 
     cr = CategoryRelations(
@@ -588,6 +604,6 @@ if __name__ == "__main__":
     )
 
     cr.reg_scatter(
-        labels=False, separator="cids", title="Carry and Return", xlab="Carry",
+        labels=False, separator=cids, title="Carry and Return", xlab="Carry",
         ylab="Return", coef_box="lower left"
     )
