@@ -134,7 +134,7 @@ class JPMaQSDownload(object):
         self.dq_interface: DataQueryInterface = DataQueryInterface(
             oauth=oauth,
             check_connection=check_connection,
-            config_object=config_obj,
+            config=config_obj,
             debug=debug,
             **kwargs,
         )
@@ -653,7 +653,7 @@ class JPMaQSDownload(object):
                 expected_expressions=expressions,
                 start_date=start_date,
                 end_date=end_date,
-                verbose=not (self.suppress_warning),
+                verbose=not self.suppress_warning,
             )
             data = data_df
 
@@ -701,7 +701,7 @@ class JPMaQSDownload(object):
             print(f"Average transfer rate : \t{avg_transfer_rate_kbit:.2f} Kbps")
 
         if len(self.msg_errors) > 0:
-            if not (self.suppress_warning):
+            if not self.suppress_warning:
                 print(
                     f"{len(self.msg_errors)} errors encountered during the download. \n"
                     f"The errors did not compromise the download. \n"
