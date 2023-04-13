@@ -568,9 +568,12 @@ class JPMaQSDownload(object):
         self.suppress_warning = suppress_warning
         self.debug = debug
 
-        for varx in [tickers, cids, xcats, expressions]:
-            if isinstance(varx, str):
-                varx = [varx]
+        vartolist = lambda x: [x] if isinstance(x, str) else x
+        tickers = vartolist(tickers)
+        cids = vartolist(cids)
+        xcats = vartolist(xcats)
+        expressions = vartolist(expressions)
+        metrics = vartolist(metrics)
 
         if len(metrics) == 1:
             if metrics[0] == "all":
@@ -734,7 +737,7 @@ if __name__ == "__main__":
         "DU05YXR_NSA",
         "DU05YXR_VT10",
     ]
-    metrics = ["all"]
+    metrics = "all"
     start_date: str = "2023-03-01"
     end_date: str = "2023-03-20"
 
