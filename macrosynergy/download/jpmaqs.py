@@ -2,20 +2,15 @@
 
 from typing import List, Optional, Dict, Union
 import pandas as pd
-import warnings
-import yaml
-import json
 import traceback as tb
-from macrosynergy.download.dataquery import DataQueryInterface
-from macrosynergy.download.exceptions import (
-    HeartbeatError,
-    InvalidDataframeError,
-    MissingDataError,
-)
 import datetime
 import logging
 import io
 from timeit import default_timer as timer
+
+from macrosynergy.download.dataquery import DataQueryInterface
+from macrosynergy.download.exceptions import *
+from macrosynergy.management.utils import is_valid_iso_date, JPMaQSAPIConfigObject
 
 logger = logging.getLogger(__name__)
 debug_stream_handler = logging.StreamHandler(io.StringIO())
@@ -26,33 +21,6 @@ debug_stream_handler.setFormatter(
     )
 )
 logger.addHandler(debug_stream_handler)
-
-
-def oauth_credential_loader(path_to_credentials: str) -> dict:
-    """Load oauth credentials from a yaml file.
-    :param <str> path_to_credentials: path to yaml file containing credentials.
-    :return <dict>: dictionary containing credentials.
-    """
-
-    credentials: Dict[str, str] = {}
-    if path_to_credentials.endswith("yml") or path_to_credentials.endswith("yaml"):
-        with open(path_to_credentials, "r") as f:
-            credentials = yaml.safe_load(f)
-
-    if path_to_credentials.endswith("json"):
-        with open(path_to_credentials, "r") as f:
-            credentials = json.load(f)
-
-    # look for client_id and client_secret substrings
-    for key in credentials.keys():
-        if "client_id" in key:
-            client_id = credentials[key]
-        if "client_secret" in key:
-            client_secret = credentials[key]
-
-    credentials = {"client_id": client_id, "client_secret": client_secret}
-
-    return credentials
 
 
 class JPMaQSDownload(object):
@@ -68,6 +36,13 @@ class JPMaQSDownload(object):
     :param <str> key: path to key file.
     :param <str> username: username for certificate based authentication.
     :param <str> password : paired with username for certificate.
+
+    When using a config file:
+    :param <str> credentials_config: path to config file.
+
+    The config file should contain the client_id and client_secret for oauth, or the
+    crt, key, username, and password for certificate based authentication.
+    (see macrosynergy.management.utils.JPMaQSAPIConfigObject)
 
     :param <bool> debug: True if debug mode, False if not.
     :param <bool> suppress_warning: True if suppressing warnings, False if not.
@@ -104,7 +79,7 @@ class JPMaQSDownload(object):
         username: Optional[str] = None,
         password: Optional[str] = None,
         check_connection: bool = True,
-        oauth_config: Optional[str] = None,
+        credentials_config: Optional[str] = None,
         proxy: Optional[Dict] = None,
         suppress_warning: bool = True,
         debug: bool = False,
@@ -132,53 +107,38 @@ class JPMaQSDownload(object):
         if not isinstance(dq_download_kwargs, dict):
             raise TypeError("`dq_download_kwargs` must be a dictionary.")
 
+        if not isinstance(oauth, bool):
+            raise TypeError("`oauth` must be a boolean.")
+
         self.suppress_warning = suppress_warning
         self.debug = debug
         self.print_debug_data = print_debug_data
         self._check_connection = check_connection
         self.dq_download_kwargs = dq_download_kwargs
-        if oauth and (
-            (not isinstance(client_id, str)) or (not isinstance(client_secret, str))
-        ):
-            if oauth_config is None:
-                raise ValueError(
-                    "If using oauth, `client_id` and `client_secret` must be provided."
-                    " Alternatively, provide a path to a yaml file containing the credentials "
-                    "using the `oauth_config` argument."
-                )
-            else:
-                credentials = oauth_credential_loader(oauth_config)
-                client_id = credentials["client_id"]
-                client_secret = credentials["client_secret"]
 
-        if oauth:
-            self.dq_interface: DataQueryInterface = DataQueryInterface(
-                oauth=oauth,
-                client_id=client_id,
-                client_secret=client_secret,
-                check_connection=check_connection,
-                proxy=proxy,
-                **kwargs,
-            )
-        else:
-            # ensure "crt", "key", "username", and "password" are in kwargs
-            for varx, namex in zip(
-                [crt, key, username, password],
-                ["crt", "key", "username", "password"],
-            ):
-                if not isinstance(varx, str):
-                    raise TypeError(f"`{namex}` must be a string.")
+        if credentials_config is not None:
+            if not isinstance(credentials_config, str):
+                raise TypeError("`credentials_config` must be a string.")
 
-            self.dq_interface: DataQueryInterface = DataQueryInterface(
-                oauth=oauth,
-                check_connection=check_connection,
-                crt=crt,
-                key=key,
-                username=username,
-                password=password,
-                proxy=proxy,
-                **kwargs,
-            )
+        config_obj: JPMaQSAPIConfigObject = JPMaQSAPIConfigObject(
+            config_path=credentials_config,
+            client_id=client_id,
+            client_secret=client_secret,
+            crt=crt,
+            key=key,
+            username=username,
+            password=password,
+            proxy=proxy,
+        )
+
+        self.dq_interface: DataQueryInterface = DataQueryInterface(
+            oauth=oauth,
+            check_connection=check_connection,
+            config_object=config_obj,
+            debug=debug,
+            **kwargs,
+        )
+
         self.valid_metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
         self.msg_errors: List[str] = []
         self.msg_warnings: List[str] = []
@@ -457,11 +417,6 @@ class JPMaQSDownload(object):
         self, verbose: bool = False, raise_error: bool = False
     ) -> bool:
         """Check if the interface is connected to the server.
-        
-        :param verbose <bool>: If True, print debug messages.
-        :param raise_error <bool>: If True, raise a ConnectionError if the
-            connection fails.
-
         :return <bool>: True if connected, False if not.
         """
 
@@ -481,6 +436,8 @@ class JPMaQSDownload(object):
         expressions: List[str],
         show_progress: bool,
         as_dataframe: bool,
+        report_time_taken: bool,
+        report_egress: bool,
     ) -> bool:
         """Validate the arguments passed to the download function.
 
@@ -493,18 +450,17 @@ class JPMaQSDownload(object):
 
         """
 
-        def is_valid_date(date: str) -> bool:
-            try:
-                datetime.datetime.strptime(date, "%Y-%m-%d")
-                return True
-            except ValueError:
-                return False
-
         if not isinstance(show_progress, bool):
             raise TypeError("`show_progress` must be a boolean.")
 
         if not isinstance(as_dataframe, bool):
             raise TypeError("`as_dataframe` must be a boolean.")
+
+        if not isinstance(report_time_taken, bool):
+            raise TypeError("`report_time_taken` must be a boolean.")
+
+        if not isinstance(report_egress, bool):
+            raise TypeError("`report_egress` must be a boolean.")
 
         if all([tickers is None, cids is None, xcats is None, expressions is None]):
             raise ValueError(
@@ -545,7 +501,7 @@ class JPMaQSDownload(object):
         for varx, namex in zip([start_date, end_date], ["start_date", "end_date"]):
             if not isinstance(varx, str):
                 raise TypeError(f"`{namex}` must be a string.")
-            if not is_valid_date(varx):
+            if not is_valid_iso_date(varx):
                 raise ValueError(
                     f"`{namex}` must be a valid date in the format YYYY-MM-DD."
                 )
@@ -565,7 +521,8 @@ class JPMaQSDownload(object):
         debug: bool = False,
         suppress_warning: bool = False,
         as_dataframe: bool = True,
-        report_time_taken: bool = True,
+        report_time_taken: bool = False,
+        report_egress: bool = False,
     ) -> Union[pd.DataFrame, List[Dict]]:
         """Driver function to download data from JPMaQS via the DataQuery API.
         Timeseries data can be requested using `tickers` with `metrics`, or
@@ -593,6 +550,10 @@ class JPMaQSDownload(object):
             False if not (default). If debug=True, this is set to True.
         :param <bool> as_dataframe: Return a dataframe if True (default),
             a list of dictionaries if False.
+        :param <bool> report_time_taken: If True, the time taken to download
+            and apply data transformations is reported.
+        :param <bool> report_egress: If True, the number of bytes downloaded
+            is reported along with the transmission speed in kilobits/second.
 
         :return <pd.DataFrame|list[Dict]>: dataframe of data if
             `as_dataframe` is True, list of dictionaries if False.
@@ -606,7 +567,6 @@ class JPMaQSDownload(object):
         # override the default warning behaviour and debug behaviour
         self.suppress_warning = suppress_warning
         self.debug = debug
-
 
         for varx in [tickers, cids, xcats, expressions]:
             if isinstance(varx, str):
@@ -635,6 +595,8 @@ class JPMaQSDownload(object):
             expressions=expressions,
             show_progress=show_progress,
             as_dataframe=as_dataframe,
+            report_time_taken=report_time_taken,
+            report_egress=report_egress,
         ):
             raise ValueError("Invalid arguments passed to download().")
 
@@ -650,8 +612,9 @@ class JPMaQSDownload(object):
         )
 
         # Download data.
-        download_time_taken: float = timer()
         data: List[Dict] = []
+        egress_data: Dict = {}
+        download_time_taken: float = timer()
         with self.dq_interface as dq:
             print(
                 "Downloading data from JPMaQS.\nTimestamp UTC: ",
@@ -678,6 +641,9 @@ class JPMaQSDownload(object):
                     self.dq_interface.unavailable_expressions
                 )
 
+            if report_egress:
+                egress_data = self.dq_interface.egress_data
+
         download_time_taken: float = timer() - download_time_taken
         dfs_time_taken: float = timer()
         if as_dataframe:
@@ -700,6 +666,40 @@ class JPMaQSDownload(object):
                     f"Time taken to convert to dataframe: \t{dfs_time_taken:.2f} seconds."
                 )
 
+        if report_egress:
+            # create averages for egress_data like
+            #  egress_data[tracking_id] = {
+            #     "url": log_url,
+            #     "upload_size": upload_size,
+            #     "download_size": download_size,
+            #     "time_taken": time_taken,
+            #   }
+
+            total_upload: int = 0
+            total_download: int = 0
+            total_time_taken: float = 0
+            longest_time_taken: float = 0
+            longest_time_taken_url: str = ""
+            for tracking_id in egress_data:
+                total_upload += egress_data[tracking_id]["upload_size"]
+                total_download += egress_data[tracking_id]["download_size"]
+                total_time_taken += egress_data[tracking_id]["time_taken"]
+                if egress_data[tracking_id]["time_taken"] > longest_time_taken:
+                    longest_time_taken = egress_data[tracking_id]["time_taken"]
+                    longest_time_taken_url = egress_data[tracking_id]["url"]
+
+            avg_upload_size_kb: float = total_upload / (1024)
+            avg_download_size_kb: float = total_download / (1024)
+            avg_time_taken: float = total_time_taken / len(egress_data)
+            avg_transfer_rate_kbit: float = (
+                (avg_download_size_kb + avg_upload_size_kb) * 8 / avg_time_taken
+            )
+            print(f"Average upload size: \t{avg_upload_size_kb:.2f} KB")
+            print(f"Average download size: \t{avg_download_size_kb:.2f} KB")
+            print(f"Average time taken: \t{avg_time_taken:.2f} seconds")
+            print(f"Longest time taken: \t{longest_time_taken:.2f} seconds")
+            print(f"Average transfer rate : \t{avg_transfer_rate_kbit:.2f} Kbps")
+
         if len(self.msg_errors) > 0:
             if not (self.suppress_warning):
                 print(
@@ -712,11 +712,6 @@ class JPMaQSDownload(object):
 
 
 if __name__ == "__main__":
-    import os
-
-    client_id = os.environ["JPMAQS_API_CLIENT_ID"]
-    client_secret = os.environ["JPMAQS_API_CLIENT_SECRET"]
-
     cids = [
         "AUD",
         "BRL",
@@ -744,8 +739,7 @@ if __name__ == "__main__":
     end_date: str = "2023-03-20"
 
     with JPMaQSDownload(
-        client_id=client_id,
-        client_secret=client_secret,
+        credentials_config="./config.yml",
         debug=True,
     ) as jpmaqs:
         data = jpmaqs.download(
@@ -756,6 +750,8 @@ if __name__ == "__main__":
             end_date=end_date,
             show_progress=True,
             suppress_warning=False,
+            report_time_taken=True,
+            report_egress=True,
         )
 
         print(data.head())
