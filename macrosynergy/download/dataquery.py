@@ -347,12 +347,16 @@ class OAuth(object):
 
         created: datetime = self._stored_token["created_at"]  # utc time of creation
         expires: datetime = created + timedelta(seconds=self._stored_token["expires_in"])
+
         utcnow = datetime.utcnow()
         is_active: bool = expires > utcnow
 
         logger.debug(
             "Active token: %s, created: %s, expires: %s, now: %s",
-            is_active, created, expires, utcnow
+            is_active,
+            created,
+            expires,
+            utcnow,
         )
 
         return is_active
@@ -410,13 +414,13 @@ class CertAuth(object):
         crt: str,
         key: str,
     ):
-        assert isinstance(username, str), (
-            f"username must be <str> and not {type(username)}"
-        )
+        assert isinstance(
+            username, str
+        ), f"username must be <str> and not {type(username)}"
 
-        assert isinstance(password, str), (
-            f"password must be <str> and not {type(password)}"
-        )
+        assert isinstance(
+            password, str
+        ), f"password must be <str> and not {type(password)}"
 
         self.auth: str = base64.b64encode(
             bytes(f"{username:s}:{password:s}", "utf-8")
@@ -564,18 +568,16 @@ class DataQueryInterface(object):
         config: JPMaQSAPIConfigObject,
         oauth: bool = True,
         debug: bool = False,
-        concurrent: bool = True,
         batch_size: int = 20,
-        heartbeat: bool = True,
+        check_connection: bool = True,
         base_url: str = OAUTH_BASE_URL,
         suppress_warnings: bool = True,
     ):
-        self.heartbeat: bool = heartbeat
+        self._check_connection: bool = check_connection
         self.msg_errors: List[str] = []
         self.msg_warnings: List[str] = []
         self.unavailable_expressions: List[str] = []
         self.debug: bool = debug
-        self.concurrent: bool = concurrent
         self.suppress_warnings: bool = suppress_warnings
         self.batch_size: int = batch_size
 
@@ -595,9 +597,9 @@ class DataQueryInterface(object):
 
             self.auth: CertAuth = CertAuth(**config.cert(mask=False))
 
-        assert (
-                self.auth is not None
-        ), "Failed to initialise access method. Check the config_object passed"
+        assert self.auth is not None, (
+            "Failed to initialise access method. Check the config_object passed"
+        )
 
         self.proxy: Optional[dict] = config.proxy(mask=False)
         self.base_url: str = base_url
@@ -628,7 +630,7 @@ class DataQueryInterface(object):
             params={"data": "NO_REFERENCE_DATA"},
             proxy=self.proxy,
             tracking_id=HEARTBEAT_TRACKING_ID,
-            **self.auth.get_auth()
+            **self.auth.get_auth(),
         )
 
         result: bool = True
@@ -673,7 +675,7 @@ class DataQueryInterface(object):
             params=params,
             proxy=self.proxy,
             tracking_id=tracking_id,
-            **self.auth.get_auth()
+            **self.auth.get_auth(),
         )
 
         if (response is None) or ("instruments" not in response.keys()):
@@ -685,16 +687,13 @@ class DataQueryInterface(object):
 
         downloaded_data.extend(response["instruments"])
 
-        if (
-                "links" in response.keys()
-                and response["links"][1]["next"] is not None
-        ):
+        if "links" in response.keys() and response["links"][1]["next"] is not None:
             logger.info("DQ response paginated - get next response page")
             downloaded_data.extend(
                 self._fetch(
                     url=self.base_url + response["links"][1]["next"],
                     params={},
-                    tracking_id=tracking_id
+                    tracking_id=tracking_id,
                 )
             )
 
@@ -899,7 +898,7 @@ class DataQueryInterface(object):
         end_date: str = end_date.replace("-", "")
 
         # check heartbeat before each "batch" of requests
-        if self.heartbeat:
+        if self._check_connection:
             if not self.check_connection():
                 raise ConnectionError(
                     HeartbeatError(
