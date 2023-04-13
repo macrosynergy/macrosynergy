@@ -132,6 +132,8 @@ def request_wrapper(
     :param <dict> kwargs: kwargs to pass to requests.request().
     :param <str> tracking_id: default None, unique tracking ID of request.
     :param <dict> proxy: default None, dictionary of proxy settings for request.
+    :param <Tuple[str, str]> cert: default None, tuple of string for filename
+        of certificate and key.
 
     :return <dict>: response as a dictionary.
 
@@ -286,7 +288,6 @@ class OAuth(object):
     :param <str> client_id: client ID for the OAuth application.
     :param <str> client_secret: client secret for the OAuth application.
     :param <dict> proxy: proxy to use for requests. Defaults to None.
-    :param <str> base_url: base URL for OAuth access.
     :param <str> token_url: URL for getting OAuth tokens.
     :param <str> dq_resource_id: resource ID for the JPMaQS Application.
 
@@ -434,6 +435,101 @@ class CertAuth(object):
         return {"headers": headers, "cert": (self.crt, self.key)}
 
 
+def validate_download_args(
+    expressions: List[str],
+    start_date: str,
+    end_date: str,
+    show_progress: bool,
+    endpoint: str,
+    calender: str,
+    frequency: str,
+    conversion: str,
+    nan_treatment: str,
+    reference_data: str,
+    retry_counter: int,
+    delay_param: float,
+):
+    """
+    Validate the arguments passed to the download_data method.
+
+    :params -- see download_data method.
+
+    :returns True if all arguments are valid.
+
+    :raises <TypeError>: if any of the arguments are of the wrong type.
+    :raises <ValueError>: if any of the arguments are semantically incorrect.
+    """
+
+    if expressions is None:
+        raise ValueError("`expressions` must be a list of strings.")
+
+    if not isinstance(expressions, list):
+        raise TypeError("`expressions` must be a list of strings.")
+
+    if not all(isinstance(expr, str) for expr in expressions):
+        raise TypeError("`expressions` must be a list of strings.")
+
+    for varx, namex in zip([start_date, end_date], ["start_date", "end_date"]):
+        if (varx is None) or not isinstance(varx, str):
+            raise TypeError(f"`{namex}` must be a string.")
+        if not is_valid_iso_date(varx):
+            raise ValueError(
+                f"`{namex}` must be a string in the ISO-8601 format (YYYY-MM-DD)."
+            )
+
+    if not isinstance(show_progress, bool):
+        raise TypeError("`show_progress` must be a boolean.")
+
+    if not isinstance(retry_counter, int):
+        raise TypeError("`retry_counter` must be an integer.")
+
+    if not isinstance(delay_param, float):
+        raise TypeError("`delay_param` must be a float >=0.2 (seconds).")
+    elif delay_param < 0.2:
+        raise ValueError("`delay_param` must be a float >=0.2 (seconds).")
+
+    vars_types_zip: zip = zip(
+        [
+            endpoint,
+            calender,
+            frequency,
+            conversion,
+            nan_treatment,
+            reference_data,
+        ],
+        [
+            "endpoint",
+            "calender",
+            "frequency",
+            "conversion",
+            "nan_treatment",
+            "reference_data",
+        ],
+    )
+    for varx, namex in vars_types_zip:
+        if not isinstance(varx, str):
+            raise TypeError(f"`{namex}` must be a string.")
+
+
+def get_unavailable_expressions(
+        expected_exprs: List[str], dicts_list: List[Dict],
+) -> List[str]:
+    """
+    Method to get the expressions that are not available in the response.
+    Looks at the dict["attributes"][0]["expression"] field of each dict
+    in the list.
+
+    :param <List[str]> expected_exprs: list of expressions that were requested.
+    :param <List[Dict]> dicts_list: list of dicts to search for the expressions.
+
+    :return <List[str]>: list of expressions that were not found in the dicts.
+    """
+    found_exprs: List[str] = [
+        curr_dict["attributes"][0]["expression"] for curr_dict in dicts_list
+    ]
+    return list(set(expected_exprs) - set(found_exprs))
+
+
 class DataQueryInterface(object):
     """
     High level interface for the DataQuery API.
@@ -442,24 +538,16 @@ class DataQueryInterface(object):
     :param <bool> oauth: whether to use OAuth authentication. Defaults to True.
     :param <bool> debug: whether to print debug messages. Defaults to False.
     :param <bool> concurrent: whether to use concurrent requests. Defaults to True.
-    :param <int> batch_size: default 20, number of expressions to send in a single request.
-        Must be a number between 1 and 20 (both included).
+    :param <int> batch_size: default 20, number of expressions to send in a single
+        request. Must be a number between 1 and 20 (both included).
     :param <bool> heartbeat: whether to send a heartbeat request. Defaults to True.
     :param <bool> suppress_warnings: whether to suppress warnings. Defaults to True.
 
     When using OAuth authentication, the following parameters are used:
-    :param <str> client_id: client ID for the DataQuery API.
-    :param <str> client_secret: client secret for the DataQuery API.
     :param <str> base_url: base URL for the DataQuery API. Defaults to OAUTH_BASE_URL.
-    :param <dict> proxy: proxy to use for requests. Defaults to None.
 
     When using certificate based authentication, the following parameters are used:
-    :param <str> username: username for the DataQuery API.
-    :param <str> password: password for the DataQuery API.
-    :param <str> crt: path to the certificate file. Defaults to "api_macrosynergy_com.crt".
-    :param <str> key: path to the key file. Defaults to "api_macrosynergy_com.key".
     :param <str> base_url: base URL for the DataQuery API. Defaults to CERT_BASE_URL.
-    :param <dict> proxy: proxy to use for requests. Defaults to None.
 
     :return <DataQueryInterface>: DataQueryInterface object.
 
@@ -513,12 +601,14 @@ class DataQueryInterface(object):
 
         self.proxy: Optional[dict] = config.proxy(mask=False)
         self.base_url: str = base_url
+        self.egress_data: dict = {}
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         if exc_type:
+            logger.error("Exception %s - %s", exc_type, exc_value)
             print(f"Exception: {exc_type} {exc_value}")
 
     def check_connection(self, verbose=False) -> bool:
@@ -544,7 +634,7 @@ class DataQueryInterface(object):
         result: bool = True
         if (js is None) or (not isinstance(js, dict)) or ("info" not in js):
             logger.warning("Connection to JPMorgan DataQuery heartbeat failed")
-            result = False
+            result: bool = False
 
         if result:
             result = (int(js["info"]["code"]) == 200) and (
@@ -626,103 +716,105 @@ class DataQueryInterface(object):
         """
         raise NotImplementedError("This method has not been implemented yet.")
 
-    def validate_download_args(
-        self,
-        expressions: List[str],
-        start_date: str,
-        end_date: str,
-        show_progress: bool,
-        endpoint: str,
-        calender: str,
-        frequency: str,
-        conversion: str,
-        nan_treatment: str,
-        reference_data: str,
-        retry_counter: int,
-        delay_param: int,
-    ):
-        """
-        Validate the arguments passed to the download_data method.
+    def download(
+            self,
+            expressions: List[str],
+            params: dict,
+            url: str,
+            tracking_id: str,
+            delay_param: float,
+            show_progress: bool = False,
+            retry_counter: int = 0
+    ) -> List[dict]:
+        if retry_counter > 0:
+            print("Retrying failed downloads. Retry count:", retry_counter)
 
-        :params -- see download_data method.
+        if retry_counter > HL_RETRY_COUNT:
+            raise DownloadError(
+                f"Failed {retry_counter} times to download data all requested data.\n"
+                f"No longer retrying."
+            )
 
-        :returns True if all arguments are valid.
-
-        :raises <TypeError>: if any of the arguments are of the wrong type.
-        :raises <ValueError>: if any of the arguments are semantically incorrect.
-        """
-
-        if expressions is None:
-            raise ValueError("`expressions` must be a list of strings.")
-
-        if not isinstance(expressions, list):
-            raise TypeError("`expressions` must be a list of strings.")
-
-        if not all(isinstance(expr, str) for expr in expressions):
-            raise TypeError("`expressions` must be a list of strings.")
-
-        for varx, namex in zip([start_date, end_date], ["start_date", "end_date"]):
-            if (varx is None) or not isinstance(varx, str):
-                raise TypeError(f"`{namex}` must be a string.")
-            if not is_valid_iso_date(varx):
-                raise ValueError(
-                    f"`{namex}` must be a string in the ISO-8601 format (YYYY-MM-DD)."
-                )
-
-        if not isinstance(show_progress, bool):
-            raise TypeError("`show_progress` must be a boolean.")
-
-        if not isinstance(retry_counter, int):
-            raise TypeError("`retry_counter` must be an integer.")
-
-        if not isinstance(delay_param, float):
-            raise TypeError("`delay_param` must be a float >=0.2 (seconds).")
-        elif delay_param < 0.2:
-            raise ValueError("`delay_param` must be a float >=0.2 (seconds).")
-
-        vars_types_zip: zip = zip(
-            [
-                endpoint,
-                calender,
-                frequency,
-                conversion,
-                nan_treatment,
-                reference_data,
-            ],
-            [
-                "endpoint",
-                "calender",
-                "frequency",
-                "conversion",
-                "nan_treatment",
-                "reference_data",
-            ],
-        )
-        for varx, namex in vars_types_zip:
-            if not isinstance(varx, str):
-                raise TypeError(f"`{namex}` must be a string.")
-
-        return True
-
-    def get_unavailable_expressions(
-        self,
-        expected_exprs: List[str],
-        dicts_list: List[Dict],
-    ) -> List[str]:
-        """
-        Method to get the expressions that are not available in the response.
-        Looks at the dict["attributes"][0]["expression"] field of each dict
-        in the list.
-
-        :param <List[str]> expected_exprs: list of expressions that were requested.
-        :param <List[Dict]> dicts_list: list of dicts to search for the expressions.
-
-        :return <List[str]>: list of expressions that were not found in the dicts.
-        """
-        found_exprs: List[str] = [
-            curr_dict["attributes"][0]["expression"] for curr_dict in dicts_list
+        expr_batches: List[List[str]] = [
+            expressions[i:i + self.batch_size]
+            for i in range(0, len(expressions), self.batch_size)
         ]
-        return list(set(expected_exprs) - set(found_exprs))
+
+        download_outputs: List[List[Dict]] = []
+        failed_batches: List[List[str]] = []
+        continuous_failures: int = 0
+        last_five_exc: List[Exception] = []
+
+        future_objects: List[concurrent.futures.Future] = []
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            for ib, expr_batch in tqdm(
+                enumerate(expr_batches),
+                desc="Requesting data",
+                disable=not show_progress,
+                total=len(expr_batches),
+            ):
+                curr_params: Dict = params.copy()
+                curr_params["expressions"] = expr_batch
+                future_objects.append(
+                    executor.submit(
+                        self._fetch,
+                        url=url,
+                        params=curr_params,
+                        tracking_id=tracking_id,
+                    )
+                )
+                time.sleep(delay_param)
+
+            for ib, future in tqdm(
+                enumerate(future_objects),
+                desc="Downloading data",
+                disable=not show_progress,
+                total=len(future_objects),
+            ):
+                try:
+                    download_outputs.append(future.result())
+                    continuous_failures = 0
+                except Exception as exc:
+                    if isinstance(exc, (KeyboardInterrupt, AuthenticationError)):
+                        raise exc
+
+                    failed_batches.append(expr_batches[ib])
+                    self.msg_errors.append(
+                        f"Batch {ib} failed with exception: {exc}"
+                    )
+                    continuous_failures += 1
+                    last_five_exc.append(exc)
+                    if continuous_failures > MAX_CONTINUOUS_FAILURES:
+                        exc_str: str = "\n".join(
+                            [str(e) for e in last_five_exc]
+                        )
+                        raise DownloadError(
+                            f"Failed {continuous_failures} times to download data."
+                            f" Last five exceptions: \n{exc_str}"
+                        )
+
+                    if self.debug:
+                        raise exc
+
+        final_output: List[Dict] = list(itertools.chain.from_iterable(download_outputs))
+
+        if len(failed_batches) > 0:
+            flat_failed_batches: List[str] = list(
+                itertools.chain.from_iterable(failed_batches)
+            )
+            retried_output: List[dict] = self.download(
+                expressions=flat_failed_batches,
+                params=params,
+                url=url,
+                tracking_id=tracking_id,
+                delay_param=delay_param + 0.1,
+                show_progress=show_progress,
+                retry_counter=retry_counter+1,
+            )
+
+            final_output += retried_output  # extend retried output
+
+        return final_output
 
     def download_data(
         self,
@@ -775,38 +867,36 @@ class DataQueryInterface(object):
         # NOTE : args validated only on first call, not on retries
         # this is because the args can be modified by the retry mechanism
         # (eg. date format)
-        if retry_counter == 0:
-            self.validate_download_args(
-                expressions=expressions,
-                start_date=start_date,
-                end_date=end_date,
-                show_progress=show_progress,
-                endpoint=endpoint,
-                calender=calender,
-                frequency=frequency,
-                conversion=conversion,
-                nan_treatment=nan_treatment,
-                reference_data=reference_data,
-                retry_counter=retry_counter,
-                delay_param=delay_param,
+
+        validate_download_args(
+            expressions=expressions,
+            start_date=start_date,
+            end_date=end_date,
+            show_progress=show_progress,
+            endpoint=endpoint,
+            calender=calender,
+            frequency=frequency,
+            conversion=conversion,
+            nan_treatment=nan_treatment,
+            reference_data=reference_data,
+            retry_counter=retry_counter,
+            delay_param=delay_param,
+        )
+
+        if (
+                datetime.strptime(end_date, "%Y-%m-%d")
+                < datetime.strptime(start_date, "%Y-%m-%d")
+        ):
+            logger.warning(
+                "Start date (%s) is after end-date (%s): swap them!",
+                start_date,
+                end_date
             )
-            # if end_date is before start_date, swap them
-            if datetime.strptime(end_date, "%Y-%m-%d") < datetime.strptime(
-                start_date, "%Y-%m-%d"
-            ):
-                start_date, end_date = end_date, start_date
-        else:
-            print("Retrying failed downloads. Retry count:", retry_counter)
+            start_date, end_date = end_date, start_date
 
         # remove dashes from dates to match DQ format
-        start_date = start_date.replace("-", "")
-        end_date = end_date.replace("-", "")
-
-        if retry_counter > HL_RETRY_COUNT:
-            raise DownloadError(
-                f"Failed {retry_counter} times to download data all requested data.\n"
-                f"No longer retrying."
-            )
+        start_date: str = start_date.replace("-", "")
+        end_date: str = end_date.replace("-", "")
 
         # check heartbeat before each "batch" of requests
         if self.heartbeat:
@@ -830,125 +920,16 @@ class DataQueryInterface(object):
             "data": reference_data,
         }
 
-        # if filter_from_catalogue:
-        #     expressions = self.filter_exprs_from_catalogue(expressions)
+        final_output: List[dict] = self.download(
+            expressions=expressions,
+            params=params_dict,
+            url=self.base_url + endpoint,
+            tracking_id=tracking_id,
+            delay_param=delay_param,
+            show_progress=show_progress
+        )
 
-        expr_batches: List[List[str]] = [
-            expressions[i : i + self.batch_size]
-            for i in range(0, len(expressions), self.batch_size)
-        ]
-
-        download_outputs: List[List[Dict]] = []
-        failed_batches: List[List[str]] = []
-
-        if self.concurrent:
-            future_objects: List[concurrent.futures.Future] = []
-
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                for ib, expr_batch in tqdm(
-                    enumerate(expr_batches),
-                    desc="Requesting data",
-                    disable=not show_progress,
-                    total=len(expr_batches),
-                ):
-                    curr_params: Dict = params_dict.copy()
-                    curr_params["expressions"] = expr_batch
-                    future_objects.append(
-                        executor.submit(
-                            self._fetch,
-                            url=self.base_url + endpoint,
-                            params=curr_params,
-                            tracking_id=tracking_id,
-                        )
-                    )
-                    time.sleep(delay_param)
-
-                continuous_failures: int = 0
-                last_five_exc: List[Exception] = []
-                for ib, future in tqdm(
-                    enumerate(future_objects),
-                    desc="Downloading data",
-                    disable=not show_progress,
-                    total=len(future_objects),
-                ):
-                    try:
-                        download_outputs.append(future.result())
-                        continuous_failures = 0
-                    except Exception as exc:
-                        if isinstance(exc, (KeyboardInterrupt, AuthenticationError)):
-                            raise exc
-                        else:
-                            failed_batches.append(expr_batches[ib])
-                            self.msg_errors.append(
-                                f"Batch {ib} failed with exception: {exc}"
-                            )
-                            continuous_failures += 1
-                            last_five_exc.append(exc)
-                            if continuous_failures > MAX_CONTINUOUS_FAILURES:
-                                exc_str: str = "\n".join(
-                                    [str(e) for e in last_five_exc]
-                                )
-                                raise DownloadError(
-                                    f"Failed {continuous_failures} times to download data."
-                                    f" Last five exceptions: \n{exc_str}"
-                                )
-                            if self.debug:
-                                raise exc
-                            else:
-                                continue
-
-        else:
-            for ib, expr_batch in tqdm(
-                enumerate(expr_batches),
-                desc="Requesting data",
-                disable=not show_progress,
-            ):
-                curr_params: Dict = params_dict.copy()
-                curr_params["expressions"] = expr_batch
-                try:
-                    result = self._fetch(
-                        url=self.base_url + endpoint,
-                        params=curr_params,
-                        tracking_id=tracking_id,
-                    )
-                    download_outputs.append(result)
-                except Exception as exc:
-                    if isinstance(exc, (KeyboardInterrupt, AuthenticationError)):
-                        raise exc
-                    else:
-                        failed_batches.append(expr_batch)
-                        self.msg_errors.append(
-                            f"Batch {ib} failed with exception: {exc}"
-                        )
-                        if self.debug:
-                            raise exc
-                        else:
-                            continue
-
-        final_output: List[Dict] = list(itertools.chain.from_iterable(download_outputs))
-        retried_output = []
-        if len(failed_batches) > 0:
-            flat_failed_batches: List[str] = list(
-                itertools.chain.from_iterable(failed_batches)
-            )
-            retried_output = self.download_data(
-                expressions=flat_failed_batches,
-                start_date=start_date,
-                end_date=end_date,
-                show_progress=show_progress,
-                endpoint=endpoint,
-                calender=calender,
-                frequency=frequency,
-                conversion=conversion,
-                nan_treatment=nan_treatment,
-                reference_data=reference_data,
-                retry_counter=retry_counter + 1,
-                delay_param=delay_param + 0.1,
-            )
-
-        final_output += retried_output  # extend retried output
-
-        self.unavailable_expressions += self.get_unavailable_expressions(
+        self.unavailable_expressions = get_unavailable_expressions(
             expected_exprs=expressions, dicts_list=final_output
         )
 
@@ -959,26 +940,23 @@ class DataQueryInterface(object):
 if __name__ == "__main__":
     import os
 
-    client_id = os.environ["JPMAQS_API_CLIENT_ID"]
-    client_secret = os.environ["JPMAQS_API_CLIENT_SECRET"]
+    cf: JPMaQSAPIConfigObject = JPMaQSAPIConfigObject(
+        client_id=os.environ["JPMAQS_API_CLIENT_ID"],
+        client_secret=os.environ["JPMAQS_API_CLIENT_SECRET"]
+    )
 
     expressions = [
         "DB(JPMAQS,USD_EQXR_VT10,value)",
         "DB(JPMAQS,AUD_EXALLOPENNESS_NSA_1YMA,value)",
     ]
-    start_date: str = "2020-01-25"
-    end_date: str = "2023-02-05"
 
-    with DataQueryInterface(
-        client_id=client_id,
-        client_secret=client_secret,
-    ) as dq:
+    with DataQueryInterface(config=cf) as dq:
         assert dq.check_connection(verbose=True)
 
         data = dq.download_data(
             expressions=expressions,
-            start_date=start_date,
-            end_date=end_date,
+            start_date="2020-01-25",
+            end_date="2023-02-05",
             show_progress=True,
         )
 
