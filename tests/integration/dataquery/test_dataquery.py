@@ -19,15 +19,16 @@ class TestDataQueryOAuth(unittest.TestCase):
                 jpmaqs.check_connection()
 
     def test_connection(self):
-        dq = DataQueryInterface(
+        with JPMaQSDownload(
             oauth=True,
             client_id=os.getenv("DQ_CLIENT_ID"),
             client_secret=os.getenv("DQ_CLIENT_SECRET"),
-        )
-        self.assertTrue(
-            dq.check_connection(),
-            msg="Authentication error - unable to access DataQuery:",
-        )
+            check_connection=False,
+        ) as jpmaqs:
+            self.assertTrue(
+                jpmaqs.check_connection(),
+                msg="Authentication error - unable to access DataQuery:",
+            )
 
     def test_download_jpmaqs_data(self):
         with JPMaQSDownload(
