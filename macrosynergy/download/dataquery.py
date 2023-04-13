@@ -491,24 +491,19 @@ class DataQueryInterface(object):
 
         if not isinstance(config, JPMaQSAPIConfigObject):
             raise ValueError(
-                "config_object must be provided for DataQuery"
-                "authentication. Check macrosynergy.management.utils.JPMaQSAPIConfigObject "
+                "config_object must be provided for DataQuery authentication."
+                " Check macrosynergy.management.utils.JPMaQSAPIConfigObject "
                 "for more details."
             )
 
         self.auth: Optional[Union[CertAuth, OAuth]] = None
         if oauth:
-            credentials: dict = config.oauth(mask=False)
-            self.auth: OAuth = OAuth(
-                **credentials,
-                base_url=base_url,
-            )
+            self.auth: OAuth = OAuth(**config.oauth(mask=False))
         else:
-            credentials: dict = config.cert(mask=False)
             if base_url == OAUTH_BASE_URL:
-                base_url = CERT_BASE_URL
+                base_url: str = CERT_BASE_URL
 
-            self.auth: CertAuth = CertAuth(**credentials)
+            self.auth: CertAuth = CertAuth(**config.cert(mask=False))
 
         assert (
                 self.auth is not None
@@ -535,6 +530,7 @@ class DataQueryInterface(object):
 
         :raises <HeartbeatError>: if the heartbeat fails.
         """
+        logger.debug("Check if connection can be established to JPMorgan DataQuery")
         js: dict = self.request(
             url=self.base_url + HEARTBEAT_ENDPOINT,
             params={"data": "NO_REFERENCE_DATA"},
@@ -544,12 +540,14 @@ class DataQueryInterface(object):
 
         result: bool = True
         if (js is None) or (not isinstance(js, dict)) or ("info" not in js):
+            logger.warning("Connection to JPMorgan DataQuery heartbeat failed")
             result = False
 
         if result:
             result = (int(js["info"]["code"]) == 200) and (
                 js["info"]["message"] == "Service Available."
             )
+
         if verbose:
             print("Connection successful!" if result else "Connection failed.")
         return result
@@ -587,7 +585,6 @@ class DataQueryInterface(object):
         self,
         url: str,
         params: dict = None,
-        proxy: Optional[dict] = None,
         tracking_id: Optional[str] = None,
     ) -> List[Dict]:
         """
@@ -607,35 +604,34 @@ class DataQueryInterface(object):
         """
 
         downloaded_data: List[Dict] = []
-        curr_response: Dict = {}
-        curr_url: str = url
-        current_params: Dict = params.copy()
-        get_pagination: bool = True
-        log_url: str = form_full_url(curr_url, current_params)
-        curr_response: Optional[Dict] = None
-        while get_pagination:
-            curr_response: Dict = self.request(
-                url=url,
-                params=params,
-                proxy=proxy,
-                tracking_id=tracking_id,
+        response: Dict = self.request(
+            url=url,
+            params=params,
+            proxy=self.proxy,
+            tracking_id=tracking_id,
+        )
+
+        if (response is None) or ("instruments" not in response.keys()):
+            raise InvalidResponseError(
+                f"Invalid response from DataQuery: {response}\n"
+                f"URL: {form_full_url(url, params)}"
+                f"Timestamp (UTC): {datetime.utcnow().isoformat()}"
             )
-            if (curr_response is None) or ("instruments" not in curr_response.keys()):
-                raise InvalidResponseError(
-                    f"Invalid response from DataQuery: {curr_response}\n"
-                    f"URL: {log_url}"
-                    f"Timestamp (UTC): {datetime.utcnow().isoformat()}"
+
+        downloaded_data.extend(response["instruments"])
+        
+        if (
+                "links" in response.keys()
+                and response["links"][1]["next"] is not None
+        ):
+            logger.info("DQ response paginated - get next response page")
+            downloaded_data.extend(
+                self._fetch(
+                    url=self.base_url + response["links"][1]["next"],
+                    params={},
+                    tracking_id=tracking_id
                 )
-            else:
-                downloaded_data.extend(curr_response["instruments"])
-                if "links" in curr_response.keys():
-                    if curr_response["links"][1]["next"] is None:
-                        get_pagination = False
-                        break
-                    else:
-                        curr_url = OAUTH_BASE_URL + curr_response["links"][1]["next"]
-                        current_params = {}
-                        log_url = form_full_url(curr_url, current_params)
+            )
 
         return downloaded_data
 
