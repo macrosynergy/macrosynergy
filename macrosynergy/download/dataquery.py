@@ -15,7 +15,7 @@ import uuid
 import io
 import requests
 from typing import List, Optional, Dict, Union
-from datetime import datetime
+from datetime import datetime, timedelta
 from timeit import default_timer as timer
 from tqdm import tqdm
 
@@ -348,9 +348,9 @@ class OAuth(object):
         if self._stored_token is None:
             return False
 
-        created: datetime.datetime = self._stored_token["created_at"]
-        expires: int = self._stored_token["expires_in"]
-        is_active = (datetime.now() - created).total_seconds() / 60 >= (expires - 1)
+        created: datetime = self._stored_token["created_at"] # utc time of creation
+        expires: int = self._stored_token["expires_in"] # int in seconds
+        is_active: bool = (created + timedelta(seconds=expires)) > datetime.utcnow()
         return is_active
 
     def _get_token(self) -> str:
@@ -367,12 +367,11 @@ class OAuth(object):
                 proxy=self.proxy,
                 tracking_id=OAUTH_TRACKING_ID,
             )
-            time.sleep(API_DELAY_PARAM)
-            # TODO : Is sleep needed here?
             # on failure, exception will be raised by request_wrapper
 
+            # NOTE : use UTC time for token expiry
             self._stored_token: dict = {
-                "created_at": datetime.now(),
+                "created_at": datetime.utcnow(),
                 "access_token": js["access_token"],
                 "expires_in": js["expires_in"],
             }
