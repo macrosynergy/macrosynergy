@@ -401,8 +401,8 @@ class JPMaQSAPIConfigObject(object):
         r_auth: Dict[str, Optional[str]] = {}
         # any complete set of credentials will now be in r_auth
         for vx, varsx in zip(
-            [oauth_var_names, cert_var_names, ],
-            ["oauth", "cert"],
+            [oauth_var_names, cert_var_names, proxy_var_names],
+            ["oauth", "cert", "proxy", "proxy"],
         ):
             if all_args_present([loaded_vars[v] for v in vx]):
                 r_auth[varsx] = {v: loaded_vars[v] for v in vx}
