@@ -381,8 +381,9 @@ class OAuth(object):
 
         return self._stored_token["access_token"]
 
-    def get_auth(self) -> Tuple[str, Optional[Tuple[str, str]]]:
-        return "Bearer " + self._get_token(), None
+    def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
+        headers = {"Authorization": "Bearer " + self._get_token()}
+        return {"headers": headers, "cert": None}
 
 
 class CertAuth(object):
@@ -428,8 +429,9 @@ class CertAuth(object):
         self.key: str = key
         self.crt: str = crt
 
-    def get_auth(self) -> Tuple[str, Tuple[str, str]]:
-        return f"Basic {self.auth:s}", (self.crt, self.key)
+    def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
+        headers = {"Authorization": f"Basic {self.auth:s}"}
+        return {"headers": headers, "cert": (self.crt, self.key)}
 
 
 class DataQueryInterface(object):
@@ -531,11 +533,12 @@ class DataQueryInterface(object):
         :raises <HeartbeatError>: if the heartbeat fails.
         """
         logger.debug("Check if connection can be established to JPMorgan DataQuery")
-        js: dict = self.request(
+        js: dict = request_wrapper(
             url=self.base_url + HEARTBEAT_ENDPOINT,
             params={"data": "NO_REFERENCE_DATA"},
             proxy=self.proxy,
             tracking_id=HEARTBEAT_TRACKING_ID,
+            **self.auth.get_auth()
         )
 
         result: bool = True
@@ -551,35 +554,6 @@ class DataQueryInterface(object):
         if verbose:
             print("Connection successful!" if result else "Connection failed.")
         return result
-
-    def request(
-        self,
-        url: str,
-        params: dict = None,
-        proxy: Optional[dict] = None,
-        tracking_id: Optional[str] = None,
-    ) -> dict:
-        """
-        Wrapper for request_wrapper to use the relevant certificate and headers.
-
-        :param <str> url: URL to request.
-        :param <dict> params: parameters to pass to the request.
-        :param <dict> proxy: proxy to use for the request.
-        :param <str> tracking_id: tracking ID to use for the request (for logging).
-
-        :return <dict>: JSON response from the request.
-        """
-        auth, cert = self.auth.get_auth()
-        js = request_wrapper(
-            url=url,
-            cert=cert,
-            headers={"Authorization": auth},
-            params=params,
-            proxy=proxy,
-            tracking_id=tracking_id,
-        )
-
-        return js
 
     def _fetch(
         self,
@@ -604,11 +578,12 @@ class DataQueryInterface(object):
         """
 
         downloaded_data: List[Dict] = []
-        response: Dict = self.request(
+        response: Dict = request_wrapper(
             url=url,
             params=params,
             proxy=self.proxy,
             tracking_id=tracking_id,
+            **self.auth.get_auth()
         )
 
         if (response is None) or ("instruments" not in response.keys()):
@@ -619,7 +594,7 @@ class DataQueryInterface(object):
             )
 
         downloaded_data.extend(response["instruments"])
-        
+
         if (
                 "links" in response.keys()
                 and response["links"][1]["next"] is not None
@@ -883,7 +858,6 @@ class DataQueryInterface(object):
                             self._fetch,
                             url=self.base_url + endpoint,
                             params=curr_params,
-                            proxy=self.proxy,
                             tracking_id=tracking_id,
                         )
                     )
@@ -935,7 +909,6 @@ class DataQueryInterface(object):
                     result = self._fetch(
                         url=self.base_url + endpoint,
                         params=curr_params,
-                        proxy=self.proxy,
                         tracking_id=tracking_id,
                     )
                     download_outputs.append(result)
