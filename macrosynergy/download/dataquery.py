@@ -77,7 +77,7 @@ def validate_response(response: requests.Response) -> dict:
     :raises <KeyboardInterrupt>: if the user interrupts the download.
     """
 
-    error_str = (
+    error_str : str = (
         f"Response : {response}\n"
         f"Requested URL: {response.request.url}\n"
         f"Response status code: {response.status_code}\n"
@@ -85,8 +85,20 @@ def validate_response(response: requests.Response) -> dict:
         f"Response text: {response.text}\n"
         f"Timestamp (UTC) : {datetime.utcnow().isoformat()}; \n"
     )
+    
     # TODO : Use response.raise_for_status() as a better way to check for errors
-    if response.status_code == 200:
+    if response.status_code != 200:
+        logger.info("Non-200 response code from DataQuery: %s", response.status_code)
+        if response.status_code == 401:
+            raise AuthenticationError(error_str)
+
+        if HEARTBEAT_ENDPOINT in response.request.url:
+            raise HeartbeatError(error_str)
+
+        raise InvalidResponseError(
+            f"Request did not return a 200 status code.\n{error_str}"
+        )
+    else:
         try:
             response_dict = response.json()
             if response_dict is None:
@@ -100,17 +112,6 @@ def validate_response(response: requests.Response) -> dict:
                 error_str + f"Error parsing response as JSON: {exc}"
             )
 
-    else:
-        if response.status_code == 401:
-            raise AuthenticationError(error_str)
-
-        if HEARTBEAT_ENDPOINT in response.request.url:
-            raise HeartbeatError(error_str)
-
-        raise InvalidResponseError(
-            f"Request did not return a 200 status code.\n{error_str}"
-        )
-
 
 def request_wrapper(
     url: str,
@@ -123,7 +124,7 @@ def request_wrapper(
 ) -> dict:
     """
     Wrapper for requests.request() that handles retries and logging.
-    All paramaters and kwargs are passed to requests.request().
+    All parameters and kwargs are passed to requests.request().
 
     :param <str> url: URL to request.
     :param <dict> headers: headers to pass to requests.request().
@@ -142,24 +143,24 @@ def request_wrapper(
     :raises <Exception>: other exceptions may be raised by requests.request().
     """
 
-    if not method in ["get", "post"]:
+    if method not in ["get", "post"]:
         raise ValueError(f"Invalid method: {method}")
 
     # insert tracking info in headers
     if headers is None:
         headers: Dict = {}
-    headers["User-Agent"] = f"MacrosynergyPackage/{ms_version_info}"
+    headers["User-Agent"] : str = f"MacrosynergyPackage/{ms_version_info}"
 
     uuid_str: str = str(uuid.uuid4())
     if (tracking_id is None) or (tracking_id == ""):
-        tracking_id = uuid_str
+        tracking_id: str = uuid_str
     else:
-        tracking_id = f"uuid::{uuid_str}::{tracking_id}"
+        tracking_id: str = f"uuid::{uuid_str}::{tracking_id}"
 
-    headers["X-Tracking-Id"] = tracking_id
+    headers["X-Tracking-Id"] : str = tracking_id
 
     log_url: str = form_full_url(url, params)
-    logger.info(f"Requesting URL: {log_url} , tracking_id: {tracking_id}")
+    logger.info(f"Requesting URL: {log_url} with tracking_id: {tracking_id}")
     raised_exceptions: List[Exception] = []
     error_statements: List[str] = []
     error_statement: str = ""
