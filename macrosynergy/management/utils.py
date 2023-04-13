@@ -401,11 +401,15 @@ class JPMaQSAPIConfigObject(object):
         r_auth: Dict[str, Optional[str]] = {}
         # any complete set of credentials will now be in r_auth
         for vx, varsx in zip(
-            [oauth_var_names, cert_var_names, proxy_var_names],
-            ["oauth", "cert"] + proxy_var_names,
+            [oauth_var_names, cert_var_names, ],
+            ["oauth", "cert"],
         ):
             if all_args_present([loaded_vars[v] for v in vx]):
                 r_auth[varsx] = {v: loaded_vars[v] for v in vx}
+            
+        for px, pxn in zip(proxy_vars, proxy_var_names):
+            if px is not None:
+                r_auth[pxn] = px
 
         if not r_auth:
             raise ValueError(
@@ -417,7 +421,7 @@ class JPMaQSAPIConfigObject(object):
         if "cert" in r_auth.keys():
             for kx in ["crt", "key"]:
                 if not os.path.isfile(r_auth["cert"][kx]):
-                    raise ValueError(
+                    raise FileNotFoundError(
                         f"Please ensure the file path - {r_auth['cert'][kx]} - is correct, "
                         "and the program has read access to the file."
                     )
@@ -437,15 +441,16 @@ class JPMaQSAPIConfigObject(object):
                 assert isinstance(
                     loaded_vars[pkx], dict
                 ), "Proxy settings must be a dictionary or JSON-like string."
-
-        if r_auth["proxy"] is not None:
-                if r_auth["proxy"]["proxies"] is not None:
-                    r_auth["proxy"].update(r_auth["proxy"]["proxies"])
-                    del r_auth["proxy"]["proxies"]
-                
-                if r_auth["proxy"]["proxy"] is not None:
-                    r_auth["proxy"].update(r_auth["proxy"]["proxy"])
-                    del r_auth["proxy"]["proxy"]
+        if "proxy" in r_auth.keys():
+            if r_auth["proxy"] is not None:
+                if "proxies" in r_auth["proxy"].keys():
+                    if r_auth["proxy"]["proxies"] is not None:
+                        r_auth["proxy"].update(r_auth["proxy"]["proxies"])
+                        del r_auth["proxy"]["proxies"]
+                if "proxy" in r_auth["proxy"].keys():
+                    if r_auth["proxy"]["proxy"] is not None:
+                        r_auth["proxy"].update(r_auth["proxy"]["proxy"])
+                        del r_auth["proxy"]["proxy"]
 
 
         self._credentials: Dict[str, dict] = r_auth
@@ -456,7 +461,7 @@ class JPMaQSAPIConfigObject(object):
 
     def oauth(self, mask: bool = True):
         if "oauth" not in self._credentials.keys():
-            raise ValueError("OAuth credentials not found.")
+            return None
         else:
             rdict: Dict[str, str] = {
                 "client_id": self._credentials["oauth"]["client_id"],
@@ -502,7 +507,7 @@ class JPMaQSAPIConfigObject(object):
             return rdict
 
     def proxy(self, mask: bool = False):
-        if not (("proxy" in self._credentials) or ("proxies") in self._credentials):
+        if not ("proxy" in self._credentials):
             return None
         else:
             rdict: Dict[str, dict] = {}
