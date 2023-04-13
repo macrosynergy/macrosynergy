@@ -352,10 +352,9 @@ class TestJPMaQSAPIConfigObject(unittest.TestCase):
         def _mock_is_file(path):
             return self._mock_isfile(path)
         
-        # it's going to read yml. so it's going to read the file, then it's goinj gto do isfile on the path/to/CERTIFICATE and path/to/KEY
+        # it's going to read yml. so it's going to read the file, then it's going to do isfile on the path/to/CERTIFICATE and path/to/KEY
         with patch('os.path.isfile', side_effect= lambda path: _mock_is_file(path)):
             with patch('builtins.open', m):
-
                 config = JPMaQSAPIConfigObject("config.json", client_id=client_id, client_secret=client_secret)
                 oauth = config.oauth(mask=False)
                 cert = config.cert(mask=False)
@@ -363,10 +362,7 @@ class TestJPMaQSAPIConfigObject(unittest.TestCase):
         
 
 
-        # Assert that the 'open' function was called with the correct file name
-        m.assert_called_once_with('config.json', 'r')
-        # Assert that the necessary attributes or properties of the object were correctly set
-        
+        m.assert_called_once_with('config.json', 'r')        
         # check [client_id, client_secret] in oauth
         self.assertEqual(oauth['client_id'], client_id)
         self.assertEqual(oauth['client_secret'], client_secret)
@@ -394,7 +390,6 @@ class TestJPMaQSAPIConfigObject(unittest.TestCase):
         def _mock_is_file(path):
             return self._mock_isfile(path)
         
-        # it's going to read yml. so it's going to read the file, then it's goinj gto do isfile on the path/to/CERTIFICATE and path/to/KEY
         with patch('os.path.isfile', side_effect= lambda path: _mock_is_file(path)):
             with patch('builtins.open', m):
                 username = 'uname--'
@@ -425,6 +420,64 @@ class TestJPMaQSAPIConfigObject(unittest.TestCase):
         self.assertEqual(cert['username'], username)
         self.assertEqual(cert['password'], password)
         self.assertEqual(proxy['http'], proxyL['http'])
+        
+    def test_partial_args(self):
+        """
+        Mock the open function to return the yaml content.
+        Also mock path/to/CERTIFICATE and path/to/KEY as files
+        """
+
+        # Patch the built-in 'open' function with the mock file object
+        client_id = 'CLIENT_ID--'
+        client_secret = 'CLIENT_SECRET--'
+
+
+        oauth : Dict[str, str] = {}
+        cert : Dict[str, str] = {}
+        proxy : Dict[str, str] = {}
+
+        
+        config = JPMaQSAPIConfigObject(client_id=client_id, client_secret=client_secret)
+        oauth = config.oauth(mask=False)
+        cert = config.cert(mask=False)
+        proxy = config.proxy(mask=False)
+
+        self.assertEqual(oauth['client_id'], client_id)
+        self.assertEqual(oauth['client_secret'], client_secret)
+
+        self.assertEqual(cert, None)
+        self.assertEqual(proxy, None)
+        
+
+        def _mock_is_file(path):
+            return self._mock_isfile(path)
+        
+        with patch('os.path.isfile', side_effect= lambda path: _mock_is_file(path)):
+                username = 'uname--'
+                password = 'pass--'
+                crtx = 'path/to/CERTIFICATE_ALT'
+                keyx = 'path/to/KEY_ALT'
+                proxyL = {'http': 'vpn.com:8090'}
+
+                config = JPMaQSAPIConfigObject(username=username, 
+                                                password=password,
+                                                crt=crtx,
+                                                key=keyx,
+                                                proxy=proxyL)
+                
+                oauth = config.oauth(mask=False)
+                cert = config.cert(mask=False)
+                proxy = config.proxy(mask=False)
+                
+        self.assertEqual(oauth, None)
+        self.assertEqual(cert['crt'], crtx)
+        self.assertEqual(cert['key'], keyx)
+        self.assertEqual(cert['username'], username)
+        self.assertEqual(cert['password'], password)
+        self.assertEqual(proxy['http'], proxyL['http'])
+        
+        
+    
 
 
     
