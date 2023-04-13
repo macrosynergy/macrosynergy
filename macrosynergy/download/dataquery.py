@@ -10,12 +10,11 @@ import time
 import logging
 import itertools
 import base64
-import os
 import uuid
 import io
 import requests
-from typing import List, Optional, Dict, Union
 from datetime import datetime, timedelta
+from typing import List, Optional, Dict, Union, Tuple
 from timeit import default_timer as timer
 from tqdm import tqdm
 
@@ -42,14 +41,13 @@ API_DELAY_PARAM: float = 0.3  # 300ms delay between requests
 API_RETRY_COUNT: int = 5  # retry count for transient errors
 HL_RETRY_COUNT: int = 5  # retry count for "high-level" requests
 MAX_CONTINUOUS_FAILURES: int = 5  # max number of continuous errors before stopping
-API_EXPR_LIMIT: int = 20  # 20 is the max number of expressions per API call
 HEARTBEAT_ENDPOINT: str = "/services/heartbeat"
 TIMESERIES_ENDPOINT: str = "/expressions/time-series"
 HEARTBEAT_TRACKING_ID: str = "heartbeat"
 OAUTH_TRACKING_ID: str = "oauth"
 TIMESERIES_TRACKING_ID: str = "timeseries"
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 debug_stream_handler = logging.StreamHandler(io.StringIO())
 debug_stream_handler.setLevel(logging.NOTSET)
 debug_stream_handler.setFormatter(
@@ -78,14 +76,13 @@ def validate_response(response: requests.Response) -> dict:
     """
 
     error_str : str = (
-        f"Response : {response}\n"
+        f"Response: {response}\n"
         f"Requested URL: {response.request.url}\n"
         f"Response status code: {response.status_code}\n"
         f"Response headers: {response.headers}\n"
         f"Response text: {response.text}\n"
-        f"Timestamp (UTC) : {datetime.utcnow().isoformat()}; \n"
+        f"Timestamp (UTC): {datetime.utcnow().isoformat()}; \n"
     )
-    
     # TODO : Use response.raise_for_status() as a better way to check for errors
     if response.status_code != 200:
         logger.info("Non-200 response code from DataQuery: %s", response.status_code)
@@ -120,6 +117,7 @@ def request_wrapper(
     method: str = "get",
     tracking_id: Optional[str] = None,
     proxy: Optional[Dict] = None,
+    cert: Optional[Tuple[str, str]] = None,
     **kwargs,
 ) -> dict:
     """
@@ -132,6 +130,8 @@ def request_wrapper(
     :param <str> method: HTTP method to use. Must be one of "get"
         or "post". Defaults to "get".
     :param <dict> kwargs: kwargs to pass to requests.request().
+    :param <str> tracking_id: default None, unique tracking ID of request.
+    :param <dict> proxy: default None, dictionary of proxy settings for request.
 
     :return <dict>: response as a dictionary.
 
@@ -178,9 +178,10 @@ def request_wrapper(
 
             upload_size = prepared_request.headers.get("Content-Length", 0)
 
-            response = requests.Session().send(
+            response: requests.Response = requests.Session().send(
                 prepared_request,
                 proxies=proxy,
+                cert=cert,
             )
 
             # track the download size
@@ -301,16 +302,15 @@ class OAuth(object):
         client_id: str,
         client_secret: str,
         proxy: Optional[dict] = None,
-        base_url: str = OAUTH_BASE_URL,
         token_url: str = OAUTH_TOKEN_URL,
         dq_resource_id: str = OAUTH_DQ_RESOURCE_ID,
     ):
+        logger.debug("Instantiate OAuth pathway to DataQuery")
         vars_types_zip: zip = zip(
-            [client_id, client_secret, base_url, token_url, dq_resource_id],
+            [client_id, client_secret, token_url, dq_resource_id],
             [
                 "client_id",
                 "client_secret",
-                "base_url",
                 "token_url",
                 "dq_resource_id",
             ],
@@ -323,21 +323,15 @@ class OAuth(object):
         if not isinstance(proxy, dict) and proxy is not None:
             raise TypeError(f"proxy must be a <dict> and not {type(proxy)}.")
 
-        self.base_url: str = base_url
         self.token_url: str = token_url
-        self.dq_resource_id: str = dq_resource_id
         self.proxy: Optional[dict] = proxy
-
-        self.client_id: str = client_id
-
-        self.client_secret: str = client_secret
 
         self._stored_token: Optional[dict] = None
         self.token_data = {
             "grant_type": "client_credentials",
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
-            "aud": self.dq_resource_id,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "aud": dq_resource_id,
         }
 
     def _valid_token(self) -> bool:
@@ -347,20 +341,28 @@ class OAuth(object):
         :return <bool>: True if the token is valid, False otherwise.
         """
         if self._stored_token is None:
+            logger.debug("No token stored")
             return False
 
-        created: datetime = self._stored_token["created_at"] # utc time of creation
-        expires: int = self._stored_token["expires_in"] # int in seconds
-        is_active: bool = (created + timedelta(seconds=expires)) > datetime.utcnow()
+        created: datetime = self._stored_token["created_at"]  # utc time of creation
+        expires: datetime = created + timedelta(seconds=self._stored_token["expires_in"])
+        utcnow = datetime.utcnow()
+        is_active: bool = expires > utcnow
+
+        logger.debug(
+            "Active token: %s, created: %s, expires: %s, now: %s",
+            is_active, created, expires, utcnow
+        )
+
         return is_active
 
     def _get_token(self) -> str:
-        """
-        Method to get a new OAuth token.
+        """Method to get a new OAuth token.
 
         :return <str>: OAuth token.
         """
         if not self._valid_token():
+            logger.debug("Request new OAuth token")
             js = request_wrapper(
                 url=self.token_url,
                 data=self.token_data,
@@ -379,34 +381,9 @@ class OAuth(object):
 
         return self._stored_token["access_token"]
 
-    def _request(
-        self,
-        url: str,
-        params: dict = None,
-        proxy: Optional[dict] = None,
-        tracking_id: Optional[str] = None,
-    ) -> dict:
-        """
-        Wrapper for request_wrapper to add the correct authorization and headers.
-
-        :param <str> url: URL to request.
-        :param <dict> params: parameters to pass to the request.
-        :param <dict> proxy: proxy to use for the request.
-        :param <str> tracking_id: tracking ID to use for the request (for logging).
-
-        :return <dict>: JSON response from the request.
-
-        :raises <Exception>: other exceptions may be raised by underlying functions.
-        """
-
-        # this method is only needed to insert the relavant authorization header
-        return request_wrapper(
-            url=url,
-            params=params,
-            headers={"Authorization": "Bearer " + self._get_token()},
-            proxy=proxy,
-            tracking_id=tracking_id,
-        )
+    def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
+        headers = {"Authorization": "Bearer " + self._get_token()}
+        return {"headers": headers, "cert": None}
 
 
 class CertAuth(object):
@@ -417,13 +394,11 @@ class CertAuth(object):
     :param <str> password: password for the DataQuery API.
     :param <str> crt: path to the certificate file.
     :param <str> key: path to the key file.
-    :param <str> base_url: base URL for the DataQuery API.
-    :param <dict> proxy: proxy to use for requests. Defaults to None.
 
     :return <CertAuth>: CertAuth object.
 
-    :raises <TypeError>: if any of the parameters are of the wrong type.
-    :raises <ValueError>: if any of the parameters are semantically incorrect.
+    :raises <AssertionError>: if any of the parameters are of the wrong type.
+    :raises <FileNotFoundError>: if certificate or key file is missing from filesystem.
     :raises <Exception>: other exceptions may be raised by underlying functions.
     """
 
@@ -431,63 +406,32 @@ class CertAuth(object):
         self,
         username: str,
         password: str,
-        crt: str = "api_macrosynergy_com.crt",
-        key: str = "api_macrosynergy_com.key",
-        base_url: str = CERT_BASE_URL,
-        proxy: Optional[dict] = None,
+        crt: str,
+        key: str,
     ):
-        vars_types_zip: zip = zip(
-            [username, password, crt, key, base_url],
-            ["username", "password", "crt", "key", "base_url"],
+        assert isinstance(username, str), (
+            f"username must be <str> and not {type(username)}"
         )
-        for varx, namex in vars_types_zip:
-            if not isinstance(varx, str):
-                raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
-        if not isinstance(proxy, dict) and proxy is not None:
-            raise TypeError(f"proxy must be a <dict> and not {type(proxy)}.")
+
+        assert isinstance(password, str), (
+            f"password must be <str> and not {type(password)}"
+        )
 
         self.auth: str = base64.b64encode(
             bytes(f"{username:s}:{password:s}", "utf-8")
         ).decode("ascii")
 
-        self.headers: Dict[str, str] = {"Authorization": f"Basic {self.auth:s}"}
-        self.base_url: str = base_url
-        self.proxy: Optional[dict] = proxy
-
         # Key and Certificate check
-        for f in [key, crt]:
+        for n, f in [("key", key), ("crt", crt)]:
+            assert isinstance(f, str), f"{n} must be type <str> and not {type(f)}"
             if not os.path.isfile(f):
                 raise FileNotFoundError(f"The file '{f}' does not exist.")
         self.key: str = key
         self.crt: str = crt
 
-    def _request(
-        self,
-        url: str,
-        params: dict = None,
-        proxy: Optional[dict] = None,
-        tracking_id: Optional[str] = None,
-    ) -> dict:
-        """
-        Wrapper for request_wrapper to use the relevant certificate and headers.
-
-        :param <str> url: URL to request.
-        :param <dict> params: parameters to pass to the request.
-        :param <dict> proxy: proxy to use for the request.
-        :param <str> tracking_id: tracking ID to use for the request (for logging).
-
-        :return <dict>: JSON response from the request.
-        """
-
-        js = request_wrapper(
-            url=url,
-            cert=(self.crt, self.key),
-            headers=self.headers,
-            params=params,
-            proxy=proxy,
-            tracking_id=tracking_id,
-        )
-        return js
+    def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
+        headers = {"Authorization": f"Basic {self.auth:s}"}
+        return {"headers": headers, "cert": (self.crt, self.key)}
 
 
 class DataQueryInterface(object):
@@ -498,8 +442,8 @@ class DataQueryInterface(object):
     :param <bool> oauth: whether to use OAuth authentication. Defaults to True.
     :param <bool> debug: whether to print debug messages. Defaults to False.
     :param <bool> concurrent: whether to use concurrent requests. Defaults to True.
-    :param <int> batch_size: number of expressions to send in a single request.
-        Defaults to API_EXPR_LIMIT.
+    :param <int> batch_size: default 20, number of expressions to send in a single request.
+        Must be a number between 1 and 20 (both included).
     :param <bool> heartbeat: whether to send a heartbeat request. Defaults to True.
     :param <bool> suppress_warnings: whether to suppress warnings. Defaults to True.
 
@@ -529,18 +473,16 @@ class DataQueryInterface(object):
 
     def __init__(
         self,
+        config: JPMaQSAPIConfigObject,
         oauth: bool = True,
         debug: bool = False,
         concurrent: bool = True,
-        batch_size: int = API_EXPR_LIMIT,
-        heartbeat: bool = True,
+        batch_size: int = 20,
+        check_connection: bool = True,
         base_url: str = OAUTH_BASE_URL,
         suppress_warnings: bool = True,
-        config_object: Optional[JPMaQSAPIConfigObject] = None,
-        **kwargs,
     ):
-        # self.proxy = kwargs.pop("proxy", kwargs.pop("proxies", None))
-        self.heartbeat: bool = heartbeat
+        self._check_connection: bool = check_connection
         self.msg_errors: List[str] = []
         self.msg_warnings: List[str] = []
         self.unavailable_expressions: List[str] = []
@@ -549,34 +491,28 @@ class DataQueryInterface(object):
         self.suppress_warnings: bool = suppress_warnings
         self.batch_size: int = batch_size
 
-        if config_object is None:
-            # raise value error saying config not provided. check macrosyenrgy.management.utils.JPMaQSAPIConfigObject
+        if not isinstance(config, JPMaQSAPIConfigObject):
             raise ValueError(
-                "config_object must be provided for DataQuery"
-                "authentication. Check macrosyenrgy.management.utils.JPMaQSAPIConfigObject "
+                "config_object must be provided for DataQuery authentication."
+                " Check macrosynergy.management.utils.JPMaQSAPIConfigObject "
                 "for more details."
             )
 
-        self.access_method: Optional[Union[CertAuth, OAuth]] = None
-        credentials: dict = {}
+        self.auth: Optional[Union[CertAuth, OAuth]] = None
         if oauth:
-            credentials = config_object.oauth(mask=False)
-            self.access_method: OAuth = OAuth(
-                **credentials,
-                base_url=base_url,
-            )
+            self.auth: OAuth = OAuth(**config.oauth(mask=False))
         else:
-            credentials = config_object.cert(mask=False)
             if base_url == OAUTH_BASE_URL:
-                base_url = CERT_BASE_URL
+                base_url: str = CERT_BASE_URL
 
-            self.access_method: CertAuth = CertAuth(**credentials, base_url=base_url)
+            self.auth: CertAuth = CertAuth(**config.cert(mask=False))
 
         assert (
-            self.access_method is not None
+                self.auth is not None
         ), "Failed to initialise access method. Check the config_object passed"
 
-        self.proxy: Optional[dict] = config_object.proxy(mask=False)
+        self.proxy: Optional[dict] = config.proxy(mask=False)
+        self.base_url: str = base_url
 
     def __enter__(self):
         return self
@@ -596,25 +532,25 @@ class DataQueryInterface(object):
 
         :raises <HeartbeatError>: if the heartbeat fails.
         """
-        js: dict = {}
-        try:
-            js = self.access_method._request(
-                url=self.access_method.base_url + HEARTBEAT_ENDPOINT,
-                params={"data": "NO_REFERENCE_DATA"},
-                proxy=self.proxy,
-                tracking_id=HEARTBEAT_TRACKING_ID,
-            )
-        except Exception as e:
-            raise e
+        logger.debug("Check if connection can be established to JPMorgan DataQuery")
+        js: dict = request_wrapper(
+            url=self.base_url + HEARTBEAT_ENDPOINT,
+            params={"data": "NO_REFERENCE_DATA"},
+            proxy=self.proxy,
+            tracking_id=HEARTBEAT_TRACKING_ID,
+            **self.auth.get_auth()
+        )
 
         result: bool = True
         if (js is None) or (not isinstance(js, dict)) or ("info" not in js):
+            logger.warning("Connection to JPMorgan DataQuery heartbeat failed")
             result = False
 
         if result:
             result = (int(js["info"]["code"]) == 200) and (
                 js["info"]["message"] == "Service Available."
             )
+
         if verbose:
             print("Connection successful!" if result else "Connection failed.")
         return result
@@ -623,7 +559,6 @@ class DataQueryInterface(object):
         self,
         url: str,
         params: dict = None,
-        proxy: Optional[dict] = None,
         tracking_id: Optional[str] = None,
     ) -> List[Dict]:
         """
@@ -643,35 +578,35 @@ class DataQueryInterface(object):
         """
 
         downloaded_data: List[Dict] = []
-        curr_response: Dict = {}
-        curr_url: str = url
-        current_params: Dict = params.copy()
-        get_pagination: bool = True
-        log_url: str = form_full_url(curr_url, current_params)
-        curr_response: Optional[Dict] = None
-        while get_pagination:
-            curr_response: Dict = self.access_method._request(
-                url=url,
-                params=params,
-                proxy=proxy,
-                tracking_id=tracking_id,
+        response: Dict = request_wrapper(
+            url=url,
+            params=params,
+            proxy=self.proxy,
+            tracking_id=tracking_id,
+            **self.auth.get_auth()
+        )
+
+        if (response is None) or ("instruments" not in response.keys()):
+            raise InvalidResponseError(
+                f"Invalid response from DataQuery: {response}\n"
+                f"URL: {form_full_url(url, params)}"
+                f"Timestamp (UTC): {datetime.utcnow().isoformat()}"
             )
-            if (curr_response is None) or ("instruments" not in curr_response.keys()):
-                raise InvalidResponseError(
-                    f"Invalid response from DataQuery: {curr_response}\n"
-                    f"URL: {log_url}"
-                    f"Timestamp (UTC): {datetime.utcnow().isoformat()}"
+
+        downloaded_data.extend(response["instruments"])
+
+        if (
+                "links" in response.keys()
+                and response["links"][1]["next"] is not None
+        ):
+            logger.info("DQ response paginated - get next response page")
+            downloaded_data.extend(
+                self._fetch(
+                    url=self.base_url + response["links"][1]["next"],
+                    params={},
+                    tracking_id=tracking_id
                 )
-            else:
-                downloaded_data.extend(curr_response["instruments"])
-                if "links" in curr_response.keys():
-                    if curr_response["links"][1]["next"] is None:
-                        get_pagination = False
-                        break
-                    else:
-                        curr_url = OAUTH_BASE_URL + curr_response["links"][1]["next"]
-                        current_params = {}
-                        log_url = form_full_url(curr_url, current_params)
+            )
 
         return downloaded_data
 
@@ -802,7 +737,7 @@ class DataQueryInterface(object):
         nan_treatment: str = "NA_NOTHING",
         reference_data: str = "NO_REFERENCE_DATA",
         retry_counter: int = 0,
-        delay_param: float = API_DELAY_PARAM,
+        delay_param: float = API_DELAY_PARAM,  # TODO do we want the user to have access to this?
         # filter_from_catalogue: bool = True,
     ) -> List[Dict]:
         """
@@ -874,7 +809,7 @@ class DataQueryInterface(object):
             )
 
         # check heartbeat before each "batch" of requests
-        if self.heartbeat:
+        if self._check_connection:
             if not self.check_connection():
                 raise ConnectionError(
                     HeartbeatError(
@@ -921,9 +856,8 @@ class DataQueryInterface(object):
                     future_objects.append(
                         executor.submit(
                             self._fetch,
-                            url=self.access_method.base_url + endpoint,
+                            url=self.base_url + endpoint,
                             params=curr_params,
-                            proxy=self.proxy,
                             tracking_id=tracking_id,
                         )
                     )
@@ -973,9 +907,8 @@ class DataQueryInterface(object):
                 curr_params["expressions"] = expr_batch
                 try:
                     result = self._fetch(
-                        url=self.access_method.base_url + endpoint,
+                        url=self.base_url + endpoint,
                         params=curr_params,
-                        proxy=self.proxy,
                         tracking_id=tracking_id,
                     )
                     download_outputs.append(result)

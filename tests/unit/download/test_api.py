@@ -16,13 +16,8 @@ class TestCertAuth(unittest.TestCase):
 
 class TestOAuth(unittest.TestCase):
     def test_init(self):
-        oauth: dataquery.OAuth = dataquery.OAuth(
-            client_id="test-id", client_secret="SECRET"
-        )
-
-        self.assertEqual(dataquery.OAUTH_BASE_URL, oauth.base_url)
-        self.assertEqual("test-id", oauth.client_id)
-        self.assertEqual("SECRET", oauth.client_secret)
+        jpmaqs : JPMaQSDownload = JPMaQSDownload(oauth=True, client_id="test-id", client_secret="SECRET", check_connection=False)
+        self.assertEqual(jpmaqs.dq_interface.base_url, dataquery.OAUTH_BASE_URL)
 
     # def test_invalid_args_passed(self):
     def test_invalid_init_args(self):
@@ -103,10 +98,14 @@ class TestDataQueryInterface(unittest.TestCase):
         return aggregator
 
     @mock.patch(
-        "macrosynergy.download.dataquery.OAuth._request",
+        "macrosynergy.download.dataquery.OAuth._get_token",
+        return_value=("SOME_TEST_TOKEN"),
+    )
+    @mock.patch(
+        "macrosynergy.download.dataquery.request_wrapper",
         return_value=({"info": {"code": 200, "message": "Service Available."}}),
     )
-    def test_check_connection(self, mock_p_request):
+    def test_check_connection(self, mock_p_request, mock_p_get_token):
         # If the connection to DataQuery is working, the response code will invariably be
         # 200. Therefore, use the Interface Object's method to check DataQuery
         # connections.
@@ -117,12 +116,17 @@ class TestDataQueryInterface(unittest.TestCase):
             self.assertTrue(jpmaqs.check_connection())
 
         mock_p_request.assert_called_once()
+        mock_p_get_token.assert_called_once()
 
     @mock.patch(
-        "macrosynergy.download.dataquery.OAuth._request",
+        "macrosynergy.download.dataquery.OAuth._get_token",
+        return_value=("SOME_TEST_TOKEN"),
+    )
+    @mock.patch(
+        "macrosynergy.download.dataquery.request_wrapper",
         return_value=({"info": {"code": 200, "message": "Service Available."}}),
     )
-    def test_check_connection_on_init(self, mock_p_request):
+    def test_check_connection_on_init(self, mock_p_request, mock_p_get_token):
         # If the connection to DataQuery is working, the response code will invariably be
         # 200. Therefore, use the Interface Object's method to check DataQuery
         # connections.
@@ -135,9 +139,14 @@ class TestDataQueryInterface(unittest.TestCase):
             pass
 
         mock_p_request.assert_called_once()
+        mock_p_get_token.assert_called_once()
 
     @mock.patch(
-        "macrosynergy.download.dataquery.OAuth._request",
+        "macrosynergy.download.dataquery.OAuth._get_token",
+        return_value=("SOME_TEST_TOKEN"),
+    )
+    @mock.patch(
+        "macrosynergy.download.dataquery.request_wrapper",
         return_value=(
             {"info": {"code": 400}},
             False,
@@ -149,7 +158,7 @@ class TestDataQueryInterface(unittest.TestCase):
             },
         ),
     )
-    def test_check_connection_fail(self, mock_p_fail):
+    def test_check_connection_fail(self, mock_p_fail, mock_p_get_token):
         # Opposite of above method: if the connection to DataQuery fails, the error code
         # will be 400.
 
@@ -160,7 +169,9 @@ class TestDataQueryInterface(unittest.TestCase):
             # (unable to connect).
             self.assertFalse(jpmaqs_download.check_connection())
         mock_p_fail.assert_called_once()
-
+        mock_p_get_token.assert_called_once()
+        
+    
     def test_oauth_condition(self):
         # Accessing DataQuery can be achieved via two methods: OAuth or Certificates /
         # Keys. To handle for the idiosyncrasies of the two access methods, split the
@@ -176,7 +187,7 @@ class TestDataQueryInterface(unittest.TestCase):
             jpmaqs_download.dq_interface, dataquery.DataQueryInterface
         )
         self.assertIsInstance(
-            jpmaqs_download.dq_interface.access_method, dataquery.OAuth
+            jpmaqs_download.dq_interface.auth, dataquery.OAuth
         )
 
     def test_certauth_condition(self):
