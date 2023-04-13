@@ -390,7 +390,7 @@ class TestJPMaQSAPIConfigObject(unittest.TestCase):
         cert : Dict[str, str] = {}
         proxy : Dict[str, str] = {}
 
-        m = mock_open(read_data=self.mock_json_content())
+        m = mock_open(read_data=self.mock_yaml_content())
         def _mock_is_file(path):
             return self._mock_isfile(path)
         
@@ -403,7 +403,7 @@ class TestJPMaQSAPIConfigObject(unittest.TestCase):
                 keyx = 'path/to/KEY_ALT'
                 proxyL = {'http': 'vpn.com:8090'}
 
-                config = JPMaQSAPIConfigObject("config.json", 
+                config = JPMaQSAPIConfigObject("config.yml", 
                                                username=username, 
                                                password=password,
                                                 crt=crtx,
@@ -412,23 +412,20 @@ class TestJPMaQSAPIConfigObject(unittest.TestCase):
                 oauth = config.oauth(mask=False)
                 cert = config.cert(mask=False)
                 proxy = config.proxy(mask=False)
+                
+        m.assert_called_once_with('config.yml', 'r')
 
-        # config_dict = yaml.safe_load(io.StringIO(self.mock_json_content()))
-        # self.assertEqual(oauth['client_id'], config_dict['JPMAQS_CREDENTIALS']['OAUTH']['client_id'])
-        # self.assertEqual(oauth['client_id'], rec_search_dict(config_dict, 'client_id'))
-        # self.assertEqual(oauth['client_secret'], config_dict['JPMAQS_CREDENTIALS']['OAUTH']['client_secret'])
-        # self.assertEqual(oauth['client_secret'], rec_search_dict(config_dict, 'client_secret'))
-        # self.assertEqual(cert['crt'], config_dict['JPMAQS_CREDENTIALS']['CERT']['crt'])
-        # self.assertEqual(cert['crt'], rec_search_dict(config_dict, 'crt'))
-        # self.assertEqual(cert['key'], config_dict['JPMAQS_CREDENTIALS']['CERT']['key'])
-        # self.assertEqual(cert['key'], rec_search_dict(config_dict, 'key'))
-        # self.assertEqual(cert['username'], username)
-        # self.assertEqual(cert['password'], password)
-        # self.assertEqual(proxy['http'], proxyL['http'])
+        config_dict = yaml.safe_load(io.StringIO(self.mock_json_content()))
+        self.assertEqual(oauth['client_id'], config_dict['JPMAQS_CREDENTIALS']['OAUTH']['client_id'])
+        self.assertEqual(oauth['client_id'], rec_search_dict(config_dict, 'client_id'))
+        self.assertEqual(oauth['client_secret'], config_dict['JPMAQS_CREDENTIALS']['OAUTH']['client_secret'])
+        self.assertEqual(oauth['client_secret'], rec_search_dict(config_dict, 'client_secret'))
+        self.assertEqual(cert['crt'], crtx)
+        self.assertEqual(cert['key'], keyx)
+        self.assertEqual(cert['username'], username)
+        self.assertEqual(cert['password'], password)
+        self.assertEqual(proxy['http'], proxyL['http'])
 
-        
-
-        
 
     
 

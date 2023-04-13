@@ -390,10 +390,13 @@ class JPMaQSAPIConfigObject(object):
         all_args_present: Callable = lambda x: all([v is not None for v in x])
 
         # overwrite any loaded variables with any passed variables
-        for pr_args in [oauth_vars, cert_vars, proxy_vars]:
-            if all_args_present(pr_args):
-                for var, val in zip(loaded_vars.keys(), pr_args):
-                    loaded_vars[var] = val
+        for pr_args, pr_arg_names in zip(
+            [oauth_vars, cert_vars, proxy_vars],
+            [oauth_var_names, cert_var_names, proxy_var_names],
+        ):
+            for arg, arg_name in zip(pr_args, pr_arg_names):
+                if arg is not None:
+                    loaded_vars[arg_name] = arg
 
         r_auth: Dict[str, Optional[str]] = {}
         # any complete set of credentials will now be in r_auth
