@@ -2,6 +2,7 @@ import unittest
 import pandas as pd
 from tests.simulate import make_qdf
 from macrosynergy.panel.view_timelines import view_timelines
+import matplotlib
 
 class TestAll(unittest.TestCase):
 
@@ -35,6 +36,9 @@ class TestAll(unittest.TestCase):
         
         # test that all the sample cases run
         
+        # set backend to Agg to avoid spawning a window
+        matplotlib.use('Agg')
+
         try:
             view_timelines(dfd, xcats=xcats[:2], cids=cids[0],
                         size=(10, 5), title='AUD Return and Carry')
