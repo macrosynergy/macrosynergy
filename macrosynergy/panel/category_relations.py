@@ -71,25 +71,6 @@ class CategoryRelations(object):
 
     """
     
-    def _apply_slip(self, df: pd.DataFrame, slip: int) -> pd.DataFrame:
-        # identify unique cid_xcat combinations
-        
-        df['tickers'] = df['cid'] + '_' + df['xcat']
-        unique_tickers : List[str] = (df['cid'] + '_' + df['xcat']).unique().tolist()
-        out_dfs : List[pd.DataFrame] = []
-        for ticker in unique_tickers:
-            sel_df : pd.DataFrame = df[df['tickers'] == ticker]
-            dates : pd.Series = pd.to_datetime(sel_df['real_date'])
-            values : pd.Series = sel_df[self.val]
-            sd = sel_df[sel_df[self.val].notna()]['real_date'].min()
-            ed = sel_df[sel_df[self.val].notna()]['real_date'].max()
-            values = values.shift(slip)[(dates >= sd) & (dates <= ed)]
-            sel_df.loc[values.index, self.val] = values
-            out_dfs.append(sel_df)
-        
-        out_df : pd.DataFrame = pd.concat(out_dfs, axis=0).drop(columns=['tickers'])
-        return out_df
-
     def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                  val: str = 'value', start: str = None, end: str = None,
                  blacklist: dict = None, years = None, freq: str = 'M', lag: int = 0,
@@ -117,11 +98,15 @@ class CategoryRelations(object):
         # Select the cross-sections available for both categories.
         df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
         
+        df_slips : pd.DataFrame = df.copy()
         if self.slip != 0:
-            df = self._apply_slip(df, self.slip)
+            df_slips = self.apply_slip(target_df=df_slips, slip=self.slip, cids=self.cids,
+                                        xcats=self.xcats, metrics=[self.val])
 
         shared_cids = CategoryRelations.intersection_cids(df, xcats, cids)
 
+        # TODO : df = df_slips here?
+        
         # Will potentially contain NaN values if the two categories are defined over
         # time-periods.
         df = categories_df(
@@ -158,6 +143,40 @@ class CategoryRelations(object):
         # NaN values will not be handled if both of the above conditions are not
         # satisfied.
         self.df = df.dropna(axis=0, how='any')
+
+    def apply_slip(self, target_df: pd.DataFrame, slip: int,
+                    cids: List[str] = None, xcats: List[str] = None,
+                    metrics: List[str] = None) -> pd.DataFrame:
+        if isinstance(cids, str):
+            cids = [cids]
+        if isinstance(xcats, str):
+            xcats = [xcats]
+        if isinstance(metrics, str):
+            metrics = [metrics]
+
+        sel_tickers : List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+
+        target_df['tickers'] = target_df['cid'] + '_' + target_df['xcat']
+
+        if len(set(sel_tickers) - set(target_df['tickers'].unique())) > 0:
+            ValueError("Tickers targetted for applying slip are not present in the DataFrame.\n"
+             f"Missing tickers: {set(sel_tickers) - set(target_df['tickers'].unique())}")
+
+        sel_df : pd.DataFrame = target_df[target_df['tickers'].isin(sel_tickers)]
+
+        unique_tickers : List[str] = (sel_df['tickers']).unique().tolist()
+
+        out_dfs : List[pd.DataFrame] = []
+        for ticker in unique_tickers:
+            curr_df : pd.DataFrame = sel_df[sel_df['tickers'] == ticker].sort_values(by='real_date')
+            dates : pd.Series = pd.to_datetime(sel_df['real_date'])
+            values : pd.Series = curr_df[metrics]
+            sd = sel_df[sel_df[metrics].notna()]['real_date'].min()
+            ed = sel_df[sel_df[metrics].notna()]['real_date'].max()
+            curr_df[metrics] = values.shift(slip)[(dates >= sd) & (dates <= ed)]
+        
+        out_df : pd.DataFrame = pd.concat(out_dfs, axis=0).drop(columns=['tickers'])
+        return out_df
 
     @classmethod
     def intersection_cids(cls, df, xcats, cids):
