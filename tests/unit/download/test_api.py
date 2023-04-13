@@ -176,7 +176,7 @@ class TestDataQueryInterface(unittest.TestCase):
             jpmaqs_download.dq_interface, dataquery.DataQueryInterface
         )
         self.assertIsInstance(
-            jpmaqs_download.dq_interface.authentication, dataquery.OAuth
+            jpmaqs_download.dq_interface.auth, dataquery.OAuth
         )
 
     def test_certauth_condition(self):

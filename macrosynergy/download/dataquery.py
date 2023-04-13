@@ -13,13 +13,8 @@ import base64
 import uuid
 import io
 import requests
-<<<<<<< Updated upstream
-from typing import List, Optional, Dict, Union
 from datetime import datetime, timedelta
-=======
 from typing import List, Optional, Dict, Union, Tuple
-from datetime import datetime
->>>>>>> Stashed changes
 from timeit import default_timer as timer
 from tqdm import tqdm
 
@@ -46,7 +41,6 @@ API_DELAY_PARAM: float = 0.3  # 300ms delay between requests
 API_RETRY_COUNT: int = 5  # retry count for transient errors
 HL_RETRY_COUNT: int = 5  # retry count for "high-level" requests
 MAX_CONTINUOUS_FAILURES: int = 5  # max number of continuous errors before stopping
-API_EXPR_LIMIT: int = 20  # 20 is the max number of expressions per API call
 HEARTBEAT_ENDPOINT: str = "/services/heartbeat"
 TIMESERIES_ENDPOINT: str = "/expressions/time-series"
 HEARTBEAT_TRACKING_ID: str = "heartbeat"
@@ -123,6 +117,7 @@ def request_wrapper(
     method: str = "get",
     tracking_id: Optional[str] = None,
     proxy: Optional[Dict] = None,
+    cert: Optional[Tuple[str, str]] = None,
     **kwargs,
 ) -> dict:
     """
@@ -165,7 +160,7 @@ def request_wrapper(
     headers["X-Tracking-Id"]: str = tracking_id
 
     log_url: str = form_full_url(url, params)
-    logger.info(f"Requesting URL: {log_url} , tracking_id: {tracking_id}")
+    logger.info(f"Requesting URL: {log_url} with tracking_id: {tracking_id}")
     raised_exceptions: List[Exception] = []
     error_statements: List[str] = []
     error_statement: str = ""
@@ -186,6 +181,7 @@ def request_wrapper(
             response: requests.Response = requests.Session().send(
                 prepared_request,
                 proxies=proxy,
+                cert=cert,
             )
 
             # track the download size
@@ -306,17 +302,15 @@ class OAuth(object):
         client_id: str,
         client_secret: str,
         proxy: Optional[dict] = None,
-        base_url: str = OAUTH_BASE_URL,
         token_url: str = OAUTH_TOKEN_URL,
         dq_resource_id: str = OAUTH_DQ_RESOURCE_ID,
     ):
         logger.debug("Instantiate OAuth pathway to DataQuery")
         vars_types_zip: zip = zip(
-            [client_id, client_secret, base_url, token_url, dq_resource_id],
+            [client_id, client_secret, token_url, dq_resource_id],
             [
                 "client_id",
                 "client_secret",
-                "base_url",
                 "token_url",
                 "dq_resource_id",
             ],
@@ -329,21 +323,15 @@ class OAuth(object):
         if not isinstance(proxy, dict) and proxy is not None:
             raise TypeError(f"proxy must be a <dict> and not {type(proxy)}.")
 
-        self.base_url: str = base_url
         self.token_url: str = token_url
-        self.dq_resource_id: str = dq_resource_id
         self.proxy: Optional[dict] = proxy
-
-        self.client_id: str = client_id
-
-        self.client_secret: str = client_secret
 
         self._stored_token: Optional[dict] = None
         self.token_data = {
             "grant_type": "client_credentials",
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
-            "aud": self.dq_resource_id,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "aud": dq_resource_id,
         }
 
     def _valid_token(self) -> bool:
@@ -356,12 +344,14 @@ class OAuth(object):
             logger.debug("No token stored")
             return False
 
-        created: datetime = self._stored_token["created_at"] # utc time of creation
-        expires: int = self._stored_token["expires_in"] # int in seconds
-        is_active: bool = (created + timedelta(seconds=expires)) > datetime.utcnow()
+        created: datetime = self._stored_token["created_at"]  # utc time of creation
+        expires: datetime = created + timedelta(seconds=self._stored_token["expires_in"])
+        utcnow = datetime.utcnow()
+        is_active: bool = expires > utcnow
 
         logger.debug(
-            "Active token %s created at %s expires at %s", is_active, created, expires
+            "Active token: %s, created: %s, expires: %s, now: %s",
+            is_active, created, expires, utcnow
         )
 
         return is_active
@@ -372,6 +362,7 @@ class OAuth(object):
         :return <str>: OAuth token.
         """
         if not self._valid_token():
+            logger.debug("Request new OAuth token")
             js = request_wrapper(
                 url=self.token_url,
                 data=self.token_data,
@@ -402,13 +393,11 @@ class CertAuth(object):
     :param <str> password: password for the DataQuery API.
     :param <str> crt: path to the certificate file.
     :param <str> key: path to the key file.
-    :param <str> base_url: base URL for the DataQuery API.
-    :param <dict> proxy: proxy to use for requests. Defaults to None.
 
     :return <CertAuth>: CertAuth object.
 
-    :raises <TypeError>: if any of the parameters are of the wrong type.
-    :raises <ValueError>: if any of the parameters are semantically incorrect.
+    :raises <AssertionError>: if any of the parameters are of the wrong type.
+    :raises <FileNotFoundError>: if certificate or key file is missing from filesystem.
     :raises <Exception>: other exceptions may be raised by underlying functions.
     """
 
@@ -416,31 +405,24 @@ class CertAuth(object):
         self,
         username: str,
         password: str,
-        crt: str = "api_macrosynergy_com.crt",
-        key: str = "api_macrosynergy_com.key",
-        base_url: str = CERT_BASE_URL,
-        proxy: Optional[dict] = None,
+        crt: str,
+        key: str,
     ):
-        vars_types_zip: zip = zip(
-            [username, password, crt, key, base_url],
-            ["username", "password", "crt", "key", "base_url"],
+        assert isinstance(username, str), (
+            f"username must be <str> and not {type(username)}"
         )
-        for varx, namex in vars_types_zip:
-            if not isinstance(varx, str):
-                raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
-        if not isinstance(proxy, dict) and proxy is not None:
-            raise TypeError(f"proxy must be a <dict> and not {type(proxy)}.")
+
+        assert isinstance(password, str), (
+            f"password must be <str> and not {type(password)}"
+        )
 
         self.auth: str = base64.b64encode(
             bytes(f"{username:s}:{password:s}", "utf-8")
         ).decode("ascii")
 
-        self.headers: Dict[str, str] = {"Authorization": f"Basic {self.auth:s}"}
-        self.base_url: str = base_url
-        self.proxy: Optional[dict] = proxy
-
         # Key and Certificate check
-        for f in [key, crt]:
+        for n, f in [("key", key), ("crt", crt)]:
+            assert isinstance(f, str), f"{n} must be type <str> and not {type(f)}"
             if not os.path.isfile(f):
                 raise FileNotFoundError(f"The file '{f}' does not exist.")
         self.key: str = key
@@ -514,10 +496,10 @@ class DataQueryInterface(object):
                 "for more details."
             )
 
-        self.authentication: Optional[Union[CertAuth, OAuth]] = None
+        self.auth: Optional[Union[CertAuth, OAuth]] = None
         if oauth:
             credentials: dict = config.oauth(mask=False)
-            self.authentication: OAuth = OAuth(
+            self.auth: OAuth = OAuth(
                 **credentials,
                 base_url=base_url,
             )
@@ -526,13 +508,14 @@ class DataQueryInterface(object):
             if base_url == OAUTH_BASE_URL:
                 base_url = CERT_BASE_URL
 
-            self.authentication: CertAuth = CertAuth(**credentials, base_url=base_url)
+            self.auth: CertAuth = CertAuth(**credentials)
 
         assert (
-                self.authentication is not None
+                self.auth is not None
         ), "Failed to initialise access method. Check the config_object passed"
 
         self.proxy: Optional[dict] = config.proxy(mask=False)
+        self.base_url: str = base_url
 
     def __enter__(self):
         return self
@@ -553,7 +536,7 @@ class DataQueryInterface(object):
         :raises <HeartbeatError>: if the heartbeat fails.
         """
         js: dict = self.request(
-            url=self.authentication.base_url + HEARTBEAT_ENDPOINT,
+            url=self.base_url + HEARTBEAT_ENDPOINT,
             params={"data": "NO_REFERENCE_DATA"},
             proxy=self.proxy,
             tracking_id=HEARTBEAT_TRACKING_ID,
@@ -588,7 +571,7 @@ class DataQueryInterface(object):
 
         :return <dict>: JSON response from the request.
         """
-        auth, cert = self.authentication.get_auth()
+        auth, cert = self.auth.get_auth()
         js = request_wrapper(
             url=url,
             cert=cert,
@@ -631,7 +614,7 @@ class DataQueryInterface(object):
         log_url: str = form_full_url(curr_url, current_params)
         curr_response: Optional[Dict] = None
         while get_pagination:
-            curr_response: Dict = self.authentication._request(
+            curr_response: Dict = self.request(
                 url=url,
                 params=params,
                 proxy=proxy,
@@ -783,7 +766,7 @@ class DataQueryInterface(object):
         nan_treatment: str = "NA_NOTHING",
         reference_data: str = "NO_REFERENCE_DATA",
         retry_counter: int = 0,
-        delay_param: float = API_DELAY_PARAM,
+        delay_param: float = API_DELAY_PARAM,  # TODO do we want the user to have access to this?
         # filter_from_catalogue: bool = True,
     ) -> List[Dict]:
         """
@@ -902,7 +885,7 @@ class DataQueryInterface(object):
                     future_objects.append(
                         executor.submit(
                             self._fetch,
-                            url=self.authentication.base_url + endpoint,
+                            url=self.base_url + endpoint,
                             params=curr_params,
                             proxy=self.proxy,
                             tracking_id=tracking_id,
@@ -954,7 +937,7 @@ class DataQueryInterface(object):
                 curr_params["expressions"] = expr_batch
                 try:
                     result = self._fetch(
-                        url=self.authentication.base_url + endpoint,
+                        url=self.base_url + endpoint,
                         params=curr_params,
                         proxy=self.proxy,
                         tracking_id=tracking_id,
