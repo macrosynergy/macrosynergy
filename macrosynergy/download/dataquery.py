@@ -14,9 +14,11 @@ import os
 import uuid
 import io
 import requests
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Union
 from datetime import datetime
+from timeit import default_timer as timer
 from tqdm import tqdm
+
 from macrosynergy import __version__ as ms_version_info
 from macrosynergy.download.exceptions import (
     AuthenticationError,
@@ -24,7 +26,11 @@ from macrosynergy.download.exceptions import (
     InvalidResponseError,
     HeartbeatError,
 )
-
+from macrosynergy.management.utils import (
+    is_valid_iso_date,
+    form_full_url,
+    JPMaQSAPIConfigObject,
+)
 
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 OAUTH_BASE_URL: str = (
@@ -52,6 +58,8 @@ debug_stream_handler.setFormatter(
     )
 )
 logger.addHandler(debug_stream_handler)
+
+egress_logger: dict = {}
 
 
 def validate_response(response: requests.Response) -> dict:
@@ -104,28 +112,13 @@ def validate_response(response: requests.Response) -> dict:
         )
 
 
-def form_full_url(url: str, params: Dict = {}) -> str:
-    """
-    Forms a full URL from a base URL and a dictionary of parameters.
-    Useful for logging and debugging.
-
-    :param <str> url: base URL.
-    :param <dict> params: dictionary of parameters.
-
-    :return <str>: full URL
-    """
-    return requests.compat.quote(
-        (f"{url}?{requests.compat.urlencode(params)}" if params else url),
-        safe="%/:=&?~#+!$,;'@()*[]",
-    )
-
-
 def request_wrapper(
     url: str,
     headers: Optional[Dict] = None,
     params: Optional[Dict] = None,
     method: str = "get",
     tracking_id: Optional[str] = None,
+    proxy: Optional[Dict] = None,
     **kwargs,
 ) -> dict:
     """
@@ -172,11 +165,36 @@ def request_wrapper(
     error_statement: str = ""
     retry_count: int = 0
     response: Optional[requests.Response] = None
+    upload_size: int = 0
+    download_size: int = 0
+    time_taken: float = 0
+    start_time: float = timer()
     while retry_count < API_RETRY_COUNT:
         try:
-            response = requests.request(
+            prepared_request: requests.PreparedRequest = requests.Request(
                 method, url, headers=headers, params=params, **kwargs
+            ).prepare()
+
+            upload_size = prepared_request.headers.get("Content-Length", 0)
+
+            response = requests.Session().send(
+                prepared_request,
+                proxies=proxy,
             )
+
+            # track the download size
+            if isinstance(response, requests.Response):
+                download_size = response.content.__sizeof__()
+
+            time_taken = timer() - start_time
+
+            egress_logger[tracking_id] = {
+                "url": log_url,
+                "upload_size": int(upload_size),
+                "download_size": int(download_size),
+                "time_taken": time_taken,
+            }
+
             if isinstance(response, requests.Response):
                 return validate_response(response)
 
@@ -217,11 +235,27 @@ def request_wrapper(
             # all other exceptions are caught here and retried after a delay
 
             if any([isinstance(exc, e) for e in known_exceptions]):
+                egress_logger[tracking_id] = {
+                    "url": log_url,
+                    "upload_size": upload_size,
+                    "download_size": download_size,
+                    "time_taken": time_taken,
+                    "error": f"{exc}",
+                }
                 logger.warning(error_statement)
                 retry_count += 1
                 time.sleep(API_DELAY_PARAM)
             else:
                 raise exc
+
+        time_taken = timer() - start_time
+
+        egress_logger[tracking_id] = {
+            "url": log_url,
+            "upload_size": upload_size,
+            "download_size": download_size,
+            "time_taken": time_taken,
+        }
 
     if isinstance(raised_exceptions[-1], HeartbeatError):
         raise HeartbeatError(error_statement)
@@ -330,7 +364,7 @@ class OAuth(object):
                 url=self.token_url,
                 data=self.token_data,
                 method="post",
-                proxies=self.proxy,
+                proxy=self.proxy,
                 tracking_id=OAUTH_TRACKING_ID,
             )
             time.sleep(API_DELAY_PARAM)
@@ -370,7 +404,7 @@ class OAuth(object):
             url=url,
             params=params,
             headers={"Authorization": "Bearer " + self._get_token()},
-            proxies=proxy,
+            proxy=proxy,
             tracking_id=tracking_id,
         )
 
@@ -450,7 +484,7 @@ class CertAuth(object):
             cert=(self.crt, self.key),
             headers=self.headers,
             params=params,
-            proxies=proxy,
+            proxy=proxy,
             tracking_id=tracking_id,
         )
         return js
@@ -502,9 +536,10 @@ class DataQueryInterface(object):
         heartbeat: bool = True,
         base_url: str = OAUTH_BASE_URL,
         suppress_warnings: bool = True,
+        config_object: Optional[JPMaQSAPIConfigObject] = None,
         **kwargs,
     ):
-        self.proxy = kwargs.pop("proxy", kwargs.pop("proxies", None))
+        # self.proxy = kwargs.pop("proxy", kwargs.pop("proxies", None))
         self.heartbeat: bool = heartbeat
         self.msg_errors: List[str] = []
         self.msg_warnings: List[str] = []
@@ -514,44 +549,34 @@ class DataQueryInterface(object):
         self.suppress_warnings: bool = suppress_warnings
         self.batch_size: int = batch_size
 
-        if oauth:
-            # ensure that we have a client_id and client_secret
-
-            for k in ["client_id", "client_secret"]:
-                if not (k in kwargs):
-                    raise ValueError(
-                        f"{k} must be provided for " "OAuth authentication."
-                    )
-
-            self.access_method: OAuth = OAuth(
-                client_id=kwargs["client_id"],
-                client_secret=kwargs["client_secret"],
-                base_url=base_url,
-                token_url=OAUTH_TOKEN_URL,
-                dq_resource_id=OAUTH_DQ_RESOURCE_ID,
-                proxy=self.proxy,
+        if config_object is None:
+            # raise value error saying config not provided. check macrosyenrgy.management.utils.JPMaQSAPIConfigObject
+            raise ValueError(
+                "config_object must be provided for DataQuery"
+                "authentication. Check macrosyenrgy.management.utils.JPMaQSAPIConfigObject "
+                "for more details."
             )
 
+        self.access_method: Optional[Union[CertAuth, OAuth]] = None
+        credentials: dict = {}
+        if oauth:
+            credentials = config_object.oauth(mask=False)
+            self.access_method: OAuth = OAuth(
+                **credentials,
+                base_url=base_url,
+            )
         else:
-            # ensure that we have a username and password, crt and key
-            for k in ["username", "password", "crt", "key"]:
-                if not (k in kwargs):
-                    raise ValueError(
-                        f"{k} must be provided for " "certificate authentication."
-                    )
-
+            credentials = config_object.cert(mask=False)
             if base_url == OAUTH_BASE_URL:
-                print("Changing OAUTH_BASE_URL to CERT_BASE_URL")
                 base_url = CERT_BASE_URL
 
-            self.access_method: CertAuth = CertAuth(
-                username=kwargs["username"],
-                password=kwargs["password"],
-                crt=kwargs["crt"],
-                key=kwargs["key"],
-                base_url=base_url,
-                proxy=self.proxy,
-            )
+            self.access_method: CertAuth = CertAuth(**credentials, base_url=base_url)
+
+        assert (
+            self.access_method is not None
+        ), "Failed to initialise access method. Check the config_object passed"
+
+        self.proxy: Optional[dict] = config_object.proxy(mask=False)
 
     def __enter__(self):
         return self
@@ -692,13 +717,6 @@ class DataQueryInterface(object):
         :raises <ValueError>: if any of the arguments are semantically incorrect.
         """
 
-        def is_valid_date(date: str) -> bool:
-            try:
-                datetime.strptime(date, "%Y-%m-%d")
-                return True
-            except ValueError:
-                return False
-
         if expressions is None:
             raise ValueError("`expressions` must be a list of strings.")
 
@@ -711,7 +729,7 @@ class DataQueryInterface(object):
         for varx, namex in zip([start_date, end_date], ["start_date", "end_date"]):
             if (varx is None) or not isinstance(varx, str):
                 raise TypeError(f"`{namex}` must be a string.")
-            if not is_valid_date(varx):
+            if not is_valid_iso_date(varx):
                 raise ValueError(
                     f"`{namex}` must be a string in the ISO-8601 format (YYYY-MM-DD)."
                 )
@@ -1001,6 +1019,7 @@ class DataQueryInterface(object):
             expected_exprs=expressions, dicts_list=final_output
         )
 
+        self.egress_data = egress_logger
         return final_output
 
 
