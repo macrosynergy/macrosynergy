@@ -75,7 +75,7 @@ def validate_response(response: requests.Response) -> dict:
     :raises <KeyboardInterrupt>: if the user interrupts the download.
     """
 
-    error_str : str = (
+    error_str: str = (
         f"Response: {response}\n"
         f"Requested URL: {response.request.url}\n"
         f"Response status code: {response.status_code}\n"
@@ -149,7 +149,7 @@ def request_wrapper(
     # insert tracking info in headers
     if headers is None:
         headers: Dict = {}
-    headers["User-Agent"] : str = f"MacrosynergyPackage/{ms_version_info}"
+    headers["User-Agent"]: str = f"MacrosynergyPackage/{ms_version_info}"
 
     uuid_str: str = str(uuid.uuid4())
     if (tracking_id is None) or (tracking_id == ""):
@@ -157,7 +157,7 @@ def request_wrapper(
     else:
         tracking_id: str = f"uuid::{uuid_str}::{tracking_id}"
 
-    headers["X-Tracking-Id"] : str = tracking_id
+    headers["X-Tracking-Id"]: str = tracking_id
 
     log_url: str = form_full_url(url, params)
     logger.info(f"Requesting URL: {log_url} with tracking_id: {tracking_id}")
@@ -345,13 +345,18 @@ class OAuth(object):
             return False
 
         created: datetime = self._stored_token["created_at"]  # utc time of creation
-        expires: datetime = created + timedelta(seconds=self._stored_token["expires_in"])
+        expires: datetime = created + timedelta(
+            seconds=self._stored_token["expires_in"]
+        )
         utcnow = datetime.utcnow()
         is_active: bool = expires > utcnow
 
         logger.debug(
             "Active token: %s, created: %s, expires: %s, now: %s",
-            is_active, created, expires, utcnow
+            is_active,
+            created,
+            expires,
+            utcnow,
         )
 
         return is_active
@@ -409,13 +414,13 @@ class CertAuth(object):
         crt: str,
         key: str,
     ):
-        assert isinstance(username, str), (
-            f"username must be <str> and not {type(username)}"
-        )
+        assert isinstance(
+            username, str
+        ), f"username must be <str> and not {type(username)}"
 
-        assert isinstance(password, str), (
-            f"password must be <str> and not {type(password)}"
-        )
+        assert isinstance(
+            password, str
+        ), f"password must be <str> and not {type(password)}"
 
         self.auth: str = base64.b64encode(
             bytes(f"{username:s}:{password:s}", "utf-8")
@@ -508,7 +513,7 @@ class DataQueryInterface(object):
             self.auth: CertAuth = CertAuth(**config.cert(mask=False))
 
         assert (
-                self.auth is not None
+            self.auth is not None
         ), "Failed to initialise access method. Check the config_object passed"
 
         self.proxy: Optional[dict] = config.proxy(mask=False)
@@ -538,7 +543,7 @@ class DataQueryInterface(object):
             params={"data": "NO_REFERENCE_DATA"},
             proxy=self.proxy,
             tracking_id=HEARTBEAT_TRACKING_ID,
-            **self.auth.get_auth()
+            **self.auth.get_auth(),
         )
 
         result: bool = True
@@ -583,7 +588,7 @@ class DataQueryInterface(object):
             params=params,
             proxy=self.proxy,
             tracking_id=tracking_id,
-            **self.auth.get_auth()
+            **self.auth.get_auth(),
         )
 
         if (response is None) or ("instruments" not in response.keys()):
@@ -595,16 +600,13 @@ class DataQueryInterface(object):
 
         downloaded_data.extend(response["instruments"])
 
-        if (
-                "links" in response.keys()
-                and response["links"][1]["next"] is not None
-        ):
+        if "links" in response.keys() and response["links"][1]["next"] is not None:
             logger.info("DQ response paginated - get next response page")
             downloaded_data.extend(
                 self._fetch(
                     url=self.base_url + response["links"][1]["next"],
                     params={},
-                    tracking_id=tracking_id
+                    tracking_id=tracking_id,
                 )
             )
 

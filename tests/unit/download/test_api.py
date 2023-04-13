@@ -16,7 +16,12 @@ class TestCertAuth(unittest.TestCase):
 
 class TestOAuth(unittest.TestCase):
     def test_init(self):
-        jpmaqs : JPMaQSDownload = JPMaQSDownload(oauth=True, client_id="test-id", client_secret="SECRET", check_connection=False)
+        jpmaqs: JPMaQSDownload = JPMaQSDownload(
+            oauth=True,
+            client_id="test-id",
+            client_secret="SECRET",
+            check_connection=False,
+        )
         self.assertEqual(jpmaqs.dq_interface.base_url, dataquery.OAUTH_BASE_URL)
 
     # def test_invalid_args_passed(self):
@@ -170,8 +175,7 @@ class TestDataQueryInterface(unittest.TestCase):
             self.assertFalse(jpmaqs_download.check_connection())
         mock_p_fail.assert_called_once()
         mock_p_get_token.assert_called_once()
-        
-    
+
     def test_oauth_condition(self):
         # Accessing DataQuery can be achieved via two methods: OAuth or Certificates /
         # Keys. To handle for the idiosyncrasies of the two access methods, split the
@@ -186,9 +190,7 @@ class TestDataQueryInterface(unittest.TestCase):
         self.assertIsInstance(
             jpmaqs_download.dq_interface, dataquery.DataQueryInterface
         )
-        self.assertIsInstance(
-            jpmaqs_download.dq_interface.auth, dataquery.OAuth
-        )
+        self.assertIsInstance(jpmaqs_download.dq_interface.auth, dataquery.OAuth)
 
     def test_certauth_condition(self):
         # Second check is that the DataQuery instance is using an CertAuth Object if the
