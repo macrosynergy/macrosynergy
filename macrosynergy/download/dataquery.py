@@ -162,7 +162,7 @@ def request_wrapper(
     headers["X-Tracking-Id"]: str = tracking_id
 
     log_url: str = form_full_url(url, params)
-    logger.info(f"Requesting URL: {log_url} with tracking_id: {tracking_id}")
+    logger.debug(f"Requesting URL: {log_url} with tracking_id: {tracking_id}")
     raised_exceptions: List[Exception] = []
     error_statements: List[str] = []
     error_statement: str = ""
@@ -798,8 +798,14 @@ class DataQueryInterface(object):
         final_output: List[Dict] = list(itertools.chain.from_iterable(download_outputs))
 
         if len(failed_batches) > 0:
+
             flat_failed_batches: List[str] = list(
                 itertools.chain.from_iterable(failed_batches)
+            )
+            logger.warning(
+                "Failed batches %d - retry download for %d expressions",
+                len(failed_batches),
+                len(flat_failed_batches)
             )
             retried_output: List[dict] = self._download(
                 expressions=flat_failed_batches,
@@ -908,6 +914,12 @@ class DataQueryInterface(object):
                 )
             time.sleep(delay_param)
 
+        logger.info(
+            "Download %d expressions from DataQuery from %s to %s",
+            len(expressions),
+            datetime.strptime(start_date, "%Y%m%d").date(),
+            datetime.strptime(end_date, "%Y%m%d").date()
+        )
         params_dict: Dict = {
             "format": "JSON",
             "start-date": start_date,
@@ -930,6 +942,11 @@ class DataQueryInterface(object):
 
         self.unavailable_expressions = get_unavailable_expressions(
             expected_exprs=expressions, dicts_list=final_output
+        )
+        logger.info(
+            "Downloaded expressions: %d, unavailable: %d",
+            len(final_output),
+            len(self.unavailable_expressions)
         )
 
         self.egress_data = egress_logger
