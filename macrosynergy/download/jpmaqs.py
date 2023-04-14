@@ -329,6 +329,8 @@ class JPMaQSDownload(object):
         cid: str
         xcat: str
         found_expressions: List[str] = []
+        _missing_exprs : List[str] = [] 
+        # _missing_exprs is just a sanity check to verify self.unavailable_expressions
         for d in dicts_list:
             cid, xcat, metricx = JPMaQSDownload.deconstruct_expression(
                 d["attributes"][0]["expression"]
@@ -344,6 +346,11 @@ class JPMaQSDownload(object):
                 )
                 df = df[["real_date", "cid", "xcat", "obs", "metric"]]
                 dfs.append(df)
+            else:
+                _missing_exprs.append(d["attributes"][0]["expression"])
+                
+        assert set(_missing_exprs) == set(self.unavailable_expressions), \
+            "Downloaded `dicts_list` has been modified before calling `time_series_to_df`"
 
         final_df: pd.DataFrame = pd.concat(dfs, ignore_index=True)
 
