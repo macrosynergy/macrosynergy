@@ -190,13 +190,8 @@ class TestDataQueryInterface(unittest.TestCase):
         self.assertIsInstance(
             jpmaqs_download.dq_interface, dataquery.DataQueryInterface
         )
-<<<<<<< HEAD
-        self.assertIsInstance(
-            jpmaqs_download.dq_interface.auth, dataquery.OAuth
-        )
-=======
+
         self.assertIsInstance(jpmaqs_download.dq_interface.auth, dataquery.OAuth)
->>>>>>> feature/api_rewrite
 
     def test_certauth_condition(self):
         # Second check is that the DataQuery instance is using an CertAuth Object if the
