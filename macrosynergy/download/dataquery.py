@@ -28,7 +28,7 @@ from macrosynergy.download.exceptions import (
 from macrosynergy.management.utils import (
     is_valid_iso_date,
     form_full_url,
-    JPMaQSAPIConfigObject,
+    Config,
 )
 
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
@@ -531,6 +531,7 @@ def get_unavailable_expressions(
     """
     found_exprs: List[str] = [
         curr_dict["attributes"][0]["expression"] for curr_dict in dicts_list
+        if curr_dict["attributes"][0]["time-series"] is not None
     ]
     return list(set(expected_exprs) - set(found_exprs))
 
@@ -538,7 +539,8 @@ def get_unavailable_expressions(
 class DataQueryInterface(object):
     """
     High level interface for the DataQuery API.
-    Uses one of the CertAuth or the OAuth object to allow for authentication.
+    Must be instantiated with a valid Config object.
+    (see macrosynergy.management.utils.Config class for more info)
 
     :param <bool> oauth: whether to use OAuth authentication. Defaults to True.
     :param <bool> debug: whether to print debug messages. Defaults to False.
@@ -566,7 +568,7 @@ class DataQueryInterface(object):
 
     def __init__(
         self,
-        config: JPMaQSAPIConfigObject,
+        config: Config,
         oauth: bool = True,
         debug: bool = False,
         batch_size: int = 20,
@@ -582,10 +584,10 @@ class DataQueryInterface(object):
         self.suppress_warnings: bool = suppress_warnings
         self.batch_size: int = batch_size
 
-        if not isinstance(config, JPMaQSAPIConfigObject):
+        if not isinstance(config, Config):
             raise ValueError(
                 "config_object must be provided for DataQuery authentication."
-                " Check macrosynergy.management.utils.JPMaQSAPIConfigObject "
+                " Check macrosynergy.management.utils.Config "
                 "for more details."
             )
 
@@ -951,7 +953,7 @@ class DataQueryInterface(object):
 if __name__ == "__main__":
     import os
 
-    cf: JPMaQSAPIConfigObject = JPMaQSAPIConfigObject(
+    cf: Config = Config(
         client_id=os.environ["JPMAQS_API_CLIENT_ID"],
         client_secret=os.environ["JPMAQS_API_CLIENT_SECRET"],
     )

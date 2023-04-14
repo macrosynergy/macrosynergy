@@ -10,7 +10,7 @@ from timeit import default_timer as timer
 
 from macrosynergy.download.dataquery import DataQueryInterface
 from macrosynergy.download.exceptions import *
-from macrosynergy.management.utils import is_valid_iso_date, JPMaQSAPIConfigObject
+from macrosynergy.management.utils import is_valid_iso_date, Config
 
 logger = logging.getLogger(__name__)
 debug_stream_handler = logging.StreamHandler(io.StringIO())
@@ -120,7 +120,7 @@ class JPMaQSDownload(object):
             if not isinstance(credentials_config, str):
                 raise TypeError("`credentials_config` must be a string.")
 
-        config_obj: JPMaQSAPIConfigObject = JPMaQSAPIConfigObject(
+        config_obj: Config = Config(
             config_path=credentials_config,
             client_id=client_id,
             client_secret=client_secret,
@@ -259,9 +259,11 @@ class JPMaQSDownload(object):
 
         if expr_missing:
             log_str = (
-                f"Some expressions are missing from the downloaded data. \n"
+                f"Some expressions are missing from the downloaded data."
+                " Check logger output for complete list."
                 f"{len(expr_missing)} out of {len(expr_expected)} expressions are missing."
             )
+            
             logger.warning(log_str)
             if verbose:
                 print(log_str)
@@ -329,6 +331,9 @@ class JPMaQSDownload(object):
         cid: str
         xcat: str
         found_expressions: List[str] = []
+        _missing_exprs : List[str] = []
+        self.unavailable_expr_messages = []
+        # _missing_exprs is just a sanity check to verify self.unavailable_expressions
         for d in dicts_list:
             cid, xcat, metricx = JPMaQSDownload.deconstruct_expression(
                 d["attributes"][0]["expression"]
@@ -344,6 +349,12 @@ class JPMaQSDownload(object):
                 )
                 df = df[["real_date", "cid", "xcat", "obs", "metric"]]
                 dfs.append(df)
+            else:
+                _missing_exprs.append(d["attributes"][0]["expression"])
+                self.unavailable_expr_messages.append(d["attributes"][0]["message"])
+                
+        assert set(_missing_exprs) == set(self.unavailable_expressions), \
+            "Downloaded `dicts_list` has been modified before calling `time_series_to_df`"
 
         final_df: pd.DataFrame = pd.concat(dfs, ignore_index=True)
 
@@ -745,7 +756,7 @@ if __name__ == "__main__":
     end_date: str = "2023-03-20"
 
     with JPMaQSDownload(
-        credentials_config="./config.yml",
+        credentials_config="env",
         debug=True,
     ) as jpmaqs:
         data = jpmaqs.download(

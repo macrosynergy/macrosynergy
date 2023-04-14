@@ -307,7 +307,7 @@ def wide_to_long(
 ##############################
 
 
-class JPMaQSAPIConfigObject(object):
+class Config(object):
     def __init__(
         self,
         config_path: Optional[str] = None,
