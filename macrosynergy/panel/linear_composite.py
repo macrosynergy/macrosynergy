@@ -7,7 +7,7 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=None,
                      cids: List[str] = None, start: str = None, end: str = None,
-                     complete_xcats: bool = True, nan_treatment: Optional[Union[str, int]] = None,
+                     complete_xcats: bool = True,
                      new_xcat="NEW"):
     """
     Returns new category panel as linear combination of others as standard dataframe
@@ -15,23 +15,21 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
     :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
     :param <List[str]> xcats: all extended categories used for the linear combination.
-    :param <List[float]> weights: weights of all categories in the linear combination.
-        These must correspond to the order of xcats and the sum will be coerced to unity.
+    :param <List[float]> weights: weights of  categories for linear combination.
+        Weights must correspond to order of xcats and their sum will be coerced to unity.
         Default is equal weights.
     :param <List[float]> signs: signs with which the categories are combined.
         These must be 1 or -1 for positive and negative and correspond to the order of
         xcats. Default is all positive.
-    :param <List[str]> cids: cross-sections for which the linear combination is ti be
+    :param <List[str]> cids: cross-sections for which the linear combination is to be
         calculated. Default is all cross-section available for the respective category.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         for which the respective category is available is used.
     :param <str> end: latest date in ISO format. Default is None and latest date for
         which the respective category is available is used.
-    :param <bool> complete_xcats: If True combinations are only calculated for
+    :param <bool> complete_xcats: If True (default) combinations are only calculated for
         observation dates on which all xcats are available. If False a combination of the
         available categories is used.
-    :param <str> nan_treatment: If an integer is passed, the NaNs are replaced by the integer.
-        Passing "drop" will drop all rows with NaNs. Default is None and no treatment is done.        
     :param <str> new_xcat: name of new composite xcat. Default is "NEW".
 
     """
@@ -47,16 +45,19 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
         
     # checking inputs; casting weights and signs to np.array    
     if weights is not None:
-        assert isinstance(weights, listtypes), "weights must be list, np.ndarray or pd.Series"
+        assert isinstance(weights, listtypes), \
+            "weights must be list, np.ndarray or pd.Series"
         if isinstance(weights, np.ndarray):
-            assert weights.ndim == 1, "weights must be 1-dimensional if passed as np.ndarray"
+            assert weights.ndim == 1, \
+                "weights must be 1-dimensional if passed as np.ndarray"
         else:
             weights = np.array(weights)
     else:
         weights = np.ones(len(xcats)) * (1 / len(xcats))
     
     if signs is not None:
-        assert isinstance(signs, listtypes), "signs must be list, np.ndarray or pd.Series"
+        assert isinstance(signs, listtypes), \
+            "signs must be list, np.ndarray or pd.Series"
         if isinstance(signs, np.ndarray):
             assert signs.ndim == 1, "signs must be 1-dimensional if passed as np.ndarray"
         if isinstance(signs, list):
@@ -64,9 +65,10 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
     else:
         signs = np.ones(len(xcats))
         
-    assert len(xcats) == len(weights) == len(signs), "xcats, weights, and signs must have same length"
+    assert len(xcats) == len(weights) == len(signs), \
+        "xcats, weights, and signs must have same length"
     if not np.isclose(np.sum(weights), 1):
-        print("WARNING: weights do not sum to 1. They will be coerced to sum to 1. w←w/∑w")
+        print("WARNING: weights do not sum to 1 and will be coerced to 1. w←w/∑w")
         weights = weights / np.sum(weights)
     if not np.all(np.isin(signs, [1, -1])):
         print("WARNING: signs must be 1 or -1. They will be coerced to 1 or -1.")
@@ -81,17 +83,15 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
         end = df['real_date'].max()
     
     dfc: pd.DataFrame = reduce_df(df, cids=cids, xcats=xcats, start=start, end=end)
-    
-    # @mikiinterfiore 's version
-    # creating a dataframe with the xcats as columns. each row is an observation for a combination CID-Date
+
+    # dataframe with the xcats as columns and rows as cid-date combinations
     dfc_wide = dfc.set_index(['cid', 'real_date', 'xcat'])['value'].unstack(level=2)
-    # creating a dataframe for the weights with the same index as dfc_wide. 
-    # each column will be a weight, with the same value all along
+    # dataframe for weights with same index as dfc_wide: each column will be a weight
     weights_wide = pd.DataFrame(data=[weights.sort_index()], 
                     index=dfc_wide.index, columns=dfc_wide.columns)
     # boolean mask to help us work out the calcs
     mask = dfc_wide.isna()
-    # pandas series with an index equal to the index of dfc_wide, and a value equal to the sum of the weights
+    # series with an index of dfc_wide, and a value equal to the sum of the weights
     weights_sum = weights_wide[~mask].abs().sum(axis=1)
     # re-weighting the weights to sum to 1 considering the available xcats
     adj_weights_wide = weights_wide[~mask].div(weights_sum, axis=0)
@@ -111,6 +111,7 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
     return out_df    
     
 if __name__ == "__main__":
+
     cids = ['AUD', 'CAD', 'GBP']
     xcats = ['XR', 'CRY', 'INFL']
     dates  = pd.date_range('2000-01-01', '2000-01-03')
