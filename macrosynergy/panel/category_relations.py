@@ -158,7 +158,7 @@ class CategoryRelations(object):
         target_df['tickers'] = target_df['cid'] + '_' + target_df['xcat']
 
         if len(set(sel_tickers) - set(target_df['tickers'].unique())) > 0:
-            ValueError("Tickers targetted for applying slip are not present in the DataFrame.\n"
+            raise ValueError("Tickers targetted for applying slip are not present in the DataFrame.\n"
              f"Missing tickers: {set(sel_tickers) - set(target_df['tickers'].unique())}")
 
         slip : int = slip.__neg__()
