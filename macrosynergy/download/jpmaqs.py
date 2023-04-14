@@ -259,9 +259,11 @@ class JPMaQSDownload(object):
 
         if expr_missing:
             log_str = (
-                f"Some expressions are missing from the downloaded data. \n"
+                f"Some expressions are missing from the downloaded data."
+                " Check logger output for complete list."
                 f"{len(expr_missing)} out of {len(expr_expected)} expressions are missing."
             )
+            
             logger.warning(log_str)
             if verbose:
                 print(log_str)
@@ -329,7 +331,8 @@ class JPMaQSDownload(object):
         cid: str
         xcat: str
         found_expressions: List[str] = []
-        _missing_exprs : List[str] = [] 
+        _missing_exprs : List[str] = []
+        self.unavailable_expr_messages = []
         # _missing_exprs is just a sanity check to verify self.unavailable_expressions
         for d in dicts_list:
             cid, xcat, metricx = JPMaQSDownload.deconstruct_expression(
@@ -348,6 +351,7 @@ class JPMaQSDownload(object):
                 dfs.append(df)
             else:
                 _missing_exprs.append(d["attributes"][0]["expression"])
+                self.unavailable_expr_messages.append(d["attributes"][0]["message"])
                 
         assert set(_missing_exprs) == set(self.unavailable_expressions), \
             "Downloaded `dicts_list` has been modified before calling `time_series_to_df`"
@@ -752,7 +756,7 @@ if __name__ == "__main__":
     end_date: str = "2023-03-20"
 
     with JPMaQSDownload(
-        credentials_config="./config.yml",
+        credentials_config="env",
         debug=True,
     ) as jpmaqs:
         data = jpmaqs.download(
