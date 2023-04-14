@@ -32,6 +32,8 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
         available categories is used.
     :param <str> new_xcat: name of new composite xcat. Default is "NEW".
 
+    :return <pd.DataFrame>: standardized DataFrame with the relative values, featuring
+        the categories: 'cid', 'xcat', 'real_date' and 'value'.
     """
     listtypes = (list, np.ndarray, pd.Series)
 
