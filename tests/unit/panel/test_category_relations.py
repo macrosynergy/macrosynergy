@@ -508,7 +508,57 @@ class TestAll(unittest.TestCase):
                 )
                 assert inan_count == onan_count - test_slip
 
-        #
+        # Test Case 2 - slip is greater than the number of unique dates for a cid, xcat pair
+        
+        df : pd.DataFrame = test_df.copy()
+        df["vx"] = (
+            df.groupby(["cid", "xcat"])["real_date"].rank(method="dense").astype(int)
+        )
+        
+        test_slip = int(max(df["vx"])) + 1
+        
+        out_df = CategoryRelations.apply_slip(target_df=df, slip=test_slip,
+                                                xcats=sel_xcats, cids=sel_cids,
+                                                metrics=["value", "vx"])
+
+        self.assertTrue(out_df["vx"].isna().all())
+        self.assertTrue(out_df["value"].isna().all())
+        
+        out_df = CategoryRelations.apply_slip(target_df=df, slip=test_slip,
+                                                xcats=sel_xcats, cids=sel_cids,
+                                                metrics=["value"])
+        
+        self.assertTrue((df["vx"] == out_df["vx"]).all())
+        self.assertTrue(out_df["value"].isna().all())
+        
+        
+        # case 3 - slip is negative
+        df : pd.DataFrame = test_df.copy()
+        
+        with self.assertRaises(ValueError):
+            CategoryRelations.apply_slip(target_df=df, slip=-1,
+                                                xcats=sel_xcats, cids=sel_cids,
+                                                metrics=["value"])
+        
+        
+        # check that a value error is raised when cids and xcats are not in the dataframe
+        with self.assertRaises(ValueError):
+            CategoryRelations.apply_slip(target_df=df, slip=2,
+                                                xcats=["metallica"], cids=["ac_dc"],
+                                                metrics=["value"])
+            
+        with self.assertRaises(ValueError):
+            CategoryRelations.apply_slip(target_df=df, slip=2,
+                                                xcats=["metallica"], cids=sel_cids,
+                                                metrics=["value"])
+            
+        with self.assertRaises(ValueError):
+            CategoryRelations.apply_slip(target_df=df, slip=-1,
+                                                xcats=sel_xcats, cids=["ac_dc"],
+                                                metrics=["value"])
+        
+            
+
 
 
 if __name__ == "__main__":
