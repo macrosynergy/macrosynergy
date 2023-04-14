@@ -21,7 +21,7 @@ from macrosynergy.management.utils import (
 )
 
 from macrosynergy.management.utils import (
-    JPMaQSAPIConfigObject,)
+    Config,)
 
 
 class TestFunctions(unittest.TestCase):
@@ -250,7 +250,7 @@ class TestJPMaQSAPIConfigObject(unittest.TestCase):
         with patch('os.path.isfile', side_effect= lambda path: _mock_is_file(path)):
             with patch('builtins.open', m):
 
-                config = JPMaQSAPIConfigObject("config.yml")
+                config = Config("config.yml")
                 oauth = config.oauth(mask=False)
                 cert = config.cert(mask=False)
                 proxy = config.proxy(mask=False)
@@ -301,7 +301,7 @@ class TestJPMaQSAPIConfigObject(unittest.TestCase):
         with patch('os.path.isfile', side_effect= lambda path: _mock_is_file(path)):
             with patch('builtins.open', m):
 
-                config = JPMaQSAPIConfigObject("config.json")
+                config = Config("config.json")
                 oauth = config.oauth(mask=False)
                 cert = config.cert(mask=False)
                 proxy = config.proxy(mask=False)
@@ -355,7 +355,7 @@ class TestJPMaQSAPIConfigObject(unittest.TestCase):
         # it's going to read yml. so it's going to read the file, then it's going to do isfile on the path/to/CERTIFICATE and path/to/KEY
         with patch('os.path.isfile', side_effect= lambda path: _mock_is_file(path)):
             with patch('builtins.open', m):
-                config = JPMaQSAPIConfigObject("config.json", client_id=client_id, client_secret=client_secret)
+                config = Config("config.json", client_id=client_id, client_secret=client_secret)
                 oauth = config.oauth(mask=False)
                 cert = config.cert(mask=False)
                 proxy = config.proxy(mask=False)
@@ -398,7 +398,7 @@ class TestJPMaQSAPIConfigObject(unittest.TestCase):
                 keyx = 'path/to/KEY_ALT'
                 proxyL = {'http': 'vpn.com:8090'}
 
-                config = JPMaQSAPIConfigObject("config.yml", 
+                config = Config("config.yml", 
                                                username=username, 
                                                password=password,
                                                 crt=crtx,
@@ -437,7 +437,7 @@ class TestJPMaQSAPIConfigObject(unittest.TestCase):
         proxy : Dict[str, str] = {}
 
         
-        config = JPMaQSAPIConfigObject(client_id=client_id, client_secret=client_secret)
+        config = Config(client_id=client_id, client_secret=client_secret)
         oauth = config.oauth(mask=False)
         cert = config.cert(mask=False)
         proxy = config.proxy(mask=False)
@@ -459,7 +459,7 @@ class TestJPMaQSAPIConfigObject(unittest.TestCase):
                 keyx = 'path/to/KEY_ALT'
                 proxyL = {'http': 'vpn.com:8090'}
 
-                config = JPMaQSAPIConfigObject(username=username, 
+                config = Config(username=username, 
                                                 password=password,
                                                 crt=crtx,
                                                 key=keyx,

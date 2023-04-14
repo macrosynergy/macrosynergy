@@ -10,7 +10,7 @@ from timeit import default_timer as timer
 
 from macrosynergy.download.dataquery import DataQueryInterface
 from macrosynergy.download.exceptions import *
-from macrosynergy.management.utils import is_valid_iso_date, JPMaQSAPIConfigObject
+from macrosynergy.management.utils import is_valid_iso_date, Config
 
 logger = logging.getLogger(__name__)
 debug_stream_handler = logging.StreamHandler(io.StringIO())
@@ -120,7 +120,7 @@ class JPMaQSDownload(object):
             if not isinstance(credentials_config, str):
                 raise TypeError("`credentials_config` must be a string.")
 
-        config_obj: JPMaQSAPIConfigObject = JPMaQSAPIConfigObject(
+        config_obj: Config = Config(
             config_path=credentials_config,
             client_id=client_id,
             client_secret=client_secret,
