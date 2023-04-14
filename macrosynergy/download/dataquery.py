@@ -533,6 +533,7 @@ def get_unavailable_expressions(
     """
     found_exprs: List[str] = [
         curr_dict["attributes"][0]["expression"] for curr_dict in dicts_list
+        if curr_dict["attributes"][0]["time-series"] is not None
     ]
     return list(set(expected_exprs) - set(found_exprs))
 
