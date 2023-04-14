@@ -260,11 +260,12 @@ class JPMaQSDownload(object):
         if expr_missing:
             log_str = (
                 f"Some expressions are missing from the downloaded data."
-                " Check logger output for complete list."
+                " Check logger output for complete list. \n"
                 f"{len(expr_missing)} out of {len(expr_expected)} expressions are missing."
             )
             
             logger.warning(log_str)
+            logger.warning(f"Missing expressions: {expr_missing}")
             if verbose:
                 print(log_str)
 
