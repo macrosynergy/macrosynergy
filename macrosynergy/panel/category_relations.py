@@ -94,14 +94,16 @@ class CategoryRelations(object):
         assert self.freq in ['D', 'W', 'M', 'Q', 'A']
         assert {'cid', 'xcat', 'real_date', val}.issubset(set(df.columns))
         assert len(xcats) == 2, "Expects two fields."
+        assert isinstance(slip, int) and slip >= 0, "Slip must be a non-negative integer."
 
         # Select the cross-sections available for both categories.
         df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
         
         df_slips : pd.DataFrame = df.copy()
         if self.slip != 0:
+            metrics_found : List[str] = list(set(df_slips.columns) - set(['cid', 'xcat', 'real_date']))
             df_slips = self.apply_slip(target_df=df_slips, slip=self.slip, cids=self.cids,
-                                        xcats=self.xcats, metrics=[self.val])
+                                        xcats=self.xcats, metrics=metrics_found)
 
         shared_cids = CategoryRelations.intersection_cids(df, xcats, cids)
 
@@ -147,36 +149,26 @@ class CategoryRelations(object):
     def apply_slip(self, target_df: pd.DataFrame, slip: int,
                     cids: List[str] = None, xcats: List[str] = None,
                     metrics: List[str] = None) -> pd.DataFrame:
-        if isinstance(cids, str):
-            cids = [cids]
-        if isinstance(xcats, str):
-            xcats = [xcats]
-        if isinstance(metrics, str):
-            metrics = [metrics]
+        
+        if not (isinstance(slip, int) and slip >= 0):
+            ValueError("Slip must be a non-negative integer.")
 
         sel_tickers : List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
-
         target_df['tickers'] = target_df['cid'] + '_' + target_df['xcat']
 
         if len(set(sel_tickers) - set(target_df['tickers'].unique())) > 0:
             ValueError("Tickers targetted for applying slip are not present in the DataFrame.\n"
              f"Missing tickers: {set(sel_tickers) - set(target_df['tickers'].unique())}")
 
-        sel_df : pd.DataFrame = target_df[target_df['tickers'].isin(sel_tickers)]
-
-        unique_tickers : List[str] = (sel_df['tickers']).unique().tolist()
-
-        out_dfs : List[pd.DataFrame] = []
-        for ticker in unique_tickers:
-            curr_df : pd.DataFrame = sel_df[sel_df['tickers'] == ticker].sort_values(by='real_date')
-            dates : pd.Series = pd.to_datetime(sel_df['real_date'])
-            values : pd.Series = curr_df[metrics]
-            sd = sel_df[sel_df[metrics].notna()]['real_date'].min()
-            ed = sel_df[sel_df[metrics].notna()]['real_date'].max()
-            curr_df[metrics] = values.shift(slip)[(dates >= sd) & (dates <= ed)]
+        slip : int = slip.__neg__()
         
-        out_df : pd.DataFrame = pd.concat(out_dfs, axis=0).drop(columns=['tickers'])
-        return out_df
+        target_df : pd.DataFrame = target_df.copy()
+        target_df[metrics] = target_df.groupby('tickers')[metrics].shift(slip)
+        target_df = target_df.drop(columns=['tickers'])
+        
+        return target_df
+        
+
 
     @classmethod
     def intersection_cids(cls, df, xcats, cids):
