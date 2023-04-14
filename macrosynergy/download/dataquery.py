@@ -547,14 +547,11 @@ class DataQueryInterface(object):
     :param <bool> concurrent: whether to use concurrent requests. Defaults to True.
     :param <int> batch_size: default 20, number of expressions to send in a single
         request. Must be a number between 1 and 20 (both included).
-    :param <bool> heartbeat: whether to send a heartbeat request. Defaults to True.
+    :param <bool> check_connection: whether to send a check_connection request. 
+        Defaults to True.
+    :param <str> base_url: base URL for the DataQuery API. Defaults to OAUTH_BASE_URL
+        if `oauth` is True, CERT_BASE_URL otherwise.
     :param <bool> suppress_warnings: whether to suppress warnings. Defaults to True.
-
-    When using OAuth authentication, the following parameters are used:
-    :param <str> base_url: base URL for the DataQuery API. Defaults to OAUTH_BASE_URL.
-
-    When using certificate based authentication, the following parameters are used:
-    :param <str> base_url: base URL for the DataQuery API. Defaults to CERT_BASE_URL.
 
     :return <DataQueryInterface>: DataQueryInterface object.
 
