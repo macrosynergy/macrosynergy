@@ -263,7 +263,7 @@ class JPMaQSDownload(object):
                 " Check logger output for complete list. \n"
                 f"{len(expr_missing)} out of {len(expr_expected)} expressions are missing."
             )
-            
+
             logger.warning(log_str)
             logger.warning(f"Missing expressions: {expr_missing}")
             if verbose:
@@ -332,7 +332,7 @@ class JPMaQSDownload(object):
         cid: str
         xcat: str
         found_expressions: List[str] = []
-        _missing_exprs : List[str] = []
+        _missing_exprs: List[str] = []
         self.unavailable_expr_messages = []
         # _missing_exprs is just a sanity check to verify self.unavailable_expressions
         for d in dicts_list:
@@ -343,7 +343,8 @@ class JPMaQSDownload(object):
                 found_expressions.append(d["attributes"][0]["expression"])
                 df: pd.DataFrame = (
                     pd.DataFrame(
-                        d["attributes"][0]["time-series"], columns=["real_date", metricx]
+                        d["attributes"][0]["time-series"],
+                        columns=["real_date", metricx],
                     )
                     .assign(cid=cid, xcat=xcat, metric=metricx)
                     .rename(columns={metricx: "obs"})
@@ -353,9 +354,10 @@ class JPMaQSDownload(object):
             else:
                 _missing_exprs.append(d["attributes"][0]["expression"])
                 self.unavailable_expr_messages.append(d["attributes"][0]["message"])
-                
-        assert set(_missing_exprs) == set(self.unavailable_expressions), \
-            "Downloaded `dicts_list` has been modified before calling `time_series_to_df`"
+
+        assert set(_missing_exprs) == set(
+            self.unavailable_expressions
+        ), "Downloaded `dicts_list` has been modified before calling `time_series_to_df`"
 
         final_df: pd.DataFrame = pd.concat(dfs, ignore_index=True)
 
@@ -399,11 +401,11 @@ class JPMaQSDownload(object):
         )
         # sort found_metrics in the order of self.valid_metrics, then re-order the columns
         final_df = final_df[["real_date", "cid", "xcat"] + found_metrics]
-        
+
         # IMPORTANT NOTE:
         # Drop NA containing rows to be revisited when blacklisting is implemented
-        
-        final_df = final_df.dropna(axis=0, how='any').reset_index(drop=True)
+
+        final_df = final_df.dropna(axis=0, how="any").reset_index(drop=True)
 
         if validate_df:
             vdf = self.validate_downloaded_df(
@@ -748,7 +750,7 @@ if __name__ == "__main__":
         "EUR",
         "FRF",
         "GBP",
-        "USD"
+        "USD",
     ]
     xcats = [
         "RIR_NSA",
