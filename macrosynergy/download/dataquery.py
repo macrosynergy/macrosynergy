@@ -105,9 +105,7 @@ def validate_response(response: requests.Response) -> dict:
         if isinstance(exc, KeyboardInterrupt):
             raise exc
 
-        raise InvalidResponseError(
-            error_str + f"Error parsing response as JSON: {exc}"
-        )
+        raise InvalidResponseError(error_str + f"Error parsing response as JSON: {exc}")
 
 
 def request_wrapper(
@@ -346,7 +344,9 @@ class OAuth(object):
             return False
 
         created: datetime = self._stored_token["created_at"]  # utc time of creation
-        expires: datetime = created + timedelta(seconds=self._stored_token["expires_in"])
+        expires: datetime = created + timedelta(
+            seconds=self._stored_token["expires_in"]
+        )
 
         utcnow = datetime.utcnow()
         is_active: bool = expires > utcnow
@@ -516,7 +516,8 @@ def validate_download_args(
 
 
 def get_unavailable_expressions(
-        expected_exprs: List[str], dicts_list: List[Dict],
+    expected_exprs: List[str],
+    dicts_list: List[Dict],
 ) -> List[str]:
     """
     Method to get the expressions that are not available in the response.
@@ -597,9 +598,9 @@ class DataQueryInterface(object):
 
             self.auth: CertAuth = CertAuth(**config.cert(mask=False))
 
-        assert self.auth is not None, (
-            "Failed to initialise access method. Check the config_object passed"
-        )
+        assert (
+            self.auth is not None
+        ), "Failed to initialise access method. Check the config_object passed"
 
         self.proxy: Optional[dict] = config.proxy(mask=False)
         self.base_url: str = base_url
@@ -716,14 +717,14 @@ class DataQueryInterface(object):
         raise NotImplementedError("This method has not been implemented yet.")
 
     def _download(
-            self,
-            expressions: List[str],
-            params: dict,
-            url: str,
-            tracking_id: str,
-            delay_param: float,
-            show_progress: bool = False,
-            retry_counter: int = 0
+        self,
+        expressions: List[str],
+        params: dict,
+        url: str,
+        tracking_id: str,
+        delay_param: float,
+        show_progress: bool = False,
+        retry_counter: int = 0,
     ) -> List[dict]:
         if retry_counter > 0:
             print("Retrying failed downloads. Retry count:", retry_counter)
@@ -735,7 +736,7 @@ class DataQueryInterface(object):
             )
 
         expr_batches: List[List[str]] = [
-            expressions[i:i + self.batch_size]
+            expressions[i : i + self.batch_size]
             for i in range(0, len(expressions), self.batch_size)
         ]
 
@@ -778,15 +779,11 @@ class DataQueryInterface(object):
                         raise exc
 
                     failed_batches.append(expr_batches[ib])
-                    self.msg_errors.append(
-                        f"Batch {ib} failed with exception: {exc}"
-                    )
+                    self.msg_errors.append(f"Batch {ib} failed with exception: {exc}")
                     continuous_failures += 1
                     last_five_exc.append(exc)
                     if continuous_failures > MAX_CONTINUOUS_FAILURES:
-                        exc_str: str = "\n".join(
-                            [str(e) for e in last_five_exc]
-                        )
+                        exc_str: str = "\n".join([str(e) for e in last_five_exc])
                         raise DownloadError(
                             f"Failed {continuous_failures} times to download data."
                             f" Last five exceptions: \n{exc_str}"
@@ -798,14 +795,13 @@ class DataQueryInterface(object):
         final_output: List[Dict] = list(itertools.chain.from_iterable(download_outputs))
 
         if len(failed_batches) > 0:
-
             flat_failed_batches: List[str] = list(
                 itertools.chain.from_iterable(failed_batches)
             )
             logger.warning(
                 "Failed batches %d - retry download for %d expressions",
                 len(failed_batches),
-                len(flat_failed_batches)
+                len(flat_failed_batches),
             )
             retried_output: List[dict] = self._download(
                 expressions=flat_failed_batches,
@@ -814,7 +810,7 @@ class DataQueryInterface(object):
                 tracking_id=tracking_id,
                 delay_param=delay_param + 0.1,
                 show_progress=show_progress,
-                retry_counter=retry_counter+1,
+                retry_counter=retry_counter + 1,
             )
 
             final_output += retried_output  # extend retried output
@@ -888,14 +884,13 @@ class DataQueryInterface(object):
             delay_param=delay_param,
         )
 
-        if (
-                datetime.strptime(end_date, "%Y-%m-%d")
-                < datetime.strptime(start_date, "%Y-%m-%d")
+        if datetime.strptime(end_date, "%Y-%m-%d") < datetime.strptime(
+            start_date, "%Y-%m-%d"
         ):
             logger.warning(
                 "Start date (%s) is after end-date (%s): swap them!",
                 start_date,
-                end_date
+                end_date,
             )
             start_date, end_date = end_date, start_date
 
@@ -918,7 +913,7 @@ class DataQueryInterface(object):
             "Download %d expressions from DataQuery from %s to %s",
             len(expressions),
             datetime.strptime(start_date, "%Y%m%d").date(),
-            datetime.strptime(end_date, "%Y%m%d").date()
+            datetime.strptime(end_date, "%Y%m%d").date(),
         )
         params_dict: Dict = {
             "format": "JSON",
@@ -937,7 +932,7 @@ class DataQueryInterface(object):
             url=self.base_url + endpoint,
             tracking_id=tracking_id,
             delay_param=delay_param,
-            show_progress=show_progress
+            show_progress=show_progress,
         )
 
         self.unavailable_expressions = get_unavailable_expressions(
@@ -946,7 +941,7 @@ class DataQueryInterface(object):
         logger.info(
             "Downloaded expressions: %d, unavailable: %d",
             len(final_output),
-            len(self.unavailable_expressions)
+            len(self.unavailable_expressions),
         )
 
         self.egress_data = egress_logger
@@ -958,7 +953,7 @@ if __name__ == "__main__":
 
     cf: JPMaQSAPIConfigObject = JPMaQSAPIConfigObject(
         client_id=os.environ["JPMAQS_API_CLIENT_ID"],
-        client_secret=os.environ["JPMAQS_API_CLIENT_SECRET"]
+        client_secret=os.environ["JPMAQS_API_CLIENT_SECRET"],
     )
 
     expressions = [
