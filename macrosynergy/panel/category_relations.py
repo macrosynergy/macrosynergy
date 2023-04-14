@@ -146,9 +146,10 @@ class CategoryRelations(object):
         # satisfied.
         self.df = df.dropna(axis=0, how='any')
 
+    @classmethod
     def apply_slip(self, target_df: pd.DataFrame, slip: int,
-                    cids: List[str] = None, xcats: List[str] = None,
-                    metrics: List[str] = None) -> pd.DataFrame:
+                    cids: List[str], xcats: List[str],
+                    metrics: List[str]) -> pd.DataFrame:
         
         if not (isinstance(slip, int) and slip >= 0):
             ValueError("Slip must be a non-negative integer.")
