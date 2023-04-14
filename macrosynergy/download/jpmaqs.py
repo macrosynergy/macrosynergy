@@ -399,6 +399,11 @@ class JPMaQSDownload(object):
         )
         # sort found_metrics in the order of self.valid_metrics, then re-order the columns
         final_df = final_df[["real_date", "cid", "xcat"] + found_metrics]
+        
+        # IMPORTANT NOTE:
+        # Drop NA containing rows to be revisited when blacklisting is implemented
+        
+        final_df = final_df.dropna(axis=0, how='any').reset_index(drop=True)
 
         if validate_df:
             vdf = self.validate_downloaded_df(
