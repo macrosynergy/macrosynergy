@@ -8,14 +8,15 @@ from random import randint
 from tests.simulate import make_qdf
 from macrosynergy.panel.category_relations import CategoryRelations
 from macrosynergy.management.shape_dfs import categories_df
+from typing import List, Tuple, Dict, Union, Optional
 
 class TestAll(unittest.TestCase):
 
     # Method used to construct the respective DataFrame.
     def dataframe_generator(self):
 
-        self.__dict__['cids'] = ['AUD', 'CAD', 'GBP', 'NZD', 'JPY', 'CHF']
-        self.__dict__['xcats'] = ['XR', 'CRY', 'GROWTH', 'INFL']
+        self.cids : List[str] = ['AUD', 'CAD', 'GBP', 'NZD', 'JPY', 'CHF']
+        self.xcats : List[str] = ['XR', 'CRY', 'GROWTH', 'INFL']
 
         df_cids = pd.DataFrame(index=self.cids,
                                columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
@@ -34,11 +35,11 @@ class TestAll(unittest.TestCase):
         df_xcats.loc['INFL'] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-        self.__dict__['dfd'] = dfd
-
-        self.__dict__['black'] = {'AUD': ['2000-01-01', '2003-12-31'],
-                                  'GBP': ['2018-01-01', '2100-01-01']}
-
+        
+        self.dfd : pd.DataFrame = dfd
+        self.black : Dict[str, List[str]] = {'AUD': ['2000-01-01', '2003-12-31'],
+                                             'GBP': ['2018-01-01', '2100-01-01']}
+        
         # Filter the DataFrame to test the Set Theory logic.
         # The category, Growth, will not be defined for the cross-section 'AUD'.
         # The purpose is to return the shared cross-sections across specific categories.
@@ -51,10 +52,10 @@ class TestAll(unittest.TestCase):
         filt3 = (dfd['xcat'] == 'INFL') & (dfd['cid'] == 'JPY')
         # Reduced dataframe.
 
-        self.__dict__['filter_tuple'] = (filt1 | filt2 | filt3)
+        self.filter_tuple : Tuple[pd.Series, pd.Series, pd.Series] = (filt1 | filt2 | filt3)
         dfdx = dfd[~self.filter_tuple]
 
-        self.__dict__['dfdx'] = dfdx
+        self.dfdx : pd.DataFrame = dfdx
 
         # Define a List of the cross-sections that one is interested in modelling. The
         # dataframe might potentially be defined on a greater number of cross-sections.
@@ -62,8 +63,7 @@ class TestAll(unittest.TestCase):
         # in the dataframe.
         # The above stipulation on 'cidx' will require being validated in the defined
         # functionality.
-        cidx = ['AUD', 'CAD', 'GBP']
-        self.__dict__['cidx'] = cidx
+        self.cidx : List[str] = ['AUD', 'CAD', 'GBP']
 
     def test_constructor(self):
 
@@ -340,6 +340,43 @@ class TestAll(unittest.TestCase):
 
         # Adjust for the application of the lag.
         self.assertTrue(df_outlier.shape == df_time_series.shape)
+        
+    def test_apply_slip(self):
+            
+        self.dataframe_generator()
+        
+        # pick 3 random cids
+        sel_xcats : List[str] = ['XR', 'CRY']
+        sel_cids  : List[str] = ['AUD', 'CAD', 'GBP']
+        sel_dates : pd.DatetimeIndex = pd.bdate_range(start='2020-01-01', 
+                                                        end='2020-02-01')
+
+        # reduce the dataframe to the selected cids and xcats
+        df : pd.DataFrame = self.dfd.copy()
+        df = df[df['cid'].isin(sel_cids) & df['xcat'].isin(sel_xcats) & df['real_date'].isin(sel_dates)].reset_index(drop=True)
+        
+        # for every unique cid, xcat pair add a column "vx" which is just an integer 0→n ,
+        # where n is the number of unique dates for that cid, xcat pair
+        df['vx'] = df.groupby(['cid', 'xcat'])['real_date'].rank(method='dense').astype(int)
+        test_slip : int = 5
+        # apply the slip method
+        out_df = CategoryRelations.apply_slip(target_df=df, slip=test_slip,
+                                              xcats=sel_xcats, cids=sel_cids, 
+                                              metrics=['value', 'vx'])
+
+        # assert that max(df['vx']) == max(out_df['vx']) + 5
+        assert int(min(df['vx'])) == int(min(out_df['vx']) - test_slip)
+        
+        for cid in sel_cids:
+            for xcat in sel_xcats:
+                inan_count = df[(df['cid'] == cid) & (df['xcat'] == xcat)]['vx'].isna().sum()
+                onan_count = out_df[(out_df['cid'] == cid) & (out_df['xcat'] == xcat)]['vx'].isna().sum()
+                assert inan_count == onan_count + test_slip
+
+        
+            
+            
+            
 
 
 if __name__ == "__main__":
