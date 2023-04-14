@@ -152,7 +152,7 @@ class CategoryRelations(object):
                     metrics: List[str]) -> pd.DataFrame:
         
         if not (isinstance(slip, int) and slip >= 0):
-            ValueError("Slip must be a non-negative integer.")
+            raise ValueError("Slip must be a non-negative integer.")
 
         sel_tickers : List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
         target_df['tickers'] = target_df['cid'] + '_' + target_df['xcat']
