@@ -1,4 +1,3 @@
-
 import unittest
 import io
 import sys
@@ -119,7 +118,7 @@ class TestAll(unittest.TestCase):
 
         self.dataframe_generator()
 
-        self.__dict__['cidx'] = ['AUD', 'CAD', 'GBP', 'USD', 'CHF']
+        self.cidx = ['AUD', 'CAD', 'GBP', 'USD', 'CHF']
 
         # The StringIO module is an in-memory file-like Object.
         capturedOutput = io.StringIO()
@@ -141,7 +140,7 @@ class TestAll(unittest.TestCase):
 
         # Aim to test the returned list of cross-sections.
         # Broaden the testcase to further test the accuracy.
-        self.__dict__['cidx'] = ['AUD', 'CAD', 'GBP', 'USD', 'EUR', 'JPY', 'NZD', 'CHF']
+        self.cidx = ['AUD', 'CAD', 'GBP', 'USD', 'EUR', 'JPY', 'NZD', 'CHF']
         # Print statements will be returned to the console.
         shared_cids = CategoryRelations.intersection_cids(self.dfdx, ['GROWTH', 'INFL'],
                                                           self.cidx)
@@ -342,41 +341,59 @@ class TestAll(unittest.TestCase):
         self.assertTrue(df_outlier.shape == df_time_series.shape)
         
     def test_apply_slip(self):
-            
+
         self.dataframe_generator()
-        
+
         # pick 3 random cids
-        sel_xcats : List[str] = ['XR', 'CRY']
-        sel_cids  : List[str] = ['AUD', 'CAD', 'GBP']
-        sel_dates : pd.DatetimeIndex = pd.bdate_range(start='2020-01-01', 
-                                                        end='2020-02-01')
+        sel_xcats: List[str] = ["XR", "CRY"]
+        sel_cids: List[str] = ["AUD", "CAD", "GBP"]
+        sel_dates: pd.DatetimeIndex = pd.bdate_range(
+            start="2020-01-01", end="2020-02-01"
+        )
 
         # reduce the dataframe to the selected cids and xcats
-        df : pd.DataFrame = self.dfd.copy()
-        df = df[df['cid'].isin(sel_cids) & df['xcat'].isin(sel_xcats) & df['real_date'].isin(sel_dates)].reset_index(drop=True)
+        test_df: pd.DataFrame = self.dfd.copy()
+        test_df = test_df[
+            test_df["cid"].isin(sel_cids)
+            & test_df["xcat"].isin(sel_xcats)
+            & test_df["real_date"].isin(sel_dates)
+        ].reset_index(drop=True)
+
+        df : pd.DataFrame = test_df.copy()
+        
+        # Test Case 1
         
         # for every unique cid, xcat pair add a column "vx" which is just an integer 0→n ,
         # where n is the number of unique dates for that cid, xcat pair
-        df['vx'] = df.groupby(['cid', 'xcat'])['real_date'].rank(method='dense').astype(int)
-        test_slip : int = 5
+        df["vx"] = (
+            df.groupby(["cid", "xcat"])["real_date"].rank(method="dense").astype(int)
+        )
+        test_slip: int = 5
         # apply the slip method
-        out_df = CategoryRelations.apply_slip(target_df=df, slip=test_slip,
-                                              xcats=sel_xcats, cids=sel_cids, 
-                                              metrics=['value', 'vx'])
+        out_df = CategoryRelations.apply_slip(
+            target_df=df,
+            slip=test_slip,
+            xcats=sel_xcats,
+            cids=sel_cids,
+            metrics=["value", "vx"],
+        )
 
-        # assert that max(df['vx']) == max(out_df['vx']) + 5
-        assert int(min(df['vx'])) == int(min(out_df['vx']) - test_slip)
-        
+        # NOTE: casting df.vx to int as pandas casts it to float64
+        self.assertEqual(int(min(df["vx"])), int(min(out_df["vx"]) - test_slip))
+
         for cid in sel_cids:
             for xcat in sel_xcats:
-                inan_count = df[(df['cid'] == cid) & (df['xcat'] == xcat)]['vx'].isna().sum()
-                onan_count = out_df[(out_df['cid'] == cid) & (out_df['xcat'] == xcat)]['vx'].isna().sum()
-                assert inan_count == onan_count + test_slip
+                inan_count = (
+                    df[(df["cid"] == cid) & (df["xcat"] == xcat)]["vx"].isna().sum()
+                )
+                onan_count = (
+                    out_df[(out_df["cid"] == cid) & (out_df["xcat"] == xcat)]["vx"]
+                    .isna()
+                    .sum()
+                )
+                assert inan_count == onan_count - test_slip
 
-        
-            
-            
-            
+        #
 
 
 if __name__ == "__main__":
