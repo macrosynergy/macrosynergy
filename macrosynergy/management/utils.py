@@ -462,6 +462,7 @@ class Config(object):
 
 
         self._credentials: Dict[str, dict] = r_auth
+        self.config_path: Optional[str] = config_path
 
         self._config_type: Optional[str] = "yaml"  # default
         if (not isinstance(config_path, type(None))) and config_path.endswith(".json"):
@@ -590,6 +591,42 @@ class Config(object):
             f.write(output)
 
         return export_file
+    
+    def multi_credentials(self):
+        assert (self.config_path is not None) and (self.config_path != "env"), \
+            "MultiCredentials can only be used with a config file."
+        rdict: Dict[str, dict] = {}
+        """
+        look for multi cred in the dict like :
+        multi_cred:
+            cred0:
+                cl_id: "wfdfdfs"
+                cl_sc: "fw;mfwlkfemw"
+            cred1:
+                cl_id: "wklfnwflknwe"
+                cl_sc: "dsfnjlskfdn"
+            cred2:...
+        """
+        new_dict : Dict[str, dict] = {}
+        if self.config_path.endswith(".json"):
+            with open(self.config_path, "r") as f:
+                new_dict = json.load(f)
+        elif self.config_path.endswith(".yaml") or self.config_path.endswith(".yml"):
+            with open(self.config_path, "r") as f:
+                new_dict = yaml.safe_load(f)
+        else:
+            raise ValueError(f"Unknown config file extension : {self.config_path}")
+        
+        if "multi_cred" not in new_dict.keys():
+            raise ValueError("No multi_cred key in config file.")
+        
+        rs : List[Config] = [] 
+        n : dict = new_dict.copy()
+        for clid, clsc in [[n["multi_cred"][kx]["cl_id"], 
+                            n["multi_cred"][kx]["cl_sc"]] for kx in n["multi_cred"].keys()]:
+            rs.append(Config(client_id=clid, client_secret=clsc, proxy=self.proxy(mask=False)))
+
+        return rs
 
     def __repr__(self):
         return f"JPMaQS API Config Object, methods : {list(self._credentials.keys())}"
