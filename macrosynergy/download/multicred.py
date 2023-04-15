@@ -149,7 +149,7 @@ if __name__ == "__main__":
 
     mcd = MultiCredentialDownload(config=Config("./config_multicred.yml"))
 
-    x = mcd._download(
+    x = mcd.download(
         tickers=tickers,
         metrics=["all"],
         start_date="1990-01-01",
