@@ -1,8 +1,8 @@
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Any 
 from macrosynergy.download import JPMaQSDownload
-from macrosynergy.download.dataquery import OAUTH_BASE_URL
 from macrosynergy.management.utils import Config
 import pandas as pd
+import pickle
 from timeit import default_timer as timer
 from tqdm import tqdm
 from joblib import Parallel, delayed
@@ -13,26 +13,39 @@ from joblib import Parallel, delayed
 
 class MultiCredentialDownload:
     def __init__(
-        self, config: Config, base_url: str = OAUTH_BASE_URL, max_workers: int = 4
+        self, config: Config, 
+        max_workers: int = 4,
+        save_path: str = None
     ):
         self.config = config
-        self._base_url = base_url
         self._max_workers = max_workers
+        self.save_path = save_path
+        self.chunk_len = 1000
 
     def _download_chunk(
         self,
         credentials: Config,
         download_args: dict,
+        save_id: str,
     ):
         # force the download skip the dataframe conversion
         download_args["as_dataframe"] = False
-
         try:
-            with JPMaQSDownload(**credentials.oauth(mask=False)) as jpm:
-                return jpm.download(**download_args)
+            with open(f"{self.save_path}/{save_id}.pkl", "rb") as f:
+                with JPMaQSDownload(**credentials.oauth(mask=False), 
+                                    ) as jpm:
+                    pickle.dump(jpm.download(**download_args))
+
+            return True
         except Exception as e:
             print(e)
-            return -1
+            return False
+        
+    def _get_next_credentials(self):
+        while True:
+            for cred in self.config.multi_credentials():
+                yield cred
+
 
     def download(
         self,
@@ -46,74 +59,67 @@ class MultiCredentialDownload:
         report_egress: bool = True,
     ) -> Dict[str, dict]:
         if metrics==["all"]:
-            metrics = ["value", "grading", "eop_lag", "mop_lag"]
+            metrics : List[str] = ["value", "grading", "eop_lag", "mop_lag"]
 
-        all_expressions = JPMaQSDownload.construct_expressions(
+        all_expressions : List[str] = JPMaQSDownload.construct_expressions(
             tickers=tickers, cids=cids, xcats=xcats, metrics=metrics
         )
-
-        # split the expressions into n chunks, where n is the number of credentials
-        mcred: List[Config] = self.config.multi_credentials()
-
-        chunk_size = len(all_expressions) // len(mcred)
-        chunks = [
-            all_expressions[i : i + chunk_size]
-            for i in range(0, len(all_expressions), chunk_size)
+        
+        # form "chunks" of 1000
+        chunks : List[List[str]] = [
+            all_expressions[i : i + self.chunk_len] for i in range(0, len(all_expressions), self.chunk_len)
         ]
-        results = []
-        start: float = timer()
-        results = Parallel(n_jobs=self._max_workers)(
-            delayed(self._download_chunk)(
-                credentials=credx,
-                download_args={
-                    "expressions": chunk,
-                    "start_date": start_date,
-                    "end_date": end_date,
-                    "report_time_taken": report_time_taken,
-                    "report_egress": report_egress,
-                },
-            )
-            for credx, chunk in tqdm(zip(mcred, chunks), total=len(chunks))
-        )
-        end: float = timer()
-        if report_time_taken:
-            print(f"MultiCred time taken: {end - start} seconds")
 
-        failed = [i for i, x in enumerate(results) if x == -1]
-        if len(failed) > 0:
-            # form the failed expressions
-            print(f"Failed to download {len(failed)} chunks")
-            print("Retrying...")
-            failed_chunks = [chunks[i] for i in failed]
-            f_mcred = mcred[: len(failed_chunks)]
-            start: float = timer()
-            f_results = Parallel(n_jobs=self._max_workers)(
-                delayed(self._download_chunk)(
-                    credentials=credx,
-                    download_args={
+        download_args_list : List[dict] = [{
                         "expressions": chunk,
                         "start_date": start_date,
                         "end_date": end_date,
+                        "as_dataframe": False,
                         "report_time_taken": report_time_taken,
                         "report_egress": report_egress,
-                    },
-                )
-                for credx, chunk in tqdm(
-                    zip(f_mcred, failed_chunks), total=len(failed_chunks)
-                )
+                    } for chunk in chunks]
+        
+        save_ids : List[str] = [f"{i}" for i in range(len(download_args_list))]
+        
+        results : List[bool] = \
+            Parallel(n_jobs=self._max_workers)(
+                delayed(self._download_chunk)(
+                    credentials=self._get_next_credentials(),
+                    download_args=download_args,
+                    save_id=save_id,    
+                ) for save_id, download_args in zip(save_ids, download_args_list)
             )
+        
 
-            end: float = timer()
-            if report_time_taken:
-                print(f"MultiCred time taken: {end - start} seconds")
-            results = [x if x != -1 else y for x, y in zip(results, f_results)]
+        # if any of the results are false, then we need to re-run the failed ones
+        if not all(results):
+            failed_ids : List[str] = [save_id for save_id, result in zip(save_ids, results) if not result]
+            failed_args : List[dict] = [download_args for download_args, result in zip(download_args_list, results) if not result]
+            
+            results : List[bool] = \
+                Parallel(n_jobs=self._max_workers)(
+                    delayed(self._download_chunk)(
+                        credentials=self._get_next_credentials(),
+                        download_args=download_args,
+                        save_id=save_id,    
+                    ) for save_id, download_args in zip(failed_ids, failed_args)
+                )
+                
+            
+            if not all(results):
+                # failed to download n expressions. no longer retrying
+                print(f"Failed to download {(len(results) - sum(results))*self.chunk_len}"
+                                " expressions. No longer retrying.")
+            
+            return
+            
+        
+        
+        
 
-            # print the failed expressions
-            print(f"Failed to download {len(failed)} chunks. No longer retrying.")
 
-        r = [x for x in results if x != -1]
-        r = [item for sublist in r for item in sublist]
-        return r
+
+
 
 
 if __name__ == "__main__":
