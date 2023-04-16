@@ -164,7 +164,9 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
 
                 handles, labels = ax.get_legend_handles_labels()
                 # set the xcat_labels[0] for the actual xcat, and the last label for the csmean
-                if len(xcat_labels) == len(xcats) + 1:
+                if xcat_labels is None:
+                    labels = fg._legend_data.keys()
+                elif len(xcat_labels) == len(xcats) + 1:
                     labels = xcat_labels
                 
                 ax.legend(handles=handles, labels=labels)
@@ -202,7 +204,9 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
                 
                 
                 handles, labels = ax.get_legend_handles_labels()
-                if len(xcat_labels) == len(xcats) + 1:
+                if xcat_labels is None:
+                    labels = fg._legend_data.keys()
+                elif len(xcat_labels) == len(xcats) + 1:
                     labels = xcat_labels
                 
                 ax.legend(handles=handles, labels=labels)
