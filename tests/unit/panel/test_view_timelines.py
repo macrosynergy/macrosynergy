@@ -2,6 +2,7 @@ import unittest
 import pandas as pd
 from tests.simulate import make_qdf
 from macrosynergy.panel.view_timelines import view_timelines
+import matplotlib
 
 class TestAll(unittest.TestCase):
 
@@ -35,6 +36,9 @@ class TestAll(unittest.TestCase):
         
         # test that all the sample cases run
         
+        # set backend to Agg to avoid spawning a window
+        matplotlib.use('Agg')
+
         try:
             view_timelines(dfd, xcats=xcats[:2], cids=cids[0],
                         size=(10, 5), title='AUD Return and Carry')
@@ -53,6 +57,19 @@ class TestAll(unittest.TestCase):
             view_timelines(dfd, xcats=[xcats[0]], cids=cids, ncol=2,
                         cumsum=True, same_y=False, aspect=2, single_chart=True)
             
+            # test that any indexing of the  works
+            for c in dfd.columns:
+                dfdr = dfd.copy().set_index(c)
+                view_timelines(dfdr, xcats=[xcats[0]], cids=cids, ncol=2,
+                            cumsum=True, same_y=False, aspect=2, single_chart=True)
+            
+            dfdr = dfd.copy().set_index('real_date')
+            # rename column 'value' to 'qwerty'
+            dfdr = dfdr.rename(columns={'value': 'qwerty'})
+            view_timelines(dfdr, xcats=[xcats[0]], cids=cids, ncol=2,
+                        cumsum=True, same_y=False, aspect=2, single_chart=True,
+                        val='qwerty')
+                        
         except Exception as e:
             self.fail(e)
             
@@ -96,6 +113,15 @@ class TestAll(unittest.TestCase):
                 xcat_labels=['Return', 'Carry', 'Inflation'],
                 title='AUD Return, Carry & Inflation', 
                 single_chart=True, xcat_grid=True) # (xcat_grid && single_chart) must be False
+            
+        with self.assertRaises(Exception):
+            dfdr = dfd.copy().set_index('real_date').drop('cid', axis=1)
+            view_timelines(dfdr, xcats=xcats, cids=cids[0],
+                title_adj=0.8, same_y=True,
+                xcat_labels=['Return', 'Carry', 'Inflation'],
+                title='AUD Return, Carry & Inflation',
+                xcat_grid=True) # df must have a column named 'cid'
+
 
         
 if __name__ == '__main__':
