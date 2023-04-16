@@ -2,184 +2,383 @@
 Providing a high level interface to simplify visual tasks involving matplotlib and seaborn.
 """
 
+import matplotlib
+import matplotlib.figure
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas  as pd
 import numpy   as np
-from typing import Optional, List, Tuple, Dict, Union
+from typing import Optional, List, Tuple, Dict, Union, Callable
 import logging
+from macrosynergy.management.utils import standardise_dataframe
+from macrosynergy.management import reduce_df
+
+
 
 logger = logging.getLogger(__name__)
 
-def facet_grid(
-        df : pd.DataFrame,
-        facet_type : Optional[str] = 'line',
-        facet_plot_kwargs : Optional[Dict] = None,
-        plot_tickers : Optional[bool] = False,
-        plot_by_cid : Optional[str] = None,
-        plot_xcats : Optional[List[str]] = None,
-        xcat_labels : Optional[List[str]] = None,
-        plot_by_xcat : Optional[str] = None,
-        cid_labels : Optional[List[str]] = None,
-        plot_cids : Optional[List[str]] = None,
-        ncols : Optional[int] = 3,
-        nrows : Optional[int] = 3,
-        sharey : Optional[bool] = True,
-        sharex : Optional[bool] = True,
-        share_x_labels : Optional[bool] = True,
-        share_y_labels : Optional[bool] = True,
-        xlabel : Optional[str] = None,
-        ylabel : Optional[str] = None,
-        title : Optional[str] = None,
-        title_adj : Optional[float] = 0.95,
-        figsize : Optional[Tuple[int, int]] = None,
-        aspect : Optional[float] = 1.618,
-        height : Optional[float] = None,
-        width : Optional[float] = None,
-        facetsize : Optional[Tuple[int, int]] = None,
-        show : Optional[bool] = True,
-):
+class PlotLines(object):
     """
-    :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
-        'cid', 'xcats', 'real_date' and at least one column with values of interest.
-    :param <str> facet_type: type of facet plot to be used. Options: 'line', 'bar', 
-        'reg', 'resid', 'kde', 'hist', 'box', 'violin', 'strip', 'swarm', 'point'.
-    :param <dict> facet_plot_kwargs: kwargs to be passed to the facet plot. Look at
-        the documentation for the facet plot type for the available kwargs for each
-        plot type.
-    :param <str> plot_tickers: plot all cid_xcat tickers from the DataFrame,
-        with one ticker per facet.
-    :param <str> plot_by_cid: plot all xcats for the specified cid from the DataFrame,
-        with one xcat per facet. Paired args : `xcat_labels`, `plot_xcats`.
-    :param <list> plot_xcats: plot only the specified xcats for the specified cid. 
-        To be used with arg: `plot_by_cid`.
-    :param <list> xcat_labels: labels for the xcats. Must be of same length as
-        the number of unique xcats in the DataFrame, or the number of xcats specified
-        `plot_xcats`. To be used with arg: `plot_by_cid`.
-    :param <str> plot_by_xcat: plot all cids for the specified xcat from the DataFrame,
-        with one cid per facet. Paired args : `cid_labels`, `plot_cids`.
-    :param <list> plot_cids: plot only the specified cids for the specified xcat.
-        To be used with arg: `plot_by_xcat`.
-    :param <list> cid_labels: labels for the cids. Must be of same length as
-        the number of unique cids in the DataFrame, or the number of cids specified
-        `plot_cids`. To be used with arg: `plot_by_xcat`.
-    :param <int> ncols: number of columns in the facet grid.
-    :param <int> nrows: number of rows in the facet grid.
-    :param <bool> sharey: share the y-axis across all facets.
-    :param <bool> sharex: share the x-axis across all facets.
-    :param <bool> share_x_labels: share the x-axis labels across all facets.
-    :param <bool> share_y_labels: share the y-axis labels across all facets.
-    :param <str> xlabel: label for the x-axis.
-    :param <str> ylabel: label for the y-axis.
-    :param <str> title: title for the facet grid.
-    :param <float> title_adj: adjust the title position.
-    :param <tuple> figsize: size of the figure.
-    :param <float> aspect: aspect ratio of the figure.
-    :param <float> height: height of the figure.
-    :param <float> width: width of the figure.
-    :param <tuple> facetsize: size of each facet.
-    :param <bool> show: show the plot.
-
-    return <matplotlib.figure.Figure>
+    inialise with a DF.
+    have optional cids, xcats, start_date, end_date, metric,
+    option to filter by cid, xcat, start_date, end_date, metric
     """
-
-    # input validation
-    assert isinstance(df, pd.DataFrame), 'The input df must be a pandas DataFrame.'
-    dfcols = set(df.columns)
-    mandatory_cols = set(['cid', 'xcats', 'real_date'])
-    optional_cols = set(['mop_lag', 'eop_lag', 'value', 'grading'])
-
-    # all mandatory columns must be present, atleast one optional column must be present
-    if not mandatory_cols.issubset(dfcols) or not optional_cols.intersection(dfcols):
-        # try some pandas magic
-        dfa = df.copy().reset_index()
-        dfa.columns = [c.lower() for c in dfa.columns]
-
-        logger.warning('The DataFrame columns are not standardized. Trying to standardize them.')
-        assert mandatory_cols.issubset(dfa.columns), 'The mandatory columns are not present in the DataFrame.'
-        assert optional_cols.intersection(dfa.columns), 'None of the optional columns are present in the DataFrame.'
-
-    assert (plot_by_cid is None) ^ (plot_by_xcat is None), 'Please specify either plot_by_cid or plot_by_xcat.'
-    if plot_by_cid is not None:
-        assert plot_by_cid in df['cid'].unique(), 'The specified cid is not present in the DataFrame.'
-        plot_by = 'cid'
-    if plot_by_xcat is not None:
-        assert plot_by_xcat in df['xcats'].unique(), 'The specified xcat is not present in the DataFrame.'
-        plot_by = 'xcat'
-
-    if figsize is None:
-        assert isinstance(aspect, (int, float)), 'The aspect ratio must be a float or integer.'
-        # one of height or width must be specified
-        assert (height is not None) ^ (width is not None), 'Please specify either height or width.'
-        if height is not None:
-            assert isinstance(height, (int, float)), 'The height must be a float or integer.'
-            figsize = (aspect * height, height)
-        else:
-            assert isinstance(width, (int, float)), 'The width must be a float or integer.'
-            figsize = (width, width / aspect)
-    else:
-        assert isinstance(figsize, tuple), 'The figsize must be a tuple of integers.'
-        assert len(figsize) == 2, 'The figsize must be a tuple of length 2.'
-        assert all([isinstance(i, int) for i in figsize]), 'The figsize must be a tuple of integers.'
-
-    
-    if plot_tickers:
-        raise NotImplementedError('plot_tickers is not implemented yet.')
-        # form a helper column called 'tickers'
-        # df['tickers'] = df['cid'] + '_' + df['xcat']
-        # simply plot the tickers to a facet grid
-        # g = sns.FacetGrid(df, col='tickers', col_wrap=ncols,
-        #                   sharey=sharey, sharex=sharex,
-        #                   height=height, aspect=aspect)
-        # g.map(plt.plot, 'real_date', 'value')
-
-    if plot_by_cid is not None:
-        # filter the DataFrame
-        df = df[df['cid'] == plot_by_cid]
-        # plot the xcats to a facet grid
-        if xcat_labels is not None:
-            assert len(xcat_labels) == len(df['xcat'].unique()), 'The number of xcat labels must be equal to the number of xcats.'
-            df['xcat'] = df['xcat'].replace(dict(zip(df['xcat'].unique(), xcat_labels)))
-
-        fg = sns.FacetGrid(df, col='xcat', col_wrap=ncols,
-                            sharey=sharey, sharex=sharex,
-                            height=height, aspect=aspect)
-
-        # title for each individual facet should be xcat. plot real_date on x-axis, value on y-axis
-        fg.map(plt.plot, 'real_date', 'value')
-        fg.set_titles('{col_name}')
+    def __init__(self,
+                 df : pd.DataFrame,
+                 cids : List[str] = None,
+                xcats : List[str] = None,
+                start_date : str = None,
+                end_date : str = None,
+                ):
         
+        self.df :pd.DataFrame = reduce_df(
+            standardise_dataframe(df),
+            cids=cids,
+            xcats=xcats,
+            start=start_date,
+            end=end_date,
+        )
+        
+
+
+    def plot(self,
+                cids : List[str] = None,
+                xcats : List[str] = None,
+                metrics : List[str] = None,
+                start_date : str = None,
+                end_date : str = None,
+                plot_by_cid : bool = None,
+                plot_by_xcat : bool = None,
+                xcat_labels : List[str] = None,
+                cid_labels : List[str] = None,
+                font_size : int = 12,
+                metric_labels : List[str] = None,
+                ncols : int = 4,
+                same_x : bool = True,
+                same_y : bool = True,
+                figsize : tuple = (8, 12),
+                aspect : float = 1.5,
+                fig_title : str = None,
+                fig_title_adj : float = 1.05,
+                legend : bool = True,
+                legend_title : str = None,
+                legend_loc : str = 'best',
+                legend_fontsize : int = 12,
+                legend_ncol : int = 1,
+                legend_bbox_to_anchor : tuple = (1, 1),
+    ):
+        """
+        Plot the data in the DataFrame.
+        Plot all the lines on one plot.
+
+        Parameters
+        ----------
+        Parameter for filtering the DataFrame:
+        :param <List[str]> cids: A list of cids to select from the DataFrame
+            (self.df). If None, all cids are selected.
+        :param <List[str]> xcats: A list of xcats to select from the DataFrame
+            (self.df). If None, all xcats are selected.
+        :param <List[str]> metrics: A list of metrics to select from the DataFrame
+            (self.df). If None, all metrics are selected.
+        :param <str> start_date: The start date to select from the DataFrame in
+            the format 'YYYY-MM-DD'. If None, all dates are selected.
+        :param <str> end_date: The end date to select from the DataFrame in
+            the format 'YYYY-MM-DD'. If None, all dates are selected.
+
+        Parameters for plotting:    
+        :param <bool> plot_by_cid: If True, plot the lines for each cid on a
+            separate plot. If False, plot all lines on one plot. If None, plot
+            all lines on one plot.
+        :param <bool> plot_by_xcat: If True, plot the lines for each xcat on a
+            separate plot. If False, plot all lines on one plot. If None, plot
+            all lines on one plot.
+
+        Parameters for labelling the plot:
+        :param <List[str]> xcat_labels: A list of labels for the xcats. If None,
+            the xcat names are used.
+        :param <List[str]> cid_labels: A list of labels for the cids. If None,
+            the cid names are used.
+        :param <int> font_size: The font size for the labels.
+        :param <List[str]> metric_labels: A list of labels for the metrics. If
+            None, the metric names are used.
+        
+        Parameters for the figure:
+        :param <int> ncols: The number of columns in the figure.
+        :param <bool> same_x: If True, the x-axis limits are the same
+            for all plots.
+        :param <bool> same_y: If True, the y-axis limits are the same
+            for all plots.
+        :param <tuple> figsize: The size of the figure.
+        :param <float> aspect: The aspect ratio of the figure.
+        :param <str> fig_title: The title of the figure.
+        :param <float> fig_title_adj: The adjustment of the figure title.
+        :param <bool> legend: If True, show the legend.
+        :param <str> legend_title: The title of the legend.
+        :param <str> legend_loc: The location of the legend.
+        :param <int> legend_fontsize: The font size of the legend.
+        :param <int> legend_ncol: The number of columns in the legend.
+        :param <tuple> legend_bbox_to_anchor: The bounding box
+            of the legend.
+        """
+        pass
+
+
+    
+
+class FacetGrid(object):
+    """
+    inialise with a DF.
+    have optional cids, xcats, start_date, end_date, metric,
+    option to filter by cid, xcat, start_date, end_date, metric
+    """
+    def __init__(self,
+                 df : pd.DataFrame,
+                 cids : List[str] = None,
+                xcats : List[str] = None,
+                metrics : List[str] = None,
+                start_date : str = None,
+                end_date : str = None,
+                ):
+        
+        self.df : pd.DataFrame = reduce_df(
+            standardise_dataframe(df),
+            cids=cids,
+            xcats=xcats,
+            metrics=metrics,
+            start=start_date,
+            end=end_date,
+        )
+
+
+    def plot(self,
+                plot_type : str = 'line',
+                cids : List[str] = None,
+                xcats : List[str] = None,
+                metric : str = "value",
+                start_date : str = None,
+                end_date : str = None,
+                plot_by_cid : bool = None,
+                plot_by_xcat : bool = None,
+                xcat_labels : List[str] = None,
+                cid_labels : List[str] = None,
+                x_axis_label : str = None,
+                y_axis_label : str = None,
+                font_size : int = 12,
+                ncols : int = 4,
+                same_x : bool = True,
+                same_y : bool = True,
+                figsize : tuple = (8, 12),
+                aspect : float = 1.5,
+                fig_title : str = None,
+                fig_title_adj : float = 1.05,
+                plot_style : str = 'darkgrid',
+                legend : bool = True,
+                legend_title : str = None,
+                legend_loc : str = 'outside',
+                legend_fontsize : int = 12,
+                legend_ncol : int = 1,
+                legend_bbox_to_anchor : tuple = (1, 1),
+                # returns a figure with a .show() method
+    ) -> matplotlib.figure.Figure:
+        """
+        Plot the data in the DataFrame.
+        
+        Parameters
+        ----------
+        Parameter for filtering the DataFrame:
+        :param <List[str]> cids: A list of cids to select from the DataFrame
+            (self.df). If None, all cids are selected.
+        :param <List[str]> xcats: A list of xcats to select from the DataFrame
+            (self.df). If None, all xcats are selected.
+        :param <List[str]> metric : A metric to select from the DataFrame. Defaults to
+            'value'.
+        :param <str> start_date: The start date to select from the DataFrame in
+            the format 'YYYY-MM-DD'. If None, all dates are selected.
+        :param <str> end_date: The end date to select from the DataFrame in the
+            format 'YYYY-MM-DD'. If None, all dates are selected.
+        :param <bool> plot_by_cid: If True (default), each cid is plotted in a separate
+            facet. If False (or None), each xcat is plotted in a separate facet.
+            Must be of the same length as `xcats` or the number of unique cids in the
+            DataFrame.
+        :param <bool> plot_by_xcat: If True, each xcat is plotted in a separate
+            facet. If False (default) (or None), each cid is plotted in a separate facet.
+            Must be of the same length as `cids` or the number of unique xcats in the
+            DataFrame.
+
+        Parameters for plotting:
+        :param <List[str]> xcat_labels: A list of labels to use with categories (xcat),
+            in the same order as the categories. If None (default), the original
+            xcat names are used.
+        :param <List[str]> cid_labels: A list of labels to use with categories (cid),
+            in the same order as the categories. If None (default), the original
+            cid names are used. 
+        :param <str> x_axis_label: The label to use for the x-axis. If None (default),
+            the index name (usually 'real_date') is used.
+        :param <str> y_axis_label: The label to use for the y-axis. If None (default),
+            the metric name is used (usually 'value').
+        :param <int> font_size: The font size to use for the subplot titles and labels.
+            Default is 12.
+        :param <int> ncols: The number of columns to use in the FacetGrid. Default is 4.
+        :param <bool> same_x: If True (default), the x-axis is shared across all subplots.
+        :param <bool> same_y: If True (default), the y-axis is shared across all subplots.
+        :param <tuple> figsize: The size of the figure. Default is (8, 12).
+        :param <float> aspect: The aspect ratio to use for the subplots. Default is 1.5.
+        :param <str> fig_title: The title to use for the figure. Default is None.
+        :param <float> fig_title_adj: The vertical adjustment of the figure title.
+            Default is 1.05.
+        :param <bool> plot_style: The style to use for the plot. Default is 'darkgrid'.
+        :param <bool> legend: If True (default), a legend is added to the plot.
+        :param <str> legend_title: The title to use for the legend. Default is None.
+        :param <str> legend_loc: The location to use for the legend. Default is 'best'.
+        :param <int> legend_fontsize: The font size to use for the legend. Default is 12.
+        :param <int> legend_ncol: The number of columns to use for the legend. Default is 1.
+        :param <tuple> legend_bbox_to_anchor: The bounding box to use for the legend.
+            Default is (1, 1).
+
+        """
+
+        if not isinstance(plot_type, str):
+            raise TypeError(f"plot_type must be a string, not {type(plot_type)}")
+        else:
+            plot_type : str = plot_type.lower()
+            if not plot_type in ['line', 'scatter']:
+                raise ValueError(f"plot_type must be 'line' or 'bar', not {plot_type}")
+
+        if plot_by_cid is None:
+            plot_by_cid = True
+        
+        if plot_by_xcat is True:
+            plot_by_cid = False
+
+        df : pd.DataFrame = reduce_df(
+            self.df,
+            cids=cids,
+            xcats=xcats,
+            start=start_date,
+            end=end_date,)
+        
+        # assert metric in df.columns, f"Metric '{metric}' not found in DataFrame"
+        if not metric in df.columns:
+            raise ValueError(f"Metric '{metric}' not found in DataFrame"
+                       f" with columns: {df.columns}")
+            
+        validListOfStr : Callable[[List[str]], bool] = lambda x: \
+            (isinstance(x, list)) and (len(x) > 0) and (isinstance(x[0], str))
+        
+        if plot_by_cid:
+            if cids is not None:
+                if not validListOfStr(cids):
+                    raise ValueError("`cids` must be a list of strings")
+            else:
+                cids : List[str] = df['cid'].unique().tolist()
+
+            if cid_labels is not None:
+                if not validListOfStr(cid_labels) or \
+                    (len(cid_labels) != len(cids)):
+                    raise ValueError("`cid_labels` must be a list of strings"
+                                     " with the same length as `cids`")
+            else:
+                cid_labels : List[str] = cids
+            
+        else:
+            if xcats is not None:
+                if not validListOfStr(xcats):
+                    raise ValueError("`xcats` must be a list of strings")
+            else:
+                xcats : List[str] = df['xcat'].unique().tolist()
+
+            if xcat_labels is not None:
+                if not validListOfStr(xcat_labels) or \
+                    (len(xcat_labels) != len(xcats)):
+                    raise ValueError("`xcat_labels` must be a list of strings"
+                                     " with the same length as `xcats`")
+            else:
+                xcat_labels : List[str] = xcats
+
+        if set(cids) != set(cid_labels):
+            replace_dict : Dict[str, str] = dict(zip(cids, cid_labels))
+            df['cid'] = df['cid'].replace(replace_dict)
+
+        if set(xcats) != set(xcat_labels):
+            replace_dict : Dict[str, str] = dict(zip(xcats, xcat_labels))
+            df['xcat'] = df['xcat'].replace(replace_dict)
+
+        g : sns.FacetGrid
+        if plot_by_cid:
+            g : sns.FacetGrid = sns.FacetGrid(
+                df,
+                col='cid',
+                col_wrap=ncols,
+                sharex=same_x,
+                sharey=same_y,
+                height=figsize[1],
+                aspect=aspect,)
+        else:
+            g : sns.FacetGrid = sns.FacetGrid(
+                df,
+                col='xcat',
+                col_wrap=ncols,
+                sharex=same_x,
+                sharey=same_y,
+                height=figsize[1],
+                aspect=aspect,)
+        
+        func : Callable = \
+        {
+            'line': sns.lineplot,
+            'scatter': sns.scatterplot,
+        }[plot_type]
+
+        if plot_by_cid:
+            # map the df for a facetgrid
+            g.map_dataframe(
+                func=func,
+                x='real_date',
+                y=metric,
+                hue='xcat',
+                style='xcat',
+                markers=True,
+                dashes=False,
+                palette='tab10',)
+        else:
+            # map the df for a facetgrid
+            g.map_dataframe(
+                func=func,
+                x='real_date',
+                y=metric,
+                hue='cid',
+                style='cid',
+                markers=True,
+                dashes=False,
+                palette='tab10',)
+            
         # set the x-axis labels
-        if share_x_labels:
-            fg.set_xlabels(xlabel)
-        else:
-            for ax in fg.axes.flat:
-                ax.set_xlabel(xlabel)
-
+        g.set_xlabels(x_axis_label or 'real_date')
         # set the y-axis labels
-        if share_y_labels:
-            fg.set_ylabels(ylabel)
-        else:
-            for ax in fg.axes.flat:
-                ax.set_ylabel(ylabel)
+        g.set_ylabels(y_axis_label or metric)
+        # set the subplot titles
+        # if plotby_cid use cid_labels, else use xcat_labels
+        g.set_titles(row_template='{row_name}', col_template='{col_name}')
+        # set the font sizes
 
-        # set the title
-        if title is not None:
-            fg.fig.suptitle(title, y=title_adj)
+        # add legend
+        if legend:
+            # make sure it's outside the plot 
+            # (bbox_to_anchor=(1, 1) is the default)
+            g.add_legend(
+                title=legend_title,
+                loc=legend_loc,
+                fontsize=legend_fontsize,
+                ncol=legend_ncol,
+                bbox_to_anchor=legend_bbox_to_anchor,)
+        
+        # set the figure title
+        if fig_title is not None:
+            g.figure.suptitle(fig_title, y=fig_title_adj)
+        
+        # set the figure size
+        g.figure.set_size_inches(*figsize)
 
-        # set the figure size using rcParams
-        plt.rcParams['figure.figsize'] = figsize
-
-        # set the facet size using rcParams
-
-
-
-    
-
-
-
-
-
-
-    
-    
+        # return the figure
+        return g.figure
+            
