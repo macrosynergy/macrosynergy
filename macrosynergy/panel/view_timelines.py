@@ -5,9 +5,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import List, Union, Tuple
 
+import sys
+sys.path.append('/Users/palashtyagi/Work/Code/macrosynergy/')
+
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.check_availability import reduce_df
-
+from macrosynergy.visuals import FacetPlot
 
 def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
                    intersect: bool = False, val: str = 'value', 
@@ -101,25 +104,14 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
                                                  val]].groupby(['cid', 'xcat']).cumsum()
 
     sns.set(style='darkgrid')
+    plotter : FacetPlot = FacetPlot(df=df, cids=cids, xcats=xcats, metrics=[val],
+                                    start_date=start, end_date=end)
     if len(cids) == 1:
         if xcat_grid:
-            fg = sns.FacetGrid(data=df, col='xcat', col_wrap=ncol,
-                        sharey=same_y, aspect=aspect,
-                        height=height, col_order=xcats)
-            fg.map_dataframe(sns.lineplot, x='real_date', y=val,
-                                hue='xcat', hue_order=xcats, estimator=None)
-
-            fg.map(plt.axhline, y=0, c=".5")
-            fg.set_axis_labels("", "")
-            if xcat_labels is None:
-                xcat_labels = xcats
-            for ax, tx in zip(fg.axes.flat, xcat_labels):
-                ax.set_title(tx)
-            
-            if title is not None:
-                fg.fig.suptitle(title,)
-                fg.fig.subplots_adjust(top=title_adj)
-
+            plotter.plot(
+                plot_type='line',
+                plot_by_xcat=True,
+                same_y=same_y,).show()
         else:
             
             sns.set(rc={'figure.figsize': size})

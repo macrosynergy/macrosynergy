@@ -125,7 +125,7 @@ class PlotLines(object):
 
     
 
-class FacetGrid(object):
+class FacetPlot(object):
     """
     inialise with a DF.
     have optional cids, xcats, start_date, end_date, metric,
@@ -140,14 +140,19 @@ class FacetGrid(object):
                 end_date : str = None,
                 ):
         
-        self.df : pd.DataFrame = reduce_df(
-            standardise_dataframe(df),
-            cids=cids,
-            xcats=xcats,
-            metrics=metrics,
-            start=start_date,
-            end=end_date,
-        )
+        # sdf : pd.DataFrame = standardise_dataframe(df)
+        sdf = sdf[["real_date", "cid", "xcat",] + metrics]
+        if cids:
+            sdf = sdf[sdf["cid"].isin(cids)]
+        if xcats:
+            sdf = sdf[sdf["xcat"].isin(xcats)]
+        if start_date:
+            sdf = sdf[sdf["real_date"] >= pd.to_datetime(start_date)]
+        if end_date:
+            sdf = sdf[sdf["real_date"] <= pd.to_datetime(end_date)]
+        
+        self.df : pd.DataFrame = sdf
+
 
 
     def plot(self,
@@ -178,7 +183,6 @@ class FacetGrid(object):
                 legend_fontsize : int = 12,
                 legend_ncol : int = 1,
                 legend_bbox_to_anchor : tuple = (1, 1),
-                # returns a figure with a .show() method
     ) -> matplotlib.figure.Figure:
         """
         Plot the data in the DataFrame.
@@ -257,6 +261,7 @@ class FacetGrid(object):
             start=start_date,
             end=end_date,)
         
+        # validate args
         # assert metric in df.columns, f"Metric '{metric}' not found in DataFrame"
         if not metric in df.columns:
             raise ValueError(f"Metric '{metric}' not found in DataFrame"
@@ -295,6 +300,9 @@ class FacetGrid(object):
             else:
                 xcat_labels : List[str] = xcats
 
+
+        # rename cids, xcats in df to match cid_labels, xcat_labels
+
         if set(cids) != set(cid_labels):
             replace_dict : Dict[str, str] = dict(zip(cids, cid_labels))
             df['cid'] = df['cid'].replace(replace_dict)
@@ -303,68 +311,45 @@ class FacetGrid(object):
             replace_dict : Dict[str, str] = dict(zip(xcats, xcat_labels))
             df['xcat'] = df['xcat'].replace(replace_dict)
 
-        g : sns.FacetGrid
-        if plot_by_cid:
-            g : sns.FacetGrid = sns.FacetGrid(
-                df,
-                col='cid',
-                col_wrap=ncols,
-                sharex=same_x,
-                sharey=same_y,
-                height=figsize[1],
-                aspect=aspect,)
-        else:
-            g : sns.FacetGrid = sns.FacetGrid(
-                df,
-                col='xcat',
-                col_wrap=ncols,
-                sharex=same_x,
-                sharey=same_y,
-                height=figsize[1],
-                aspect=aspect,)
-        
-        func : Callable = \
+        # set up plot
+        plot_by_col : str = 'cid' if plot_by_cid else 'xcat'
+        hue_col : str = 'xcat' if plot_by_cid else 'cid'
+
+        # choose plot function
+        plot_func : Callable = \
         {
             'line': sns.lineplot,
             'scatter': sns.scatterplot,
         }[plot_type]
 
-        if plot_by_cid:
-            # map the df for a facetgrid
-            g.map_dataframe(
-                func=func,
-                x='real_date',
-                y=metric,
-                hue='xcat',
-                style='xcat',
-                markers=True,
-                dashes=False,
-                palette='tab10',)
-        else:
-            # map the df for a facetgrid
-            g.map_dataframe(
-                func=func,
-                x='real_date',
-                y=metric,
-                hue='cid',
-                style='cid',
-                markers=True,
-                dashes=False,
-                palette='tab10',)
+        g : sns.FacetGrid = sns.FacetGrid(
+            df,
+            col=plot_by_col,
+            col_wrap=ncols,
+            sharex=same_x,
+            sharey=same_y,
+            height=figsize[1],
+            aspect=aspect,
+            despine=True,)
+        
+        # plot
+        g.map_dataframe(
+            plot_func,
+            x='real_date',
+            y=metric,
+            hue=hue_col,
+            style=hue_col,
+            markers=True,
+            dashes=False,
+            palette='tab10',)
             
-        # set the x-axis labels
+        # set labels
         g.set_xlabels(x_axis_label or 'real_date')
-        # set the y-axis labels
         g.set_ylabels(y_axis_label or metric)
-        # set the subplot titles
-        # if plotby_cid use cid_labels, else use xcat_labels
         g.set_titles(row_template='{row_name}', col_template='{col_name}')
-        # set the font sizes
 
         # add legend
         if legend:
-            # make sure it's outside the plot 
-            # (bbox_to_anchor=(1, 1) is the default)
             g.add_legend(
                 title=legend_title,
                 loc=legend_loc,
@@ -372,13 +357,12 @@ class FacetGrid(object):
                 ncol=legend_ncol,
                 bbox_to_anchor=legend_bbox_to_anchor,)
         
-        # set the figure title
+        # set figure title
         if fig_title is not None:
             g.figure.suptitle(fig_title, y=fig_title_adj)
         
-        # set the figure size
         g.figure.set_size_inches(*figsize)
+        sns.set_style(plot_style)
 
-        # return the figure
         return g.figure
             
