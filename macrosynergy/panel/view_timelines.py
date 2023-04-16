@@ -5,9 +5,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import List, Union, Tuple
 
-import sys
-sys.path.append('/Users/palashtyagi/Work/Code/macrosynergy/')
-
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.check_availability import reduce_df
 from macrosynergy.visuals import FacetPlot
