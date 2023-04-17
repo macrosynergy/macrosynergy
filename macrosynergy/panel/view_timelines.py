@@ -129,8 +129,12 @@ def view_timelines(
         )
 
     sns.set(style="darkgrid")
-    face_plotter : FacetPlot = FacetPlot(df=df, cids=cids, xcats=xcats, metrics=[val], start_date=start, end_date=end)
-    line_plotter : LinePlot = LinePlot(df=df, cids=cids, xcats=xcats, metrics=[val], start_date=start, end_date=end)
+    face_plotter: FacetPlot = FacetPlot(
+        df=df, cids=cids, xcats=xcats, metrics=[val], start_date=start, end_date=end
+    )
+    line_plotter: LinePlot = LinePlot(
+        df=df, cids=cids, xcats=xcats, metrics=[val], start_date=start, end_date=end
+    )
 
     if len(cids) == 1:
         if xcat_grid:
@@ -151,57 +155,57 @@ def view_timelines(
 
         else:
             line_plotter.plot(
-                    plot_by_xcat=True,
-                    xcat_labels=xcat_labels,
-                    fig_title=title,
-                    fig_title_adj=title_adj,
-                    figsize=size,
-                    aspect=aspect,
-                )
+                plot_by_xcat=True,
+                xcat_labels=xcat_labels,
+                fig_title=title,
+                fig_title_adj=title_adj,
+                figsize=size,
+                aspect=aspect,
+            )
             plt.show()
 
     else:
-        cross_mean : pd.Series = None
-        cross_mean_label : str = None
+        cross_mean: pd.Series = None
+        cross_mean_label: str = None
         if cs_mean:
-            cdf: pd.DataFrame = df.pivot( index="real_date", columns="cid", values="value"
+            cdf: pd.DataFrame = df.pivot(
+                index="real_date", columns="cid", values="value"
             ).mean(axis=1)
             cross_mean: pd.Series = pd.Series(
                 data=cdf.to_numpy(),
                 index=cdf.index,
             )
             cross_mean_label: str = f"cross-sectional average of {xcats[0]}"
-    
+
         if not single_chart:
             face_plotter.plot(
-                    plot_type="line",
-                    plot_by_cid=True,
-                    same_y=same_y,
-                    ncols=ncol,
-                    # cid_labels=cid_labels,
-                    add_axhline=True,
-                    fig_title=title,
-                    fig_title_adj=title_adj,
-                    figsize=size,
-                    aspect=aspect,
-                    compare_series=cross_mean,
-                    compare_series_label=cross_mean_label,
-                )
+                plot_type="line",
+                plot_by_cid=True,
+                same_y=same_y,
+                ncols=ncol,
+                # cid_labels=cid_labels,
+                add_axhline=True,
+                fig_title=title,
+                fig_title_adj=title_adj,
+                figsize=size,
+                aspect=aspect,
+                compare_series=cross_mean,
+                compare_series_label=cross_mean_label,
+            )
             plt.show()
 
         else:
             line_plotter.plot(
-                    plot_by_cid=True,
-                    # cid_labels=cid_labels,
-                    fig_title=title,
-                    fig_title_adj=title_adj,
-                    figsize=size,
-                    aspect=aspect,
-                    compare_series=cross_mean,
-                    compare_series_label=cross_mean_label,
-                )
+                plot_by_cid=True,
+                # cid_labels=cid_labels,
+                fig_title=title,
+                fig_title_adj=title_adj,
+                figsize=size,
+                aspect=aspect,
+                compare_series=cross_mean,
+                compare_series_label=cross_mean_label,
+            )
             plt.show()
-
 
 
 if __name__ == "__main__":
@@ -211,33 +215,19 @@ if __name__ == "__main__":
     df_cids = pd.DataFrame(
         index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
     )
-    df_cids.loc[
-        "AUD",
-    ] = ["2010-01-01", "2020-12-31", 0.2, 0.2]
-    df_cids.loc[
-        "CAD",
-    ] = ["2011-01-01", "2020-11-30", 0, 1]
-    df_cids.loc[
-        "GBP",
-    ] = ["2012-01-01", "2020-11-30", 0, 2]
-    df_cids.loc[
-        "NZD",
-    ] = ["2012-01-01", "2020-09-30", -0.1, 3]
+    df_cids.loc["AUD"] = ["2010-01-01", "2020-12-31", 0.2, 0.2]
+    df_cids.loc["CAD"] = ["2011-01-01", "2020-11-30", 0, 1]
+    df_cids.loc["GBP"] = ["2012-01-01", "2020-11-30", 0, 2]
+    df_cids.loc["NZD"] = ["2012-01-01", "2020-09-30", -0.1, 3]
 
     df_xcats = pd.DataFrame(
         index=xcats,
         columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
     )
 
-    df_xcats.loc[
-        "XR",
-    ] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-    df_xcats.loc[
-        "INFL",
-    ] = ["2015-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-    df_xcats.loc[
-        "CRY",
-    ] = ["2013-01-01", "2020-10-30", 1, 2, 0.95, 0.5]
+    df_xcats.loc["XR"] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["INFL"] = ["2015-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY"] = ["2013-01-01", "2020-10-30", 1, 2, 0.95, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfdx = dfd[~((dfd["cid"] == "AUD") & (dfd["xcat"] == "XR"))]

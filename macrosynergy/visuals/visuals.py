@@ -240,22 +240,25 @@ class LinePlot(Plotter):
             hue=hue_col,
             estimator=None,
         )
-        
-        # if there's a compare series to plot, plot it and set the legend
+
         if compare_series is not None:
-            assert isinstance(compare_series, pd.Series), "`compare_series` must be a pandas Series"
-            assert isinstance(compare_series_label, str), "`compare_series_label` must be a string"
-            # plot it on `ax`
+            assert isinstance(
+                compare_series, pd.Series
+            ), "`compare_series` must be a pandas Series"
+            assert isinstance(
+                compare_series_label, str
+            ), "`compare_series_label` must be a string"
             sns.lineplot(
                 x=compare_series.index,
                 y=compare_series.values,
                 ax=ax,
                 label=compare_series_label,
+                # color red
+                color="red",
+                estimator=None,
             )
 
-        
         sns.set(rc={"figure.figsize": figsize})
-        ax.set_aspect(aspect)
         ax.set_title(fig_title, fontsize=font_size, pad=fig_title_adj)
         ax.set_xlabel(x_axis_label or "Date", fontsize=font_size)
         ax.set_ylabel(y_axis_label or metric, fontsize=font_size)
@@ -267,11 +270,11 @@ class LinePlot(Plotter):
             ax.legend(
                 title=legend_title,
                 loc=legend_loc,
-                fontsize=legend_fontsize,
-                ncol=legend_ncol,
-                bbox_to_anchor=legend_bbox_to_anchor,
+                # fontsize=legend_fontsize,
+                # ncol=legend_ncol,
+                # bbox_to_anchor=legend_bbox_to_anchor,
             )
-            
+
         if add_axhline:
             ax.axhline(y=0, c=".5")
 
@@ -336,7 +339,7 @@ class FacetPlot(Plotter):
         legend: bool = True,
         legend_title: str = None,
         legend_loc: str = "best",
-        legend_fontsize: int = 12,
+        legend_fontsize: int = 5,
         legend_ncol: int = 1,
         legend_bbox_to_anchor: tuple = (1, 1),
     ) -> matplotlib.figure.Figure:
@@ -525,12 +528,12 @@ class FacetPlot(Plotter):
                     x=compare_series.index,
                     y=compare_series.values,
                     ax=ax,
-                    color="k",
+                    color="red",
                     label=compare_series_label,
                 )
 
         # set plot titles
-        g.set_titles(col_template="{col_name}", size=font_size * 0.8)
+        g.set_titles(col_template="{col_name}", size=font_size)
 
         # set the plot style
         sns.set_style(plot_style)
@@ -538,12 +541,18 @@ class FacetPlot(Plotter):
 
         # set the font size
         sns.set(font_scale=font_size)
+        # adjust figure size to fit the title by +title_adj
+        g.figure.set_size_inches(
+            g.figure.get_size_inches()[0], g.figure.get_size_inches()[1] + fig_title_adj
+        )
+        
+        
 
         g.set_axis_labels(x_axis_label or "real_date", y_axis_label or metric)
 
         # set the title
         if fig_title is not None:
-            g.fig.suptitle(fig_title, fontsize=font_size * 2, y=fig_title_adj)
+            g.fig.suptitle(fig_title, fontsize=font_size, y=fig_title_adj)
 
         # set the legend
         if legend:
@@ -553,18 +562,18 @@ class FacetPlot(Plotter):
             g.add_legend(
                 title=legend_title,
                 loc=legend_loc,
-                fontsize=legend_fontsize,
-                ncol=legend_ncol,
-                bbox_to_anchor=legend_bbox_to_anchor,
+                # fontsize=legend_fontsize,
+                # ncol=legend_ncol,
+                # bbox_to_anchor=legend_bbox_to_anchor,
             )
 
         # if add_axhline add an axhline(y=0, c=".5")
         if add_axhline:
             for ax in g.axes.flat:
                 ax.axhline(y=0, c=".5")
-            
+
         if all_xticks:
             for ax in g.axes.flat:
                 ax.tick_params(labelbottom=True, pad=0)
-        
+
         return g.figure
