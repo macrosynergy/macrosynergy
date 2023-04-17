@@ -3,70 +3,110 @@ Providing a high level interface to simplify visual tasks involving matplotlib a
 """
 
 import matplotlib
-import matplotlib.figure
+import matplotlib.figure, matplotlib.axes
 import matplotlib.pyplot as plt
 import seaborn as sns
-import pandas  as pd
-import numpy   as np
+import pandas as pd
+import numpy as np
 from typing import Optional, List, Tuple, Dict, Union, Callable
 import logging
 from macrosynergy.management.utils import standardise_dataframe
 from macrosynergy.management import reduce_df
+import math
 
+
+class Plotter(object):
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        cids: List[str] = None,
+        xcats: List[str] = None,
+        metrics: List[str] = None,
+        start_date: str = None,
+        end_date: str = None,
+    ):
+
+        sdf: pd.DataFrame = df.copy()
+        sdf = sdf[
+            [
+                "real_date",
+                "cid",
+                "xcat",
+            ]
+            + metrics
+        ]
+        if cids:
+            sdf = sdf[sdf["cid"].isin(cids)]
+        if xcats:
+            sdf = sdf[sdf["xcat"].isin(xcats)]
+        if start_date:
+            sdf = sdf[sdf["real_date"] >= pd.to_datetime(start_date)]
+        if end_date:
+            sdf = sdf[sdf["real_date"] <= pd.to_datetime(end_date)]
+
+        self.df: pd.DataFrame = sdf
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
 
 
 logger = logging.getLogger(__name__)
 
-class PlotLines(object):
-    """
-    inialise with a DF.
-    have optional cids, xcats, start_date, end_date, metric,
-    option to filter by cid, xcat, start_date, end_date, metric
-    """
-    def __init__(self,
-                 df : pd.DataFrame,
-                 cids : List[str] = None,
-                xcats : List[str] = None,
-                start_date : str = None,
-                end_date : str = None,
-                ):
-        
-        self.df :pd.DataFrame = reduce_df(
-            standardise_dataframe(df),
+
+class LinePlot(Plotter):
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        cids: List[str] = None,
+        xcats: List[str] = None,
+        start_date: str = None,
+        metrics: str = ["value"],
+        end_date: str = None,
+    ):
+
+        super().__init__(
+            df=df,
             cids=cids,
             xcats=xcats,
-            start=start_date,
-            end=end_date,
+            start_date=start_date,
+            end_date=end_date,
+            metrics=metrics,
         )
-        
 
-
-    def plot(self,
-                cids : List[str] = None,
-                xcats : List[str] = None,
-                metrics : List[str] = None,
-                start_date : str = None,
-                end_date : str = None,
-                plot_by_cid : bool = None,
-                plot_by_xcat : bool = None,
-                xcat_labels : List[str] = None,
-                cid_labels : List[str] = None,
-                font_size : int = 12,
-                metric_labels : List[str] = None,
-                ncols : int = 4,
-                same_x : bool = True,
-                same_y : bool = True,
-                figsize : tuple = (8, 12),
-                aspect : float = 1.5,
-                fig_title : str = None,
-                fig_title_adj : float = 1.05,
-                legend : bool = True,
-                legend_title : str = None,
-                legend_loc : str = 'best',
-                legend_fontsize : int = 12,
-                legend_ncol : int = 1,
-                legend_bbox_to_anchor : tuple = (1, 1),
-    ):
+    def plot(
+        self,
+        plot_type: str = "line",
+        cids: List[str] = None,
+        xcats: List[str] = None,
+        metric: str = "value",
+        start_date: str = None,
+        end_date: str = None,
+        plot_by_cid: bool = None,
+        plot_by_xcat: bool = None,
+        xcat_labels: List[str] = None,
+        cid_labels: List[str] = None,
+        font_size: int = 12,
+        x_axis_label: str = None,
+        y_axis_label: str = None,
+        add_axhline: bool = False,
+        compare_series: Optional[pd.Series] = None,
+        compare_series_label: str = "ReferenceSeries",
+        figsize: tuple = (8, 12),
+        height: int = 3,
+        plot_style: str = "darkgrid",
+        aspect: float = 1.5,
+        fig_title: str = None,
+        fig_title_adj: float = 1.05,
+        legend: bool = True,
+        legend_title: str = None,
+        legend_loc: str = "best",
+        legend_fontsize: int = 12,
+        legend_ncol: int = 1,
+        legend_bbox_to_anchor: tuple = (1, 1),
+    ) -> matplotlib.figure.Figure:
         """
         Plot the data in the DataFrame.
         Plot all the lines on one plot.
@@ -85,7 +125,7 @@ class PlotLines(object):
         :param <str> end_date: The end date to select from the DataFrame in
             the format 'YYYY-MM-DD'. If None, all dates are selected.
 
-        Parameters for plotting:    
+        Parameters for plotting:
         :param <bool> plot_by_cid: If True, plot the lines for each cid on a
             separate plot. If False, plot all lines on one plot. If None, plot
             all lines on one plot.
@@ -99,9 +139,7 @@ class PlotLines(object):
         :param <List[str]> cid_labels: A list of labels for the cids. If None,
             the cid names are used.
         :param <int> font_size: The font size for the labels.
-        :param <List[str]> metric_labels: A list of labels for the metrics. If
-            None, the metric names are used.
-        
+
         Parameters for the figure:
         :param <int> ncols: The number of columns in the figure.
         :param <bool> same_x: If True, the x-axis limits are the same
@@ -120,73 +158,191 @@ class PlotLines(object):
         :param <tuple> legend_bbox_to_anchor: The bounding box
             of the legend.
         """
+        df: pd.DataFrame = reduce_df(
+            self.df,
+            cids=cids,
+            xcats=xcats,
+            start=start_date,
+            end=end_date,
+        )
+
+        if plot_by_cid is None:
+            plot_by_cid = True
+
+        if plot_by_xcat is True:
+            plot_by_cid = False
+
+        # validate args
+        # assert metric in df.columns, f"Metric '{metric}' not found in DataFrame"
+        if not metric in df.columns:
+            raise ValueError(
+                f"Metric '{metric}' not found in DataFrame"
+                f" with columns: {df.columns}"
+            )
+
+        validListOfStr: Callable[[List[str]], bool] = (
+            lambda x: (isinstance(x, list)) and (len(x) > 0) and (isinstance(x[0], str))
+        )
+
+        if cids is not None:
+            if not validListOfStr(cids):
+                raise ValueError("`cids` must be a list of strings")
+        else:
+            cids: List[str] = df["cid"].unique().tolist()
+
+        if cid_labels is not None:
+            if not validListOfStr(cid_labels) or (len(cid_labels) != len(cids)):
+                raise ValueError(
+                    "`cid_labels` must be a list of strings"
+                    " with the same length as `cids`"
+                )
+        else:
+            cid_labels: List[str] = cids
+
+        if xcats is not None:
+            if not validListOfStr(xcats):
+                raise ValueError("`xcats` must be a list of strings")
+        else:
+            xcats: List[str] = df["xcat"].unique().tolist()
+
+        if xcat_labels is not None:
+            if not validListOfStr(xcat_labels) or (len(xcat_labels) != len(xcats)):
+                raise ValueError(
+                    "`xcat_labels` must be a list of strings"
+                    " with the same length as `xcats`"
+                )
+        else:
+            xcat_labels: List[str] = xcats
+
+        if (set(cids) != set(cid_labels)) and (len(cids) == len(cid_labels)):
+            replace_dict: Dict[str, str] = dict(zip(cids, cid_labels))
+            df["cid"] = df["cid"].replace(replace_dict)
+
+        if (set(xcats) != set(xcat_labels)) and (len(xcats) == len(xcat_labels)):
+            replace_dict: Dict[str, str] = dict(zip(xcats, xcat_labels))
+            df["xcat"] = df["xcat"].replace(replace_dict)
+
+        # set up plot
+        plot_by_col: str = "cid" if plot_by_cid else "xcat"
+        hue_col: str = "cid" if plot_by_cid else "xcat"
+
+        # choose plot function
+        plot_func: Callable = {
+            "line": sns.lineplot,
+            "scatter": sns.scatterplot,
+        }[plot_type]
+
+        sns.set_style(plot_style)
+        ax: plt.Axes = plot_func(
+            data=df,
+            x="real_date",
+            y=metric,
+            hue=hue_col,
+            estimator=None,
+        )
+        
+        # if there's a compare series to plot, plot it and set the legend
+        if compare_series is not None:
+            assert isinstance(compare_series, pd.Series), "`compare_series` must be a pandas Series"
+            assert isinstance(compare_series_label, str), "`compare_series_label` must be a string"
+            # plot it on `ax`
+            sns.lineplot(
+                x=compare_series.index,
+                y=compare_series.values,
+                ax=ax,
+                label=compare_series_label,
+            )
+
+        
+        sns.set(rc={"figure.figsize": figsize})
+        ax.set_aspect(aspect)
+        ax.set_title(fig_title, fontsize=font_size, pad=fig_title_adj)
+        ax.set_xlabel(x_axis_label or "Date", fontsize=font_size)
+        ax.set_ylabel(y_axis_label or metric, fontsize=font_size)
+        ax.tick_params(axis="both", labelsize=font_size)
+
+        if legend:
+            if legend_loc == "best":
+                legend_loc: str = "lower center"
+            ax.legend(
+                title=legend_title,
+                loc=legend_loc,
+                fontsize=legend_fontsize,
+                ncol=legend_ncol,
+                bbox_to_anchor=legend_bbox_to_anchor,
+            )
+            
+        if add_axhline:
+            ax.axhline(y=0, c=".5")
+
+        # return the figure
+        return ax.get_figure()
+
+
+class FacetPlot(Plotter):
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        cids: List[str] = None,
+        xcats: List[str] = None,
+        metrics: List[str] = None,
+        start_date: str = None,
+        end_date: str = None,
+    ):
+
+        super().__init__(
+            df=df,
+            cids=cids,
+            xcats=xcats,
+            metrics=metrics,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
         pass
 
-
-    
-
-class FacetPlot(object):
-    """
-    inialise with a DF.
-    have optional cids, xcats, start_date, end_date, metric,
-    option to filter by cid, xcat, start_date, end_date, metric
-    """
-    def __init__(self,
-                 df : pd.DataFrame,
-                 cids : List[str] = None,
-                xcats : List[str] = None,
-                metrics : List[str] = None,
-                start_date : str = None,
-                end_date : str = None,
-                ):
-        
-        # sdf : pd.DataFrame = standardise_dataframe(df)
-        sdf = sdf[["real_date", "cid", "xcat",] + metrics]
-        if cids:
-            sdf = sdf[sdf["cid"].isin(cids)]
-        if xcats:
-            sdf = sdf[sdf["xcat"].isin(xcats)]
-        if start_date:
-            sdf = sdf[sdf["real_date"] >= pd.to_datetime(start_date)]
-        if end_date:
-            sdf = sdf[sdf["real_date"] <= pd.to_datetime(end_date)]
-        
-        self.df : pd.DataFrame = sdf
-
-
-
-    def plot(self,
-                plot_type : str = 'line',
-                cids : List[str] = None,
-                xcats : List[str] = None,
-                metric : str = "value",
-                start_date : str = None,
-                end_date : str = None,
-                plot_by_cid : bool = None,
-                plot_by_xcat : bool = None,
-                xcat_labels : List[str] = None,
-                cid_labels : List[str] = None,
-                x_axis_label : str = None,
-                y_axis_label : str = None,
-                font_size : int = 12,
-                ncols : int = 4,
-                same_x : bool = True,
-                same_y : bool = True,
-                figsize : tuple = (8, 12),
-                aspect : float = 1.5,
-                fig_title : str = None,
-                fig_title_adj : float = 1.05,
-                plot_style : str = 'darkgrid',
-                legend : bool = True,
-                legend_title : str = None,
-                legend_loc : str = 'outside',
-                legend_fontsize : int = 12,
-                legend_ncol : int = 1,
-                legend_bbox_to_anchor : tuple = (1, 1),
+    def plot(
+        self,
+        plot_type: str = "line",
+        cids: List[str] = None,
+        xcats: List[str] = None,
+        metric: str = "value",
+        start_date: str = None,
+        end_date: str = None,
+        plot_by_cid: bool = None,
+        plot_by_xcat: bool = None,
+        xcat_labels: List[str] = None,
+        cid_labels: List[str] = None,
+        add_axhline: bool = True,
+        compare_series: Optional[pd.Series] = None,
+        compare_series_label: str = "ReferenceSeries",
+        x_axis_label: str = None,
+        y_axis_label: str = None,
+        all_xticks: bool = True,
+        font_size: int = 12,
+        ncols: int = 4,
+        same_x: bool = True,
+        same_y: bool = True,
+        figsize: tuple = (12, 8),
+        aspect: float = 1.5,
+        height: float = 3,
+        fig_title: str = None,
+        fig_title_adj: float = 1.05,
+        plot_style: str = "darkgrid",
+        legend: bool = True,
+        legend_title: str = None,
+        legend_loc: str = "best",
+        legend_fontsize: int = 12,
+        legend_ncol: int = 1,
+        legend_bbox_to_anchor: tuple = (1, 1),
     ) -> matplotlib.figure.Figure:
         """
         Plot the data in the DataFrame.
-        
+
         Parameters
         ----------
         Parameter for filtering the DataFrame:
@@ -215,11 +371,13 @@ class FacetPlot(object):
             xcat names are used.
         :param <List[str]> cid_labels: A list of labels to use with categories (cid),
             in the same order as the categories. If None (default), the original
-            cid names are used. 
+            cid names are used.
         :param <str> x_axis_label: The label to use for the x-axis. If None (default),
             the index name (usually 'real_date') is used.
         :param <str> y_axis_label: The label to use for the y-axis. If None (default),
             the metric name is used (usually 'value').
+        :param <bool> add_axhline: If True (default), an horizontal line is added at
+            y=0.
         :param <int> font_size: The font size to use for the subplot titles and labels.
             Default is 12.
         :param <int> ncols: The number of columns to use in the FacetGrid. Default is 4.
@@ -239,130 +397,174 @@ class FacetPlot(object):
         :param <tuple> legend_bbox_to_anchor: The bounding box to use for the legend.
             Default is (1, 1).
 
+        Returns
+        -------
+        :return <matplotlib.figure.Figure>: The figure object. However, to plot, one must
+            call `plt.show()` or `plt.savefig()` after calling this method.
+
         """
 
         if not isinstance(plot_type, str):
             raise TypeError(f"plot_type must be a string, not {type(plot_type)}")
         else:
-            plot_type : str = plot_type.lower()
-            if not plot_type in ['line', 'scatter']:
+            plot_type: str = plot_type.lower()
+            if not plot_type in ["line", "scatter"]:
                 raise ValueError(f"plot_type must be 'line' or 'bar', not {plot_type}")
 
         if plot_by_cid is None:
             plot_by_cid = True
-        
+
         if plot_by_xcat is True:
             plot_by_cid = False
 
-        df : pd.DataFrame = reduce_df(
+        df: pd.DataFrame = reduce_df(
             self.df,
             cids=cids,
             xcats=xcats,
             start=start_date,
-            end=end_date,)
-        
+            end=end_date,
+        )
+
         # validate args
         # assert metric in df.columns, f"Metric '{metric}' not found in DataFrame"
         if not metric in df.columns:
-            raise ValueError(f"Metric '{metric}' not found in DataFrame"
-                       f" with columns: {df.columns}")
-            
-        validListOfStr : Callable[[List[str]], bool] = lambda x: \
-            (isinstance(x, list)) and (len(x) > 0) and (isinstance(x[0], str))
-        
-        if plot_by_cid:
-            if cids is not None:
-                if not validListOfStr(cids):
-                    raise ValueError("`cids` must be a list of strings")
-            else:
-                cids : List[str] = df['cid'].unique().tolist()
+            raise ValueError(
+                f"Metric '{metric}' not found in DataFrame"
+                f" with columns: {df.columns}"
+            )
 
-            if cid_labels is not None:
-                if not validListOfStr(cid_labels) or \
-                    (len(cid_labels) != len(cids)):
-                    raise ValueError("`cid_labels` must be a list of strings"
-                                     " with the same length as `cids`")
-            else:
-                cid_labels : List[str] = cids
-            
+        validListOfStr: Callable[[List[str]], bool] = (
+            lambda x: (isinstance(x, list)) and (len(x) > 0) and (isinstance(x[0], str))
+        )
+
+        if cids is not None:
+            if not validListOfStr(cids):
+                raise ValueError("`cids` must be a list of strings")
         else:
-            if xcats is not None:
-                if not validListOfStr(xcats):
-                    raise ValueError("`xcats` must be a list of strings")
-            else:
-                xcats : List[str] = df['xcat'].unique().tolist()
+            cids: List[str] = df["cid"].unique().tolist()
 
-            if xcat_labels is not None:
-                if not validListOfStr(xcat_labels) or \
-                    (len(xcat_labels) != len(xcats)):
-                    raise ValueError("`xcat_labels` must be a list of strings"
-                                     " with the same length as `xcats`")
-            else:
-                xcat_labels : List[str] = xcats
+        if cid_labels is not None:
+            if not validListOfStr(cid_labels) or (len(cid_labels) != len(cids)):
+                raise ValueError(
+                    "`cid_labels` must be a list of strings"
+                    " with the same length as `cids`"
+                )
+        else:
+            cid_labels: List[str] = cids
 
+        if xcats is not None:
+            if not validListOfStr(xcats):
+                raise ValueError("`xcats` must be a list of strings")
+        else:
+            xcats: List[str] = df["xcat"].unique().tolist()
+
+        if xcat_labels is not None:
+            if not validListOfStr(xcat_labels) or (len(xcat_labels) != len(xcats)):
+                raise ValueError(
+                    "`xcat_labels` must be a list of strings"
+                    " with the same length as `xcats`"
+                )
+        else:
+            xcat_labels: List[str] = xcats
 
         # rename cids, xcats in df to match cid_labels, xcat_labels
 
-        if set(cids) != set(cid_labels):
-            replace_dict : Dict[str, str] = dict(zip(cids, cid_labels))
-            df['cid'] = df['cid'].replace(replace_dict)
+        if (set(cids) != set(cid_labels)) and (len(cids) == len(cid_labels)):
+            replace_dict: Dict[str, str] = dict(zip(cids, cid_labels))
+            df["cid"] = df["cid"].replace(replace_dict)
 
-        if set(xcats) != set(xcat_labels):
-            replace_dict : Dict[str, str] = dict(zip(xcats, xcat_labels))
-            df['xcat'] = df['xcat'].replace(replace_dict)
+        if (set(xcats) != set(xcat_labels)) and (len(xcats) == len(xcat_labels)):
+            replace_dict: Dict[str, str] = dict(zip(xcats, xcat_labels))
+            df["xcat"] = df["xcat"].replace(replace_dict)
 
         # set up plot
-        plot_by_col : str = 'cid' if plot_by_cid else 'xcat'
-        hue_col : str = 'xcat' if plot_by_cid else 'cid'
+        plot_by_col: str = "cid" if plot_by_cid else "xcat"
+        hue_col: str = "xcat" if plot_by_cid else "cid"
+
+        if ncols > len(df[plot_by_col].unique()):
+            ncols: int = len(df[plot_by_col].unique())
 
         # choose plot function
-        plot_func : Callable = \
-        {
-            'line': sns.lineplot,
-            'scatter': sns.scatterplot,
+        plot_func: Callable = {
+            "line": sns.lineplot,
+            "scatter": sns.scatterplot,
         }[plot_type]
 
-        g : sns.FacetGrid = sns.FacetGrid(
+        g: sns.FacetGrid = sns.FacetGrid(
             df,
             col=plot_by_col,
+            hue=hue_col,
             col_wrap=ncols,
             sharex=same_x,
             sharey=same_y,
-            height=figsize[1],
             aspect=aspect,
-            despine=True,)
-        
-        # plot
+            height=height,
+            legend_out=True,
+        )
+
         g.map_dataframe(
             plot_func,
-            x='real_date',
+            x="real_date",
             y=metric,
             hue=hue_col,
             style=hue_col,
-            markers=True,
-            dashes=False,
-            palette='tab10',)
-            
-        # set labels
-        g.set_xlabels(x_axis_label or 'real_date')
-        g.set_ylabels(y_axis_label or metric)
-        g.set_titles(row_template='{row_name}', col_template='{col_name}')
+        )
 
-        # add legend
+        if compare_series is not None:
+            assert isinstance(
+                compare_series, pd.Series
+            ), f"`compare_series` must be a pandas Series, not {type(compare_series)}"
+            assert isinstance(
+                compare_series_label, str
+            ), f"`compare_series_label` must be a string, not {type(compare_series_label)}"
+
+            # add this series to every plot. use plot_func to determine the plot type
+            ax: plt.Axes
+            for ax in g.axes.flatten():
+                plot_func(
+                    x=compare_series.index,
+                    y=compare_series.values,
+                    ax=ax,
+                    color="k",
+                    label=compare_series_label,
+                )
+
+        # set plot titles
+        g.set_titles(col_template="{col_name}", size=font_size * 0.8)
+
+        # set the plot style
+        sns.set_style(plot_style)
+        sns.set(rc={"figure.figsize": figsize})
+
+        # set the font size
+        sns.set(font_scale=font_size)
+
+        g.set_axis_labels(x_axis_label or "real_date", y_axis_label or metric)
+
+        # set the title
+        if fig_title is not None:
+            g.fig.suptitle(fig_title, fontsize=font_size * 2, y=fig_title_adj)
+
+        # set the legend
         if legend:
+            if legend_loc == "best":
+                legend_loc: str = "lower center"
+
             g.add_legend(
                 title=legend_title,
                 loc=legend_loc,
                 fontsize=legend_fontsize,
                 ncol=legend_ncol,
-                bbox_to_anchor=legend_bbox_to_anchor,)
-        
-        # set figure title
-        if fig_title is not None:
-            g.figure.suptitle(fig_title, y=fig_title_adj)
-        
-        g.figure.set_size_inches(*figsize)
-        sns.set_style(plot_style)
+                bbox_to_anchor=legend_bbox_to_anchor,
+            )
 
-        return g.figure
+        # if add_axhline add an axhline(y=0, c=".5")
+        if add_axhline:
+            for ax in g.axes.flat:
+                ax.axhline(y=0, c=".5")
             
+        if all_xticks:
+            for ax in g.axes.flat:
+                ax.tick_params(labelbottom=True, pad=0)
+        
+        return g.figure
