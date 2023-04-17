@@ -150,6 +150,17 @@ qstools/version.py
 
 # Ignore config files: do not commit
 config*.yml
+config*.yaml
+config*.json
+secret*.yml
+secret*.yaml
+secret*.json
+password*.yml
+password*.yaml
+password*.json
+credentials*.yml
+credentials*.yaml
+credentials*.json
 
 #ignore ftr file
 *.ftr
