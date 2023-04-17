@@ -171,6 +171,8 @@ coverage.xml
 
 dev/
 
+data/
+
 macrosynergy/version.py
 
 .vscode/
