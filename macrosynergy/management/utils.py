@@ -12,6 +12,7 @@ import json
 from typing import Any, List, Dict, Optional, Callable, Union
 import requests, requests.compat
 import itertools
+import functools
 
 
 ##############################
@@ -223,26 +224,37 @@ def form_full_url(url: str, params: Dict = {}) -> str:
 
 def common_cids(df: pd.DataFrame, xcats: List[str]):
     """
-    Returns a list of cross-sectional identifiers for which all categories are available
+    Returns a list of cross-sectional identifiers (cids) for which the specified categories
+       (xcats) are available.
 
-    :param <pd.Dataframe> df: standardized JPMaQS DataFrame with necessary columns:
+    :param <pd.Dataframe> df: Standardized JPMaQS DataFrame with necessary columns:
         'cid', 'xcat', 'real_date' and 'value'.
-    :param <List[str]> xcats:  at least two categories whose cross-sectional identifiers
-        are considered.
+    :param <List[str]> xcats: A list with least two categories whose cross-sectional 
+        identifiers are being considered.
 
-    return <List[str]>:
+    return <List[str]>: List of cross-sectional identifiers for which all categories in `xcats`
+        are available.
     """
 
-    assert isinstance(xcats, list) and \
-           all(isinstance(elem, str) for elem in xcats) and \
-           len(xcats) >= 2, 'xcats must at least contain to category tickers'
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Argument `df` must be a pandas DataFrame.")
 
-    sets = []
+    if not isinstance(xcats, list):
+        raise TypeError("Argument `xcats` must be a list.")
+    elif not all(isinstance(elem, str) for elem in xcats):
+        raise TypeError("Argument `xcats` must be a list of strings.")
+    elif len(xcats) < 2:
+        raise ValueError("Argument `xcats` must contain at least two category tickers.")
+    elif not set(xcats).issubset(set(df['xcat'].unique())): 
+        raise ValueError("All categories in `xcats` must be present in the DataFrame.")
+
+    cid_sets : List[set]= []
     for xc in xcats:
-        sc = set(df[df["xcat"] == xc]["cid"].unique())
-        sets.append(sc)
+        sc : set = set(df[df["xcat"] == xc]["cid"].unique())
+        if sc:
+            cid_sets.append(sc)
 
-    ls = list(sets[0].intersection(*sets[1:]))
+    ls : List[str] = list(cid_sets[0].intersection(*cid_sets[1:]))
     return sorted(ls)
 
 
