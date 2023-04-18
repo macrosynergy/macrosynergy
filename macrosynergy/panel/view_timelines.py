@@ -52,9 +52,7 @@ def view_timelines(
     :param <bool> same_y: if True (default) all plots in facet grid share same y axis.
     :param <bool> all_xticks:  if True x-axis tick labels are added to all plots in grid.
         Default is False, i.e only the lowest row displays the labels.
-    :param <bool> xcat_grid: if True, shows a facet grid of line charts for each xcat
-        for a single cross section. Default is False, only one cross section is allowed
-        with this option.
+    :param <bool> facet_grid: if True a facet grid is created. Default is False.
     :param <List[str]> xcat_labels: labels to be used for xcats. If not defined, the
         labels will be identical to extended categories.
     :param <bool> single_chart: if True, all lines are plotted in a single chart.
@@ -128,7 +126,7 @@ def view_timelines(
             .cumsum()
         )
 
-    sns.set(style="darkgrid")
+    
     face_plotter: FacetPlot = FacetPlot(
         df=df, cids=cids, xcats=xcats, metrics=[val], start_date=start, end_date=end
     )
@@ -136,82 +134,62 @@ def view_timelines(
         df=df, cids=cids, xcats=xcats, metrics=[val], start_date=start, end_date=end
     )
 
-    if len(cids) == 1:
-        if xcat_grid:
-            face_plotter.plot(
-                plot_by_xcat=True,
-                same_y=same_y,
-                ncols=ncol,
-                xcat_labels=xcat_labels,
-                fig_title=title,
-                height=height,
-                fig_title_adj=title_adj,
-                figsize=size,
-                aspect=aspect,
-                legend=True,
-                all_xticks=all_xticks,
-            )
-            plt.show()
+    cross_mean: pd.Series = None
+    cross_mean_label: str = None
+    if cs_mean:
+        cross_mean_label: str = f"cross-sectional average of {xcats[0]}"
+        if xcat_labels is not None:
+            if len(xcat_labels) == len(xcats) + 1:
+                cross_mean_label = xcat_labels.pop(-1)
 
-        else:
-            line_plotter.plot(
-                plot_by_xcat=True,
-                xcat_labels=xcat_labels,
-                fig_title=title,
-                fig_title_adj=title_adj,
-                figsize=size,
-                aspect=aspect,
-            )
-            plt.show()
+        cdf: pd.DataFrame = df.pivot(
+            index="real_date", columns="cid", values="value"
+        ).mean(axis=1)
+        cross_mean: pd.Series = pd.Series(
+            data=cdf.to_numpy(),
+            index=cdf.index,
+        )
+
+
+    plot_by_xcat: bool = (len(cids) == 1)
+    if xcat_grid or not single_chart:
+        face_plotter.plot(
+            plot_by_xcat=plot_by_xcat,
+            same_y=same_y,
+            same_x=same_y,
+            ncols=ncol,
+            xcat_labels=xcat_labels,
+            fig_title=title,
+            height=height,
+            fig_title_adj=title_adj,
+            label_adj=label_adj,
+            figsize=size,
+            aspect=aspect,
+            all_xticks=all_xticks,
+            compare_series=cross_mean,
+            compare_series_label=cross_mean_label,
+            legend=False or cs_mean,
+        )
+        plt.show()
 
     else:
-        cross_mean: pd.Series = None
-        cross_mean_label: str = None
-        if cs_mean:
-            cdf: pd.DataFrame = df.pivot(
-                index="real_date", columns="cid", values="value"
-            ).mean(axis=1)
-            cross_mean: pd.Series = pd.Series(
-                data=cdf.to_numpy(),
-                index=cdf.index,
-            )
-            cross_mean_label: str = f"cross-sectional average of {xcats[0]}"
-
-        if not single_chart:
-            face_plotter.plot(
-                plot_type="line",
-                plot_by_cid=True,
-                same_y=same_y,
-                ncols=ncol,
-                # cid_labels=cid_labels,
-                add_axhline=True,
-                fig_title=title,
-                fig_title_adj=title_adj,
-                figsize=size,
-                aspect=aspect,
-                compare_series=cross_mean,
-                compare_series_label=cross_mean_label,
-            )
-            plt.show()
-
-        else:
-            line_plotter.plot(
-                plot_by_cid=True,
-                # cid_labels=cid_labels,
-                fig_title=title,
-                fig_title_adj=title_adj,
-                figsize=size,
-                aspect=aspect,
-                compare_series=cross_mean,
-                compare_series_label=cross_mean_label,
-            )
-            plt.show()
+        line_plotter.plot(
+            plot_by_xcat=plot_by_xcat,
+            xcat_labels=xcat_labels,
+            fig_title=title,
+            fig_title_adj=title_adj,
+            figsize=size,
+            aspect=aspect,
+            compare_series=cross_mean,
+            compare_series_label=cross_mean_label,
+        )
+        plt.show()
 
 
 if __name__ == "__main__":
 
     cids = ["AUD", "CAD", "GBP", "NZD"]
-    xcats = ["XR", "CRY", "INFL"]
+    xcats = ["XR", "CRY", "INFL", "FXXR"]
     df_cids = pd.DataFrame(
         index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
     )
@@ -228,8 +206,20 @@ if __name__ == "__main__":
     df_xcats.loc["XR"] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
     df_xcats.loc["INFL"] = ["2015-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
     df_xcats.loc["CRY"] = ["2013-01-01", "2020-10-30", 1, 2, 0.95, 0.5]
+    df_xcats.loc["FXXR"] = ["2013-01-01", "2020-10-30", 1, 2, 0.95, 0.5]
 
-    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    dfd : pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
+     # sort by cid, xcat, and real_date
+    dfd = dfd.sort_values(["cid", "xcat", "real_date"])
+    ctr :int = -1
+    for xcat in xcats[:2]:
+        for cid in cids[:2]:
+            ctr *= -1
+            mask = (dfd["cid"] == cid) & (dfd["xcat"] == xcat)
+            dfd.loc[mask, "value"] = 10 * ctr * np.arange(
+                dfd.loc[mask, "value"].shape[0]) \
+                /(dfd.loc[mask, "value"].shape[0]-1)
+
     dfdx = dfd[~((dfd["cid"] == "AUD") & (dfd["xcat"] == "XR"))]
 
     view_timelines(
@@ -253,14 +243,14 @@ if __name__ == "__main__":
     view_timelines(dfd, xcats=["CRY"], cids=cids, ncol=2, title="Carry", cs_mean=True)
 
     view_timelines(
-        dfd, xcats=["XR"], cids=cids, ncol=2, cumsum=True, same_y=False, aspect=2
+        dfd, xcats=["XR"], cids=cids[:2], ncol=2, cumsum=True, same_y=False, aspect=2
     )
 
     dfd = dfd.set_index("real_date")
     view_timelines(
         dfd,
         xcats=["XR"],
-        cids=cids,
+        cids=cids[:2],
         ncol=2,
         cumsum=True,
         same_y=False,

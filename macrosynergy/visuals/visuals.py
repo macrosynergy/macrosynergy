@@ -266,13 +266,13 @@ class LinePlot(Plotter):
 
         if legend:
             if legend_loc == "best":
-                legend_loc: str = "lower center"
+                legend_loc: str = "center left"
             ax.legend(
                 title=legend_title,
                 loc=legend_loc,
-                # fontsize=legend_fontsize,
+                fontsize=legend_fontsize,
                 # ncol=legend_ncol,
-                # bbox_to_anchor=legend_bbox_to_anchor,
+                bbox_to_anchor=legend_bbox_to_anchor,
             )
 
         if add_axhline:
@@ -325,6 +325,7 @@ class FacetPlot(Plotter):
         compare_series_label: str = "ReferenceSeries",
         x_axis_label: str = None,
         y_axis_label: str = None,
+        label_adj : float = 1.05,
         all_xticks: bool = True,
         font_size: int = 12,
         ncols: int = 4,
@@ -335,10 +336,12 @@ class FacetPlot(Plotter):
         height: float = 3,
         fig_title: str = None,
         fig_title_adj: float = 1.05,
+        fig_title_fontsize: int = 18,
         plot_style: str = "darkgrid",
         legend: bool = True,
         legend_title: str = None,
         legend_loc: str = "best",
+        legend_adj: float = 1.05,
         legend_fontsize: int = 5,
         legend_ncol: int = 1,
         legend_bbox_to_anchor: tuple = (1, 1),
@@ -537,43 +540,44 @@ class FacetPlot(Plotter):
 
         # set the plot style
         sns.set_style(plot_style)
-        sns.set(rc={"figure.figsize": figsize})
-
-        # set the font size
-        sns.set(font_scale=font_size)
-        # adjust figure size to fit the title by +title_adj
-        g.figure.set_size_inches(
-            g.figure.get_size_inches()[0], g.figure.get_size_inches()[1] + fig_title_adj
-        )
+        sns.set(rc={"figure.figsize": figsize})        
         
-        
-
         g.set_axis_labels(x_axis_label or "real_date", y_axis_label or metric)
+
+        g.figure.subplots_adjust(top=fig_title_adj, bottom=label_adj, left=label_adj, right=1 - label_adj)
 
         # set the title
         if fig_title is not None:
-            g.fig.suptitle(fig_title, fontsize=font_size, y=fig_title_adj)
+            g.fig.suptitle(fig_title, fontsize=fig_title_fontsize, y=fig_title_adj)
 
         # set the legend
-        if legend:
-            if legend_loc == "best":
-                legend_loc: str = "lower center"
+        if legend or compare_series is not None:
+            if not legend:
+                legend_labels: List[str] = [compare_series_label]
+            else:
+                legend_labels: List[str] = xcat_labels if plot_by_cid else cid_labels
+                if compare_series is not None:
+                    legend_labels.append(compare_series_label)
 
-            g.add_legend(
+            if legend_loc == "best":
+                legend_loc: str = "center left"
+
+
+            g.figure.legend(
                 title=legend_title,
                 loc=legend_loc,
-                # fontsize=legend_fontsize,
+                fontsize=legend_fontsize,
                 # ncol=legend_ncol,
-                # bbox_to_anchor=legend_bbox_to_anchor,
+                bbox_to_anchor=legend_bbox_to_anchor,
             )
+            # adjust the figure size to fit the legend
+            g.fig.subplots_adjust(right=legend_adj)
+            # move the legend to the top right of the plot
 
-        # if add_axhline add an axhline(y=0, c=".5")
         if add_axhline:
-            for ax in g.axes.flat:
-                ax.axhline(y=0, c=".5")
+            g.map(plt.axhline, y=0, c=".5")
 
         if all_xticks:
-            for ax in g.axes.flat:
-                ax.tick_params(labelbottom=True, pad=0)
+            g.tick_params(labelbottom=True, pad=0)
 
         return g.figure
