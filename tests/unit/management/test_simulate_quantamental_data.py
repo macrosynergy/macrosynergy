@@ -254,6 +254,7 @@ class Test_All(unittest.TestCase):
             self.assertTrue(df['xcat'].nunique() == len(xcats))
             self.assertTrue(df['cid'].nunique() * df['xcat'].nunique() == len(tickers))
             self.assertTrue(set(df['cid'] + '_' + df['xcat']) == set(tickers))
+            self.assertTrue(df.shape[0] == len(ebdates) * len(tickers))
             
             for cid in cids:
                 for xcat in xcats:
