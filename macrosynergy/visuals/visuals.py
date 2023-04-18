@@ -27,14 +27,9 @@ class Plotter(object):
     ):
 
         sdf: pd.DataFrame = df.copy()
-        sdf = sdf[
-            [
-                "real_date",
-                "cid",
-                "xcat",
-            ]
-            + metrics
-        ]
+        df_cols: List[str] = ["real_date", "cid", "xcat"]
+        df_cols += metrics
+        sdf = sdf[df_cols]
         if cids:
             sdf = sdf[sdf["cid"].isin(cids)]
         if xcats:
@@ -325,7 +320,7 @@ class FacetPlot(Plotter):
         compare_series_label: str = "ReferenceSeries",
         x_axis_label: str = None,
         y_axis_label: str = None,
-        label_adj : float = 1.05,
+        label_adj: float = 1.05,
         all_xticks: bool = True,
         font_size: int = 12,
         ncols: int = 4,
@@ -540,11 +535,13 @@ class FacetPlot(Plotter):
 
         # set the plot style
         sns.set_style(plot_style)
-        sns.set(rc={"figure.figsize": figsize})        
-        
+        sns.set(rc={"figure.figsize": figsize})
+
         g.set_axis_labels(x_axis_label or "real_date", y_axis_label or metric)
 
-        g.figure.subplots_adjust(top=fig_title_adj, bottom=label_adj, left=label_adj, right=1 - label_adj)
+        g.figure.subplots_adjust(
+            top=fig_title_adj, bottom=label_adj, left=label_adj, right=1 - label_adj
+        )
 
         # set the title
         if fig_title is not None:
@@ -561,7 +558,6 @@ class FacetPlot(Plotter):
 
             if legend_loc == "best":
                 legend_loc: str = "center left"
-
 
             g.figure.legend(
                 title=legend_title,
