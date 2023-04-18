@@ -70,42 +70,46 @@ def get_dict_max_depth(d: dict) -> int:
         else 0
     )
 
-
-def rec_search_dict(d: dict, key: str, match_substring: bool = False) -> str:
+def rec_search_dict(d : dict,
+                    key : str,
+                    match_substring : bool = False,
+                    match_type=None):
     """
     Recursively searches a dictionary for a key and returns the value
     associated with it.
 
-    Parameters
     :param <dict> d: The dictionary to be searched.
     :param <str> key: The key to be searched for.
     :param <bool> match_substring: If True, the function will return
         the value of the first key that contains the substring
         specified by the key parameter. If False, the function will
         return the value of the first key that matches the key
-        parameter exactly.
-
-    Returns
-    :return <str>: The value associated with the key.
+        parameter exactly. Default is False.
+    :param <Any> match_type: If not None, the function will look for
+        a key that matches the search parameters and has
+        the specified type. Default is None.
+    :return Any: The value associated with the key, or None if the key
+        is not found.
     """
     if not isinstance(d, dict):
-        raise TypeError("Argument `d` must be a dictionary.")
-    result: Any = None
+        return None
+
     for k, v in d.items():
         if match_substring:
             if key in k:
-                return v
+                if match_type is None or isinstance(v, match_type):
+                    return v
         else:
             if k == key:
-                return v
+                if match_type is None or isinstance(v, match_type):
+                    return v
 
         if isinstance(v, dict):
-            item = rec_search_dict(v, key, match_substring)
-            if item is not None:
-                result = item
-                break
+            result = rec_search_dict(v, key, match_substring, match_type)
+            if result is not None:
+                return result
 
-    return result
+    return None
 
 
 def is_valid_iso_date(date: str) -> bool:
@@ -418,10 +422,14 @@ class Config(object):
                     # make all keys lowercase
                     config_dict = {k.lower(): v for k, v in config_dict.items()}
                     for var in loaded_vars.keys():
-                        loaded_vars[var] = rec_search_dict(config_dict, var, True)
+                        loaded_vars[var] = rec_search_dict(d=config_dict, key=var, match_type=str)
+
+                    for var in proxy_var_names:
+                        loaded_vars[var] = rec_search_dict(d=config_dict, key=var, match_type=dict)
 
                     if loaded_vars["crt"] is None:
-                        loaded_vars["crt"] = rec_search_dict(config_dict, "cert", True)
+                        loaded_vars["crt"] = rec_search_dict(d=config_dict, key="cert",
+                                                             match_substring=True, match_type=str)
 
         all_args_present: Callable = lambda x: all([v is not None for v in x])
 

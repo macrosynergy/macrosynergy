@@ -43,14 +43,20 @@ class TestFunctions(unittest.TestCase):
         d: dict = {"a": 1, "b": {"c": 2, "d": {"e": 3}}}
         self.assertEqual(rec_search_dict(d, "e"), 3)
 
-        d: int = 10
-        with self.assertRaises(TypeError):
-            rec_search_dict(d, "e")
+        self.assertEqual(rec_search_dict('Some string', "KEY"), None)
 
         dx: dict = {0: "a"}
         for i in range(1, 100):
             dx = {i: dx}
         self.assertEqual(rec_search_dict(dx, 0), "a")
+
+        d = {"12": 1, "123": 2, "234": 3, "1256": 4, "246": 5}
+        self.assertEqual(rec_search_dict(d=d, key="25", match_substring=True), 4)
+        self.assertEqual(rec_search_dict(d=d, key="99", match_substring=True), None)
+
+        d = {"12": 1, "123": [2], "234": '3', "1256": 4.0, "246": {"a": 1}}
+        for k in d.keys():
+            self.assertEqual(rec_search_dict(d=d, key=k, match_substring=True, match_type=type(d[k])), d[k])
 
     def test_is_valid_iso_date(self):
         d1: str = "2020-01-01"

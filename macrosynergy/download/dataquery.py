@@ -7,6 +7,7 @@ JPMorgan DataQuery API.
 """
 import concurrent.futures
 import time
+import os
 import logging
 import itertools
 import base64
@@ -530,7 +531,8 @@ def get_unavailable_expressions(
     :return <List[str]>: list of expressions that were not found in the dicts.
     """
     found_exprs: List[str] = [
-        curr_dict["attributes"][0]["expression"] for curr_dict in dicts_list
+        curr_dict["attributes"][0]["expression"]
+        for curr_dict in dicts_list
         if curr_dict["attributes"][0]["time-series"] is not None
     ]
     return list(set(expected_exprs) - set(found_exprs))
@@ -547,7 +549,7 @@ class DataQueryInterface(object):
     :param <bool> concurrent: whether to use concurrent requests. Defaults to True.
     :param <int> batch_size: default 20, number of expressions to send in a single
         request. Must be a number between 1 and 20 (both included).
-    :param <bool> check_connection: whether to send a check_connection request. 
+    :param <bool> check_connection: whether to send a check_connection request.
         Defaults to True.
     :param <str> base_url: base URL for the DataQuery API. Defaults to OAUTH_BASE_URL
         if `oauth` is True, CERT_BASE_URL otherwise.
