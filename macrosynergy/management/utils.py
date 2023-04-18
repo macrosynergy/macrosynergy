@@ -221,6 +221,30 @@ def form_full_url(url: str, params: Dict = {}) -> str:
         safe="%/:=&?~#+!$,;'@()*[]",
     )
 
+def common_cids(df: pd.DataFrame, xcats: List[str]):
+    """
+    Returns a list of cross-sectional identifiers for which all categories are available
+
+    :param <pd.Dataframe> df: standardized JPMaQS DataFrame with necessary columns:
+        'cid', 'xcat', 'real_date' and 'value'.
+    :param <List[str]> xcats:  at least two categories whose cross-sectional identifiers
+        are considered.
+
+    return <List[str]>:
+    """
+
+    assert isinstance(xcats, list) and \
+           all(isinstance(elem, str) for elem in xcats) and \
+           len(xcats) >= 2, 'xcats must at least contain to category tickers'
+
+    sets = []
+    for xc in xcats:
+        sc = set(df[df["xcat"] == xc]["cid"].unique())
+        sets.append(sc)
+
+    ls = list(sets[0].intersection(*sets[1:]))
+    return sorted(ls)
+
 
 ##############################
 #   Dataframe Functions
