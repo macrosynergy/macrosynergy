@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from statsmodels.tsa.arima_process import ArmaProcess
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Union
 from collections import defaultdict
 import datetime
 
@@ -211,7 +211,17 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
 
 
 def generate_lines(sig_len: int,
-                   style : str = 'linear') -> np.ndarray:
+                   style : str = 'linear') -> Union[np.ndarray,
+                                                    Dict[str, np.ndarray]]:
+    
+    if not isinstance(sig_len, int):
+        raise TypeError("`sig_len` must be an integer.")
+    elif sig_len < 1:
+        raise ValueError("`sig_len` must be greater than 0.")
+    
+    if not isinstance(style, str):
+        raise TypeError("`style` must be a string.")
+    
     style : str = '-'.join(style.strip().lower().split())
     lines: Dict[str, np.ndarray] = {
             "linear": np.arange(1, sig_len + 1) * 100 / sig_len,
@@ -233,12 +243,16 @@ def generate_lines(sig_len: int,
             # sine wave with 1==sig_len peak=50, trough=-50
             "sine": np.sin(np.arange(1, sig_len + 1) * np.pi / (sig_len / 2)) * 50 + 50,
         }
+    for k, v in lines.items():
+        lines[k] = v[:sig_len]
     if style == "any":
-        return np.random.choice(list(lines.values()))
+        return list(lines.values())[np.random.randint(0, len(lines))]
     elif style == "all":
         return lines
+    elif style in lines:
+        return lines[style]
     else:
-        return lines.get(style, None)
+        raise ValueError(f"Invalid style: {style}. Use one of: {list(lines.keys())}.")
     
 
 
@@ -255,7 +269,18 @@ def make_test_df(
     The functions generates a standard quantamental dataframe with
     where the value column is populated with pre-defined values.
     These values are simple lines, or waves that are easy to identify
-    between plots, and for generic testing purposes.
+    and differentiate in a plot.
+    
+    Parameters
+    ----------
+    :param <List[str]> cids: A list of strings for cids.
+    :param <List[str]> xcats: A list of strings for xcats.
+    :param <str> start_date: An ISO-formatted date string.
+    :param <str> end_date: An ISO-formatted date string.
+    :param <str> prefer: A string that specifies the type of line to generate.
+        Current choices are: 'linear', 'decreasing-linear', 'sharp-hill',
+        'four-bit-sine', 'sine', 'any'.
+        See `macrosynergy.management.simulate_quantamental_data.generate_lines`.
     """
 
     if isinstance(cids, str):

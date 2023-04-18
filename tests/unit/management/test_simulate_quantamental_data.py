@@ -189,6 +189,45 @@ class Test_All(unittest.TestCase):
 
         # "weekend handler" will shift the date forwards.
         self.assertTrue(pd.to_datetime('2021-11-22') == dates_df[-1])
+        
+        
+    def test_generate_lines(self):
+        
+        # generate_lines(sig_len : uint, style : str) -> Union[np.ndarray, Dict[str, np.ndarray]]
+        test_len : int = 100
+        line_styles : Dict[str, np.ndarray] = generate_lines(sig_len=test_len, style='all')
+        
+        # assert that output is a dictionary and is not empty
+        self.assertTrue(isinstance(line_styles, dict))
+        self.assertTrue(len(line_styles) > 0)
+        
+        # assert that all are np.ndarrays of the correct length
+        self.assertTrue(all(isinstance(line, np.ndarray) for line in line_styles.values()))
+        self.assertTrue(all(len(line) == test_len for line in line_styles.values()))
+        
+        for key, line in line_styles.items():
+            t_o : np.ndarray = generate_lines(sig_len=test_len, style=key)
+            self.assertTrue(np.array_equal(line, t_o))
+        
+        # generate an array of random numbers in range(65, 91) of random len in range(3, 10)
+        while True:
+            r_str : str = ''.join([chr(i) for i in np.random.randint(65, 91, np.random.randint(3, 10))])
+            if r_str not in line_styles.keys():
+                break
+        
+        l_styles : List[str] = list(line_styles.keys())
+        self.assertRaises(ValueError, generate_lines, sig_len=test_len, style=r_str)
+        self.assertRaises(ValueError, generate_lines, sig_len=-10, style=l_styles[0])
+        self.assertRaises(ValueError, generate_lines, sig_len=0, style=l_styles[0])
+        
+        r : np.ndarray = generate_lines(sig_len=test_len, style=l_styles[0])
+        l : List[bool] = []
+        for ix in range(100):
+            rx : np.ndarray = generate_lines(sig_len=test_len, style='any')
+            l.append(np.array_equal(rx, r))
+        
+        self.assertTrue(sum(l) < len(l))
+
 
 
 if __name__ == '__main__':
