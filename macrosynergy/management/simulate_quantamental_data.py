@@ -288,14 +288,18 @@ def make_test_df(
     if isinstance(xcats, str):
         xcats = [xcats]
 
-    dates : pd.DatetimeIndex = pd.date_range(start_date, end_date)
+    dates : pd.DatetimeIndex = pd.bdate_range(start_date, end_date)
     
     df_list: List[pd.DataFrame] = []
     for cid in cids:
         for xcat in xcats:
-            df_add: pd.DataFrame = pd.DataFrame({"cid": [cid], "xcat": [xcat]})
-            df_add["real_date"] = pd.bdate_range(start_date, end_date)
-            df_add["value"] = generate_lines(len(dates), prefer)
+            df_add: pd.DataFrame = pd.DataFrame(index=dates, 
+                                                columns=['real_date','cid',
+                                                         'xcat', 'value'])
+            df_add['cid'] = cid
+            df_add['xcat'] = xcat
+            df_add['real_date'] = dates
+            df_add['value'] = generate_lines(len(dates), style=prefer)
             df_list.append(df_add)
 
     return pd.concat(df_list).reset_index(drop=True)

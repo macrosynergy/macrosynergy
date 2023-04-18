@@ -227,6 +227,41 @@ class Test_All(unittest.TestCase):
             l.append(np.array_equal(rx, r))
         
         self.assertTrue(sum(l) < len(l))
+        
+    def test_make_test_df(self):
+        cids : List[str] = ['AUD', 'CAD', 'GBP', 'USD']
+        xcats : List[str] = ['XR', 'IR']
+        tickers : List[str] = [f'{cid}_{xc}' for cid in cids for xc in xcats]
+        start_date : str = '2010-01-01'
+        end_date : str = '2020-12-31'
+        date_range : pd.DatetimeIndex = pd.bdate_range(start=start_date, end=end_date)
+        line_styles : Dict[str, np.ndarray] = generate_lines(sig_len=len(date_range), style='all')
+        line_styles_names : List[str] = list(line_styles.keys())
+        
+        for ls in list(line_styles_names):
+            df : pd.DataFrame = make_test_df(cids=cids, xcats=xcats, start_date=start_date, end_date=end_date, prefer=ls)
+            
+            self.assertTrue(isinstance(df, pd.DataFrame))
+            self.assertFalse(df.empty)
+            self.assertTrue(set(df.columns) == {'cid', 'xcat', 'real_date', 'value'})
+            
+            ebdates : pd.DatetimeIndex = pd.bdate_range(start=start_date, end=end_date)
+            self.assertTrue(set(ebdates) == set(df['real_date']))
+            self.assertTrue(df['real_date'].nunique() == len(line_styles[ls]))
+            self.assertTrue(df['real_date'].nunique() == len(ebdates))
+
+            self.assertTrue(df['cid'].nunique() == len(cids))
+            self.assertTrue(df['xcat'].nunique() == len(xcats))
+            self.assertTrue(df['cid'].nunique() * df['xcat'].nunique() == len(tickers))
+            self.assertTrue(set(df['cid'] + '_' + df['xcat']) == set(tickers))
+            
+            for cid in cids:
+                for xcat in xcats:
+                    t_df : pd.DataFrame = df[(df['cid'] == cid) & (df['xcat'] == xcat)]
+                    self.assertTrue(set(ebdates) == set(t_df['real_date']))
+                    # assert that the values are the same as the line style
+                    self.assertTrue(np.array_equal(t_df['value'].to_numpy(), line_styles[ls]))
+        
 
 
 
