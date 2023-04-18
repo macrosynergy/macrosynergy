@@ -9,6 +9,7 @@ import yaml
 import json
 from unittest.mock import patch, MagicMock, Mock, mock_open
 from typing import List, Tuple, Dict, Union, Any
+from macrosynergy.management.simulate_quantamental_data import make_test_df
 from macrosynergy.management.utils import (
     get_dict_max_depth,
     rec_search_dict,
@@ -18,6 +19,7 @@ from macrosynergy.management.utils import (
     convert_to_iso_format,
     form_full_url,
     generate_random_date,
+    common_cids
 )
 
 from macrosynergy.management.utils import (
@@ -174,6 +176,43 @@ class TestFunctions(unittest.TestCase):
             rdD = generate_random_date(edD, edD)
             self.assertEqual(rdD, edD.strftime("%Y-%m-%d"))
 
+    def test_common_cids(self):
+        cids : List[str] = ["AUD", "USD", "GBP", "EUR", "CAD"]
+        xcats : List[str] = ["FXXR", "IR", "EQXR", "CRY", "FXFW"]
+        df : pd.DataFrame = make_test_df(cids=cids, xcats=xcats)
+        
+        # check normal case
+        com_cids : List[str] = common_cids(df=df, xcats=xcats)
+        self.assertEqual(set(com_cids), set(cids))
+        
+        self.assertRaises(TypeError, common_cids, df=1, xcats=xcats)
+        self.assertRaises(TypeError, common_cids, df=df, xcats=1)
+        self.assertRaises(ValueError, common_cids, df=df, xcats=['xcat'])
+        self.assertRaises(ValueError, common_cids, df=df, xcats=["apple", "banana"])
+        self.assertRaises(TypeError, common_cids, df=df, xcats=[1,2,3])
+        
+        # test A
+        dfA : pd.DataFrame = df.copy()
+        dfA = dfA[~((dfA["cid"] == "USD") & (dfA["xcat"].isin(["FXXR", "IR"])))]
+        dfA = dfA[~((dfA["cid"] == "CAD") & (dfA["xcat"].isin(["FXXR", "IR"])))]
+        
+        com_cids : List[str] = common_cids(df=dfA, xcats=xcats)
+        self.assertEqual(set(com_cids), set(["AUD", "GBP", "EUR"]))
+        
+        comm_cids : List[str] = common_cids(df=dfA, xcats=["FXXR", "IR"])
+        self.assertEqual(set(comm_cids), set(["AUD", "GBP", "EUR",]))
+        
+        # test B
+        dfB : pd.DataFrame = df.copy()
+        # remove "FXXR", "IR", "EQXR" from "AUD", "USD"
+        dfB = dfB[~((dfB["cid"] == "AUD") & (dfB["xcat"].isin(["FXXR", "IR", "EQXR"])))]
+        dfB = dfB[~((dfB["cid"] == "USD") & (dfB["xcat"].isin(["FXXR", "IR", "EQXR"])))]
+
+        com_cids : List[str] = common_cids(df=dfB, xcats=xcats)
+        self.assertEqual(set(com_cids), set(["GBP", "EUR", "CAD"]))
+
+        comm_cids : List[str] = common_cids(df=dfB, xcats=["FXFW", "CRY"])
+        self.assertEqual(set(comm_cids), set(cids))
 
 
 
