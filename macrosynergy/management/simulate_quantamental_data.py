@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from statsmodels.tsa.arima_process import ArmaProcess
+from typing import List, Tuple, Dict
 from collections import defaultdict
 import datetime
 
@@ -208,6 +209,71 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
 
     return pd.concat(df_list).reset_index(drop=True)
 
+
+def generate_lines(sig_len: int,
+                   style : str = 'linear') -> np.ndarray:
+    style : str = '-'.join(style.strip().lower().split())
+    lines: Dict[str, np.ndarray] = {
+            "linear": np.arange(1, sig_len + 1) * 100 / sig_len,
+            "decreasing-linear": np.arange(sig_len, 0, -1) * 100 / sig_len,
+            "sharp-hill": np.concatenate(
+                (
+                    np.arange(1, sig_len // 4 + 1) * 100 / sig_len,
+                    np.arange(sig_len // 4, sig_len // 4 * 3 + 1)[::-1] * 100 / sig_len,
+                    np.arange(sig_len // 4 * 3, sig_len + 1) * 100 / sig_len,
+                )
+            ),
+            "four-bit-sine": np.concatenate(
+                (
+                    np.arange(1, sig_len // 4 + 1) * 100 / sig_len,
+                    np.arange(sig_len // 4, sig_len // 4 * 3 + 1)[::-1] * 100 / sig_len,
+                    np.arange(sig_len // 4 * 3, sig_len + 1) * 100 / sig_len,
+                )
+            ),
+            # sine wave with 1==sig_len peak=50, trough=-50
+            "sine": np.sin(np.arange(1, sig_len + 1) * np.pi / (sig_len / 2)) * 50 + 50,
+        }
+    if style == "any":
+        return np.random.choice(list(lines.values()))
+    elif style == "all":
+        return lines
+    else:
+        return lines.get(style, None)
+    
+
+
+def make_test_df(
+    cids: List[str] = ["AUD", "CAD", "GBP"],
+    xcats: List[str] = ["XR", "CRY"],
+    start_date: str = "2010-01-01",
+    end_date: str = "2020-12-31",
+    prefer : str = 'any',
+):
+    """
+    Generates a test dataframe with pre-defined values.
+    These values are meant to be used for testing purposes only.
+    The functions generates a standard quantamental dataframe with
+    where the value column is populated with pre-defined values.
+    These values are simple lines, or waves that are easy to identify
+    between plots, and for generic testing purposes.
+    """
+
+    if isinstance(cids, str):
+        cids = [cids]
+    if isinstance(xcats, str):
+        xcats = [xcats]
+
+    dates : pd.DatetimeIndex = pd.date_range(start_date, end_date)
+    
+    df_list: List[pd.DataFrame] = []
+    for cid in cids:
+        for xcat in xcats:
+            df_add: pd.DataFrame = pd.DataFrame({"cid": [cid], "xcat": [xcat]})
+            df_add["real_date"] = pd.bdate_range(start_date, end_date)
+            df_add["value"] = generate_lines(len(dates), prefer)
+            df_list.append(df_add)
+
+    return pd.concat(df_list).reset_index(drop=True)
 
 if __name__ == "__main__":
 
