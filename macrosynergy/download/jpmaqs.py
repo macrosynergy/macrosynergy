@@ -538,7 +538,7 @@ class JPMaQSDownload(object):
         start_date: str = "2000-01-01",
         end_date: Optional[str] = None,
         expressions: Optional[List[str]] = None,
-        show_progress: bool = True,
+        show_progress: bool = False,
         debug: bool = False,
         suppress_warning: bool = False,
         as_dataframe: bool = True,
