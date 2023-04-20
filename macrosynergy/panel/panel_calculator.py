@@ -184,7 +184,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None,
             exec(f'{single} = dfw')
 
     # F. Calculate the panels and collect.
-
+    df_out : pd.DataFrame
     for new_xcat, formula in ops.items():
         dfw_add = eval(formula)
         df_add = pd.melt(dfw_add.reset_index(), id_vars=['real_date']).rename({'variable': 'cid'}, axis=1)
@@ -192,7 +192,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None,
         if new_xcat == list(ops.keys())[0]:
             df_out = df_add[cols]
         else:
-            df_out = df_out.append(df_add[cols])
+            df_out = pd.concat([df_out, df_add[cols]], axis=0, ignore_index=True)
         exec(f'{new_xcat} = dfw_add')
         
     for cd in df_out['cid'].unique():
