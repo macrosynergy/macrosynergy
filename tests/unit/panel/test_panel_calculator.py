@@ -235,7 +235,8 @@ class TestAll(unittest.TestCase):
         self.assertTrue(row_value_gbp == manual_calculator)
 
     def test_panel_calculator_nan_warning(self):
-        
+        # raise all warnings 
+        warnings.simplefilter("always")
         self.dataframe_generator()
         test_cids : List[str] = ['USD', 'AUD', 'GBP']
         test_xcats : List[str] = ['XR', 'CRY', 'GROWTH', 'INFL']
