@@ -8,7 +8,6 @@ import re
 import random
 import warnings
 
-warnings.filterwarnings("ignore")
 
 
 def time_series_check(formula: str, index: int):
@@ -199,7 +198,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None,
         for xc in df_out['xcat'].unique():
             if df_out[(df_out['cid'] == cd) & (df_out['xcat'] == xc)]['value'].isnull().all():
                 warnings.warn(f"The series {cd}_{xc} is populated "
-                              "with NaNs only, and will be dropped.")
+                              "with NaNs only, and will be dropped.", UserWarning)
                 df_out = df_out[~((df_out['cid'] == cd) & (df_out['xcat'] == xc))]
 
     return df_out
