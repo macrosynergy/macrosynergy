@@ -251,7 +251,7 @@ class TestAll(unittest.TestCase):
                 end_date=self.end
             )
             
-            test_df.loc[(test_df['cid'] == 'USD') & (test_df['xcat'] == 'XR'), 'value'] = pd.NA
+            test_df.loc[(test_df['cid'] == 'USD') , 'value'] = pd.NA
             expected_nan_series : List[str] = ['USD_NEW1', 'USD_NEW2']
 
             with warnings.catch_warnings(record=True) as w:
