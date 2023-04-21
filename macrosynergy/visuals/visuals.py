@@ -14,8 +14,31 @@ from macrosynergy.management.utils import standardise_dataframe
 from macrosynergy.management import reduce_df
 import math
 
+logger = logging.getLogger(__name__)
 
 class Plotter(object):
+    """
+    Base class for a DataFrame Plotter.
+    It provides a shared interface for the plotter classes,
+    and some common functionality - currently just the filtering
+    of the DataFrame.
+
+    Parameters
+    ----------
+    :param <pd.DataFrame> df: A DataFrame with the following columns:
+        'cid', 'xcat', 'real_date', and at least one metric from - 
+        'value', 'grading', 'eop_lag', or 'mop_lag'. 
+    :param <List[str]> cids: A list of cids to select from the DataFrame
+        (self.df). If None, all cids are selected.
+    :param <List[str]> xcats: A list of xcats to select from the DataFrame
+        (self.df). If None, all xcats are selected.
+    :param <List[str]> metrics: A list of metrics to select from the DataFrame
+        (self.df). If None, all metrics are selected.
+    :param <str> start_date: ISO-8601 formatted date. Select data from
+        this date onwards. If None, all dates are selected.
+    :param <str> end_date: ISO-8601 formatted date. Select data up to
+        and including this date. If None, all dates are selected.
+    """
     def __init__(
         self,
         df: pd.DataFrame,
@@ -48,10 +71,29 @@ class Plotter(object):
         pass
 
 
-logger = logging.getLogger(__name__)
 
 
 class LinePlot(Plotter):
+    """
+    Class for plotting time series data on a line plot.
+    Inherits from `class Plotter`.
+
+    Parameters
+    ----------
+    :param <pd.DataFrame> df: A DataFrame with the following columns:
+        'cid', 'xcat', 'real_date', and at least one metric from - 
+        'value', 'grading', 'eop_lag', or 'mop_lag'. 
+    :param <List[str]> cids: A list of cids to select from the DataFrame.
+        If None, all cids are selected.
+    :param <List[str]> xcats: A list of xcats to select from the DataFrame.
+        If None, all xcats are selected.
+    :param <List[str]> metrics: A list of metrics to select from the DataFrame.
+        If None, all metrics are selected.
+    :param <str> start_date: ISO-8601 formatted date. Select data from
+        this date onwards. If None, all dates are selected.
+    :param <str> end_date: ISO-8601 formatted date. Select data up to
+        and including this date. If None, all dates are selected.
+    """
     def __init__(
         self,
         df: pd.DataFrame,
@@ -278,6 +320,27 @@ class LinePlot(Plotter):
 
 
 class FacetPlot(Plotter):
+    """
+    Class for plotting time series data with multiple facets.
+    Inherits from `class Plotter`.
+
+    Parameters
+    ----------
+    :param <pd.DataFrame> df: A DataFrame with the following columns:
+        'cid', 'xcat', 'real_date', and at least one metric from - 
+        'value', 'grading', 'eop_lag', or 'mop_lag'. 
+    :param <List[str]> cids: A list of cids to select from the DataFrame.
+        If None, all cids are selected.
+    :param <List[str]> xcats: A list of xcats to select from the DataFrame.
+        If None, all xcats are selected.
+    :param <List[str]> metrics: A list of metrics to select from the DataFrame.
+        If None, all metrics are selected.
+    :param <str> start_date: ISO-8601 formatted date. Select data from
+        this date onwards. If None, all dates are selected.
+    :param <str> end_date: ISO-8601 formatted date. Select data up to
+        and including this date. If None, all dates are selected.
+    """
+
     def __init__(
         self,
         df: pd.DataFrame,
