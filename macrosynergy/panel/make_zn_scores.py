@@ -1,7 +1,8 @@
 
 import numpy as np
 import pandas as pd
-from typing import List
+from typing import List, Dict, Set
+import warnings
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
@@ -153,6 +154,17 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         df, xcats=[xcat], cids=cids, start=start, end=end, blacklist=blacklist
     )
 
+    df_orig : pd.DataFrame = df.copy()
+    for cd, xc in df_orig.groupby(["cid", "xcat"]).groups:
+        sel_series : pd.Series = df_orig[df_orig["cid"] == cd][df_orig["xcat"] == xc]["value"]
+        if sel_series.isna().all():
+            warnings.warn(f"The series {cd}_{xc} is populated "
+                              "with NaNs only, and will be dropped.")
+            df = df[~((df["cid"] == cd) & (df["xcat"] == xc))]
+
+    df = df.reset_index(drop=True)
+    df_orig = None # Free up memory.
+
     s_date = min(df['real_date'])
     e_date = max(df['real_date'])
     dates_iter = pd.date_range(start=s_date, end=e_date, freq=pd_freq[est_freq])
@@ -214,6 +226,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
 
 if __name__ == "__main__":
+
 
     cids = ['AUD', 'CAD', 'GBP', 'USD', 'NZD']
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
