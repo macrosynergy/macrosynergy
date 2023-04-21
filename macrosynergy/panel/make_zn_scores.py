@@ -156,7 +156,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
     df_orig : pd.DataFrame = df.copy()
     for cd, xc in df_orig.groupby(["cid", "xcat"]).groups:
-        sel_series : pd.Series = df_orig[df_orig["cid"] == cd][df_orig["xcat"] == xc]["value"]
+        sel_series : pd.Series = df_orig[(df_orig["cid"] == cd) & (df_orig["xcat"] == xc)]["value"]
         if sel_series.isna().all():
             warnings.warn(f"The series {cd}_{xc} is populated "
                               "with NaNs only, and will be dropped.")
