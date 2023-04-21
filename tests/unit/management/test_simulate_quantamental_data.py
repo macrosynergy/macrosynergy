@@ -189,6 +189,81 @@ class Test_All(unittest.TestCase):
 
         # "weekend handler" will shift the date forwards.
         self.assertTrue(pd.to_datetime('2021-11-22') == dates_df[-1])
+        
+        
+    def test_generate_lines(self):
+        
+        # generate_lines(sig_len : uint, style : str) -> Union[np.ndarray, Dict[str, np.ndarray]]
+        test_len : int = 100
+        line_styles : Dict[str, np.ndarray] = generate_lines(sig_len=test_len, style='all')
+        
+        # assert that output is a dictionary and is not empty
+        self.assertTrue(isinstance(line_styles, dict))
+        self.assertTrue(len(line_styles) > 0)
+        
+        # assert that all are np.ndarrays of the correct length
+        self.assertTrue(all(isinstance(line, np.ndarray) for line in line_styles.values()))
+        self.assertTrue(all(len(line) == test_len for line in line_styles.values()))
+        
+        for key, line in line_styles.items():
+            t_o : np.ndarray = generate_lines(sig_len=test_len, style=key)
+            self.assertTrue(np.array_equal(line, t_o))
+        
+        # generate an array of random numbers in range(65, 91) of random len in range(3, 10)
+        while True:
+            r_str : str = ''.join([chr(i) for i in np.random.randint(65, 91, np.random.randint(3, 10))])
+            if r_str not in line_styles.keys():
+                break
+        
+        l_styles : List[str] = list(line_styles.keys())
+        self.assertRaises(ValueError, generate_lines, sig_len=test_len, style=r_str)
+        self.assertRaises(ValueError, generate_lines, sig_len=-10, style=l_styles[0])
+        self.assertRaises(ValueError, generate_lines, sig_len=0, style=l_styles[0])
+        
+        r : np.ndarray = generate_lines(sig_len=test_len, style=l_styles[0])
+        l : List[bool] = []
+        for ix in range(100):
+            rx : np.ndarray = generate_lines(sig_len=test_len, style='any')
+            l.append(np.array_equal(rx, r))
+        
+        self.assertTrue(sum(l) < len(l))
+        
+    def test_make_test_df(self):
+        cids : List[str] = ['AUD', 'CAD', 'GBP', 'USD']
+        xcats : List[str] = ['XR', 'IR']
+        tickers : List[str] = [f'{cid}_{xc}' for cid in cids for xc in xcats]
+        start_date : str = '2010-01-01'
+        end_date : str = '2020-12-31'
+        date_range : pd.DatetimeIndex = pd.bdate_range(start=start_date, end=end_date)
+        line_styles : Dict[str, np.ndarray] = generate_lines(sig_len=len(date_range), style='all')
+        line_styles_names : List[str] = list(line_styles.keys())
+        
+        for ls in list(line_styles_names):
+            df : pd.DataFrame = make_test_df(cids=cids, xcats=xcats, start_date=start_date, end_date=end_date, prefer=ls)
+            
+            self.assertTrue(isinstance(df, pd.DataFrame))
+            self.assertFalse(df.empty)
+            self.assertTrue(set(df.columns) == {'cid', 'xcat', 'real_date', 'value'})
+            
+            ebdates : pd.DatetimeIndex = pd.bdate_range(start=start_date, end=end_date)
+            self.assertTrue(set(ebdates) == set(df['real_date']))
+            self.assertTrue(df['real_date'].nunique() == len(line_styles[ls]))
+            self.assertTrue(df['real_date'].nunique() == len(ebdates))
+
+            self.assertTrue(df['cid'].nunique() == len(cids))
+            self.assertTrue(df['xcat'].nunique() == len(xcats))
+            self.assertTrue(df['cid'].nunique() * df['xcat'].nunique() == len(tickers))
+            self.assertTrue(set(df['cid'] + '_' + df['xcat']) == set(tickers))
+            self.assertTrue(df.shape[0] == len(ebdates) * len(tickers))
+            
+            for cid in cids:
+                for xcat in xcats:
+                    t_df : pd.DataFrame = df[(df['cid'] == cid) & (df['xcat'] == xcat)]
+                    self.assertTrue(set(ebdates) == set(t_df['real_date']))
+                    # assert that the values are the same as the line style
+                    self.assertTrue(np.array_equal(t_df['value'].to_numpy(), line_styles[ls]))
+        
+
 
 
 if __name__ == '__main__':

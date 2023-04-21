@@ -12,6 +12,7 @@ import json
 from typing import Any, List, Dict, Optional, Callable, Union
 import requests, requests.compat
 import itertools
+import functools
 
 
 ##############################
@@ -69,42 +70,46 @@ def get_dict_max_depth(d: dict) -> int:
         else 0
     )
 
-
-def rec_search_dict(d: dict, key: str, match_substring: bool = False) -> str:
+def rec_search_dict(d : dict,
+                    key : str,
+                    match_substring : bool = False,
+                    match_type=None):
     """
     Recursively searches a dictionary for a key and returns the value
     associated with it.
 
-    Parameters
     :param <dict> d: The dictionary to be searched.
     :param <str> key: The key to be searched for.
     :param <bool> match_substring: If True, the function will return
         the value of the first key that contains the substring
         specified by the key parameter. If False, the function will
         return the value of the first key that matches the key
-        parameter exactly.
-
-    Returns
-    :return <str>: The value associated with the key.
+        parameter exactly. Default is False.
+    :param <Any> match_type: If not None, the function will look for
+        a key that matches the search parameters and has
+        the specified type. Default is None.
+    :return Any: The value associated with the key, or None if the key
+        is not found.
     """
     if not isinstance(d, dict):
-        raise TypeError("Argument `d` must be a dictionary.")
-    result: Any = None
+        return None
+
     for k, v in d.items():
         if match_substring:
             if key in k:
-                return v
+                if match_type is None or isinstance(v, match_type):
+                    return v
         else:
             if k == key:
-                return v
+                if match_type is None or isinstance(v, match_type):
+                    return v
 
         if isinstance(v, dict):
-            item = rec_search_dict(v, key, match_substring)
-            if item is not None:
-                result = item
-                break
+            result = rec_search_dict(v, key, match_substring, match_type)
+            if result is not None:
+                return result
 
-    return result
+    return None
 
 
 def is_valid_iso_date(date: str) -> bool:
@@ -220,6 +225,41 @@ def form_full_url(url: str, params: Dict = {}) -> str:
         (f"{url}?{requests.compat.urlencode(params)}" if params else url),
         safe="%/:=&?~#+!$,;'@()*[]",
     )
+
+def common_cids(df: pd.DataFrame, xcats: List[str]):
+    """
+    Returns a list of cross-sectional identifiers (cids) for which the specified categories
+       (xcats) are available.
+
+    :param <pd.Dataframe> df: Standardized JPMaQS DataFrame with necessary columns:
+        'cid', 'xcat', 'real_date' and 'value'.
+    :param <List[str]> xcats: A list with least two categories whose cross-sectional 
+        identifiers are being considered.
+
+    return <List[str]>: List of cross-sectional identifiers for which all categories in `xcats`
+        are available.
+    """
+
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Argument `df` must be a pandas DataFrame.")
+
+    if not isinstance(xcats, list):
+        raise TypeError("Argument `xcats` must be a list.")
+    elif not all(isinstance(elem, str) for elem in xcats):
+        raise TypeError("Argument `xcats` must be a list of strings.")
+    elif len(xcats) < 2:
+        raise ValueError("Argument `xcats` must contain at least two category tickers.")
+    elif not set(xcats).issubset(set(df['xcat'].unique())): 
+        raise ValueError("All categories in `xcats` must be present in the DataFrame.")
+
+    cid_sets : List[set]= []
+    for xc in xcats:
+        sc : set = set(df[df["xcat"] == xc]["cid"].unique())
+        if sc:
+            cid_sets.append(sc)
+
+    ls : List[str] = list(cid_sets[0].intersection(*cid_sets[1:]))
+    return sorted(ls)
 
 
 ##############################
@@ -382,10 +422,14 @@ class Config(object):
                     # make all keys lowercase
                     config_dict = {k.lower(): v for k, v in config_dict.items()}
                     for var in loaded_vars.keys():
-                        loaded_vars[var] = rec_search_dict(config_dict, var, True)
+                        loaded_vars[var] = rec_search_dict(d=config_dict, key=var, match_type=str)
+
+                    for var in proxy_var_names:
+                        loaded_vars[var] = rec_search_dict(d=config_dict, key=var, match_type=dict)
 
                     if loaded_vars["crt"] is None:
-                        loaded_vars["crt"] = rec_search_dict(config_dict, "cert", True)
+                        loaded_vars["crt"] = rec_search_dict(d=config_dict, key="cert",
+                                                             match_substring=True, match_type=str)
 
         all_args_present: Callable = lambda x: all([v is not None for v in x])
 

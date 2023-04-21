@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from statsmodels.tsa.arima_process import ArmaProcess
+from typing import List, Tuple, Dict, Union
 from collections import defaultdict
 import datetime
 
@@ -208,6 +209,100 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
 
     return pd.concat(df_list).reset_index(drop=True)
 
+
+def generate_lines(sig_len: int,
+                   style : str = 'linear') -> Union[np.ndarray,
+                                                    Dict[str, np.ndarray]]:
+    
+    if not isinstance(sig_len, int):
+        raise TypeError("`sig_len` must be an integer.")
+    elif sig_len < 1:
+        raise ValueError("`sig_len` must be greater than 0.")
+    
+    if not isinstance(style, str):
+        raise TypeError("`style` must be a string.")
+    
+    style : str = '-'.join(style.strip().lower().split())
+    lines: Dict[str, np.ndarray] = {
+            "linear": np.arange(1, sig_len + 1) * 100 / sig_len,
+            "decreasing-linear": np.arange(sig_len, 0, -1) * 100 / sig_len,
+            "sharp-hill": np.concatenate(
+                (
+                    np.arange(1, sig_len // 4 + 1) * 100 / sig_len,
+                    np.arange(sig_len // 4, sig_len // 4 * 3 + 1)[::-1] * 100 / sig_len,
+                    np.arange(sig_len // 4 * 3, sig_len + 1) * 100 / sig_len,
+                )
+            ),
+            "four-bit-sine": np.concatenate(
+                (
+                    np.arange(1, sig_len // 4 + 1) * 100 / sig_len,
+                    np.arange(sig_len // 4, sig_len // 4 * 3 + 1)[::-1] * 100 / sig_len,
+                    np.arange(sig_len // 4 * 3, sig_len + 1) * 100 / sig_len,
+                )
+            ),
+            # sine wave with 1==sig_len peak=50, trough=-50
+            "sine": np.sin(np.arange(1, sig_len + 1) * np.pi / (sig_len / 2)) * 50 + 50,
+        }
+    for k, v in lines.items():
+        lines[k] = v[:sig_len]
+    if style == "any":
+        return list(lines.values())[np.random.randint(0, len(lines))]
+    elif style == "all":
+        return lines
+    elif style in lines:
+        return lines[style]
+    else:
+        raise ValueError(f"Invalid style: {style}. Use one of: {list(lines.keys())}.")
+    
+
+
+def make_test_df(
+    cids: List[str] = ["AUD", "CAD", "GBP"],
+    xcats: List[str] = ["XR", "CRY"],
+    start_date: str = "2010-01-01",
+    end_date: str = "2020-12-31",
+    prefer : str = 'any',
+):
+    """
+    Generates a test dataframe with pre-defined values.
+    These values are meant to be used for testing purposes only.
+    The functions generates a standard quantamental dataframe with
+    where the value column is populated with pre-defined values.
+    These values are simple lines, or waves that are easy to identify
+    and differentiate in a plot.
+    
+    Parameters
+    ----------
+    :param <List[str]> cids: A list of strings for cids.
+    :param <List[str]> xcats: A list of strings for xcats.
+    :param <str> start_date: An ISO-formatted date string.
+    :param <str> end_date: An ISO-formatted date string.
+    :param <str> prefer: A string that specifies the type of line to generate.
+        Current choices are: 'linear', 'decreasing-linear', 'sharp-hill',
+        'four-bit-sine', 'sine', 'any'.
+        See `macrosynergy.management.simulate_quantamental_data.generate_lines`.
+    """
+
+    if isinstance(cids, str):
+        cids = [cids]
+    if isinstance(xcats, str):
+        xcats = [xcats]
+
+    dates : pd.DatetimeIndex = pd.bdate_range(start_date, end_date)
+    
+    df_list: List[pd.DataFrame] = []
+    for cid in cids:
+        for xcat in xcats:
+            df_add: pd.DataFrame = pd.DataFrame(index=dates, 
+                                                columns=['real_date','cid',
+                                                         'xcat', 'value'])
+            df_add['cid'] = cid
+            df_add['xcat'] = xcat
+            df_add['real_date'] = dates
+            df_add['value'] = generate_lines(len(dates), style=prefer)
+            df_list.append(df_add)
+
+    return pd.concat(df_list).reset_index(drop=True)
 
 if __name__ == "__main__":
 
