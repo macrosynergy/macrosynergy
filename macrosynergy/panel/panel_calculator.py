@@ -196,7 +196,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None,
         exec(f'{new_xcat} = dfw_add')
         
     if df_out.isna().any().any():
-        df = drop_nan_series(df=df_out, raise_warning=True)
+        df_out = drop_nan_series(df=df_out, raise_warning=True)
 
     return df_out
 
