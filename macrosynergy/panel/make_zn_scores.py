@@ -5,6 +5,7 @@ from typing import List, Dict, Set
 import warnings
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.utils import drop_nan_series
 
 def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
                    stat: str = 'mean', sequential: bool = True,
@@ -154,16 +155,8 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         df, xcats=[xcat], cids=cids, start=start, end=end, blacklist=blacklist
     )
 
-    df_orig : pd.DataFrame = df.copy()
-    for cd, xc in df_orig.groupby(["cid", "xcat"]).groups:
-        sel_series : pd.Series = df_orig[df_orig["cid"] == cd][df_orig["xcat"] == xc]["value"]
-        if sel_series.isna().all():
-            warnings.warn(f"The series {cd}_{xc} is populated "
-                              "with NaNs only, and will be dropped.")
-            df = df[~((df["cid"] == cd) & (df["xcat"] == xc))]
-
-    df = df.reset_index(drop=True)
-    df_orig = None # Free up memory.
+    if df.isna().values.any():
+        df = drop_nan_series(df=df, raise_warning=True)
 
     s_date = min(df['real_date'])
     e_date = max(df['real_date'])

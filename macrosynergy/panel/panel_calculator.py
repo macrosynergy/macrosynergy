@@ -4,6 +4,7 @@ import pandas as pd
 from typing import List
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.management.utils import drop_nan_series
 import re
 import random
 import warnings
@@ -194,12 +195,8 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None,
             df_out = pd.concat([df_out, df_add[cols]], axis=0, ignore_index=True)
         exec(f'{new_xcat} = dfw_add')
         
-    for cd in df_out['cid'].unique():
-        for xc in df_out['xcat'].unique():
-            if df_out[(df_out['cid'] == cd) & (df_out['xcat'] == xc)]['value'].isnull().all():
-                warnings.warn(f"The series {cd}_{xc} is populated "
-                              "with NaNs only, and will be dropped.", UserWarning)
-                df_out = df_out[~((df_out['cid'] == cd) & (df_out['xcat'] == xc))]
+    if df_out.isna().any().any():
+        df_out = drop_nan_series(df=df_out, raise_warning=True)
 
     return df_out
 
