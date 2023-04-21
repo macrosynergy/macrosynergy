@@ -215,6 +215,29 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
 if __name__ == "__main__":
 
+    # # Debug
+    #
+    # cidx = ["USD", "IDR", "INR"]
+    # xcatx = ["XEMPL_NSA_P1M1ML12_3MMA"]
+    #
+    # bugpath = "..//..//data//"
+    # dfxx = pd.read_csv(f"{bugpath}df_bugcheck.csv")
+    # dfxx["real_date"] = pd.to_datetime(dfxx["real_date"])
+    #
+    # xc = "XEMPL_NSA_P1M1ML12_3MMA"
+    #
+    # dfa = make_zn_scores(
+    #     dfxx,
+    #     xcat=xc,
+    #     cids=cidx,
+    #     sequential=False,
+    #     min_obs=522,  # oos scaling after 2 years of panel data
+    #     est_freq="m",
+    #     neutral="zero",
+    #     pan_weight=0.5,
+    #     thresh=3,
+    # )
+
     cids = ['AUD', 'CAD', 'GBP', 'USD', 'NZD']
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
 
