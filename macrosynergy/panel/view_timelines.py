@@ -223,10 +223,6 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
                     labels = xcat_labels
 
         if len(xcats) > 1 or cs_mean:
-            # fg.fig.legend(handles=handles, labels=labels,
-            #               loc='lower center', ncol=3)
-            # fg.fig.subplots_adjust(bottom=label_adj,
-            #                        top=title_adj)
             if isinstance(fg, sns.axisgrid.FacetGrid):
                 fg.fig.legend(handles=handles, labels=labels,
                             loc='lower center', ncol=3)
@@ -282,6 +278,8 @@ if __name__ == "__main__":
 
     view_timelines(dfd, xcats=['CRY'], cids=cids, ncol=2, title='Carry',
                    cs_mean=True)
+    view_timelines(dfd, xcats=['CRY'], cids=cids, ncol=2, title='Carry',
+                   cs_mean=True, xcat_labels=['Carry', 'cs-mean-1'])
 
     view_timelines(dfd, xcats=['XR'], cids=cids, ncol=2,
                    cumsum=True, same_y=False, aspect=2)
