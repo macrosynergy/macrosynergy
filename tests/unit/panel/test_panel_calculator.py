@@ -37,14 +37,10 @@ class TestAll(unittest.TestCase):
 
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
         self.dfd : pd.DataFrame = dfd
-        self.dfd : pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
         black = {'AUD': ['2021-01-01', '2022-12-31'],
                  'GBP': ['2021-01-01', '2100-01-01']}
 
-        self.blacklist : dict = black
-        self.start : str = '2010-01-01'
-        self.end : str = '2020-12-31'
         self.blacklist : Dict[str, List[str]] = black
         self.start : str = '2010-01-01'
         self.end : str = '2020-12-31'
