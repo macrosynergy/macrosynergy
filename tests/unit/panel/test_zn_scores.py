@@ -27,13 +27,14 @@ class TestAll(unittest.TestCase):
 
         # Standard df for tests.
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-        self.__dict__['dfd'] = dfd[dfd['xcat'] == 'CRY']
-        self.__dict__['dfw'] = self.dfd.pivot(index='real_date', columns='cid',
-                                              values='value')
+        self.dfd : pd.DataFrame = dfd[dfd['xcat'] == 'CRY']
+        self.dfw : pd.DataFrame = self.dfd.pivot(index='real_date', columns='cid',
+                                                    values='value')
 
         daily_dates = pd.date_range(start='2010-01-01', end='2020-10-30', freq='B')
         self.__dict__['dates_iter'] = daily_dates
-        self.__dict__['func_dict'] = {'mean': np.mean, 'median': np.median}
+        self.dates_iter : pd.DatetimeIndex = daily_dates
+        self.func_dict : Dict[str, Callable] = {'mean': np.mean, 'median': np.median}
 
     def in_sampling(self, dfw: pd.DataFrame, neutral : str, min_obs : int) -> float:
         """
