@@ -8,19 +8,20 @@ from tests.simulate import make_qdf
 from macrosynergy.panel.return_beta import *
 from macrosynergy.management.shape_dfs import reduce_df
 import math
+from typing import List, Dict
 
 class TestAll(unittest.TestCase):
 
     def dataframe_construction(self):
 
         # Emerging Market Asian countries.
-        cids = ['IDR', 'INR', 'KRW', 'MYR', 'PHP']
+        cids : List[str] = ['IDR', 'INR', 'KRW', 'MYR', 'PHP']
         # Add the US - used as the hedging asset.
         cids += ['USD']
 
-        self.__dict__['cids'] = cids
-        xcats = ['FXXR_NSA', 'GROWTHXR_NSA', 'INFLXR_NSA', 'EQXR_NSA']
-        self.__dict__['xcats'] = xcats
+        self.cids : List[str] = cids
+        xcats : List[str] = ['FXXR_NSA', 'GROWTHXR_NSA', 'INFLXR_NSA', 'EQXR_NSA']
+        self.xcats : List[str] = xcats
 
         df_cids = pd.DataFrame(index=self.cids, columns=['earliest', 'latest', 'mean_add',
                                                          'sd_mult'])
@@ -45,7 +46,7 @@ class TestAll(unittest.TestCase):
         black = {'IDR': ['2010-01-01', '2012-01-04'],
                  'INR': ['2010-01-01', '2013-12-31'],
                  }
-        self.__dict__['blacklist'] = black
+        self.black : Dict[str, List[str]] = black
 
         # Standard df for tests.
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
@@ -62,6 +63,32 @@ class TestAll(unittest.TestCase):
                                                  cids=cids)
         self.__dict__["dfp_w"] = self.unhedged_df.pivot(index='real_date', columns='cid',
                                                         values='value')
+        
+    def test_df_cols(self):
+        """
+        The dataframe passed to the return_beta() method needs to have the following
+        columns: 'cid', 'xcid', 'real_date', 'value'. Any extra columns will be dropped.
+        This test checks if the function successfully raises a ValueError if the
+        dataframe does not have the required columns.
+        """
+        self.dataframe_construction()
+
+        df_test : pd.DataFrame = self.dfd.copy()
+        # DO NOT CHANGE THE ORDER OF THE FOLLOWING LIST `expc_cols`
+        expc_cols : List[str] = ['cid', 'xcat', 'real_date', 'value']
+        
+        for col_name in expc_cols:
+            df_test.rename(columns={col_name: col_name + "_"}, inplace=True)
+            with self.assertRaises(ValueError):
+                try:
+                    return_beta(df=df_test, cids=self.cids, xcat=self.xcats[0],
+                                benchmark_return=f"{self.cids[0]}_{self.xcats[0]}", 
+                                start='2010-01-01',)
+                except ValueError as e:
+                    exp_err_str : str = f"`df` must contain the following columns: {expc_cols}"
+                    self.assertIn(exp_err_str, str(e))
+                    raise ValueError(e)
+
 
     def test_date_alignment(self):
         """

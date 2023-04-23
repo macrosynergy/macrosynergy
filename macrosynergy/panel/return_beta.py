@@ -231,11 +231,14 @@ def return_beta(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     """
 
     # Assertions.
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
     cols = ['cid', 'xcat', 'real_date', 'value']
-    assert list(df.columns) == cols, f"Requires the columns: " \
-                                     f"{cols}."
+    if not set(cols).issubset(set(df.columns)):
+        raise ValueError(f"`df` must contain the following columns: {cols}")
+
+    df : pd.DataFrame = df[cols]
+
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
     all_tix = np.unique(df['cid'] + '_' + df['xcat'])
     bm_error = f"Benchmark return ticker {benchmark_return} is not in the DataFrame."
