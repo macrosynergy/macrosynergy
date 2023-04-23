@@ -1,5 +1,6 @@
-# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
+# This workflow will install Python dependencies, run tests and lint with PyPy
 # For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+# and https://doc.pypy.org/en/latest/install.html
 
 name: Test Python package on Ubuntu
 
@@ -13,10 +14,10 @@ on:
 jobs:
   build:
 
-    runs-on: ubuntu-latest  # Alternative: windows-latest
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11']
+        python-version: ['pypy3.7', 'pypy3.9']
 
     steps:
     - uses: actions/checkout@v3
@@ -26,9 +27,9 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install flake8 pytest sphinx pytest-cov
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        pypy -m ensurepip --upgrade
+        pypy -m pip install flake8 pytest sphinx pytest-cov
+        if [ -f requirements.txt ]; then pypy -m pip install -r requirements.txt; fi
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
@@ -38,4 +39,4 @@ jobs:
     - name: Test with pytest
       run: |
         # Options: --ignore=tests/specific.py --ignore-glob=tests/ignore-pattern
-        pytest -rEf tests/unit/ --cov macrosynergy -p no:warnings --verbose
+        pypy -m pytest -rEf tests/unit/ --cov macrosynergy -p no:warnings --verbose
