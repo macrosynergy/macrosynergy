@@ -1,9 +1,11 @@
 
 import numpy as np
 import pandas as pd
-from typing import List
+from typing import List, Dict, Set
+import warnings
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.utils import drop_nan_series
 
 def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
                    stat: str = 'mean', sequential: bool = True,
@@ -153,6 +155,9 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
         df, xcats=[xcat], cids=cids, start=start, end=end, blacklist=blacklist
     )
 
+    if df.isna().values.any():
+        df = drop_nan_series(df=df, raise_warning=True)
+
     s_date = min(df['real_date'])
     e_date = max(df['real_date'])
     dates_iter = pd.date_range(start=s_date, end=e_date, freq=pd_freq[est_freq])
@@ -214,6 +219,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
 
 if __name__ == "__main__":
+
 
     cids = ['AUD', 'CAD', 'GBP', 'USD', 'NZD']
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']

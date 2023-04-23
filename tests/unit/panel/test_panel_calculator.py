@@ -3,15 +3,20 @@ import unittest
 import numpy as np
 import pandas as pd
 from tests.simulate import make_qdf
+from macrosynergy.management.simulate_quantamental_data import make_test_df
 from macrosynergy.panel.panel_calculator import panel_calculator
+import warnings
 from random import randint, choice
-from typing import List
+from typing import List, Dict, Tuple, Union, Optional, Set
 
 class TestAll(unittest.TestCase):
 
     def dataframe_generator(self, date = '2002-01-01'):
         self.cids : List[str] = ['AUD', 'CAD', 'GBP', 'NZD', 'USD']
         self.xcats : List[str] = ['XR', 'CRY', 'GROWTH', 'INFL']
+        self.cids : List[str] = ['AUD', 'CAD', 'GBP', 'NZD', 'USD']
+        self.xcats : List[str] = ['XR', 'CRY', 'GROWTH', 'INFL']
+        
         df_cids = pd.DataFrame(index=self.cids,
                                columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
 
@@ -32,11 +37,15 @@ class TestAll(unittest.TestCase):
 
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
         self.dfd : pd.DataFrame = dfd
+        self.dfd : pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
         black = {'AUD': ['2021-01-01', '2022-12-31'],
                  'GBP': ['2021-01-01', '2100-01-01']}
 
         self.blacklist : dict = black
+        self.start : str = '2010-01-01'
+        self.end : str = '2020-12-31'
+        self.blacklist : Dict[str, List[str]] = black
         self.start : str = '2010-01-01'
         self.end : str = '2020-12-31'
 
@@ -231,6 +240,53 @@ class TestAll(unittest.TestCase):
 
         manual_calculator = (growth - infl) / xr
         self.assertTrue(row_value_gbp == manual_calculator)
+
+    def test_panel_calculator_nan_warning(self):
+        # raise all warnings 
+        warnings.simplefilter("always")
+        self.dataframe_generator()
+        test_cids : List[str] = ['USD', 'AUD', 'GBP']
+        test_xcats : List[str] = ['XR', 'CRY', 'GROWTH', 'INFL']
+        formulae  = ["NEW1 = np.abs( XR ) + 0.52 + 2 * CRY",
+            "NEW2 = NEW1 / XR"]
+        test_repeats : int = 100
+        # the reason we 
+        for loopvar in range(test_repeats):
+            test_df : pd.DataFrame = make_test_df(
+                cids=test_cids,
+                xcats=test_xcats,
+                start_date=self.start,
+                end_date=self.end
+            )
+            
+            test_df.loc[(test_df['cid'] == 'USD') , 'value'] = pd.NA
+            expected_nan_series : List[str] = ['USD_NEW1', 'USD_NEW2']
+
+            with warnings.catch_warnings(record=True) as w:
+                results : pd.DataFrame = panel_calculator(
+                    df=test_df,
+                    calcs=formulae,
+                    cids=self.cids,
+                    start=self.start,
+                    end=self.end,
+                    blacklist=self.blacklist
+                )
+                
+                self.assertEqual(len(w), len(expected_nan_series))
+                ticks_found : Set = set(results['cid'] + '_' + results['xcat'])
+                ticks_orig : Set = set(test_df['cid'] + '_' + test_df['xcat'])
+                self.assertTrue(len(ticks_found) < len(ticks_orig))
+                for m_series in expected_nan_series:
+                    self.assertNotIn(m_series, ticks_found)
+
+                for warning, m_series in zip(w, expected_nan_series):
+                    self.assertEqual(warning.category, UserWarning)
+                    self.assertIn((f"The series {m_series} is populated "
+                                "with NaNs only, and will be dropped."),
+                                str(warning.message))
+
+        # the paranoid programmer's check - to be removed later
+        self.assertEqual(loopvar, test_repeats - 1)
 
     def test_panel_calculator_time_series(self):
 
