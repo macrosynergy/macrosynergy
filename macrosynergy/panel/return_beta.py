@@ -185,8 +185,9 @@ def adjusted_returns(benchmark_return: pd.Series, df_hedge: pd.DataFrame,
 def return_beta(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                 benchmark_return: str = None, start: str = None, end: str = None,
                 blacklist: dict = None, meth: str = 'ols', oos: bool = True,
-                refreq: str = 'm', min_obs: int = 24, hedged_returns: bool = False,
-                ratio_name: str = "_HR", hr_name: str = "H"):
+                refreq: str = 'm', min_obs: int = 24, max_obs: int = 1000,
+                hedged_returns: bool = False, ratio_name: str = "_HR",
+                hr_name: str = "H"):
 
     """
     Estimate sensitivities (betas) of return category with respect to single return.
@@ -218,6 +219,8 @@ def return_beta(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     :param <int> min_obs: the minimum number of observations required in order to
         estimate a hedge ratio. The default value is 24 days.
         The permissible minimum is 10.
+    :param max_obs: the maximum number of latest observations allowed in order to
+        estimate a hedge ratio. The default value is 1000.
     :param <str> meth: method used to estimate hedge ratio. At present the only method is
         OLS regression ('ols').
     :param <bool> hedged_returns: If True the function appends the hedged returns to the
@@ -316,7 +319,7 @@ def return_beta(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         xr = dfw[c]
         df_hr = hedge_calculator(unhedged_return=xr, benchmark_return=br,
                                  rdates=dates_re, cross_section=c, meth=meth,
-                                 min_obs=min_obs)
+                                 min_obs=min_obs, max_obs=max_obs)
         aggregate.append(df_hr)
 
     df_hedge = pd.concat(aggregate).reset_index(drop=True)
