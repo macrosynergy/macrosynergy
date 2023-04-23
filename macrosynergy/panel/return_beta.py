@@ -40,7 +40,7 @@ def date_alignment(unhedged_return: pd.Series, benchmark_return: pd.Series):
 
 def hedge_calculator(unhedged_return: pd.Series, benchmark_return: pd.Series,
                      rdates: List[pd.Timestamp], cross_section: str, meth: str = 'ols',
-                     min_obs: int = 24):
+                     min_obs: int = 24, max_obs : int = 1000):
     """
     Calculate the hedge ratios for each cross-section in the panel being hedged. It is
     worth noting that the sample of data used for calculating the hedge ratio will
@@ -60,6 +60,8 @@ def hedge_calculator(unhedged_return: pd.Series, benchmark_return: pd.Series,
         OLS regression ('ols').
     :param <int> min_obs: a hedge ratio will only be computed if the number of days has
         surpassed the integer held by the parameter.
+    :param max_obs: the maximum number of latest observations allowed in order to
+        estimate a hedge ratio. The default value is 1000.
 
     :return <pd.DataFrame>: returns a dataframe of the hedge ratios for the respective
         cross-section.
@@ -72,6 +74,12 @@ def hedge_calculator(unhedged_return: pd.Series, benchmark_return: pd.Series,
 
     benchmark_return = br[br.first_valid_index():br.last_valid_index()]
     unhedged_return = un_r[un_r.first_valid_index():un_r.last_valid_index()]
+
+    # truncate the series to max_obs
+    if len(unhedged_return) > max_obs:
+        unhedged_return = unhedged_return[-max_obs:]
+    if len(benchmark_return) > max_obs:
+        benchmark_return = benchmark_return[-max_obs:]
 
     s_date, e_date = date_alignment(unhedged_return=unhedged_return,
                                     benchmark_return=benchmark_return)
