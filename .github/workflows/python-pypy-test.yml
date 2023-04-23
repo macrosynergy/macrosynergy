@@ -27,6 +27,8 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
+        sudo apt-get update && sudo apt-get -y upgrade
+        sudo apt-get -y install libopenblas-dev  pkg-config libopenblas64-dev
         pypy -m ensurepip --upgrade
         pypy -m pip install flake8 pytest sphinx pytest-cov
         if [ -f requirements.txt ]; then pypy -m pip install -r requirements.txt; fi
