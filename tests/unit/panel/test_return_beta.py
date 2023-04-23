@@ -43,25 +43,24 @@ class TestAll(unittest.TestCase):
 
         # If the asset being used as the hedge experiences a blackout period, then it is
         # probably not an appropriate asset to use in the hedging strategy.
-        black = {'IDR': ['2010-01-01', '2012-01-04'],
+        blacklist = {'IDR': ['2010-01-01', '2012-01-04'],
                  'INR': ['2010-01-01', '2013-12-31'],
                  }
-        self.black : Dict[str, List[str]] = black
+        self.blacklist : Dict[str, List[str]] = blacklist
 
         # Standard df for tests.
-        dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-        self.__dict__['dfd'] = dfd
+        self.dfd : pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
         # The Unit Test will be based on the hedging strategy: hedge FX returns
         # (FXXR_NSA) against US Equity, S&P 500, (USD_EQXR_NSA).
         cid_hedge = 'USD'
         xcat_hedge = 'EQXR_NSA'
-        self.__dict__['benchmark_df'] = reduce_df(dfd, xcats=[xcat_hedge],
+        self.benchmark_df : pd.DataFrame = reduce_df(self.dfd, xcats=[xcat_hedge],
                                                   cids=cid_hedge)
 
-        self.__dict__["unhedged_df"] = reduce_df(dfd, xcats=['FXXR_NSA'],
+        self.unhedged_df : pd.DataFrame = reduce_df(self.dfd, xcats=['FXXR_NSA'],
                                                  cids=cids)
-        self.__dict__["dfp_w"] = self.unhedged_df.pivot(index='real_date', columns='cid',
+        self.dfp_w = self.unhedged_df.pivot(index='real_date', columns='cid',
                                                         values='value')
         
     def test_df_cols(self):
