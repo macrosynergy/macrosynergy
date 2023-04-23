@@ -1,7 +1,7 @@
 
 import numpy as np
 import pandas as pd
-from typing import List
+from typing import List, Set
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 
@@ -131,9 +131,11 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
     if basket is not None:
         # Basket must be a subset of the available cross-sections.
-        miss = set(basket) - set(cids)
+        miss : Set = set(basket) - set(df['cid'])
         error_basket = f"The basket elements {miss} are not specified or " \
-                       f"are not available."
+                       f"are not available. It is possible that the specified " \
+                       f"cross-sections in `basket` are not available for the " \
+                        "chosen time-period."
         assert len(miss) == 0, error_basket
     else:
         # Default basket is all available cross-sections.
