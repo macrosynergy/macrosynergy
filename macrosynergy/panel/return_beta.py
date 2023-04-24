@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from typing import List, Union
 import statsmodels.api as sm
+from statsmodels.regression.linear_model import RegressionResults
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 import matplotlib.pyplot as plt
@@ -40,7 +41,7 @@ def date_alignment(unhedged_return: pd.Series, benchmark_return: pd.Series):
 
 def hedge_calculator(unhedged_return: pd.Series, benchmark_return: pd.Series,
                      rdates: List[pd.Timestamp], cross_section: str, meth: str = 'ols',
-                     min_obs: int = 24):
+                     min_obs: int = 24, max_obs: int = 1000):
     """
     Calculate the hedge ratios for each cross-section in the panel being hedged. It is
     worth noting that the sample of data used for calculating the hedge ratio will
@@ -60,6 +61,8 @@ def hedge_calculator(unhedged_return: pd.Series, benchmark_return: pd.Series,
         OLS regression ('ols').
     :param <int> min_obs: a hedge ratio will only be computed if the number of days has
         surpassed the integer held by the parameter.
+    :param <int> max_obs: the maximum number of latest observations allowed in order to
+        estimate a hedge ratio. The default value is 1000.
 
     :return <pd.DataFrame>: returns a dataframe of the hedge ratios for the respective
         cross-section.
@@ -95,18 +98,22 @@ def hedge_calculator(unhedged_return: pd.Series, benchmark_return: pd.Series,
     df_hrat = pd.DataFrame(data=data_column, index=rdates,
                            columns=['value'])
 
+    min_date : pd.Timestamp = min(rdates)
     for d in rdates:
         if d > min_obs_date:
+            curr_start_date : pd.Timestamp = max(min_date, d - pd.Timedelta(days=max_obs))
             # Inclusive of the re-estimation date.
-            X = unhedged_return.loc[:d]
-            Y = benchmark_return.loc[:d]
+            xvar = unhedged_return.loc[curr_start_date:d]
+            yvar = benchmark_return.loc[curr_start_date:d]
             # Condition currently redundant but will become relevant.
             if meth == 'ols':
-                X = sm.add_constant(X)
-                mod = sm.OLS(Y, X)
-                results = mod.fit()
+                xvar = sm.add_constant(xvar)
+                mod : sm.OLS = sm.OLS(yvar, xvar)
+                results : RegressionResults = mod.fit()
+                results_params : pd.Series = results.params
+            
+            df_hrat.loc[d] = results_params.loc[cross_section]
 
-            df_hrat.loc[d] = results.params[1]
 
     # Any dates prior to the minimum observation which would be classified by NaN values
     # remove from the DataFrame.
@@ -211,7 +218,7 @@ def return_beta(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
     :param <int> min_obs: the minimum number of observations required in order to
         estimate a hedge ratio. The default value is 24 days.
         The permissible minimum is 10.
-    :param max_obs: the maximum number of latest observations allowed in order to
+    :param <int> max_obs: the maximum number of latest observations allowed in order to
         estimate a hedge ratio. The default value is 1000.
     :param <str> meth: method used to estimate hedge ratio. At present the only method is
         OLS regression ('ols').
@@ -314,7 +321,7 @@ def return_beta(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
         xr = dfw[c]
         df_hr = hedge_calculator(unhedged_return=xr, benchmark_return=br,
                                  rdates=dates_re, cross_section=c, meth=meth,
-                                 min_obs=min_obs)
+                                 min_obs=min_obs, max_obs=max_obs)
         aggregate.append(df_hr)
 
     df_hedge = pd.concat(aggregate).reset_index(drop=True)
