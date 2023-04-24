@@ -2,10 +2,6 @@
 import numpy as np
 import pandas as pd
 from typing import List, Set
-
-import sys
-sys.path.append("C:/Users/PalashTyagi/OneDrive - Macrosynergy/Documents/Code/ms_copy/macrosynergy")
-
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 
