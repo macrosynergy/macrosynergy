@@ -8,13 +8,14 @@ from macrosynergy.management.shape_dfs import reduce_df, categories_df
 from math import ceil, floor
 from datetime import timedelta
 from pandas.tseries.offsets import BMonthEnd
+from typing import List, Dict, Tuple, Union, Optional
 
 class TestAll(unittest.TestCase):
 
     def dataframe_constructor(self):
 
-        self.__dict__['cids'] = ['AUD', 'CAD', 'GBP']
-        self.__dict__['xcats'] = ['CRY', 'XR', 'GROWTH', 'INFL', 'GDP']
+        self.cids: List[str] = ['AUD', 'CAD', 'GBP']
+        self.xcats: List[str] = ['CRY', 'XR', 'GROWTH', 'INFL', 'GDP']
 
         df_cids = pd.DataFrame(index=self.cids,
                                columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
@@ -33,7 +34,7 @@ class TestAll(unittest.TestCase):
 
         random.seed(1)
         np.random.seed(0)
-        self.dfd : pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
+        self.dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     def test_reduce_df_general(self):
         self.dataframe_constructor()

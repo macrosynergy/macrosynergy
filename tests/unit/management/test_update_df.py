@@ -6,14 +6,15 @@ from tests.simulate import make_qdf
 from macrosynergy.management.update_df import update_df, update_tickers, \
     update_categories
 from macrosynergy.panel.make_relative_value import make_relative_value
+from typing import Union, List, Dict, Tuple, Optional
 
 
 class TestAll(unittest.TestCase):
 
     def dataframe_constructor(self):
 
-        self.__dict__['cids'] = ['AUD', 'CAD', 'GBP', 'NZD']
-        self.__dict__['xcats'] = ['GROWTH', 'INFL', 'XR']
+        self.cids: List[str] = ['AUD', 'CAD', 'GBP', 'NZD']
+        self.xcats: List[str] = ['GROWTH', 'INFL', 'XR']
 
         df_cids = pd.DataFrame(index=self.cids,
                                columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
@@ -31,11 +32,11 @@ class TestAll(unittest.TestCase):
 
         random.seed(1)
         np.random.seed(0)
-        self.dfd : pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
+        self.dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
         black = {'AUD': ['2000-01-01', '2003-12-31'],
                  'GBP': ['2018-01-01', '2100-01-01']}
-        self.blacklist : dict = black
+        self.blacklist: Dict[str, List[str]] = black
 
     def test_update_tickers(self):
         """
