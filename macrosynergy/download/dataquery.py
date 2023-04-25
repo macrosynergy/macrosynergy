@@ -38,15 +38,18 @@ OAUTH_BASE_URL: str = (
 )
 OAUTH_TOKEN_URL: str = "https://authe.jpmchase.com/as/token.oauth2"
 OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
+JPMAQS_GROUP_ID: str = "CA_QI_MACRO_SYNERGY"
 API_DELAY_PARAM: float = 0.3  # 300ms delay between requests
 API_RETRY_COUNT: int = 5  # retry count for transient errors
 HL_RETRY_COUNT: int = 5  # retry count for "high-level" requests
 MAX_CONTINUOUS_FAILURES: int = 5  # max number of continuous errors before stopping
 HEARTBEAT_ENDPOINT: str = "/services/heartbeat"
 TIMESERIES_ENDPOINT: str = "/expressions/time-series"
+CATALOGUE_ENDPOINT: str = "/group/instruments"
 HEARTBEAT_TRACKING_ID: str = "heartbeat"
 OAUTH_TRACKING_ID: str = "oauth"
 TIMESERIES_TRACKING_ID: str = "timeseries"
+CATALOGUE_TRACKING_ID: str = "catalogue"
 
 logger: logging.Logger = logging.getLogger(__name__)
 debug_stream_handler = logging.StreamHandler(io.StringIO())
@@ -701,14 +704,42 @@ class DataQueryInterface(object):
 
         return downloaded_data
 
-    def get_catalogue(self):
+    def get_catalogue(self,
+                      group_id: str = JPMAQS_GROUP_ID,
+                      ) -> List[str]:
         """
         Method to get the JPMaQS catalogue.
-        Not yet implemented.
+        Queries the DataQuery API's Groups/Search endpoint to get the list of
+        tickers in the JPMaQS group. The group ID can be changed to fetch a 
+        different group's catalogue.
+        
+        Parameters
+        :param <str> group_id: the group ID to fetch the catalogue for.
+        
+        :return <List[str]>: list of tickers in the JPMaQS group.
+        
+        :raises <ValueError>: if the response from the server is not valid.
         """
-        raise NotImplementedError("This method has not been implemented yet.")
+        print('Fetching the JPMaQS catalogue...')
+        response_list: Dict = self._fetch(
+            url=self.base_url + CATALOGUE_ENDPOINT,
+            params={'group-id' : JPMAQS_GROUP_ID},
+            tracking_id=CATALOGUE_TRACKING_ID,
+        )
+        
+        tickers : List[str] = [d["instrument-name"] for d in response_list]
+        utkr_count : int = len(tickers)
+        tkr_idx : List[int] = sorted([d['item'] for d in response_list])
+        
+        if not((min(tkr_idx) == 1) and (max(tkr_idx) == utkr_count)
+            and (len(set(tkr_idx)) == utkr_count)):
+            raise ValueError('The downloaded catalogue is corrupt.')
+        
+        return tickers
+        
+        
 
-    def filter_exprs_from_catalogue(self, expressions: List[str]) -> List[str]:
+    def filter_tickers_from_catalogue(self, expressions: List[str]) -> List[str]:
         """
         Method to filter a list of expressions against the JPMaQS catalogue.
         Would avoid unnecessary calls or passing invalid expressions to the API.
@@ -823,6 +854,7 @@ class DataQueryInterface(object):
         expressions: List[str],
         start_date: str = "2000-01-01",
         end_date: str = None,
+        filter_from_catalogue: bool = False,
         show_progress: bool = False,
         endpoint: str = TIMESERIES_ENDPOINT,
         calender: str = "CAL_ALLDAYS",
@@ -832,7 +864,6 @@ class DataQueryInterface(object):
         reference_data: str = "NO_REFERENCE_DATA",
         retry_counter: int = 0,
         delay_param: float = API_DELAY_PARAM,  # TODO do we want the user to have access to this?
-        # filter_from_catalogue: bool = True,
     ) -> List[Dict]:
         """
         Download data from the DataQuery API.
@@ -926,6 +957,9 @@ class DataQueryInterface(object):
             "nan_treatment": nan_treatment,
             "data": reference_data,
         }
+        
+        if filter_from_catalogue:
+            catalogue = self.get_catalogue()
 
         final_output: List[dict] = self._download(
             expressions=expressions,
