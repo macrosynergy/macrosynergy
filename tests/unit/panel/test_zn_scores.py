@@ -243,7 +243,7 @@ class TestAll(unittest.TestCase):
                                columns=[cid])
             df_neutral = expanding_stat(dfi, dates_iter=self.dates_iter, stat=stat,
                                         sequential=sequential, iis=iis)
-            dfw_zns_css.loc[:, cid] = df_neutral
+            dfw_zns_css.loc[df_neutral.index, cid] = df_neutral['value']
 
         return dfw_zns_css
 
