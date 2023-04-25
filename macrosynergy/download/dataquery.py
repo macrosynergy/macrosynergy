@@ -720,10 +720,9 @@ class DataQueryInterface(object):
         
         :raises <ValueError>: if the response from the server is not valid.
         """
-        print('Fetching the JPMaQS catalogue...')
         response_list: Dict = self._fetch(
             url=self.base_url + CATALOGUE_ENDPOINT,
-            params={'group-id' : JPMAQS_GROUP_ID},
+            params={'group-id' : group_id},
             tracking_id=CATALOGUE_TRACKING_ID,
         )
         
@@ -738,15 +737,6 @@ class DataQueryInterface(object):
         return tickers
         
         
-
-    def filter_tickers_from_catalogue(self, expressions: List[str]) -> List[str]:
-        """
-        Method to filter a list of expressions against the JPMaQS catalogue.
-        Would avoid unnecessary calls or passing invalid expressions to the API.
-
-        Not yet implemented.
-        """
-        raise NotImplementedError("This method has not been implemented yet.")
 
     def _download(
         self,
@@ -854,7 +844,6 @@ class DataQueryInterface(object):
         expressions: List[str],
         start_date: str = "2000-01-01",
         end_date: str = None,
-        filter_from_catalogue: bool = False,
         show_progress: bool = False,
         endpoint: str = TIMESERIES_ENDPOINT,
         calender: str = "CAL_ALLDAYS",
@@ -957,9 +946,6 @@ class DataQueryInterface(object):
             "nan_treatment": nan_treatment,
             "data": reference_data,
         }
-        
-        if filter_from_catalogue:
-            catalogue = self.get_catalogue()
 
         final_output: List[dict] = self._download(
             expressions=expressions,

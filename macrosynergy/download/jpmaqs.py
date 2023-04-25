@@ -529,6 +529,34 @@ class JPMaQSDownload(object):
 
         return True
 
+    def get_catalogue(self):
+        self.catalogue : List[str] = self.dq_interface.get_catalogue()
+        return self.catalogue
+
+    def filter_expressions_from_catalogue(self, expressions: List[str], verbose : bool = True) -> List[str]:
+        """
+        Method to filter a list of expressions against the JPMaQS catalogue.
+        This avoids requesting data for expressions that are not in the catalogue,
+        and provides the user wuth the complete list of expressions that are in the
+        catalogue.
+
+        Parameters
+        :param <List[str]> tickers: list of tickers to filter.
+
+        :return <List[str]>: list of tickers that are in the JPMaQS catalogue.
+        """
+        print("Downloading the JPMaQS catalogue from DataQuery...")
+        catalogue_tickers : List[str] = self.get_catalogue()
+        catalogue_expressions : List[str] = self.construct_expressions(tickers=catalogue_tickers, 
+                                                                       metrics=self.valid_metrics)
+        r : List[str] = sorted(list(set(expressions).intersection(catalogue_expressions)))
+        if verbose:
+            filtered : int = len(expressions) - len(r)
+            if filtered > 0:
+                print(f"Removed {filtered}/{len(expressions)} expressions that are not in the JPMaQS catalogue.")
+        
+        return r
+
     def download(
         self,
         tickers: Optional[List[str]] = None,
@@ -538,6 +566,7 @@ class JPMaQSDownload(object):
         start_date: str = "2000-01-01",
         end_date: Optional[str] = None,
         expressions: Optional[List[str]] = None,
+        filter_from_catalogue: bool = False,
         show_progress: bool = False,
         debug: bool = False,
         suppress_warning: bool = False,
@@ -561,6 +590,9 @@ class JPMaQSDownload(object):
         :param <str> end_date: end date of the data to download in the ISO
             format - YYYY-MM-DD.
         :param <list[str]> expressions: list of DataQuery expressions.
+        :param <bool> filter_from_catalogue: If True, the JPMaQS catalogue is
+            downloaded and used to filter the list of tickers. Default is
+            False.
         :param <bool> show_progress: True if progress bar should be shown,
             False if not (default).
         :param <bool> suppress_warning: True if suppressing warnings. Default
@@ -634,6 +666,9 @@ class JPMaQSDownload(object):
             xcats=xcats,
             metrics=metrics,
         )
+
+        if filter_from_catalogue:
+            expressions = self.filter_expressions_from_catalogue(expressions)
 
         # Download data.
         data: List[Dict] = []
@@ -772,6 +807,7 @@ if __name__ == "__main__":
             xcats=xcats,
             metrics=metrics,
             start_date=start_date,
+            filter_from_catalogue=True,
             end_date=end_date,
             show_progress=True,
             suppress_warning=False,
