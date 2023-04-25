@@ -19,7 +19,6 @@ Intended Audience :: Science/Research
 Intended Audience :: Developers
 Programming Language :: Python
 Programming Language :: Python :: 3
-Programming Language :: Python :: 3.7
 Programming Language :: Python :: 3.8
 Programming Language :: Python :: 3.9
 Programming Language :: Python :: 3.10
@@ -48,11 +47,11 @@ if sys.version_info >= (3, 12):
         RuntimeWarning,
     )
     
-if sys.version_info < (3, 7):
+if sys.version_info < (3, 8):
     warnings.warn(
         f"Python {sys.version_info.major}.{sys.version_info.minor} "
         "has reached end-of-life. The Macrosynergy package no longer supports this version. "
-        "Please upgrade to Python 3.7 or later.", 
+        "Please upgrade to Python 3.8 or later.", 
         RuntimeWarning,
     )
 

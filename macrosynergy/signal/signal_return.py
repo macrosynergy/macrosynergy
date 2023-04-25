@@ -551,7 +551,8 @@ class SignalReturnRelations:
 
         dfys = self.df_ys.round(decimals=5)
         dfcs = self.df_cs.round(decimals=5)
-        dfsum = dfys.iloc[:3, ].append(dfcs.iloc[1:3, ])
+        dfsum = pd.concat([dfys.iloc[:3, ], dfcs.iloc[1:3, ]], axis=0)
+
         dfsum.index = ["Panel", "Mean years", "Positive ratio",
                        "Mean cids", "Positive ratio"]
 

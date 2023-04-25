@@ -14,6 +14,8 @@ class TestAll(unittest.TestCase):
     def dataframe_generator(self, date = '2002-01-01'):
         self.cids : List[str] = ['AUD', 'CAD', 'GBP', 'NZD', 'USD']
         self.xcats : List[str] = ['XR', 'CRY', 'GROWTH', 'INFL']
+        self.cids : List[str] = ['AUD', 'CAD', 'GBP', 'NZD', 'USD']
+        self.xcats : List[str] = ['XR', 'CRY', 'GROWTH', 'INFL']
         
         df_cids = pd.DataFrame(index=self.cids,
                                columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
@@ -33,7 +35,8 @@ class TestAll(unittest.TestCase):
         df_xcats.loc['GROWTH'] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 1]
         df_xcats.loc['INFL'] = ['2011-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
-        self.dfd : pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
+        dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+        self.dfd : pd.DataFrame = dfd
 
         black = {'AUD': ['2021-01-01', '2022-12-31'],
                  'GBP': ['2021-01-01', '2100-01-01']}
