@@ -5,6 +5,7 @@ import pandas as pd
 import traceback as tb
 import datetime
 import logging
+import warnings
 import io
 from timeit import default_timer as timer
 
@@ -275,7 +276,7 @@ class JPMaQSDownload(object):
         if datetime.datetime.strptime(
             start_date, "%Y-%m-%d"
         ) < datetime.datetime.strptime("1990-01-01", "%Y-%m-%d"):
-            start_date = "1990-01-01"
+            start_date = "1950-01-01"
 
         dates_expected = pd.bdate_range(start=start_date, end=end_date)
         dates_missing = len(data_df) - len(
@@ -353,11 +354,19 @@ class JPMaQSDownload(object):
                 dfs.append(df)
             else:
                 _missing_exprs.append(d["attributes"][0]["expression"])
-                self.unavailable_expr_messages.append(d["attributes"][0]["message"])
+                if "message" in d["attributes"][0]:
+                    self.unavailable_expr_messages.append(d["attributes"][0]["message"])
+                else:
+                    self.unavailable_expr_messages.append(f"DataQuery did not return data or error message for expression {d['attributes'][0]['expression']}")
 
         assert set(_missing_exprs) == set(
             self.unavailable_expressions
         ), "Downloaded `dicts_list` has been modified before calling `time_series_to_df`"
+        
+        if len(dfs) == 0:
+            raise InvalidDataframeError(
+                "No data was downloaded. Check logger output for complete list of missing expressions."
+            )
 
         final_df: pd.DataFrame = pd.concat(dfs, ignore_index=True)
 
@@ -526,6 +535,17 @@ class JPMaQSDownload(object):
                 raise ValueError(
                     f"`{namex}` must be a valid date in the format YYYY-MM-DD."
                 )
+            if pd.to_datetime(varx, errors="coerce") is pd.NaT:
+                raise ValueError(
+                    f"`{namex}` must be a valid date > "
+                    f"{pd.Timestamp.min.strftime('%Y-%m-%d')} "
+                )
+            if pd.to_datetime(varx) < pd.to_datetime("1950-01-01"):
+                warnings.warn(
+                    message=(f"`{namex}` is set before 1950-01-01."
+                             "Data before 1950-01-01 may not be available,"
+                             " and will cause errors/missing data."),
+                    category=UserWarning,)
 
         return True
 
@@ -623,6 +643,13 @@ class JPMaQSDownload(object):
             report_egress=report_egress,
         ):
             raise ValueError("Invalid arguments passed to download().")
+        if pd.to_datetime(start_date) > pd.to_datetime(end_date):
+            warnings.warn(
+                message=(f"`start_date` ({start_date}) is after `end_date` ({end_date}). "
+                    "These dates will be swapped."
+                ),
+                category=UserWarning,)
+            start_date, end_date = end_date, start_date
 
         # Construct expressions.
         if expressions is None:
@@ -760,8 +787,9 @@ if __name__ == "__main__":
         "DU05YXR_VT10",
     ]
     metrics = "all"
-    start_date: str = "2023-03-01"
+    start_date: str = "2023-01-01"
     end_date: str = "2023-03-20"
+    start_date, end_date = end_date, start_date
 
     with JPMaQSDownload(
         credentials_config="env",
