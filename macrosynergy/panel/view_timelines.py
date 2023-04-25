@@ -1,6 +1,7 @@
 
 import numpy as np
 import pandas as pd
+import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import List, Union, Tuple
@@ -162,6 +163,13 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
                                 ax=ax, label=f"cross-sectional average of {xcats[0]}.")
 
                 handles, labels = ax.get_legend_handles_labels()
+                # set the xcat_labels[0] for the actual xcat, and the last label for the csmean
+                if xcat_labels is None:
+                    labels = fg._legend_data.keys()
+                elif len(xcat_labels) == len(xcats) + 1:
+                    labels = xcat_labels
+                
+                ax.legend(handles=handles, labels=labels)
 
             fg.map(plt.axhline, y=0, c=".5")
             fg.set_titles(col_template='{col_name}')
@@ -190,8 +198,18 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
                                         index=cross_mean.index,
                                         columns=['average'])
                 cross_mean = cross_mean.reset_index(level=0)
-                sns.lineplot(data=cross_mean, x='real_date', y='average', color='red',
+
+                fg = sns.lineplot(data=cross_mean, x='real_date', y='average', color='red',
                             ax=ax, label=f"cross-sectional average of {xcats[0]}.")
+                
+                
+                handles, labels = ax.get_legend_handles_labels()
+                if xcat_labels is None:
+                    labels = fg._legend_data.keys()
+                elif len(xcat_labels) == len(xcats) + 1:
+                    labels = xcat_labels
+                
+                ax.legend(handles=handles, labels=labels)
 
             
             if title is not None:
@@ -203,12 +221,22 @@ def view_timelines(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] =
                     labels = fg._legend_data.keys()
                 else:
                     labels = xcat_labels
-        
+
         if len(xcats) > 1 or cs_mean:
-            fg.fig.legend(handles=handles, labels=labels,
-                          loc='lower center', ncol=3)
-            fg.fig.subplots_adjust(bottom=label_adj,
-                                   top=title_adj)
+            if isinstance(fg, sns.axisgrid.FacetGrid):
+                fg.fig.legend(handles=handles, labels=labels,
+                            loc='lower center', ncol=3)
+                fg.fig.subplots_adjust(bottom=label_adj,
+                                    top=title_adj)
+            elif isinstance(fg, plt.Axes):
+                ax.legend(handles=handles, labels=labels,
+                            loc='lower center', ncol=3)
+                # adjust the bottom of the chart to make room for the legend
+                plt.subplots_adjust(bottom=label_adj,
+                                    top=title_adj)
+
+
+
 
     # Add x-axis tick labels to all axes in grid.
     if all_xticks:
@@ -250,6 +278,8 @@ if __name__ == "__main__":
 
     view_timelines(dfd, xcats=['CRY'], cids=cids, ncol=2, title='Carry',
                    cs_mean=True)
+    view_timelines(dfd, xcats=['CRY'], cids=cids, ncol=2, title='Carry',
+                   cs_mean=True, xcat_labels=['Carry', 'cs-mean-1'])
 
     view_timelines(dfd, xcats=['XR'], cids=cids, ncol=2,
                    cumsum=True, same_y=False, aspect=2)
@@ -258,4 +288,8 @@ if __name__ == "__main__":
     view_timelines(dfd, xcats=['XR'], cids=cids, ncol=2,
                 cumsum=True, same_y=False, aspect=2, single_chart=True)
 
-    dfd.info()
+    view_timelines(
+        dfd, xcats=['XR'], single_chart=True, cids=cids,
+        start='2010-01-01', title='AUD Return Comparison',
+        cs_mean=True, aspect=1.5, title_adj=0.92,label_adj=0.08,
+        xcat_labels=['AUD Return', 'cs-mean'])
