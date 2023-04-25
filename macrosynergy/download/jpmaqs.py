@@ -789,7 +789,6 @@ if __name__ == "__main__":
     metrics = "all"
     start_date: str = "2023-01-01"
     end_date: str = "2023-03-20"
-    start_date, end_date = end_date, start_date
 
     with JPMaQSDownload(
         credentials_config="env",
