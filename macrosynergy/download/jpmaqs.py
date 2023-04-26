@@ -265,7 +265,7 @@ class JPMaQSDownload(object):
                 f"{len(expr_missing)} out of {len(expr_expected)} expressions are missing."
                 f"To download the catalogue of all available expressions and filter the"
                 " unavailable expressions, set `get_catalogue=True` in the "
-                " call to `JPMaQSDownload.download()`." 
+                " call to `JPMaQSDownload.download()`."
             )
 
             logger.info(log_str)
@@ -360,12 +360,14 @@ class JPMaQSDownload(object):
                 if "message" in d["attributes"][0]:
                     self.unavailable_expr_messages.append(d["attributes"][0]["message"])
                 else:
-                    self.unavailable_expr_messages.append(f"DataQuery did not return data or error message for expression {d['attributes'][0]['expression']}")
+                    self.unavailable_expr_messages.append(
+                        f"DataQuery did not return data or error message for expression {d['attributes'][0]['expression']}"
+                    )
 
         assert set(_missing_exprs) == set(
             self.unavailable_expressions
         ), "Downloaded `dicts_list` has been modified before calling `time_series_to_df`"
-        
+
         if len(dfs) == 0:
             raise InvalidDataframeError(
                 "No data was downloaded. Check logger output for complete list of missing expressions."
@@ -549,18 +551,23 @@ class JPMaQSDownload(object):
                 )
             if pd.to_datetime(varx) < pd.to_datetime("1950-01-01"):
                 warnings.warn(
-                    message=(f"`{namex}` is set before 1950-01-01."
-                             "Data before 1950-01-01 may not be available,"
-                             " and will cause errors/missing data."),
-                    category=UserWarning,)
+                    message=(
+                        f"`{namex}` is set before 1950-01-01."
+                        "Data before 1950-01-01 may not be available,"
+                        " and will cause errors/missing data."
+                    ),
+                    category=UserWarning,
+                )
 
         return True
 
     def get_catalogue(self):
-        self.catalogue : List[str] = self.dq_interface.get_catalogue()
+        self.catalogue: List[str] = self.dq_interface.get_catalogue()
         return self.catalogue
 
-    def filter_expressions_from_catalogue(self, expressions: List[str], verbose : bool = True) -> List[str]:
+    def filter_expressions_from_catalogue(
+        self, expressions: List[str], verbose: bool = True
+    ) -> List[str]:
         """
         Method to filter a list of expressions against the JPMaQS catalogue.
         This avoids requesting data for expressions that are not in the catalogue,
@@ -573,15 +580,20 @@ class JPMaQSDownload(object):
         :return <List[str]>: list of tickers that are in the JPMaQS catalogue.
         """
         print("Downloading the JPMaQS catalogue from DataQuery...")
-        catalogue_tickers : List[str] = self.get_catalogue()
-        catalogue_expressions : List[str] = self.construct_expressions(tickers=catalogue_tickers, 
-                                                                       metrics=self.valid_metrics)
-        r : List[str] = sorted(list(set(expressions).intersection(catalogue_expressions)))
+        catalogue_tickers: List[str] = self.get_catalogue()
+        catalogue_expressions: List[str] = self.construct_expressions(
+            tickers=catalogue_tickers, metrics=self.valid_metrics
+        )
+        r: List[str] = sorted(
+            list(set(expressions).intersection(catalogue_expressions))
+        )
         if verbose:
-            filtered : int = len(expressions) - len(r)
+            filtered: int = len(expressions) - len(r)
             if filtered > 0:
-                print(f"Removed {filtered}/{len(expressions)} expressions that are not in the JPMaQS catalogue.")
-        
+                print(
+                    f"Removed {filtered}/{len(expressions)} expressions that are not in the JPMaQS catalogue."
+                )
+
         return r
 
     def download(
@@ -685,10 +697,12 @@ class JPMaQSDownload(object):
             raise ValueError("Invalid arguments passed to download().")
         if pd.to_datetime(start_date) > pd.to_datetime(end_date):
             warnings.warn(
-                message=(f"`start_date` ({start_date}) is after `end_date` ({end_date}). "
+                message=(
+                    f"`start_date` ({start_date}) is after `end_date` ({end_date}). "
                     "These dates will be swapped."
                 ),
-                category=UserWarning,)
+                category=UserWarning,
+            )
             start_date, end_date = end_date, start_date
 
         # Construct expressions.

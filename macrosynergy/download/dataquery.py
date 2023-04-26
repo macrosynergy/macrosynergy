@@ -704,39 +704,41 @@ class DataQueryInterface(object):
 
         return downloaded_data
 
-    def get_catalogue(self,
-                      group_id: str = JPMAQS_GROUP_ID,
-                      ) -> List[str]:
+    def get_catalogue(
+        self,
+        group_id: str = JPMAQS_GROUP_ID,
+    ) -> List[str]:
         """
         Method to get the JPMaQS catalogue.
         Queries the DataQuery API's Groups/Search endpoint to get the list of
-        tickers in the JPMaQS group. The group ID can be changed to fetch a 
+        tickers in the JPMaQS group. The group ID can be changed to fetch a
         different group's catalogue.
-        
+
         Parameters
         :param <str> group_id: the group ID to fetch the catalogue for.
-        
+
         :return <List[str]>: list of tickers in the JPMaQS group.
-        
+
         :raises <ValueError>: if the response from the server is not valid.
         """
         response_list: Dict = self._fetch(
             url=self.base_url + CATALOGUE_ENDPOINT,
-            params={'group-id' : group_id},
+            params={"group-id": group_id},
             tracking_id=CATALOGUE_TRACKING_ID,
         )
-        
-        tickers : List[str] = [d["instrument-name"] for d in response_list]
-        utkr_count : int = len(tickers)
-        tkr_idx : List[int] = sorted([d['item'] for d in response_list])
-        
-        if not((min(tkr_idx) == 1) and (max(tkr_idx) == utkr_count)
-            and (len(set(tkr_idx)) == utkr_count)):
-            raise ValueError('The downloaded catalogue is corrupt.')
-        
+
+        tickers: List[str] = [d["instrument-name"] for d in response_list]
+        utkr_count: int = len(tickers)
+        tkr_idx: List[int] = sorted([d["item"] for d in response_list])
+
+        if not (
+            (min(tkr_idx) == 1)
+            and (max(tkr_idx) == utkr_count)
+            and (len(set(tkr_idx)) == utkr_count)
+        ):
+            raise ValueError("The downloaded catalogue is corrupt.")
+
         return tickers
-        
-        
 
     def _download(
         self,
