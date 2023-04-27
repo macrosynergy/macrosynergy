@@ -1,4 +1,3 @@
-
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -40,8 +39,8 @@ def view_timelines(df: pd.DataFrame, xcats: Optional[List[str]] = None,
     :param <bool> same_y: if True (default) all plots in facet grid share same y axis.
     :param <bool> all_xticks:  if True x-axis tick labels are added to all plots in grid.
         Default is False, i.e only the lowest row displays the labels.
-    :param <bool> xcat_grid: if True, shows a facet grid of line charts for each xcat 
-        for a single cross section. Default is False, only one cross section is allowed 
+    :param <bool> xcat_grid: if True, shows a facet grid of line charts for each xcat
+        for a single cross section. Default is False, only one cross section is allowed
         with this option.
     :param <List[str]> xcat_labels: labels to be used for xcats. If not defined, the
         labels will be identical to extended categories.
@@ -103,19 +102,37 @@ def view_timelines(df: pd.DataFrame, xcats: Optional[List[str]] = None,
                                   "real_date"])[['cid', 'xcat',
                                                  val]].groupby(['cid', 'xcat']).cumsum()
 
-    sns.set(style='darkgrid')
-    cross_mean : Optional[pd.DataFrame] = None
-    if cs_mean and (len(cids) > 1):
-        dfw: pd.DataFrame = df.pivot(index='real_date', columns='cid',
-                                    values='value')
-        cm_series: pd.Series = dfw.mean(axis=1)
-        cross_mean: pd.DataFrame = pd.DataFrame(data=cm_series.to_numpy(),
-                                                index=cm_series.index,
-                                                columns=['average']).reset_index(level=0)
+    max_plots: int = 1
+    if (len(cids) == 1) and xcat_grid:
+        max_plots = len(xcats)
+    elif (len(cids) > 1) and not single_chart:
+        max_plots = len(cids)
+    ncol: int = min(ncol, max_plots)
 
-    sns.set(rc={'figure.figsize': size})
-    fg : Optional[sns.FacetGrid] = None
-    ax : Optional[plt.Axes] = None
+    sns.set(style="darkgrid")
+    cross_mean: Optional[pd.DataFrame] = None
+    cs_label: str = f"cross-sectional average of {xcats[0]}."
+    if cs_mean and (len(cids) > 1):
+        dfw: pd.DataFrame = df.pivot(index="real_date", columns="cid", values="value")
+        cm_series: pd.Series = dfw.mean(axis=1)
+        cross_mean: pd.DataFrame = pd.DataFrame(
+            data=cm_series.to_numpy(), index=cm_series.index, columns=["average"]
+        ).reset_index(level=0)
+
+        if xcat_labels is not None:
+            if len(xcat_labels) == (len(xcats) + 1):
+                cs_label = xcat_labels.pop(-1)
+
+    # now replace all xcats with xcat_labels
+    if xcat_labels is not None:
+        for xc, xl in zip(xcats, xcat_labels):
+            df["xcat"] = df["xcat"].replace(xc, xl)
+        xcats = xcat_labels
+
+    sns.set(rc={"figure.figsize": size})
+
+    fg: Optional[sns.FacetGrid] = None
+    ax: Optional[plt.Axes] = None
     if len(cids) == 1:
         if xcat_grid:
             fg : sns.FacetGrid = sns.FacetGrid(df, col='xcat', col_wrap=ncol,
@@ -126,41 +143,22 @@ def view_timelines(df: pd.DataFrame, xcats: Optional[List[str]] = None,
 
             fg.map(plt.axhline, y=0, c=".5")
             fg.set_axis_labels("", "")
-            if xcat_labels is None:
-                xcat_labels : List[str] = xcats
-
-            ax : plt.Axes
-            tx : plt.Text
-            for ax, tx in zip(fg.axes.flat, xcat_labels):
-                ax.set_title(label=tx)
-            
-            fg.figure : plt.Figure
+            fg.set_titles("{col_name}")
             if title is not None:
                 plt.suptitle(title, y=title_adj)
-                plt.subplots_adjust(top=title_adj)
 
         else:
             ax : plt.Axes = sns.lineplot(data=df, x='real_date', y=val, hue='xcat',
                                         estimator=None, sizes=size)
             plt.axhline(y=0, c=".5")
 
-            handles, labels = ax.get_legend_handles_labels()
-            if xcat_labels is None:
-                xcat_labels : List[str] = labels
-            ax.legend(handles=handles, labels=xcat_labels)
+            ax.legend()
             ax.set_xlabel("")
             ax.set_ylabel("")
             if title is not None:
-                ax.set_title(title)
+                plt.suptitle(title, y=title_adj)
 
     else:
-        cs_label : str = f"cross-sectional average of {xcats[0]}."
-        if xcat_labels is None:
-            xcat_labels : List[str] = xcats
-        elif len(xcat_labels) == (len(xcats) + 1):
-            # use and remove the last label as the cross-sectional average label
-            cs_label : str = xcat_labels.pop(-1)
-
         if not single_chart:
             fg : sns.FacetGrid = sns.FacetGrid(df, col='cid', col_wrap=ncol,
                                                 sharey=same_y, height=height,
@@ -175,10 +173,9 @@ def view_timelines(df: pd.DataFrame, xcats: Optional[List[str]] = None,
             fg.map(plt.axhline, y=0, c=".5")
             fg.set_titles(col_template="{col_name}")
             fg.set_axis_labels("", "")
-            # fg.add_legend()
+            fg.add_legend()
             if title is not None:
                 plt.suptitle(title, y=title_adj)
-                plt.subplots_adjust(top=title_adj)
 
         else:
             ax : plt.Axes = sns.lineplot(data=df, x='real_date', y=val, hue='cid',
@@ -192,33 +189,21 @@ def view_timelines(df: pd.DataFrame, xcats: Optional[List[str]] = None,
             plt.axhline(y=0, c=".5")
             ax.set_xlabel("")
             ax.set_ylabel("")
+            if title is not None:
+                plt.suptitle(title, y=title_adj)
 
-        if (len(xcats) > 1) or cs_mean:
-            v : Union[sns.FacetGrid, plt.Axes] = fg if fg is not None else ax
-            if isinstance(v, sns.FacetGrid):
-                v.add_legend(loc='lower center', ncol=3)
-                legend_items_count : int = len(v._legend_data)
-                legend_rows_count : int = legend_items_count // 3 + (1 if legend_items_count % 3 > 0 else 0)
-                label_adj : float = 0.1 + (0.05 * legend_rows_count)
-                plt.subplots_adjust(bottom=label_adj, top=title_adj)
-            else:
-                handles, labels = v.get_legend_handles_labels()
-                v.legend(handles=handles, labels=labels, loc='lower center', ncol=3)
-                legend_items_count : int = len(handles)
-                legend_rows_count : int = legend_items_count // 3 + (1 if legend_items_count % 3 > 0 else 0)
-                label_adj : float = 0.1 + (0.05 * legend_rows_count)
-                plt.subplots_adjust(top=title_adj, bottom=label_adj)
-                
-
-    # Add x-axis tick labels to all axes in grid.
     if all_xticks:
         if fg is not None:
             for ax in fg.axes.flat:
                 ax.tick_params(labelbottom=True, pad=0)
         else:
             ax.tick_params(labelbottom=True, pad=0)
+            
+    if fg is not None:
+        fg.figure.subplots_adjust(bottom=label_adj)
+    else:
+        plt.subplots_adjust(bottom=label_adj)
 
-    plt.rcParams['figure.figsize'] = size
     plt.show()
 
 
