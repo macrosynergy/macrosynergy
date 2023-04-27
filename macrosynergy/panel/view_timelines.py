@@ -168,9 +168,9 @@ def view_timelines(
             df["xcat"] = df["xcat"].replace(xc, xl)
         xcats = xcat_labels
 
-    # sns.set(rc={"figure.figsize": size})
+    sns.set(rc={"figure.figsize": size})
     plt.rcParams["figure.figsize"] = size
-    # plt.rcParams['figure.constrained_layout.use'] = True
+    legend_cols : int = 3
 
     fg: Optional[sns.FacetGrid] = None
     ax: Optional[plt.Axes] = None
@@ -202,13 +202,13 @@ def view_timelines(
 
         else:
             ax: plt.Axes = sns.lineplot(
-                data=df, x="real_date", y=val, hue="xcat", estimator=None, sizes=size
+                data=df, x="real_date", y=val, hue="xcat", estimator=None, #sizes=size
             )
             plt.axhline(y=0, c=".5")
 
             ax.set_xlabel("")
             ax.set_ylabel("")
-            ax.legend()
+            ax.legend(ncol=legend_cols)
             if title is not None:
                 plt.suptitle(title, y=title_adj)
 
@@ -246,9 +246,10 @@ def view_timelines(
             fg.map(plt.axhline, y=0, c=".5")
             fg.set_titles(col_template="{col_name}")
             fg.set_axis_labels("", "")
-            if cs_mean:
+            if cs_mean or (len(xcats) > 1):
                 fg.add_legend(
                     loc="lower center",
+                    ncol=legend_cols,
                 )
             if title is not None:
                 plt.suptitle(title, y=title_adj)
@@ -276,7 +277,7 @@ def view_timelines(
             plt.axhline(y=0, c=".5")
             ax.set_xlabel("")
             ax.set_ylabel("")
-            ax.legend()
+            ax.legend(ncol=legend_cols)
             if title is not None:
                 plt.suptitle(title, y=title_adj)
 
