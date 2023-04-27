@@ -83,30 +83,43 @@ def view_timelines(
             dft = df.reset_index()
             assert set(dft.columns).issuperset(
                 {"cid", "xcat", "real_date", val}
-            ), fail_str
+            )
 
             df = dft.copy()
         except Exception as e:
-            raise Exception(f"Exception message: {e}", fail_str)
+            ValueError(fail_str)
 
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
-    cs_mean_error = f"cs_mean parameter must be a Boolean Object."
-    assert isinstance(cs_mean, bool), cs_mean_error
-    error = (
-        f"cs_mean can only be set to True if a single category is passed. The "
+    if not isinstance(cs_mean, bool):
+        raise TypeError(f"`cs_mean` parameter must be a Boolean object.")
+    
+    if not isinstance(xcats, list):
+        raise TypeError(f"`xcats` must be a list of strings.")
+    elif not all(isinstance(x, str) for x in xcats):
+        raise TypeError(f"`xcats` must be a list of strings.")
+    
+    if not isinstance(cids, list):
+        raise TypeError(f"`cids` must be a list of strings.")
+    elif not all(isinstance(x, str) for x in cids):
+        raise TypeError(f"`cids` must be a list of strings.")
+    
+    if cs_mean and len(xcats) > 1:
+        raise ValueError(
+        f"cs_mean can only be set to True "
+        "if a single category is passed. The "
         f"received categories are {xcats}."
     )
-    if cs_mean:
-        assert len(xcats) == 1, error
 
-    assert isinstance(xcat_grid, bool), "xcat_grid parameter must be a Boolean Object."
-    assert isinstance(
-        single_chart, bool
-    ), "single_chart parameter must be a Boolean Object."
-    assert not (
-        xcat_grid and single_chart
-    ), "xcat_grid and single_chart cannot both be True."
+    if not isinstance(xcat_grid, bool):
+        raise TypeError("`xcat_grid` parameter must be a Boolean object.")
+    
+    if not isinstance(single_chart, bool): 
+        raise TypeError("`single_chart` parameter must be a Boolean object.")
+    if not (xcat_grid and single_chart):
+        raise ValueError("xcat_grid and single_chart cannot both be True.")
+    
+    
 
     df, xcats, cids = reduce_df(
         df, xcats, cids, start, end, out_all=True, intersect=intersect
@@ -114,11 +127,11 @@ def view_timelines(
 
     # NOTE: casting var(cids) to list if it is a string is dependent on the reduce_df function
 
-    assert isinstance(xcat_grid, bool), "xcat_grid parameter must be a Boolean Object."
     if xcat_grid:
-        assert (
-            len(cids) == 1
-        ), "xcat_grid can only be set to True if a single cross-section is passed."
+
+        if not len(cids) == 1:
+            raise ValueError("`xcat_grid` can only be set to True if a "
+                "single cross-section (`cids`) is passed.")
 
     if cumsum:
         df[val] = (
@@ -154,7 +167,9 @@ def view_timelines(
             df["xcat"] = df["xcat"].replace(xc, xl)
         xcats = xcat_labels
 
-    sns.set(rc={"figure.figsize": size})
+    # sns.set(rc={"figure.figsize": size})
+    plt.rcParams["figure.figsize"] = size
+    # plt.rcParams['figure.constrained_layout.use'] = True
 
     fg: Optional[sns.FacetGrid] = None
     ax: Optional[plt.Axes] = None
@@ -190,9 +205,9 @@ def view_timelines(
             )
             plt.axhline(y=0, c=".5")
 
-            ax.legend()
             ax.set_xlabel("")
             ax.set_ylabel("")
+            ax.legend()
             if title is not None:
                 plt.suptitle(title, y=title_adj)
 
@@ -230,7 +245,8 @@ def view_timelines(
             fg.map(plt.axhline, y=0, c=".5")
             fg.set_titles(col_template="{col_name}")
             fg.set_axis_labels("", "")
-            fg.add_legend()
+            if cs_mean:
+                fg.add_legend(loc="lower center",)
             if title is not None:
                 plt.suptitle(title, y=title_adj)
 
@@ -257,6 +273,7 @@ def view_timelines(
             plt.axhline(y=0, c=".5")
             ax.set_xlabel("")
             ax.set_ylabel("")
+            ax.legend()
             if title is not None:
                 plt.suptitle(title, y=title_adj)
 
@@ -319,6 +336,7 @@ if __name__ == "__main__":
         cids=cids[0],
         size=(10, 5),
         title="AUD Return and Carry",
+        label_adj=0.1,
     )
 
     view_timelines(
