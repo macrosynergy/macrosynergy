@@ -117,7 +117,7 @@ def view_timelines(
 
     if not isinstance(single_chart, bool):
         raise TypeError("`single_chart` parameter must be a Boolean object.")
-    if not (xcat_grid and single_chart):
+    if (xcat_grid and single_chart):
         raise ValueError("xcat_grid and single_chart cannot both be True.")
 
     df, xcats, cids = reduce_df(
