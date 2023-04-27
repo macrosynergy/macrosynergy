@@ -81,9 +81,7 @@ def view_timelines(
         )
         try:
             dft = df.reset_index()
-            assert set(dft.columns).issuperset(
-                {"cid", "xcat", "real_date", val}
-            )
+            assert set(dft.columns).issuperset({"cid", "xcat", "real_date", val})
 
             df = dft.copy()
         except Exception as e:
@@ -93,33 +91,31 @@ def view_timelines(
 
     if not isinstance(cs_mean, bool):
         raise TypeError(f"`cs_mean` parameter must be a Boolean object.")
-    
+
     if not isinstance(xcats, list):
         raise TypeError(f"`xcats` must be a list of strings.")
     elif not all(isinstance(x, str) for x in xcats):
         raise TypeError(f"`xcats` must be a list of strings.")
-    
+
     if not isinstance(cids, list):
         raise TypeError(f"`cids` must be a list of strings.")
     elif not all(isinstance(x, str) for x in cids):
         raise TypeError(f"`cids` must be a list of strings.")
-    
+
     if cs_mean and len(xcats) > 1:
         raise ValueError(
-        f"cs_mean can only be set to True "
-        "if a single category is passed. The "
-        f"received categories are {xcats}."
-    )
+            f"cs_mean can only be set to True "
+            "if a single category is passed. The "
+            f"received categories are {xcats}."
+        )
 
     if not isinstance(xcat_grid, bool):
         raise TypeError("`xcat_grid` parameter must be a Boolean object.")
-    
-    if not isinstance(single_chart, bool): 
+
+    if not isinstance(single_chart, bool):
         raise TypeError("`single_chart` parameter must be a Boolean object.")
     if not (xcat_grid and single_chart):
         raise ValueError("xcat_grid and single_chart cannot both be True.")
-    
-    
 
     df, xcats, cids = reduce_df(
         df, xcats, cids, start, end, out_all=True, intersect=intersect
@@ -130,8 +126,10 @@ def view_timelines(
     if xcat_grid:
 
         if not len(cids) == 1:
-            raise ValueError("`xcat_grid` can only be set to True if a "
-                "single cross-section (`cids`) is passed.")
+            raise ValueError(
+                "`xcat_grid` can only be set to True if a "
+                "single cross-section (`cids`) is passed."
+            )
 
     if cumsum:
         df[val] = (
@@ -246,7 +244,9 @@ def view_timelines(
             fg.set_titles(col_template="{col_name}")
             fg.set_axis_labels("", "")
             if cs_mean:
-                fg.add_legend(loc="lower center",)
+                fg.add_legend(
+                    loc="lower center",
+                )
             if title is not None:
                 plt.suptitle(title, y=title_adj)
 
