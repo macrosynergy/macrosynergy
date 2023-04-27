@@ -85,7 +85,7 @@ def view_timelines(
 
             df = dft.copy()
         except Exception as e:
-            ValueError(fail_str)
+            raise ValueError(fail_str)
 
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
