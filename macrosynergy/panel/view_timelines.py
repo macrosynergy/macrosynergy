@@ -9,17 +9,29 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.check_availability import reduce_df
 
 
-def view_timelines(df: pd.DataFrame, xcats: Optional[List[str]] = None,  
-                   cids: Optional[List[str]] = None,
-                   intersect: bool = False, val: str = 'value', 
-                   cumsum: bool = False, start: str = '2000-01-01',
-                   end: Optional[str] = None, ncol: int = 3, same_y: bool = True,
-                   all_xticks: bool = False, xcat_grid: bool = False,
-                   xcat_labels: Optional[List[str]] = None, single_chart: bool = False,
-                   label_adj: float = 0.05, title: Optional[str] = None, 
-                   title_adj: float = 0.95, cs_mean: bool = False, 
-                   size: Tuple[float, float] = (12, 7),  aspect: float = 1.7, 
-                   height: float = 3.0):
+def view_timelines(
+    df: pd.DataFrame,
+    xcats: Optional[List[str]] = None,
+    cids: Optional[List[str]] = None,
+    intersect: bool = False,
+    val: str = "value",
+    cumsum: bool = False,
+    start: str = "2000-01-01",
+    end: Optional[str] = None,
+    ncol: int = 3,
+    same_y: bool = True,
+    all_xticks: bool = False,
+    xcat_grid: bool = False,
+    xcat_labels: Optional[List[str]] = None,
+    single_chart: bool = False,
+    label_adj: float = 0.05,
+    title: Optional[str] = None,
+    title_adj: float = 0.95,
+    cs_mean: bool = False,
+    size: Tuple[float, float] = (12, 7),
+    aspect: float = 1.7,
+    height: float = 3.0,
+):
 
     """Displays a facet grid of time line charts of one or more categories.
 
@@ -59,16 +71,19 @@ def view_timelines(df: pd.DataFrame, xcats: Optional[List[str]] = None,
     :param <float> height: height of plots in facet. Default is 3.
 
     """
-    
-    if not set(df.columns).issuperset({'cid', 'xcat', 'real_date', val}):
-        fail_str :str =(f"Error : Tried to standardize DataFrame but failed."
-                f"DataFrame not in the correct format. Please ensure " \
-                f"that the DataFrame has the following columns: " 
-                f"'cid', 'xcat', 'real_date' and column='{val}'.")
+
+    if not set(df.columns).issuperset({"cid", "xcat", "real_date", val}):
+        fail_str: str = (
+            f"Error : Tried to standardize DataFrame but failed."
+            f"DataFrame not in the correct format. Please ensure "
+            f"that the DataFrame has the following columns: "
+            f"'cid', 'xcat', 'real_date' and column='{val}'."
+        )
         try:
             dft = df.reset_index()
-            assert set(dft.columns).issuperset({'cid', 'xcat', 'real_date', val}),\
-                fail_str
+            assert set(dft.columns).issuperset(
+                {"cid", "xcat", "real_date", val}
+            ), fail_str
 
             df = dft.copy()
         except Exception as e:
@@ -78,29 +93,39 @@ def view_timelines(df: pd.DataFrame, xcats: Optional[List[str]] = None,
 
     cs_mean_error = f"cs_mean parameter must be a Boolean Object."
     assert isinstance(cs_mean, bool), cs_mean_error
-    error = f"cs_mean can only be set to True if a single category is passed. The " \
-            f"received categories are {xcats}."
+    error = (
+        f"cs_mean can only be set to True if a single category is passed. The "
+        f"received categories are {xcats}."
+    )
     if cs_mean:
-        assert (len(xcats) == 1), error
-        
-    assert isinstance(xcat_grid, bool), "xcat_grid parameter must be a Boolean Object."
-    assert isinstance(single_chart, bool), "single_chart parameter must be a Boolean Object."
-    assert not (xcat_grid and single_chart), "xcat_grid and single_chart cannot both be True."
+        assert len(xcats) == 1, error
 
-    df, xcats, cids = reduce_df(df, xcats, cids, start, end,
-                                out_all=True, intersect=intersect)
-    
+    assert isinstance(xcat_grid, bool), "xcat_grid parameter must be a Boolean Object."
+    assert isinstance(
+        single_chart, bool
+    ), "single_chart parameter must be a Boolean Object."
+    assert not (
+        xcat_grid and single_chart
+    ), "xcat_grid and single_chart cannot both be True."
+
+    df, xcats, cids = reduce_df(
+        df, xcats, cids, start, end, out_all=True, intersect=intersect
+    )
+
     # NOTE: casting var(cids) to list if it is a string is dependent on the reduce_df function
 
     assert isinstance(xcat_grid, bool), "xcat_grid parameter must be a Boolean Object."
     if xcat_grid:
-        assert (len(cids) == 1), \
-        "xcat_grid can only be set to True if a single cross-section is passed."
+        assert (
+            len(cids) == 1
+        ), "xcat_grid can only be set to True if a single cross-section is passed."
 
     if cumsum:
-        df[val] = df.sort_values(['cid', 'xcat',
-                                  "real_date"])[['cid', 'xcat',
-                                                 val]].groupby(['cid', 'xcat']).cumsum()
+        df[val] = (
+            df.sort_values(["cid", "xcat", "real_date"])[["cid", "xcat", val]]
+            .groupby(["cid", "xcat"])
+            .cumsum()
+        )
 
     max_plots: int = 1
     if (len(cids) == 1) and xcat_grid:
@@ -135,11 +160,23 @@ def view_timelines(df: pd.DataFrame, xcats: Optional[List[str]] = None,
     ax: Optional[plt.Axes] = None
     if len(cids) == 1:
         if xcat_grid:
-            fg : sns.FacetGrid = sns.FacetGrid(df, col='xcat', col_wrap=ncol,
-                                                sharey=same_y, height=height,
-                                                aspect=aspect, col_order=xcats)
-            fg.map_dataframe(sns.lineplot, x='real_date', y=val, hue='xcat',
-                             hue_order=xcats, estimator=None,)
+            fg: sns.FacetGrid = sns.FacetGrid(
+                df,
+                col="xcat",
+                col_wrap=ncol,
+                sharey=same_y,
+                height=height,
+                aspect=aspect,
+                col_order=xcats,
+            )
+            fg.map_dataframe(
+                sns.lineplot,
+                x="real_date",
+                y=val,
+                hue="xcat",
+                hue_order=xcats,
+                estimator=None,
+            )
 
             fg.map(plt.axhline, y=0, c=".5")
             fg.set_axis_labels("", "")
@@ -148,8 +185,9 @@ def view_timelines(df: pd.DataFrame, xcats: Optional[List[str]] = None,
                 plt.suptitle(title, y=title_adj)
 
         else:
-            ax : plt.Axes = sns.lineplot(data=df, x='real_date', y=val, hue='xcat',
-                                        estimator=None, sizes=size)
+            ax: plt.Axes = sns.lineplot(
+                data=df, x="real_date", y=val, hue="xcat", estimator=None, sizes=size
+            )
             plt.axhline(y=0, c=".5")
 
             ax.legend()
@@ -160,15 +198,34 @@ def view_timelines(df: pd.DataFrame, xcats: Optional[List[str]] = None,
 
     else:
         if not single_chart:
-            fg : sns.FacetGrid = sns.FacetGrid(df, col='cid', col_wrap=ncol,
-                                                sharey=same_y, height=height,
-                                                aspect=aspect, col_order=cids)
-            fg.map_dataframe(sns.lineplot, x='real_date', y=val, hue='xcat',
-                             hue_order=xcats, estimator=None,)
+            fg: sns.FacetGrid = sns.FacetGrid(
+                df,
+                col="cid",
+                col_wrap=ncol,
+                sharey=same_y,
+                height=height,
+                aspect=aspect,
+                col_order=cids,
+            )
+            fg.map_dataframe(
+                sns.lineplot,
+                x="real_date",
+                y=val,
+                hue="xcat",
+                hue_order=xcats,
+                estimator=None,
+            )
 
             if cs_mean:
-                fg.map(sns.lineplot, x='real_date', y='average', color='red',
-                        estimator=None, label=cs_label, data=cross_mean)
+                fg.map(
+                    sns.lineplot,
+                    x="real_date",
+                    y="average",
+                    color="red",
+                    estimator=None,
+                    label=cs_label,
+                    data=cross_mean,
+                )
 
             fg.map(plt.axhline, y=0, c=".5")
             fg.set_titles(col_template="{col_name}")
@@ -178,13 +235,24 @@ def view_timelines(df: pd.DataFrame, xcats: Optional[List[str]] = None,
                 plt.suptitle(title, y=title_adj)
 
         else:
-            ax : plt.Axes = sns.lineplot(data=df, x='real_date', y=val, hue='cid',
-                                         hue_order=cids, estimator=None, )
-            
+            ax: plt.Axes = sns.lineplot(
+                data=df,
+                x="real_date",
+                y=val,
+                hue="cid",
+                hue_order=cids,
+                estimator=None,
+            )
+
             if cs_mean:
-                ax : plt.Axes = sns.lineplot(data=cross_mean, x='real_date',
-                                             y='average', color='red',
-                                             estimator=None, label=cs_label)
+                ax: plt.Axes = sns.lineplot(
+                    data=cross_mean,
+                    x="real_date",
+                    y="average",
+                    color="red",
+                    estimator=None,
+                    label=cs_label,
+                )
 
             plt.axhline(y=0, c=".5")
             ax.set_xlabel("")
@@ -198,7 +266,7 @@ def view_timelines(df: pd.DataFrame, xcats: Optional[List[str]] = None,
                 ax.tick_params(labelbottom=True, pad=0)
         else:
             ax.tick_params(labelbottom=True, pad=0)
-            
+
     if fg is not None:
         fg.figure.subplots_adjust(bottom=label_adj)
     else:
@@ -209,47 +277,97 @@ def view_timelines(df: pd.DataFrame, xcats: Optional[List[str]] = None,
 
 if __name__ == "__main__":
 
-    cids = ['AUD', 'CAD', 'GBP', 'NZD']
-    xcats = ['XR', 'CRY', 'INFL']
-    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
-                                                'sd_mult'])
-    df_cids.loc['AUD', ] = ['2010-01-01', '2020-12-31', 0.2, 0.2]
-    df_cids.loc['CAD', ] = ['2011-01-01', '2020-11-30', 0, 1]
-    df_cids.loc['GBP', ] = ['2012-01-01', '2020-11-30', 0, 2]
-    df_cids.loc['NZD', ] = ['2012-01-01', '2020-09-30', -0.1, 3]
+    cids = ["AUD", "CAD", "GBP", "NZD"]
+    xcats = ["XR", "CRY", "INFL"]
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc[
+        "AUD",
+    ] = ["2010-01-01", "2020-12-31", 0.2, 0.2]
+    df_cids.loc[
+        "CAD",
+    ] = ["2011-01-01", "2020-11-30", 0, 1]
+    df_cids.loc[
+        "GBP",
+    ] = ["2012-01-01", "2020-11-30", 0, 2]
+    df_cids.loc[
+        "NZD",
+    ] = ["2012-01-01", "2020-09-30", -0.1, 3]
 
-    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
-                                                  'sd_mult', 'ar_coef', 'back_coef'])
+    df_xcats = pd.DataFrame(
+        index=xcats,
+        columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+    )
 
-    df_xcats.loc['XR', ] = ['2010-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
-    df_xcats.loc['INFL', ] = ['2015-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
-    df_xcats.loc['CRY', ] = ['2013-01-01', '2020-10-30', 1, 2, 0.95, 0.5]
+    df_xcats.loc[
+        "XR",
+    ] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc[
+        "INFL",
+    ] = ["2015-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc[
+        "CRY",
+    ] = ["2013-01-01", "2020-10-30", 1, 2, 0.95, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-    dfdx = dfd[~((dfd['cid'] == 'AUD') & (dfd['xcat'] == 'XR'))]
-
-    view_timelines(dfd, xcats=['XR', 'CRY'], cids=cids[0],
-                   size=(10, 5), title='AUD Return and Carry')
-
-    view_timelines(dfd, xcats=['XR', 'CRY', 'INFL'], cids=cids[0],
-                   xcat_grid=True, title_adj=0.8,
-                   xcat_labels=['Return', 'Carry', 'Inflation'],
-                   title='AUD Return, Carry & Inflation')
-
-    view_timelines(dfd, xcats=['CRY'], cids=cids, ncol=2, title='Carry',
-                   cs_mean=True)
-    view_timelines(dfd, xcats=['CRY'], cids=cids, ncol=2, title='Carry',
-                   cs_mean=True, xcat_labels=['Carry', 'cs-mean-1'])
-
-    view_timelines(dfd, xcats=['XR'], cids=cids, ncol=2,
-                   cumsum=True, same_y=False, aspect=2)
-    
-    dfd = dfd.set_index('real_date')    
-    view_timelines(dfd, xcats=['XR'], cids=cids, ncol=2,
-                cumsum=True, same_y=False, aspect=2, single_chart=True)
+    dfdx = dfd[~((dfd["cid"] == "AUD") & (dfd["xcat"] == "XR"))]
 
     view_timelines(
-        dfd, xcats=['XR'], single_chart=True, cids=cids,
-        start='2010-01-01', title='AUD Return Comparison',
-        cs_mean=True, aspect=1.5, title_adj=0.92,label_adj=0.08,
-        xcat_labels=['AUD Return', 'cs-mean'])
+        dfd,
+        xcats=["XR", "CRY"],
+        cids=cids[0],
+        size=(10, 5),
+        title="AUD Return and Carry",
+    )
+
+    view_timelines(
+        dfd,
+        xcats=["XR", "CRY", "INFL"],
+        cids=cids[0],
+        xcat_grid=True,
+        title_adj=0.8,
+        xcat_labels=["Return", "Carry", "Inflation"],
+        title="AUD Return, Carry & Inflation",
+    )
+
+    view_timelines(dfd, xcats=["CRY"], cids=cids, ncol=2, title="Carry", cs_mean=True)
+    view_timelines(
+        dfd,
+        xcats=["CRY"],
+        cids=cids,
+        ncol=2,
+        title="Carry",
+        cs_mean=True,
+        xcat_labels=["Carry", "cs-mean-1"],
+    )
+
+    view_timelines(
+        dfd, xcats=["XR"], cids=cids, ncol=2, cumsum=True, same_y=False, aspect=2
+    )
+
+    dfd = dfd.set_index("real_date")
+    view_timelines(
+        dfd,
+        xcats=["XR"],
+        cids=cids,
+        ncol=2,
+        cumsum=True,
+        same_y=False,
+        aspect=2,
+        single_chart=True,
+    )
+
+    view_timelines(
+        dfd,
+        xcats=["XR"],
+        single_chart=True,
+        cids=cids,
+        start="2010-01-01",
+        title="AUD Return Comparison",
+        cs_mean=True,
+        aspect=1.5,
+        title_adj=0.92,
+        label_adj=0.08,
+        xcat_labels=["AUD Return", "cs-mean"],
+    )
