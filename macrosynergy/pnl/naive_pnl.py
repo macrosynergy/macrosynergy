@@ -344,7 +344,7 @@ class NaivePnL:
         df_pnl_all = df_pnl_all.reset_index()[df_pnl.columns]
         # Will be inclusive of each individual cross-section's signal-adjusted return and
         # the aggregated panel return.
-        df_pnl = df_pnl.append(df_pnl_all)
+        df_pnl = pd.concat([df_pnl, df_pnl_all])
 
         if vol_scale is not None:
             leverage = vol_scale * (df_pnl_all['value'].std() * np.sqrt(261))**(-1)
