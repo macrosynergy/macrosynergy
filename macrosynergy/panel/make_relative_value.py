@@ -125,6 +125,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
     for cvar in [cids, basket]:
         if cvar is not None:
             all_cids.extend(cvar)
+    all_cids = list(set(all_cids))
     if len(all_cids) < 1:
         all_cids = None
     dfx = reduce_df(
