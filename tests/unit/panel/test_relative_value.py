@@ -2,6 +2,7 @@
 import unittest
 import numpy as np
 import pandas as pd
+from typing import List, Dict, Tuple, Union, Set
 from tests.simulate import make_qdf
 from macrosynergy.panel.make_relative_value import make_relative_value, _prepare_basket
 from macrosynergy.management.shape_dfs import reduce_df
@@ -12,8 +13,10 @@ import sys
 class TestAll(unittest.TestCase):
 
     def dataframe_generator(self):
-        self.__dict__['cids'] = ['AUD', 'CAD', 'GBP', 'NZD']
-        self.__dict__['xcats'] = ['XR', 'CRY', 'GROWTH', 'INFL']
+        self.cids: List[str] = ['AUD', 'CAD', 'GBP', 'NZD']
+        self.xcats: List[str] = ['XR', 'CRY', 'GROWTH', 'INFL']
+
+
         df_cids = pd.DataFrame(index=self.cids,
                                columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
 
@@ -31,18 +34,18 @@ class TestAll(unittest.TestCase):
         df_xcats.loc['GROWTH'] = ['2001-01-01', '2020-10-30', 1, 2, 0.9, 1]
         df_xcats.loc['INFL'] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
 
-        dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-        self.__dict__['dfd'] = dfd
+
+        self.dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
         black = {'AUD': ['2000-01-01', '2003-12-31'],
                  'GBP': ['2018-01-01', '2100-01-01']}
 
-        self.__dict__['blacklist'] = black
+        self.blacklist: Dict[str, List[str]] = black
 
     def test_relative_value_dimensionality(self):
 
         self.dataframe_generator()
-        dfd = self.dfd
+        dfd = self.dfd.copy()
 
         with self.assertRaises(AssertionError):
             # Validate the assertion on the parameter "rel_meth".
@@ -313,6 +316,16 @@ class TestAll(unittest.TestCase):
 
         self.assertTrue(np.all(computed_values == function_output[0]))
 
+        # Running where cids and basket are disjoint sets. This running without error is
+        # a test in itself.
+        dfd_5: pd.DataFrame = make_relative_value(dfx, xcats='GROWTH', cids=['GBP', 'NZD'],
+                                                    blacklist=self.blacklist, basket=['AUD'],
+                                                    rel_meth='divide', rel_xcats=None, postfix='RV')
+
+        # Check that the correct tickers are in the output.
+        out_basket_tickers: Set = set((dfd_5['cid']+dfd_5['xcat']))
+        expct_basket_tickers: Set = set(['AUDGROWTH', 'GBPGROWTH', 'NZDGROWTH'])   
+        self.assertEqual(out_basket_tickers, expct_basket_tickers)     
 
 if __name__ == '__main__':
 
