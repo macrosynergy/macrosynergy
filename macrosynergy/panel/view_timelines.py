@@ -162,7 +162,7 @@ def view_timelines(
             if len(xcat_labels) == (len(xcats) + 1):
                 cs_label = xcat_labels.pop(-1)
 
-    # now replace all xcats with xcat_labels
+    # Replace xcats in the DF with their corresponding labels
     if xcat_labels is not None:
         for xc, xl in zip(xcats, xcat_labels):
             df["xcat"] = df["xcat"].replace(xc, xl)
