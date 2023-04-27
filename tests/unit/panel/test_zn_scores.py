@@ -27,15 +27,16 @@ class TestAll(unittest.TestCase):
 
         # Standard df for tests.
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-
         self.dfd : pd.DataFrame = dfd[dfd['xcat'] == 'CRY']
         self.dfw : pd.DataFrame = self.dfd.pivot(index='real_date', columns='cid',
                                                     values='value')
 
-        self.dates_iter : pd.DatetimeIndex = pd.date_range(start='2010-01-01', end='2020-10-30', freq='B')
+        daily_dates = pd.date_range(start='2010-01-01', end='2020-10-30', freq='B')
+        self.__dict__['dates_iter'] = daily_dates
+        self.dates_iter : pd.DatetimeIndex = daily_dates
         self.func_dict : Dict[str, Callable] = {'mean': np.mean, 'median': np.median}
 
-    def in_sampling(self, dfw, neutral, min_obs):
+    def in_sampling(self, dfw: pd.DataFrame, neutral : str, min_obs : int) -> float:
         """
         Used to test the application of pandas in-built back-fill mechanism.
         """
@@ -242,7 +243,7 @@ class TestAll(unittest.TestCase):
                                columns=[cid])
             df_neutral = expanding_stat(dfi, dates_iter=self.dates_iter, stat=stat,
                                         sequential=sequential, iis=iis)
-            dfw_zns_css.loc[:, cid] = df_neutral
+            dfw_zns_css.loc[df_neutral.index, cid] = df_neutral['value']
 
         return dfw_zns_css
 
@@ -287,7 +288,6 @@ class TestAll(unittest.TestCase):
             median_cross = df_median.loc[:, cross]
             median_cross.dropna(axis=0, how='any', inplace=True)
             median_value = median_cross.unique()
-
             self.assertTrue(len(median_value) == 1)
 
             # Choose a random index to confirm the value.

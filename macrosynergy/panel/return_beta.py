@@ -332,8 +332,8 @@ def return_beta(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
                                       benchmark_return=br)
         df_hreturn = df_hreturn.sort_values(['cid', 'real_date'])
         df_hreturn['xcat'] = xcat + "_" + hr_name
-        df_hedge = df_hedge.append(df_hreturn)
-        df_hedge = df_hedge.reset_index(drop=True)
+        df_hedge = pd.concat([df_hedge, df_hreturn], axis=0, 
+                             ignore_index=True).reset_index(drop=True)
 
     return df_hedge[cols]
 

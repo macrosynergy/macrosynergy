@@ -170,7 +170,7 @@ class VintageData:
                 df_rel = pd.DataFrame({'release_date': rel_date,
                                        'observation_date': obs_dates.date,
                                        'value': values})
-                df_gr1 = df_gr1.append(df_rel)
+                df_gr1 = pd.concat([df_gr1, df_rel], ignore_index=True)
 
         df_gr1["grading"] = 1
         return self.add_ticker_parts(df_gr1)
