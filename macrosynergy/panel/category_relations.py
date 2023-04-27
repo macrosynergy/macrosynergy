@@ -59,14 +59,24 @@ class CategoryRelations(object):
         for the two respective categories. Observations with higher values will be
         trimmed, i.e. removed from the analysis (not winsorized!). Default is None
         for both. Trimming is applied after all other transformations.
-    """
+    :param <int> slip: lag (delay of arrival) of first (explanatory) category in days
+        prior to any frequency conversion. Default is 0. This simulates time elapsed 
+        between observing data and using them for market positioning.
+        This is different from and complementary to  the `lag` argument which delays 
+        the explanatory variable by the periods of the investigated sample, which 
+        often is downsampled. Importantly, for analyses with explanatory and dependent 
+        categories, the first category takes the role of the explanatory and a positive 
+        lag means that the explanatory values will be deferred into the future, 
+        i.e. relate to future values of the explained variable.
 
+    """
+    
     def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                  val: str = 'value', start: str = None, end: str = None,
                  blacklist: dict = None, years = None, freq: str = 'M', lag: int = 0,
                  fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean'),
                  xcat1_chg: str = None, n_periods: int = 1,
-                 xcat_trims: List[float] = [None, None]):
+                 xcat_trims: List[float] = [None, None], slip: int = 0,):
         """ Initializes CategoryRelations """
 
         self.xcats = xcats
@@ -79,21 +89,32 @@ class CategoryRelations(object):
         self.xcat1_chg = xcat1_chg
         self.n_periods = n_periods
         self.xcat_trims = xcat_trims
+        self.slip = slip
 
         assert self.freq in ['D', 'W', 'M', 'Q', 'A']
         assert {'cid', 'xcat', 'real_date', val}.issubset(set(df.columns))
         assert len(xcats) == 2, "Expects two fields."
+        assert isinstance(slip, int) and slip >= 0, "Slip must be a non-negative integer."
 
         # Select the cross-sections available for both categories.
         df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+        
+        df_slips : pd.DataFrame = df.copy()
+        if self.slip != 0:
+            metrics_found : List[str] = list(set(df_slips.columns) - set(['cid', 'xcat', 'real_date']))
+            df_slips = self.apply_slip(target_df=df_slips, slip=self.slip, cids=self.cids,
+                                        xcats=self.xcats, metrics=metrics_found)
 
         shared_cids = CategoryRelations.intersection_cids(df, xcats, cids)
 
+        # TODO : df = df_slips here?
+        
         # Will potentially contain NaN values if the two categories are defined over
         # time-periods.
         df = categories_df(
             df, xcats, shared_cids, val=val, start=start, end=end, freq=freq,
-            blacklist=blacklist, years=years, lag=lag, fwin=fwin, xcat_aggs=xcat_aggs
+            blacklist=blacklist, years=years, lag=lag,
+            fwin=fwin, xcat_aggs=xcat_aggs
         )
 
         if xcat1_chg is not None:
@@ -124,6 +145,31 @@ class CategoryRelations(object):
         # NaN values will not be handled if both of the above conditions are not
         # satisfied.
         self.df = df.dropna(axis=0, how='any')
+
+    @classmethod
+    def apply_slip(self, target_df: pd.DataFrame, slip: int,
+                    cids: List[str], xcats: List[str],
+                    metrics: List[str]) -> pd.DataFrame:
+        
+        if not (isinstance(slip, int) and slip >= 0):
+            raise ValueError("Slip must be a non-negative integer.")
+
+        sel_tickers : List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+        target_df['tickers'] = target_df['cid'] + '_' + target_df['xcat']
+
+        if not set(sel_tickers).issubset(set(target_df['tickers'].unique())):
+            raise ValueError("Tickers targetted for applying slip are not present in the DataFrame.\n"
+             f"Missing tickers: {set(sel_tickers) - set(target_df['tickers'].unique())}")
+
+        slip : int = slip.__neg__()
+        
+        target_df : pd.DataFrame = target_df.copy()
+        target_df[metrics] = target_df.groupby('tickers')[metrics].shift(slip)
+        target_df = target_df.drop(columns=['tickers'])
+        
+        return target_df
+        
+
 
     @classmethod
     def intersection_cids(cls, df, xcats, cids):
