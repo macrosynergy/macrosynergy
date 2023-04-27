@@ -437,19 +437,21 @@ class TestAll(unittest.TestCase):
         # Running where cids and basket are disjoint sets. This running without error is
         # a test in itself.
         dfd_5: pd.DataFrame = make_relative_value(
-            dfx,
-            xcats="GROWTH",
-            cids=["GBP", "NZD"],
+            df=self.dfd,
+            xcats=self.xcats[0],
+            cids=["AUD", "CAD"],
             blacklist=self.blacklist,
-            basket=["AUD"],
+            basket=["GBP"],
             rel_meth="divide",
             rel_xcats=None,
             postfix="RV",
         )
 
         # Check that the correct tickers are in the output.
-        out_basket_tickers: Set = set((dfd_5["cid"] + dfd_5["xcat"]))
-        expct_basket_tickers: Set = set(["AUDGROWTH", "GBPGROWTH", "NZDGROWTH"])
+        out_basket_tickers: Set = set(dfd_5["cid"] + dfd_5["xcat"])
+        expct_basket_tickers: Set = set(
+            [f"{cd}{self.xcats[0]}RV" for cd in ["AUD", "CAD", "GBP"]]
+        )
         self.assertEqual(out_basket_tickers, expct_basket_tickers)
 
 
