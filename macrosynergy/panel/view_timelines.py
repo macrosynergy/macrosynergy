@@ -92,15 +92,18 @@ def view_timelines(
     if not isinstance(cs_mean, bool):
         raise TypeError(f"`cs_mean` parameter must be a Boolean object.")
 
-    if not isinstance(xcats, list):
-        raise TypeError(f"`xcats` must be a list of strings.")
-    elif not all(isinstance(x, str) for x in xcats):
-        raise TypeError(f"`xcats` must be a list of strings.")
+    if isinstance(xcats, str):
+        xcats = [xcats]
+    if isinstance(cids, str):
+        cids = [cids]
 
-    if not isinstance(cids, list):
-        raise TypeError(f"`cids` must be a list of strings.")
-    elif not all(isinstance(x, str) for x in cids):
-        raise TypeError(f"`cids` must be a list of strings.")
+    for varx, namex in zip([xcats, cids], ["xcats", "cids"]):
+        if (
+            (not isinstance(varx, list))
+            or (not all(isinstance(x, str) for x in varx))
+            or (not varx)
+        ):
+            raise TypeError(f"`{namex}` must be a list of strings.")
 
     if cs_mean and len(xcats) > 1:
         raise ValueError(
