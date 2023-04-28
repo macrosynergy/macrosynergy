@@ -357,7 +357,7 @@ class CategoryRelations(object):
                     fit_reg: bool = True, reg_ci: int = 95,
                     reg_order: int = 1, reg_robust: bool = False,
                     separator: Union[str, int] = None, title_adj: float = 1,
-                    single_chart: bool = False):
+                    single_chart: bool = False, heatmap: bool = False,):
 
         """
         Display scatter-plot and regression line.
@@ -402,8 +402,9 @@ class CategoryRelations(object):
             are numerous charts, and the labels are excessively long). The default is
             False, and the names of the axis will be displayed on each grid if not
             conflicting with the label for each variable.
+        :param <bool> heatmap: boolean parameter determining whether or not to add continuout
+            time colour coding to the scatter plot. The default is False.
         """
-
         coef_box_loc_error = "The parameter expects a string used to delimit the " \
                              "location of the box: 'upper left', 'lower right' etc."
         if coef_box is not None:
@@ -535,7 +536,17 @@ class CategoryRelations(object):
         elif separator is None:
             fig, ax = plt.subplots(figsize=size)
 
-            sns.regplot(data=dfx, x=self.xcats[0], y=self.xcats[1],
+            if heatmap:
+                dates = dfx.reset_index().real_date
+                # get days from the starting date
+                dates_num = (dates - dates.min()).dt.days
+                palette = np.array(sns.color_palette("RdBu_r", len(dates)))
+                sns.regplot(data=dfx, x=self.xcats[0], y=self.xcats[1],
+                        ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
+                        scatter_kws={'s': 30, 'alpha': 0.5, 'color': 'lightgray', 'facecolors': palette[dates_num.index]},
+                        line_kws={'lw': 1})
+            else:
+                sns.regplot(data=dfx, x=self.xcats[0], y=self.xcats[1],
                         ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
                         scatter_kws={'s': 30, 'alpha': 0.5, 'color': 'lightgray'},
                         line_kws={'lw': 1})
@@ -635,7 +646,7 @@ if __name__ == "__main__":
 
     cr.reg_scatter(
         labels=False, separator=None, title="Carry and Return", xlab="Carry",
-        ylab="Return", coef_box="lower left", prob_est="map",
+        ylab="Return", coef_box="lower left", prob_est="map", heatmap=True
     )
 
     cr = CategoryRelations(
@@ -651,5 +662,5 @@ if __name__ == "__main__":
 
     cr.reg_scatter(
         labels=False, separator=cids, title="Carry and Return", xlab="Carry",
-        ylab="Return", coef_box="lower left"
+        ylab="Return", coef_box="lower left",
     )
