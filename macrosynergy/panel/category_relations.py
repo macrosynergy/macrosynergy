@@ -402,7 +402,7 @@ class CategoryRelations(object):
             are numerous charts, and the labels are excessively long). The default is
             False, and the names of the axis will be displayed on each grid if not
             conflicting with the label for each variable.
-        :param <bool> heatmap: boolean parameter determining whether or not to add continuout
+        :param <bool> heatmap: boolean parameter determining whether or not to add continuous
             time colour coding to the scatter plot. The default is False.
         """
         coef_box_loc_error = "The parameter expects a string used to delimit the " \
