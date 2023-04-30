@@ -541,10 +541,13 @@ class CategoryRelations(object):
                 # get days from the starting date
                 dates_num = (dates - dates.min()).dt.days
                 palette = np.array(sns.color_palette("RdBu_r", len(dates)))
-                sns.regplot(data=dfx, x=self.xcats[0], y=self.xcats[1],
+                ax = sns.regplot(data=dfx, x=self.xcats[0], y=self.xcats[1],
                         ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
                         scatter_kws={'s': 30, 'alpha': 0.5, 'color': 'lightgray', 'facecolors': palette[dates_num.index]},
                         line_kws={'lw': 1})
+                norm = plt.Normalize(dates.min().value, dates.max().value)
+                cbar = ax.figure.colorbar(plt.cm.ScalarMappable(cmap="RdBu_r",norm=norm), ax=ax)
+                cbar.ax.set_yticklabels(pd.to_datetime(cbar.get_ticks()).strftime(date_format='%b %Y'))
             else:
                 sns.regplot(data=dfx, x=self.xcats[0], y=self.xcats[1],
                         ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
