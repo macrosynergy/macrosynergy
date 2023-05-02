@@ -856,7 +856,7 @@ class TestJPMaQSDownload(unittest.TestCase):
             "as_dataframe" : True,
             "report_time_taken" : True,
             "report_egress" : True,}
-        
+        bad_args : Dict[str, Any] = {}
         jpmaqs: JPMaQSDownload = JPMaQSDownload(client_id="client_id", 
                                                 client_secret="client_secret",
                                                 check_connection=False,)
