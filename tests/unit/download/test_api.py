@@ -481,6 +481,11 @@ class TestDataQueryDownloads(unittest.TestCase):
                 dq.check_connection()
 
     def test_connection(self):
+        
+        dq_clid = os.getenv("DQ_CLIENT_ID")
+        # assert is not None
+        assert dq_clid is not None, "DQ_CLIENT_ID environment variable not set"
+        
         with JPMaQSDownload(
             oauth=True,
             client_id=os.getenv("DQ_CLIENT_ID"),
