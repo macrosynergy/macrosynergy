@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import os
 import datetime
+import base64
 
 from typing import List, Dict, Union, Optional, Any, Tuple
 import requests
@@ -13,6 +14,7 @@ from macrosynergy.download import dataquery
 from macrosynergy.download import JPMaQSDownload
 from macrosynergy.download.dataquery import (
     DataQueryInterface,
+    OAuth, CertAuth,
     request_wrapper,
     validate_response,
     validate_download_args
@@ -35,9 +37,63 @@ from macrosynergy.management.utils import Config
 
 
 class TestCertAuth(unittest.TestCase):
-    def test_something(self):
-        self.assertEqual(True, True)
-        # TODO : Write tests for the CertAuth class
+    def mock_isfile(self, path: str) -> bool:
+        good_paths: List[str] = ['path/key.key', 'path/crt.crt']
+        if path in good_paths:
+            return True
+        
+    def good_args(self) -> Dict[str, str]:
+        return {
+            'username': 'user',
+            'password': 'pass',
+            'crt': 'path/crt.crt',
+            'key': 'path/key.key'}
+        
+    def test_init(self):            
+        try:
+            with mock.patch("os.path.isfile", side_effect=lambda x: self.mock_isfile(x)):
+                certauth: CertAuth = CertAuth(**self.good_args())
+                
+                expctd_auth: str = base64.b64encode(bytes(f"{self.good_args()['username']}:{self.good_args()['password']}", "utf-8")).decode("ascii")
+                self.assertEqual(certauth.auth, expctd_auth)
+                self.assertEqual(certauth.crt, self.good_args()['crt'])
+                self.assertEqual(certauth.key, self.good_args()['key'])
+                
+        except Exception as e:
+            self.fail(f"Unexpected exception raised: {e}")
+        
+        with mock.patch("os.path.isfile", side_effect=lambda x: self.mock_isfile(x)):
+            for key in self.good_args().keys():
+                bad_args: Dict[str, str] = self.good_args().copy()
+                bad_args[key] = 1
+                with self.assertRaises(TypeError):
+                    CertAuth(**bad_args)
+                    
+        with mock.patch("os.path.isfile", side_effect=lambda x: self.mock_isfile(x)):
+            for key in ['crt', 'key']:
+                bad_args: Dict[str, str] = self.good_args().copy()
+                bad_args[key] = 'path/invalid_path'
+                with self.assertRaises(FileNotFoundError):
+                    CertAuth(**bad_args)
+                    
+    def test_get_auth(self):
+        
+        with mock.patch("os.path.isfile", side_effect=lambda x: self.mock_isfile(x)):
+            certauth: CertAuth = CertAuth(**self.good_args())
+            
+            expctd_auth: str = base64.b64encode(bytes(f"{self.good_args()['username']}"
+                                                      f":{self.good_args()['password']}", 
+                                                      "utf-8")).decode("ascii")
+            self.assertEqual(certauth.auth, expctd_auth)
+            self.assertEqual(certauth.crt, self.good_args()['crt'])
+            self.assertEqual(certauth.key, self.good_args()['key'])
+            
+            authx : Dict[str, Dict[str, Any]] = certauth.get_auth()
+            self.assertEqual(authx["headers"]["Authorization"], f"Basic {expctd_auth}")
+            self.assertEqual(authx["cert"], (self.good_args()['crt'], self.good_args()['key']))
+        
+        
+        
 
 
 class TestOAuth(unittest.TestCase):
@@ -127,6 +183,10 @@ class TestDataQueryInterface(unittest.TestCase):
             aggregator.append(elem_dict)
 
         return aggregator
+
+    def test_init(self):
+        with self.assertRaises(ValueError):
+            DataQueryInterface(config=1)
 
     @mock.patch(
         "macrosynergy.download.dataquery.OAuth._get_token",
@@ -341,7 +401,7 @@ class TestDataQueryInterface(unittest.TestCase):
             )
 
 
-class TestDataQueryOAuth(unittest.TestCase):
+class TestDataQueryDownloads(unittest.TestCase):
     def test_authentication_error(self):
         with JPMaQSDownload(
             oauth=True,
@@ -520,6 +580,18 @@ class TestArgValidation(unittest.TestCase):
             "retry_counter": 0,
             "delay_param": API_DELAY_PARAM,}
         self.assertTrue(validate_download_args(**good_args))
+        
+        # rplace expressions with None. should raise value error
+        bad_args: Dict[str, Any] = good_args.copy()
+        bad_args["expressions"] = None
+        with self.assertRaises(ValueError):
+            validate_download_args(**bad_args)
+            
+        # replace expressions with list of ints. should raise type error
+        bad_args: Dict[str, Any] = good_args.copy()
+        bad_args["expressions"] = [1, 2, 3]
+        with self.assertRaises(TypeError):
+            validate_download_args(**bad_args)
         
         for key in good_args.keys():
             bad_value : Union[int, str] = 1
