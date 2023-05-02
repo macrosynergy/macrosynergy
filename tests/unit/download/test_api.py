@@ -807,7 +807,100 @@ class TestRequestWrapper(unittest.TestCase):
                 
 ##############################################
 
+
+class MockDataQueryInterface(DataQueryInterface):
+    @staticmethod
+    def jpmaqs_value(elem: str):
+        """
+        Used to produce a value or grade for the associated ticker. If the metric is
+        grade, the function will return 1.0 and if value, the function returns a random
+        number between (0, 1).
+
+        :param <str> elem: ticker.
+        """
+        ticker_split = elem.split(",")
+        if ticker_split[-1][:-1] == "grading":
+            value = 1.0
+        else:
+            value = random()
+        return value
+
+    def request_wrapper(
+        self, dq_expressions: List[str], start_date: str, end_date: str
+    ):
+        """
+        Contrived request method to replicate output from DataQuery. Will replicate the
+        form of a JPMaQS expression from DataQuery which will subsequently be used to
+        test methods held in the api.Interface() Class.
+        """
+        aggregator = []
+        for i, elem in enumerate(dq_expressions):
+            elem_dict = {
+                "item": (i + 1),
+                "group": None,
+                "attributes": [
+                    {
+                        "expression": elem,
+                        "label": None,
+                        "attribute-id": None,
+                        "attribute-name": None,
+                        "time-series": [
+                            [d.strftime("%Y%m%d"), self.jpmaqs_value(elem)]
+                            for d in pd.bdate_range(start_date, end_date)
+                        ],
+                    },
+                ],
+                "instrument-id": None,
+                "instrument-name": None,
+            }
+            aggregator.append(elem_dict)
+
+        return aggregator
+
+    def __init__(self, *args, **kwargs):
+        if "config" in kwargs:
+            self.config = kwargs["config"]
+        else:
+            self.config = Config(client_id="test_clid", client_secret="test_clsc",
+                                 crt="test_crt", key="test_key", username="test_user",
+                                    password="test_pass",)
+            
+        # init the parent class with the config
+        super().__init__(config=self.config)
+
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+    def check_connection(self, verbose=False) -> bool:
+        return True
+    
+    def download_data(self, expressions : List[str], start_date : str, end_date : str,
+                      **kwargs) -> pd.DataFrame:
+        return self.request_wrapper(expressions, start_date, end_date)
+    
+    def _gen_attributes(self, msg_errors: List[str] = None, msg_warnings: List[str] = None,
+                        unavailable_expressions: List[str] = None, egress_data: List[Dict[str, Any]] = None):
+        
+        self.msg_errors: List[str] = ["DEFAULT ERROR MESSAGE"] if msg_errors is None else msg_errors
+        self.msg_warnings: List[str] = ["DEFAULT WARNING MESSAGE"] if msg_warnings is None else msg_warnings
+        self.unavailable_expressions: List[str] = ["Some_Expression"] if unavailable_expressions is None else unavailable_expressions
+        self.egress_data: List[Dict[str, Any]] = {
+            'tracking-id-123' : {
+                'upload_size' : 200,
+                'download_size' : 2000,
+                'url' : OAUTH_BASE_URL + TIMESERIES_ENDPOINT,
+                'time_taken' : 10,
+            }
+        }
+    
+
+
+
 class TestJPMaQSDownload(unittest.TestCase):
+    
     def test_init(self):
         good_args: Dict[str, Any] = {
             "oauth": True,
@@ -930,7 +1023,38 @@ class TestJPMaQSDownload(unittest.TestCase):
             bad_args[date_args] = '1200-01-01'
             with self.assertRaises(ValueError):
                 jpmaqs.validate_download_args(**bad_args)
-                
+
+
+
+    def test_download(self):
+        good_args: Dict[str, Any] = {
+            "tickers" : ["EUR_FXXR_NSA", "USD_FXXR_NSA"],
+            "cids" : ["GBP", "EUR"],
+            "xcats" : ["FXXR_NSA", "EQXR_NSA"],
+            "metrics" : ["value", "grading"],
+            "start_date" : "2019-01-01",
+            "end_date" : "2019-01-31",
+            "expressions" : ["DB(JPMAQS,AUD_FXXR_NSA,value)", 
+                             "DB(JPMAQS,CAD_FXXR_NSA,value)"],
+            "show_progress" : True,
+            "as_dataframe" : True,
+            "report_time_taken" : True,
+            "report_egress" : True,}
+        
+        jpmaqs : JPMaQSDownload = JPMaQSDownload(client_id="client_id", 
+                                                 client_secret="client_secret",
+                                                 check_connection=False,)
+        
+        config: Config = Config(client_id="client_id", 
+                                client_secret="client_secret",)
+        
+        mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(config=config)
+        mock_dq_interface._gen_attributes()
+
+        try:
+            jpmaqs.download(**good_args)
+        except Exception as e:
+            self.fail("Unexpected exception raised: {}".format(e))
                 
 
 
