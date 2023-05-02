@@ -425,11 +425,9 @@ class TestDataQueryInterface(unittest.TestCase):
             
             
     def test_dq_fetch(self):
-        cfg = Config(client_id="client_id", client_secret="client_secret")
-        print(cfg.credentials())
+        cfg = Config(client_id=os.getenv("DQ_CLIENT_ID"), client_secret=os.getenv("DQ_CLIENT_SECRET"))
         dq : DataQueryInterface = DataQueryInterface(oauth=True,
-                                                     config=Config(client_id="client_id", 
-                                                                   client_secret="client_secret"))
+                                                     config=cfg)
         
         self.assertTrue(dq.check_connection()) # doing this so oath token is ready for _fetch method
         invl_responses: List[Any] = [None, {}, {"attributes": []}, {"attributes": [{"expression": "expression1"}]}]
