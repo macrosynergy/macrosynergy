@@ -480,12 +480,7 @@ class TestDataQueryDownloads(unittest.TestCase):
             with self.assertRaises(AuthenticationError):
                 dq.check_connection()
 
-    def test_connection(self):
-        
-        dq_clid = os.getenv("DQ_CLIENT_ID")
-        # assert is not None
-        assert dq_clid is not None, "DQ_CLIENT_ID environment variable not set"
-        
+    def test_connection(self):       
         with JPMaQSDownload(
             oauth=True,
             client_id=os.getenv("DQ_CLIENT_ID"),
