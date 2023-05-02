@@ -8,7 +8,7 @@ import requests
 from macrosynergy.download import JPMaQSDownload
 from macrosynergy.download.dataquery import DataQueryInterface, request_wrapper, validate_response
 from macrosynergy.download.dataquery import OAUTH_BASE_URL, OAUTH_TOKEN_URL, HEARTBEAT_ENDPOINT, TIMESERIES_ENDPOINT
-from macrosynergy.download.exceptions import AuthenticationError, HeartbeatError, InvalidResponseError
+from macrosynergy.download.exceptions import AuthenticationError, HeartbeatError, InvalidResponseError, DownloadError, InvalidDataframeError
 from macrosynergy.management.utils import Config
 
 class TestDataQueryOAuth(unittest.TestCase):
@@ -219,15 +219,39 @@ class TestRequestWrapper(unittest.TestCase):
         with self.assertRaises(ValueError):
             request_wrapper(method="pop", url=OAUTH_TOKEN_URL)
 
-
-        # mock using mock_request_send
-
         def mock_auth_error(*args, **kwargs) -> requests.Response:
             return self.mock_response(url=OAUTH_TOKEN_URL, status_code=401)
 
         with patch("requests.Session.send", side_effect=mock_auth_error):
             with self.assertRaises(AuthenticationError):
                 request_wrapper(method="get", url=OAUTH_TOKEN_URL,
+                )
+
+        def mock_heartbeat_error(*args, **kwargs) -> requests.Response:
+            # mock a response with 403. assert raises heartbeat error
+            return self.mock_response(url=OAUTH_BASE_URL+HEARTBEAT_ENDPOINT, status_code=403)
+        
+        with patch("requests.Session.send", side_effect=mock_heartbeat_error):
+            with self.assertRaises(HeartbeatError):
+                request_wrapper(method="get", url=OAUTH_BASE_URL+HEARTBEAT_ENDPOINT,
+                )
+
+        def mock_known_errors(*args, **kwargs) -> requests.Response:
+            # mock a response with 400. assert raises invalid response error
+            raise ConnectionResetError
+        
+        with patch("requests.Session.send", side_effect=mock_known_errors):
+            with self.assertRaises(DownloadError):
+                request_wrapper(method="get", url=OAUTH_BASE_URL+HEARTBEAT_ENDPOINT,
+                )
+
+        def mock_unknown_errors(*args, **kwargs) -> requests.Response:
+            # raise some unrelated error - using InvalidDataframeError as it does not interact with this scope
+            raise InvalidDataframeError
+
+        with patch("requests.Session.send", side_effect=mock_unknown_errors):
+            with self.assertRaises(InvalidDataframeError):
+                request_wrapper(method="get", url=OAUTH_BASE_URL+HEARTBEAT_ENDPOINT,
                 )
 
 
