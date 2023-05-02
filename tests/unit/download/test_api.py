@@ -925,6 +925,11 @@ class TestJPMaQSDownload(unittest.TestCase):
             bad_args[date_args] = '1900-01-01'
             with self.assertWarns(UserWarning):
                 jpmaqs.validate_download_args(**bad_args)
+
+            # pd.Timestamp extreme cases
+            bad_args[date_args] = '1200-01-01'
+            with self.assertRaises(ValueError):
+                jpmaqs.validate_download_args(**bad_args)
                 
                 
 
