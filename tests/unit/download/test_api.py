@@ -413,8 +413,9 @@ class TestDataQueryInterface(unittest.TestCase):
             
             
     def test_get_catalogue(self):
-        dq : DataQueryInterface = DataQueryInterface(Config(client_id="client_id", client_secret="client_secret"),
-                                                     oauth=True)
+        dq : DataQueryInterface = DataQueryInterface(oauth=True,
+                                                     config=Config(client_id="client_id", 
+                                                                   client_secret="client_secret"))
         # assert raises NotImplementedError
         with self.assertRaises(NotImplementedError):
             dq.get_catalogue()
@@ -424,9 +425,11 @@ class TestDataQueryInterface(unittest.TestCase):
             
             
     def test_dq_fetch(self):
-        dq : DataQueryInterface = DataQueryInterface(Config(client_id=os.getenv("DQ_CLIENT_ID"),
-                                                            client_secret=os.getenv("DQ_CLIENT_SECRET")),
-                                                     oauth=True)
+        cfg = Config(client_id="client_id", client_secret="client_secret")
+        print(cfg.credentials())
+        dq : DataQueryInterface = DataQueryInterface(oauth=True,
+                                                     config=Config(client_id="client_id", 
+                                                                   client_secret="client_secret"))
         
         self.assertTrue(dq.check_connection()) # doing this so oath token is ready for _fetch method
         invl_responses: List[Any] = [None, {}, {"attributes": []}, {"attributes": [{"expression": "expression1"}]}]
