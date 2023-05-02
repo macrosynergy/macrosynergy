@@ -413,7 +413,8 @@ class TestDataQueryInterface(unittest.TestCase):
             
             
     def test_get_catalogue(self):
-        dq : DataQueryInterface = DataQueryInterface(Config(client_id="client_id", client_secret="client_secret"))
+        dq : DataQueryInterface = DataQueryInterface(Config(client_id="client_id", client_secret="client_secret"),
+                                                     oauth=True)
         # assert raises NotImplementedError
         with self.assertRaises(NotImplementedError):
             dq.get_catalogue()
@@ -424,7 +425,8 @@ class TestDataQueryInterface(unittest.TestCase):
             
     def test_dq_fetch(self):
         dq : DataQueryInterface = DataQueryInterface(Config(client_id=os.getenv("DQ_CLIENT_ID"),
-                                                            client_secret=os.getenv("DQ_CLIENT_SECRET")))
+                                                            client_secret=os.getenv("DQ_CLIENT_SECRET")),
+                                                     oauth=True)
         
         self.assertTrue(dq.check_connection()) # doing this so oath token is ready for _fetch method
         invl_responses: List[Any] = [None, {}, {"attributes": []}, {"attributes": [{"expression": "expression1"}]}]
@@ -793,6 +795,34 @@ class TestRequestWrapper(unittest.TestCase):
                     method="get",
                     url=OAUTH_BASE_URL + HEARTBEAT_ENDPOINT,
                 )
+                
+##############################################
+
+class TestJPMaQSDownload(unittest.TestCase):
+    def test_init(self):
+        good_args: Dict[str, Any] = {
+            "oauth": True,
+            "client_id": "client_id",
+            "client_secret": "client_secret",
+            "check_connection": False,
+            "proxy": {"http": "proxy.com"},
+            "suppress_warning": True,
+            "debug": False,
+            "print_debug_data": False,
+            "dq_download_kwargs": {"test": "test"},
+        }
+        # check if the the class is initialized with the correct arguments
+        try:
+            jpmaqs: JPMaQSDownload = JPMaQSDownload(**good_args)
+            self.assertEqual(set(jpmaqs.valid_metrics), 
+                             set(["value", "grading", "eop_lag", "mop_lag"]))
+            for varx in [jpmaqs.msg_errors, jpmaqs.msg_warnings, jpmaqs.unavailable_expressions]:
+                self.assertEqual(varx, [])
+            
+            self.assertEqual(jpmaqs.downloaded_data, {})
+        except Exception as e:
+            self.fail("Unexpected exception raised: {}".format(e))
+            
 
 
 if __name__ == "__main__":
