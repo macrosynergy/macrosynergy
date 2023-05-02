@@ -910,7 +910,7 @@ class MockDataQueryInterface(DataQueryInterface):
                 password="test_pass",
             )
 
-        # init the parent class with the config
+        self.mask_expressions = []
         super().__init__(config=self.config)
 
     def __enter__(self):
@@ -923,13 +923,25 @@ class MockDataQueryInterface(DataQueryInterface):
         return True
 
     def download_data(
-        self, expressions: List[str], start_date: str, end_date: str, **kwargs
+        self, expressions: List[str], start_date: str, end_date: str,
+        **kwargs
     ) -> pd.DataFrame:
-        return self.request_wrapper(expressions, start_date, end_date)
+        expr = expressions.copy()
+
+        ts: List[dict] = self.request_wrapper(expressions, start_date, end_date)
+        # look at d[attributes][0][expression]. if in mask_expressions, replace attributes[0][time-series] with None
+        if self.mask_expressions:
+            for d in ts:
+                if d["attributes"][0]["expression"] in self.mask_expressions:
+                    d["attributes"][0]["time-series"] = None
+                    d["attributes"][0]["message"] = f"MASKED - {d['attributes'][0]['expression']}"
+        
+        return ts
 
     def _gen_attributes(
         self,
         msg_errors: List[str] = None,
+        mask_expressions: List[str] = None,
         msg_warnings: List[str] = None,
         unavailable_expressions: List[str] = None,
         egress_data: List[Dict[str, Any]] = None,
@@ -953,6 +965,10 @@ class MockDataQueryInterface(DataQueryInterface):
                 "time_taken": 10,
             }
         }
+
+        self.mask_expressions: List[str] = (
+            ["Some_Expression_X"] if mask_expressions is None else mask_expressions
+        )
 
 
 class TestJPMaQSDownload(unittest.TestCase):
@@ -1094,7 +1110,7 @@ class TestJPMaQSDownload(unittest.TestCase):
             "tickers": ["EUR_FXXR_NSA", "USD_FXXR_NSA"],
             "cids": ["GBP", "EUR"],
             "xcats": ["FXXR_NSA", "EQXR_NSA"],
-            "metrics": ["value", "grading"],
+            "metrics": ["value", "grading", "eop_lag", "mop_lag"],
             "start_date": "2019-01-01",
             "end_date": "2019-01-31",
             "expressions": [
@@ -1121,10 +1137,18 @@ class TestJPMaQSDownload(unittest.TestCase):
         mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(
             config=config
         )
-        mock_dq_interface._gen_attributes()
+        un_avail_exprs: List[str] = ["DB(JPMAQS,USD_FXXR_NSA,value)",
+                                          "DB(JPMAQS,USD_FXXR_NSA,grading)",
+                                          "DB(JPMAQS,USD_FXXR_NSA,eop_lag)",
+                                          "DB(JPMAQS,USD_FXXR_NSA,mop_lag)"]
+        mock_dq_interface._gen_attributes(unavailable_expressions=un_avail_exprs,
+                                          mask_expressions=un_avail_exprs)
+
+        # mock dq interface
+        jpmaqs.dq_interface = mock_dq_interface
 
         try:
-            jpmaqs.download(**good_args)
+            test_df:pd.DataFrame = jpmaqs.download(**good_args)
         except Exception as e:
             self.fail("Unexpected exception raised: {}".format(e))
 
