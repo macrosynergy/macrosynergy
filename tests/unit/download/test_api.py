@@ -410,6 +410,14 @@ class TestDataQueryInterface(unittest.TestCase):
                 tkm,
                 "_".join(jpmaqs_download.deconstruct_expression(expression=expression)),
             )
+
+        for expr in [1, [1, 2]]:
+            # type error
+            with self.assertRaises(TypeError):
+                jpmaqs_download.deconstruct_expression(expression=expr)
+        
+        with self.assertRaises(ValueError):
+            jpmaqs_download.deconstruct_expression(expression=[])
             
             
     def test_get_catalogue(self):
@@ -827,12 +835,105 @@ class TestJPMaQSDownload(unittest.TestCase):
         for argx in good_args:
             with self.assertRaises(TypeError):
                 bad_args = good_args.copy()
-                bad_args[argx] = 1
+                bad_args[argx] = -1 # 1 would evaluate to True for bools
                 JPMaQSDownload(**bad_args)
                 
         with self.assertRaises(TypeError):
             good_args["credentials_config"] = 1
             JPMaQSDownload(**good_args)
+
+    def test_download_arg_validation(self):
+        good_args: Dict[str, Any] = {
+            "tickers" : ["EUR_FXXR_NSA", "USD_FXXR_NSA"],
+            "cids" : ["GBP", "EUR"],
+            "xcats" : ["FXXR_NSA", "EQXR_NSA"],
+            "metrics" : ["value", "grading"],
+            "start_date" : "2019-01-01",
+            "end_date" : "2019-01-31",
+            "expressions" : ["DB(JPMAQS,AUD_FXXR_NSA,value)", 
+                             "DB(JPMAQS,CAD_FXXR_NSA,value)"],
+            "show_progress" : True,
+            "as_dataframe" : True,
+            "report_time_taken" : True,
+            "report_egress" : True,}
+        
+        jpmaqs: JPMaQSDownload = JPMaQSDownload(client_id="client_id", 
+                                                client_secret="client_secret",
+                                                check_connection=False,)
+        
+        try:
+            if not jpmaqs.validate_download_args(**good_args):
+                self.fail("Unexpected validation failure")
+        except Exception as e:
+            self.fail("Unexpected exception raised: {}".format(e))
+
+        for argx in good_args:
+            with self.assertRaises(TypeError):
+                bad_args = good_args.copy()
+                bad_args[argx] = -1
+                jpmaqs.validate_download_args(**bad_args)
+
+        # value error for tickers==cids==xcats==expressions == None
+        with self.assertRaises(ValueError):
+            bad_args = good_args.copy()
+            bad_args["tickers"] = None
+            bad_args["cids"] = None
+            bad_args["xcats"] = None
+            bad_args["expressions"] = None
+            jpmaqs.validate_download_args(**bad_args)
+
+        for lvarx in ["tickers", "cids", "xcats", "expressions"]:
+            with self.assertRaises(ValueError):
+                bad_args = good_args.copy()
+                bad_args[lvarx] = []
+                jpmaqs.validate_download_args(**bad_args)
+            
+            with self.assertRaises(TypeError):
+                bad_args = good_args.copy()
+                bad_args[lvarx] = [1]
+                jpmaqs.validate_download_args(**bad_args)
+
+        # test cases for metrics arg
+        bad_args = good_args.copy()
+        bad_args["metrics"] = None
+        with self.assertRaises(ValueError):
+            jpmaqs.validate_download_args(**bad_args)
+        
+        bad_args = good_args.copy()
+        bad_args["metrics"] = ["Metallica"]
+        with self.assertRaises(ValueError):
+            jpmaqs.validate_download_args(**bad_args)
+
+        # cid AND xcat cases
+        with self.assertRaises(ValueError):
+            bad_args = good_args.copy()
+            bad_args["xcats"] = None
+            jpmaqs.validate_download_args(**bad_args)
+
+        with self.assertRaises(ValueError):
+            bad_args = good_args.copy()
+            bad_args["cids"] = None
+            jpmaqs.validate_download_args(**bad_args)
+
+
+        for date_args in ["start_date", "end_date"]:
+            bad_args = good_args.copy()
+            bad_args[date_args] = 'Metallica'
+            with self.assertRaises(ValueError):
+                jpmaqs.validate_download_args(**bad_args)
+            
+            bad_args[date_args] = '1900-01-01'
+            with self.assertWarns(UserWarning):
+                jpmaqs.validate_download_args(**bad_args)
+                
+                
+
+
+    def test_validate_downloaded_df(self):
+        pass
+
+
+        
 
 
 
