@@ -6,6 +6,7 @@ import pandas as pd
 import os
 import datetime
 import base64
+import io
 
 from typing import List, Dict, Union, Optional, Any, Tuple
 import requests
@@ -24,7 +25,9 @@ from macrosynergy.download.dataquery import (
     OAUTH_TOKEN_URL,
     HEARTBEAT_ENDPOINT,
     TIMESERIES_ENDPOINT,
-    API_DELAY_PARAM
+    API_DELAY_PARAM,
+    HL_RETRY_COUNT,
+    CERT_BASE_URL,
 )
 from macrosynergy.download.exceptions import (
     AuthenticationError,
@@ -91,11 +94,17 @@ class TestCertAuth(unittest.TestCase):
             authx : Dict[str, Dict[str, Any]] = certauth.get_auth()
             self.assertEqual(authx["headers"]["Authorization"], f"Basic {expctd_auth}")
             self.assertEqual(authx["cert"], (self.good_args()['crt'], self.good_args()['key']))
-        
-        
-        
+            
+    def test_with_dqinterface(self):
+        with mock.patch("os.path.isfile", side_effect=lambda x: self.mock_isfile(x)):
+            cfg : Config = Config(username='user', password='pass', crt='path/crt.crt', key='path/key.key')
+            dq_interface : DataQueryInterface = DataQueryInterface(config=cfg, oauth=False)
 
-
+            # assert that dq_interface.auth is CertAuth type
+            self.assertIsInstance(dq_interface.auth, CertAuth)
+            # check that the base_url is cert_base url
+            self.assertEqual(dq_interface.base_url, CERT_BASE_URL)
+            
 class TestOAuth(unittest.TestCase):
     def test_init(self):
         jpmaqs: JPMaQSDownload = JPMaQSDownload(
@@ -106,30 +115,32 @@ class TestOAuth(unittest.TestCase):
         )
         self.assertEqual(jpmaqs.dq_interface.base_url, dataquery.OAUTH_BASE_URL)
 
-    # def test_invalid_args_passed(self):
     def test_invalid_init_args(self):
-        # test invalid client_id
-        with self.assertRaises(TypeError):
-            dataquery.OAuth(client_id=123, client_secret="SECRET")
 
-        # test invalid client_secret
-        with self.assertRaises(TypeError):
-            dataquery.OAuth(client_id="test-id", client_secret=123)
-
-        # test invalid base_url
-        with self.assertRaises(TypeError):
-            dataquery.OAuth(client_id="test-id", client_secret="SECRET", base_url=None)
-
-        # test invalid token_url
-        with self.assertRaises(TypeError):
-            dataquery.OAuth(client_id="test-id", client_secret="SECRET", token_url=None)
-
-        # test invalid dq_resource_id
-        with self.assertRaises(TypeError):
-            dataquery.OAuth(
-                client_id="test-id", client_secret="SECRET", dq_resource_id=None
-            )
-
+        good_args : Dict[str, str] = {'client_id': 'test-id', 'client_secret': 'SECRET',
+                                      'token_url': 'https://token.url',
+                                        'dq_resource_id': 'test-resource-id'}
+        
+        for key in good_args.keys():
+            bad_args: Dict[str, str] = good_args.copy()
+            bad_args[key] = 1
+            with self.assertRaises(TypeError):
+                OAuth(**bad_args)
+                
+        try:
+            oath_obj : OAuth = OAuth(**good_args)
+            
+            self.assertIsInstance(oath_obj.token_data, dict)
+            expcted_token_data : Dict[str, str] = {
+                "grant_type": "client_credentials",
+                "client_id": "test-id",
+                "client_secret": "SECRET",
+                "aud": 'test-resource-id'
+            }
+            self.assertEqual(oath_obj.token_data, expcted_token_data)
+        except Exception as e:
+            self.fail(f"Unexpected exception raised: {e}")
+        
     def test_valid_token(self):
         oauth = dataquery.OAuth(client_id="test-id", client_secret="SECRET")
         self.assertFalse(oauth._valid_token())
@@ -399,6 +410,50 @@ class TestDataQueryInterface(unittest.TestCase):
                 tkm,
                 "_".join(jpmaqs_download.deconstruct_expression(expression=expression)),
             )
+            
+            
+    def test_get_catalogue(self):
+        dq : DataQueryInterface = DataQueryInterface(Config(client_id="client_id", client_secret="client_secret"))
+        # assert raises NotImplementedError
+        with self.assertRaises(NotImplementedError):
+            dq.get_catalogue()
+            
+        with self.assertRaises(NotImplementedError):
+            dq.filter_exprs_from_catalogue(expressions=["expression1", "expression2"])
+            
+            
+    def test_dq_fetch(self):
+        dq : DataQueryInterface = DataQueryInterface(Config(client_id=os.getenv("DQ_CLIENT_ID"),
+                                                            client_secret=os.getenv("DQ_CLIENT_SECRET")))
+        
+        self.assertTrue(dq.check_connection()) # doing this so oath token is ready for _fetch method
+        invl_responses: List[Any] = [None, {}, {"attributes": []}, {"attributes": [{"expression": "expression1"}]}]
+        
+        for invl_response in invl_responses:
+            with mock.patch("macrosynergy.download.dataquery.request_wrapper", return_value=invl_response):
+                with self.assertRaises(InvalidResponseError):
+                    dq._fetch(url=OAUTH_BASE_URL+TIMESERIES_ENDPOINT, params={"expr": "expression1"})
+                    
+    def test_download(self):
+        good_args: Dict[str, Any] = {"expressions" : ["expression1", "expression2"],
+                                        "params" : {"start_date": "2000-01-01", "end_date": "2020-01-01"},
+                                        "url" : OAUTH_BASE_URL+TIMESERIES_ENDPOINT,
+                                        "tracking_id" : str,
+                                        "delay_param" : 0.25,
+                                        "retry_counter" : 0,}
+        
+        bad_args: Dict[str, Any] = good_args.copy()
+        bad_args["retry_counter"] = 10
+        
+        with mock.patch("sys.stdout", new=io.StringIO()) as mock_std:
+            with mock.patch("macrosynergy.download.dataquery.request_wrapper", return_value={"attributes": []}):
+                with self.assertRaises(DownloadError):
+                    DataQueryInterface(Config(client_id="client_id", client_secret="client_secret"), oauth=True)._download(**bad_args)
+            err_string_1: str = f"Retrying failed downloads. Retry count: {bad_args['retry_counter']}"
+            self.assertIn(err_string_1, mock_std.getvalue())
+            
+            
+    
 
 
 class TestDataQueryDownloads(unittest.TestCase):
@@ -723,6 +778,17 @@ class TestRequestWrapper(unittest.TestCase):
 
         with mock.patch("requests.Session.send", side_effect=mock_unknown_errors):
             with self.assertRaises(InvalidDataframeError):
+                request_wrapper(
+                    method="get",
+                    url=OAUTH_BASE_URL + HEARTBEAT_ENDPOINT,
+                )
+                
+        def mock_keyboard_interrupt(*args, **kwargs) -> requests.Response:
+            # raise some unrelated error - using InvalidDataframeError as it does not interact with this scope
+            raise KeyboardInterrupt
+        
+        with mock.patch("requests.Session.send", side_effect=mock_keyboard_interrupt):
+            with self.assertRaises(KeyboardInterrupt):
                 request_wrapper(
                     method="get",
                     url=OAUTH_BASE_URL + HEARTBEAT_ENDPOINT,
