@@ -543,6 +543,7 @@ class DataQueryInterface(object):
     Must be instantiated with a valid Config object.
     (see macrosynergy.management.utils.Config class for more info)
 
+    :param <Config> config: Config object.
     :param <bool> oauth: whether to use OAuth authentication. Defaults to True.
     :param <bool> debug: whether to print debug messages. Defaults to False.
     :param <bool> concurrent: whether to use concurrent requests. Defaults to True.
