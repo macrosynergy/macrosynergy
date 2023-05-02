@@ -3,11 +3,8 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-import sys
-sys.path.append("/Users/palashtyagi/Work/Code/ms/macrosynergy/")
-
 import random
-from typing import List, Union, Tuple, Dict
+from typing import List, Union, Tuple
 from macrosynergy.panel.historic_vol import expo_weights, expo_std, flat_std
 from macrosynergy.management.shape_dfs import reduce_df_by_ticker
 from macrosynergy.panel.converge_row import ConvergeRow
