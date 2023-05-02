@@ -414,24 +414,21 @@ class CertAuth(object):
         password: str,
         crt: str,
         key: str,
-    ):
-        assert isinstance(
-            username, str
-        ), f"username must be <str> and not {type(username)}"
-
-        assert isinstance(
-            password, str
-        ), f"password must be <str> and not {type(password)}"
+    ):        
+        for varx, namex in zip([username, password], ["username", "password"]):
+            if not isinstance(varx, str):
+                raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
 
         self.auth: str = base64.b64encode(
             bytes(f"{username:s}:{password:s}", "utf-8")
         ).decode("ascii")
 
         # Key and Certificate check
-        for n, f in [("key", key), ("crt", crt)]:
-            assert isinstance(f, str), f"{n} must be type <str> and not {type(f)}"
-            if not os.path.isfile(f):
-                raise FileNotFoundError(f"The file '{f}' does not exist.")
+        for varx, namex in zip([crt, key], ["crt", "key"]):
+            if not isinstance(varx, str):
+                raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
+            if not os.path.isfile(varx):
+                raise FileNotFoundError(f"The file '{varx}' does not exist.")
         self.key: str = key
         self.crt: str = crt
 
