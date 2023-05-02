@@ -923,8 +923,7 @@ class MockDataQueryInterface(DataQueryInterface):
         return True
 
     def download_data(
-        self, expressions: List[str], start_date: str, end_date: str,
-        **kwargs
+        self, expressions: List[str], start_date: str, end_date: str, **kwargs
     ) -> pd.DataFrame:
         expr = expressions.copy()
 
@@ -934,8 +933,10 @@ class MockDataQueryInterface(DataQueryInterface):
             for d in ts:
                 if d["attributes"][0]["expression"] in self.mask_expressions:
                     d["attributes"][0]["time-series"] = None
-                    d["attributes"][0]["message"] = f"MASKED - {d['attributes'][0]['expression']}"
-        
+                    d["attributes"][0][
+                        "message"
+                    ] = f"MASKED - {d['attributes'][0]['expression']}"
+
         return ts
 
     def _gen_attributes(
@@ -1137,18 +1138,21 @@ class TestJPMaQSDownload(unittest.TestCase):
         mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(
             config=config
         )
-        un_avail_exprs: List[str] = ["DB(JPMAQS,USD_FXXR_NSA,value)",
-                                          "DB(JPMAQS,USD_FXXR_NSA,grading)",
-                                          "DB(JPMAQS,USD_FXXR_NSA,eop_lag)",
-                                          "DB(JPMAQS,USD_FXXR_NSA,mop_lag)"]
-        mock_dq_interface._gen_attributes(unavailable_expressions=un_avail_exprs,
-                                          mask_expressions=un_avail_exprs)
+        un_avail_exprs: List[str] = [
+            "DB(JPMAQS,USD_FXXR_NSA,value)",
+            "DB(JPMAQS,USD_FXXR_NSA,grading)",
+            "DB(JPMAQS,USD_FXXR_NSA,eop_lag)",
+            "DB(JPMAQS,USD_FXXR_NSA,mop_lag)",
+        ]
+        mock_dq_interface._gen_attributes(
+            unavailable_expressions=un_avail_exprs, mask_expressions=un_avail_exprs
+        )
 
         # mock dq interface
         jpmaqs.dq_interface = mock_dq_interface
 
         try:
-            test_df:pd.DataFrame = jpmaqs.download(**good_args)
+            test_df: pd.DataFrame = jpmaqs.download(**good_args)
         except Exception as e:
             self.fail("Unexpected exception raised: {}".format(e))
 
