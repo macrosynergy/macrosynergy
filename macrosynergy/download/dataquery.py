@@ -414,7 +414,7 @@ class CertAuth(object):
         password: str,
         crt: str,
         key: str,
-    ):        
+    ):
         for varx, namex in zip([username, password], ["username", "password"]):
             if not isinstance(varx, str):
                 raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
@@ -511,8 +511,9 @@ def validate_download_args(
     for varx, namex in vars_types_zip:
         if not isinstance(varx, str):
             raise TypeError(f"`{namex}` must be a string.")
-        
+
     return True
+
 
 def get_unavailable_expressions(
     expected_exprs: List[str],

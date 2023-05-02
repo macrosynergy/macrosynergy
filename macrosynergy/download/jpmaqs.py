@@ -357,12 +357,14 @@ class JPMaQSDownload(object):
                 if "message" in d["attributes"][0]:
                     self.unavailable_expr_messages.append(d["attributes"][0]["message"])
                 else:
-                    self.unavailable_expr_messages.append(f"DataQuery did not return data or error message for expression {d['attributes'][0]['expression']}")
+                    self.unavailable_expr_messages.append(
+                        f"DataQuery did not return data or error message for expression {d['attributes'][0]['expression']}"
+                    )
 
         assert set(_missing_exprs) == set(
             self.unavailable_expressions
         ), "Downloaded `dicts_list` has been modified before calling `time_series_to_df`"
-        
+
         if len(dfs) == 0:
             raise InvalidDataframeError(
                 "No data was downloaded. Check logger output for complete list of missing expressions."
@@ -542,10 +544,13 @@ class JPMaQSDownload(object):
                 )
             if pd.to_datetime(varx) < pd.to_datetime("1950-01-01"):
                 warnings.warn(
-                    message=(f"`{namex}` is set before 1950-01-01."
-                             "Data before 1950-01-01 may not be available,"
-                             " and will cause errors/missing data."),
-                    category=UserWarning,)
+                    message=(
+                        f"`{namex}` is set before 1950-01-01."
+                        "Data before 1950-01-01 may not be available,"
+                        " and will cause errors/missing data."
+                    ),
+                    category=UserWarning,
+                )
 
         return True
 
@@ -645,10 +650,12 @@ class JPMaQSDownload(object):
             raise ValueError("Invalid arguments passed to download().")
         if pd.to_datetime(start_date) > pd.to_datetime(end_date):
             warnings.warn(
-                message=(f"`start_date` ({start_date}) is after `end_date` ({end_date}). "
+                message=(
+                    f"`start_date` ({start_date}) is after `end_date` ({end_date}). "
                     "These dates will be swapped."
                 ),
-                category=UserWarning,)
+                category=UserWarning,
+            )
             start_date, end_date = end_date, start_date
 
         # Construct expressions.
