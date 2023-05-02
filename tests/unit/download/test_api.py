@@ -811,7 +811,7 @@ class TestJPMaQSDownload(unittest.TestCase):
             "print_debug_data": False,
             "dq_download_kwargs": {"test": "test"},
         }
-        # check if the the class is initialized with the correct arguments
+
         try:
             jpmaqs: JPMaQSDownload = JPMaQSDownload(**good_args)
             self.assertEqual(set(jpmaqs.valid_metrics), 
