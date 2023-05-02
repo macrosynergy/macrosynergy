@@ -15,10 +15,11 @@ from macrosynergy.download import dataquery
 from macrosynergy.download import JPMaQSDownload
 from macrosynergy.download.dataquery import (
     DataQueryInterface,
-    OAuth, CertAuth,
+    OAuth,
+    CertAuth,
     request_wrapper,
     validate_response,
-    validate_download_args
+    validate_download_args,
 )
 from macrosynergy.download.dataquery import (
     OAUTH_BASE_URL,
@@ -41,70 +42,88 @@ from macrosynergy.management.utils import Config
 
 class TestCertAuth(unittest.TestCase):
     def mock_isfile(self, path: str) -> bool:
-        good_paths: List[str] = ['path/key.key', 'path/crt.crt']
+        good_paths: List[str] = ["path/key.key", "path/crt.crt"]
         if path in good_paths:
             return True
-        
+
     def good_args(self) -> Dict[str, str]:
         return {
-            'username': 'user',
-            'password': 'pass',
-            'crt': 'path/crt.crt',
-            'key': 'path/key.key'}
-        
-    def test_init(self):            
+            "username": "user",
+            "password": "pass",
+            "crt": "path/crt.crt",
+            "key": "path/key.key",
+        }
+
+    def test_init(self):
         try:
-            with mock.patch("os.path.isfile", side_effect=lambda x: self.mock_isfile(x)):
+            with mock.patch(
+                "os.path.isfile", side_effect=lambda x: self.mock_isfile(x)
+            ):
                 certauth: CertAuth = CertAuth(**self.good_args())
-                
-                expctd_auth: str = base64.b64encode(bytes(f"{self.good_args()['username']}:{self.good_args()['password']}", "utf-8")).decode("ascii")
+
+                expctd_auth: str = base64.b64encode(
+                    bytes(
+                        f"{self.good_args()['username']}:{self.good_args()['password']}",
+                        "utf-8",
+                    )
+                ).decode("ascii")
                 self.assertEqual(certauth.auth, expctd_auth)
-                self.assertEqual(certauth.crt, self.good_args()['crt'])
-                self.assertEqual(certauth.key, self.good_args()['key'])
-                
+                self.assertEqual(certauth.crt, self.good_args()["crt"])
+                self.assertEqual(certauth.key, self.good_args()["key"])
+
         except Exception as e:
             self.fail(f"Unexpected exception raised: {e}")
-        
+
         with mock.patch("os.path.isfile", side_effect=lambda x: self.mock_isfile(x)):
             for key in self.good_args().keys():
                 bad_args: Dict[str, str] = self.good_args().copy()
                 bad_args[key] = 1
                 with self.assertRaises(TypeError):
                     CertAuth(**bad_args)
-                    
+
         with mock.patch("os.path.isfile", side_effect=lambda x: self.mock_isfile(x)):
-            for key in ['crt', 'key']:
+            for key in ["crt", "key"]:
                 bad_args: Dict[str, str] = self.good_args().copy()
-                bad_args[key] = 'path/invalid_path'
+                bad_args[key] = "path/invalid_path"
                 with self.assertRaises(FileNotFoundError):
                     CertAuth(**bad_args)
-                    
+
     def test_get_auth(self):
-        
         with mock.patch("os.path.isfile", side_effect=lambda x: self.mock_isfile(x)):
             certauth: CertAuth = CertAuth(**self.good_args())
-            
-            expctd_auth: str = base64.b64encode(bytes(f"{self.good_args()['username']}"
-                                                      f":{self.good_args()['password']}", 
-                                                      "utf-8")).decode("ascii")
+
+            expctd_auth: str = base64.b64encode(
+                bytes(
+                    f"{self.good_args()['username']}"
+                    f":{self.good_args()['password']}",
+                    "utf-8",
+                )
+            ).decode("ascii")
             self.assertEqual(certauth.auth, expctd_auth)
-            self.assertEqual(certauth.crt, self.good_args()['crt'])
-            self.assertEqual(certauth.key, self.good_args()['key'])
-            
-            authx : Dict[str, Dict[str, Any]] = certauth.get_auth()
+            self.assertEqual(certauth.crt, self.good_args()["crt"])
+            self.assertEqual(certauth.key, self.good_args()["key"])
+
+            authx: Dict[str, Dict[str, Any]] = certauth.get_auth()
             self.assertEqual(authx["headers"]["Authorization"], f"Basic {expctd_auth}")
-            self.assertEqual(authx["cert"], (self.good_args()['crt'], self.good_args()['key']))
-            
+            self.assertEqual(
+                authx["cert"], (self.good_args()["crt"], self.good_args()["key"])
+            )
+
     def test_with_dqinterface(self):
         with mock.patch("os.path.isfile", side_effect=lambda x: self.mock_isfile(x)):
-            cfg : Config = Config(username='user', password='pass', crt='path/crt.crt', key='path/key.key')
-            dq_interface : DataQueryInterface = DataQueryInterface(config=cfg, oauth=False)
+            cfg: Config = Config(
+                username="user", password="pass", crt="path/crt.crt", key="path/key.key"
+            )
+            dq_interface: DataQueryInterface = DataQueryInterface(
+                config=cfg, oauth=False
+            )
 
             # assert that dq_interface.auth is CertAuth type
             self.assertIsInstance(dq_interface.auth, CertAuth)
             # check that the base_url is cert_base url
             self.assertEqual(dq_interface.base_url, CERT_BASE_URL)
-            
+
+
 class TestOAuth(unittest.TestCase):
     def test_init(self):
         jpmaqs: JPMaQSDownload = JPMaQSDownload(
@@ -116,31 +135,33 @@ class TestOAuth(unittest.TestCase):
         self.assertEqual(jpmaqs.dq_interface.base_url, dataquery.OAUTH_BASE_URL)
 
     def test_invalid_init_args(self):
+        good_args: Dict[str, str] = {
+            "client_id": "test-id",
+            "client_secret": "SECRET",
+            "token_url": "https://token.url",
+            "dq_resource_id": "test-resource-id",
+        }
 
-        good_args : Dict[str, str] = {'client_id': 'test-id', 'client_secret': 'SECRET',
-                                      'token_url': 'https://token.url',
-                                        'dq_resource_id': 'test-resource-id'}
-        
         for key in good_args.keys():
             bad_args: Dict[str, str] = good_args.copy()
             bad_args[key] = 1
             with self.assertRaises(TypeError):
                 OAuth(**bad_args)
-                
+
         try:
-            oath_obj : OAuth = OAuth(**good_args)
-            
+            oath_obj: OAuth = OAuth(**good_args)
+
             self.assertIsInstance(oath_obj.token_data, dict)
-            expcted_token_data : Dict[str, str] = {
+            expcted_token_data: Dict[str, str] = {
                 "grant_type": "client_credentials",
                 "client_id": "test-id",
                 "client_secret": "SECRET",
-                "aud": 'test-resource-id'
+                "aud": "test-resource-id",
             }
             self.assertEqual(oath_obj.token_data, expcted_token_data)
         except Exception as e:
             self.fail(f"Unexpected exception raised: {e}")
-        
+
     def test_valid_token(self):
         oauth = dataquery.OAuth(client_id="test-id", client_secret="SECRET")
         self.assertFalse(oauth._valid_token())
@@ -415,56 +436,77 @@ class TestDataQueryInterface(unittest.TestCase):
             # type error
             with self.assertRaises(TypeError):
                 jpmaqs_download.deconstruct_expression(expression=expr)
-        
+
         with self.assertRaises(ValueError):
             jpmaqs_download.deconstruct_expression(expression=[])
-            
-            
+
     def test_get_catalogue(self):
-        dq : DataQueryInterface = DataQueryInterface(oauth=True,
-                                                     config=Config(client_id="client_id", 
-                                                                   client_secret="client_secret"))
+        dq: DataQueryInterface = DataQueryInterface(
+            oauth=True,
+            config=Config(client_id="client_id", client_secret="client_secret"),
+        )
         # assert raises NotImplementedError
         with self.assertRaises(NotImplementedError):
             dq.get_catalogue()
-            
+
         with self.assertRaises(NotImplementedError):
             dq.filter_exprs_from_catalogue(expressions=["expression1", "expression2"])
-            
-            
+
     def test_dq_fetch(self):
-        cfg = Config(client_id=os.getenv("DQ_CLIENT_ID"), client_secret=os.getenv("DQ_CLIENT_SECRET"))
-        dq : DataQueryInterface = DataQueryInterface(oauth=True,
-                                                     config=cfg)
-        
-        self.assertTrue(dq.check_connection()) # doing this so oath token is ready for _fetch method
-        invl_responses: List[Any] = [None, {}, {"attributes": []}, {"attributes": [{"expression": "expression1"}]}]
-        
+        cfg = Config(
+            client_id=os.getenv("DQ_CLIENT_ID"),
+            client_secret=os.getenv("DQ_CLIENT_SECRET"),
+        )
+        dq: DataQueryInterface = DataQueryInterface(oauth=True, config=cfg)
+
+        self.assertTrue(
+            dq.check_connection()
+        )  # doing this so oath token is ready for _fetch method
+        invl_responses: List[Any] = [
+            None,
+            {},
+            {"attributes": []},
+            {"attributes": [{"expression": "expression1"}]},
+        ]
+
         for invl_response in invl_responses:
-            with mock.patch("macrosynergy.download.dataquery.request_wrapper", return_value=invl_response):
+            with mock.patch(
+                "macrosynergy.download.dataquery.request_wrapper",
+                return_value=invl_response,
+            ):
                 with self.assertRaises(InvalidResponseError):
-                    dq._fetch(url=OAUTH_BASE_URL+TIMESERIES_ENDPOINT, params={"expr": "expression1"})
-                    
+                    dq._fetch(
+                        url=OAUTH_BASE_URL + TIMESERIES_ENDPOINT,
+                        params={"expr": "expression1"},
+                    )
+
     def test_download(self):
-        good_args: Dict[str, Any] = {"expressions" : ["expression1", "expression2"],
-                                        "params" : {"start_date": "2000-01-01", "end_date": "2020-01-01"},
-                                        "url" : OAUTH_BASE_URL+TIMESERIES_ENDPOINT,
-                                        "tracking_id" : str,
-                                        "delay_param" : 0.25,
-                                        "retry_counter" : 0,}
-        
+        good_args: Dict[str, Any] = {
+            "expressions": ["expression1", "expression2"],
+            "params": {"start_date": "2000-01-01", "end_date": "2020-01-01"},
+            "url": OAUTH_BASE_URL + TIMESERIES_ENDPOINT,
+            "tracking_id": str,
+            "delay_param": 0.25,
+            "retry_counter": 0,
+        }
+
         bad_args: Dict[str, Any] = good_args.copy()
         bad_args["retry_counter"] = 10
-        
+
         with mock.patch("sys.stdout", new=io.StringIO()) as mock_std:
-            with mock.patch("macrosynergy.download.dataquery.request_wrapper", return_value={"attributes": []}):
+            with mock.patch(
+                "macrosynergy.download.dataquery.request_wrapper",
+                return_value={"attributes": []},
+            ):
                 with self.assertRaises(DownloadError):
-                    DataQueryInterface(Config(client_id="client_id", client_secret="client_secret"), oauth=True)._download(**bad_args)
-            err_string_1: str = f"Retrying failed downloads. Retry count: {bad_args['retry_counter']}"
+                    DataQueryInterface(
+                        Config(client_id="client_id", client_secret="client_secret"),
+                        oauth=True,
+                    )._download(**bad_args)
+            err_string_1: str = (
+                f"Retrying failed downloads. Retry count: {bad_args['retry_counter']}"
+            )
             self.assertIn(err_string_1, mock_std.getvalue())
-            
-            
-    
 
 
 class TestDataQueryDownloads(unittest.TestCase):
@@ -488,7 +530,7 @@ class TestDataQueryDownloads(unittest.TestCase):
             with self.assertRaises(AuthenticationError):
                 dq.check_connection()
 
-    def test_connection(self):       
+    def test_connection(self):
         with JPMaQSDownload(
             oauth=True,
             client_id=os.getenv("DQ_CLIENT_ID"),
@@ -631,7 +673,6 @@ class TestDataQueryDownloads(unittest.TestCase):
 
 class TestArgValidation(unittest.TestCase):
     def test_dq_download_args(self):
-
         good_args: Dict[str, Any] = {
             "expressions": ["DB(JPMAQS,EUR_FXXR_NSA,value)"],
             "start_date": "2020-01-01",
@@ -644,44 +685,46 @@ class TestArgValidation(unittest.TestCase):
             "nan_treatment": "NA_NOTHING",
             "reference_data": "NO_REFERENCE_DATA",
             "retry_counter": 0,
-            "delay_param": API_DELAY_PARAM,}
+            "delay_param": API_DELAY_PARAM,
+        }
         self.assertTrue(validate_download_args(**good_args))
-        
+
         # rplace expressions with None. should raise value error
         bad_args: Dict[str, Any] = good_args.copy()
         bad_args["expressions"] = None
         with self.assertRaises(ValueError):
             validate_download_args(**bad_args)
-            
+
         # replace expressions with list of ints. should raise type error
         bad_args: Dict[str, Any] = good_args.copy()
         bad_args["expressions"] = [1, 2, 3]
         with self.assertRaises(TypeError):
             validate_download_args(**bad_args)
-        
+
         for key in good_args.keys():
-            bad_value : Union[int, str] = 1
+            bad_value: Union[int, str] = 1
             if key == "retry_counter":
                 bad_value = "1"
             bad_args: Dict[str, Any] = good_args.copy()
             bad_args[key] = bad_value
             with self.assertRaises(TypeError):
                 validate_download_args(**bad_args)
-                
+
         for delay_param in [0.1, -1.0]:
             bad_args: Dict[str, Any] = good_args.copy()
             bad_args["delay_param"] = delay_param
             with self.assertRaises(ValueError):
                 validate_download_args(**bad_args)
-                
+
         for date_arg in ["start_date", "end_date"]:
             bad_args: Dict[str, Any] = good_args.copy()
             bad_args[date_arg] = "1-Jan-2023"
             with self.assertRaises(ValueError):
                 validate_download_args(**bad_args)
-        
+
 
 ##############################################
+
 
 class TestRequestWrapper(unittest.TestCase):
     def mock_response(
@@ -712,14 +755,10 @@ class TestRequestWrapper(unittest.TestCase):
                     url=OAUTH_BASE_URL + HEARTBEAT_ENDPOINT, status_code=403
                 )
             )
-            
+
         # mock with a 403, and use url=oauth_base_url. assert raises invalid response error
         with self.assertRaises(InvalidResponseError):
-            validate_response(
-                self.mock_response(
-                    url=OAUTH_BASE_URL, status_code=403
-                )
-            )
+            validate_response(self.mock_response(url=OAUTH_BASE_URL, status_code=403))
 
         # oauth_bas_url+timeseires and empty content, assert raises invalid response error
         with self.assertRaises(InvalidResponseError):
@@ -793,18 +832,19 @@ class TestRequestWrapper(unittest.TestCase):
                     method="get",
                     url=OAUTH_BASE_URL + HEARTBEAT_ENDPOINT,
                 )
-                
+
         def mock_keyboard_interrupt(*args, **kwargs) -> requests.Response:
             # raise some unrelated error - using InvalidDataframeError as it does not interact with this scope
             raise KeyboardInterrupt
-        
+
         with mock.patch("requests.Session.send", side_effect=mock_keyboard_interrupt):
             with self.assertRaises(KeyboardInterrupt):
                 request_wrapper(
                     method="get",
                     url=OAUTH_BASE_URL + HEARTBEAT_ENDPOINT,
                 )
-                
+
+
 ##############################################
 
 
@@ -861,46 +901,61 @@ class MockDataQueryInterface(DataQueryInterface):
         if "config" in kwargs:
             self.config = kwargs["config"]
         else:
-            self.config = Config(client_id="test_clid", client_secret="test_clsc",
-                                 crt="test_crt", key="test_key", username="test_user",
-                                    password="test_pass",)
-            
+            self.config = Config(
+                client_id="test_clid",
+                client_secret="test_clsc",
+                crt="test_crt",
+                key="test_key",
+                username="test_user",
+                password="test_pass",
+            )
+
         # init the parent class with the config
         super().__init__(config=self.config)
 
     def __enter__(self):
         return self
-    
+
     def __exit__(self, exc_type, exc_value, traceback):
         pass
 
     def check_connection(self, verbose=False) -> bool:
         return True
-    
-    def download_data(self, expressions : List[str], start_date : str, end_date : str,
-                      **kwargs) -> pd.DataFrame:
+
+    def download_data(
+        self, expressions: List[str], start_date: str, end_date: str, **kwargs
+    ) -> pd.DataFrame:
         return self.request_wrapper(expressions, start_date, end_date)
-    
-    def _gen_attributes(self, msg_errors: List[str] = None, msg_warnings: List[str] = None,
-                        unavailable_expressions: List[str] = None, egress_data: List[Dict[str, Any]] = None):
-        
-        self.msg_errors: List[str] = ["DEFAULT ERROR MESSAGE"] if msg_errors is None else msg_errors
-        self.msg_warnings: List[str] = ["DEFAULT WARNING MESSAGE"] if msg_warnings is None else msg_warnings
-        self.unavailable_expressions: List[str] = ["Some_Expression"] if unavailable_expressions is None else unavailable_expressions
+
+    def _gen_attributes(
+        self,
+        msg_errors: List[str] = None,
+        msg_warnings: List[str] = None,
+        unavailable_expressions: List[str] = None,
+        egress_data: List[Dict[str, Any]] = None,
+    ):
+        self.msg_errors: List[str] = (
+            ["DEFAULT ERROR MESSAGE"] if msg_errors is None else msg_errors
+        )
+        self.msg_warnings: List[str] = (
+            ["DEFAULT WARNING MESSAGE"] if msg_warnings is None else msg_warnings
+        )
+        self.unavailable_expressions: List[str] = (
+            ["Some_Expression"]
+            if unavailable_expressions is None
+            else unavailable_expressions
+        )
         self.egress_data: List[Dict[str, Any]] = {
-            'tracking-id-123' : {
-                'upload_size' : 200,
-                'download_size' : 2000,
-                'url' : OAUTH_BASE_URL + TIMESERIES_ENDPOINT,
-                'time_taken' : 10,
+            "tracking-id-123": {
+                "upload_size": 200,
+                "download_size": 2000,
+                "url": OAUTH_BASE_URL + TIMESERIES_ENDPOINT,
+                "time_taken": 10,
             }
         }
-    
-
 
 
 class TestJPMaQSDownload(unittest.TestCase):
-    
     def test_init(self):
         good_args: Dict[str, Any] = {
             "oauth": True,
@@ -916,44 +971,55 @@ class TestJPMaQSDownload(unittest.TestCase):
 
         try:
             jpmaqs: JPMaQSDownload = JPMaQSDownload(**good_args)
-            self.assertEqual(set(jpmaqs.valid_metrics), 
-                             set(["value", "grading", "eop_lag", "mop_lag"]))
-            for varx in [jpmaqs.msg_errors, jpmaqs.msg_warnings, jpmaqs.unavailable_expressions]:
+            self.assertEqual(
+                set(jpmaqs.valid_metrics),
+                set(["value", "grading", "eop_lag", "mop_lag"]),
+            )
+            for varx in [
+                jpmaqs.msg_errors,
+                jpmaqs.msg_warnings,
+                jpmaqs.unavailable_expressions,
+            ]:
                 self.assertEqual(varx, [])
-            
+
             self.assertEqual(jpmaqs.downloaded_data, {})
         except Exception as e:
             self.fail("Unexpected exception raised: {}".format(e))
-            
+
         for argx in good_args:
             with self.assertRaises(TypeError):
                 bad_args = good_args.copy()
-                bad_args[argx] = -1 # 1 would evaluate to True for bools
+                bad_args[argx] = -1  # 1 would evaluate to True for bools
                 JPMaQSDownload(**bad_args)
-                
+
         with self.assertRaises(TypeError):
             good_args["credentials_config"] = 1
             JPMaQSDownload(**good_args)
 
     def test_download_arg_validation(self):
         good_args: Dict[str, Any] = {
-            "tickers" : ["EUR_FXXR_NSA", "USD_FXXR_NSA"],
-            "cids" : ["GBP", "EUR"],
-            "xcats" : ["FXXR_NSA", "EQXR_NSA"],
-            "metrics" : ["value", "grading"],
-            "start_date" : "2019-01-01",
-            "end_date" : "2019-01-31",
-            "expressions" : ["DB(JPMAQS,AUD_FXXR_NSA,value)", 
-                             "DB(JPMAQS,CAD_FXXR_NSA,value)"],
-            "show_progress" : True,
-            "as_dataframe" : True,
-            "report_time_taken" : True,
-            "report_egress" : True,}
-        bad_args : Dict[str, Any] = {}
-        jpmaqs: JPMaQSDownload = JPMaQSDownload(client_id="client_id", 
-                                                client_secret="client_secret",
-                                                check_connection=False,)
-        
+            "tickers": ["EUR_FXXR_NSA", "USD_FXXR_NSA"],
+            "cids": ["GBP", "EUR"],
+            "xcats": ["FXXR_NSA", "EQXR_NSA"],
+            "metrics": ["value", "grading"],
+            "start_date": "2019-01-01",
+            "end_date": "2019-01-31",
+            "expressions": [
+                "DB(JPMAQS,AUD_FXXR_NSA,value)",
+                "DB(JPMAQS,CAD_FXXR_NSA,value)",
+            ],
+            "show_progress": True,
+            "as_dataframe": True,
+            "report_time_taken": True,
+            "report_egress": True,
+        }
+        bad_args: Dict[str, Any] = {}
+        jpmaqs: JPMaQSDownload = JPMaQSDownload(
+            client_id="client_id",
+            client_secret="client_secret",
+            check_connection=False,
+        )
+
         try:
             if not jpmaqs.validate_download_args(**good_args):
                 self.fail("Unexpected validation failure")
@@ -980,7 +1046,7 @@ class TestJPMaQSDownload(unittest.TestCase):
                 bad_args = good_args.copy()
                 bad_args[lvarx] = []
                 jpmaqs.validate_download_args(**bad_args)
-            
+
             with self.assertRaises(TypeError):
                 bad_args = good_args.copy()
                 bad_args[lvarx] = [1]
@@ -991,7 +1057,7 @@ class TestJPMaQSDownload(unittest.TestCase):
         bad_args["metrics"] = None
         with self.assertRaises(ValueError):
             jpmaqs.validate_download_args(**bad_args)
-        
+
         bad_args = good_args.copy()
         bad_args["metrics"] = ["Metallica"]
         with self.assertRaises(ValueError):
@@ -1008,62 +1074,62 @@ class TestJPMaQSDownload(unittest.TestCase):
             bad_args["cids"] = None
             jpmaqs.validate_download_args(**bad_args)
 
-
         for date_args in ["start_date", "end_date"]:
             bad_args = good_args.copy()
-            bad_args[date_args] = 'Metallica'
+            bad_args[date_args] = "Metallica"
             with self.assertRaises(ValueError):
                 jpmaqs.validate_download_args(**bad_args)
-            
-            bad_args[date_args] = '1900-01-01'
+
+            bad_args[date_args] = "1900-01-01"
             with self.assertWarns(UserWarning):
                 jpmaqs.validate_download_args(**bad_args)
 
             # pd.Timestamp extreme cases
-            bad_args[date_args] = '1200-01-01'
+            bad_args[date_args] = "1200-01-01"
             with self.assertRaises(ValueError):
                 jpmaqs.validate_download_args(**bad_args)
 
-
-
     def test_download(self):
         good_args: Dict[str, Any] = {
-            "tickers" : ["EUR_FXXR_NSA", "USD_FXXR_NSA"],
-            "cids" : ["GBP", "EUR"],
-            "xcats" : ["FXXR_NSA", "EQXR_NSA"],
-            "metrics" : ["value", "grading"],
-            "start_date" : "2019-01-01",
-            "end_date" : "2019-01-31",
-            "expressions" : ["DB(JPMAQS,AUD_FXXR_NSA,value)", 
-                             "DB(JPMAQS,CAD_FXXR_NSA,value)"],
-            "show_progress" : True,
-            "as_dataframe" : True,
-            "report_time_taken" : True,
-            "report_egress" : True,}
-        
-        jpmaqs : JPMaQSDownload = JPMaQSDownload(client_id="client_id", 
-                                                 client_secret="client_secret",
-                                                 check_connection=False,)
-        
-        config: Config = Config(client_id="client_id", 
-                                client_secret="client_secret",)
-        
-        mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(config=config)
+            "tickers": ["EUR_FXXR_NSA", "USD_FXXR_NSA"],
+            "cids": ["GBP", "EUR"],
+            "xcats": ["FXXR_NSA", "EQXR_NSA"],
+            "metrics": ["value", "grading"],
+            "start_date": "2019-01-01",
+            "end_date": "2019-01-31",
+            "expressions": [
+                "DB(JPMAQS,AUD_FXXR_NSA,value)",
+                "DB(JPMAQS,CAD_FXXR_NSA,value)",
+            ],
+            "show_progress": True,
+            "as_dataframe": True,
+            "report_time_taken": True,
+            "report_egress": True,
+        }
+
+        jpmaqs: JPMaQSDownload = JPMaQSDownload(
+            client_id="client_id",
+            client_secret="client_secret",
+            check_connection=False,
+        )
+
+        config: Config = Config(
+            client_id="client_id",
+            client_secret="client_secret",
+        )
+
+        mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(
+            config=config
+        )
         mock_dq_interface._gen_attributes()
 
         try:
             jpmaqs.download(**good_args)
         except Exception as e:
             self.fail("Unexpected exception raised: {}".format(e))
-                
-
 
     def test_validate_downloaded_df(self):
         pass
-
-
-        
-
 
 
 if __name__ == "__main__":
