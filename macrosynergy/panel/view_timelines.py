@@ -31,6 +31,7 @@ def view_timelines(
     size: Tuple[float, float] = (12, 7),
     aspect: float = 1.7,
     height: float = 3.0,
+    legend_fontsize: int = 12,
 ):
 
     """Displays a facet grid of time line charts of one or more categories.
@@ -69,6 +70,7 @@ def view_timelines(
         section plot. Default is (12, 7). This is irrelevant for facet grid.
     :param <float> aspect: width-height ratio for plots in facet. Default is 1.7.
     :param <float> height: height of plots in facet. Default is 3.
+    :param <int> legend_fontsize: font size of legend. Default is 12.
 
     """
 
@@ -208,7 +210,7 @@ def view_timelines(
 
             ax.set_xlabel("")
             ax.set_ylabel("")
-            ax.legend(ncol=legend_cols)
+            ax.legend(ncol=legend_cols, fontsize=legend_fontsize)
             if title is not None:
                 plt.suptitle(title, y=title_adj)
 
@@ -250,6 +252,7 @@ def view_timelines(
                 fg.add_legend(
                     loc="lower center",
                     ncol=legend_cols,
+                    fontsize=legend_fontsize
                 )
             if title is not None:
                 plt.suptitle(title, y=title_adj)
@@ -277,7 +280,7 @@ def view_timelines(
             plt.axhline(y=0, c=".5")
             ax.set_xlabel("")
             ax.set_ylabel("")
-            ax.legend(ncol=legend_cols)
+            ax.legend(ncol=legend_cols, fontsize=legend_fontsize)
             if title is not None:
                 plt.suptitle(title, y=title_adj)
 
