@@ -553,6 +553,7 @@ class DataQueryInterface(object):
         Defaults to True.
     :param <str> base_url: base URL for the DataQuery API. Defaults to OAUTH_BASE_URL
         if `oauth` is True, CERT_BASE_URL otherwise.
+    :param <str> token_url: token URL for the DataQuery API. Defaults to OAUTH_TOKEN_URL.
     :param <bool> suppress_warnings: whether to suppress warnings. Defaults to True.
 
     :return <DataQueryInterface>: DataQueryInterface object.
@@ -573,6 +574,7 @@ class DataQueryInterface(object):
         batch_size: int = 20,
         check_connection: bool = True,
         base_url: str = OAUTH_BASE_URL,
+        token_url: str = OAUTH_TOKEN_URL,
         suppress_warnings: bool = True,
     ):
         self._check_connection: bool = check_connection
@@ -592,7 +594,7 @@ class DataQueryInterface(object):
 
         self.auth: Optional[Union[CertAuth, OAuth]] = None
         if oauth:
-            self.auth: OAuth = OAuth(**config.oauth(mask=False))
+            self.auth: OAuth = OAuth(**config.oauth(mask=False), token_url=token_url)
         else:
             if base_url == OAUTH_BASE_URL:
                 base_url: str = CERT_BASE_URL

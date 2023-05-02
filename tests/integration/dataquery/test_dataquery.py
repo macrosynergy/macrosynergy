@@ -1,10 +1,14 @@
 import unittest
+from unittest.mock import patch, Mock
 import os
 import pandas as pd
 import datetime
-from typing import List, Dict, Union, Optional, Any
+from typing import List, Dict, Union, Optional, Any, Tuple
+import requests
 from macrosynergy.download import JPMaQSDownload
-from macrosynergy.download.dataquery import DataQueryInterface, AuthenticationError, request_wrapper, validate_response
+from macrosynergy.download.dataquery import DataQueryInterface, request_wrapper, validate_response
+from macrosynergy.download.dataquery import OAUTH_BASE_URL, OAUTH_TOKEN_URL, HEARTBEAT_ENDPOINT, TIMESERIES_ENDPOINT
+from macrosynergy.download.exceptions import AuthenticationError, HeartbeatError, InvalidResponseError
 from macrosynergy.management.utils import Config
 
 class TestDataQueryOAuth(unittest.TestCase):
@@ -148,10 +152,92 @@ class TestDataQueryOAuth(unittest.TestCase):
 
         self.assertGreater(data.shape[0], 0)
 
+        test_expr : str = JPMaQSDownload.construct_expressions(cids=cids, xcats=xcats,
+                                                               metrics=["value", "grading"])
+        with DataQueryInterface(
+            oauth=True,
+            config=Config(
+                client_id=os.getenv("DQ_CLIENT_ID"),
+                client_secret=os.getenv("DQ_CLIENT_SECRET"),
+            ),
+        ) as dq:
+            data: List[Dict[str, Any]] = dq.download_data(
+                expressions=test_expr,
+                start_date=start_date,
+                end_date=end_date,
+            )
 
-# class TestRequestWrapper(unittest.TestCase):
+        self.assertIsInstance(data, list)
+        self.assertGreater(len(data), 0)
+        for _data in data:
+            self.assertIsInstance(_data, dict)
 
-                         
+
+
+class TestRequestWrapper(unittest.TestCase):
+
+    def mock_response(self,
+                      url : str,
+                      status_code: int = 200,
+                        headers: Dict[str, str] = None,
+                        text: str = None,
+                        content: bytes = None,) -> requests.Response:
+        mock_resp : requests.Response = requests.Response()
+        mock_resp.status_code = status_code
+        mock_resp.headers = headers or {}
+        mock_resp._content = content
+        mock_resp._text = text
+        mock_resp.request = requests.Request("GET", url)
+        return mock_resp
+    
+    def test_validate_response(self):
+
+        # mock a response with 401. assert raises authentication error
+        with self.assertRaises(AuthenticationError):
+            validate_response(self.mock_response(url=OAUTH_TOKEN_URL, status_code=401))
+
+        # mock with a 403, and use url=oauth+heartbeat. assert raises heartbeat error
+        with self.assertRaises(HeartbeatError):
+            validate_response(self.mock_response(url=OAUTH_BASE_URL+HEARTBEAT_ENDPOINT, status_code=403))
+
+        # oauth_bas_url+timeseires and empty content, assert raises invalid response error
+        with self.assertRaises(InvalidResponseError):
+            validate_response(self.mock_response(url=OAUTH_BASE_URL+TIMESERIES_ENDPOINT, status_code=200, content=b""))
+
+
+        # with 200 , and empty content, assert raises invalid response error
+        with self.assertRaises(InvalidResponseError):
+            validate_response(self.mock_response(url=OAUTH_TOKEN_URL, status_code=200, content=b""))
+
+        # with non-json content, assert raises invalid response error
+        with self.assertRaises(InvalidResponseError):
+            validate_response(self.mock_response(url=OAUTH_TOKEN_URL, status_code=200, content=b"not json"))
+
+
+    def test_request_wrapper(self):
+
+        with self.assertRaises(ValueError):
+            request_wrapper(method="pop", url=OAUTH_TOKEN_URL)
+
+
+        # mock using mock_request_send
+
+        def mock_auth_error(*args, **kwargs) -> requests.Response:
+            return self.mock_response(url=OAUTH_TOKEN_URL, status_code=401)
+
+        with patch("requests.Session.send", side_effect=mock_auth_error):
+            with self.assertRaises(AuthenticationError):
+                request_wrapper(method="get", url=OAUTH_TOKEN_URL,
+                )
+
+
+        
+            
+
+
+        
+        
+
 
 
 
