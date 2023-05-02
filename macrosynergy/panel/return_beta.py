@@ -98,10 +98,11 @@ def hedge_calculator(unhedged_return: pd.Series, benchmark_return: pd.Series,
     df_hrat = pd.DataFrame(data=data_column, index=rdates,
                            columns=['value'])
 
-    min_date : pd.Timestamp = min(rdates)
+    min_date: pd.Timestamp = min(rdates)
+    list_rdates: List[pd.Timestamp] = rdates[rdates.index(min_date):]
     for d in rdates:
         if d > min_obs_date:
-            curr_start_date : pd.Timestamp = max(min_date, d - pd.Timedelta(days=max_obs))
+            curr_start_date: pd.Timestamp = rdates[max(0, rdates.index(d) - max_obs)]
             # Inclusive of the re-estimation date.
             xvar = unhedged_return.loc[curr_start_date:d]
             yvar = benchmark_return.loc[curr_start_date:d]
@@ -113,7 +114,6 @@ def hedge_calculator(unhedged_return: pd.Series, benchmark_return: pd.Series,
                 results_params : pd.Series = results.params
             
             df_hrat.loc[d] = results_params.loc[cross_section]
-
 
     # Any dates prior to the minimum observation which would be classified by NaN values
     # remove from the DataFrame.

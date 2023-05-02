@@ -4,6 +4,10 @@ import numpy as np
 import pandas as pd
 import warnings
 import statsmodels.api as sm
+
+import sys
+sys.path.append('C:/Users/PalashTyagi/OneDrive - Macrosynergy/Documents/Code/ms/macrosynergy')
+
 from tests.simulate import make_qdf
 from macrosynergy.panel.return_beta import *
 from macrosynergy.management.shape_dfs import reduce_df
@@ -143,37 +147,34 @@ class TestAll(unittest.TestCase):
         # ensures a certain number of days have passed until a hedge ratio is calculated.
 
         # Analysis completed using a single cross-section from the panel.
-        c = 'KRW'
-        xr = self.dfp_w[c]
-        xr = xr.astype(dtype=np.float16)
+        c: str = 'KRW'
+        xr: pd.Series = (self.dfp_w[c]).astype(dtype=np.float16)
         # Adjusts for the effect of pivoting.
         xr = xr.dropna(axis=0, how="all")
 
-        br = pd.Series(data=self.benchmark_df['value'].to_numpy(),
-                       index=self.benchmark_df['real_date'])
-        br = br.astype(dtype=np.float16)
+        br: pd.Series = pd.Series(data=self.benchmark_df['value'].to_numpy(),
+                       index=self.benchmark_df['real_date']).astype(dtype=np.float16)
 
         # Apply the .date_alignment() method to establish the start & end date of the
         # re-estimation date series. Confirms the re-estimation frequency has been
         # correctly applied.
         # The frequency tested on will be monthly: business month end frequency.
+        start_date: pd.Timestamp
+        end_date: pd.Timestamp
         start_date, end_date = date_alignment(unhedged_return=xr, benchmark_return=br)
-        dates_re = pd.date_range(start=start_date, end=end_date, freq='BM')
-        str_time = lambda date: pd.Timestamp(str(date))
-        dates_re = list(map(str_time, dates_re))
+        dates_re: List[pd.Timestamp] = list(pd.date_range(start=start_date, end=end_date, freq='BM'))
 
-        min_observation = 50
+        min_observation: int = 50
         # Produce daily business day date series to determine the date that corresponds
         # to the specified minimum observation.
-        daily_dates = pd.date_range(start=start_date, end=end_date, freq='B')
-        test_min_obs = daily_dates.to_numpy()[60]
+        test_min_obs: np.datetime64 = pd.date_range(start=start_date, end=end_date, freq='B').to_numpy()[60]
 
-        df_hr = hedge_calculator(unhedged_return=xr, benchmark_return=br,
+        df_hr: pd.DataFrame = hedge_calculator(unhedged_return=xr, benchmark_return=br,
                                  rdates=dates_re, cross_section=c, meth='ols',
-                                 min_obs=min_observation)
+                                 min_obs=min_observation, max_obs=100)
         # Confirm the first computed hedge ratio value falls after the minimum
         # observation date.
-        test_date = df_hr['real_date'].iloc[0]
+        test_date: pd.Timestamp = df_hr['real_date'].iloc[0]
         self.assertTrue(test_date > test_min_obs)
 
         # In the example, the hedge ratio is computed monthly - last business day of the
@@ -203,15 +204,18 @@ class TestAll(unittest.TestCase):
         s_date, e_date = date_alignment(unhedged_return=xr, benchmark_return=br)
         xr = xr.truncate(before=s_date, after=e_date)
         br = br.truncate(before=s_date, after=e_date)
-
-        X = sm.add_constant(xr.loc[:'2013-03-29'])
-        y = br.loc[:'2013-03-29']
+        
+        last_test_date : str = '2013-03-29'
+        first_test_date : str = pd.bdate_range(end=last_test_date, periods=100)[0].strftime("%Y-%m-%d")
+        # 100 -1, as the hedge ratio is computed using the last 100 observations. 
+        X = sm.add_constant(xr.loc[first_test_date:last_test_date])
+        y = br.loc[first_test_date:last_test_date]
         mod = sm.OLS(y, X)
         result = mod.fit().params[1]
 
         # Test on the next business day given the shift. The hedge ratio computed on the
         # re-estimation date is applied to the return series on the next business day
-        # after re-estimation.
+        # after re-estimation. NOTE : 30,31-Mar-2013 are weekend dates.
         test_value = float(df_hr[df_hr['real_date'] == '2013-04-01']['value'])
         self.assertTrue(result == test_value)
 
