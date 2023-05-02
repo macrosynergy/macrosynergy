@@ -15,12 +15,14 @@ from macrosynergy.download.dataquery import (
     DataQueryInterface,
     request_wrapper,
     validate_response,
+    validate_download_args
 )
 from macrosynergy.download.dataquery import (
     OAUTH_BASE_URL,
     OAUTH_TOKEN_URL,
     HEARTBEAT_ENDPOINT,
     TIMESERIES_ENDPOINT,
+    API_DELAY_PARAM
 )
 from macrosynergy.download.exceptions import (
     AuthenticationError,
@@ -501,6 +503,48 @@ class TestDataQueryOAuth(unittest.TestCase):
 ##############################################
 
 
+class TestArgValidation(unittest.TestCase):
+    def test_dq_download_args(self):
+
+        good_args: Dict[str, Any] = {
+            "expressions": ["DB(JPMAQS,EUR_FXXR_NSA,value)"],
+            "start_date": "2020-01-01",
+            "end_date": "2020-02-01",
+            "show_progress": True,
+            "endpoint": HEARTBEAT_ENDPOINT,
+            "calender": "CAL_ALLDAYS",
+            "frequency": "FREQ_DAY",
+            "conversion": "CONV_LASTBUS_ABS",
+            "nan_treatment": "NA_NOTHING",
+            "reference_data": "NO_REFERENCE_DATA",
+            "retry_counter": 0,
+            "delay_param": API_DELAY_PARAM,}
+        self.assertTrue(validate_download_args(**good_args))
+        
+        for key in good_args.keys():
+            bad_value : Union[int, str] = 1
+            if key == "retry_counter":
+                bad_value = "1"
+            bad_args: Dict[str, Any] = good_args.copy()
+            bad_args[key] = bad_value
+            with self.assertRaises(TypeError):
+                validate_download_args(**bad_args)
+                
+        for delay_param in [0.1, -1.0]:
+            bad_args: Dict[str, Any] = good_args.copy()
+            bad_args["delay_param"] = delay_param
+            with self.assertRaises(ValueError):
+                validate_download_args(**bad_args)
+                
+        for date_arg in ["start_date", "end_date"]:
+            bad_args: Dict[str, Any] = good_args.copy()
+            bad_args[date_arg] = "1-Jan-2023"
+            with self.assertRaises(ValueError):
+                validate_download_args(**bad_args)
+        
+
+##############################################
+
 class TestRequestWrapper(unittest.TestCase):
     def mock_response(
         self,
@@ -528,6 +572,14 @@ class TestRequestWrapper(unittest.TestCase):
             validate_response(
                 self.mock_response(
                     url=OAUTH_BASE_URL + HEARTBEAT_ENDPOINT, status_code=403
+                )
+            )
+            
+        # mock with a 403, and use url=oauth_base_url. assert raises invalid response error
+        with self.assertRaises(InvalidResponseError):
+            validate_response(
+                self.mock_response(
+                    url=OAUTH_BASE_URL, status_code=403
                 )
             )
 
