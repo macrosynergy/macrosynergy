@@ -514,7 +514,8 @@ def validate_download_args(
     for varx, namex in vars_types_zip:
         if not isinstance(varx, str):
             raise TypeError(f"`{namex}` must be a string.")
-
+        
+    return True
 
 def get_unavailable_expressions(
     expected_exprs: List[str],
