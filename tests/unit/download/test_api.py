@@ -824,6 +824,16 @@ class TestJPMaQSDownload(unittest.TestCase):
         except Exception as e:
             self.fail("Unexpected exception raised: {}".format(e))
             
+        for argx in good_args:
+            with self.assertRaises(TypeError):
+                bad_args = good_args.copy()
+                bad_args[argx] = 1
+                JPMaQSDownload(**bad_args)
+                
+        with self.assertRaises(TypeError):
+            good_args["credentials_config"] = 1
+            JPMaQSDownload(**good_args)
+
 
 
 if __name__ == "__main__":
