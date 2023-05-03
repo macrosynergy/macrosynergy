@@ -507,6 +507,57 @@ class TestDataQueryInterface(unittest.TestCase):
                 f"Retrying failed downloads. Retry count: {bad_args['retry_counter']}"
             )
             self.assertIn(err_string_1, mock_std.getvalue())
+            
+    def test_dq_download_args(self):
+        good_args: Dict[str, Any] = {
+            "expressions": ["DB(JPMAQS,EUR_FXXR_NSA,value)"],
+            "start_date": "2020-01-01",
+            "end_date": "2020-02-01",
+            "show_progress": True,
+            "endpoint": HEARTBEAT_ENDPOINT,
+            "calender": "CAL_ALLDAYS",
+            "frequency": "FREQ_DAY",
+            "conversion": "CONV_LASTBUS_ABS",
+            "nan_treatment": "NA_NOTHING",
+            "reference_data": "NO_REFERENCE_DATA",
+            "retry_counter": 0,
+            "delay_param": API_DELAY_PARAM,
+        }
+        self.assertTrue(validate_download_args(**good_args))
+
+        # rplace expressions with None. should raise value error
+        bad_args: Dict[str, Any] = good_args.copy()
+        bad_args["expressions"] = None
+        with self.assertRaises(ValueError):
+            validate_download_args(**bad_args)
+
+        # replace expressions with list of ints. should raise type error
+        bad_args: Dict[str, Any] = good_args.copy()
+        bad_args["expressions"] = [1, 2, 3]
+        with self.assertRaises(TypeError):
+            validate_download_args(**bad_args)
+
+        for key in good_args.keys():
+            bad_value: Union[int, str] = 1
+            if key == "retry_counter":
+                bad_value = "1"
+            bad_args: Dict[str, Any] = good_args.copy()
+            bad_args[key] = bad_value
+            with self.assertRaises(TypeError):
+                validate_download_args(**bad_args)
+
+        for delay_param in [0.1, -1.0]:
+            bad_args: Dict[str, Any] = good_args.copy()
+            bad_args["delay_param"] = delay_param
+            with self.assertRaises(ValueError):
+                validate_download_args(**bad_args)
+
+        for date_arg in ["start_date", "end_date"]:
+            bad_args: Dict[str, Any] = good_args.copy()
+            bad_args[date_arg] = "1-Jan-2023"
+            with self.assertRaises(ValueError):
+                validate_download_args(**bad_args)
+
 
 
 class TestDataQueryDownloads(unittest.TestCase):
@@ -666,61 +717,6 @@ class TestDataQueryDownloads(unittest.TestCase):
         self.assertGreater(len(data), 0)
         for _data in data:
             self.assertIsInstance(_data, dict)
-
-
-##############################################
-
-
-class TestArgValidation(unittest.TestCase):
-    def test_dq_download_args(self):
-        good_args: Dict[str, Any] = {
-            "expressions": ["DB(JPMAQS,EUR_FXXR_NSA,value)"],
-            "start_date": "2020-01-01",
-            "end_date": "2020-02-01",
-            "show_progress": True,
-            "endpoint": HEARTBEAT_ENDPOINT,
-            "calender": "CAL_ALLDAYS",
-            "frequency": "FREQ_DAY",
-            "conversion": "CONV_LASTBUS_ABS",
-            "nan_treatment": "NA_NOTHING",
-            "reference_data": "NO_REFERENCE_DATA",
-            "retry_counter": 0,
-            "delay_param": API_DELAY_PARAM,
-        }
-        self.assertTrue(validate_download_args(**good_args))
-
-        # rplace expressions with None. should raise value error
-        bad_args: Dict[str, Any] = good_args.copy()
-        bad_args["expressions"] = None
-        with self.assertRaises(ValueError):
-            validate_download_args(**bad_args)
-
-        # replace expressions with list of ints. should raise type error
-        bad_args: Dict[str, Any] = good_args.copy()
-        bad_args["expressions"] = [1, 2, 3]
-        with self.assertRaises(TypeError):
-            validate_download_args(**bad_args)
-
-        for key in good_args.keys():
-            bad_value: Union[int, str] = 1
-            if key == "retry_counter":
-                bad_value = "1"
-            bad_args: Dict[str, Any] = good_args.copy()
-            bad_args[key] = bad_value
-            with self.assertRaises(TypeError):
-                validate_download_args(**bad_args)
-
-        for delay_param in [0.1, -1.0]:
-            bad_args: Dict[str, Any] = good_args.copy()
-            bad_args["delay_param"] = delay_param
-            with self.assertRaises(ValueError):
-                validate_download_args(**bad_args)
-
-        for date_arg in ["start_date", "end_date"]:
-            bad_args: Dict[str, Any] = good_args.copy()
-            bad_args[date_arg] = "1-Jan-2023"
-            with self.assertRaises(ValueError):
-                validate_download_args(**bad_args)
 
 
 ##############################################
@@ -1106,7 +1102,7 @@ class TestJPMaQSDownload(unittest.TestCase):
             with self.assertRaises(ValueError):
                 jpmaqs.validate_download_args(**bad_args)
 
-    def test_download(self):
+    def test_download_func(self):
         good_args: Dict[str, Any] = {
             "tickers": ["EUR_FXXR_NSA", "USD_FXXR_NSA"],
             "cids": ["GBP", "EUR"],
