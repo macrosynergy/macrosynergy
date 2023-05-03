@@ -108,8 +108,6 @@ class JPMaQSDownload(object):
         if not isinstance(dq_download_kwargs, dict):
             raise TypeError("`dq_download_kwargs` must be a dictionary.")
 
-        if not isinstance(oauth, bool):
-            raise TypeError("`oauth` must be a boolean.")
 
         self.suppress_warning = suppress_warning
         self.debug = debug
