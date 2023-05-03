@@ -75,18 +75,12 @@ def business_day_dif(df: pd.DataFrame, maxdate: pd.Timestamp):
         series.
 
     """
-    year_df = (maxdate.year - df.apply(lambda x: x.dt.year))
-    year_df *= 52
-
-    week_max = maxdate.week
-    week_df = week_max - df.apply(lambda x: x.dt.isocalendar().week)
-
+    year_df = (maxdate.year - df.apply(lambda x: x.dt.isocalendar().year)) * 52
+    week_df = (maxdate.week - df.apply(lambda x: x.dt.isocalendar().week))
     # Account for difference over a year.
     week_df += year_df
-
     # Account for weekends.
     week_df *= 2
-
     df = (maxdate - df).apply(lambda x: x.dt.days)
     return df - week_df
 
@@ -107,16 +101,19 @@ def visual_paneldates(df: pd.DataFrame, size: Tuple[float] = None):
         # in the DataFrame.
         maxdate = df.max().max()
         df = business_day_dif(df=df, maxdate=maxdate)
-        df = df.astype(int)
 
-        header = f"Missing days prior to {maxdate.strftime('%Y-%m-%d')}"
+        df = df.astype(float)
+        # Ideally the data type should be int, but Pandas cannot represent NaN as int.
+        # -- https://pandas.pydata.org/pandas-docs/stable/user_guide/gotchas.html#support-for-integer-na
+
+        header = f"Missing days up to {maxdate.strftime('%Y-%m-%d')}"
 
     else:
 
         header = "Start years of quantamental indicators."
 
     if size is None:
-        size = (max(df.shape[0] / 2, 15), max(1, df.shape[1]/ 2))
+        size = (max(df.shape[0] / 2, 18), max(1, df.shape[1]/ 2))
 
     sns.set(rc={'figure.figsize': size})
     sns.heatmap(df.T, cmap='YlOrBr', center=df.stack().mean(), annot=True, fmt='.0f',
@@ -129,7 +126,8 @@ def visual_paneldates(df: pd.DataFrame, size: Tuple[float] = None):
 
 def check_availability(df: pd.DataFrame, xcats: List[str] = None,
                        cids: List[str] = None, start: str = None,
-                       start_size: Tuple[float] = None, end_size: Tuple[float] = None):
+                       start_size: Tuple[float] = None, end_size: Tuple[float] = None,
+                       start_years: bool = True, missing_recent: bool = True):
     """
     Wrapper for visualizing start and end dates of a filtered DataFrame.
 
@@ -144,13 +142,24 @@ def check_availability(df: pd.DataFrame, xcats: List[str] = None,
         the start years heatmap. Default is None (format adjusted to data).
     :param <Tuple[float]> end_size: tuple of floats with width/length of
         the end dates heatmap. Default is None (format adjusted to data).
-
+    :param <bool> start_years: boolean indicating whether or not to display a chart 
+        of starting years for each cross-section and indicator.
+        Default is True (display start years).
+    :param <bool> missing_recent: boolean indicating whether or not to display a chart 
+        of missing date numbers for each cross-section and indicator.
+        Default is True (display missing days).
     """
+    assert isinstance(start_years, bool), f"<bool> object expected and not {type(start_years)}."
+    assert isinstance(missing_recent, bool), f"<bool> object expected and not {type(missing_recent)}."
+
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start)
-    dfs = check_startyears(dfx)
-    visual_paneldates(dfs, size=start_size)
-    dfe = check_enddates(dfx)
-    visual_paneldates(dfe, size=end_size)
+    if start_years:
+        dfs = check_startyears(dfx)
+        visual_paneldates(dfs, size=start_size)
+    if missing_recent:
+        dfe = check_enddates(dfx)
+        plt.figure()
+        visual_paneldates(dfe, size=end_size)
 
 
 if __name__ == "__main__":
@@ -176,5 +185,5 @@ if __name__ == "__main__":
 
     xxcats = xcats + ['TREND']
     xxcids = cids + ['USD']
-
-    check_availability(df=dfd, xcats=xcats, cids=cids)
+    
+    check_availability(df=dfd, xcats=xcats, cids=cids, missing_recent=False)

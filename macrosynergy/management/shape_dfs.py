@@ -1,10 +1,11 @@
-
 import numpy as np
 import pandas as pd
 from typing import List
 import random
 from macrosynergy.management.simulate_quantamental_data import make_qdf
+
 from itertools import product
+
 
 def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
               start: str = None, end: str = None, blacklist: dict = None,
@@ -72,6 +73,7 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
     else:
         return dfx.drop_duplicates()
 
+
 def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str = None,
                         end: str = None, blacklist: dict = None):
     """
@@ -112,6 +114,7 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
 
     return dfx.drop_duplicates()
 
+
 def aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
     """
     Helper method to down-sample each category in the DataFrame by aggregating over the
@@ -133,7 +136,7 @@ def aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
 
     return dfx
 
-def expln_df(df_w: pd.DataFrame, xpls: List[str], agg_meth: str, sum_adj: dict,
+def expln_df(df_w: pd.DataFrame, xpls: List[str], agg_meth: str, sum_condition: bool,
              lag: int):
     """
     Produces the explanatory column(s) for the custom DataFrame.
@@ -142,8 +145,8 @@ def expln_df(df_w: pd.DataFrame, xpls: List[str], agg_meth: str, sum_adj: dict,
         respective aggregation method will be applied.
     :param <List[str]> xpls: list of explanatory category(s).
     :param <str> agg_meth: aggregation method used for all explanatory variables.
-    :param <dict> sum_adj: required dictionary to negate erroneous zeros if the aggregate
-        method used is sum.
+    :param <dict> sum_condition: required boolean to negate erroneous zeros if the
+        aggregate method used, for the explanatory variable, is sum.
     :param <int> lag: lag of explanatory category(s). Applied uniformly to each
         category.
     """
@@ -151,7 +154,11 @@ def expln_df(df_w: pd.DataFrame, xpls: List[str], agg_meth: str, sum_adj: dict,
     dfw_xpls = pd.DataFrame()
     for xpl in xpls:
 
-        xpl_col = df_w[xpl].agg(agg_meth, sum_adj).astype(dtype=np.float32)
+        if not sum_condition:
+            xpl_col = df_w[xpl].agg(agg_meth).astype(dtype=np.float32)
+        else:
+            xpl_col = df_w[xpl].sum(min_count=1)
+
         if lag > 0:
             xpl_col = xpl_col.groupby(level=0).shift(lag)
 
@@ -262,20 +269,19 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         df_w = df_w.groupby([pd.Grouper(level='cid'),
                              pd.Grouper(level='real_date', freq=frq_dict[freq])])
 
+        dfw_xpls = expln_df(
+            df_w=df_w, xpls=xpls, agg_meth=xcat_aggs[0],
+            sum_condition=(xcat_aggs[0] == "sum"), lag=lag
+        )
+
         # Handles for falsified zeros. Following the frequency conversion, if the
         # aggregation method is set to "sum", time periods that exclusively contain NaN
         # values will incorrectly be summed to the value zero which is misleading for
         # analysis.
-        sum_dict = {}
-        for i, agg in enumerate(xcat_aggs):
-            sum_dict[i] = {'min_count': 1} if agg == 'sum' else {}
-
-        dfw_xpls = expln_df(
-            df_w=df_w, xpls=xpls, agg_meth=xcat_aggs[0],
-            sum_adj=sum_dict[0], lag=lag
-        )
-
-        dep_col = df_w[dep].agg(xcat_aggs[1], sum_dict[1]).astype(dtype=np.float32)
+        if not (xcat_aggs[-1] == "sum"):
+            dep_col = df_w[dep].agg(xcat_aggs[1]).astype(dtype=np.float32)
+        else:
+            dep_col = df_w[dep].sum(min_count=1)
 
         if fwin > 1:
             s = 1 - fwin

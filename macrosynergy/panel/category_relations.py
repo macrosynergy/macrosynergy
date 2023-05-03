@@ -59,14 +59,24 @@ class CategoryRelations(object):
         for the two respective categories. Observations with higher values will be
         trimmed, i.e. removed from the analysis (not winsorized!). Default is None
         for both. Trimming is applied after all other transformations.
-    """
+    :param <int> slip: lag (delay of arrival) of first (explanatory) category in days
+        prior to any frequency conversion. Default is 0. This simulates time elapsed 
+        between observing data and using them for market positioning.
+        This is different from and complementary to  the `lag` argument which delays 
+        the explanatory variable by the periods of the investigated sample, which 
+        often is downsampled. Importantly, for analyses with explanatory and dependent 
+        categories, the first category takes the role of the explanatory and a positive 
+        lag means that the explanatory values will be deferred into the future, 
+        i.e. relate to future values of the explained variable.
 
+    """
+    
     def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                  val: str = 'value', start: str = None, end: str = None,
                  blacklist: dict = None, years = None, freq: str = 'M', lag: int = 0,
                  fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean'),
                  xcat1_chg: str = None, n_periods: int = 1,
-                 xcat_trims: List[float] = [None, None]):
+                 xcat_trims: List[float] = [None, None], slip: int = 0,):
         """ Initializes CategoryRelations """
 
         self.xcats = xcats
@@ -79,21 +89,32 @@ class CategoryRelations(object):
         self.xcat1_chg = xcat1_chg
         self.n_periods = n_periods
         self.xcat_trims = xcat_trims
+        self.slip = slip
 
         assert self.freq in ['D', 'W', 'M', 'Q', 'A']
         assert {'cid', 'xcat', 'real_date', val}.issubset(set(df.columns))
         assert len(xcats) == 2, "Expects two fields."
+        assert isinstance(slip, int) and slip >= 0, "Slip must be a non-negative integer."
 
         # Select the cross-sections available for both categories.
         df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+        
+        df_slips : pd.DataFrame = df.copy()
+        if self.slip != 0:
+            metrics_found : List[str] = list(set(df_slips.columns) - set(['cid', 'xcat', 'real_date']))
+            df_slips = self.apply_slip(target_df=df_slips, slip=self.slip, cids=self.cids,
+                                        xcats=self.xcats, metrics=metrics_found)
 
         shared_cids = CategoryRelations.intersection_cids(df, xcats, cids)
 
+        # TODO : df = df_slips here?
+        
         # Will potentially contain NaN values if the two categories are defined over
         # time-periods.
         df = categories_df(
             df, xcats, shared_cids, val=val, start=start, end=end, freq=freq,
-            blacklist=blacklist, years=years, lag=lag, fwin=fwin, xcat_aggs=xcat_aggs
+            blacklist=blacklist, years=years, lag=lag,
+            fwin=fwin, xcat_aggs=xcat_aggs
         )
 
         if xcat1_chg is not None:
@@ -124,6 +145,31 @@ class CategoryRelations(object):
         # NaN values will not be handled if both of the above conditions are not
         # satisfied.
         self.df = df.dropna(axis=0, how='any')
+
+    @classmethod
+    def apply_slip(self, target_df: pd.DataFrame, slip: int,
+                    cids: List[str], xcats: List[str],
+                    metrics: List[str]) -> pd.DataFrame:
+        
+        if not (isinstance(slip, int) and slip >= 0):
+            raise ValueError("Slip must be a non-negative integer.")
+
+        sel_tickers : List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+        target_df['tickers'] = target_df['cid'] + '_' + target_df['xcat']
+
+        if not set(sel_tickers).issubset(set(target_df['tickers'].unique())):
+            raise ValueError("Tickers targetted for applying slip are not present in the DataFrame.\n"
+             f"Missing tickers: {set(sel_tickers) - set(target_df['tickers'].unique())}")
+
+        slip : int = slip.__neg__()
+        
+        target_df : pd.DataFrame = target_df.copy()
+        target_df[metrics] = target_df.groupby('tickers')[metrics].shift(slip)
+        target_df = target_df.drop(columns=['tickers'])
+        
+        return target_df
+        
+
 
     @classmethod
     def intersection_cids(cls, df, xcats, cids):
@@ -220,7 +266,7 @@ class CategoryRelations(object):
         return df
 
     def corr_prob_calc(self, df_probability: Union[pd.DataFrame, List[pd.DataFrame]],
-                       prob_bool: bool = True):
+                       prob_est):
         """
         Compute the correlation coefficient and probability statistics.
 
@@ -239,20 +285,22 @@ class CategoryRelations(object):
 
         cpl = []
         for i, df_i in enumerate(df_probability):
-            x = df_i[self.xcats[0]].to_numpy()
-            y = df_i[self.xcats[1]].to_numpy()
-            coeff, pval = stats.pearsonr(x, y)
-            if prob_bool:
-                row = [np.round(coeff, 3), np.round(1 - pval, 3)]
-            else:
-                row = [np.round(coeff, 3)]
-
+            feat = df_i[self.xcats[0]].to_numpy()
+            targ = df_i[self.xcats[1]].to_numpy()
+            coeff, pval = stats.pearsonr(feat, targ)
+            if prob_est == "map":
+                X = df_i.loc[:, self.xcats[0]]
+                X = sm.add_constant(X)
+                y = df_i.loc[:, self.xcats[1]]
+                groups = df_i.reset_index().real_date
+                re = sm.MixedLM(y, X, groups, ).fit(reml=False)  # random effects est
+                pval = float(re.summary().tables[1].iloc[1, 3])
+            row = [np.round(coeff, 3), np.round(1 - pval, 3)]
             cpl.append(row)
         return cpl
 
-    def corr_probability(self, df_probability, time_period: str = '',
-                         coef_box_loc: str = 'upper left',
-                         prob_bool: bool = True):
+    def corr_probability(self, df_probability, prob_est, time_period: str = '',
+                         coef_box_loc: str = 'upper left'):
         """
         Add the computed correlation coefficient and probability to a Matplotlib table.
 
@@ -272,12 +320,11 @@ class CategoryRelations(object):
         time_period_error = f"<str> expected - received {type(time_period)}."
         assert isinstance(time_period, str), time_period_error
 
-        cpl = self.corr_prob_calc(df_probability=df_probability, prob_bool=prob_bool)
-        if prob_bool:
-            fields = [f"Correlation\n coefficient {time_period}",
-                      f"Probability\n of significance {time_period}"]
-        else:
-            fields = ["Correlation\n coefficient"]
+        cpl = self.corr_prob_calc(df_probability=df_probability,
+                                  prob_est=prob_est)
+
+        fields = [f"Correlation\n coefficient {time_period}",
+                  f"Probability\n of significance {time_period}"]
 
         if isinstance(df_probability, list) and len(df_probability) == 2:
             row_headers = ["Before 2010", "After 2010"]
@@ -306,7 +353,8 @@ class CategoryRelations(object):
 
     def reg_scatter(self, title: str = None, labels: bool = False,
                     size: Tuple[float] = (12, 8), xlab: str = None, ylab: str = None,
-                    coef_box: str = None, fit_reg: bool = True, reg_ci: int = 95,
+                    coef_box: str = None, prob_est: str = "pool",
+                    fit_reg: bool = True, reg_ci: int = 95,
                     reg_order: int = 1, reg_robust: bool = False,
                     separator: Union[str, int] = None, title_adj: float = 1,
                     single_chart: bool = False):
@@ -334,6 +382,14 @@ class CategoryRelations(object):
             pseudo-boolean parameter. The options are standard, i.e. 'upper left',
             'lower right' and so forth. Default is None, i.e the statistics are not
             displayed.
+        :param <str> prob_est: type of estimator for probability of significant relation.
+            The default is "pool", which means that all observation pairs of a panel
+            are pooled and the probability is based on that pool.
+            The alternative is "map", denoting Macrosynergy panel test. This is based
+            on a panel regression with period-specific random effects and greatly
+            mitigates the issue of pseudo-replication if panel features and targets
+            are correlated across time.
+            See also https://research.macrosynergy.com/testing-macro-trading-factors/
         :param <Union[str, int]> separator: allows categorizing the scatter analysis by
             cross-section or integer. In the former case the argument is set to
             "cids" and in the latter case the argument is set to a year [2010, for
@@ -352,6 +408,8 @@ class CategoryRelations(object):
                              "location of the box: 'upper left', 'lower right' etc."
         if coef_box is not None:
             assert isinstance(coef_box, str), coef_box_loc_error
+
+        assert prob_est in ["pool", "map"], "prob_est must be 'pool' or 'map'"
 
         sns.set_theme(style="whitegrid")
         dfx = self.df.copy()
@@ -398,7 +456,10 @@ class CategoryRelations(object):
 
             if coef_box is not None:
                 data_table = self.corr_probability(
-                    df_probability=[dfx1, dfx2], time_period="", coef_box_loc=coef_box
+                    df_probability=[dfx1, dfx2],
+                    time_period="",
+                    coef_box_loc=coef_box,
+                    prob_est=prob_est
                 )
                 data_table.scale(0.4, 2.5)
                 data_table.set_fontsize(14)
@@ -414,15 +475,13 @@ class CategoryRelations(object):
 
             assert isinstance(single_chart, bool)
 
-            index_cids = dfx.index.get_level_values(0)
-            cids_in_df = list(index_cids.unique())
-            n_cids = len(cids_in_df)
+            dfx_copy = dfx.reset_index()
+            n_cids = len(dfx_copy['cid'].unique())
 
             error_cids = "There must be more than one cross-section to use " \
                          "separator = 'cids'."
             assert n_cids > 1, error_cids
 
-            dfx['cid'] = index_cids
             # “Wrap” the column variable at this width, so that the column facets span
             # multiple rows. Used to determine the number of grids on each row.
             dict_coln = {2: 2, 5: 3, 8: 4, 30: 5}
@@ -431,12 +490,9 @@ class CategoryRelations(object):
             key = keys_ar[keys_ar <= n_cids][-1]
             col_number = dict_coln[key]
 
-            # Convert the DataFrame to a standardised DataFrame. Three columns: two
+            # The DataFrame is already a standardised DataFrame. Three columns: two
             # categories (dependent & explanatory variable) and the respective
             # cross-sections. The index will be the date timestamp.
-            dfx_copy = dfx.copy()
-            dfx_copy = dfx_copy.droplevel(0, axis="index")
-            dfx_copy = dfx_copy.reset_index(level=0)
 
             fg = sns.FacetGrid(data=dfx_copy, col='cid', col_wrap=col_number)
             fg.map(
@@ -486,7 +542,8 @@ class CategoryRelations(object):
 
             if coef_box is not None:
                 data_table = self.corr_probability(
-                    df_probability=self.df, coef_box_loc=coef_box
+                    df_probability=self.df, prob_est=prob_est,
+                    coef_box_loc=coef_box
                 )
                 data_table.scale(0.4, 2.5)
                 data_table.set_fontsize(12)
@@ -524,15 +581,23 @@ class CategoryRelations(object):
             
         plt.show()
 
-    def ols_table(self):
+    def ols_table(self, type='pool'):
         """
-        Print statsmodel OLS table of pooled regression.
+        Print statsmodels regression summaries.
+        :param <str> type: type of linear regression summary to print. Default is 'pool'.
+            Alternative is 're' for period-specific random effects.
 
         """
+        assert type in ['pool', 're'], "Type must be either 'pool' or 're'."
 
         x, y = self.df.dropna().iloc[:, 0], self.df.dropna().iloc[:, 1]
         x_fit = sm.add_constant(x)
-        fit_results = sm.OLS(y, x_fit).fit()
+        groups = self.df.reset_index().real_date
+        if type == 'pool':
+            fit_results = sm.OLS(y, x_fit).fit()
+        elif type == 're':
+            fit_results = sm.MixedLM(y, x_fit, groups).fit(reml=False)
+        
         print(fit_results.summary())
 
 
@@ -578,5 +643,24 @@ if __name__ == "__main__":
 
     cr.reg_scatter(
         labels=False, separator=None, title="Carry and Return", xlab="Carry",
+        ylab="Return", coef_box="lower left", prob_est="map",
+    )
+
+    cr = CategoryRelations(
+        dfdx, xcats=["CRY", "XR"], 
+        xcat1_chg="diff",
+        freq="M", 
+        lag=1, 
+        cids=cidx, 
+        xcat_aggs=["mean", "sum"],
+        start="2001-01-01", 
+        blacklist=black, years=None
+    )
+
+    cr.reg_scatter(
+        labels=False, separator=cids, title="Carry and Return", xlab="Carry",
         ylab="Return", coef_box="lower left"
     )
+
+    cr.ols_table(type='pool')
+    cr.ols_table(type='re')

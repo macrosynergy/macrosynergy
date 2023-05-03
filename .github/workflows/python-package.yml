@@ -8,6 +8,7 @@ on:
     branches: [ main, dev, test, prod, develop, release ]
   pull_request:
     branches: [ main, dev, test, prod, develop, release ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -15,12 +16,12 @@ jobs:
     runs-on: ubuntu-latest  # Alternative: windows-latest
     strategy:
       matrix:
-        python-version: ['3.7', '3.8', '3.9', '3.10']  # For multiple: [3.7, 3.8]
+        python-version: ['3.8', '3.9', '3.10', '3.11']
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies

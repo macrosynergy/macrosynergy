@@ -5,14 +5,15 @@ from macrosynergy.management.shape_dfs import reduce_df
 import unittest
 import numpy as np
 import pandas as pd
+from typing import List, Dict, Tuple, Union
 
 
 class TestAll(unittest.TestCase):
 
     def dataframe_construction(self):
 
-        self.__dict__['cids'] = ['AUD', 'CAD', 'GBP', 'NZD', 'USD', 'EUR']
-        self.__dict__['xcats'] = ['EQXR', 'CRY', 'GROWTH', 'INFL', 'DUXR']
+        self.cids : List[str] = ['AUD', 'CAD', 'GBP', 'NZD', 'USD', 'EUR']
+        self.xcats : List[str] = ['EQXR', 'CRY', 'GROWTH', 'INFL', 'DUXR']
 
         df_cids = pd.DataFrame(index=self.cids, columns=['earliest', 'latest', 'mean_add',
                                                     'sd_mult'])
@@ -35,11 +36,11 @@ class TestAll(unittest.TestCase):
 
         black = {'AUD': ['2000-01-01', '2003-12-31'],
                  'GBP': ['2018-01-01', '2100-01-01']}
-        self.__dict__['blacklist'] = black
+        self.blacklist : Dict[str, List[str]] = black
 
         # Standard df for tests.
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-        self.__dict__['dfd'] = dfd
+        self.dfd : pd.DataFrame = reduce_df(dfd, blacklist=self.blacklist)
 
     def test_constructor(self):
         # Test NaivePnL's constructor and the instantiation of the respective fields.
@@ -300,13 +301,13 @@ class TestAll(unittest.TestCase):
         # Will implicitly test if the PnL name, using the default mechanism, will have
         # the postfix "_NEG" appended given sig_neg is set to True.
         pnl.make_pnl(
-            sig="GROWTH", sig_op="zn_score_pan", sig_neg=True, rebal_freq="monthly",
+            sig="INFL", sig_op="zn_score_pan", sig_neg=True, rebal_freq="monthly",
             vol_scale=5, rebal_slip=1, min_obs=250, thresh=2
         )
 
         # Same parameter but sig_neg is set to False.
         pnl.make_pnl(
-            sig="GROWTH", sig_op="zn_score_pan", sig_neg=False, rebal_freq="monthly",
+            sig="INFL", sig_op="zn_score_pan", sig_neg=False, rebal_freq="monthly",
             vol_scale=5, rebal_slip=1, min_obs=250, thresh=2
         )
 
@@ -314,7 +315,7 @@ class TestAll(unittest.TestCase):
         # correlation coefficients with the benchmarks, the value should equate to
         # zero.
         df_eval = pnl.evaluate_pnls(
-            pnl_cats=["PNL_GROWTH", "PNL_GROWTH_NEG"],
+            pnl_cats=["PNL_INFL", "PNL_INFL_NEG"],
         )
 
         bm_correl = df_eval.loc[[b + " correl" for b in bms], :]
