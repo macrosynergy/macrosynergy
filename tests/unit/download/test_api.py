@@ -507,7 +507,7 @@ class TestDataQueryInterface(unittest.TestCase):
                 f"Retrying failed downloads. Retry count: {bad_args['retry_counter']}"
             )
             self.assertIn(err_string_1, mock_std.getvalue())
-            
+
     def test_dq_download_args(self):
         good_args: Dict[str, Any] = {
             "expressions": ["DB(JPMAQS,EUR_FXXR_NSA,value)"],
@@ -557,7 +557,6 @@ class TestDataQueryInterface(unittest.TestCase):
             bad_args[date_arg] = "1-Jan-2023"
             with self.assertRaises(ValueError):
                 validate_download_args(**bad_args)
-
 
 
 class TestDataQueryDownloads(unittest.TestCase):
