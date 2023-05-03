@@ -74,7 +74,7 @@ class CategoryRelations(object):
     def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                  val: str = 'value', start: str = None, end: str = None,
                  blacklist: dict = None, years = None, freq: str = 'M', lag: int = 0,
-                 fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean'),
+                 fwin: int = 1, xcat_aggs: List[str] = ['mean', 'mean'],
                  xcat1_chg: str = None, n_periods: int = 1,
                  xcat_trims: List[float] = [None, None], slip: int = 0,):
         """ Initializes CategoryRelations """
@@ -91,23 +91,35 @@ class CategoryRelations(object):
         self.xcat_trims = xcat_trims
         self.slip = slip
 
-        assert self.freq in ['D', 'W', 'M', 'Q', 'A']
-        assert {'cid', 'xcat', 'real_date', val}.issubset(set(df.columns))
-        assert len(xcats) == 2, "Expects two fields."
-        assert isinstance(slip, int) and slip >= 0, "Slip must be a non-negative integer."
+        if not isinstance(self.freq, str):
+            raise TypeError("freq must be a string.")
+        elif not self.freq in ['D', 'W', 'M', 'Q', 'A']:
+            raise ValueError("freq must be one of 'D', 'W', 'M', 'Q', 'A'.")
+        if not isinstance(val, str):
+            raise TypeError("val must be a string.")
+        if not {'cid', 'xcat', 'real_date', val}.issubset(set(df.columns)):
+            raise ValueError("`df` must have columns 'cid', 'xcat', 'real_date' and `val`.")
+        if not isinstance(xcats, (list, tuple)):
+            raise TypeError("`xcats` must be a list or a tuple.")
+        elif not len(xcats) == 2:
+            raise ValueError("`xcats` must have exactly two elements.")
+        if not isinstance(slip, int):
+            raise TypeError("`slip` must be a non-negative integer.")
+        elif slip < 0:
+            raise ValueError("`slip` must be a non-negative integer.")
+
+        if not isinstance(xcat_aggs, (list, tuple)):
+            raise TypeError("xcat_aggs must be a list or a tuple.")
 
         # Select the cross-sections available for both categories.
         df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
         
-        df_slips : pd.DataFrame = df.copy()
         if self.slip != 0:
-            metrics_found : List[str] = list(set(df_slips.columns) - set(['cid', 'xcat', 'real_date']))
-            df_slips = self.apply_slip(target_df=df_slips, slip=self.slip, cids=self.cids,
+            metrics_found : List[str] = list(set(df.columns) - set(['cid', 'xcat', 'real_date']))
+            df = self.apply_slip(target_df=df, slip=self.slip, cids=self.cids,
                                         xcats=self.xcats, metrics=metrics_found)
 
         shared_cids = CategoryRelations.intersection_cids(df, xcats, cids)
-
-        # TODO : df = df_slips here?
         
         # Will potentially contain NaN values if the two categories are defined over
         # time-periods.

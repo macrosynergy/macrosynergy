@@ -556,8 +556,10 @@ class TestAll(unittest.TestCase):
             CategoryRelations.apply_slip(target_df=df, slip=-1,
                                                 xcats=sel_xcats, cids=["ac_dc"],
                                                 metrics=["value"])
-        
-            
+        try:
+            cat_rel: CategoryRelations = CategoryRelations(df=df, xcats=sel_xcats, cids=sel_cids, slip=100)
+        except:
+            self.fail("CategoryRelations init failed")
 
 
 
