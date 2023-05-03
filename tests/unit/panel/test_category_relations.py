@@ -74,7 +74,7 @@ class TestAll(unittest.TestCase):
         self.dataframe_generator()
         # Testing the various assert statements built into the Class's Constructor.
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # Test the notion that the metric of interest is present in the DataFrame. If
             # not, an assertion will be thrown.
             cr = CategoryRelations(
@@ -90,13 +90,13 @@ class TestAll(unittest.TestCase):
                 val="grading",
             )
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # Test the restrictions placed on the frequency parameter.
             cr = CategoryRelations(
                 self.dfdx,
                 xcats=["GROWTH", "INFL"],
                 cids=self.cidx,
-                freq="d",
+                freq="r",
                 xcat_aggs=["mean", "mean"],
                 lag=1,
                 start="2000-01-01",
@@ -104,7 +104,7 @@ class TestAll(unittest.TestCase):
                 blacklist=self.black,
             )
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # Test the notion that the category List can only receive two categories.
             cr = CategoryRelations(
                 self.dfdx,

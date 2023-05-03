@@ -73,27 +73,27 @@ class CategoryRelations(object):
     
     def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                  val: str = 'value', start: str = None, end: str = None,
-                 blacklist: dict = None, years = None, freq: str = 'M', lag: int = 0,
+                 blacklist: dict = None, years: int = None, freq: str = 'M', lag: int = 0,
                  fwin: int = 1, xcat_aggs: List[str] = ['mean', 'mean'],
                  xcat1_chg: str = None, n_periods: int = 1,
                  xcat_trims: List[float] = [None, None], slip: int = 0,):
         """ Initializes CategoryRelations """
 
-        self.xcats = xcats
-        self.cids = cids 
-        self.val = val 
-        self.freq = freq
-        self.lag = lag
-        self.years = years 
-        self.aggs = xcat_aggs
-        self.xcat1_chg = xcat1_chg
-        self.n_periods = n_periods
-        self.xcat_trims = xcat_trims
-        self.slip = slip
+        self.xcats: List[str] = xcats
+        self.cids: List[str] = cids 
+        self.val: str = val 
+        self.freq: str = freq.upper()
+        self.lag: int = lag
+        self.years: int  = years 
+        self.aggs: List[str] = xcat_aggs
+        self.xcat1_chg: str  = xcat1_chg
+        self.n_periods: int = n_periods
+        self.xcat_trims: List[float] = xcat_trims
+        self.slip: int = slip
 
         if not isinstance(self.freq, str):
             raise TypeError("freq must be a string.")
-        elif not self.freq in ['D', 'W', 'M', 'Q', 'A']:
+        elif  self.freq not in ['D', 'W', 'M', 'Q', 'A']:
             raise ValueError("freq must be one of 'D', 'W', 'M', 'Q', 'A'.")
         if not isinstance(val, str):
             raise TypeError("val must be a string.")
