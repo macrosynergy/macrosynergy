@@ -25,6 +25,7 @@ from macrosynergy.download.exceptions import (
     DownloadError,
     InvalidResponseError,
     HeartbeatError,
+    KNOWN_EXCEPTIONS
 )
 from macrosynergy.management.utils import (
     is_valid_iso_date,
@@ -219,21 +220,9 @@ def request_wrapper(
             raised_exceptions.append(exc)
             error_statements.append(error_statement)
 
-            known_exceptions = [
-                requests.exceptions.ConnectionError,
-                requests.exceptions.ConnectTimeout,
-                requests.exceptions.ReadTimeout,
-                ConnectionResetError,
-                requests.exceptions.Timeout,
-                requests.exceptions.TooManyRedirects,
-                requests.exceptions.RequestException,
-                requests.exceptions.HTTPError,
-                requests.exceptions.InvalidURL,
-                requests.exceptions.InvalidSchema,
-                requests.exceptions.ChunkedEncodingError,
-                # NOTE : HeartBeat is a special case
-                HeartbeatError,
-            ]
+            known_exceptions = KNOWN_EXCEPTIONS + [HeartbeatError]
+            # NOTE : HeartBeat is a special case
+                
             # NOTE: exceptions that need the code to break should be caught before this
             # all other exceptions are caught here and retried after a delay
 
