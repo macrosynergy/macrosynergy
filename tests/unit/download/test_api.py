@@ -818,7 +818,8 @@ class TestRequestWrapper(unittest.TestCase):
                 )
 
         def mock_unknown_errors(*args, **kwargs) -> requests.Response:
-            # raise some unrelated error - using InvalidDataframeError as it does not interact with this scope
+            # raise some unrelated error -
+            # using InvalidDataframeError as it does not interact with this scope
             raise InvalidDataframeError
 
         with mock.patch("requests.Session.send", side_effect=mock_unknown_errors):
@@ -829,7 +830,6 @@ class TestRequestWrapper(unittest.TestCase):
                 )
 
         def mock_keyboard_interrupt(*args, **kwargs) -> requests.Response:
-            # raise some unrelated error - using InvalidDataframeError as it does not interact with this scope
             raise KeyboardInterrupt
 
         with mock.patch("requests.Session.send", side_effect=mock_keyboard_interrupt):
@@ -920,10 +920,7 @@ class MockDataQueryInterface(DataQueryInterface):
     def download_data(
         self, expressions: List[str], start_date: str, end_date: str, **kwargs
     ) -> pd.DataFrame:
-        expr = expressions.copy()
-
         ts: List[dict] = self.request_wrapper(expressions, start_date, end_date)
-        # look at d[attributes][0][expression]. if in mask_expressions, replace attributes[0][time-series] with None
         if self.mask_expressions:
             for d in ts:
                 if d["attributes"][0]["expression"] in self.mask_expressions:
