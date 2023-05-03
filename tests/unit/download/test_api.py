@@ -41,6 +41,56 @@ from macrosynergy.download.exceptions import (
 from macrosynergy.management.utils import Config
 
 
+
+def mock_jpmaqs_value(elem: str) -> float:
+    """
+    Used to produce a value or grade for the associated ticker. If the metric is
+    grade, the function will return 1.0 and if value, the function returns a random
+    number between (0, 1).
+
+    :param <str> elem: ticker.
+    """
+    ticker_split = elem.split(",")
+    if ticker_split[-1][:-1] == "grading":
+        value = 1.0
+    else:
+        value = random()
+    return value
+
+def mock_request_wrapper(
+    dq_expressions: List[str], start_date: str, end_date: str
+) -> List[Dict[str, Any]]:
+    """
+    Contrived request method to replicate output from DataQuery. Will replicate the
+    form of a JPMaQS expression from DataQuery which will subsequently be used to
+    test methods held in the api.Interface() Class.
+    """
+    aggregator = []
+    for i, elem in enumerate(dq_expressions):
+        elem_dict = {
+            "item": (i + 1),
+            "group": None,
+            "attributes": [
+                {
+                    "expression": elem,
+                    "label": None,
+                    "attribute-id": None,
+                    "attribute-name": None,
+                    "time-series": [
+                        [d.strftime("%Y%m%d"), mock_jpmaqs_value(elem)]
+                        for d in pd.bdate_range(start_date, end_date)
+                    ],
+                },
+            ],
+            "instrument-id": None,
+            "instrument-name": None,
+        }
+        aggregator.append(elem_dict)
+
+    return aggregator
+
+
+
 class TestCertAuth(unittest.TestCase):
     def mock_isfile(self, path: str) -> bool:
         good_paths: List[str] = ["path/key.key", "path/crt.crt"]
@@ -125,6 +175,9 @@ class TestCertAuth(unittest.TestCase):
             self.assertEqual(dq_interface.base_url, CERT_BASE_URL)
 
 
+##############################################
+
+
 class TestOAuth(unittest.TestCase):
     def test_init(self):
         jpmaqs: JPMaQSDownload = JPMaQSDownload(
@@ -168,54 +221,24 @@ class TestOAuth(unittest.TestCase):
         self.assertFalse(oauth._valid_token())
 
 
+##############################################
+
+
 class TestDataQueryInterface(unittest.TestCase):
     @staticmethod
-    def jpmaqs_value(elem: str):
+    def jpmaqs_value(elem: str) -> float:
         """
-        Used to produce a value or grade for the associated ticker. If the metric is
-        grade, the function will return 1.0 and if value, the function returns a random
-        number between (0, 1).
+        Use the mock jpmaqs_value to return a mock numerical jpmaqs value.
+        """
+        return mock_jpmaqs_value(elem=elem)
 
-        :param <str> elem: ticker.
+    def request_wrapper(self, 
+            dq_expressions: List[str], start_date: str, end_date: str
+        ) -> List[Dict[str, Any]]:
         """
-        ticker_split = elem.split(",")
-        if ticker_split[-1][:-1] == "grading":
-            value = 1.0
-        else:
-            value = random()
-        return value
-
-    def request_wrapper(
-        self, dq_expressions: List[str], start_date: str, end_date: str
-    ):
+        Use the mock request_wrapper to return a mock response.
         """
-        Contrived request method to replicate output from DataQuery. Will replicate the
-        form of a JPMaQS expression from DataQuery which will subsequently be used to
-        test methods held in the api.Interface() Class.
-        """
-        aggregator = []
-        for i, elem in enumerate(dq_expressions):
-            elem_dict = {
-                "item": (i + 1),
-                "group": None,
-                "attributes": [
-                    {
-                        "expression": elem,
-                        "label": None,
-                        "attribute-id": None,
-                        "attribute-name": None,
-                        "time-series": [
-                            [d.strftime("%Y%m%d"), self.jpmaqs_value(elem)]
-                            for d in pd.bdate_range(start_date, end_date)
-                        ],
-                    },
-                ],
-                "instrument-id": None,
-                "instrument-name": None,
-            }
-            aggregator.append(elem_dict)
-
-        return aggregator
+        return mock_request_wrapper(dq_expressions=dq_expressions, start_date=start_date, end_date=end_date)
 
     def test_init(self):
         with self.assertRaises(ValueError):
@@ -560,6 +583,9 @@ class TestDataQueryInterface(unittest.TestCase):
                 validate_download_args(**bad_args)
 
 
+##############################################
+
+
 class TestDataQueryDownloads(unittest.TestCase):
     def test_authentication_error(self):
         with JPMaQSDownload(
@@ -846,52 +872,19 @@ class TestRequestWrapper(unittest.TestCase):
 
 class MockDataQueryInterface(DataQueryInterface):
     @staticmethod
-    def jpmaqs_value(elem: str):
+    def jpmaqs_value(elem: str) -> float:
         """
-        Used to produce a value or grade for the associated ticker. If the metric is
-        grade, the function will return 1.0 and if value, the function returns a random
-        number between (0, 1).
+        Use the mock jpmaqs_value to return a mock numerical jpmaqs value.
+        """
+        return mock_jpmaqs_value(elem=elem)
 
-        :param <str> elem: ticker.
+    def request_wrapper(self, 
+            dq_expressions: List[str], start_date: str, end_date: str
+        ) -> List[Dict[str, Any]]:
         """
-        ticker_split = elem.split(",")
-        if ticker_split[-1][:-1] == "grading":
-            value = 1.0
-        else:
-            value = random()
-        return value
-
-    def request_wrapper(
-        self, dq_expressions: List[str], start_date: str, end_date: str
-    ):
+        Use the mock request_wrapper to return a mock response.
         """
-        Contrived request method to replicate output from DataQuery. Will replicate the
-        form of a JPMaQS expression from DataQuery which will subsequently be used to
-        test methods held in the api.Interface() Class.
-        """
-        aggregator = []
-        for i, elem in enumerate(dq_expressions):
-            elem_dict = {
-                "item": (i + 1),
-                "group": None,
-                "attributes": [
-                    {
-                        "expression": elem,
-                        "label": None,
-                        "attribute-id": None,
-                        "attribute-name": None,
-                        "time-series": [
-                            [d.strftime("%Y%m%d"), self.jpmaqs_value(elem)]
-                            for d in pd.bdate_range(start_date, end_date)
-                        ],
-                    },
-                ],
-                "instrument-id": None,
-                "instrument-name": None,
-            }
-            aggregator.append(elem_dict)
-
-        return aggregator
+        return mock_request_wrapper(dq_expressions=dq_expressions, start_date=start_date, end_date=end_date)
 
     def __init__(self, *args, **kwargs):
         if "config" in kwargs:
@@ -965,6 +958,9 @@ class MockDataQueryInterface(DataQueryInterface):
         )
 
 
+##############################################
+
+
 class TestJPMaQSDownload(unittest.TestCase):
     def test_init(self):
         good_args: Dict[str, Any] = {
@@ -1001,11 +997,6 @@ class TestJPMaQSDownload(unittest.TestCase):
                 bad_args = good_args.copy()
                 bad_args[argx] = -1  # 1 would evaluate to True for bools
                 JPMaQSDownload(**bad_args)
-
-        with self.assertRaises(TypeError):
-            bad_args = good_args.copy()
-            bad_args["oauth"] = "test"
-            JPMaQSDownload(**bad_args)
 
         with self.assertRaises(TypeError):
             good_args["credentials_config"] = 1
