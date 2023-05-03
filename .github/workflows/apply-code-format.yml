@@ -5,6 +5,7 @@ on:
     branches: [ main, develop, test ] 
     paths:
       - "**.py"
+  workflow_dispatch:
 
 jobs:
   format:
@@ -12,7 +13,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@develop
+        uses: actions/checkout@v3
 
       - name: Checkout Black repository
         uses: psf/black@stable
@@ -20,8 +21,21 @@ jobs:
           options: --check --diff
           src: '.'
 
-    
-
+      - name: Extract branch name
+        shell: bash
+        run: echo "branch=$(echo ${GITHUB_REF#refs/heads/})" >>$GITHUB_OUTPUT
+        id: extract_branch
+          
+      - name: git-check
+        id: git-check
+        shell: bash
+        run: |
+          # fetch current branch
+          git fetch origin ${{ github.ref }}
+          git checkout ${{ steps.extract_branch.outputs.branch }}
+          # check if there are any changes against last commit.
+          git diff --exit-code --quiet || echo "::set-output name=modified::true"
+        
       - name: Push changes
         if: steps.git-check.outputs.modified == 'true'
         run: |
