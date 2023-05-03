@@ -2,7 +2,7 @@ name: Format Python code
 
 on:
   push:
-    branches: [ main, develop, test ] 
+    branches: [ main, develop, test , feature/test_code_format_workflow ]
     paths:
       - "**.py"
   workflow_dispatch:
