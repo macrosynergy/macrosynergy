@@ -7,6 +7,7 @@ import os
 import datetime
 import base64
 import io
+import copy
 
 from typing import List, Dict, Union, Optional, Any, Tuple
 import requests
@@ -914,7 +915,7 @@ class MockDataQueryInterface(DataQueryInterface):
     def __exit__(self, exc_type, exc_value, traceback):
         pass
 
-    def check_connection(self, verbose=False) -> bool:
+    def check_connection(self, *args, **kwargs) -> bool:
         return True
 
     def download_data(
@@ -1000,6 +1001,11 @@ class TestJPMaQSDownload(unittest.TestCase):
                 bad_args = good_args.copy()
                 bad_args[argx] = -1  # 1 would evaluate to True for bools
                 JPMaQSDownload(**bad_args)
+                
+        with self.assertRaises(TypeError):
+            bad_args = good_args.copy()
+            bad_args["oauth"] = "test"
+            JPMaQSDownload(**bad_args)
 
         with self.assertRaises(TypeError):
             good_args["credentials_config"] = 1
@@ -1191,6 +1197,36 @@ class TestJPMaQSDownload(unittest.TestCase):
         with self.assertRaises(AssertionError):
             # the assertion checks whether the download/DQInterface is "mismatched"
             jpmaqs.download(**good_args)
+        
+        jpmaqs: JPMaQSDownload = JPMaQSDownload(
+            client_id="client_id",
+            client_secret="client_secret",
+            check_connection=False,
+        )
+
+        config: Config = Config(
+            client_id="client_id",
+            client_secret="client_secret",
+        )
+
+        mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(
+            config=config
+        )
+        un_avail_exprs: List[str] = [
+            "DB(JPMAQS,USD_FXXR_NSA,value)",
+            "DB(JPMAQS,USD_FXXR_NSA,grading)",
+            "DB(JPMAQS,USD_FXXR_NSA,eop_lag)",
+            "DB(JPMAQS,USD_FXXR_NSA,mop_lag)",
+        ]
+        mock_dq_interface._gen_attributes(
+            unavailable_expressions=un_avail_exprs, mask_expressions=un_avail_exprs
+        )
+        jpmaqs.dq_interface = mock_dq_interface
+        with self.assertWarns(UserWarning):
+            bad_args = good_args.copy()
+            bad_args["start_date"] = "2019-01-31"
+            bad_args["end_date"] = "2019-01-01"
+            jpmaqs.download(**bad_args)
 
     def test_validate_downloaded_df(self):
         pass
