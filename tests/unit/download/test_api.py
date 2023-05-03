@@ -1001,7 +1001,7 @@ class TestJPMaQSDownload(unittest.TestCase):
                 bad_args = good_args.copy()
                 bad_args[argx] = -1  # 1 would evaluate to True for bools
                 JPMaQSDownload(**bad_args)
-                
+
         with self.assertRaises(TypeError):
             bad_args = good_args.copy()
             bad_args["oauth"] = "test"
@@ -1197,7 +1197,7 @@ class TestJPMaQSDownload(unittest.TestCase):
         with self.assertRaises(AssertionError):
             # the assertion checks whether the download/DQInterface is "mismatched"
             jpmaqs.download(**good_args)
-        
+
         jpmaqs: JPMaQSDownload = JPMaQSDownload(
             client_id="client_id",
             client_secret="client_secret",
