@@ -1148,8 +1148,44 @@ class TestJPMaQSDownload(unittest.TestCase):
 
         try:
             test_df: pd.DataFrame = jpmaqs.download(**good_args)
+            
+            tickers: pd.Series = test_df["cid"] + "_" + test_df["xcat"]
+            
+            self.assertFalse("USD_FXXR_NSA" in tickers.values)
+            for cid in ["GBP", "EUR"]:
+                for xcat in ["FXXR_NSA", "EQXR_NSA"]:
+                    self.assertTrue(f"{cid}_{xcat}" in tickers.values)
+
+            self.assertTrue(len(jpmaqs.msg_errors) > 0)
+            self.assertTrue(len(jpmaqs.msg_warnings) > 0)
+            for unav in set(un_avail_exprs):
+                self.assertTrue(sum([unav in msg_unav for msg_unav in set(jpmaqs.unavailable_expr_messages)]) == 1)
+            
+            
         except Exception as e:
             self.fail("Unexpected exception raised: {}".format(e))
+            
+        # now test with fail condition where no expressions are available
+        test_exprs: List[str] = JPMaQSDownload.construct_expressions(
+            cids=["GBP", "EUR", "CAD"],
+            xcats=["FXXR_NSA", "EQXR_NSA"],
+            metrics=["value", "grading",]
+            )
+        mock_dq_interface._gen_attributes(
+            unavailable_expressions=test_exprs, mask_expressions=test_exprs)
+
+        with self.assertRaises(InvalidDataframeError):
+            jpmaqs.dq_interface = mock_dq_interface
+            bad_args: Dict[str, Any] = good_args.copy()
+            bad_args["expressions"] = test_exprs
+            jpmaqs.download(**bad_args)
+            
+        with self.assertRaises(AssertionError):
+            # the assertion checks whether the download/DQInterface is "mismatched"
+            jpmaqs.download(**good_args)
+            
+            
+
 
     def test_validate_downloaded_df(self):
         pass
