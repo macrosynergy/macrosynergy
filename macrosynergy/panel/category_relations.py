@@ -357,7 +357,7 @@ class CategoryRelations(object):
                     fit_reg: bool = True, reg_ci: int = 95,
                     reg_order: int = 1, reg_robust: bool = False,
                     separator: Union[str, int] = None, title_adj: float = 1,
-                    single_chart: bool = False, heatmap: bool = False,):
+                    single_chart: bool = False, time_color: bool = False,):
 
         """
         Display scatter-plot and regression line.
@@ -402,8 +402,8 @@ class CategoryRelations(object):
             are numerous charts, and the labels are excessively long). The default is
             False, and the names of the axis will be displayed on each grid if not
             conflicting with the label for each variable.
-        :param <bool> heatmap: boolean parameter determining whether or not to add continuous
-            time colour coding to the scatter plot. The default is False.
+        :param <bool> time_color: if True this adds continuous time colour coding to the scatter 
+            plot. The default is False.
         """
         coef_box_loc_error = "The parameter expects a string used to delimit the " \
                              "location of the box: 'upper left', 'lower right' etc."
@@ -412,7 +412,7 @@ class CategoryRelations(object):
 
         assert prob_est in ["pool", "map"], "prob_est must be 'pool' or 'map'"
 
-        assert heatmap in [True, False], "heatmap must be True or False"
+        assert time_color in [True, False], "time_color must be True or False"
 
         sns.set_theme(style="whitegrid")
         dfx = self.df.copy()
@@ -538,8 +538,8 @@ class CategoryRelations(object):
         elif separator is None:
             fig, ax = plt.subplots(figsize=size)
 
-            if heatmap:
-                cmap = "RdBu"
+            if time_color:
+                cmap = "RdBu_r"
                 dates = dfx.reset_index().real_date
                 palette = np.array(sns.color_palette(cmap, len(dates)))
                 ax = sns.regplot(data=dfx, x=self.xcats[0], y=self.xcats[1],
@@ -650,7 +650,7 @@ if __name__ == "__main__":
 
     cr.reg_scatter(
         labels=False, separator=None, title="Carry and Return", xlab="Carry",
-        ylab="Return", coef_box="lower left", prob_est="map", heatmap=True
+        ylab="Return", coef_box="lower left", prob_est="map", time_color=True
     )
 
     cr = CategoryRelations(
