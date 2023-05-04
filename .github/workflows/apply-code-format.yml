@@ -10,62 +10,27 @@ on:
 jobs:
   format:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Checkout Black repository
-        uses: psf/black@stable
-        with:
-          options: --check --diff
-          src: '.'
-
-      - name: Extract branch name
-        shell: bash
-        run: echo "branch=$(echo ${GITHUB_REF#refs/heads/})" >>$GITHUB_OUTPUT
-        id: extract_branch
-          
-      - name: git-check
-        id: git-check
-        shell: bash
+      - name: Install Python and Git
         run: |
-          # fetch current branch
-          git fetch origin ${{ github.ref }}
-          git checkout ${{ steps.extract_branch.outputs.branch }}
-          # check if there are any changes against last commit.
-          git diff --exit-code --quiet || echo "::set-output name=modified::true"
-        
-      - name: Push changes
-        if: steps.git-check.outputs.modified == 'true'
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-pip git
+          python3 -m pip install --upgrade pip
+      - name: Install Python requirements
         run: |
-          # git config --global user.name 'abc'
-          # git config --global user.email 'abc123@users.noreply.github.com'
+          python3 -m pip install black "black[jupyter]"
 
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          
-          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+      - name: Apply formatting
+        run: |
+          python3 -m black .
 
-          git commit -am "Apply Black code formatting"
-          
-          git push
-
-
-
-# Black formatter, GitHub Actions guide
-# https://black.readthedocs.io/en/stable/integrations/github_actions.html
-
-
-# other resources
-# Thank you, 
-#           Peter Evans   , https://peterevans.dev/posts/github-actions-how-to-automate-code-formatting-in-pull-requests/
-#           MichaelCurrin , https://michaelcurrin.github.io/code-cookbook/recipes/ci-cd/github-actions/workflows/python/format.html
-#           rickstaa      , https://github.com/rickstaa/action-black/
-
-
-# an Github action for running black-action already exists, however it's 3rd party so I would not recommend as it uses a slightly hacky-tachy method.
-#           rickstaa      , https://github.com/marketplace/actions/run-black-formatter 
-
-
+      - name: Commit changes
+        run: |
+          CURR_BRANCH=$(git branch --show-current)
+          git config --global user.name "Macrosynergy Automations Bot"
+          git config --global user.email "automation@macrosynergy.com"
+          git add .
+          git commit -m "Auto-formatting code"
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/macrosynergy/macrosynergy
+          git push origin $CURR_BRANCH
 
