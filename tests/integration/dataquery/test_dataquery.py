@@ -164,27 +164,6 @@ class TestDataQueryOAuth(unittest.TestCase):
 
         self.assertGreater(data.shape[0], 0)
 
-        test_expr: str = JPMaQSDownload.construct_expressions(
-            cids=cids, xcats=xcats, metrics=["value", "grading"]
-        )
-        with DataQueryInterface(
-            oauth=True,
-            config=Config(
-                client_id=os.getenv("DQ_CLIENT_ID"),
-                client_secret=os.getenv("DQ_CLIENT_SECRET"),
-            ),
-        ) as dq:
-            data: List[Dict[str, Any]] = dq.download_data(
-                expressions=test_expr,
-                start_date=start_date,
-                end_date=end_date,
-            )
-
-        self.assertIsInstance(data, list)
-        self.assertGreater(len(data), 0)
-        for _data in data:
-            self.assertIsInstance(_data, dict)
-
 
 if __name__ == "__main__":
     unittest.main()

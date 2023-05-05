@@ -581,15 +581,23 @@ class CategoryRelations(object):
             
         plt.show()
 
-    def ols_table(self):
+    def ols_table(self, type='pool'):
         """
-        Print statsmodel OLS table of pooled regression.
+        Print statsmodels regression summaries.
+        :param <str> type: type of linear regression summary to print. Default is 'pool'.
+            Alternative is 're' for period-specific random effects.
 
         """
+        assert type in ['pool', 're'], "Type must be either 'pool' or 're'."
 
         x, y = self.df.dropna().iloc[:, 0], self.df.dropna().iloc[:, 1]
         x_fit = sm.add_constant(x)
-        fit_results = sm.OLS(y, x_fit).fit()
+        groups = self.df.reset_index().real_date
+        if type == 'pool':
+            fit_results = sm.OLS(y, x_fit).fit()
+        elif type == 're':
+            fit_results = sm.MixedLM(y, x_fit, groups).fit(reml=False)
+        
         print(fit_results.summary())
 
 
@@ -653,3 +661,6 @@ if __name__ == "__main__":
         labels=False, separator=cids, title="Carry and Return", xlab="Carry",
         ylab="Return", coef_box="lower left"
     )
+
+    cr.ols_table(type='pool')
+    cr.ols_table(type='re')
