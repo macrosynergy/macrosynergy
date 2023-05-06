@@ -174,6 +174,7 @@ def setup_package():
         include_package_data=True,
         packages=find_packages(),
         version=get_version_info()[0],
+        build_with_nuitka=True,
     )
     # __copyright__ = 'Copyright 2020 Macrosynergy Ltd'
 
