@@ -59,16 +59,11 @@ class CategoryRelations(object):
         for the two respective categories. Observations with higher values will be
         trimmed, i.e. removed from the analysis (not winsorized!). Default is None
         for both. Trimming is applied after all other transformations.
-    :param <int> slip: lag (delay of arrival) of first (explanatory) category in days
-        prior to any frequency conversion. Default is 0. This simulates time elapsed 
-        between observing data and using them for market positioning.
-        This is different from and complementary to  the `lag` argument which delays 
-        the explanatory variable by the periods of the investigated sample, which 
-        often is downsampled. Importantly, for analyses with explanatory and dependent 
-        categories, the first category takes the role of the explanatory and a positive 
-        lag means that the explanatory values will be deferred into the future, 
-        i.e. relate to future values of the explained variable.
-
+    :param <int> slip: implied slippage of feature availability for relationship with
+        the target category. This mimics the relationship between trading signals and
+        returns, which is often characterized by a delay due to the setup of of positions.
+        Technically, this is a negative lag (early arrival) of the target category
+        in working days prior to any frequency conversion. Default is 0.
     """
     
     def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
@@ -166,7 +161,6 @@ class CategoryRelations(object):
 
         slip : int = slip.__neg__()
         
-        target_df : pd.DataFrame = target_df.copy()
         target_df[metrics] = target_df.groupby('tickers')[metrics].shift(slip)
         target_df = target_df.drop(columns=['tickers'])
         
