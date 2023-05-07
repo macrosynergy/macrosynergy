@@ -59,16 +59,11 @@ class CategoryRelations(object):
         for the two respective categories. Observations with higher values will be
         trimmed, i.e. removed from the analysis (not winsorized!). Default is None
         for both. Trimming is applied after all other transformations.
-    :param <int> slip: lag (delay of arrival) of first (explanatory) category in days
-        prior to any frequency conversion. Default is 0. This simulates time elapsed 
-        between observing data and using them for market positioning.
-        This is different from and complementary to  the `lag` argument which delays 
-        the explanatory variable by the periods of the investigated sample, which 
-        often is downsampled. Importantly, for analyses with explanatory and dependent 
-        categories, the first category takes the role of the explanatory and a positive 
-        lag means that the explanatory values will be deferred into the future, 
-        i.e. relate to future values of the explained variable.
-
+    :param <int> slip: implied slippage of feature availability for relationship with
+        the target category. This mimics the relationship between trading signals and
+        returns, which is often characterized by a delay due to the setup of of positions.
+        Technically, this is a lag (delay of arrival) of first (explanatory) category 
+        in working days prior to any frequency conversion. Default is 0.
     """
     
     def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
@@ -155,7 +150,7 @@ class CategoryRelations(object):
                     metrics: List[str]) -> pd.DataFrame:
         
         if not (isinstance(slip, int) and slip >= 0):
-            raise ValueError("Slip must be a non-negative integer.")
+            raise ValueError("Argumnent `slip` must be a non-negative integer.")
 
         sel_tickers : List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
         target_df['tickers'] = target_df['cid'] + '_' + target_df['xcat']
@@ -632,7 +627,7 @@ if __name__ == "__main__":
     cidx = ['AUD', 'CAD', 'GBP', 'USD']
 
     cr = CategoryRelations(
-        dfdx, xcats=["CRY", "XR"], freq="M", lag=1, cids=cidx, xcat_aggs=["mean", "sum"],
+        dfdx, xcats=["CRY", "XR"], freq="M", lag=1, slip = 1, cids=cidx, xcat_aggs=["mean", "sum"],
         start="2001-01-01", blacklist=black, years=None
     )
 
