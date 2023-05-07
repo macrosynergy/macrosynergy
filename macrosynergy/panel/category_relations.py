@@ -167,8 +167,9 @@ class CategoryRelations(object):
         if not set(sel_tickers).issubset(set(target_df['tickers'].unique())):
             raise ValueError("Tickers targetted for applying slip are not present in the DataFrame.\n"
              f"Missing tickers: {set(sel_tickers) - set(target_df['tickers'].unique())}")
+
+        slip : int = slip.__neg__()
         
-        target_df : pd.DataFrame = target_df.copy()
         target_df[metrics] = target_df.groupby('tickers')[metrics].shift(slip)
         target_df = target_df.drop(columns=['tickers'])
         
