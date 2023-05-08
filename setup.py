@@ -149,6 +149,7 @@ with open(os.path.join(os.path.dirname(__file__), "requirements.txt")) as f:
 
 def nuitka_args(packages: List[str]) -> Dict[str, Any]:
     extra_packages: List[str] = ["numpy", "pandas", "matplotlib"]
+    packages = [p for p in packages if "tests" not in p]
     command_options = {
         "nuitka": {
             # boolean option, e.g. if you cared for C compilation commands
@@ -184,7 +185,6 @@ def setup_package():
     write_version_py()
     # write_version_py(filename='macrosynergy.build/version.py')
     # move ./tests to ./macrosynergy/tests
-    shutil.move('tests', 'macrosynergy/tests')
 
     metadata = dict(
         name="macrosynergy",
@@ -232,7 +232,6 @@ def setup_package():
         del sys.path[0]
         os.chdir(old_path)
 
-    shutil.move('macrosynergy/tests', 'tests')
     return
 
 
