@@ -4,6 +4,7 @@ import sys
 import subprocess
 import warnings
 from pathlib import Path
+from typing import List, Dict, Any
 
 DOCLINES = (__doc__ or '').split("\n")
 
@@ -138,6 +139,32 @@ with open(os.path.join(os.path.dirname(__file__), "requirements.txt")) as f:
     REQUIREMENTS = f.read()
 
 
+def nuitka_args(packages: List[str]) -> Dict[str, Any]:
+
+    
+    extra_packages: List[str] = ["numpy", "pandas", "matplotlib"]
+    command_options={
+        'nuitka': {
+            # boolean option, e.g. if you cared for C compilation commands
+            '--show-scons': True,
+            # options with single values, e.g. enable a plugin of Nuitka
+            '--enable-plugin': "numpy",
+            # options with several values, e.g. avoiding including modules
+            '--nofollow-import-to' : ["*.tests", "*.distutils"],
+            '--include-module': packages,
+            '--include-package': packages + extra_packages,
+            '--follow-import-to': packages + extra_packages,
+            '--noinclude-pytest-mode': 'nofollow',
+            '--noiclude-unittest-mode': 'nofollow',
+            '--enable-plugin': ["numpy", "matplotlib", "multiprocessing", "anti-bloat"],
+        }
+    }
+
+    return command_options
+        
+
+
+
 def setup_package():
     from setuptools import setup, find_packages
 
@@ -175,7 +202,8 @@ def setup_package():
         include_package_data=True,
         packages=find_packages(),
         version=get_version_info()[0],
-        build_with_nuitka=True,
+        # build_with_nuitka=True,
+        command_options=nuitka_args(find_packages()),
     )
     # __copyright__ = 'Copyright 2020 Macrosynergy Ltd'
 
