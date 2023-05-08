@@ -91,7 +91,7 @@ def get_version_info():
     FULLVERSION = VERSION
     if os.path.exists('.git'):
         GIT_REVISION = git_version()
-    elif os.path.exists('macrosynergy/version.py') or os.path.exists('macrosynergy.build/version.py')
+    elif os.path.exists('macrosynergy/version.py') or os.path.exists('macrosynergy.build/version.py'):
         # must be a source distribution, use existing version file
         try:
             from qstools.version import git_revision as GIT_REVISION
