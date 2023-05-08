@@ -148,7 +148,6 @@ with open(os.path.join(os.path.dirname(__file__), "requirements.txt")) as f:
 
 def nuitka_args(packages: List[str]) -> Dict[str, Any]:
     extra_packages: List[str] = ["numpy", "pandas", "matplotlib"]
-    extra_packages = []
     command_options = {
         "nuitka": {
             # boolean option, e.g. if you cared for C compilation commands
