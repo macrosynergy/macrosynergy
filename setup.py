@@ -6,7 +6,7 @@ import warnings
 from pathlib import Path
 from typing import List, Dict, Any
 
-DOCLINES = (__doc__ or '').split("\n")
+DOCLINES = (__doc__ or "").split("\n")
 
 path = Path(__file__).parent
 with open(os.path.join(path, "README.md"), "r") as f:
@@ -38,7 +38,7 @@ MAJOR = 0
 MINOR = 0
 MICRO = 28
 ISRELEASED = True
-VERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
+VERSION = "%d.%d.%d" % (MAJOR, MINOR, MICRO)
 
 if sys.version_info >= (3, 12):
     # The first version not in the `Programming Language :: Python :: ...` classifiers above
@@ -47,12 +47,12 @@ if sys.version_info >= (3, 12):
         f"{sys.version_info.major}.{sys.version_info.minor}.",
         RuntimeWarning,
     )
-    
+
 if sys.version_info < (3, 8):
     warnings.warn(
         f"Python {sys.version_info.major}.{sys.version_info.minor} "
         "has reached end-of-life. The Macrosynergy package no longer supports this version. "
-        "Please upgrade to Python 3.8 or later.", 
+        "Please upgrade to Python 3.8 or later.",
         RuntimeWarning,
     )
 
@@ -62,20 +62,20 @@ def git_version():
     def _minimal_ext_cmd(cmd):
         # construct minimal environment
         env = {}
-        for k in ['SYSTEMROOT', 'PATH', 'HOME']:
+        for k in ["SYSTEMROOT", "PATH", "HOME"]:
             v = os.environ.get(k)
             if v is not None:
                 env[k] = v
         # LANGUAGE is used on win32
-        env['LANGUAGE'] = 'C'
-        env['LANG'] = 'C'
-        env['LC_ALL'] = 'C'
+        env["LANGUAGE"] = "C"
+        env["LANG"] = "C"
+        env["LC_ALL"] = "C"
         out = subprocess.check_output(cmd, stderr=subprocess.STDOUT, env=env)
         return out
 
     try:
-        out = _minimal_ext_cmd(['git', 'rev-parse', 'HEAD'])
-        GIT_REVISION = out.strip().decode('ascii')
+        out = _minimal_ext_cmd(["git", "rev-parse", "HEAD"])
+        GIT_REVISION = out.strip().decode("ascii")
     except (subprocess.SubprocessError, OSError):
         GIT_REVISION = "Unknown"
 
@@ -90,16 +90,18 @@ def get_version_info():
     # Adding the git rev number needs to be done inside write_version_py(),
     # otherwise the import of qstools.version messes up the build under Python 3.
     FULLVERSION = VERSION
-    if os.path.exists('.git'):
+    if os.path.exists(".git"):
         GIT_REVISION = git_version()
-    elif os.path.exists('macrosynergy/version.py'):
+    elif os.path.exists("macrosynergy/version.py"):
         # must be a source distribution, use existing version file
         try:
             from qstools.version import git_revision as GIT_REVISION
         except ImportError:
-            raise ImportError("Unable to import git_revision. Try removing "
-                              "qstools/version.py and the build directory "
-                              "before building.")
+            raise ImportError(
+                "Unable to import git_revision. Try removing "
+                "qstools/version.py and the build directory "
+                "before building."
+            )
     else:
         GIT_REVISION = "Unknown"
 
@@ -107,12 +109,12 @@ def get_version_info():
         import time
 
         time_stamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
-        FULLVERSION += f'.dev0+{time_stamp}_{GIT_REVISION[:7]}'
+        FULLVERSION += f".dev0+{time_stamp}_{GIT_REVISION[:7]}"
 
     return FULLVERSION, GIT_REVISION
 
 
-def write_version_py(filename='macrosynergy/version.py'):
+def write_version_py(filename="macrosynergy/version.py"):
     cnt = """\
 # THIS FILE IS GENERATED FROM macrosynergy SETUP.PY
 short_version: str = '%(version)s'
@@ -125,12 +127,17 @@ if not release:
 """
     FULLVERSION, GIT_REVISION = get_version_info()
 
-    a = open(filename, 'w')
+    a = open(filename, "w")
     try:
-        a.write(cnt % {'version': VERSION,
-                       'full_version': FULLVERSION,
-                       'git_revision': GIT_REVISION,
-                       'isrelease': str(ISRELEASED)})
+        a.write(
+            cnt
+            % {
+                "version": VERSION,
+                "full_version": FULLVERSION,
+                "git_revision": GIT_REVISION,
+                "isrelease": str(ISRELEASED),
+            }
+        )
     finally:
         a.close()
 
@@ -140,27 +147,28 @@ with open(os.path.join(os.path.dirname(__file__), "requirements.txt")) as f:
 
 
 def nuitka_args(packages: List[str]) -> Dict[str, Any]:
-
-    
     extra_packages: List[str] = ["numpy", "pandas", "matplotlib"]
-    command_options={
-        'nuitka': {
+    command_options = {
+        "nuitka": {
             # boolean option, e.g. if you cared for C compilation commands
-            '--show-scons': True,
-            # options with single values, e.g. enable a plugin of Nuitka
-            '--enable-plugin': "numpy",
+            # '--show-scons': True,
+            "--enable-plugin": "numpy",
             # options with several values, e.g. avoiding including modules
-            '--nofollow-import-to' : ["*.tests", "*.distutils", "unittest", "pytest"],
-            '--include-module': packages,
-            '--include-package': packages + extra_packages,
-            '--follow-import-to': packages + extra_packages,
-            '--enable-plugin': ["numpy", "matplotlib", "multiprocessing", "anti-bloat"],
+            "--nofollow-import-to": [
+                "*.tests",
+                "*.distutils",
+                "unittest",
+                "pytest",
+                "tests",
+            ],
+            "--include-module": packages,
+            "--include-package": packages + extra_packages,
+            "--follow-import-to": packages + extra_packages,
+            "--enable-plugin": ["numpy", "matplotlib", "multiprocessing", "anti-bloat"],
         }
     }
 
     return command_options
-        
-
 
 
 def setup_package():
@@ -176,7 +184,7 @@ def setup_package():
     # write_version_py(filename='macrosynergy.build/version.py')
 
     metadata = dict(
-        name='macrosynergy',
+        name="macrosynergy",
         maintainer="Macrosynergy",
         maintainer_email="info@macrosynergy.com",
         description=DOCLINES[0],
@@ -184,26 +192,36 @@ def setup_package():
         long_description_content_type="text/markdown",
         long_description=readme,
         url="https://www.macrosynergy.com",
-        author_email='info@macrosynergy.com',
-        author='Macrosynergy Ltd',
+        author_email="info@macrosynergy.com",
+        author="Macrosynergy Ltd",
         download_url="https://github.com/macrosynergy/macrosynergy",
         project_urls={
             "Bug Tracker": "https://github.com/macrosynergy/macrosynergy/issues",
             "Source Code": "https://github.com/macrosynergy/macrosynergy",
-            "Documentation": "https://docs.macrosynergy.com"
+            "Documentation": "https://docs.macrosynergy.com",
         },
-        classifiers=[_f for _f in CLASSIFIERS.split('\n') if _f],
+        classifiers=[_f for _f in CLASSIFIERS.split("\n") if _f],
         platforms=["Windows", "Linux", "Mac OS-X"],
-        test_suite='pytest',
-        python_requires='>=3.6',
+        test_suite="pytest",
+        python_requires=">=3.6",
         install_requires=REQUIREMENTS.split("\n"),
         include_package_data=True,
         packages=find_packages(),
         version=get_version_info()[0],
-        # build_with_nuitka=True,
-        command_options=nuitka_args(find_packages()),
     )
     # __copyright__ = 'Copyright 2020 Macrosynergy Ltd'
+
+    nuitka_available: bool = False
+    try:
+        import nuitka
+
+        nuitka_available = True
+    except:
+        pass
+
+    if nuitka_available:
+        metadata["build_with_nuitka"] = True
+        metadata["command_options"] = nuitka_args(find_packages())
 
     try:
         setup(**metadata)
