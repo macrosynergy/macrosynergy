@@ -6,6 +6,7 @@ import subprocess
 import warnings
 from pathlib import Path
 from typing import List, Dict, Any
+import importlib
 
 DOCLINES = (__doc__ or "").split("\n")
 
@@ -149,6 +150,13 @@ with open(os.path.join(os.path.dirname(__file__), "requirements.txt")) as f:
 
 def nuitka_args(packages: List[str]) -> Dict[str, Any]:
     extra_packages: List[str] = ["numpy",]# "pandas", "matplotlib", "statsmodels", "sklearn", "scipy", "requests"]
+    # import all the modules from the required packages... such as numpy.core, numpy.testing, etc.
+    bck_packages: List[str] = []
+    for package in extra_packages:
+        modules = dir(importlib.import_module(package))
+        for module in modules:
+            bck_packages.append(f"{package}.{module}")
+
     packages = [p for p in packages if "tests" not in p]
     command_options = {
         "nuitka": {
@@ -164,8 +172,8 @@ def nuitka_args(packages: List[str]) -> Dict[str, Any]:
                 "tests",
             ],
             "--include-module": packages,
-            "--include-package": packages + extra_packages,
-            "--follow-import-to": packages + extra_packages,
+            "--include-package": packages + extra_packages + bck_packages,
+            "--follow-import-to": packages + extra_packages + bck_packages,
             "--enable-plugin": ["numpy", "matplotlib", "multiprocessing", "anti-bloat"],
         }
     }
