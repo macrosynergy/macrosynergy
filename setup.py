@@ -171,6 +171,8 @@ def nuitka_args(packages: List[str]) -> Dict[str, Any]:
             "--follow-import-to": packages + extra_packages,
             "--enable-plugin": ["numpy", "matplotlib", "multiprocessing", "anti-bloat", "data-files", "implicit-imports"],
 
+            "--prefer-source-code": True,
+
         }
     }
 
