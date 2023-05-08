@@ -150,12 +150,10 @@ def nuitka_args(packages: List[str]) -> Dict[str, Any]:
             # options with single values, e.g. enable a plugin of Nuitka
             '--enable-plugin': "numpy",
             # options with several values, e.g. avoiding including modules
-            '--nofollow-import-to' : ["*.tests", "*.distutils"],
+            '--nofollow-import-to' : ["*.tests", "*.distutils", "unittest", "pytest"],
             '--include-module': packages,
             '--include-package': packages + extra_packages,
             '--follow-import-to': packages + extra_packages,
-            '--noinclude-pytest-mode': 'nofollow',
-            '--noiclude-unittest-mode': 'nofollow',
             '--enable-plugin': ["numpy", "matplotlib", "multiprocessing", "anti-bloat"],
         }
     }
