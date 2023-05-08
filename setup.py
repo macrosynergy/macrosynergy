@@ -149,11 +149,18 @@ with open(os.path.join(os.path.dirname(__file__), "requirements.txt")) as f:
 
 
 def nuitka_args(packages: List[str]) -> Dict[str, Any]:
-    extra_packages: List[str] = ["numpy",
-                                 ]# "pandas", "matplotlib", "statsmodels", "sklearn", "scipy", "requests"]
+    extra_packages: List[str] = [
+        "numpy",
+        "pandas",
+        "matplotlib",
+        "statsmodels",
+        "sklearn",
+        "scipy",
+        "requests",
+    ]
     # import all the modules from the required packages... such as numpy.core, numpy.testing, etc.
 
-    packages = [p for p in packages if "tests" not in p]
+    # packages = [p for p in packages if "tests" not in p]
     command_options = {
         "nuitka": {
             # boolean option, e.g. if you cared for C compilation commands
@@ -162,19 +169,17 @@ def nuitka_args(packages: List[str]) -> Dict[str, Any]:
             "--nofollow-import-to": [
                 "*.tests",
                 "*.distutils",
-                "unittest",
-                "pytest",
+                # "unittest",
+                # "pytest",
                 "tests",
             ],
             # "--include-module": packages + extra_packages,
             "--include-package": packages + extra_packages,
             "--follow-import-to": extra_packages,
-            # "--enable-plugin": [ # "numpy", 
+            # "--enable-plugin": [ # "numpy",
             #                     "matplotlib", "multiprocessing", "anti-bloat", "data-files", "implicit-imports"],
             # apparently all plugins are automatically enabled. numpy is depricated.
-
             "--prefer-source-code": True,
-
         }
     }
 

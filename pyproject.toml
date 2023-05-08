@@ -9,8 +9,7 @@ readme = "README.md"
 license = {file = "LICENSE"}
 
 authors = [
-    {name = "Macrosynergy", 
-    email = "info@macrosynergy.com"}]
+    {name = "Macrosynergy", email = "info@macrosynergy.com"}]
 
 homepage = "https://www.macrosynergy.com"
 repository = "https://github.com/macrosynergy/macrosynegy"
