@@ -157,7 +157,6 @@ def nuitka_args(packages: List[str]) -> Dict[str, Any]:
         "nuitka": {
             # boolean option, e.g. if you cared for C compilation commands
             # '--show-scons': True,
-            "--enable-plugin": ["numpy", "matplotlib", "multiprocessing", "anti-bloat"],
             # options with several values, e.g. avoiding including modules
             "--nofollow-import-to": [
                 "*.tests",
@@ -166,10 +165,11 @@ def nuitka_args(packages: List[str]) -> Dict[str, Any]:
                 "pytest",
                 "tests",
             ],
-            "--include-module": packages + extra_packages,
+            # "--include-module": packages + extra_packages,
             "--include-package": packages + extra_packages,
             "--follow-import-to": packages + extra_packages,
-            "--enable-plugin": ["numpy", "matplotlib", "multiprocessing", "anti-bloat"],
+            "--enable-plugin": ["numpy", "matplotlib", "multiprocessing", "anti-bloat", "data-files", "implicit-imports"],
+
         }
     }
 
