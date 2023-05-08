@@ -1,5 +1,6 @@
 """Macrosynergy Quant Research Package"""
 import os
+import shutil
 import sys
 import subprocess
 import warnings
@@ -182,6 +183,8 @@ def setup_package():
     # Rewrite the version file every time
     write_version_py()
     # write_version_py(filename='macrosynergy.build/version.py')
+    # move ./tests to ./macrosynergy/tests
+    shutil.move('tests', 'macrosynergy/tests')
 
     metadata = dict(
         name="macrosynergy",
@@ -228,6 +231,8 @@ def setup_package():
     finally:
         del sys.path[0]
         os.chdir(old_path)
+
+    shutil.move('macrosynergy/tests', 'tests')
     return
 
 
