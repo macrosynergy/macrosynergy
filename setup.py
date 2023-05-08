@@ -169,8 +169,9 @@ def nuitka_args(packages: List[str]) -> Dict[str, Any]:
             # "--include-module": packages + extra_packages,
             "--include-package": packages + extra_packages,
             "--follow-import-to": extra_packages,
-            "--enable-plugin": [ # "numpy", 
-                                "matplotlib", "multiprocessing", "anti-bloat", "data-files", "implicit-imports"],
+            # "--enable-plugin": [ # "numpy", 
+            #                     "matplotlib", "multiprocessing", "anti-bloat", "data-files", "implicit-imports"],
+            # apparently all plugins are automatically enabled. numpy is depricated.
 
             "--prefer-source-code": True,
 
