@@ -152,7 +152,7 @@ def nuitka_args(packages: List[str]) -> Dict[str, Any]:
         "nuitka": {
             # boolean option, e.g. if you cared for C compilation commands
             # '--show-scons': True,
-            "--enable-plugin": "numpy",
+            "--enable-plugin": ["numpy", "matplotlib", "multiprocessing", "anti-bloat"],
             # options with several values, e.g. avoiding including modules
             "--nofollow-import-to": [
                 "*.tests",
