@@ -157,7 +157,7 @@ class CategoryRelations(object):
     def apply_slip(self, target_df: pd.DataFrame, slip: int,
                     cids: List[str], xcats: List[str],
                     metrics: List[str]) -> pd.DataFrame:
-        
+        target_df = target_df.copy(deep=True)
         if not (isinstance(slip, int) and slip >= 0):
             raise ValueError("Slip must be a non-negative integer.")
 

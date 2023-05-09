@@ -485,6 +485,7 @@ class TestAll(unittest.TestCase):
         )
         test_slip: int = 5
         # apply the slip method
+        print(int(min(df["vx"])))
         out_df = CategoryRelations.apply_slip(
             target_df=df,
             slip=test_slip,
@@ -494,7 +495,7 @@ class TestAll(unittest.TestCase):
         )
 
         # NOTE: casting df.vx to int as pandas casts it to float64
-        self.assertEqual(int(min(df["vx"])), int(min(out_df["vx"]) - test_slip))
+        self.assertEqual(int(min(df["vx"])) + test_slip, int(min(out_df["vx"])))
 
         for cid in sel_cids:
             for xcat in sel_xcats:
