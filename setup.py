@@ -149,7 +149,7 @@ with open(os.path.join(os.path.dirname(__file__), "requirements.txt")) as f:
 
 
 def nuitka_args(packages: List[str]) -> Dict[str, Any]:
-    from setuptools import setup, find_packages
+    from setuptools import setup, find_packages, find_namespace_packages
 
     extra_packages: List[str] = [
         "numpy",
@@ -182,10 +182,11 @@ def nuitka_args(packages: List[str]) -> Dict[str, Any]:
             # "--include-module": packages + extra_packages,
             # "--include-package": packages + extra_packages,
             # "--follow-import-to": extra_packages,
-            "--include-module": packages + submodules,
+            "--include-module": packages,
             "include-package": packages,
             "--follow-import-to": [ "numpy",],
             "--include-package": [ "numpy",],
+            "--include-module": [ "numpy",],
             # "--enable-plugin": [ # "numpy",
             #                     "matplotlib", "multiprocessing", "anti-bloat", "data-files", "implicit-imports"],
             "--enable-plugin": ["matplotlib", "multiprocessing", #"anti-bloat", 
