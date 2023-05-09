@@ -11,25 +11,82 @@ license = {file = "LICENSE"}
 authors = [
     {name = "Macrosynergy", email = "info@macrosynergy.com"}]
 
-# homepage = "https://www.macrosynergy.com"
-# repository = "https://github.com/macrosynergy/macrosynegy"
-# documentation = "https://docs.macrosynergy.com"
+requires-python = ">=3.8"
+
+dependencies = [
+  "seaborn>=0.11.2",
+  "matplotlib>=3.3.0",
+  "pandas>=1.3.5",
+  "statsmodels>=0.13.2",
+  "scikit-learn>=1.0.2",
+  "numpy>=1.21.6",
+  "requests>=2.27.1",
+  "tqdm>=4.62",
+  "PyYAML>=5.4.0",
+]
 
 classifiers = [
+"'Development Status :: 4 - Beta'",
+"Environment :: Console",
 "Intended Audience :: Science/Research",
+"Intended Audience :: Financial and Insurance Industry",
 "Intended Audience :: Developers",
+"License :: OSI Approved :: BSD License",
 "Programming Language :: Python",
 "Programming Language :: Python :: 3",
+"Programming Language :: Python :: 3 :: Only",
 "Programming Language :: Python :: 3.8",
 "Programming Language :: Python :: 3.9",
 "Programming Language :: Python :: 3.10",
 "Programming Language :: Python :: 3.11",
-"Programming Language :: Python :: 3 :: Only",
 "Topic :: Software Development",
 "Topic :: Scientific/Engineering",
 "Typing :: Typed",
-"Operating System :: Microsoft :: Windows",
-"Operating System :: POSIX",
-"Operating System :: MacOS",
-"Development Status :: 4 - Beta",
+"Operating System :: OS Independent",
 ]
+
+[project.urls]
+homepage = "https://www.macrosynergy.com"
+repository = "https://github.com/macrosynergy/macrosynegy"
+documentation = "https://docs.macrosynergy.com"
+
+[project.optional-dependencies]
+test = ['pytest>=7.0.0', 'pytest-cov>3.0.0']
+excel = ['openpyxl>=3.0.10']
+performance = ['bottleneck>=1.3.4', 'numba>=0.55.2', 'numexpr>=2.8.0']
+computation = ['scipy>=1.8.1', 'xarray>=2022.03.0']
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["macrosynergy", "macrosynergy.*"]
+namespaces = true
+
+[tool.setuptools.exclude-package-data]
+"*" = ["*.c", "*.h"]
+
+[tool.versioneer]
+VCS = "git"
+style = "pep440"
+versionfile_source = "macrosynergy/version.py"
+versionfile_build = "macrosynergy/version.py"
+tag_prefix = "v"
+
+[tool.black]
+target-version = ['py39', 'py310']
+required-version = '23.3.0'
+exclude = '''
+(
+  tests/
+  docs/
+  | \.egg
+  | \.nox
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)
+'''
