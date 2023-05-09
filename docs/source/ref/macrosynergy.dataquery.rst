@@ -1,16 +1,16 @@
-.. figure:: ../_static/MACROSYNERGY_Logo_Primary.png
-
-dataquery
-=========
+macrosynergy.dataquery package
+==============================
 
 Submodules
 ----------
 
-.. toctree::
-   :maxdepth: 4
+macrosynergy.dataquery.api module
+---------------------------------
 
-   macrosynergy.dataquery.api
-   macrosynergy.dataquery.auth
+.. automodule:: macrosynergy.dataquery.api
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 Module contents
 ---------------

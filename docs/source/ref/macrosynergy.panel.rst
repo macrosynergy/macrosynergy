@@ -1,28 +1,128 @@
-.. figure:: ../_static/MACROSYNERGY_Logo_Primary.png
-
-panel
-=====
+macrosynergy.panel package
+==========================
 
 Submodules
 ----------
 
-.. toctree::
-   :maxdepth: 4
+macrosynergy.panel.basket module
+--------------------------------
 
-   macrosynergy.panel.basket
-   macrosynergy.panel.category_relations
-   macrosynergy.panel.converge_row
-   macrosynergy.panel.expanding_statistics
-   macrosynergy.panel.historic_vol
-   macrosynergy.panel.make_blacklist
-   macrosynergy.panel.make_relative_value
-   macrosynergy.panel.make_zn_scores
-   macrosynergy.panel.panel_calculator
-   macrosynergy.panel.return_beta
-   macrosynergy.panel.view_correlations
-   macrosynergy.panel.view_grades
-   macrosynergy.panel.view_ranges
-   macrosynergy.panel.view_timelines
+.. automodule:: macrosynergy.panel.basket
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.panel.category\_relations module
+---------------------------------------------
+
+.. automodule:: macrosynergy.panel.category_relations
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.panel.converge\_row module
+---------------------------------------
+
+.. automodule:: macrosynergy.panel.converge_row
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.panel.expanding\_statistics module
+-----------------------------------------------
+
+.. automodule:: macrosynergy.panel.expanding_statistics
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.panel.historic\_vol module
+---------------------------------------
+
+.. automodule:: macrosynergy.panel.historic_vol
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.panel.linear\_composite module
+-------------------------------------------
+
+.. automodule:: macrosynergy.panel.linear_composite
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.panel.make\_blacklist module
+-----------------------------------------
+
+.. automodule:: macrosynergy.panel.make_blacklist
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.panel.make\_relative\_value module
+-----------------------------------------------
+
+.. automodule:: macrosynergy.panel.make_relative_value
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.panel.make\_zn\_scores module
+------------------------------------------
+
+.. automodule:: macrosynergy.panel.make_zn_scores
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.panel.panel\_calculator module
+-------------------------------------------
+
+.. automodule:: macrosynergy.panel.panel_calculator
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.panel.return\_beta module
+--------------------------------------
+
+.. automodule:: macrosynergy.panel.return_beta
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.panel.view\_correlations module
+--------------------------------------------
+
+.. automodule:: macrosynergy.panel.view_correlations
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.panel.view\_grades module
+--------------------------------------
+
+.. automodule:: macrosynergy.panel.view_grades
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.panel.view\_ranges module
+--------------------------------------
+
+.. automodule:: macrosynergy.panel.view_ranges
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.panel.view\_timelines module
+-----------------------------------------
+
+.. automodule:: macrosynergy.panel.view_timelines
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 Module contents
 ---------------
@@ -31,4 +131,3 @@ Module contents
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members:

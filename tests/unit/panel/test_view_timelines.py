@@ -63,6 +63,10 @@ class TestAll(unittest.TestCase):
                 view_timelines(dfdr, xcats=[xcats[0]], cids=cids, ncol=2,
                             cumsum=True, same_y=False, aspect=2, single_chart=True)
             
+            view_timelines(dfd, xcats=[xcats[0]], cids=cids, ncol=2,
+                            cumsum=True, same_y=False, aspect=2, single_chart=True,
+                            legend_fontsize=20)
+            
             dfdr = dfd.copy().set_index('real_date')
             # rename column 'value' to 'qwerty'
             dfdr = dfdr.rename(columns={'value': 'qwerty'})
