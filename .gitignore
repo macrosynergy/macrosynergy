@@ -176,3 +176,4 @@ data/
 macrosynergy/version.py
 
 .vscode/
+.vs/
