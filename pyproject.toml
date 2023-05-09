@@ -48,26 +48,25 @@ homepage = "https://www.macrosynergy.com"
 repository = "https://github.com/macrosynergy/macrosynegy"
 documentation = "https://docs.macrosynergy.com"
 
-  [project.optional-dependencies]
-  test = [ "pytest>=7.0.0", "pytest-cov>3.0.0" ]
-  excel = [ "openpyxl>=3.0.10" ]
-  performance = [ "bottleneck>=1.3.4", "numba>=0.55.2", "numexpr>=2.8.0" ]
-  computation = [ "scipy>=1.8.1", "xarray>=2022.03.0" ]
-  notebook = [
-  "notebook>=6.0.0",
-  "ipywidgets>=7.6.5",
-  "ipython>=7.28.0",
-  "jupyter>=1.0.0",
-  "ipykernel>=6.4.1",
-  "jupyterlab>=3.1.12"
+[project.optional-dependencies]
+test = [ "pytest>=7.0.0", "pytest-cov>3.0.0" ]
+excel = [ "openpyxl>=3.0.10" ]
+performance = [ "bottleneck>=1.3.4", "numba>=0.55.2", "numexpr>=2.8.0" ]
+computation = [ "scipy>=1.8.1", "xarray>=2022.03.0" ]
+notebook = [
+"notebook>=6.0.0",
+"ipywidgets>=7.6.5",
+"ipython>=7.28.0",
+"jupyter>=1.0.0",
+"ipykernel>=6.4.1",
+"jupyterlab>=3.1.12"
 ]
-
-  markup = [
-  "pandoc>=2.14.2",
-  "pandocfilters>=1.4.3",
-  "nbconvert>=6.2.0",
-  "pyyaml>=5.4.0",
-  "pytoml>=0.1.2"
+markup = [
+"pandoc>=2.14.2",
+"pandocfilters>=1.4.3",
+"nbconvert>=6.2.0",
+"pyyaml>=5.4.0",
+"pytoml>=0.1.2"
 ]
 
 [tool.setuptools]
