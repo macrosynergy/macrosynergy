@@ -149,6 +149,8 @@ with open(os.path.join(os.path.dirname(__file__), "requirements.txt")) as f:
 
 
 def nuitka_args(packages: List[str]) -> Dict[str, Any]:
+    from setuptools import setup, find_packages
+
     extra_packages: List[str] = [
         "numpy",
         "pandas",
@@ -160,6 +162,10 @@ def nuitka_args(packages: List[str]) -> Dict[str, Any]:
     ]
     # import all the modules from the required packages... such as numpy.core, numpy.testing, etc.
 
+    # find any submodules in the packages
+    submodules: List[str] = []
+    for package in packages:
+        submodules += [find_packages(package)]
     # packages = [p for p in packages if "tests" not in p]
     command_options = {
         "nuitka": {
