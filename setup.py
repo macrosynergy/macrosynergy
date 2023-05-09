@@ -178,8 +178,11 @@ def nuitka_args(packages: List[str]) -> Dict[str, Any]:
             "--follow-import-to": extra_packages,
             # "--enable-plugin": [ # "numpy",
             #                     "matplotlib", "multiprocessing", "anti-bloat", "data-files", "implicit-imports"],
+            "--enable-plugin": ["matplotlib", "multiprocessing", "anti-bloat", "data-files", "implicit-imports",
+                                "pkg-resources", "tk-inter", "dll-files", "delvewheel", "pylint-warnings"],
             # apparently all plugins are automatically enabled. numpy is depricated.
             "--prefer-source-code": True,
+            "--enable-plugin-anti-bloat": False,
         }
     }
 
