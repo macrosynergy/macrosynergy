@@ -173,11 +173,11 @@ def nuitka_args(packages: List[str]) -> Dict[str, Any]:
             # '--show-scons': True,
             # options with several values, e.g. avoiding including modules
             "--nofollow-import-to": [
-                "*.tests",
-                "*.distutils",
-                # "unittest",
-                # "pytest",
-                "tests",
+                # "*.tests",
+                # "*.distutils",
+                "unittest",
+                "pytest",
+                # "tests",
             ],
             # "--include-module": packages + extra_packages,
             # "--include-package": packages + extra_packages,
