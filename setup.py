@@ -171,7 +171,7 @@ def nuitka_args(packages: List[str]) -> Dict[str, Any]:
     plugins: List[str] = ["matplotlib", "multiprocessing", #"anti-bloat", 
                                 "data-files", "implicit-imports",
                                 "pkg-resources", "tk-inter", "dll-files", 
-                                "delvewheel", "pylint-warnings"],
+                                "delvewheel", "pylint-warnings"]
 
     command_options = {
         "nuitka": {
@@ -184,15 +184,13 @@ def nuitka_args(packages: List[str]) -> Dict[str, Any]:
             # ],
             "--clang": None,
             "--include-module": packages,
-            "include-package": packages + ["matplotlib",],
+            "--include-package": packages + ["matplotlib"],
             "--follow-import-to": [ "numpy", "matplotlib"],
-            "--include-package": [ "numpy",],
-            "--include-module": [ "numpy",],
+            "--include-package": [ "numpy"],
+            "--include-module": [ "numpy"],
             "--enable-plugin": plugins,
-            "include-plugin-files": plugins,
-            
+            "--include-plugin-files": plugins,
             "--prefer-source-code": True,
-            # "--disable-plugin": ["anti-bloat", "numpy"]
         }
     }
 
