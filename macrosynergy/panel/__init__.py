@@ -12,9 +12,9 @@ from .view_correlations import correl_matrix
 from .view_grades import heatmap_grades
 from .view_ranges import view_ranges
 from .view_timelines import view_timelines
-
+from .view_metrics import view_metrics
 
 __all__ = ['Basket', 'CategoryRelations', 'ConvergeRow', 'return_beta',
            'beta_display', 'historic_vol', 'linear_composite',
            'make_blacklist', 'make_relative_value', 'make_zn_scores', 'panel_calculator',
-           'correl_matrix', 'heatmap_grades', 'view_ranges', 'view_timelines']
+           'correl_matrix', 'heatmap_grades', 'view_ranges', 'view_timelines', 'view_metrics']
