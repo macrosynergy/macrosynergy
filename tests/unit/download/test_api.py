@@ -900,6 +900,7 @@ class MockDataQueryInterface(DataQueryInterface):
             )
 
         self.mask_expressions = []
+        self.duplicate_entries = []
         super().__init__(config=self.config)
 
     def __enter__(self):
@@ -922,6 +923,14 @@ class MockDataQueryInterface(DataQueryInterface):
                     d["attributes"][0][
                         "message"
                     ] = f"MASKED - {d['attributes'][0]['expression']}"
+        
+        if self.duplicate_entries:
+            # copy half of the entries from d["attributes"][0]["time-series"] and append to itself
+            for d in ts:
+                if d["attributes"][0]["expression"] in self.duplicate_entries:
+                    len_ts = len(d["attributes"][0]["time-series"])
+                    dupls: List[List[str, float]] = d["attributes"][0]["time-series"][:len_ts//2]
+                    d["attributes"][0]["time-series"]: List[List[str, float]] = d["attributes"][0]["time-series"] + dupls           
 
         return ts
 
@@ -932,6 +941,7 @@ class MockDataQueryInterface(DataQueryInterface):
         msg_warnings: List[str] = None,
         unavailable_expressions: List[str] = None,
         egress_data: List[Dict[str, Any]] = None,
+        duplicate_entries: List[str] = None,
     ):
         self.msg_errors: List[str] = (
             ["DEFAULT ERROR MESSAGE"] if msg_errors is None else msg_errors
@@ -956,6 +966,8 @@ class MockDataQueryInterface(DataQueryInterface):
         self.mask_expressions: List[str] = (
             ["Some_Expression_X"] if mask_expressions is None else mask_expressions
         )
+
+        self.duplicate_entries: List[str] = []
 
 
 ##############################################
@@ -1220,7 +1232,48 @@ class TestJPMaQSDownload(unittest.TestCase):
             jpmaqs.download(**bad_args)
 
     def test_validate_downloaded_df(self):
-        pass
+        good_args: Dict[str, Any] = {
+            "tickers": ["EUR_FXXR_NSA", "USD_FXXR_NSA"],
+            "cids": ["GBP", "EUR"],
+            "xcats": ["FXXR_NSA", "EQXR_NSA"],
+            "metrics": ["value", "grading", "eop_lag", "mop_lag"],
+            "start_date": "2019-01-01",
+            "end_date": "2019-01-31",
+            "expressions": [
+                "DB(JPMAQS,AUD_FXXR_NSA,value)",
+                "DB(JPMAQS,CAD_FXXR_NSA,value)",
+            ],
+            "show_progress": True,
+            "as_dataframe": True,
+            "report_time_taken": True,
+            "report_egress": True,
+        }
+
+
+        jpmaqs: JPMaQSDownload = JPMaQSDownload(
+            client_id="client_id",
+            client_secret="client_secret",
+            check_connection=False,
+        )
+        config: Config = jpmaqs.config_obj
+        mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(
+            config=config
+        )
+        un_avail_exprs: List[str] = [
+            "DB(JPMAQS,USD_FXXR_NSA,value)",
+            "DB(JPMAQS,USD_FXXR_NSA,grading)",
+            "DB(JPMAQS,USD_FXXR_NSA,eop_lag)",
+            "DB(JPMAQS,USD_FXXR_NSA,mop_lag)",
+        ]
+        dupl_exprs: List[str] = ['DB(JPMAQS,EUR_EQXR_NSA,value)', ]
+        mock_dq_interface._gen_attributes(
+            unavailable_expressions=un_avail_exprs, mask_expressions=un_avail_exprs,
+            duplicate_entries=dupl_exprs
+        )
+        jpmaqs.dq_interface = mock_dq_interface
+        with self.assertRaises(InvalidDataframeError):
+            jpmaqs.download(**good_args)
+
 
 
 if __name__ == "__main__":

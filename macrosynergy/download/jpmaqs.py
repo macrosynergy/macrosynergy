@@ -143,6 +143,7 @@ class JPMaQSDownload(object):
         self.msg_warnings: List[str] = []
         self.unavailable_expressions: List[str] = []
         self.downloaded_data: Dict = {}
+        self.config_obj: Config = config_obj
 
         if self._check_connection:
             self.check_connection()
