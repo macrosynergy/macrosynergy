@@ -188,7 +188,7 @@ def nuitka_args(packages: List[str]) -> Dict[str, Any]:
             "--follow-import-to": [ "numpy", "matplotlib"],
             "--include-package-data": packages + [ "numpy", "matplotlib"],
             # "--include-data-file": "*",
-            "--standalone": None,
+            # "--standalone": None,
             # "--include-package": [ "numpy"],
             # "--include-module": [ "numpy"],
             # "--enable-plugin": plugins,
