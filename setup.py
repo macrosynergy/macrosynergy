@@ -182,7 +182,7 @@ def nuitka_args(packages: List[str]) -> Dict[str, Any]:
             #     "unittest",
             #     "pytest",
             # ],
-            "--clang": None,
+            # "--clang": None,
             "--include-module": packages,
             "--include-package": packages + ["matplotlib"],
             "--follow-import-to": [ "numpy", "matplotlib"],
