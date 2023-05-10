@@ -151,10 +151,11 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
     # Remove any additional metrics defined in the DataFrame.
     df = df.loc[:, expected_columns]
-    missing_cids = set(cids).difference(set(df['cid']))
-    if missing_cids:
-        raise ValueError(f"The following cids are not available in the DataFrame: "
-                            f"{missing_cids}.")
+    if cids is not None:
+        missing_cids = set(cids).difference(set(df['cid']))
+        if missing_cids:
+            raise ValueError(f"The following cids are not available in the DataFrame: "
+                                f"{missing_cids}.")
     if xcat not in df['xcat'].unique():
         raise ValueError(f"The xcat {xcat} is not available in the DataFrame.")
     
