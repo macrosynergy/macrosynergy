@@ -1,7 +1,7 @@
 
 import numpy as np
 import pandas as pd
-from typing import List
+from typing import List, Set
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 
@@ -121,8 +121,15 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
     # Intersect parameter set to False. Therefore, cross-sections across the categories
     # can vary.
+    all_cids : List[str] = []
+    for cvar in [cids, basket]:
+        if cvar is not None:
+            all_cids.extend(cvar)
+    all_cids = list(set(all_cids))
+    if len(all_cids) < 1:
+        all_cids = None
     dfx = reduce_df(
-        df, xcats, cids, start, end, blacklist, out_all=False
+        df, xcats, all_cids, start, end, blacklist, out_all=False
     )
 
     if cids is None:
@@ -131,7 +138,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
     if basket is not None:
         # Basket must be a subset of the available cross-sections.
-        miss = set(basket) - set(cids)
+        miss : Set = set(basket) - set(df['cid'])
         error_basket = f"The basket elements {miss} are not specified or " \
                        f"are not available."
         assert len(miss) == 0, error_basket

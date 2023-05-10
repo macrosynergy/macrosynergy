@@ -59,55 +59,62 @@ class CategoryRelations(object):
         for the two respective categories. Observations with higher values will be
         trimmed, i.e. removed from the analysis (not winsorized!). Default is None
         for both. Trimming is applied after all other transformations.
-    :param <int> slip: lag (delay of arrival) of first (explanatory) category in days
-        prior to any frequency conversion. Default is 0. This simulates time elapsed 
-        between observing data and using them for market positioning.
-        This is different from and complementary to  the `lag` argument which delays 
-        the explanatory variable by the periods of the investigated sample, which 
-        often is downsampled. Importantly, for analyses with explanatory and dependent 
-        categories, the first category takes the role of the explanatory and a positive 
-        lag means that the explanatory values will be deferred into the future, 
-        i.e. relate to future values of the explained variable.
-
+    :param <int> slip: implied slippage of feature availability for relationship with
+        the target category. This mimics the relationship between trading signals and
+        returns, which is often characterized by a delay due to the setup of of positions.
+        Technically, this is a negative lag (early arrival) of the target category
+        in working days prior to any frequency conversion. Default is 0.
     """
     
     def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                  val: str = 'value', start: str = None, end: str = None,
-                 blacklist: dict = None, years = None, freq: str = 'M', lag: int = 0,
-                 fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean'),
+                 blacklist: dict = None, years: int = None, freq: str = 'M', lag: int = 0,
+                 fwin: int = 1, xcat_aggs: List[str] = ['mean', 'mean'],
                  xcat1_chg: str = None, n_periods: int = 1,
                  xcat_trims: List[float] = [None, None], slip: int = 0,):
         """ Initializes CategoryRelations """
 
-        self.xcats = xcats
-        self.cids = cids 
-        self.val = val 
-        self.freq = freq
-        self.lag = lag
-        self.years = years 
-        self.aggs = xcat_aggs
-        self.xcat1_chg = xcat1_chg
-        self.n_periods = n_periods
-        self.xcat_trims = xcat_trims
-        self.slip = slip
+        self.xcats: List[str] = xcats
+        self.cids: List[str] = cids 
+        self.val: str = val 
+        self.freq: str = freq.upper()
+        self.lag: int = lag
+        self.years: int  = years 
+        self.aggs: List[str] = xcat_aggs
+        self.xcat1_chg: str  = xcat1_chg
+        self.n_periods: int = n_periods
+        self.xcat_trims: List[float] = xcat_trims
+        self.slip: int = slip
 
-        assert self.freq in ['D', 'W', 'M', 'Q', 'A']
-        assert {'cid', 'xcat', 'real_date', val}.issubset(set(df.columns))
-        assert len(xcats) == 2, "Expects two fields."
-        assert isinstance(slip, int) and slip >= 0, "Slip must be a non-negative integer."
+        if not isinstance(self.freq, str):
+            raise TypeError("freq must be a string.")
+        elif  self.freq not in ['D', 'W', 'M', 'Q', 'A']:
+            raise ValueError("freq must be one of 'D', 'W', 'M', 'Q', 'A'.")
+        if not isinstance(val, str):
+            raise TypeError("val must be a string.")
+        if not {'cid', 'xcat', 'real_date', val}.issubset(set(df.columns)):
+            raise ValueError("`df` must have columns 'cid', 'xcat', 'real_date' and `val`.")
+        if not isinstance(xcats, (list, tuple)):
+            raise TypeError("`xcats` must be a list or a tuple.")
+        elif not len(xcats) == 2:
+            raise ValueError("`xcats` must have exactly two elements.")
+        if not isinstance(slip, int):
+            raise TypeError("`slip` must be a non-negative integer.")
+        elif slip < 0:
+            raise ValueError("`slip` must be a non-negative integer.")
+
+        if not isinstance(xcat_aggs, (list, tuple)):
+            raise TypeError("xcat_aggs must be a list or a tuple.")
 
         # Select the cross-sections available for both categories.
         df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
         
-        df_slips : pd.DataFrame = df.copy()
         if self.slip != 0:
-            metrics_found : List[str] = list(set(df_slips.columns) - set(['cid', 'xcat', 'real_date']))
-            df_slips = self.apply_slip(target_df=df_slips, slip=self.slip, cids=self.cids,
+            metrics_found : List[str] = list(set(df.columns) - set(['cid', 'xcat', 'real_date']))
+            df = self.apply_slip(target_df=df, slip=self.slip, cids=self.cids,
                                         xcats=self.xcats, metrics=metrics_found)
 
         shared_cids = CategoryRelations.intersection_cids(df, xcats, cids)
-
-        # TODO : df = df_slips here?
         
         # Will potentially contain NaN values if the two categories are defined over
         # time-periods.
@@ -150,7 +157,7 @@ class CategoryRelations(object):
     def apply_slip(self, target_df: pd.DataFrame, slip: int,
                     cids: List[str], xcats: List[str],
                     metrics: List[str]) -> pd.DataFrame:
-        
+        target_df = target_df.copy(deep=True)
         if not (isinstance(slip, int) and slip >= 0):
             raise ValueError("Slip must be a non-negative integer.")
 
@@ -163,7 +170,6 @@ class CategoryRelations(object):
 
         slip : int = slip.__neg__()
         
-        target_df : pd.DataFrame = target_df.copy()
         target_df[metrics] = target_df.groupby('tickers')[metrics].shift(slip)
         target_df = target_df.drop(columns=['tickers'])
         

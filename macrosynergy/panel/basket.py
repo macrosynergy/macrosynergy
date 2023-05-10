@@ -4,7 +4,7 @@ import pandas as pd
 import seaborn as sns
 
 import random
-from typing import List, Union
+from typing import List, Union, Tuple
 from macrosynergy.panel.historic_vol import expo_weights, expo_std, flat_std
 from macrosynergy.management.shape_dfs import reduce_df_by_ticker
 from macrosynergy.panel.converge_row import ConvergeRow
@@ -518,7 +518,8 @@ class Basket(object):
                           end_date: str = None, subplots: bool = True,
                           facet_grid: bool = False, scatter: bool = False,
                           all_tickers: bool = True, single_ticker: str = None,
-                          percentage_change: bool = False):
+                          percentage_change: bool = False, 
+                          size: Tuple[int, int] = (7, 7),):
         """
         Method used to visualise the weights associated with each contract in the basket.
 
@@ -541,6 +542,7 @@ class Basket(object):
             fluctuations in the contract's weight. The graphical display is limited to a
             single contract. Therefore, pass the ticker into the parameter
             "single_ticker".
+        :param <Tuple[int, int]> size: size of the plot. Default is (7, 7).
 
         """
 
@@ -587,6 +589,7 @@ class Basket(object):
                 df_stack = df_stack.sort_values(['ticker', 'real_date'])
                 no_contracts = dfw_wgs.shape[1]
                 facet_cols = 4 if no_contracts >= 8 else 3
+                sns.set(rc={'figure.figsize': size})
                 fg = sns.FacetGrid(df_stack, col="ticker", col_wrap=facet_cols,
                                    sharey=True)
 
@@ -612,6 +615,7 @@ class Basket(object):
                 fg.set_titles(col_template='{col_name}')
                 fg.fig.suptitle('Contract weights in basket', y=1.02)
             else:
+                plt.rcParams["figure.figsize"] = size
                 dfw_wgs.plot(subplots=subplots, title="Weight Values Timestamp",
                              legend=True)
                 plt.xlabel('real_date, years')
@@ -622,6 +626,7 @@ class Basket(object):
                           "the parameter 'all_tickers' to False."
                 assert dfw_wgs.shape[1] == 1, error_5
 
+                plt.rcParams["figure.figsize"] = size
                 fig, ax = plt.subplots()
                 dfw_pct = dfw_wgs.pct_change(periods=1) * 100
                 n_index = np.array(list(map(date_func, dfw_pct.index)))
@@ -787,4 +792,11 @@ if __name__ == "__main__":
     basket_1.make_basket(
         weight_meth="fixed", max_weight=0.55, weights=[1/6, 1/6, 1/6, 1/2],
         basket_name="GLB_FIXED"
+    )
+
+    # show the weights of the GLB_FIXED basket
+
+    basket_1.weight_visualiser(
+        basket_name="GLB_FIXED",
+        subplots=False, size=(10, 5)
     )
