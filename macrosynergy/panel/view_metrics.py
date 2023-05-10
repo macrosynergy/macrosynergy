@@ -33,11 +33,10 @@ def view_metrics(
     :param <str> end: latest date in ISO format. Default is latest available.
     :param <str> metric: name of metric to be visualized. Must be "eop_lag" (default)
         "mop_lag" or "grading".
-    :param <str> agg: aggregation method. Must be one of "mean" (default), "median",
-        "min", "max", "first" or "last".
     :param <str> freq: frequency of data. Must be one of "D", "W", "M", "Q", "A". 
         Default is "M".
-    :
+    :param <str> agg: aggregation method. Must be one of "mean" (default), "median",
+        "min", "max", "first" or "last".
     :param <str> title: string of chart title; if none given default title is printed.
     :param <Tuple[float]> figsize: Tuple (w, h) of width and height of graph.
         Default is None, meaning it is set in accordance with df.
