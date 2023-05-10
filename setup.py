@@ -167,33 +167,30 @@ def nuitka_args(packages: List[str]) -> Dict[str, Any]:
     for package in packages:
         submodules += [find_packages(package)]
     # packages = [p for p in packages if "tests" not in p]
+
+    plugins: List[str] = ["matplotlib", "multiprocessing", #"anti-bloat", 
+                                "data-files", "implicit-imports",
+                                "pkg-resources", "tk-inter", "dll-files", 
+                                "delvewheel", "pylint-warnings"],
+
     command_options = {
         "nuitka": {
             # boolean option, e.g. if you cared for C compilation commands
             # '--show-scons': True,
             # options with several values, e.g. avoiding including modules
-            "--nofollow-import-to": [
-                # "*.tests",
-                # "*.distutils",
-                "unittest",
-                "pytest",
-                # "tests",
-            ],
-            # "--include-module": packages + extra_packages,
-            # "--include-package": packages + extra_packages,
-            # "--follow-import-to": extra_packages,
+            # "--nofollow-import-to": [
+            #     "unittest",
+            #     "pytest",
+            # ],
+            "--clang": None,
             "--include-module": packages,
             "include-package": packages + ["matplotlib",],
             "--follow-import-to": [ "numpy", "matplotlib"],
             "--include-package": [ "numpy",],
             "--include-module": [ "numpy",],
-            # "--enable-plugin": [ # "numpy",
-            #                     "matplotlib", "multiprocessing", "anti-bloat", "data-files", "implicit-imports"],
-            "--enable-plugin": ["matplotlib", "multiprocessing", #"anti-bloat", 
-                                "data-files", "implicit-imports",
-                                "pkg-resources", "tk-inter", "dll-files", 
-                                "delvewheel", "pylint-warnings"],
-            # apparently all plugins are automatically enabled. numpy is depricated.
+            "--enable-plugin": plugins,
+            "include-plugin-files": plugins,
+            
             "--prefer-source-code": True,
             # "--disable-plugin": ["anti-bloat", "numpy"]
         }
