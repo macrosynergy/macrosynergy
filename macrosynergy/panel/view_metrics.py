@@ -21,7 +21,7 @@ def view_metrics(
     figsize: Optional[Tuple[float]] = (14, None),
 ) -> None:
     """
-    A function to visualise the `eop_lag` and `mop_lag` metrics of the
+    A function to visualise the `eop_lag`, `mop_lag` or `grading` metrics for a given
     JPMaQS dataset. It generates a heatmap, where the x-axis is the observation
     date, the y-axis is the ticker, and the colour is the lag value.
 
