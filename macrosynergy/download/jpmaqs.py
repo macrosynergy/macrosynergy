@@ -219,7 +219,7 @@ class JPMaQSDownload(object):
             except Exception as e:
                 warnings.warn(
                     f"Failed to deconstruct expression `{expression}`: {e}",
-                    RuntimeWarning,
+                    UserWarning,
                 )
                 # fail safely, return list where all entries are =expression
                 return [expression, expression, expression]
