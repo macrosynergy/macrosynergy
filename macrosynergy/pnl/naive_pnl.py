@@ -530,7 +530,7 @@ class NaivePnL:
             plot_by = "cid"
             col_order = pnl_cids
             if xcat_labels is not None:
-                labels = xcat_labels
+                labels = pnl_cids.copy()
             legend_title = "Cross Section(s)"
 
         dfx['cum_value'] = dfx.groupby(plot_by).cumsum()
@@ -575,6 +575,8 @@ class NaivePnL:
         if no_cids == 1:
             if facet:
                 labels = labels[::-1]
+        else:
+            labels = labels[::-1]
         
         plt.axhline(y=0, color='black', linestyle='--', lw=1)
         plt.show()
@@ -907,6 +909,11 @@ if __name__ == "__main__":
     pnl.plot_pnls(
         pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=True,
     )
+    
+    pnl.plot_pnls(  pnl_cats=["PNL_GROWTH_NEG"], 
+                    pnl_cids=cids,
+                    xcat_labels=None
+                    )
 
     pnl.plot_pnls(  pnl_cats=["PNL_GROWTH_NEG"], 
                     pnl_cids=cids,
@@ -915,8 +922,8 @@ if __name__ == "__main__":
                     )
     
     pnl.plot_pnls(  pnl_cats=["PNL_GROWTH_NEG"],
-                    same_y=True,
                     pnl_cids=cids,
+                    same_y=True,
                     facet=True,
                     xcat_labels=None,
                     share_axis_labels=False,
