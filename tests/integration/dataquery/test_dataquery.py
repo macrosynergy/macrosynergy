@@ -1,37 +1,29 @@
 import unittest
-from unittest.mock import patch, Mock
 import os
 import pandas as pd
 import datetime
-from typing import List, Dict, Union, Optional, Any, Tuple
-import requests
+from random import random
+from typing import List, Dict, Any
 from macrosynergy.download import JPMaQSDownload
-from macrosynergy.download.dataquery import (
-    DataQueryInterface,
-    request_wrapper,
-    validate_response,
-)
-from macrosynergy.download.dataquery import (
-    OAUTH_BASE_URL,
-    OAUTH_TOKEN_URL,
-    HEARTBEAT_ENDPOINT,
-    TIMESERIES_ENDPOINT,
-)
+from macrosynergy.download.dataquery import DataQueryInterface
 from macrosynergy.download.exceptions import (
     AuthenticationError,
-    HeartbeatError,
-    InvalidResponseError,
-    DownloadError,
     InvalidDataframeError,
 )
 from macrosynergy.management.utils import Config
+
+def random_string() -> str:
+    """
+    Used to generate random string for testing.
+    """
+    return "".join([chr(int(random() * 26 + 97)) for i in range(10)])
 
 
 class TestDataQueryOAuth(unittest.TestCase):
     def test_authentication_error(self):
         with JPMaQSDownload(
             oauth=True,
-            client_id="WRONG_CLIENT_ID",
+            client_id="WRG_CLIENT_ID",
             client_secret="NOT_A_SECRET",
             check_connection=False,
         ) as jpmaqs:
@@ -41,8 +33,8 @@ class TestDataQueryOAuth(unittest.TestCase):
         with DataQueryInterface(
             oauth=True,
             config=Config(
-                client_id="WRONG_CLIENT_ID",
-                client_secret="NOT_A_SECRET",
+                client_id=random_string(),
+                client_secret=random_string(),
             ),
         ) as dq:
             with self.assertRaises(AuthenticationError):

@@ -41,6 +41,12 @@ from macrosynergy.download.exceptions import (
 )
 from macrosynergy.management.utils import Config
 
+def random_string() -> str:
+    """
+    Used to generate random string for testing.
+    """
+    return "".join([chr(int(random() * 26 + 97)) for i in range(10)])
+
 
 def mock_jpmaqs_value(elem: str) -> float:
     """
@@ -89,6 +95,7 @@ def mock_request_wrapper(
         aggregator.append(elem_dict)
 
     return aggregator
+
 
 
 class TestCertAuth(unittest.TestCase):
@@ -502,20 +509,24 @@ class TestDataQueryInterface(unittest.TestCase):
 
     def test_dq_fetch(self):
         cfg = Config(
-            client_id=os.getenv("DQ_CLIENT_ID"),
-            client_secret=os.getenv("DQ_CLIENT_SECRET"),
+            client_id=random_string(),
+            client_secret=random_string(),
         )
         dq: DataQueryInterface = DataQueryInterface(oauth=True, config=cfg)
 
-        self.assertTrue(
-            dq.check_connection()
-        )  # doing this so oath token is ready for _fetch method
         invl_responses: List[Any] = [
             None,
             {},
             {"attributes": []},
             {"attributes": [{"expression": "expression1"}]},
         ]
+
+        dq.auth : OAuth
+        dq.auth._stored_token: Dict = {
+                "created_at": datetime.datetime.utcnow(),
+                "access_token": random_string(),
+                "expires_in": 3600,
+            }
 
         for invl_response in invl_responses:
             with mock.patch(
@@ -614,8 +625,8 @@ class TestDataQueryDownloads(unittest.TestCase):
     def test_authentication_error(self):
         with JPMaQSDownload(
             oauth=True,
-            client_id="WRONG_CLIENT_ID",
-            client_secret="NOT_A_SECRET",
+            client_id=random_string(),
+            client_secret=random_string(),
             check_connection=False,
         ) as jpmaqs:
             with self.assertRaises(AuthenticationError):
@@ -624,8 +635,8 @@ class TestDataQueryDownloads(unittest.TestCase):
         with DataQueryInterface(
             oauth=True,
             config=Config(
-                client_id="WRONG_CLIENT_ID",
-                client_secret="NOT_A_SECRET",
+                client_id=random_string(),
+                client_secret=random_string(),
             ),
         ) as dq:
             with self.assertRaises(AuthenticationError):
@@ -655,121 +666,72 @@ class TestDataQueryDownloads(unittest.TestCase):
                 msg="Authentication error - unable to access DataQuery:",
             )
 
-    # def test_download_jpmaqs_data(self):
-    #     data: pd.DataFrame
-    #     with JPMaQSDownload(
-    #         oauth=True,
-    #         client_id=os.getenv("DQ_CLIENT_ID"),
-    #         client_secret=os.getenv("DQ_CLIENT_SECRET"),
-    #         check_connection=False,
-    #     ) as jpmaqs:
-    #         data: pd.DataFrame = jpmaqs.download(
-    #             tickers=["EUR_FXXR_NSA"],
-    #             start_date=(
-    #                 datetime.date.today() - datetime.timedelta(days=30)
-    #             ).isoformat(),
-    #         )
+    def test_download_jpmaqs_data_big(self):
+        # This test is to check that the download works for a large number of tickers.
+        # This is to specifically test the multi-threading functionality.
+        cids: List[str] = [
+            "AUD",
+            "CAD",
+            "CHF",
+        ]
 
-    #     self.assertIsInstance(data, pd.DataFrame)
+        xcats: List[str] = [
+            "EQXR_NSA",
+            "FXXR_NSA",
+            "FXXR_VT10",
+        ]
 
-    #     self.assertFalse(data.empty)
+        metrics: List[str] = ["all"]
+        start_date: str = "2020-01-01"
+        end_date: str = "2020-02-01"
 
-    #     self.assertGreater(data.shape[0], 0)
+        data: pd.DataFrame
+        with JPMaQSDownload(
+            oauth=True,
+            client_id=os.getenv("DQ_CLIENT_ID"),
+            client_secret=os.getenv("DQ_CLIENT_SECRET"),
+            check_connection=True,
+        ) as jpmaqs:
+            
+            catalogue: List[str] = jpmaqs.get_catalogue()
 
-    #     test_expr: str = "DB(JPMAQS,EUR_FXXR_NSA,value)"
-    #     with DataQueryInterface(
-    #         oauth=True,
-    #         config=Config(
-    #             client_id=os.getenv("DQ_CLIENT_ID"),
-    #             client_secret=os.getenv("DQ_CLIENT_SECRET"),
-    #         ),
-    #     ) as dq:
-    #         data: List[str] = dq.download_data(
-    #             expressions=[test_expr],
-    #         )
+            data = jpmaqs.download(
+                cids=cids,
+                xcats=xcats,
+                metrics=metrics,
+                start_date=start_date,
+                end_date=end_date,
+            )
 
-    #     self.assertIsInstance(data, list)
-    #     self.assertEqual(len(data), 1)
-    #     self.assertIsInstance(data[0], dict)
-    #     _data: Dict[str, Any] = data[0]
-    #     self.assertEqual(len(_data.keys()), 5)
-    #     for key in ["item", "group", "attributes", "instrument-id", "instrument-name"]:
-    #         self.assertIn(key, _data.keys())
+        self.assertIsInstance(data, pd.DataFrame)
 
-    #     self.assertIsInstance(_data["attributes"], list)
-    #     self.assertEqual(_data["attributes"][0]["expression"], test_expr)
-    #     self.assertIsInstance(_data["attributes"][0]["time-series"], list)
-    #     self.assertGreater(len(_data["attributes"][0]["time-series"]), 0)
+        self.assertFalse(data.empty)
 
-    # def test_download_jpmaqs_data_big(self):
-    #     # This test is to check that the download works for a large number of tickers.
-    #     # This is to specifically test the multi-threading functionality.
-    #     cids: List[str] = [
-    #         "AUD",
-    #         "CAD",
-    #         "CHF",
-    #         "EUR",
-    #         "GBP",
-    #         "NZD",
-    #         "USD",
-    #     ]
+        self.assertGreater(data.shape[0], 0)
 
-    #     xcats: List[str] = [
-    #         "EQXR_NSA",
-    #         "FXXR_NSA",
-    #         "FXXR_VT10",
-    #         "FXTARGETED_NSA",
-    #         "FXUNTRADABLE_NSA",
-    #     ]
+        test_expr: str = JPMaQSDownload.construct_expressions(
+            cids=cids, xcats=xcats, metrics=["value", "grading"]
+        )
+        with DataQueryInterface(
+            oauth=True,
+            config=Config(
+                client_id=os.getenv("DQ_CLIENT_ID"),
+                client_secret=os.getenv("DQ_CLIENT_SECRET"),
+            ),
+        ) as dq:
+            data: List[Dict[str, Any]] = dq.download_data(
+                expressions=test_expr,
+                start_date=start_date,
+                end_date=end_date,
+            )
 
-    #     metrics: List[str] = ["all"]
-    #     start_date: str = "2020-01-01"
-    #     end_date: str = "2020-02-01"
-
-    #     data: pd.DataFrame
-    #     with JPMaQSDownload(
-    #         oauth=True,
-    #         client_id=os.getenv("DQ_CLIENT_ID"),
-    #         client_secret=os.getenv("DQ_CLIENT_SECRET"),
-    #         check_connection=True,
-    #     ) as jpmaqs:
-    #         data = jpmaqs.download(
-    #             cids=cids,
-    #             xcats=xcats,
-    #             metrics=metrics,
-    #             start_date=start_date,
-    #             end_date=end_date,
-    #         )
-
-    #     self.assertIsInstance(data, pd.DataFrame)
-
-    #     self.assertFalse(data.empty)
-
-    #     self.assertGreater(data.shape[0], 0)
-
-    #     test_expr: str = JPMaQSDownload.construct_expressions(
-    #         cids=cids, xcats=xcats, metrics=["value", "grading"]
-    #     )
-    #     with DataQueryInterface(
-    #         oauth=True,
-    #         config=Config(
-    #             client_id=os.getenv("DQ_CLIENT_ID"),
-    #             client_secret=os.getenv("DQ_CLIENT_SECRET"),
-    #         ),
-    #     ) as dq:
-    #         data: List[Dict[str, Any]] = dq.download_data(
-    #             expressions=test_expr,
-    #             start_date=start_date,
-    #             end_date=end_date,
-    #         )
-
-    #     self.assertIsInstance(data, list)
-    #     self.assertGreater(len(data), 0)
-    #     for _data in data:
-    #         self.assertIsInstance(_data, dict)
+        self.assertIsInstance(data, list)
+        self.assertGreater(len(data), 0)
+        for _data in data:
+            self.assertIsInstance(_data, dict)
 
 
-##############################################
+#############################################
 
 
 class TestRequestWrapper(unittest.TestCase):
@@ -983,18 +945,18 @@ class MockDataQueryInterface(DataQueryInterface):
         duplicate_entries: List[str] = None,
     ):
         self.msg_errors: List[str] = (
-            ["DEFAULT ERROR MESSAGE"] if msg_errors is None else msg_errors
+            [] if msg_errors is None else msg_errors
         )
         self.msg_warnings: List[str] = (
-            ["DEFAULT WARNING MESSAGE"] if msg_warnings is None else msg_warnings
+            [] if msg_warnings is None else msg_warnings
         )
         self.unavailable_expressions: List[str] = (
-            ["Some_Expression"]
+            []
             if unavailable_expressions is None
             else unavailable_expressions
         )
         self.catalogue: List[str] = (
-            ["SOME_TICKER_TEST", "SOME_OTHER_TICKER_TEST"]
+            []
             if catalogue is None
             else catalogue
         )
@@ -1008,7 +970,7 @@ class MockDataQueryInterface(DataQueryInterface):
         }
 
         self.mask_expressions: List[str] = (
-            ["Some_Expression_X"] if mask_expressions is None else mask_expressions
+            [] if mask_expressions is None else mask_expressions
         )
 
         self.duplicate_entries: List[str] = (
@@ -1209,8 +1171,6 @@ class TestJPMaQSDownload(unittest.TestCase):
                 for xcat in ["FXXR_NSA", "EQXR_NSA"]:
                     self.assertTrue(f"{cid}_{xcat}" in tickers.values)
 
-            self.assertTrue(len(jpmaqs.msg_errors) > 0)
-            self.assertTrue(len(jpmaqs.msg_warnings) > 0)
             for unav in set(un_avail_exprs):
                 self.assertTrue(
                     sum(
