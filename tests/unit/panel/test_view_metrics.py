@@ -159,7 +159,15 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"view_metrics raised {e} unexpectedly")
 
-        
+        rp_args: List[Dict[str, Any]] = ['cids', 'start', 'end', 'title']
+        for rp_arg in rp_args:
+            bad_args = good_args.copy()
+            bad_args[rp_arg] = None
+            try:
+                view_metrics(**bad_args)
+            except Exception as e:
+                self.fail(f"view_metrics raised {e} unexpectedly")
+            
         
 
 if __name__ == "__main__":
