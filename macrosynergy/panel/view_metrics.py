@@ -33,7 +33,7 @@ def view_metrics(
     :param <str> end: latest date in ISO format. Default is latest available.
     :param <str> metric: name of metric to be visualized. Must be "eop_lag" (default)
         "mop_lag" or "grading".
-    :param <str> freq: frequency of data. Must be one of "D", "W", "M", "Q", "A". 
+    :param <str> freq: frequency of data. Must be one of "D", "W", "M", "Q", "A".
         Default is "M".
     :param <str> agg: aggregation method. Must be one of "mean" (default), "median",
         "min", "max", "first" or "last".
@@ -46,7 +46,8 @@ def view_metrics(
     :raises TypeError: if any of the inputs are of the wrong type.
     :raises ValueError: if any of the inputs are of the wrong value.
     """
-
+    # Validating inputs
+    # First check if the standard valid and expected columns are present
     if not isinstance(metric, str):
         raise TypeError("`metric` must be a string")
     elif metric not in ["eop_lag", "mop_lag", "grading"]:
@@ -62,7 +63,10 @@ def view_metrics(
             f"`df` must have columns 'cid', 'xcat', 'real_date' and '{metric}'"
         )
     else:
+        # Filter to only necessary columns
         df = df.copy()[expc_cols]
+
+    # Check if xcat is a single string and is in the DataFrame
 
     if not isinstance(xcat, str):
         raise TypeError("`xcat` must be a string")
@@ -70,6 +74,7 @@ def view_metrics(
         if not xcat in df["xcat"].unique():
             raise ValueError(f"No data for `xcat` = {xcat} in DataFrame `df`")
 
+    # Check if cids is a list of strings and is in the DataFrame
     if cids is not None:
         if (
             (not isinstance(cids, list))
@@ -82,8 +87,10 @@ def view_metrics(
             raise ValueError("All cids in `cids` must be in the DataFrame `df`")
 
     else:
+        # In case cids is None, set it to all cids in the DataFrame
         cids = list(df["cid"].unique())
 
+    # Validate start and end dates
     df["real_date"]: pd.DatetimeIndex = pd.to_datetime(df["real_date"])
     min_date: pd.Timestamp = df["real_date"].min()
     max_date: pd.Timestamp = df["real_date"].max()
@@ -96,6 +103,26 @@ def view_metrics(
         if not is_valid_iso_date(varx):
             raise ValueError(f"`{namex}` must be a valid ISO date string")
 
+    # Validate freq and agg
+    if not isinstance(freq, str):
+        raise TypeError("`freq` must be a string")
+    else:
+        freq: str = freq.upper()
+        if freq not in ["D", "W", "M", "Q", "A"]:
+            raise ValueError("`freq` must be one of 'D', 'W', 'M', 'Q' or 'A'")
+
+    if not isinstance(agg, str):
+        raise TypeError("`agg` must be a string")
+    else:
+        agg: str = agg.lower()
+        if agg not in ["mean", "median", "min", "max", "first", "last"]:
+            raise ValueError(
+                "`agg` must be one of 'mean', 'median', 'min', 'max', 'first' or 'last'"
+            )
+
+    # Validate title and figsize tuple.
+    # Figsize tuple allows second value to be None,
+    # which is then set to the number of cids
     if title is not None:
         if not isinstance(title, str):
             raise TypeError("`title` must be a string")
@@ -108,17 +135,32 @@ def view_metrics(
         raise ValueError("First element of `figsize` must be a float")
 
     if figsize[1] is None:
-        figsize = (figsize[0], len(cids))
+        figsize = (figsize[0], len(cids) + 1) # +1 to adjust for labels
 
     if not isinstance(figsize[1], (int, float)):
         raise ValueError("Second element of `figsize` must be a float")
 
+    # Actual plotting code
+
+    # filter and reduce the df to the required cids, xcat, start and end
     filtered_df: pd.DataFrame = reduce_df(
         df=df, cids=cids, xcats=[xcat], start=start, end=end
     )
+    # group by cid, then set the index to real_date, then resample to the required freq and agg
+    filtered_df: pd.DataFrame = (
+        filtered_df.groupby(["cid", "xcat"])
+        .apply(
+            lambda x: x.set_index("real_date")
+            .resample(freq)
+            .agg(agg, numeric_only=True)
+        )
+        .reset_index()
+    )
+
     filtered_df["real_date"]: pd.Series = filtered_df["real_date"].dt.strftime(
         "%Y-%m-%d"
     )
+
     pivoted_df: pd.DataFrame = filtered_df.pivot_table(
         index="cid", columns="real_date", values=metric
     )
@@ -138,22 +180,22 @@ def view_metrics(
         title = f"Visualising {metric} for {xcat} from {start} to {end}"
     ax.set_title(title)
     ax.set_xlabel("Date")
-    ax.set_ylabel("Cross Section")
+    ax.set_ylabel("Cross Sections")
     plt.show()
 
 
 if __name__ == "__main__":
+    test_cids: List[str] = ["USD",]#"EUR", "GBP"]
+    test_xcats: List[str] = ["FX", "IR"]
     dfE: pd.DataFrame = make_test_df(
-        cids=["USD", "EUR", "GBP"], xcats=["FX", "IR"], prefer="sharp-hill"
+        cids=test_cids, xcats=test_xcats, prefer="sharp-hill"
     )
 
     dfM: pd.DataFrame = make_test_df(
-        cids=["USD", "EUR", "GBP"], xcats=["FX", "IR"], prefer="four-bit-sine"
+        cids=test_cids, xcats=test_xcats, prefer="four-bit-sine"
     )
 
-    dfG: pd.DataFrame = make_test_df(
-        cids=["USD", "EUR", "GBP"], xcats=["FX", "IR"], prefer="sine"
-    )
+    dfG: pd.DataFrame = make_test_df(cids=test_cids, xcats=test_xcats, prefer="sine")
 
     dfE.rename(columns={"value": "eop_lag"}, inplace=True)
     dfM.rename(columns={"value": "mop_lag"}, inplace=True)
@@ -175,4 +217,3 @@ if __name__ == "__main__":
         xcat="IR",
         metric="grading",
     )
-    
