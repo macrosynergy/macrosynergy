@@ -26,7 +26,7 @@ def view_metrics(
     date, the y-axis is the ticker, and the colour is the lag value.
 
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
-        'cid', 'xcat', 'real_date' and 'eop_lag' and/or 'mop_lag.
+        'cid', 'xcat', 'real_date' and 'grading', 'eop_lag' or 'mop_lag'.
     :param str xcat: extended category whose lags are to be visualized.
     :param <List[str]> cids: cross sections to visualize. Default is all in DataFrame.
     :param <str> start: earliest date in ISO format. Default is earliest available.
@@ -44,7 +44,7 @@ def view_metrics(
     :return: None
 
     :raises TypeError: if any of the inputs are of the wrong type.
-    :raises ValueError: if any of the inputs are of the wrong value.
+    :raises ValueError: if any of the inputs are semantically incorrect.
     """
     # Validating inputs
     # First check if the standard valid and expected columns are present
