@@ -337,7 +337,7 @@ class NaivePnL:
         # Compute the return across the panel. The returns are still computed daily
         # regardless of the re-balancing frequency potentially occurring weekly or
         # monthly.
-        df_pnl_all = df_pnl.groupby(['real_date']).sum()
+        df_pnl_all = df_pnl.groupby(['real_date']).sum(numeric_only=True)
         df_pnl_all = df_pnl_all[df_pnl_all['value'].cumsum() != 0]
         # Returns are computed for each cross-section and across the panel.
         df_pnl_all['cid'] = 'ALL'
@@ -415,7 +415,7 @@ class NaivePnL:
 
         dfw_long = dfw.reset_index(drop=True)
 
-        panel_pnl = dfw_long.groupby(['real_date']).sum()
+        panel_pnl = dfw_long.groupby(['real_date']).sum(numeric_only=True)
         panel_pnl = panel_pnl.reset_index(level=0)
         panel_pnl['cid'] = 'ALL'
         panel_pnl['xcat'] = label
