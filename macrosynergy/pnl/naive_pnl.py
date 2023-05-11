@@ -533,7 +533,7 @@ class NaivePnL:
                 labels = pnl_cids.copy()
             legend_title = "Cross Section(s)"
 
-        dfx['cum_value'] = dfx.groupby(plot_by).cumsum()
+        dfx['cum_value'] = dfx.groupby(plot_by).cumsum(numeric_only=True)
 
         if facet:
             fg = sns.FacetGrid(
