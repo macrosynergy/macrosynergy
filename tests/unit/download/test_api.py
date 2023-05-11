@@ -9,12 +9,13 @@ import base64
 import io
 import copy
 
-from typing import List, Dict, Union, Optional, Any, Tuple
+from typing import List, Dict, Union, Optional, Any, Tuple, Set
 import requests
 
 from macrosynergy.download import dataquery
 from macrosynergy.download import JPMaQSDownload
 from macrosynergy.download.dataquery import (
+    JPMAQS_GROUP_ID,
     DataQueryInterface,
     OAuth,
     CertAuth,
@@ -41,7 +42,6 @@ from macrosynergy.download.exceptions import (
 from macrosynergy.management.utils import Config
 
 
-
 def mock_jpmaqs_value(elem: str) -> float:
     """
     Used to produce a value or grade for the associated ticker. If the metric is
@@ -56,6 +56,7 @@ def mock_jpmaqs_value(elem: str) -> float:
     else:
         value = random()
     return value
+
 
 def mock_request_wrapper(
     dq_expressions: List[str], start_date: str, end_date: str
@@ -88,7 +89,6 @@ def mock_request_wrapper(
         aggregator.append(elem_dict)
 
     return aggregator
-
 
 
 class TestCertAuth(unittest.TestCase):
@@ -232,13 +232,15 @@ class TestDataQueryInterface(unittest.TestCase):
         """
         return mock_jpmaqs_value(elem=elem)
 
-    def request_wrapper(self, 
-            dq_expressions: List[str], start_date: str, end_date: str
-        ) -> List[Dict[str, Any]]:
+    def request_wrapper(
+        self, dq_expressions: List[str], start_date: str, end_date: str
+    ) -> List[Dict[str, Any]]:
         """
         Use the mock request_wrapper to return a mock response.
         """
-        return mock_request_wrapper(dq_expressions=dq_expressions, start_date=start_date, end_date=end_date)
+        return mock_request_wrapper(
+            dq_expressions=dq_expressions, start_date=start_date, end_date=end_date
+        )
 
     def test_init(self):
         with self.assertRaises(ValueError):
@@ -464,17 +466,39 @@ class TestDataQueryInterface(unittest.TestCase):
         with self.assertRaises(ValueError):
             jpmaqs_download.deconstruct_expression(expression=[])
 
+        # now give it a bad expression. it should warn and return [expression, expression, expression]
+        with self.assertWarns(UserWarning):
+            self.assertEqual(
+                jpmaqs_download.deconstruct_expression(expression="bad_expression"),
+                ["bad_expression", "bad_expression", "bad_expression"],
+            )
+
     def test_get_catalogue(self):
+        dq: DataQueryInterface = DataQueryInterface(
+            oauth=True,
+            config=Config(
+                client_id=os.getenv("DQ_CLIENT_ID"),
+                client_secret=os.getenv("DQ_CLIENT_SECRET"),
+            ),
+        )
+
+        try:
+            dq.check_connection()
+            catalogue: List[str] = dq.get_catalogue()
+        except Exception as e:
+            self.fail(e)
+
+        self.assertIsInstance(catalogue, list)
+        self.assertTrue(len(catalogue) > 0)
+        self.assertTrue(all([isinstance(c, str) for c in catalogue]))
+
         dq: DataQueryInterface = DataQueryInterface(
             oauth=True,
             config=Config(client_id="client_id", client_secret="client_secret"),
         )
-        # assert raises NotImplementedError
-        with self.assertRaises(NotImplementedError):
-            dq.get_catalogue()
 
-        with self.assertRaises(NotImplementedError):
-            dq.filter_exprs_from_catalogue(expressions=["expression1", "expression2"])
+        with self.assertRaises(AuthenticationError):
+            dq.get_catalogue()
 
     def test_dq_fetch(self):
         cfg = Config(
@@ -631,118 +655,118 @@ class TestDataQueryDownloads(unittest.TestCase):
                 msg="Authentication error - unable to access DataQuery:",
             )
 
-    def test_download_jpmaqs_data(self):
-        data: pd.DataFrame
-        with JPMaQSDownload(
-            oauth=True,
-            client_id=os.getenv("DQ_CLIENT_ID"),
-            client_secret=os.getenv("DQ_CLIENT_SECRET"),
-            check_connection=False,
-        ) as jpmaqs:
-            data: pd.DataFrame = jpmaqs.download(
-                tickers=["EUR_FXXR_NSA"],
-                start_date=(
-                    datetime.date.today() - datetime.timedelta(days=30)
-                ).isoformat(),
-            )
+    # def test_download_jpmaqs_data(self):
+    #     data: pd.DataFrame
+    #     with JPMaQSDownload(
+    #         oauth=True,
+    #         client_id=os.getenv("DQ_CLIENT_ID"),
+    #         client_secret=os.getenv("DQ_CLIENT_SECRET"),
+    #         check_connection=False,
+    #     ) as jpmaqs:
+    #         data: pd.DataFrame = jpmaqs.download(
+    #             tickers=["EUR_FXXR_NSA"],
+    #             start_date=(
+    #                 datetime.date.today() - datetime.timedelta(days=30)
+    #             ).isoformat(),
+    #         )
 
-        self.assertIsInstance(data, pd.DataFrame)
+    #     self.assertIsInstance(data, pd.DataFrame)
 
-        self.assertFalse(data.empty)
+    #     self.assertFalse(data.empty)
 
-        self.assertGreater(data.shape[0], 0)
+    #     self.assertGreater(data.shape[0], 0)
 
-        test_expr: str = "DB(JPMAQS,EUR_FXXR_NSA,value)"
-        with DataQueryInterface(
-            oauth=True,
-            config=Config(
-                client_id=os.getenv("DQ_CLIENT_ID"),
-                client_secret=os.getenv("DQ_CLIENT_SECRET"),
-            ),
-        ) as dq:
-            data: List[str] = dq.download_data(
-                expressions=[test_expr],
-            )
+    #     test_expr: str = "DB(JPMAQS,EUR_FXXR_NSA,value)"
+    #     with DataQueryInterface(
+    #         oauth=True,
+    #         config=Config(
+    #             client_id=os.getenv("DQ_CLIENT_ID"),
+    #             client_secret=os.getenv("DQ_CLIENT_SECRET"),
+    #         ),
+    #     ) as dq:
+    #         data: List[str] = dq.download_data(
+    #             expressions=[test_expr],
+    #         )
 
-        self.assertIsInstance(data, list)
-        self.assertEqual(len(data), 1)
-        self.assertIsInstance(data[0], dict)
-        _data: Dict[str, Any] = data[0]
-        self.assertEqual(len(_data.keys()), 5)
-        for key in ["item", "group", "attributes", "instrument-id", "instrument-name"]:
-            self.assertIn(key, _data.keys())
+    #     self.assertIsInstance(data, list)
+    #     self.assertEqual(len(data), 1)
+    #     self.assertIsInstance(data[0], dict)
+    #     _data: Dict[str, Any] = data[0]
+    #     self.assertEqual(len(_data.keys()), 5)
+    #     for key in ["item", "group", "attributes", "instrument-id", "instrument-name"]:
+    #         self.assertIn(key, _data.keys())
 
-        self.assertIsInstance(_data["attributes"], list)
-        self.assertEqual(_data["attributes"][0]["expression"], test_expr)
-        self.assertIsInstance(_data["attributes"][0]["time-series"], list)
-        self.assertGreater(len(_data["attributes"][0]["time-series"]), 0)
+    #     self.assertIsInstance(_data["attributes"], list)
+    #     self.assertEqual(_data["attributes"][0]["expression"], test_expr)
+    #     self.assertIsInstance(_data["attributes"][0]["time-series"], list)
+    #     self.assertGreater(len(_data["attributes"][0]["time-series"]), 0)
 
-    def test_download_jpmaqs_data_big(self):
-        # This test is to check that the download works for a large number of tickers.
-        # This is to specifically test the multi-threading functionality.
-        cids: List[str] = [
-            "AUD",
-            "CAD",
-            "CHF",
-            "EUR",
-            "GBP",
-            "NZD",
-            "USD",
-        ]
+    # def test_download_jpmaqs_data_big(self):
+    #     # This test is to check that the download works for a large number of tickers.
+    #     # This is to specifically test the multi-threading functionality.
+    #     cids: List[str] = [
+    #         "AUD",
+    #         "CAD",
+    #         "CHF",
+    #         "EUR",
+    #         "GBP",
+    #         "NZD",
+    #         "USD",
+    #     ]
 
-        xcats: List[str] = [
-            "EQXR_NSA",
-            "FXXR_NSA",
-            "FXXR_VT10",
-            "FXTARGETED_NSA",
-            "FXUNTRADABLE_NSA",
-        ]
+    #     xcats: List[str] = [
+    #         "EQXR_NSA",
+    #         "FXXR_NSA",
+    #         "FXXR_VT10",
+    #         "FXTARGETED_NSA",
+    #         "FXUNTRADABLE_NSA",
+    #     ]
 
-        metrics: List[str] = ["all"]
-        start_date: str = "2020-01-01"
-        end_date: str = "2020-02-01"
+    #     metrics: List[str] = ["all"]
+    #     start_date: str = "2020-01-01"
+    #     end_date: str = "2020-02-01"
 
-        data: pd.DataFrame
-        with JPMaQSDownload(
-            oauth=True,
-            client_id=os.getenv("DQ_CLIENT_ID"),
-            client_secret=os.getenv("DQ_CLIENT_SECRET"),
-            check_connection=True,
-        ) as jpmaqs:
-            data = jpmaqs.download(
-                cids=cids,
-                xcats=xcats,
-                metrics=metrics,
-                start_date=start_date,
-                end_date=end_date,
-            )
+    #     data: pd.DataFrame
+    #     with JPMaQSDownload(
+    #         oauth=True,
+    #         client_id=os.getenv("DQ_CLIENT_ID"),
+    #         client_secret=os.getenv("DQ_CLIENT_SECRET"),
+    #         check_connection=True,
+    #     ) as jpmaqs:
+    #         data = jpmaqs.download(
+    #             cids=cids,
+    #             xcats=xcats,
+    #             metrics=metrics,
+    #             start_date=start_date,
+    #             end_date=end_date,
+    #         )
 
-        self.assertIsInstance(data, pd.DataFrame)
+    #     self.assertIsInstance(data, pd.DataFrame)
 
-        self.assertFalse(data.empty)
+    #     self.assertFalse(data.empty)
 
-        self.assertGreater(data.shape[0], 0)
+    #     self.assertGreater(data.shape[0], 0)
 
-        test_expr: str = JPMaQSDownload.construct_expressions(
-            cids=cids, xcats=xcats, metrics=["value", "grading"]
-        )
-        with DataQueryInterface(
-            oauth=True,
-            config=Config(
-                client_id=os.getenv("DQ_CLIENT_ID"),
-                client_secret=os.getenv("DQ_CLIENT_SECRET"),
-            ),
-        ) as dq:
-            data: List[Dict[str, Any]] = dq.download_data(
-                expressions=test_expr,
-                start_date=start_date,
-                end_date=end_date,
-            )
+    #     test_expr: str = JPMaQSDownload.construct_expressions(
+    #         cids=cids, xcats=xcats, metrics=["value", "grading"]
+    #     )
+    #     with DataQueryInterface(
+    #         oauth=True,
+    #         config=Config(
+    #             client_id=os.getenv("DQ_CLIENT_ID"),
+    #             client_secret=os.getenv("DQ_CLIENT_SECRET"),
+    #         ),
+    #     ) as dq:
+    #         data: List[Dict[str, Any]] = dq.download_data(
+    #             expressions=test_expr,
+    #             start_date=start_date,
+    #             end_date=end_date,
+    #         )
 
-        self.assertIsInstance(data, list)
-        self.assertGreater(len(data), 0)
-        for _data in data:
-            self.assertIsInstance(_data, dict)
+    #     self.assertIsInstance(data, list)
+    #     self.assertGreater(len(data), 0)
+    #     for _data in data:
+    #         self.assertIsInstance(_data, dict)
 
 
 ##############################################
@@ -878,13 +902,15 @@ class MockDataQueryInterface(DataQueryInterface):
         """
         return mock_jpmaqs_value(elem=elem)
 
-    def request_wrapper(self, 
-            dq_expressions: List[str], start_date: str, end_date: str
-        ) -> List[Dict[str, Any]]:
+    def request_wrapper(
+        self, dq_expressions: List[str], start_date: str, end_date: str
+    ) -> List[Dict[str, Any]]:
         """
         Use the mock request_wrapper to return a mock response.
         """
-        return mock_request_wrapper(dq_expressions=dq_expressions, start_date=start_date, end_date=end_date)
+        return mock_request_wrapper(
+            dq_expressions=dq_expressions, start_date=start_date, end_date=end_date
+        )
 
     def __init__(self, *args, **kwargs):
         if "config" in kwargs:
@@ -923,22 +949,35 @@ class MockDataQueryInterface(DataQueryInterface):
                     d["attributes"][0][
                         "message"
                     ] = f"MASKED - {d['attributes'][0]['expression']}"
-        
+
         if self.duplicate_entries:
             # copy half of the entries from d["attributes"][0]["time-series"] and append to itself
             for d in ts:
                 if d["attributes"][0]["expression"] in self.duplicate_entries:
                     len_ts = len(d["attributes"][0]["time-series"])
-                    dupls: List[List[str, float]] = d["attributes"][0]["time-series"][:len_ts//2]
-                    d["attributes"][0]["time-series"]: List[List[str, float]] = d["attributes"][0]["time-series"] + dupls           
-
+                    dupls: List[List[str, float]] = d["attributes"][0]["time-series"][
+                        : len_ts // 2
+                    ]
+                    d["attributes"][0]["time-series"]: List[List[str, float]] = (
+                        d["attributes"][0]["time-series"] + dupls
+                    )
+        tsc = []
+        if self.catalogue:
+            for d in ts:
+                if any([c in d["attributes"][0]["expression"] for c in self.catalogue]):
+                    tsc.append(d)
+        ts = tsc if self.catalogue else ts
         return ts
+
+    def get_catalogue(self, group_id: str = None) -> List[str]:
+        return self.catalogue
 
     def _gen_attributes(
         self,
         msg_errors: List[str] = None,
         mask_expressions: List[str] = None,
         msg_warnings: List[str] = None,
+        catalogue: List[str] = None,
         unavailable_expressions: List[str] = None,
         egress_data: List[Dict[str, Any]] = None,
         duplicate_entries: List[str] = None,
@@ -954,6 +993,11 @@ class MockDataQueryInterface(DataQueryInterface):
             if unavailable_expressions is None
             else unavailable_expressions
         )
+        self.catalogue: List[str] = (
+            ["SOME_TICKER_TEST", "SOME_OTHER_TICKER_TEST"]
+            if catalogue is None
+            else catalogue
+        )
         self.egress_data: List[Dict[str, Any]] = {
             "tracking-id-123": {
                 "upload_size": 200,
@@ -967,7 +1011,9 @@ class MockDataQueryInterface(DataQueryInterface):
             ["Some_Expression_X"] if mask_expressions is None else mask_expressions
         )
 
-        self.duplicate_entries: List[str] = []
+        self.duplicate_entries: List[str] = (
+            [] if duplicate_entries is None else duplicate_entries
+        )
 
 
 ##############################################
@@ -1030,6 +1076,7 @@ class TestJPMaQSDownload(unittest.TestCase):
             "as_dataframe": True,
             "report_time_taken": True,
             "report_egress": True,
+            "get_catalogue": True,
         }
         bad_args: Dict[str, Any] = {}
         jpmaqs: JPMaQSDownload = JPMaQSDownload(
@@ -1247,8 +1294,8 @@ class TestJPMaQSDownload(unittest.TestCase):
             "as_dataframe": True,
             "report_time_taken": True,
             "report_egress": True,
+            "get_catalogue": False,
         }
-
 
         jpmaqs: JPMaQSDownload = JPMaQSDownload(
             client_id="client_id",
@@ -1265,15 +1312,70 @@ class TestJPMaQSDownload(unittest.TestCase):
             "DB(JPMAQS,USD_FXXR_NSA,eop_lag)",
             "DB(JPMAQS,USD_FXXR_NSA,mop_lag)",
         ]
-        dupl_exprs: List[str] = ['DB(JPMAQS,EUR_EQXR_NSA,value)', ]
+        dupl_exprs: List[str] = [
+            "DB(JPMAQS,EUR_EQXR_NSA,value)",
+        ]
         mock_dq_interface._gen_attributes(
-            unavailable_expressions=un_avail_exprs, mask_expressions=un_avail_exprs,
-            duplicate_entries=dupl_exprs
+            unavailable_expressions=un_avail_exprs,
+            mask_expressions=un_avail_exprs,
+            duplicate_entries=dupl_exprs,
         )
         jpmaqs.dq_interface = mock_dq_interface
         with self.assertRaises(InvalidDataframeError):
             jpmaqs.download(**good_args)
 
+        mock_dq_interface._gen_attributes(
+            unavailable_expressions=un_avail_exprs,
+            mask_expressions=un_avail_exprs,
+            duplicate_entries=[],
+        )
+        jpmaqs.dq_interface = mock_dq_interface
+
+        with self.assertRaises(InvalidDataframeError):
+            jpmaqs.download(expressions=un_avail_exprs)
+
+    def test_get_catalogue(self):
+        cfg: Config = Config(
+            client_id=os.getenv("DQ_CLIENT_ID"),
+            client_secret=os.getenv("DQ_CLIENT_SECRET"),
+        )
+
+        jpmaqs: JPMaQSDownload = JPMaQSDownload(**cfg.oauth(mask=False))
+        catalogue: List[str] = jpmaqs.get_catalogue()
+        self.assertTrue(len(catalogue) > 0)
+        self.assertTrue(len(catalogue) > 5000)
+
+        bad_exprs: List[str] = jpmaqs.construct_expressions(
+            cids=["CHIROPTERA", "Balenoptera"],
+            xcats=["Dumbledore", "Voldemort"],
+            tickers=["OBI_WAN_KENOBI", "R2D2"],
+            metrics=["value", "gold"],
+        )
+
+        good_tickers: List[str] = catalogue[:10]
+        good_exprs: List[str] = jpmaqs.construct_expressions(
+            tickers=good_tickers,
+            metrics=["value", "grading"],
+        )
+
+        mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(config=cfg)
+        mock_dq_interface._gen_attributes(
+            catalogue=catalogue,
+            unavailable_expressions=[],
+            mask_expressions=[],
+            duplicate_entries=[],
+            msg_errors=[],
+            msg_warnings=[],
+        )
+        jpmaqs.dq_interface = mock_dq_interface
+
+        df: pd.DataFrame = jpmaqs.download(
+            expressions=good_exprs + bad_exprs, get_catalogue=True
+        )
+        self.assertTrue(len(df) > 0)
+
+        tcks: Set[str] = set(df["cid"] + "_" + df["xcat"])
+        self.assertTrue(set(good_tickers), tcks)
 
 
 if __name__ == "__main__":

@@ -108,7 +108,6 @@ class JPMaQSDownload(object):
         if not isinstance(dq_download_kwargs, dict):
             raise TypeError("`dq_download_kwargs` must be a dictionary.")
 
-
         self.suppress_warning = suppress_warning
         self.debug = debug
         self.print_debug_data = print_debug_data
@@ -210,11 +209,20 @@ class JPMaQSDownload(object):
                 JPMaQSDownload.deconstruct_expression(exprx) for exprx in expression
             ]
         else:
-            exprx: str = expression.replace("DB(JPMAQS,", "").replace(")", "")
-            ticker: str
-            metric: str
-            ticker, metric = exprx.split(",")
-            return ticker.split("_", 1) + [metric]
+            try:
+                exprx: str = expression.replace("DB(JPMAQS,", "").replace(")", "")
+                ticker, metric = exprx.split(",")
+                result: List[str] = ticker.split("_", 1) + [metric]
+                if len(result) != 3:
+                    raise ValueError(f"{exprx} is not a valid JPMaQS expression.")
+                return ticker.split("_", 1) + [metric]
+            except Exception as e:
+                warnings.warn(
+                    f"Failed to deconstruct expression `{expression}`: {e}",
+                    RuntimeWarning,
+                )
+                # fail safely, return list where all entries are =expression
+                return [expression, expression, expression]
 
     def validate_downloaded_df(
         self,
@@ -372,17 +380,26 @@ class JPMaQSDownload(object):
                 "No data was downloaded. Check logger output for complete list of missing expressions."
             )
 
-        final_df: pd.DataFrame = pd.concat(dfs, ignore_index=True)        
-        dups_df: pd.DataFrame = final_df.groupby(["real_date", "cid", "xcat", "metric"])["obs"].count()
-        if sum(dups_df >1) > 0:
-            dups_df = pd.DataFrame(dups_df[dups_df >1].index.tolist())
+        final_df: pd.DataFrame = pd.concat(dfs, ignore_index=True)
+        dups_df: pd.DataFrame = final_df.groupby(
+            ["real_date", "cid", "xcat", "metric"]
+        )["obs"].count()
+        if sum(dups_df > 1) > 0:
+            dups_df = pd.DataFrame(dups_df[dups_df > 1].index.tolist())
             err_str: str = "Duplicate data found for the following expressions:\n"
-            for i in dups_df.groupby([1,2,3]).groups:
-                dts_series: pd.Series = dups_df.iloc[dups_df.groupby([1,2,3]).groups[i]][0]
-                dts: List[str]  = dts_series.tolist()
+            for i in dups_df.groupby([1, 2, 3]).groups:
+                dts_series: pd.Series = dups_df.iloc[
+                    dups_df.groupby([1, 2, 3]).groups[i]
+                ][0]
+                dts: List[str] = dts_series.tolist()
                 max_date: str = pd.to_datetime(max(dts)).strftime("%Y-%m-%d")
                 min_date: str = pd.to_datetime(min(dts)).strftime("%Y-%m-%d")
-                err_str += f"Expression: {i[0]}, CID: {i[1]}, XCAT: {i[2]}, Metric: {i[3]}, Between dates: {min_date} to {max_date}\n"         
+                expression: str = self.construct_expressions(
+                    cids=[i[0]], xcats=[i[1]], metrics=[i[2]]
+                )[0]
+                err_str += (
+                    f"Expression: {expression}, Dates: {min_date} to {max_date}\n"
+                )
 
             raise InvalidDataframeError(err_str)
 

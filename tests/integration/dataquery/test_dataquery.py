@@ -118,6 +118,25 @@ class TestDataQueryOAuth(unittest.TestCase):
         self.assertIsInstance(_data["attributes"][0]["time-series"], list)
         self.assertGreater(len(_data["attributes"][0]["time-series"]), 0)
 
+    def test_bad_expressions(self):
+        jpmaqs: JPMaQSDownload = JPMaQSDownload(
+            oauth=True,
+            client_id=os.getenv("DQ_CLIENT_ID"),
+            client_secret=os.getenv("DQ_CLIENT_SECRET"),
+            check_connection=False,
+        )
+        bad_exprs: List[str] = jpmaqs.construct_expressions(
+            cids=["CHIROPTERA", "Balenoptera"],
+            xcats=["Dumbledore", "Voldemort"],
+            tickers=["OBI_WAN_KENOBI", "R_2D_2"],
+            metrics=["value", "gold"],
+        )
+
+        with self.assertRaises(InvalidDataframeError):
+            jpmaqs.download(
+                expressions=bad_exprs,
+            )
+
     def test_download_jpmaqs_data_big(self):
         # This test is to check that the download works for a large number of tickers.
         # This is to specifically test the multi-threading functionality.
