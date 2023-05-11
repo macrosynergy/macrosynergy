@@ -123,7 +123,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     :return <pd.Dataframe>: standardized DataFrame with the zn-scores of the chosen xcat:
         'cid', 'xcat', 'real_date' and 'value'.
     """
-
+    df = df.copy()
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
     expected_columns = ["cid", "xcat", "real_date", "value"]
