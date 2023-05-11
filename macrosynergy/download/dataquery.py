@@ -975,8 +975,8 @@ if __name__ == "__main__":
     import os
 
     cf: Config = Config(
-        client_id=os.environ["JPMAQS_API_CLIENT_ID"],
-        client_secret=os.environ["JPMAQS_API_CLIENT_SECRET"],
+        client_id=os.getenv("DQ_CLIENT_ID"),
+        client_secret=os.getenv("DQ_CLIENT_SECRET"),
     )
 
     expressions = [
