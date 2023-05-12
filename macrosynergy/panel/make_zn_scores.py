@@ -64,7 +64,8 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
         df_out = df_out.fillna(method='ffill')
 
         if iis:
-            df_out = df_out.fillna(method="bfill", limit=(est_index - obs_index))
+            if (est_index - obs_index)>0:
+                df_out = df_out.fillna(method="bfill", limit=(est_index - obs_index))
 
     df_out.columns.name = 'cid'
     return df_out
