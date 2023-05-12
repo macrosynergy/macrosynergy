@@ -25,6 +25,7 @@ from macrosynergy.download.exceptions import (
     DownloadError,
     InvalidResponseError,
     HeartbeatError,
+    KNOWN_EXCEPTIONS
 )
 from macrosynergy.management.utils import (
     is_valid_iso_date,
@@ -222,21 +223,9 @@ def request_wrapper(
             raised_exceptions.append(exc)
             error_statements.append(error_statement)
 
-            known_exceptions = [
-                requests.exceptions.ConnectionError,
-                requests.exceptions.ConnectTimeout,
-                requests.exceptions.ReadTimeout,
-                ConnectionResetError,
-                requests.exceptions.Timeout,
-                requests.exceptions.TooManyRedirects,
-                requests.exceptions.RequestException,
-                requests.exceptions.HTTPError,
-                requests.exceptions.InvalidURL,
-                requests.exceptions.InvalidSchema,
-                requests.exceptions.ChunkedEncodingError,
-                # NOTE : HeartBeat is a special case
-                HeartbeatError,
-            ]
+            known_exceptions = KNOWN_EXCEPTIONS + [HeartbeatError]
+            # NOTE : HeartBeat is a special case
+                
             # NOTE: exceptions that need the code to break should be caught before this
             # all other exceptions are caught here and retried after a delay
 
@@ -418,23 +407,20 @@ class CertAuth(object):
         crt: str,
         key: str,
     ):
-        assert isinstance(
-            username, str
-        ), f"username must be <str> and not {type(username)}"
-
-        assert isinstance(
-            password, str
-        ), f"password must be <str> and not {type(password)}"
+        for varx, namex in zip([username, password], ["username", "password"]):
+            if not isinstance(varx, str):
+                raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
 
         self.auth: str = base64.b64encode(
             bytes(f"{username:s}:{password:s}", "utf-8")
         ).decode("ascii")
 
         # Key and Certificate check
-        for n, f in [("key", key), ("crt", crt)]:
-            assert isinstance(f, str), f"{n} must be type <str> and not {type(f)}"
-            if not os.path.isfile(f):
-                raise FileNotFoundError(f"The file '{f}' does not exist.")
+        for varx, namex in zip([crt, key], ["crt", "key"]):
+            if not isinstance(varx, str):
+                raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
+            if not os.path.isfile(varx):
+                raise FileNotFoundError(f"The file '{varx}' does not exist.")
         self.key: str = key
         self.crt: str = crt
 
@@ -518,6 +504,8 @@ def validate_download_args(
         if not isinstance(varx, str):
             raise TypeError(f"`{namex}` must be a string.")
 
+    return True
+
 
 def get_unavailable_expressions(
     expected_exprs: List[str],
@@ -547,6 +535,7 @@ class DataQueryInterface(object):
     Must be instantiated with a valid Config object.
     (see macrosynergy.management.utils.Config class for more info)
 
+    :param <Config> config: Config object.
     :param <bool> oauth: whether to use OAuth authentication. Defaults to True.
     :param <bool> debug: whether to print debug messages. Defaults to False.
     :param <bool> concurrent: whether to use concurrent requests. Defaults to True.
@@ -556,6 +545,7 @@ class DataQueryInterface(object):
         Defaults to True.
     :param <str> base_url: base URL for the DataQuery API. Defaults to OAUTH_BASE_URL
         if `oauth` is True, CERT_BASE_URL otherwise.
+    :param <str> token_url: token URL for the DataQuery API. Defaults to OAUTH_TOKEN_URL.
     :param <bool> suppress_warnings: whether to suppress warnings. Defaults to True.
 
     :return <DataQueryInterface>: DataQueryInterface object.
@@ -576,6 +566,7 @@ class DataQueryInterface(object):
         batch_size: int = 20,
         check_connection: bool = True,
         base_url: str = OAUTH_BASE_URL,
+        token_url: str = OAUTH_TOKEN_URL,
         suppress_warnings: bool = True,
     ):
         self._check_connection: bool = check_connection
@@ -595,7 +586,7 @@ class DataQueryInterface(object):
 
         self.auth: Optional[Union[CertAuth, OAuth]] = None
         if oauth:
-            self.auth: OAuth = OAuth(**config.oauth(mask=False))
+            self.auth: OAuth = OAuth(**config.oauth(mask=False), token_url=token_url)
         else:
             if base_url == OAUTH_BASE_URL:
                 base_url: str = CERT_BASE_URL
@@ -975,8 +966,8 @@ if __name__ == "__main__":
     import os
 
     cf: Config = Config(
-        client_id=os.environ["JPMAQS_API_CLIENT_ID"],
-        client_secret=os.environ["JPMAQS_API_CLIENT_SECRET"],
+        client_id=os.getenv("DQ_CLIENT_ID"),
+        client_secret=os.getenv("DQ_CLIENT_SECRET"),
     )
 
     expressions = [

@@ -74,7 +74,7 @@ class TestAll(unittest.TestCase):
         self.dataframe_generator()
         # Testing the various assert statements built into the Class's Constructor.
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # Test the notion that the metric of interest is present in the DataFrame. If
             # not, an assertion will be thrown.
             cr = CategoryRelations(
@@ -90,13 +90,13 @@ class TestAll(unittest.TestCase):
                 val="grading",
             )
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # Test the restrictions placed on the frequency parameter.
             cr = CategoryRelations(
                 self.dfdx,
                 xcats=["GROWTH", "INFL"],
                 cids=self.cidx,
-                freq="d",
+                freq="r",
                 xcat_aggs=["mean", "mean"],
                 lag=1,
                 start="2000-01-01",
@@ -104,7 +104,7 @@ class TestAll(unittest.TestCase):
                 blacklist=self.black,
             )
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # Test the notion that the category List can only receive two categories.
             cr = CategoryRelations(
                 self.dfdx,
@@ -485,6 +485,7 @@ class TestAll(unittest.TestCase):
         )
         test_slip: int = 5
         # apply the slip method
+        print(int(min(df["vx"])))
         out_df = CategoryRelations.apply_slip(
             target_df=df,
             slip=test_slip,
@@ -494,7 +495,7 @@ class TestAll(unittest.TestCase):
         )
 
         # NOTE: casting df.vx to int as pandas casts it to float64
-        self.assertEqual(int(min(df["vx"])), int(min(out_df["vx"]) - test_slip))
+        self.assertEqual(int(min(df["vx"])) + test_slip, int(min(out_df["vx"])))
 
         for cid in sel_cids:
             for xcat in sel_xcats:
@@ -556,8 +557,10 @@ class TestAll(unittest.TestCase):
             CategoryRelations.apply_slip(target_df=df, slip=-1,
                                                 xcats=sel_xcats, cids=["ac_dc"],
                                                 metrics=["value"])
-        
-            
+        try:
+            cat_rel: CategoryRelations = CategoryRelations(df=df, xcats=sel_xcats, cids=sel_cids, slip=100)
+        except:
+            self.fail("CategoryRelations init failed")
 
 
 
