@@ -657,7 +657,10 @@ class Config(object):
         return export_file
 
     def __repr__(self):
-        return f"JPMaQS API Config Object, methods : {list(self._credentials.keys())}"
+        try:
+            return f"JPMaQS API Config Object, methods : {list(self._credentials.keys())}"
+        except:
+            return "JPMaQS API Config Object"
 
     def __str__(self):
         creds_str: str
