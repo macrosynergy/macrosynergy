@@ -1,5 +1,3 @@
-.. figure:: ../_static/MACROSYNERGY_Logo_Primary.png
-
 macrosynergy package
 ====================
 
@@ -10,6 +8,7 @@ Subpackages
    :maxdepth: 4
 
    macrosynergy.dataquery
+   macrosynergy.download
    macrosynergy.management
    macrosynergy.panel
    macrosynergy.pnl

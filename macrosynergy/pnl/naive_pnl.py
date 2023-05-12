@@ -337,14 +337,14 @@ class NaivePnL:
         # Compute the return across the panel. The returns are still computed daily
         # regardless of the re-balancing frequency potentially occurring weekly or
         # monthly.
-        df_pnl_all = df_pnl.groupby(['real_date']).sum()
+        df_pnl_all = df_pnl.groupby(['real_date']).sum(numeric_only=True)
         df_pnl_all = df_pnl_all[df_pnl_all['value'].cumsum() != 0]
         # Returns are computed for each cross-section and across the panel.
         df_pnl_all['cid'] = 'ALL'
         df_pnl_all = df_pnl_all.reset_index()[df_pnl.columns]
         # Will be inclusive of each individual cross-section's signal-adjusted return and
         # the aggregated panel return.
-        df_pnl = df_pnl.append(df_pnl_all)
+        df_pnl = pd.concat([df_pnl, df_pnl_all])
 
         if vol_scale is not None:
             leverage = vol_scale * (df_pnl_all['value'].std() * np.sqrt(261))**(-1)
@@ -415,7 +415,7 @@ class NaivePnL:
 
         dfw_long = dfw.reset_index(drop=True)
 
-        panel_pnl = dfw_long.groupby(['real_date']).sum()
+        panel_pnl = dfw_long.groupby(['real_date']).sum(numeric_only=True)
         panel_pnl = panel_pnl.reset_index(level=0)
         panel_pnl['cid'] = 'ALL'
         panel_pnl['xcat'] = label
@@ -530,10 +530,10 @@ class NaivePnL:
             plot_by = "cid"
             col_order = pnl_cids
             if xcat_labels is not None:
-                labels = xcat_labels
+                labels = pnl_cids.copy()
             legend_title = "Cross Section(s)"
 
-        dfx['cum_value'] = dfx.groupby(plot_by).cumsum()
+        dfx['cum_value'] = dfx.groupby(plot_by).cumsum(numeric_only=True)
 
         if facet:
             fg = sns.FacetGrid(
@@ -575,6 +575,8 @@ class NaivePnL:
         if no_cids == 1:
             if facet:
                 labels = labels[::-1]
+        else:
+            labels = labels[::-1]
         
         plt.axhline(y=0, color='black', linestyle='--', lw=1)
         plt.show()
@@ -907,6 +909,11 @@ if __name__ == "__main__":
     pnl.plot_pnls(
         pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=True,
     )
+    
+    pnl.plot_pnls(  pnl_cats=["PNL_GROWTH_NEG"], 
+                    pnl_cids=cids,
+                    xcat_labels=None
+                    )
 
     pnl.plot_pnls(  pnl_cats=["PNL_GROWTH_NEG"], 
                     pnl_cids=cids,
@@ -915,8 +922,8 @@ if __name__ == "__main__":
                     )
     
     pnl.plot_pnls(  pnl_cats=["PNL_GROWTH_NEG"],
-                    same_y=True,
                     pnl_cids=cids,
+                    same_y=True,
                     facet=True,
                     xcat_labels=None,
                     share_axis_labels=False,

@@ -5,14 +5,15 @@ from macrosynergy.management.shape_dfs import reduce_df
 import unittest
 import numpy as np
 import pandas as pd
+from typing import List, Dict, Tuple, Union
 
 
 class TestAll(unittest.TestCase):
 
     def dataframe_construction(self):
 
-        self.__dict__['cids'] = ['AUD', 'CAD', 'GBP', 'NZD', 'USD', 'EUR']
-        self.__dict__['xcats'] = ['EQXR', 'CRY', 'GROWTH', 'INFL', 'DUXR']
+        self.cids : List[str] = ['AUD', 'CAD', 'GBP', 'NZD', 'USD', 'EUR']
+        self.xcats : List[str] = ['EQXR', 'CRY', 'GROWTH', 'INFL', 'DUXR']
 
         df_cids = pd.DataFrame(index=self.cids, columns=['earliest', 'latest', 'mean_add',
                                                     'sd_mult'])
@@ -35,11 +36,11 @@ class TestAll(unittest.TestCase):
 
         black = {'AUD': ['2000-01-01', '2003-12-31'],
                  'GBP': ['2018-01-01', '2100-01-01']}
-        self.__dict__['blacklist'] = black
+        self.blacklist : Dict[str, List[str]] = black
 
         # Standard df for tests.
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-        self.__dict__['dfd'] = dfd
+        self.dfd : pd.DataFrame = reduce_df(dfd, blacklist=self.blacklist)
 
     def test_constructor(self):
         # Test NaivePnL's constructor and the instantiation of the respective fields.

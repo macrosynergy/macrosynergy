@@ -4,11 +4,11 @@ import pandas as pd
 from typing import List
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.management.utils import drop_nan_series
 import re
 import random
 import warnings
 
-warnings.filterwarnings("ignore")
 
 
 def time_series_check(formula: str, index: int):
@@ -184,7 +184,7 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None,
             exec(f'{single} = dfw')
 
     # F. Calculate the panels and collect.
-
+    df_out : pd.DataFrame
     for new_xcat, formula in ops.items():
         dfw_add = eval(formula)
         df_add = pd.melt(dfw_add.reset_index(), id_vars=['real_date']).rename({'variable': 'cid'}, axis=1)
@@ -192,8 +192,11 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None,
         if new_xcat == list(ops.keys())[0]:
             df_out = df_add[cols]
         else:
-            df_out = df_out.append(df_add[cols])
+            df_out = pd.concat([df_out, df_add[cols]], axis=0, ignore_index=True)
         exec(f'{new_xcat} = dfw_add')
+        
+    if df_out.isna().any().any():
+        df_out = drop_nan_series(df=df_out, raise_warning=True)
 
     return df_out
 

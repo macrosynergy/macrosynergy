@@ -1,18 +1,37 @@
-"""DataQuery Interface."""
-import warnings
+"""
+Interface for downloading data from the JPMorgan DataQuery API.
+This module is not intended to be used directly, but rather through
+macrosynergy.download.jpmaqs.py. However, for a use cases independent
+of JPMaQS, this module can be used directly to download data from the
+JPMorgan DataQuery API.
+"""
 import concurrent.futures
 import time
+import os
 import logging
-from math import ceil, floor
-from itertools import chain
-import uuid
+import itertools
 import base64
-import os, io
+import uuid
+import io
 import requests
-from typing import List, Optional, Dict, Tuple
-from datetime import datetime
-from macrosynergy.download.exceptions import *
+from datetime import datetime, timedelta
+from typing import List, Optional, Dict, Union, Tuple
+from timeit import default_timer as timer
 from tqdm import tqdm
+
+from macrosynergy import __version__ as ms_version_info
+from macrosynergy.download.exceptions import (
+    AuthenticationError,
+    DownloadError,
+    InvalidResponseError,
+    HeartbeatError,
+    KNOWN_EXCEPTIONS
+)
+from macrosynergy.management.utils import (
+    is_valid_iso_date,
+    form_full_url,
+    Config,
+)
 
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
 OAUTH_BASE_URL: str = (
@@ -20,9 +39,20 @@ OAUTH_BASE_URL: str = (
 )
 OAUTH_TOKEN_URL: str = "https://authe.jpmchase.com/as/token.oauth2"
 OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
+JPMAQS_GROUP_ID: str = "CA_QI_MACRO_SYNERGY"
 API_DELAY_PARAM: float = 0.3  # 300ms delay between requests
+API_RETRY_COUNT: int = 5  # retry count for transient errors
+HL_RETRY_COUNT: int = 5  # retry count for "high-level" requests
+MAX_CONTINUOUS_FAILURES: int = 5  # max number of continuous errors before stopping
+HEARTBEAT_ENDPOINT: str = "/services/heartbeat"
+TIMESERIES_ENDPOINT: str = "/expressions/time-series"
+CATALOGUE_ENDPOINT: str = "/group/instruments"
+HEARTBEAT_TRACKING_ID: str = "heartbeat"
+OAUTH_TRACKING_ID: str = "oauth"
+TIMESERIES_TRACKING_ID: str = "timeseries"
+CATALOGUE_TRACKING_ID: str = "catalogue"
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 debug_stream_handler = logging.StreamHandler(io.StringIO())
 debug_stream_handler.setLevel(logging.NOTSET)
 debug_stream_handler.setFormatter(
@@ -32,793 +62,927 @@ debug_stream_handler.setFormatter(
 )
 logger.addHandler(debug_stream_handler)
 
+egress_logger: dict = {}
 
-def valid_response(
-    r: requests.Response, track_id: Optional[str] = None
-) -> Tuple[Optional[dict], bool, Optional[dict]]:
+
+def validate_response(response: requests.Response) -> dict:
     """
-    Prior to requesting any data, the function will confirm if a connection to the
-    DataQuery API is able to be established given the credentials passed. If the status
-    code is 200, able to access DataQuery's API.
+    Validates a response from the API. Raises an exception if the response
+    is invalid (e.g. if the response is not a 200 status code).
+
+    :param <requests.Response> response: response object from requests.request().
+
+    :return <dict>: response as a dictionary. If the response is not valid,
+        this function will raise an exception.
+
+    :raises <InvalidResponseError>: if the response is not valid.
+    :raises <AuthenticationError>: if the response is a 401 status code.
+    :raises <KeyboardInterrupt>: if the user interrupts the download.
     """
-    msg: Optional[dict] = None
-    if not r.ok:
-        msg: Dict[str, str] = {
-            "headers": r.headers,
-            "url": r.url,
-            "status_code": r.status_code,
-            "reason": r.reason,
-            "text": r.text,
-            "log_track_id": track_id,
-        }
-        js: Optional[dict] = None
 
-        logger.error(f"Request failed. msg : {msg}" + track_id)
-
-    else:
-        js = r.json()
-
-    return js, r.ok, msg
-
-
-def dq_request(
-    url: str,
-    headers: dict = None,
-    params: dict = None,
-    method: str = "get",
-    cert: Optional[Tuple[str, str]] = None,
-    track_id: Optional[str] = None,
-    **kwargs,
-) -> Tuple[Optional[dict], bool, str, Optional[dict]]:
-    """Will return the request from DataQuery."""
-    track_id = track_id or str(0)  # x = y if y else "0"
-    request_error = (
-        f"Unknown request method {method} not in ('get', 'post'). " + track_id
+    error_str: str = (
+        f"Response: {response}\n"
+        f"Requested URL: {response.request.url}\n"
+        f"Response status code: {response.status_code}\n"
+        f"Response headers: {response.headers}\n"
+        f"Response text: {response.text}\n"
+        f"Timestamp (UTC): {datetime.utcnow().isoformat()}; \n"
     )
-    assert method in ("get", "post"), request_error
+    # TODO : Use response.raise_for_status() as a better way to check for errors
+    if response.status_code != 200:
+        logger.info("Non-200 response code from DataQuery: %s", response.status_code)
+        if response.status_code == 401:
+            raise AuthenticationError(error_str)
 
-    log_url = f"{url}?{requests.compat.urlencode(params)}" if params else url
-    log_url = requests.compat.quote(log_url, safe="%/:=&?~#+!$,;'@()*[]")
-    logger.info(f"Requesting URL: {log_url} , track_id: {track_id}")
+        if HEARTBEAT_ENDPOINT in response.request.url:
+            raise HeartbeatError(error_str)
+
+        raise InvalidResponseError(
+            f"Request did not return a 200 status code.\n{error_str}"
+        )
 
     try:
-        with requests.request(
-            method=method,
-            url=url,
-            cert=cert,
-            headers=headers,
-            params=params,
-            **kwargs,
-        ) as r:
-            last_url: str = r.url
-            js, success, msg = valid_response(r=r, track_id=track_id)
-    except requests.exceptions.ChunkedEncodingError as e:
-        logger.error(
-            f"ChunkedEncodingError: {e}," f"URL: {log_url}, track_id: {track_id}"
-        )
-        js, success, msg = None, False, None
-        raise InvalidResponseError(
-            e,
-            f"URL : {log_url}",
-        )
+        response_dict = response.json()
+        if response_dict is None:
+            raise InvalidResponseError(f"Response is empty.\n{error_str}")
+        return response_dict
+    except Exception as exc:
+        if isinstance(exc, KeyboardInterrupt):
+            raise exc
 
-    if not success:
-        logger.error(
-            "Request failed for URL: %s with message: %s and response: %s",
-            last_url,
-            msg,
-            js,
-        )
-        if msg["status_code"] == 401:
-            logger.error(
-                "Invalid credentials. Request failed for URL: %s"
-                "with message: %s and response: %s",
-                last_url,
-                msg,
-                js,
-            )
-            raise AuthenticationError(msg)
-
-    return js, success, last_url, msg
+        raise InvalidResponseError(error_str + f"Error parsing response as JSON: {exc}")
 
 
-class CertAuth(object):
-    """Certificate Authentication.
+def request_wrapper(
+    url: str,
+    headers: Optional[Dict] = None,
+    params: Optional[Dict] = None,
+    method: str = "get",
+    tracking_id: Optional[str] = None,
+    proxy: Optional[Dict] = None,
+    cert: Optional[Tuple[str, str]] = None,
+    **kwargs,
+) -> dict:
+    """
+    Wrapper for requests.request() that handles retries and logging.
+    All parameters and kwargs are passed to requests.request().
 
-    Class used to access DataQuery via certificate and private key. To access the API
-    login both username & password are required as well as a certified certificate and
-    private key to verify the request.
+    :param <str> url: URL to request.
+    :param <dict> headers: headers to pass to requests.request().
+    :param <dict> params: params to pass to requests.request().
+    :param <str> method: HTTP method to use. Must be one of "get"
+        or "post". Defaults to "get".
+    :param <dict> kwargs: kwargs to pass to requests.request().
+    :param <str> tracking_id: default None, unique tracking ID of request.
+    :param <dict> proxy: default None, dictionary of proxy settings for request.
+    :param <Tuple[str, str]> cert: default None, tuple of string for filename
+        of certificate and key.
 
-    :param <str> username: username for login to REST API for JP Morgan DataQuery.
-    :param <str> password: password.
-    :param <str> crt: string with location of public certificate.
-    :param <str> key: string with private key location.
+    :return <dict>: response as a dictionary.
 
+    :raises <InvalidResponseError>: if the response is not valid.
+    :raises <AuthenticationError>: if the response is a 401 status code.
+    :raises <DownloadError>: if the request fails after retrying.
+    :raises <KeyboardInterrupt>: if the user interrupts the download.
+    :raises <ValueError>: if the method is not one of "get" or "post".
+    :raises <Exception>: other exceptions may be raised by requests.request().
     """
 
-    def __init__(
-        self,
-        username: str,
-        password: str,
-        crt: str = "api_macrosynergy_com.crt",
-        key: str = "api_macrosynergy_com.key",
-        base_url: str = CERT_BASE_URL,
-        proxy: Optional[dict] = None,
-    ):
+    if method not in ["get", "post"]:
+        raise ValueError(f"Invalid method: {method}")
 
-        error_user = f"username must be a <str> and not {type(username)}."
-        assert isinstance(username, str), error_user
+    # insert tracking info in headers
+    if headers is None:
+        headers: Dict = {}
+    headers["User-Agent"]: str = f"MacrosynergyPackage/{ms_version_info}"
 
-        error_password = f"password must be a <str> and not {type(password)}."
-        assert isinstance(password, str), error_password
+    uuid_str: str = str(uuid.uuid4())
+    if (tracking_id is None) or (tracking_id == ""):
+        tracking_id: str = uuid_str
+    else:
+        tracking_id: str = f"uuid::{uuid_str}::{tracking_id}"
 
-        self.auth: str = base64.b64encode(
-            bytes(f"{username:s}:{password:s}", "utf-8")
-        ).decode("ascii")
+    headers["X-Tracking-Id"]: str = tracking_id
 
-        self.headers: Dict[str, str] = {"Authorization": f"Basic {self.auth:s}"}
-        self.base_url: str = base_url
+    log_url: str = form_full_url(url, params)
+    logger.debug(f"Requesting URL: {log_url} with tracking_id: {tracking_id}")
+    raised_exceptions: List[Exception] = []
+    error_statements: List[str] = []
+    error_statement: str = ""
+    retry_count: int = 0
+    response: Optional[requests.Response] = None
+    upload_size: int = 0
+    download_size: int = 0
+    time_taken: float = 0
+    start_time: float = timer()
+    while retry_count < API_RETRY_COUNT:
+        try:
+            prepared_request: requests.PreparedRequest = requests.Request(
+                method, url, headers=headers, params=params, **kwargs
+            ).prepare()
 
-        # Key and Certificate.
-        self.key: str = self.valid_file(key)
-        self.crt: str = self.valid_file(crt)
+            upload_size = prepared_request.headers.get("Content-Length", 0)
 
-        # For debugging purposes save last request response.
-        self.status_code: Optional[int] = None
-        self.last_response: Optional[str] = None
-        self.last_url: Optional[str] = None
-        self.proxy: Optional[dict] = proxy
+            response: requests.Response = requests.Session().send(
+                prepared_request,
+                proxies=proxy,
+                cert=cert,
+            )
 
-    @staticmethod
-    def valid_file(file_path: str) -> Optional[str]:
-        """Validates the key & certificate exist in the referenced directory.
-        :param <str> file_path: file_path to the key or certificate.
+            # track the download size
+            if isinstance(response, requests.Response):
+                download_size = response.content.__sizeof__()
 
-        :return <str>: path to the file.
-        """
-        if not os.path.isfile(file_path):
-            raise FileNotFoundError(f"The file '{file_path}' is not a file.")
+            time_taken: float = timer() - start_time
 
-        return file_path
+            egress_logger[tracking_id] = {
+                "url": log_url,
+                "upload_size": int(upload_size),
+                "download_size": int(download_size),
+                "time_taken": time_taken,
+            }
 
-    def get_dq_api_result(
-        self,
-        url: str,
-        params: dict = None,
-        proxy: Optional[dict] = None,
-        track_id: Optional[str] = None,
-    ) -> dict:
-        """Method used exclusively to request data from the API.
+            if isinstance(response, requests.Response):
+                return validate_response(response)
 
-        :param <str> url: url to access DQ API.
-        :param <dict> params: dictionary containing the required parameters for the
-            ticker series.
-        :param <dict> proxy: proxy settings for request.
-        """
-        js, success, self.last_url, msg = dq_request(
-            url=url,
-            cert=(self.crt, self.key),
-            headers=self.headers,
-            params=params,
-            proxies=proxy,
-            track_id=track_id,
-        )
-        self.last_response = {"json": js, "success": success, "msg": msg}
-        return js, success, msg
+        except Exception as exc:
+            # if keyboard interrupt, raise as usual
+            if isinstance(exc, KeyboardInterrupt):
+                print("KeyboardInterrupt -- halting download")
+                raise exc
+
+            # authentication error, clearly not a transient error
+            if isinstance(exc, AuthenticationError):
+                raise exc
+
+            error_statement = (
+                f"Request to {log_url} failed with error {exc}. "
+                f"Retry count: {retry_count}. "
+                f"Tracking ID: {tracking_id}"
+            )
+            raised_exceptions.append(exc)
+            error_statements.append(error_statement)
+
+            known_exceptions = KNOWN_EXCEPTIONS + [HeartbeatError]
+            # NOTE : HeartBeat is a special case
+                
+            # NOTE: exceptions that need the code to break should be caught before this
+            # all other exceptions are caught here and retried after a delay
+
+            if any([isinstance(exc, e) for e in known_exceptions]):
+                egress_logger[tracking_id] = {
+                    "url": log_url,
+                    "upload_size": upload_size,
+                    "download_size": download_size,
+                    "time_taken": time_taken,
+                    "error": f"{exc}",
+                }
+                logger.warning(error_statement)
+                retry_count += 1
+                time.sleep(API_DELAY_PARAM)
+            else:
+                raise exc
+
+        time_taken = timer() - start_time
+
+        egress_logger[tracking_id] = {
+            "url": log_url,
+            "upload_size": upload_size,
+            "download_size": download_size,
+            "time_taken": time_taken,
+        }
+
+    if isinstance(raised_exceptions[-1], HeartbeatError):
+        raise HeartbeatError(error_statement)
+
+    errs_str = "\n\n".join(
+        ("\t" + str(e) + " - \n\t\t" + est)
+        for e, est in zip(raised_exceptions, error_statements)
+    )
+
+    e_str = f"Request to {log_url} failed with error {raised_exceptions[-1]}. \n"
+    e_str += "-" * 20 + "\n"
+    if isinstance(response, requests.Response):
+        e_str += f" Status code: {response.status_code}."
+    e_str += (
+        f" No longer retrying. Tracking ID: {tracking_id}"
+        f"Exceptions raised:\n{errs_str}"
+    )
+
+    raise DownloadError(e_str)
 
 
 class OAuth(object):
-    """Accessing DataQuery via OAuth.
+    """
+    Class for handling OAuth authentication for the DataQuery API.
 
-    :param <str> client_id: string with client id, username.
-    :param <str> client_secret: string with client secret, password.
-    :param <str> url:
-    :param <str> token_url:
-    :param <str> dq_resource_id:
+    :param <str> client_id: client ID for the OAuth application.
+    :param <str> client_secret: client secret for the OAuth application.
+    :param <dict> proxy: proxy to use for requests. Defaults to None.
+    :param <str> token_url: URL for getting OAuth tokens.
+    :param <str> dq_resource_id: resource ID for the JPMaQS Application.
+
+    :return <OAuth>: OAuth object.
+
+    :raises <ValueError>: if any of the parameters are semantically incorrect.
+    :raises <TypeError>: if any of the parameters are of the wrong type.
+    :raises <Exception>: other exceptions may be raised by underlying functions.
     """
 
     def __init__(
         self,
         client_id: str,
         client_secret: str,
-        url: str = OAUTH_BASE_URL,
+        proxy: Optional[dict] = None,
         token_url: str = OAUTH_TOKEN_URL,
         dq_resource_id: str = OAUTH_DQ_RESOURCE_ID,
-        proxy: Optional[dict] = None,
     ):
+        logger.debug("Instantiate OAuth pathway to DataQuery")
+        vars_types_zip: zip = zip(
+            [client_id, client_secret, token_url, dq_resource_id],
+            [
+                "client_id",
+                "client_secret",
+                "token_url",
+                "dq_resource_id",
+            ],
+        )
 
-        self.base_url: str = url
-        self.__token_url: str = token_url
-        self.__dq_api_resource_id: str = dq_resource_id
+        for varx, namex in vars_types_zip:
+            if not isinstance(varx, str):
+                raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
 
-        id_error = f"client_id argument must be a <str> and not {type(client_id)}."
-        assert isinstance(client_id, str), id_error
-        self.client_id: str = client_id
+        if not isinstance(proxy, dict) and proxy is not None:
+            raise TypeError(f"proxy must be a <dict> and not {type(proxy)}.")
 
-        secret_error = f"client_secret must be a str and not {type(client_secret)}."
-        assert isinstance(client_secret, str), secret_error
+        self.token_url: str = token_url
+        self.proxy: Optional[dict] = proxy
 
-        self.client_secret: str = client_secret
         self._stored_token: Optional[dict] = None
         self.token_data = {
             "grant_type": "client_credentials",
-            "client_id": self.client_id,
-            "client_secret": self.client_secret,
-            "aud": self.__dq_api_resource_id,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "aud": dq_resource_id,
         }
 
-        # For debugging purposes save last request response.
-        self.status_code: Optional[int] = None
-        self.last_response: Optional[str] = None
-        self.last_url: Optional[str] = None
-        self.proxy: Optional[dict] = proxy
-
-    def _active_token(self) -> bool:
-        """Confirms if the token being used has not expired."""
-        created: datetime = self._stored_token["created_at"]
-        expires: int = self._stored_token["expires_in"]
-
-        return (datetime.now() - created).total_seconds() / 60 >= (expires - 1)
-
     def _valid_token(self) -> bool:
-        """Confirms if the credentials passed correspond to a valid token."""
-        return not (self._stored_token is None or self._active_token())
+        """
+        Method to check if the stored token is valid.
+
+        :return <bool>: True if the token is valid, False otherwise.
+        """
+        if self._stored_token is None:
+            logger.debug("No token stored")
+            return False
+
+        created: datetime = self._stored_token["created_at"]  # utc time of creation
+        expires: datetime = created + timedelta(
+            seconds=self._stored_token["expires_in"]
+        )
+
+        utcnow = datetime.utcnow()
+        is_active: bool = expires > utcnow
+
+        logger.debug(
+            "Active token: %s, created: %s, expires: %s, now: %s",
+            is_active,
+            created,
+            expires,
+            utcnow,
+        )
+
+        return is_active
 
     def _get_token(self) -> str:
-        """Retrieves the token which is used to access DataQuery via OAuth method."""
+        """Method to get a new OAuth token.
 
+        :return <str>: OAuth token.
+        """
         if not self._valid_token():
-            js, success, self.last_url, msg = dq_request(
-                url=self.__token_url,
+            logger.debug("Request new OAuth token")
+            js = request_wrapper(
+                url=self.token_url,
                 data=self.token_data,
                 method="post",
-                proxies=self.proxy,
-                track_id="get_oauth_token",
+                proxy=self.proxy,
+                tracking_id=OAUTH_TRACKING_ID,
             )
-            if not success:
-                raise AuthenticationError(msg)
+            # on failure, exception will be raised by request_wrapper
+
+            # NOTE : use UTC time for token expiry
             self._stored_token: dict = {
-                "created_at": datetime.now(),
+                "created_at": datetime.utcnow(),
                 "access_token": js["access_token"],
                 "expires_in": js["expires_in"],
             }
 
         return self._stored_token["access_token"]
 
-    def get_dq_api_result(
-        self,
-        url: str,
-        params: dict = None,
-        proxy: Optional[dict] = None,
-        track_id: Optional[str] = None,
-    ) -> dict:
-        """Method used exclusively to request data from the API.
-
-        :param <str> url: url to access DQ API.
-        :param <dict> params: dictionary containing the required parameters for the
-            ticker series.
-        :param <Optional[dict]> proxy: dictionary of proxy server.
-        """
-
-        js, success, self.last_url, msg = dq_request(
-            url=url,
-            params=params,
-            headers={"Authorization": "Bearer " + self._get_token()},
-            proxies=proxy,
-            track_id=track_id,
-        )
-        self.last_response = {"json": js, "success": success, "msg": msg}
-        return js, success, msg
+    def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
+        headers = {"Authorization": "Bearer " + self._get_token()}
+        return {"headers": headers, "cert": None}
 
 
-class Interface(object):
-    """API Interface to ©JP Morgan DataQuery.
+class CertAuth(object):
+    """
+    Class for handling certificate based authentication for the DataQuery API.
 
-    :param <bool> debug: boolean,
-        if True run the interface in debugging mode.
-    :param <bool> concurrent: run the requests concurrently.
-    :param <int> batch_size: number of JPMaQS expressions handled in a single request
-        sent to DQ API. Each request will be handled concurrently by DataQuery.
-    :param <str> client_id: optional argument required for OAuth authentication
-    :param <str> client_secret: optional argument required for OAuth authentication
-    :param <dict> kwargs: dictionary of optional arguments such as OAuth client_id <str>, client_secret <str>,
-        base_url <str>, token_url <str> (OAuth), resource_id <str> (OAuth), and username, password, crt, and key
-        (SSL certificate authentication).
+    :param <str> username: username for the DataQuery API.
+    :param <str> password: password for the DataQuery API.
+    :param <str> crt: path to the certificate file.
+    :param <str> key: path to the key file.
 
+    :return <CertAuth>: CertAuth object.
+
+    :raises <AssertionError>: if any of the parameters are of the wrong type.
+    :raises <FileNotFoundError>: if certificate or key file is missing from filesystem.
+    :raises <Exception>: other exceptions may be raised by underlying functions.
     """
 
     def __init__(
         self,
-        oauth: bool = False,
-        debug: bool = False,
-        concurrent: bool = True,
-        batch_size: int = 20,
-        heartbeat: bool = False,
-        **kwargs,
+        username: str,
+        password: str,
+        crt: str,
+        key: str,
     ):
+        for varx, namex in zip([username, password], ["username", "password"]):
+            if not isinstance(varx, str):
+                raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
 
-        self.proxy = kwargs.pop("proxy", kwargs.pop("proxies", None))
-        self.heartbeat = heartbeat
+        self.auth: str = base64.b64encode(
+            bytes(f"{username:s}:{password:s}", "utf-8")
+        ).decode("ascii")
+
+        # Key and Certificate check
+        for varx, namex in zip([crt, key], ["crt", "key"]):
+            if not isinstance(varx, str):
+                raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
+            if not os.path.isfile(varx):
+                raise FileNotFoundError(f"The file '{varx}' does not exist.")
+        self.key: str = key
+        self.crt: str = crt
+
+    def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
+        headers = {"Authorization": f"Basic {self.auth:s}"}
+        return {"headers": headers, "cert": (self.crt, self.key)}
+
+
+def validate_download_args(
+    expressions: List[str],
+    start_date: str,
+    end_date: str,
+    show_progress: bool,
+    endpoint: str,
+    calender: str,
+    frequency: str,
+    conversion: str,
+    nan_treatment: str,
+    reference_data: str,
+    retry_counter: int,
+    delay_param: float,
+):
+    """
+    Validate the arguments passed to the download_data method.
+
+    :params -- see download_data method.
+
+    :returns True if all arguments are valid.
+
+    :raises <TypeError>: if any of the arguments are of the wrong type.
+    :raises <ValueError>: if any of the arguments are semantically incorrect.
+    """
+
+    if expressions is None:
+        raise ValueError("`expressions` must be a list of strings.")
+
+    if not isinstance(expressions, list):
+        raise TypeError("`expressions` must be a list of strings.")
+
+    if not all(isinstance(expr, str) for expr in expressions):
+        raise TypeError("`expressions` must be a list of strings.")
+
+    for varx, namex in zip([start_date, end_date], ["start_date", "end_date"]):
+        if (varx is None) or not isinstance(varx, str):
+            raise TypeError(f"`{namex}` must be a string.")
+        if not is_valid_iso_date(varx):
+            raise ValueError(
+                f"`{namex}` must be a string in the ISO-8601 format (YYYY-MM-DD)."
+            )
+
+    if not isinstance(show_progress, bool):
+        raise TypeError("`show_progress` must be a boolean.")
+
+    if not isinstance(retry_counter, int):
+        raise TypeError("`retry_counter` must be an integer.")
+
+    if not isinstance(delay_param, float):
+        raise TypeError("`delay_param` must be a float >=0.2 (seconds).")
+    elif delay_param < 0.2:
+        raise ValueError("`delay_param` must be a float >=0.2 (seconds).")
+
+    vars_types_zip: zip = zip(
+        [
+            endpoint,
+            calender,
+            frequency,
+            conversion,
+            nan_treatment,
+            reference_data,
+        ],
+        [
+            "endpoint",
+            "calender",
+            "frequency",
+            "conversion",
+            "nan_treatment",
+            "reference_data",
+        ],
+    )
+    for varx, namex in vars_types_zip:
+        if not isinstance(varx, str):
+            raise TypeError(f"`{namex}` must be a string.")
+
+    return True
+
+
+def get_unavailable_expressions(
+    expected_exprs: List[str],
+    dicts_list: List[Dict],
+) -> List[str]:
+    """
+    Method to get the expressions that are not available in the response.
+    Looks at the dict["attributes"][0]["expression"] field of each dict
+    in the list.
+
+    :param <List[str]> expected_exprs: list of expressions that were requested.
+    :param <List[Dict]> dicts_list: list of dicts to search for the expressions.
+
+    :return <List[str]>: list of expressions that were not found in the dicts.
+    """
+    found_exprs: List[str] = [
+        curr_dict["attributes"][0]["expression"]
+        for curr_dict in dicts_list
+        if curr_dict["attributes"][0]["time-series"] is not None
+    ]
+    return list(set(expected_exprs) - set(found_exprs))
+
+
+class DataQueryInterface(object):
+    """
+    High level interface for the DataQuery API.
+    Must be instantiated with a valid Config object.
+    (see macrosynergy.management.utils.Config class for more info)
+
+    :param <Config> config: Config object.
+    :param <bool> oauth: whether to use OAuth authentication. Defaults to True.
+    :param <bool> debug: whether to print debug messages. Defaults to False.
+    :param <bool> concurrent: whether to use concurrent requests. Defaults to True.
+    :param <int> batch_size: default 20, number of expressions to send in a single
+        request. Must be a number between 1 and 20 (both included).
+    :param <bool> check_connection: whether to send a check_connection request.
+        Defaults to True.
+    :param <str> base_url: base URL for the DataQuery API. Defaults to OAUTH_BASE_URL
+        if `oauth` is True, CERT_BASE_URL otherwise.
+    :param <str> token_url: token URL for the DataQuery API. Defaults to OAUTH_TOKEN_URL.
+    :param <bool> suppress_warnings: whether to suppress warnings. Defaults to True.
+
+    :return <DataQueryInterface>: DataQueryInterface object.
+
+    :raises <TypeError>: if any of the parameters are of the wrong type.
+    :raises <ValueError>: if any of the parameters are semantically incorrect.
+    :raises <InvalidResponseError>: if the response from the server is not valid.
+    :raises <DownloadError>: if the download fails to complete after a number of retries.
+    :raises <HeartbeatError>: if the heartbeat (check connection) fails.
+    :raises <Exception>: other exceptions may be raised by underlying functions.
+    """
+
+    def __init__(
+        self,
+        config: Config,
+        oauth: bool = True,
+        debug: bool = False,
+        batch_size: int = 20,
+        check_connection: bool = True,
+        base_url: str = OAUTH_BASE_URL,
+        token_url: str = OAUTH_TOKEN_URL,
+        suppress_warnings: bool = True,
+    ):
+        self._check_connection: bool = check_connection
         self.msg_errors: List[str] = []
-
-        if oauth:
-            self.access: OAuth = OAuth(
-                client_id=kwargs.pop("client_id"),
-                client_secret=kwargs.pop("client_secret"),
-                url=kwargs.pop("base_url", OAUTH_BASE_URL),
-                token_url=kwargs.pop("token_url", OAUTH_TOKEN_URL),
-                dq_resource_id=kwargs.pop("resource_id", OAUTH_DQ_RESOURCE_ID),
-                proxy=self.proxy,
-            )
-        else:
-            self.access: CertAuth = CertAuth(
-                username=kwargs.pop("username"),
-                password=kwargs.pop("password"),
-                crt=kwargs.pop("crt"),
-                key=kwargs.pop("key"),
-                base_url=kwargs.pop("base_url", CERT_BASE_URL),
-                proxy=self.proxy,
-            )
-
+        self.msg_warnings: List[str] = []
+        self.unavailable_expressions: List[str] = []
         self.debug: bool = debug
-        self.last_url: Optional[str] = None
-        self.status_code: Optional[int] = None
-        self.last_response: Optional[str] = None
-        self.concurrent: bool = concurrent
+        self.suppress_warnings: bool = suppress_warnings
         self.batch_size: int = batch_size
+
+        if not isinstance(config, Config):
+            raise ValueError(
+                "config_object must be provided for DataQuery authentication."
+                " Check macrosynergy.management.utils.Config "
+                "for more details."
+            )
+
+        self.auth: Optional[Union[CertAuth, OAuth]] = None
+        if oauth:
+            self.auth: OAuth = OAuth(**config.oauth(mask=False), token_url=token_url)
+        else:
+            if base_url == OAUTH_BASE_URL:
+                base_url: str = CERT_BASE_URL
+
+            self.auth: CertAuth = CertAuth(**config.cert(mask=False))
+
+        assert (
+            self.auth is not None
+        ), "Failed to initialise access method. Check the config_object passed"
+
+        self.proxy: Optional[dict] = config.proxy(mask=False)
+        self.base_url: str = base_url
+        self.egress_data: dict = {}
 
     def __enter__(self):
         return self
 
-    def __exit__(self, exc_type, exc_value, exc_traceback):
+    def __exit__(self, exc_type, exc_value, traceback):
         if exc_type:
-            logger.error(f"Execution {exc_type} with value (exc_value): {exc_value}")
-        debug_stream_handler.stream.flush()
-        debug_stream_handler.stream.seek(0)
-        self.msg_errors = debug_stream_handler.stream.getvalue().splitlines()
-        # NOTE: Don't close the stream, as it causes can issues with parent/logging modules.
-        # NOTE: DO NOT try and close/delete self or pass it to gc.collect() here.
+            logger.error("Exception %s - %s", exc_type, exc_value)
+            print(f"Exception: {exc_type} {exc_value}")
 
-    def check_connection(self) -> Tuple[bool, dict]:
-        """Check connection (heartbeat) to DataQuery."""
-        endpoint = "/services/heartbeat"
-        js, success, msg = self.access.get_dq_api_result(
-            url=self.access.base_url + endpoint,
+    def check_connection(self, verbose=False) -> bool:
+        """
+        Check the connection to the DataQuery API using the Heartbeat endpoint.
+
+        :param <bool> verbose: whether to print a message if the heartbeat
+            is successful. Useful for debugging. Defaults to False.
+
+        :return <bool>: True if the connection is successful, False otherwise.
+
+        :raises <HeartbeatError>: if the heartbeat fails.
+        """
+        logger.debug("Check if connection can be established to JPMorgan DataQuery")
+        js: dict = request_wrapper(
+            url=self.base_url + HEARTBEAT_ENDPOINT,
             params={"data": "NO_REFERENCE_DATA"},
             proxy=self.proxy,
-            track_id="heartbeat",
+            tracking_id=HEARTBEAT_TRACKING_ID,
+            **self.auth.get_auth(),
         )
 
-        if not success:
-            return False, msg
+        result: bool = True
+        if (js is None) or (not isinstance(js, dict)) or ("info" not in js):
+            logger.warning("Connection to JPMorgan DataQuery heartbeat failed")
+            result: bool = False
 
-        if "info" not in js:
-            logger.error(
-                "Invalid response from DataQuery. %s"
-                "request %s error response at "
-                "%s: %s",
-                js,
-                self.last_url,
-                datetime.utcnow().isoformat(),
-                js,
-            )
-            raise InvalidResponseError(
-                f"Invalid response from DataQuery."
-                "'info' missing from response.keys():"
-                f"{js.keys()}, request {self.last_url:s} error response at {datetime.utcnow().isoformat()}: {js}"
+        if result:
+            result = (int(js["info"]["code"]) == 200) and (
+                js["info"]["message"] == "Service Available."
             )
 
-        results: dict = js["info"]
-        assert int(results["code"]) == 200, f"Error message from DataQuery: {results}"
-        return int(results["code"]) == 200, results
+        if verbose:
+            print("Connection successful!" if result else "Connection failed.")
+        return result
 
-    def _fetch_threading(
-        self, endpoint, params: dict, max_retries: int = 5, track_id: str = None
-    ) -> dict:
-        """
-        Method responsible for requesting Tickers from the API. Able to pass in 20
-        Tickers in a single request. If there is a request failure, the function will
-        return a None-type Object and the request will be made again but with a slower
-        delay.
-
-        :param <str> endpoint:
-        :param <dict> params: dictionary containing the required parameters.
-        :param <int> max_retries: count of servers to be retried.
-
-        return <dict>: singular dictionary obtaining maximum 20 elements.
-        """
-
-        # The url is instantiated on the ancillary Classes as it depends on the DQ access
-        # method chosen.
-        url = self.access.base_url + endpoint
-        select = "instruments"
-        response = {}
-        results = []
-        conxn_errors = 0
-        invalid_responses = 0
-        while (
-            (not (select in response.keys()))
-            and (conxn_errors <= max_retries)
-            and (invalid_responses <= max_retries)
-        ):
-            try:
-                # The required fields will already be instantiated on the instance of the
-                # Class.
-                track_id = f"--track_id={track_id if track_id else str(uuid.uuid4())}"
-                logger.info(
-                    f"Requesting {url} with params {params}"
-                    + (f"with proxy {self.proxy}" if self.proxy else "")
-                    + f" {track_id}"
-                )
-                if conxn_errors + invalid_responses:
-                    logger.info(
-                        f"Failed requests counter: {conxn_errors}, invalid_responses: {invalid_responses}"
-                        + f" {track_id}"
-                    )
-                response, status, msg = self.access.get_dq_api_result(
-                    url=url, params=params, proxy=self.proxy, track_id=track_id
-                )
-
-                if status:
-                    if response is None:
-                        # When these conditions are true, the endpoint is actively returning None.
-                        # This is an indication that the delay is too short.
-                        # triggers a retry with a longer delay
-                        return None
-                else:
-                    logger.warning(
-                        f"respone returned with HTTP Status Code {int(msg['status_code'])}. "
-                        f"response : {response}, "
-                        f"status_code : {int(msg['status_code'])}, "
-                        f"msg : {msg}, "
-                        f"url : {url}, "
-                        f"params : {params},"
-                        f"dq_api.Interface.last_url : {self.last_url}, "
-                        f"status_code : {int(msg['status_code'])} "
-                    )
-                    raise InvalidResponseError(
-                        f"Invalid response from DataQuery. response : {response}"
-                        f"status_code : {int(msg['status_code'])}, "
-                        f"msg : {msg}, "
-                        f"url : {url}, "
-                        f"params : {params},"
-                    )
-
-            except ConnectionResetError:
-                conxn_errors += 1
-                time.sleep(0.05)
-                logger.warning(
-                    f"Server error: will retry. Retry number: {conxn_errors+invalid_responses}. "
-                    f"ConnectionResetError count: {conxn_errors}, "
-                    f"invalid_responses count: {invalid_responses}, "
-                    f"dq_api.Interface.last_url : {self.last_url}, "
-                    f"dq_api.Interface.last_response : {self.last_response}, "
-                )
-                continue
-            except ValueError:
-                invalid_responses += 1
-                time.sleep(0.05)
-                logger.warning(
-                    f"Server error: Invalid response received. Retry number: {conxn_errors+invalid_responses}. "
-                    f"ConnectionResetError count: {conxn_errors}. "
-                    f"invalid_responses count: {invalid_responses}. "
-                    f"response : {response}, "
-                    f"status : {status}, "
-                    f"msg : {msg}, "
-                    f"url : {url}, "
-                    f"params : {params}, "
-                    f"dq_api.Interface.last_url : {self.last_url}"
-                )
-            else:
-                logger.info(f"Request successful. {track_id}")
-                if select in response.keys():
-                    results.extend(response[select])
-
-                if "links" not in response.keys():
-                    raise InvalidResponseError(
-                        f"Invalid response from DataQuery. response : {response}"
-                        f"links missing from response.keys():"
-                        f"Status Code: {int(msg['status_code'])}"
-                        f"msg : {msg}"
-                        f"url : {url}"
-                    )
-
-                if response["links"][1]["next"] is None:
-                    break
-
-                url = f"{self.access.base_url:s}{response['links'][1]['next']:s}"
-                params = {}
-
-        if (conxn_errors > max_retries) or (invalid_responses > max_retries):
-            raise ConnectionError(
-                f"Connection to DataQuery failed. counter: {conxn_errors}, invalid_responses: {invalid_responses}"
-                f"dq_api.Interface.last_url : {self.last_url},"
-                f"dq_api.Interface.last_response : {self.last_response},"
-            )
-
-        if (len(results) == 0) or (None in results):
-            return None
-        else:
-            return results, status, msg
-
-    def _request(
+    def _fetch(
         self,
-        endpoint: str,
+        url: str,
+        params: dict = None,
+        tracking_id: Optional[str] = None,
+    ) -> List[Dict]:
+        """
+        Make a request to the DataQuery API using the specified parameters.
+        Used to wrap a request in a thread for concurrent requests, or to
+        simplify the code for single requests.
+
+        :param <str> url: URL to request.
+        :param <dict> params: parameters to send with the request.
+        :param <dict> proxy: proxy to use for the request.
+        :param <str> tracking_id: tracking ID to use for the request.
+
+        :return <List[Dict]>: list of dictionaries containing the response data.
+
+        :raises <InvalidResponseError>: if the response from the server is not valid.
+        :raises <Exception>: other exceptions may be raised by underlying functions.
+        """
+
+        downloaded_data: List[Dict] = []
+        response: Dict = request_wrapper(
+            url=url,
+            params=params,
+            proxy=self.proxy,
+            tracking_id=tracking_id,
+            **self.auth.get_auth(),
+        )
+
+        if (response is None) or ("instruments" not in response.keys()):
+            raise InvalidResponseError(
+                f"Invalid response from DataQuery: {response}\n"
+                f"URL: {form_full_url(url, params)}"
+                f"Timestamp (UTC): {datetime.utcnow().isoformat()}"
+            )
+
+        downloaded_data.extend(response["instruments"])
+
+        if "links" in response.keys() and response["links"][1]["next"] is not None:
+            logger.info("DQ response paginated - get next response page")
+            downloaded_data.extend(
+                self._fetch(
+                    url=self.base_url + response["links"][1]["next"],
+                    params={},
+                    tracking_id=tracking_id,
+                )
+            )
+
+        return downloaded_data
+
+    def get_catalogue(
+        self,
+        group_id: str = JPMAQS_GROUP_ID,
+    ) -> List[str]:
+        """
+        Method to get the JPMaQS catalogue.
+        Queries the DataQuery API's Groups/Search endpoint to get the list of
+        tickers in the JPMaQS group. The group ID can be changed to fetch a
+        different group's catalogue.
+
+        Parameters
+        :param <str> group_id: the group ID to fetch the catalogue for.
+
+        :return <List[str]>: list of tickers in the JPMaQS group.
+
+        :raises <ValueError>: if the response from the server is not valid.
+        """
+        response_list: Dict = self._fetch(
+            url=self.base_url + CATALOGUE_ENDPOINT,
+            params={"group-id": group_id},
+            tracking_id=CATALOGUE_TRACKING_ID,
+        )
+
+        tickers: List[str] = [d["instrument-name"] for d in response_list]
+        utkr_count: int = len(tickers)
+        tkr_idx: List[int] = sorted([d["item"] for d in response_list])
+
+        if not (
+            (min(tkr_idx) == 1)
+            and (max(tkr_idx) == utkr_count)
+            and (len(set(tkr_idx)) == utkr_count)
+        ):
+            raise ValueError("The downloaded catalogue is corrupt.")
+
+        return tickers
+
+    def _download(
+        self,
         expressions: List[str],
         params: dict,
-        delay: int = 0,
-        count: int = 0,
-        start_date: str = None,
+        url: str,
+        tracking_id: str,
+        delay_param: float,
+        show_progress: bool = False,
+        retry_counter: int = 0,
+    ) -> List[dict]:
+        if retry_counter > 0:
+            print("Retrying failed downloads. Retry count:", retry_counter)
+
+        if retry_counter > HL_RETRY_COUNT:
+            raise DownloadError(
+                f"Failed {retry_counter} times to download data all requested data.\n"
+                f"No longer retrying."
+            )
+
+        expr_batches: List[List[str]] = [
+            expressions[i : i + self.batch_size]
+            for i in range(0, len(expressions), self.batch_size)
+        ]
+
+        download_outputs: List[List[Dict]] = []
+        failed_batches: List[List[str]] = []
+        continuous_failures: int = 0
+        last_five_exc: List[Exception] = []
+
+        future_objects: List[concurrent.futures.Future] = []
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            for ib, expr_batch in tqdm(
+                enumerate(expr_batches),
+                desc="Requesting data",
+                disable=not show_progress,
+                total=len(expr_batches),
+            ):
+                curr_params: Dict = params.copy()
+                curr_params["expressions"] = expr_batch
+                future_objects.append(
+                    executor.submit(
+                        self._fetch,
+                        url=url,
+                        params=curr_params,
+                        tracking_id=tracking_id,
+                    )
+                )
+                time.sleep(delay_param)
+
+            for ib, future in tqdm(
+                enumerate(future_objects),
+                desc="Downloading data",
+                disable=not show_progress,
+                total=len(future_objects),
+            ):
+                try:
+                    download_outputs.append(future.result())
+                    continuous_failures = 0
+                except Exception as exc:
+                    if isinstance(exc, (KeyboardInterrupt, AuthenticationError)):
+                        raise exc
+
+                    failed_batches.append(expr_batches[ib])
+                    self.msg_errors.append(f"Batch {ib} failed with exception: {exc}")
+                    continuous_failures += 1
+                    last_five_exc.append(exc)
+                    if continuous_failures > MAX_CONTINUOUS_FAILURES:
+                        exc_str: str = "\n".join([str(e) for e in last_five_exc])
+                        raise DownloadError(
+                            f"Failed {continuous_failures} times to download data."
+                            f" Last five exceptions: \n{exc_str}"
+                        )
+
+                    if self.debug:
+                        raise exc
+
+        final_output: List[Dict] = list(itertools.chain.from_iterable(download_outputs))
+
+        if len(failed_batches) > 0:
+            flat_failed_batches: List[str] = list(
+                itertools.chain.from_iterable(failed_batches)
+            )
+            logger.warning(
+                "Failed batches %d - retry download for %d expressions",
+                len(failed_batches),
+                len(flat_failed_batches),
+            )
+            retried_output: List[dict] = self._download(
+                expressions=flat_failed_batches,
+                params=params,
+                url=url,
+                tracking_id=tracking_id,
+                delay_param=delay_param + 0.1,
+                show_progress=show_progress,
+                retry_counter=retry_counter + 1,
+            )
+
+            final_output += retried_output  # extend retried output
+
+        return final_output
+
+    def download_data(
+        self,
+        expressions: List[str],
+        start_date: str = "2000-01-01",
         end_date: str = None,
-        calendar: str = "CAL_ALLDAYS",
+        show_progress: bool = False,
+        endpoint: str = TIMESERIES_ENDPOINT,
+        calender: str = "CAL_ALLDAYS",
         frequency: str = "FREQ_DAY",
         conversion: str = "CONV_LASTBUS_ABS",
         nan_treatment: str = "NA_NOTHING",
-        show_progress: bool = False,
-        debug: bool = False,
-    ):
+        reference_data: str = "NO_REFERENCE_DATA",
+        retry_counter: int = 0,
+        delay_param: float = API_DELAY_PARAM,  # TODO do we want the user to have access to this?
+    ) -> List[Dict]:
         """
-        Method designed to concurrently request tickers from the API. Each initiated
-        thread will handle batches of 20 tickers, and 10 threads will be active
-        concurrently. Able to request data sequentially if required or server overload.
+        Download data from the DataQuery API.
 
-        :param <str> endpoint: url.
-        :param <List[str]> tickers: List of Tickers.
-        :param <dict> params: dictionary of required parameters for request.
-        :param <Integer> delay: each release of a thread requires a delay (roughly 200
-            milliseconds) to prevent overwhelming DataQuery. Computed dynamically if DQ
-            is being hit too hard. Naturally, if the code is run sequentially, the delay
-            parameter is not applicable. Thus, default value is zero.
-        :param <Integer> count: tracks the number of recursive calls of the method. The
-            first call requires defining the parameter dictionary used for the request
-            API.
-        :param <str> start_date:
-        :param <str> end_date:
-        :param <str> calendar:
-        :param <str> frequency: frequency metric - default is daily.
-        :param <str> conversion:
-        :param <str> nan_treatment:
-        :param <bool> show_progress: used to show progress bar.
-        return <dict>: single dictionary containing all the requested Tickers and their
-            respective time-series over the defined dates.
+        :param <List[str]> expressions: list of expressions to download.
+        :param <str> start_date: start date for the data in the ISO-8601 format
+            (YYYY-MM-DD).
+        :param <str> end_date: end date for the data in the ISO-8601 format
+            (YYYY-MM-DD).
+        :param <bool> show_progress: whether to show a progress bar for the download.
+        :param <str> endpoint: endpoint to use for the download.
+        :param <str> calender: calendar setting to use for the download.
+        :param <str> frequency: frequency of data points to use for the download.
+        :param <str> conversion: conversion setting to use for the download.
+        :param <str> nan_treatment: NaN treatment setting to use for the download.
+        :param <str> reference_data: reference data to pass to the API kwargs.
+        :param <int> retry_counter: number of times the download has been retried.
+        :param <float> delay_param: delay between requests to the API.
+
+        :return <List[Dict]>: list of dictionaries containing the response data.
+
+        :raises <ValueError>: if any arguments are invalid or semantically incorrect
+            (see validate_download_args()).
+        :raises <DownloadError>: if the download fails.
+        :raises <ConnectionError(HeartbeatError)>: if the heartbeat fails.
+        :raises <Exception>: other exceptions may be raised by underlying functions.
         """
+        tracking_id: str = TIMESERIES_TRACKING_ID
+        if end_date is None:
+            end_date = datetime.today().strftime("%Y-%m-%d")
+            # NOTE : if "future dates" are passed, they must be passed by parent functions
+            # see jpmaqs.py
 
-        if delay > 0.9999:
-            error_delay = "Issue with DataQuery - requests should not be throttled."
-            raise RuntimeError(error_delay)
+        # NOTE : args validated only on first call, not on retries
+        # this is because the args can be modified by the retry mechanism
+        # (eg. date format)
 
-        no_tickers = len(expressions)
-        print(f"Number of expressions requested : {no_tickers}")
-        logger.info(f"Number of expressions requested : {no_tickers}")
+        validate_download_args(
+            expressions=expressions,
+            start_date=start_date,
+            end_date=end_date,
+            show_progress=show_progress,
+            endpoint=endpoint,
+            calender=calender,
+            frequency=frequency,
+            conversion=conversion,
+            nan_treatment=nan_treatment,
+            reference_data=reference_data,
+            retry_counter=retry_counter,
+            delay_param=delay_param,
+        )
 
-        if count > 5:
-            raise DownloadError(f"Unable to continue download as max_retries have been exceeded. Check logger output for details")
+        if datetime.strptime(end_date, "%Y-%m-%d") < datetime.strptime(
+            start_date, "%Y-%m-%d"
+        ):
+            logger.warning(
+                "Start date (%s) is after end-date (%s): swap them!",
+                start_date,
+                end_date,
+            )
+            start_date, end_date = end_date, start_date
 
-        if not count:
-            params_ = {
-                "format": "JSON",
-                "start-date": start_date,
-                "end-date": end_date,
-                "calendar": calendar,
-                "frequency": frequency,
-                "conversion": conversion,
-                "nan_treatment": nan_treatment,
-                "data": "NO_REFERENCE_DATA",
-            }
-            params.update(params_)
+        # remove dashes from dates to match DQ format
+        start_date: str = start_date.replace("-", "")
+        end_date: str = end_date.replace("-", "")
 
-        b = self.batch_size
-        iterations = ceil(no_tickers / b)
-        tick_list_compr = [
-            expressions[(i * b) : (i * b) + b] for i in range(iterations)
-        ]
-
-        unpack = list(chain(*tick_list_compr))
-        assert len(unpack) == len(set(unpack)), "List comprehension incorrect."
-
-        thread_output = []
-        final_output = []
-        error_tickers = []
-        error_messages = []
-        if self.concurrent:
-
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                futures = []
-
-                for r_list in tqdm(
-                    tick_list_compr,
-                    disable=not show_progress,
-                    desc="Requesting data : ",
-                ):
-
-                    params_copy = params.copy()
-                    params_copy["expressions"] = r_list
-                    futures.append(
-                        [
-                            executor.submit(
-                                self._fetch_threading, endpoint, params_copy
-                            ),
-                            r_list,
-                        ]
+        # check heartbeat before each "batch" of requests
+        if self._check_connection:
+            if not self.check_connection():
+                raise ConnectionError(
+                    HeartbeatError(
+                        f"Heartbeat failed. Timestamp (UTC):"
+                        f" {datetime.utcnow().isoformat()}"
                     )
-
-                    time.sleep(delay)
-                    thread_output.append(futures[-1][0])
-
-                for i, fto in tqdm(
-                    enumerate(concurrent.futures.as_completed(thread_output)),
-                    disable=not show_progress,
-                    desc="Downloading data : ",
-                    total=len(thread_output),
-                ):
-                    try:
-                        response, status, msg = fto.result()
-                        if not status:
-                            error_tickers.extend(tick_list_compr[i])
-                            error_messages.append(msg)
-                            logger.warning(
-                                f"Error in requestion tickers: {', '.join(futures[i][1])}."
-                                f"Error details: {msg}"
-                            )
-
-                        if fto.__dict__["_result"][0] is None:
-                            return None
-
-                    except Exception as exc:
-                        if isinstance(exc, InvalidResponseError):
-                            error_tickers.extend(futures[i][1])
-                            logger.warning(
-                                f"Error in requestion tickers: {', '.join(futures[i][1])}."
-                                f"Error accessing {self.access.base_url + endpoint} with "
-                                f"tickers : {futures[i][1]}"
-                                f"start-date : {start_date}"
-                                f"end-date : {end_date}"
-                            )
-                            continue 
-                        else:
-                            raise exc
-
-                    else:
-                        if isinstance(response, list):
-                            final_output.extend(response)
-                        else:
-                            continue
-                            # error_tickers.extend(futures[i][1])
-                            # error_messages.append(msg)
-
-        else:
-            # Runs through the Tickers sequentially. Thus, breaking the requests into
-            # subsets is not required.
-            final_output, error_tickers, error_messages = [], [], []
-            for elem in tick_list_compr:
-                params["expressions"] = elem
-                uTemp = self._fetch_threading(endpoint=endpoint, params=params)
-                if uTemp is None:
-                    logger.warning(f"Error requesting tickers: {', '.join(elem)}.")
-                seq_output, seq_err_tick, seq_err_msg = uTemp
-                final_output.extend(seq_output)
-                error_tickers.extend(seq_err_tick)
-                error_messages.extend(seq_err_msg)
-
-        # running error_tickers again
-
-        if error_tickers:
-            count += 1
-            recursive_call = True
-            while recursive_call:
-                delay += 0.1
-                try:
-                    (
-                        rec_final_output,
-                        rec_error_tickers,
-                        rec_error_messages,
-                    ) = self._request(
-                        endpoint=endpoint,
-                        expressions=list(set(error_tickers)),
-                        params=params,
-                        delay=delay,
-                        count=count,
-                    )
-                    # NOTE: now the new error tickers are the only error tickers,
-                    # but error messages and final_output are appended
-                    error_tickers = rec_error_tickers
-                    error_messages.extend(rec_error_messages)
-                    final_output.extend(rec_final_output)
-                    if not error_tickers:
-                        recursive_call = False
-                    elif count > 5:
-                        recursive_call = False
-                        logger.warning(
-                            f"Error requesting tickers: {', '.join(error_tickers)}. No longer retrying."
-                        )
-
-                except TypeError:
-                    continue
-
-        return final_output, error_tickers, error_messages
-
-    def get_ts_expression(
-        self, expressions, original_metrics, suppress_warning, show_progress, **kwargs
-    ):
-        """
-        Main driver function. Receives the Tickers and returns the respective dataframe.
-
-        :param <List[str]> expressions: categories & respective cross-sections requested.
-        :param <List[str]> original_metrics: List of required metrics: the returned
-            DataFrame will reflect the order of the received List.
-        :param <bool> suppress_warning: required for debugging.
-        :param <dict> kwargs: dictionary of additional arguments.
-        :param <bool> show_progress: used to show progress bar.
-        :return: <pd.DataFrame> df: ['cid', 'xcat', 'real_date'] + [original_metrics].
-        """
-        if self.heartbeat:
-            logger.info("Checking connection using heartbeat")
-            clause, results = self.check_connection()
-        else:
-            clause, results = True, None
-
-        if not clause:
-            logger.error(f"Connection failed. Error message: {results}.")
-            return None
-
-        c_delay = API_DELAY_PARAM
-        results = None
-
-        print(datetime.utcnow().isoformat(), " UTC")
-        logger.info(f"Starting request for {len(expressions)} expressions.")
-        while results is None:
-            results = self._request(
-                endpoint="/expressions/time-series",
-                expressions=expressions,
-                params={},
-                delay=c_delay,
-                show_progress=show_progress,
-                **kwargs,
-            )
-            c_delay += 0.1
-
-        results, error_tickers, error_messages = results
-        logger.info(f"Finished request for {len(expressions)} expressions.")
-
-        unavailable_expressions: List[Tuple(str, str)] = []
-        unavailable_expressions = [
-            (res["attributes"][0]["expression"], res["attributes"][0]["message"])
-            for res in results
-            if res["attributes"][0]["time-series"] is None
-            and "message" in res["attributes"][0]
-        ]
-
-        valid_results_count = len(results) - len(unavailable_expressions)
-        if valid_results_count < len(expressions):
-            if not suppress_warning:
-                logger.warning(
-                    f"Unavailable expressions: [{', '.join([str(elem) for elem in unavailable_expressions])}]."
                 )
-                logger.warning(
-                    f"Number of unavailable expressions: {len(unavailable_expressions)}."
-                )
-                logger.warning(
-                    f"Number of expressions returned : {valid_results_count}"
-                )
-            print(f"Number of expressions returned  : {valid_results_count}")
-            print(
-                f"(Number of unavailable expressions  : {len(unavailable_expressions)})"
-            )
-            print(
-                "Some expressions were unavailable, and were not returned.\n"
-                "Check logger output for more details."
-            )
-        else:
-            logger.info(f"All requested expressions were available.")
+            time.sleep(delay_param)
 
-        if error_tickers:
-            logger.warning(f"Request failed for tickers: {', '.join(error_tickers)}.")
-            logger.warning(f"Error messages: [{', '.join(error_messages)}].")
-
-        r = {
-            "results": results,
-            "error_tickers": error_tickers,
-            "error_messages": error_messages,
-            "unavailable_expressions": unavailable_expressions,
+        logger.info(
+            "Download %d expressions from DataQuery from %s to %s",
+            len(expressions),
+            datetime.strptime(start_date, "%Y%m%d").date(),
+            datetime.strptime(end_date, "%Y%m%d").date(),
+        )
+        params_dict: Dict = {
+            "format": "JSON",
+            "start-date": start_date,
+            "end-date": end_date,
+            "calendar": calender,
+            "frequency": frequency,
+            "conversion": conversion,
+            "nan_treatment": nan_treatment,
+            "data": reference_data,
         }
-        return r
+
+        final_output: List[dict] = self._download(
+            expressions=expressions,
+            params=params_dict,
+            url=self.base_url + endpoint,
+            tracking_id=tracking_id,
+            delay_param=delay_param,
+            show_progress=show_progress,
+        )
+
+        self.unavailable_expressions = get_unavailable_expressions(
+            expected_exprs=expressions, dicts_list=final_output
+        )
+        logger.info(
+            "Downloaded expressions: %d, unavailable: %d",
+            len(final_output),
+            len(self.unavailable_expressions),
+        )
+
+        self.egress_data = egress_logger
+        return final_output
+
+
+if __name__ == "__main__":
+    import os
+
+    cf: Config = Config(
+        client_id=os.getenv("DQ_CLIENT_ID"),
+        client_secret=os.getenv("DQ_CLIENT_SECRET"),
+    )
+
+    expressions = [
+        "DB(JPMAQS,USD_EQXR_VT10,value)",
+        "DB(JPMAQS,AUD_EXALLOPENNESS_NSA_1YMA,value)",
+    ]
+
+    with DataQueryInterface(config=cf) as dq:
+        assert dq.check_connection(verbose=True)
+
+        data = dq.download_data(
+            expressions=expressions,
+            start_date="2020-01-25",
+            end_date="2023-02-05",
+            show_progress=True,
+        )
+
+    print(f"Succesfully downloaded data for {len(data)} expressions.")
