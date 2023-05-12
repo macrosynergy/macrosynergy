@@ -1,9 +1,11 @@
 
 import numpy as np
 import pandas as pd
-from typing import List
+from typing import List, Dict, Set
+import warnings
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.utils import drop_nan_series
 
 def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
                    stat: str = 'mean', sequential: bool = True,
@@ -62,7 +64,8 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
         df_out = df_out.fillna(method='ffill')
 
         if iis:
-            df_out = df_out.fillna(method="bfill", limit=(est_index - obs_index))
+            if (est_index - obs_index)>0:
+                df_out = df_out.fillna(method="bfill", limit=(est_index - obs_index))
 
     df_out.columns.name = 'cid'
     return df_out
@@ -121,7 +124,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     :return <pd.Dataframe>: standardized DataFrame with the zn-scores of the chosen xcat:
         'cid', 'xcat', 'real_date' and 'value'.
     """
-
+    df = df.copy()
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
     expected_columns = ["cid", "xcat", "real_date", "value"]
@@ -149,9 +152,20 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
     # Remove any additional metrics defined in the DataFrame.
     df = df.loc[:, expected_columns]
+    if cids is not None:
+        missing_cids = set(cids).difference(set(df['cid']))
+        if missing_cids:
+            raise ValueError(f"The following cids are not available in the DataFrame: "
+                                f"{missing_cids}.")
+    if xcat not in df['xcat'].unique():
+        raise ValueError(f"The xcat {xcat} is not available in the DataFrame.")
+    
     df = reduce_df(
         df, xcats=[xcat], cids=cids, start=start, end=end, blacklist=blacklist
     )
+
+    if df.isna().values.any():
+        df = drop_nan_series(df=df, raise_warning=True)
 
     s_date = min(df['real_date'])
     e_date = max(df['real_date'])
@@ -214,6 +228,7 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
 
 if __name__ == "__main__":
+
 
     cids = ['AUD', 'CAD', 'GBP', 'USD', 'NZD']
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']

@@ -1,20 +1,64 @@
-.. figure:: ../_static/MACROSYNERGY_Logo_Primary.png
-
-management
-==========
+macrosynergy.management package
+===============================
 
 Submodules
 ----------
 
-.. toctree::
-   :maxdepth: 4
+macrosynergy.management.check\_availability module
+--------------------------------------------------
 
-   macrosynergy.management.check_availability
-   macrosynergy.management.dq
-   macrosynergy.management.shape_dfs
-   macrosynergy.management.simulate_quantamental_data
-   macrosynergy.management.simulate_vintage_data
-   macrosynergy.management.update_df
+.. automodule:: macrosynergy.management.check_availability
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.management.dq module
+---------------------------------
+
+.. automodule:: macrosynergy.management.dq
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.management.shape\_dfs module
+-----------------------------------------
+
+.. automodule:: macrosynergy.management.shape_dfs
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.management.simulate\_quantamental\_data module
+-----------------------------------------------------------
+
+.. automodule:: macrosynergy.management.simulate_quantamental_data
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.management.simulate\_vintage\_data module
+------------------------------------------------------
+
+.. automodule:: macrosynergy.management.simulate_vintage_data
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.management.update\_df module
+-----------------------------------------
+
+.. automodule:: macrosynergy.management.update_df
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.management.utils module
+------------------------------------
+
+.. automodule:: macrosynergy.management.utils
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 Module contents
 ---------------
@@ -23,4 +67,3 @@ Module contents
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members:

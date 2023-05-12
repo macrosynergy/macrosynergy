@@ -1,21 +1,50 @@
-""" Exception Classes for the download module. """
+import requests
+
+class ExceptionAdapter(Exception):
+    """Base class for all exceptions raised by the macrosynergy package."""
+
+    def __init__(self, message: str = ""):
+        self.message = message
+
+    def __str__(self):
+        # print type and message
+        return f"{self.__class__.__name__}: {self.message} \n{self.__class__.__name__}"
 
 
-class AuthenticationError(Exception):
+class AuthenticationError(ExceptionAdapter):
     """Raised when authentication fails."""
 
 
-class InvalidDataframeError(Exception):
-    """Raised when a dataframe is not valid."""
-
-
-class MissingDataError(Exception):
-    """Raised when data is missing from a requested dataframe."""
-
-
-class DownloadError(Exception):
+class DownloadError(ExceptionAdapter):
     """Raised when a download fails or is incomplete."""
 
 
-class InvalidResponseError(Exception):
+class InvalidResponseError(ExceptionAdapter):
     """Raised when a response is not valid."""
+
+
+class HeartbeatError(ExceptionAdapter):
+    """Raised when a heartbeat fails."""
+
+
+class InvalidDataframeError(ExceptionAdapter):
+    """Raised when a dataframe is not valid."""
+
+
+class MissingDataError(ExceptionAdapter):
+    """Raised when data is missing from a requested dataframe."""
+
+
+KNOWN_EXCEPTIONS = [
+                requests.exceptions.ConnectionError,
+                requests.exceptions.ConnectTimeout,
+                requests.exceptions.ReadTimeout,
+                ConnectionResetError,
+                requests.exceptions.Timeout,
+                requests.exceptions.TooManyRedirects,
+                requests.exceptions.RequestException,
+                requests.exceptions.HTTPError,
+                requests.exceptions.InvalidURL,
+                requests.exceptions.InvalidSchema,
+                requests.exceptions.ChunkedEncodingError,
+                ]

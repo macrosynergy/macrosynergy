@@ -2,6 +2,7 @@ import unittest
 import pandas as pd
 from tests.simulate import make_qdf
 from macrosynergy.panel.view_timelines import view_timelines
+import matplotlib
 
 class TestAll(unittest.TestCase):
 
@@ -35,6 +36,9 @@ class TestAll(unittest.TestCase):
         
         # test that all the sample cases run
         
+        # set backend to Agg to avoid spawning a window
+        matplotlib.use('Agg')
+
         try:
             view_timelines(dfd, xcats=xcats[:2], cids=cids[0],
                         size=(10, 5), title='AUD Return and Carry')
@@ -53,49 +57,75 @@ class TestAll(unittest.TestCase):
             view_timelines(dfd, xcats=[xcats[0]], cids=cids, ncol=2,
                         cumsum=True, same_y=False, aspect=2, single_chart=True)
             
+            # test that any indexing of the  works
+            for c in dfd.columns:
+                dfdr = dfd.copy().set_index(c)
+                view_timelines(dfdr, xcats=[xcats[0]], cids=cids, ncol=2,
+                            cumsum=True, same_y=False, aspect=2, single_chart=True)
+            
+            view_timelines(dfd, xcats=[xcats[0]], cids=cids, ncol=2,
+                            cumsum=True, same_y=False, aspect=2, single_chart=True,
+                            legend_fontsize=20)
+            
+            dfdr = dfd.copy().set_index('real_date')
+            # rename column 'value' to 'qwerty'
+            dfdr = dfdr.rename(columns={'value': 'qwerty'})
+            view_timelines(dfdr, xcats=[xcats[0]], cids=cids, ncol=2,
+                        cumsum=True, same_y=False, aspect=2, single_chart=True,
+                        val='qwerty')
+                        
         except Exception as e:
             self.fail(e)
             
             
         # test that the right errors are raised
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(TypeError):
             view_timelines(dfd, xcats=[1], cids=cids, ncol=2, title='Carry',
                 cs_mean=92.1) # cs_mean must be boolean
             
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             view_timelines(dfd, xcats=xcats, cids=cids[0],
                 xcat_grid=True, title_adj=0.8,
                 xcat_labels=['Return', 'Carry', 'Inflation'],
                 title='AUD Return, Carry & Inflation', 
                 cs_mean=True) # cs_mean must be False if len(xcats) > 1
             
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             view_timelines(dfd, xcats=xcats, cids=cids,
                 xcat_grid=True, title_adj=0.8,
                 xcat_labels=['Return', 'Carry', 'Inflation'],
                 title='AUD Return, Carry & Inflation', 
                 ) # if xcat_grid == True, len(xcats) must be == 1
             
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(TypeError):
             view_timelines(dfd, xcats=xcats, cids=cids[0],
                 title_adj=0.8, same_y=True,
                 xcat_labels=['Return', 'Carry', 'Inflation'],
                 title='AUD Return, Carry & Inflation', 
                 xcat_grid='test',) # xcat_grid must be boolean
             
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(TypeError):
             view_timelines(dfd, xcats=xcats, cids=cids[0],
                 title_adj=0.8, same_y=True,
                 xcat_labels=['Return', 'Carry', 'Inflation'],
                 title='AUD Return, Carry & Inflation', 
                 single_chart='test',) # single_chart must be boolean
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             view_timelines(dfd, xcats=xcats, cids=cids[0],
                 title_adj=0.8, same_y=True,
                 xcat_labels=['Return', 'Carry', 'Inflation'],
                 title='AUD Return, Carry & Inflation', 
                 single_chart=True, xcat_grid=True) # (xcat_grid && single_chart) must be False
+            
+        with self.assertRaises(ValueError):
+            dfdr = dfd.copy().set_index('real_date').drop('cid', axis=1)
+            view_timelines(dfdr, xcats=xcats, cids=cids[0],
+                title_adj=0.8, same_y=True,
+                xcat_labels=['Return', 'Carry', 'Inflation'],
+                title='AUD Return, Carry & Inflation',
+                xcat_grid=True) # df must have a column named 'cid'
+
 
         
 if __name__ == '__main__':
