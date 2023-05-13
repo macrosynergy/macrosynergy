@@ -234,7 +234,7 @@ def setup_package():
         pass
 
     if nuitka_available:
-        metadata["build_with_nuitka"] = True
+        # metadata["build_with_nuitka"] = True
         metadata["command_options"] = nuitka_args(find_packages())
 
     try:
