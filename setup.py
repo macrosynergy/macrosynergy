@@ -214,29 +214,12 @@ def setup_package():
     # move ./tests to ./macrosynergy/tests
 
     metadata = dict(
-        name="macrosynergy",
-        maintainer="Macrosynergy",
-        maintainer_email="info@macrosynergy.com",
-        description=DOCLINES[0],
-        license="MIT License",
-        long_description_content_type="text/markdown",
-        long_description=readme,
-        url="https://www.macrosynergy.com",
-        author_email="info@macrosynergy.com",
-        author="Macrosynergy Ltd",
-        download_url="https://github.com/macrosynergy/macrosynergy",
-        project_urls={
-            "Bug Tracker": "https://github.com/macrosynergy/macrosynergy/issues",
-            "Source Code": "https://github.com/macrosynergy/macrosynergy",
-            "Documentation": "https://docs.macrosynergy.com",
-        },
-        classifiers=[_f for _f in CLASSIFIERS.split("\n") if _f],
         platforms=["Windows", "Linux", "Mac OS-X"],
         test_suite="pytest",
         python_requires=">=3.6",
         install_requires=REQUIREMENTS.split("\n"),
         include_package_data=True,
-        packages=find_packages(),
+        # packages=find_packages(),
         version=get_version_info()[0],
     )
     # __copyright__ = 'Copyright 2020 Macrosynergy Ltd'
