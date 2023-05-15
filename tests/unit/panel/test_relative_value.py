@@ -8,7 +8,7 @@ from macrosynergy.management.shape_dfs import reduce_df
 from random import randint, choice
 import io
 import sys
-
+import warnings
 
 class TestAll(unittest.TestCase):
     def dataframe_generator(self):
@@ -234,27 +234,29 @@ class TestAll(unittest.TestCase):
 
         # Pass in the filtered DataFrame, and test whether the correct print statement
         # appears in the console.
-        capturedOutput: io.StringIO = io.StringIO()
-        sys.stdout: io.TextIOWrapper = capturedOutput
-        dfd_rl: pd.DataFrame = make_relative_value(
-            df=dfdx,
-            xcats=xcats,
-            cids=cids,
-            start=start,
-            end=end,
-            blacklist=None,
-            basket=None,
-            complete_cross=False,
-            rel_meth="subtract",
-            rel_xcats=None,
-            postfix="RV",
-        )
+        with warnings.catch_warnings(record=True) as w:
+            dfd_rl: pd.DataFrame = make_relative_value(
+                df=dfdx,
+                xcats=xcats,
+                cids=cids,
+                start=start,
+                end=end,
+                blacklist=None,
+                basket=None,
+                complete_cross=False,
+                rel_meth="subtract",
+                rel_xcats=None,
+                postfix="RV",
+            )
 
-        sys.stdout: io.TextIOWrapper = sys.__stdout__
-        capturedOutput.seek(0)
-        print_statement: str = capturedOutput.read()[-23:-2]
-        test: str = "['CAD', 'GBP', 'NZD']"
-        self.assertTrue(print_statement == test)
+            # Assert a UserWarning is raised.
+            self.assertTrue(len(w) == 1)
+            self.assertTrue(issubclass(w[-1].category, UserWarning))
+            warning_message: str = str(w[-1].message)
+
+            printed_cids: str = set(eval(warning_message[-23:-1]))
+            test: str = set(['CAD', 'GBP', 'NZD'])
+            self.assertEqual(printed_cids, test)
 
         # If the "complete_cross" parameter is set to True, the corresponding category
         # defined over an incomplete set of cross-sections, relative to the basket, will
