@@ -6,6 +6,7 @@ import seaborn as sns
 from typing import List, Union, Tuple
 from scipy import stats
 import statsmodels.api as sm
+import warnings
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import categories_df
@@ -199,8 +200,10 @@ class CategoryRelations(object):
 
         if len(miss_1) > 0:
             print(f"{xcats[0]} misses: {sorted(miss_1)}.")
+            warnings.warn(f"{xcats[0]} misses: {sorted(miss_1)}.", UserWarning)
         if len(miss_2) > 0:
             print(f"{xcats[1]} misses: {sorted(miss_2)}.")
+            warnings.warn(f"{xcats[1]} misses: {sorted(miss_2)}.", UserWarning)
 
         usable = list(set_1.intersection(set_2).
                       intersection(set(cids)))

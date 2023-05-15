@@ -8,6 +8,7 @@ from tests.simulate import make_qdf
 from macrosynergy.panel.category_relations import CategoryRelations
 from macrosynergy.management.shape_dfs import categories_df
 from typing import List, Tuple, Dict, Union, Optional
+import warnings
 
 
 class TestAll(unittest.TestCase):
@@ -175,24 +176,20 @@ class TestAll(unittest.TestCase):
 
         self.cidx = ["AUD", "CAD", "GBP", "USD", "CHF"]
 
-        # The StringIO module is an in-memory file-like Object.
-        capturedOutput = io.StringIO()
-        sys.stdout = capturedOutput
+        with warnings.catch_warnings(record=True) as w:
         # Isolate the cross-sections available for both the corresponding categories.
-        shared_cids = CategoryRelations.intersection_cids(
-            self.dfdx, ["GROWTH", "INFL"], self.cidx
-        )
-        sys.stdout = sys.__stdout__
-        capturedOutput.seek(0)
-
-        print_statements = capturedOutput.read().strip("\n").split(".")
-        print_statements = print_statements[:-1]
+            shared_cids = CategoryRelations.intersection_cids(
+                self.dfdx, ["GROWTH", "INFL"], self.cidx
+            )
+            # assert that 2 userwarnings are raised. store the warning messages as warn_statement.
+            self.assertEqual(len(w), 2)
+            warn_statement = [str(warn.message) for warn in w]
 
         # Split on the full stops, so subsequently removed from the Strings displayed in
         # the console if the conditions are satisfied.
-        self.assertTrue(print_statements[0] == "GROWTH misses: ['AUD', 'USD']")
+        self.assertTrue(warn_statement[0] == "GROWTH misses: ['AUD', 'USD'].")
         # Account for the space in the console separating both print statements.
-        self.assertTrue(print_statements[1][1:] == "INFL misses: ['USD']")
+        self.assertTrue(warn_statement[1] == "INFL misses: ['USD'].")
 
         # Aim to test the returned list of cross-sections.
         # Broaden the testcase to further test the accuracy.
