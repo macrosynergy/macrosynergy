@@ -108,6 +108,14 @@ macrosynergy.panel.view\_grades module
    :undoc-members:
    :show-inheritance:
 
+macrosynergy.panel.view\_metrics module
+---------------------------------------
+
+.. automodule:: macrosynergy.panel.view_metrics
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 macrosynergy.panel.view\_ranges module
 --------------------------------------
 
