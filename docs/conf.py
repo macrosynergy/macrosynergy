@@ -38,9 +38,9 @@ extensions = [
     'sphinx.ext.todo',
     'sphinx.ext.viewcode',
     'sphinx.ext.mathjax',
-    'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
-    'sphinx.ext.inheritance_diagram'
+    'sphinx.ext.inheritance_diagram',
+    'sphinx.ext.autosummary',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -53,7 +53,7 @@ exclude_patterns = ["_build"]
 
 source_suffix = ".rst"
 master_doc = "index"
-
+autodoc_default_flags = ['members', 'inherited-members', 'show-inheritance']
 
 # The reST default role (used for this markup: `text`) to use for all
 # documents.
@@ -84,7 +84,8 @@ todo_include_todos = True
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_rtd_theme'
+# html_theme = 'sphinx_rtd_theme'
+html_theme = 'pydata-sphinx-theme'
 # html_theme = 'sphinxdoc'
 
 # Add any paths that contain custom static files (such as style sheets) here,
