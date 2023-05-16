@@ -85,7 +85,7 @@ todo_include_todos = True
 # a list of builtin themes.
 #
 # html_theme = 'sphinx_rtd_theme'
-html_theme = 'pydata-sphinx-theme'
+html_theme = 'pydata_sphinx_theme'
 # html_theme = 'sphinxdoc'
 
 # Add any paths that contain custom static files (such as style sheets) here,
