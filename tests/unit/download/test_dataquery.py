@@ -59,20 +59,27 @@ class TestRequestWrapper(unittest.TestCase):
 
     def test_validate_response(self):
         # mock a response with 401. assert raises authentication error
+        user_id: str = f"User_{random_string()}"
         with self.assertRaises(AuthenticationError):
-            validate_response(self.mock_response(url=OAUTH_TOKEN_URL, status_code=401))
+            validate_response(
+                self.mock_response(url=OAUTH_TOKEN_URL, status_code=401),
+                user_id=user_id,
+            )
 
         # mock with a 403, and use url=oauth+heartbeat. assert raises heartbeat error
         with self.assertRaises(HeartbeatError):
             validate_response(
                 self.mock_response(
                     url=OAUTH_BASE_URL + HEARTBEAT_ENDPOINT, status_code=403
-                )
+                ),
+                user_id=user_id,
             )
 
         # mock with a 403, and use url=oauth_base_url. assert raises invalid response error
         with self.assertRaises(InvalidResponseError):
-            validate_response(self.mock_response(url=OAUTH_BASE_URL, status_code=403))
+            validate_response(
+                self.mock_response(url=OAUTH_BASE_URL, status_code=403), user_id=user_id
+            )
 
         # oauth_bas_url+timeseires and empty content, assert raises invalid response error
         with self.assertRaises(InvalidResponseError):
@@ -81,13 +88,15 @@ class TestRequestWrapper(unittest.TestCase):
                     url=OAUTH_BASE_URL + TIMESERIES_ENDPOINT,
                     status_code=200,
                     content=b"",
-                )
+                ),
+                user_id=user_id,
             )
 
         # with 200 , and empty content, assert raises invalid response error
         with self.assertRaises(InvalidResponseError):
             validate_response(
-                self.mock_response(url=OAUTH_TOKEN_URL, status_code=200, content=b"")
+                self.mock_response(url=OAUTH_TOKEN_URL, status_code=200, content=b""),
+                user_id=user_id,
             )
 
         # with non-json content, assert raises invalid response error
@@ -95,12 +104,15 @@ class TestRequestWrapper(unittest.TestCase):
             validate_response(
                 self.mock_response(
                     url=OAUTH_TOKEN_URL, status_code=200, content=b"not json"
-                )
+                ),
+                user_id=user_id,
             )
 
     def test_request_wrapper(self):
+        user_id: str = f"User_{random_string()}"
+
         with self.assertRaises(ValueError):
-            request_wrapper(method="pop", url=OAUTH_TOKEN_URL)
+            request_wrapper(method="pop", url=OAUTH_TOKEN_URL, user_id=user_id)
 
         def mock_auth_error(*args, **kwargs) -> requests.Response:
             return self.mock_response(url=OAUTH_TOKEN_URL, status_code=401)
@@ -110,6 +122,7 @@ class TestRequestWrapper(unittest.TestCase):
                 request_wrapper(
                     method="get",
                     url=OAUTH_TOKEN_URL,
+                    user_id=user_id,
                 )
 
         def mock_heartbeat_error(*args, **kwargs) -> requests.Response:
