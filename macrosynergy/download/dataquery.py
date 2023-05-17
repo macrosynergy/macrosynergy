@@ -623,7 +623,6 @@ class DataQueryInterface(object):
         logger.debug("Check if connection can be established to JPMorgan DataQuery")
         js: dict = request_wrapper(
             url=self.base_url + HEARTBEAT_ENDPOINT,
-            params={"data": "NO_REFERENCE_DATA"},
             proxy=self.proxy,
             tracking_id=HEARTBEAT_TRACKING_ID,
             **self.auth.get_auth(),
@@ -843,7 +842,7 @@ class DataQueryInterface(object):
         frequency: str = "FREQ_DAY",
         conversion: str = "CONV_LASTBUS_ABS",
         nan_treatment: str = "NA_NOTHING",
-        reference_data: str = "NO_REFERENCE_DATA",
+        reference_data: str = "ALL",
         retry_counter: int = 0,
         delay_param: float = API_DELAY_PARAM,  # TODO do we want the user to have access to this?
     ) -> List[Dict]:
