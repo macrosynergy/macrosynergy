@@ -98,7 +98,8 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
 
     if kind == 'bar':
         ax = sns.barplot(
-            x='cid', y=val, hue='xcat', hue_order=xcats, palette='Paired', data=df, errrorbar='sd', order=order
+            x='cid', y=val, hue='xcat', hue_order=xcats,
+            palette='Paired', data=df, errorbar='sd', order=order
         )
     elif kind == 'box':
         ax = sns.boxplot(x='cid', y=val, hue='xcat', hue_order=xcats,
