@@ -36,9 +36,6 @@ jobs:
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with pytest
-      env:
-        DQ_CLIENT_ID: ${{ secrets.DQ_CLIENT_ID }}
-        DQ_CLIENT_SECRET: ${{ secrets.DQ_CLIENT_SECRET }}
       run: |
         # Options: --ignore=tests/specific.py --ignore-glob=tests/ignore-pattern
         pytest -rEf tests/unit/ --cov macrosynergy -p no:warnings --verbose
