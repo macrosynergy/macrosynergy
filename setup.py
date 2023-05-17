@@ -35,7 +35,7 @@ Development Status :: 4 - Beta
 
 MAJOR = 0
 MINOR = 0
-MICRO = 28
+MICRO = 29
 ISRELEASED = True
 VERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
 
