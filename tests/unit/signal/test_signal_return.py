@@ -81,19 +81,19 @@ class TestAll(unittest.TestCase):
         arbitrary_date_one = '2011-01-10'
         arbitrary_date_two = '2020-10-27'
 
-        test_aud = df_signal[df_signal['real_date'] == arbitrary_date_one]
+        test_aud: pd.Series = df_signal[df_signal['real_date'] == arbitrary_date_one]
         test_aud = test_aud[test_aud['cid'] == 'AUD']['value']
 
-        test_usd = df_signal[df_signal['real_date'] == arbitrary_date_two]
+        test_usd: pd.Series = df_signal[df_signal['real_date'] == arbitrary_date_two]
         test_usd = test_usd[test_usd['cid'] == 'USD']['value']
 
         lagged_df = srr.df
         aud_lagged = lagged_df.loc['AUD', signal]['2011-01-11']
-        condition = round(float(test_aud), 5) - round(aud_lagged, 5)
+        condition = round(test_aud.values[0], 5) - round(aud_lagged, 5)
         self.assertTrue(abs(condition) < 0.0001)
 
         usd_lagged = lagged_df.loc['USD', signal]['2020-10-28']
-        condition = round(float(test_usd), 5) - round(usd_lagged, 5)
+        condition = round(test_usd.values[0], 5) - round(usd_lagged, 5)
         self.assertTrue(condition < 0.0001)
 
         # In addition to the DataFrame returned by categories_df(), an instance of the
