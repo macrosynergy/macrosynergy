@@ -117,10 +117,13 @@ class SignalReturnRelations:
             df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
         )
         
+        # Since there may be any metrics in the DF at this point, simply apply slip to all.
+        metric_cols: List[str] = list(set(dfd.columns.tolist()) 
+                                  - set(['real_date', 'xcat', 'cid']))
         dfd = self.apply_slip(
-            df=dfd, slip=slip,
+            target_df=dfd, slip=slip,
             cids=cids, xcats=xcats,
-            metrics=self.metrics
+            metrics=metric_cols
         )
 
         # Naturally, only applicable if rival signals have been passed.
@@ -194,6 +197,11 @@ class SignalReturnRelations:
         target_df = target_df.copy(deep=True)
         if not (isinstance(slip, int) and slip >= 0):
             raise ValueError("Slip must be a non-negative integer.")
+        
+        if cids is None:
+            cids = target_df['cid'].unique().tolist()
+        if xcats is None:
+            xcats = target_df['xcat'].unique().tolist()
 
         sel_tickers : List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
         target_df['tickers'] = target_df['cid'] + '_' + target_df['xcat']
