@@ -120,7 +120,7 @@ class SignalReturnRelations:
         # Since there may be any metrics in the DF at this point, simply apply slip to all.
         metric_cols: List[str] = list(set(dfd.columns.tolist()) 
                                   - set(['real_date', 'xcat', 'cid']))
-        dfd = self.apply_slip(
+        dfd: pd.DataFrame = self.apply_slip(
             target_df=dfd, slip=slip,
             cids=cids, xcats=xcats,
             metrics=metric_cols

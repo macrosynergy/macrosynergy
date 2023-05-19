@@ -9,6 +9,7 @@ from scipy import stats
 import random
 import pandas as pd
 import numpy as np
+from typing import List, Dict
 
 
 class TestAll(unittest.TestCase):
@@ -18,8 +19,8 @@ class TestAll(unittest.TestCase):
         Create a standardised DataFrame defined over the three categories.
         """
 
-        self.__dict__['cids'] = ['AUD', 'CAD', 'GBP', 'NZD', 'USD']
-        self.__dict__['xcats'] = ['XR', 'CRY', 'GROWTH', 'INFL']
+        self.cids: List[str] = ['AUD', 'CAD', 'GBP', 'NZD', 'USD']
+        self.xcats: List[str] = ['XR', 'CRY', 'GROWTH', 'INFL']
 
         df_cids = pd.DataFrame(index=self.cids, columns=['earliest', 'latest',
                                                          'mean_add', 'sd_mult'])
@@ -44,12 +45,12 @@ class TestAll(unittest.TestCase):
         random.seed(2)
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-        self.__dict__['dfd'] = dfd
+        self.dfd: pd.DataFrame = dfd
 
         black = {'AUD': ['2000-01-01', '2003-12-31'],
                  'GBP': ['2018-01-01', '2100-01-01']}
 
-        self.__dict__['blacklist'] = black
+        self.blacklist: Dict[str, List[str]] = black 
 
         assert 'dfd' in vars(self).keys(), "Instantiation of DataFrame missing from " \
                                            "field dictionary."
@@ -68,7 +69,7 @@ class TestAll(unittest.TestCase):
                                         freq='D', blacklist=self.blacklist)
 
         signal = 'CRY'
-        srr = SignalReturnRelations(self.dfd, ret='XR', sig=signal,
+        srr: SignalReturnRelations = SignalReturnRelations(self.dfd, ret='XR', sig=signal,
                                     freq='D', blacklist=self.blacklist)
 
         # The signal will invariably be used as the explanatory variable and the return
@@ -87,19 +88,19 @@ class TestAll(unittest.TestCase):
         test_usd: pd.Series = df_signal[df_signal['real_date'] == arbitrary_date_two]
         test_usd = test_usd[test_usd['cid'] == 'USD']['value']
 
-        lagged_df = srr.df
-        aud_lagged = lagged_df.loc['AUD', signal]['2011-01-11']
-        condition = round(test_aud.values[0], 5) - round(aud_lagged, 5)
+        lagged_df: pd.DataFrame = srr.df
+        aud_lagged: float = lagged_df.loc['AUD', signal]['2011-01-11']
+        condition: float = round(test_aud.values[0], 5) - round(aud_lagged, 5)
         self.assertTrue(abs(condition) < 0.0001)
 
-        usd_lagged = lagged_df.loc['USD', signal]['2020-10-28']
-        condition = round(test_usd.values[0], 5) - round(usd_lagged, 5)
+        usd_lagged: float = lagged_df.loc['USD', signal]['2020-10-28']
+        condition: float = round(test_usd.values[0], 5) - round(usd_lagged, 5)
         self.assertTrue(condition < 0.0001)
 
         # In addition to the DataFrame returned by categories_df(), an instance of the
         # Class will hold two "tables" for each segmentation type.
         # Confirm the indices are the expected: cross-sections or years.
-        test_index = list(srr.df_cs.index)[3:]
+        test_index: List[str] = list(srr.df_cs.index)[3:]
         self.assertTrue(sorted(self.cids) == sorted(test_index))
 
     def test_constructor_multiple_sigs(self):
