@@ -1,11 +1,14 @@
 import numpy as np
 import pandas as pd
 from typing import *
+import warnings
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 
-def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=None,
+def linear_composite(df: pd.DataFrame, xcats: List[str], 
+                     weights: Optional[Union[List[float], np.ndarray, pd.Series]] = None,
+                     signs: Optional[Union[List[float], np.ndarray, pd.Series]] = None,
                      cids: List[str] = None, start: str = None, end: str = None,
                      complete_xcats: bool = True,
                      new_xcat="NEW"):
@@ -47,33 +50,34 @@ def linear_composite(df: pd.DataFrame, xcats: List[str], weights=None, signs=Non
         
     # checking inputs; casting weights and signs to np.array    
     if weights is not None:
-        assert isinstance(weights, listtypes), \
-            "weights must be list, np.ndarray or pd.Series"
+        if not isinstance(weights, listtypes):
+            raise TypeError("weights must be a list, np.ndarray or pd.Series")
         if isinstance(weights, np.ndarray):
-            assert weights.ndim == 1, \
-                "weights must be 1-dimensional if passed as np.ndarray"
+            if (weights.ndim != 1):
+                raise ValueError("weights must be 1-dimensional if passed as np.ndarray")
         else:
             weights = np.array(weights)
     else:
         weights = np.ones(len(xcats)) * (1 / len(xcats))
     
     if signs is not None:
-        assert isinstance(signs, listtypes), \
-            "signs must be list, np.ndarray or pd.Series"
+        if not isinstance(signs, listtypes):
+            raise TypeError("signs must be a list, np.ndarray or pd.Series")
         if isinstance(signs, np.ndarray):
-            assert signs.ndim == 1, "signs must be 1-dimensional if passed as np.ndarray"
+            if (signs.ndim != 1):
+                raise ValueError("signs must be 1-dimensional if passed as np.ndarray")
         if isinstance(signs, list):
             signs = np.array(signs)    
     else:
         signs = np.ones(len(xcats))
         
-    assert len(xcats) == len(weights) == len(signs), \
-        "xcats, weights, and signs must have same length"
+    if not len(xcats) == len(weights) == len(signs):
+        raise ValueError("xcats, weights, and signs must have same length")
     if not np.isclose(np.sum(weights), 1):
-        print("WARNING: weights do not sum to 1 and will be coerced to 1. w←w/∑w")
+        warnings.warn("`weights` does not sum to 1 and will be normalized. w←w/∑w")
         weights = weights / np.sum(weights)
     if not np.all(np.isin(signs, [1, -1])):
-        print("WARNING: signs must be 1 or -1. They will be coerced to 1 or -1.")
+        warnings.warn("signs must be 1 or -1. They will be coerced to 1 or -1.")
         signs = np.abs(signs) / signs # should be faster?
         
     # main function is here and below.
