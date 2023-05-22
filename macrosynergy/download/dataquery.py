@@ -25,6 +25,7 @@ from macrosynergy.download.exceptions import (
     DownloadError,
     InvalidResponseError,
     HeartbeatError,
+    NoContentError,
     KNOWN_EXCEPTIONS,
 )
 from macrosynergy.management.utils import (
@@ -93,8 +94,8 @@ def validate_response(
         f"Timestamp (UTC): {datetime.utcnow().isoformat()}; \n"
     )
     # TODO : Use response.raise_for_status() as a better way to check for errors
-    if response.status_code != 200:
-        logger.info("Non-200 response code from DataQuery: %s", response.status_code)
+    if not response.ok:
+        logger.info("Response status is NOT OK : %s", response.status_code)
         if response.status_code == 401:
             raise AuthenticationError(error_str)
 
@@ -693,6 +694,19 @@ class DataQueryInterface(object):
         )
 
         if (response is None) or ("instruments" not in response.keys()):
+            if response is not None:
+                if (
+                    ("info" in response)
+                    and ("code" in response["info"])
+                    and (int(response["info"]["code"]) == 204)
+                ):
+                    raise NoContentError(
+                        f"Content was not found for the request: {response}\n"
+                        f"User ID: {self.auth.get_auth()['user_id']}\n"
+                        f"URL: {form_full_url(url, params)}\n"
+                        f"Timestamp (UTC): {datetime.utcnow().isoformat()}"
+                    )
+
             raise InvalidResponseError(
                 f"Invalid response from DataQuery: {response}\n"
                 f"User ID: {self.auth.get_auth()['user_id']}\n"
@@ -731,14 +745,14 @@ class DataQueryInterface(object):
 
         :raises <ValueError>: if the response from the server is not valid.
         """
-        new_group_id: str = 'JPMAQS'
+        new_group_id: str = "JPMAQS"
         try:
             response_list: Dict = self._fetch(
                 url=self.base_url + CATALOGUE_ENDPOINT,
                 params={"group-id": group_id},
                 tracking_id=CATALOGUE_TRACKING_ID,
             )
-        except InvalidResponseError as e:
+        except NoContentError as e:
             response_list: Dict = self._fetch(
                 url=self.base_url + CATALOGUE_ENDPOINT,
                 params={"group-id": new_group_id},
@@ -746,7 +760,6 @@ class DataQueryInterface(object):
             )
         except Exception as e:
             raise e
-            
 
         tickers: List[str] = [d["instrument-name"] for d in response_list]
         utkr_count: int = len(tickers)
