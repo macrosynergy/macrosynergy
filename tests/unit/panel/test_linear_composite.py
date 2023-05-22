@@ -236,19 +236,20 @@ class TestAll(unittest.TestCase):
         end: str = "2000-02-01"
 
         dfA: pd.DataFrame = make_test_df(
-                    cids=cids,
-                    xcats=xcats[:-1],
-                    start_date=start,
-                    end_date=end,
-                    prefer="linear",)
-        
+            cids=cids,
+            xcats=xcats[:-1],
+            start_date=start,
+            end_date=end,
+            prefer="linear",
+        )
+
         dfB: pd.DataFrame = make_test_df(
-                    cids=cids,
-                    xcats=["INFL"],
-                    start_date=start,
-                    end_date=end,
-                    prefer="decreasing-linear",
-                )
+            cids=cids,
+            xcats=["INFL"],
+            start_date=start,
+            end_date=end,
+            prefer="decreasing-linear",
+        )
         # dfb["value"] = dfb["value"] / dfb["value"].max()
 
         df = pd.concat([dfA, dfB], axis=0)
@@ -260,7 +261,7 @@ class TestAll(unittest.TestCase):
             update_freq="M",
             xcats=target_xcat,
             weights=weights_xcat,
-            vweights_threshold=None
+            vweights_threshold=None,
         )
 
         # assert there are no NaNs
@@ -269,17 +270,24 @@ class TestAll(unittest.TestCase):
         # test the values and whether the aggregation is correct
         # create an series of 0s of bdate_rage(start, end,)
         bdts: pd.DatetimeIndex = pd.bdate_range(start, end)
-        agg_series: pd.Series = pd.Series(
-            np.zeros(len(bdts)), index=bdts, name="value")
+        agg_series: pd.Series = pd.Series(np.zeros(len(bdts)), index=bdts, name="value")
 
         dfc: pd.DataFrame = df.copy().set_index("real_date")
 
         for cid in cids:
-            agg_series += dfc[(dfc["cid"] == cid)&(dfc["xcat"] == target_xcat)]["value"]
+            agg_series += dfc[(dfc["cid"] == cid) & (dfc["xcat"] == target_xcat)][
+                "value"
+            ]
 
         # aggregate the weights for monthly; mimcking the function
-        tmp_weights: pd.DataFrame = dfc[(dfc['cid']=='AUD')&(dfc['xcat'] == weights_xcat)]
-        rsm_weights: pd.Series = tmp_weights.resample("M").mean(numeric_only=True).reindex(tmp_weights.index, method="bfill")
+        tmp_weights: pd.DataFrame = dfc[
+            (dfc["cid"] == "AUD") & (dfc["xcat"] == weights_xcat)
+        ]
+        rsm_weights: pd.Series = (
+            tmp_weights.resample("M")
+            .mean(numeric_only=True)
+            .reindex(tmp_weights.index, method="bfill")
+        )
         # mutiply agg_series with rsm_weights anbd store in new variable
         agg_series = agg_series * rsm_weights["value"]
         agg_series = agg_series.reset_index(drop=True)
@@ -296,13 +304,11 @@ class TestAll(unittest.TestCase):
             update_freq="D",
             xcats=target_xcat,
             weights=weights_xcat,
-            vweights_threshold=None
+            vweights_threshold=None,
         )
 
         # In this case, the result["value"] == result["value"][::-1]. Test that.
         self.assertTrue(np.allclose(lc_cid["value"], lc_cid["value"][::-1]))
-
-        
 
 
 if __name__ == "__main__":

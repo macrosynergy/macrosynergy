@@ -103,7 +103,11 @@ def linear_composite_on_xcat(
         weights_df = weights_df.div(weights_df.abs().sum(axis=0), axis=1)
 
     # Downsample the weights to the update frequency
-    weights_df = weights_df.resample(update_freq).mean(numeric_only=True).reindex(target_df.index, method="bfill")
+    weights_df = (
+        weights_df.resample(update_freq)
+        .mean(numeric_only=True)
+        .reindex(target_df.index, method="bfill")
+    )
 
     # Form a mask to apply NaNs where the weight or the target is NaN
     nan_mask = target_df.isna() | weights_df.isna()
@@ -297,7 +301,6 @@ def linear_composite(
                 cids.remove(cid)
 
         dfx = reduce_df(dfx, cids=cids, xcats=[xcats, weights], start=start, end=end)
-
 
         return linear_composite_on_xcat(
             df=dfx,
