@@ -70,7 +70,6 @@ def linear_composite_on_xcat(
     cids: List[str],
     weights: str,
     normalize_weights: bool = True,
-    # signs: Union[List[float], np.ndarray, pd.Series],
     complete_cids: bool = True,
     new_cid="GLB",
 ):
@@ -110,7 +109,6 @@ def linear_composite_on_xcat(
     return out_df
 
 
-
 def linear_composite(
     df: pd.DataFrame,
     xcats: Union[str, List[str]],
@@ -131,11 +129,16 @@ def linear_composite(
         columns: 'cid', 'xcat', 'real_date' and 'value'.
     :param <Union[str, List[str]> xcats: If a single category
         is given, the linear combination is calculated for all cross-sections available
-        for that category. If a list of categories is given, the linear combination is
-        calculated for all cross-sections available for all categories in the list.
-    :param <List[float]> weights: weights of categories for linear combination. If
-        aggregating over cids, weights must be an st
-        Weights must correspond to order of xcats and their sum will be coerced to unity.
+        for that category - aggregating over cross-sections specified in `cids`,
+        resulting in a single output series labelled with the new cross section name
+        specified by `new_cid`.
+        If a list of categories is given, the linear combination is calculated for all
+        cross-sections available for each category specified in `xcats`, resulting in a
+        panel of series labelled with the new category name specified by `new_xcat` and
+        the same cross-sections as the input data.
+
+    :param <List[str]> cids: cross-sections for which the linear combination is to be
+        calculated. Default is all cross-section available.
 
     :param <List[float]> signs: signs with which the categories are combined.
         These must be 1 or -1 for positive and negative and correspond to the order of
@@ -162,14 +165,14 @@ def linear_composite(
     if not isinstance(df, pd.DataFrame):
         raise TypeError("`df` must be a pandas DataFrame")
 
-    if not set(["cid", "xcat", "real_date", "value"]).issubset(df.columns):
+    if not set(["cid", "xcat", "real_date", "value"]).issubset(set(df.columns)):
         raise ValueError(
             "`df` must be a standardized JPMaQS DataFrame with the necessary columns: "
             "'cid', 'xcat', 'real_date' and 'value'."
         )
-    
+
     if df.empty:
-        raise ValueError("`df` is empty")    
+        raise ValueError("`df` is empty")
 
     dfx: pd.DataFrame = df.copy()
 
@@ -180,7 +183,7 @@ def linear_composite(
                 raise TypeError(f"`{namex}` must be a string")
             if not is_valid_iso_date(varx):
                 raise ValueError(f"`{namex}` must be a valid ISO date")
-            
+
     dfx["real_date"] = pd.to_datetime(dfx["real_date"])
     if start is None:
         start = dfx["real_date"].min()
@@ -197,51 +200,80 @@ def linear_composite(
 
     # now make sure the specified cids are in the df
     if cids is not None:
-        if (not isinstance(cids, list)) or (not len(cids)) or (not all(isinstance(x, str) for x in cids)):
+        if (
+            (not isinstance(cids, list))
+            or (not len(cids))
+            or (not all(isinstance(x, str) for x in cids))
+        ):
             raise TypeError("`cids` must be a non-empty list of strings")
         if not all(x in dfx["cid"].unique() for x in cids):
             raise ValueError(f"not all cids in `cids` are available in DataFrame")
     else:
         cids: List[str] = sorted(list(dfx["cid"].unique()))
 
+
+    # Branch off for the single category case
     if isinstance(xcats, str):
         if not xcats in dfx["xcat"].unique():
             raise ValueError(f"Category '{xcats}' not available in DataFrame")
-        
+
         if isinstance(weights, str):
             if not weights in dfx["xcat"].unique():
                 raise ValueError(f"Category '{weights}' not available in DataFrame")
         else:
-            weights = None
-        
+            raise TypeError(
+                "`weights` must be a string specifying a category to be used as a weight"
+            )
+
+        tdf = dfx[dfx["cid"].isin(cids)]
+        for cid in tdf["cid"].unique():
+            avail_xcats: Set[str] = set(tdf[tdf["cid"] == cid]["xcat"].unique())
+            if not xcats in avail_xcats:
+                warnings.warn(
+                    f"Category '{xcats}' (target category) not available for cid '{cid}',"
+                    f"dropping cid from `cids`"
+                )
+                cids.remove(cid)
+            if not weights in avail_xcats:
+                warnings.warn(
+                    f"Category '{weights}' (used as weights) not available for cid '{cid}',"
+                    f"dropping cid from `cids`"
+                )
+                cids.remove(cid)
+
+        dfx = reduce_df(dfx, cids=cids, xcats=[xcats, weights], start=start, end=end)
+
         return linear_composite_on_xcat(
             df=dfx,
             xcat=xcats,
             cids=cids,
             weights=weights,
             normalize_weights=True,
-            complete_cids= complete_cids,
-            new_cid=new_cid,)
-    
+            complete_cids=complete_cids,
+            new_cid=new_cid,
+        )
+
     elif isinstance(xcats, list):
         if not all(isinstance(x, str) for x in xcats):
             raise TypeError("`xcats` must be a list of strings")
         if not all(x in dfx["xcat"].unique() for x in xcats):
             raise ValueError(f"Not all xcats in `xcats` are available in DataFrame")
-        
+
         for varx, namex in zip([weights, signs], ["weights", "signs"]):
             if not isinstance(varx, listtypes):
-                raise TypeError(f"`{namex}` must be a list of floats, an np.ndarray or a pd.Series")
+                raise TypeError(
+                    f"`{namex}` must be a list of floats, an np.ndarray or a pd.Series"
+                )
 
         if weights is None:
             weights: np.ndarray = np.ones(len(xcats))
 
         if signs is None:
             signs: np.ndarray = np.ones(len(xcats))
-            
+
         if not len(weights) == len(xcats) == len(signs):
             raise ValueError("`xcats`, `weights` and `signs` must have the same length")
-        
+
         return linear_composite_on_cid(
             df=dfx,
             xcats=xcats,
@@ -249,31 +281,37 @@ def linear_composite(
             weights=weights,
             signs=signs,
             normalize_weights=True,
-            complete_cids=complete_cids,
+            complete_xcats=complete_xcats,
             new_xcat=new_xcat,
-            new_cid=new_cid,)
-
+        )
 
 
 if __name__ == "__main__":
 
     cids = ["AUD", "CAD", "GBP"]
-    xcats = ['XR', 'CRY', 'INFL']
-    dates  = pd.date_range('2000-01-01', '2000-01-03')
+    xcats = ["XR", "CRY", "INFL"]
+    dates = pd.date_range("2000-01-01", "2000-01-03")
     total_entries = len(cids) * len(xcats) * len(dates)
     randomints = list(np.arange(total_entries) - total_entries // 2)
-    lx = [[cid, xcat, date, randomints.pop()]
-            for cid in cids
-            for xcat in xcats
-            for date in dates]
-    dfst = pd.DataFrame(lx, columns=['cid', 'xcat', 'real_date', 'value'])
+    lx = [
+        [cid, xcat, date, randomints.pop()]
+        for cid in cids
+        for xcat in xcats
+        for date in dates
+    ]
+    dfst = pd.DataFrame(lx, columns=["cid", "xcat", "real_date", "value"])
     missing_idx = [9, 18, 19, 20, 23, 25, 26]
-    dfst.loc[missing_idx, 'value'] = np.NaN
+    dfst.loc[missing_idx, "value"] = np.NaN
 
     weights = [1, 2, 3]
     signs = [-1, 1, 1]
 
-    dflc = linear_composite(df=dfst, xcats=xcats, cids=cids,
-                            weights=weights, signs=signs,
-                            complete_xcats=True)
+    dflc = linear_composite(
+        df=dfst,
+        xcats=xcats,
+        cids=cids,
+        weights=weights,
+        signs=signs,
+        complete_xcats=True,
+    )
     print(dflc)
