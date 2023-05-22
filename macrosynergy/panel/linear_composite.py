@@ -136,24 +136,27 @@ def linear_composite(
         cross-sections available for each category specified in `xcats`, resulting in a
         panel of series labelled with the new category name specified by `new_xcat` and
         the same cross-sections as the input data.
-
     :param <List[str]> cids: cross-sections for which the linear combination is to be
         calculated. Default is all cross-section available.
-
-    :param <List[float]> signs: signs with which the categories are combined.
-        These must be 1 or -1 for positive and negative and correspond to the order of
-        xcats. Default is all positive.
-    :param <List[str]> cids: cross-sections for which the linear combination is to be
-        calculated. Default is all cross-section available for the respective category.
+    :param <List[float]> signs: An array of [1, -1] of the same length as the number of
+        categories in `xcats` to indicate whether the respective category should be
+        added or subtracted from the linear combination. Not relevant when aggregating
+        over cross-sections, i.e. when a single category is given in `xcats`.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         for which the respective category is available is used.
     :param <str> end: latest date in ISO format. Default is None and latest date for
         which the respective category is available is used.
     :param <bool> complete_xcats: If True (default) combinations are only calculated for
         observation dates on which all xcats are available. If False a combination of the
-        available categories is used.
-    :param <str> new_xcat: name of new composite xcat. Default is "NEW".
-    :param <str> new_cid: name of new composite cid when aggregating over cids for a given
+        available categories is used. Not relevant when aggregating over cross-sections,
+        i.e. when a single category is given in `xcats`.
+    :param <bool> complete_cids: If True (default) combinations are only calculated for
+        observation dates on which all cids are available. If False a combination of the
+        available cross-sections is used. Not relevant when aggregating over categories,
+        i.e. when multiple categories are given in `xcats`.
+    :param <str> new_xcat: Name of new composite xcat when aggregating over xcats for a
+        given cid. Default is "NEW".
+    :param <str> new_cid: Name of new composite cid when aggregating over cids for a given
         xcat. Default is "GLB".
 
     :return <pd.DataFrame>: standardized DataFrame with the relative values, featuring
