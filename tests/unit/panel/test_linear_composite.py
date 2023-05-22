@@ -3,17 +3,20 @@ import numpy as np
 import pandas as pd
 from typing import *
 
-from macrosynergy.panel.linear_composite import *
+from macrosynergy.panel.linear_composite import linear_composite
+from macrosynergy.management.simulate_quantamental_data import make_test_df
+
 
 def rle(arr):
     # take array and return as run length encoded array as [[v1, c1], [v2, c2], ...]
     oarr = []
     for k in arr:
-        if (oarr== k) and (oarr[-1][0]== k) :
+        if (oarr == k) and (oarr[-1][0] == k):
             oarr[-1][1] += 1
         else:
             oarr.append([k, 1])
     return oarr
+
 
 def un_rle(arr):
     # take run length encoded array as [[v1, c1], [v2, c2], ...] and return as array
@@ -132,27 +135,29 @@ class TestAll(unittest.TestCase):
         )
 
         expected_results = np.array(
-        un_rle(
-            [[10/9, 1], 
-            [3/2, 3],
-            [1.0, 1],
-            [3/2, 1],
-            [10/9, 2], 
-            [3/2, 1],
-            [10/9, 4], 
-            [3/2, 1],
-            [10/9, 7], 
-            [3/2, 1],
-            [10/9, 2], 
-            [1.0, 2],
-            [10/9, 3], 
-            [0.0, 1],
-            [10/9, 23],
-            [0.0, 1],
-            [10/9, 6]]
-        ))
-        self.assertTrue(np.allclose(outdf["value"], expected_results))           
-        
+            un_rle(
+                [
+                    [10 / 9, 1],
+                    [3 / 2, 3],
+                    [1.0, 1],
+                    [3 / 2, 1],
+                    [10 / 9, 2],
+                    [3 / 2, 1],
+                    [10 / 9, 4],
+                    [3 / 2, 1],
+                    [10 / 9, 7],
+                    [3 / 2, 1],
+                    [10 / 9, 2],
+                    [1.0, 2],
+                    [10 / 9, 3],
+                    [0.0, 1],
+                    [10 / 9, 23],
+                    [0.0, 1],
+                    [10 / 9, 6],
+                ]
+            )
+        )
+        self.assertTrue(np.allclose(outdf["value"], expected_results))
 
     def test_linear_composite_hc(self):
         # hard coded test
@@ -223,6 +228,36 @@ class TestAll(unittest.TestCase):
                 outdf["value"].values, excpected_vals_cTrue, rtol=1e-5, equal_nan=True
             )
         )
+
+    def test_linear_composite_agg_cid(self):
+        cids: List[str] = ["AUD", "CAD", "GBP"]
+        xcats: List[str] = ["XR", "CRY", "INFL"]
+
+        df: pd.DataFrame = pd.concat(
+            [
+                make_test_df(
+                    cids=cids,
+                    xcats=xcats[:-1],
+                    start_date="2000-01-01",
+                    end_date="2000-02-01",
+                    prefer="linear",
+                ),
+                make_test_df(
+                    cids=cids,
+                    xcats=["INFL"],
+                    start_date="2000-01-01",
+                    end_date="2000-02-01",
+                    prefer="decreasing-linear",
+                ),
+            ]
+        )
+
+        lc_cid = linear_composite(
+            df=df,
+            xcats="CRY",
+            weights="INFL",
+        )
+
 
 
 if __name__ == "__main__":

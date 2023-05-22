@@ -3,9 +3,6 @@ import pandas as pd
 from typing import *
 import warnings
 
-import sys
-sys.path.append(r'C:\Users\PalashTyagi\OneDrive - Macrosynergy\Documents\Code\ms_copy\macrosynergy')
-
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf, make_test_df
 from macrosynergy.management.utils import is_valid_iso_date
@@ -75,25 +72,25 @@ def linear_composite_on_xcat(
     normalize_weights: bool = False,
     complete_cids: bool = True,
     update_freq: str = "M",
-    vweights_threshold: float = 2/3,
+    vweights_threshold: float = 2 / 3,
     new_cid="GLB",
 ):
     # sort and filter
     df = df.copy().sort_values(by=["cid", "xcat", "real_date"])
     cids_mask = df["cid"].isin(cids)
-    
+
     # seekect the target and weights
     target_df: pd.DataFrame = df[(df["xcat"] == xcat) & cids_mask].copy()
     weights_df: pd.DataFrame = df[(df["xcat"] == weights) & cids_mask].copy()
-    
+
     # drop original df to save memory
     df = None
-    
+
     # set the targets and weights to wide indexing with cids as columns
     target_df = target_df.set_index(["real_date", "cid"])["value"].unstack(level=1)
     weights_df = weights_df.set_index(["real_date", "cid"])["value"].unstack(level=1)
-    
-    # Edge case where `weights` is the same as `xcat`, set weights to 1 
+
+    # Edge case where `weights` is the same as `xcat`, set weights to 1
     if weights is None or weights == "" or weights == xcat:
         weights_df = pd.DataFrame(
             data=np.ones(target_df.shape),
@@ -104,9 +101,11 @@ def linear_composite_on_xcat(
     # Normalize the weights to sum to 1 if specified
     if normalize_weights:
         weights_df = weights_df.div(weights_df.abs().sum(axis=0), axis=1)
-    
-    # Downsample the weights to the update_freq
-    weights_df = weights_df.resample(update_freq).last().ffill()
+
+    # Downsample the weights to the update frequency, but keep the same indexing as the target.
+    weights_df = (
+        weights_df.resample(update_freq).first().reindex(target_df.index).bfill()
+    )
 
     # Form a mask to apply NaNs where the weight or the target is NaN
     nan_mask = target_df.isna() | weights_df.isna()
@@ -122,16 +121,17 @@ def linear_composite_on_xcat(
 
     out_df = out_df.sum(axis=1).reset_index().rename(columns={0: "value"})
 
-    # Sum the weights for each [date, cid]; if below threshold, drop the value 
+    # Sum the weights for each [date, cid]; if below threshold, drop the value
     weights_sum = weights_df[~nan_mask].abs().sum(axis=1)
+    out_df.set_index("real_date", inplace=True)
     out_df.loc[(weights_sum < vweights_threshold), "value"] = np.NaN
 
     out_df["cid"] = new_cid
     out_df["xcat"] = xcat
-    out_df = out_df[["cid", "xcat", "real_date", "value"]].sort_values(
+    out_df = out_df.reset_index()[["cid", "xcat", "real_date", "value"]].sort_values(
         by=["cid", "xcat", "real_date"]
     )
-    
+
     return out_df
 
 
@@ -141,7 +141,7 @@ def linear_composite(
     cids: Optional[List[str]] = None,
     weights: Optional[Union[List[float], np.ndarray, pd.Series, str]] = None,
     update_freq: str = "M",
-    vweights_threshold: float = 2/3,
+    vweights_threshold: float = 2 / 3,
     signs: Optional[Union[List[float], np.ndarray, pd.Series]] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
@@ -213,16 +213,14 @@ def linear_composite(
         raise ValueError("`df` is empty")
 
     dfx: pd.DataFrame = df.copy()
-    
+
     # udpate_freq check
     if not isinstance(update_freq, str):
         raise TypeError("`update_freq` must be a string")
 
     update_freq = update_freq.upper()
     if update_freq not in ["D", "W", "M", "Q", "A"]:
-        raise ValueError(
-            "`update_freq` must be one of 'D', 'W', 'M', 'Q', 'A'"
-        )
+        raise ValueError("`update_freq` must be one of 'D', 'W', 'M', 'Q', 'A'")
 
     # dates check
     for varx, namex in zip([start, end], ["start", "end"]):
@@ -258,7 +256,6 @@ def linear_composite(
             raise ValueError(f"not all cids in `cids` are available in DataFrame")
     else:
         cids: List[str] = sorted(list(dfx["cid"].unique()))
-
 
     # Branch off for the single category case
     if isinstance(xcats, str):
@@ -339,28 +336,38 @@ if __name__ == "__main__":
 
     cids = ["AUD", "CAD", "GBP"]
     xcats = ["XR", "CRY", "INFL"]
-    
-    df: pd.DataFrame = pd.concat([
-        make_test_df(
-        cids=cids,
-        xcats=xcats[:-1],
-        start_date="2000-01-01",
-        end_date="2000-02-01",
-        prefer='linear'       
-    ),
-    make_test_df(
-        cids=cids,
-        xcats=["INFL"],
-        start_date="2000-01-01",
-        end_date="2000-02-01",
-        prefer='decreasing-linear'       
+
+    df: pd.DataFrame = pd.concat(
+        [
+            make_test_df(
+                cids=cids,
+                xcats=xcats[:-1],
+                start_date="2000-01-01",
+                end_date="2000-02-01",
+                prefer="linear",
+            ),
+            make_test_df(
+                cids=cids,
+                xcats=["INFL"],
+                start_date="2000-01-01",
+                end_date="2000-02-01",
+                prefer="decreasing-linear",
+            ),
+        ]
     )
-    ])
-    
+
     # all infls are now decreasing-linear, while everything else is increasing-linear
-    
-    lc_cid = linear_composite(df=df, xcats='CRY', weights='INFL',)
-    
-    lc_xcat = linear_composite(df=df, cids=["AUD", "CAD"], xcats=["XR", "CRY", "INFL"], 
-                            weights=[1, 2, 1], signs=[1, -1, 1])
-    
+
+    lc_cid = linear_composite(
+        df=df,
+        xcats="CRY",
+        weights="INFL",
+    )
+
+    lc_xcat = linear_composite(
+        df=df,
+        cids=["AUD", "CAD"],
+        xcats=["XR", "CRY", "INFL"],
+        weights=[1, 2, 1],
+        signs=[1, -1, 1],
+    )
