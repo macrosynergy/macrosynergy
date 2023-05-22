@@ -731,11 +731,22 @@ class DataQueryInterface(object):
 
         :raises <ValueError>: if the response from the server is not valid.
         """
-        response_list: Dict = self._fetch(
-            url=self.base_url + CATALOGUE_ENDPOINT,
-            params={"group-id": group_id},
-            tracking_id=CATALOGUE_TRACKING_ID,
-        )
+        new_group_id: str = 'JPMAQS'
+        try:
+            response_list: Dict = self._fetch(
+                url=self.base_url + CATALOGUE_ENDPOINT,
+                params={"group-id": group_id},
+                tracking_id=CATALOGUE_TRACKING_ID,
+            )
+        except InvalidResponseError as e:
+            response_list: Dict = self._fetch(
+                url=self.base_url + CATALOGUE_ENDPOINT,
+                params={"group-id": new_group_id},
+                tracking_id=CATALOGUE_TRACKING_ID,
+            )
+        except Exception as e:
+            raise e
+            
 
         tickers: List[str] = [d["instrument-name"] for d in response_list]
         utkr_count: int = len(tickers)
