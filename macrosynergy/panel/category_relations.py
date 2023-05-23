@@ -6,6 +6,7 @@ import seaborn as sns
 from typing import List, Union, Tuple
 from scipy import stats
 import statsmodels.api as sm
+import warnings
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import categories_df
@@ -157,6 +158,22 @@ class CategoryRelations(object):
     def apply_slip(self, target_df: pd.DataFrame, slip: int,
                     cids: List[str], xcats: List[str],
                     metrics: List[str]) -> pd.DataFrame:
+        """
+        Applied a slip, i.e. a negative lag, to the target DataFrame 
+        for the given cross-sections and categories, on the given metrics.
+        
+        Parameters
+        ----------
+        :param <pd.DataFrame> target_df: DataFrame to which the slip is applied.
+        :param <int> slip: Slip to be applied.
+        :param <List[str]> cids: List of cross-sections.
+        :param <List[str]> xcats: List of categories.
+        :param <List[str]> metrics: List of metrics to which the slip is applied.
+        :return <pd.DataFrame> target_df: DataFrame with the slip applied.
+        :raises <TypeError>: If the provided parameters are not of the expected type.
+        :raises <ValueError>: If the provided parameters are semantically incorrect.
+        """
+
         target_df = target_df.copy(deep=True)
         if not (isinstance(slip, int) and slip >= 0):
             raise ValueError("Slip must be a non-negative integer.")
@@ -199,8 +216,10 @@ class CategoryRelations(object):
 
         if len(miss_1) > 0:
             print(f"{xcats[0]} misses: {sorted(miss_1)}.")
+            warnings.warn(f"{xcats[0]} misses: {sorted(miss_1)}.", UserWarning)
         if len(miss_2) > 0:
             print(f"{xcats[1]} misses: {sorted(miss_2)}.")
+            warnings.warn(f"{xcats[1]} misses: {sorted(miss_2)}.", UserWarning)
 
         usable = list(set_1.intersection(set_2).
                       intersection(set(cids)))
