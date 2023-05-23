@@ -11,7 +11,6 @@ import requests
 
 from macrosynergy.download import dataquery, JPMaQSDownload
 from macrosynergy.download.dataquery import (
-    JPMAQS_GROUP_ID,
     DataQueryInterface,
     OAuth,
     CertAuth,
@@ -26,6 +25,8 @@ from macrosynergy.download.dataquery import (
     TIMESERIES_ENDPOINT,
     API_DELAY_PARAM,
     CERT_BASE_URL,
+    CATALOGUE_ENDPOINT,
+    JPMAQS_GROUP_ID,
 )
 from macrosynergy.download.exceptions import (
     AuthenticationError,
@@ -33,6 +34,7 @@ from macrosynergy.download.exceptions import (
     InvalidResponseError,
     DownloadError,
     InvalidDataframeError,
+    NoContentError
 )
 from macrosynergy.management.utils import Config
 
@@ -589,6 +591,17 @@ class TestDataQueryInterface(unittest.TestCase):
                         url=OAUTH_BASE_URL + TIMESERIES_ENDPOINT,
                         params={"expr": "expression1"},
                     )
+                    
+        invl_response: Dict[str, Any] = {'info':{'code': '204', 'message': 'No Content'}}
+        with mock.patch(
+            "macrosynergy.download.dataquery.request_wrapper",
+            return_value=invl_response,
+        ):
+            with self.assertRaises(NoContentError):
+                dq._fetch(
+                    url=OAUTH_BASE_URL + CATALOGUE_ENDPOINT,
+                    params={"group": "group-name"},
+                )
 
     def test_download(self):
         good_args: Dict[str, Any] = {
