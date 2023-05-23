@@ -35,8 +35,8 @@ Development Status :: 4 - Beta
 
 MAJOR = 0
 MINOR = 0
-MICRO = 30
-ISRELEASED = True
+MICRO = 31
+ISRELEASED = False
 VERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
 
 if sys.version_info >= (3, 12):
