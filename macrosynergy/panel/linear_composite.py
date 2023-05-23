@@ -70,7 +70,7 @@ def linear_composite_on_xcat(
     cids: List[str],
     weights: str,
     normalize_weights: bool = False,
-    complete_cids: bool = True,
+    complete_cids: bool = False,
     update_freq: str = "M",
     vweights_threshold: float = 2 / 3,
     new_cid="GLB",
@@ -149,7 +149,7 @@ def linear_composite(
     start: Optional[str] = None,
     end: Optional[str] = None,
     complete_xcats: bool = True,
-    complete_cids: bool = True,
+    complete_cids: bool = False,
     new_xcat="NEW",
     new_cid="GLB",
 ):
