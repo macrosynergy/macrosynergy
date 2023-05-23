@@ -9,7 +9,7 @@ class TestPackage(unittest.TestCase):
         cmd = ("import macrosynergy as msy; "
                "import sys; ")
 
-        cmd = sys.executable + ' -c "' + cmd + '"'
+        cmd = f'"{sys.executable}" -c "' + cmd + '"'
         p = subprocess.Popen(cmd, shell=True, close_fds=True)
         p.wait()
         rc = p.returncode
@@ -17,7 +17,7 @@ class TestPackage(unittest.TestCase):
 
     def test_docstring_optimization_compat(self):
         # Check that importing with stripped docstrings does not raise
-        cmd = sys.executable + ' -OO -c "import macrosynergy as qs"'
+        cmd = f'"{sys.executable}" -OO -c "import macrosynergy as qs"'
         p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE)
         out = p.communicate()

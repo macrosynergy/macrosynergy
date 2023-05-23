@@ -1,16 +1,24 @@
-.. figure:: ../_static/MACROSYNERGY_Logo_Primary.png
-
-pnl
-===
+macrosynergy.pnl package
+========================
 
 Submodules
 ----------
 
-.. toctree::
-   :maxdepth: 4
+macrosynergy.pnl.naive\_pnl module
+----------------------------------
 
-   macrosynergy.pnl.naive_pnl
-   macrosynergy.pnl.real_pnl
+.. automodule:: macrosynergy.pnl.naive_pnl
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.pnl.real\_pnl module
+---------------------------------
+
+.. automodule:: macrosynergy.pnl.real_pnl
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 Module contents
 ---------------
@@ -19,4 +27,3 @@ Module contents
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members:

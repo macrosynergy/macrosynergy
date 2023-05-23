@@ -1,33 +1,30 @@
 # This workflow will install Python dependencies, run tests and lint with a variety of Python versions
 # For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
 
-name: Test Python package on Ubuntu
+name: Package documentation - build RSTs
 
 on:
   push:
-    branches: [ main, dev, test, prod, develop, release ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, dev, test, prod, develop, release ]
-  workflow_dispatch:
+    branches: [ main ]
 
 jobs:
   build:
 
     runs-on: ubuntu-latest  # Alternative: windows-latest
-    strategy:
-      matrix:
-        python-version: ['3.8', '3.9', '3.10', '3.11']
 
     steps:
     - uses: actions/checkout@v3
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python 3.11
       uses: actions/setup-python@v4
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: 3.11
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install flake8 pytest sphinx pytest-cov
+
+        pip install flake8 pytest pytest-cov sphinx==5.3.0 sphinx_rtd_theme==1.1.1
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Lint with flake8
       run: |
@@ -38,9 +35,13 @@ jobs:
     - name: Test with pytest
       run: |
         # Options: --ignore=tests/specific.py --ignore-glob=tests/ignore-pattern
-        pytest -rEf tests/unit/ --cov macrosynergy -p no:warnings --verbose
-
-    - name: Test build settings
+        pytest -rEf tests/unit/ --cov macrosynergy -p no:warnings --verbose --cov macrosynergy
+    - name: Upload coverage reports to Codecov
       run: |
-        pip install .[all] 
-        python -c "import macrosynergy; print(macrosynergy.__version__)"
+        curl -Os https://uploader.codecov.io/latest/linux/codecov
+        chmod +x codecov
+        ./codecov -t ${CODECOV_TOKEN}
+    - name: Test sphinx build of documentation
+      run: |
+        cd docs
+        make html

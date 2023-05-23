@@ -1,0 +1,137 @@
+[build-system]
+requires = [ "setuptools>=61.0.0", "wheel" ]
+
+[project]
+name = "macrosynergy"
+description = "Macrosynergy Quant Research Package"
+dynamic = [ "version" ]
+
+authors = [
+    {name = "Macrosynergy", email = "info@macrosynergy.com"}]
+
+requires-python = ">=3.8"
+dependencies = [
+  "seaborn>=0.11.2",
+  "matplotlib>=3.3.0",
+  "pandas>=1.3.5",
+  "statsmodels>=0.13.2",
+  "scikit-learn>=1.0.2",
+  "numpy>=1.21.6",
+  "requests>=2.27.1",
+  "tqdm>=4.62",
+  "PyYAML>=5.4.0"
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Financial and Insurance Industry",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: BSD License",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Software Development",
+  "Topic :: Scientific/Engineering",
+  "Typing :: Typed",
+  "Operating System :: OS Independent"
+]
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[project.license]
+file = "LICENSE"
+type = "BSD-3-Clause"
+
+[project.urls]
+homepage = "https://www.macrosynergy.com"
+repository = "https://github.com/macrosynergy/macrosynergy/"
+documentation = "https://docs.macrosynergy.com"
+tracker = "https://github.com/macrosynergy/macrosynergy/issues"
+
+[project.optional-dependencies]
+test = [ "pytest>=7.0.0", "pytest-cov>3.0.0", "coverage>=6.0.0" ]
+excel = [ "openpyxl>=3.0.10" ]
+formatting = [ "black>=22.1.0", "flake8>=4.0.1" ]
+performance = [ "bottleneck>=1.3.4", "numba>=0.55.2", "numexpr>=2.8.0" ]
+computation = [ "scipy>=1.8.1", "xarray>=2022.03.0" ]
+notebook = [
+"notebook>=6.0.0",
+"ipywidgets>=7.6.5",
+"ipython>=7.28.0",
+"jupyter>=1.0.0",
+"ipykernel>=6.4.1",
+"jupyterlab>=3.1.12"
+]
+markup = [
+"pandoc>=1.1.0",
+"pandocfilters>=1.4.3",
+"nbconvert>=6.2.0",
+"pyyaml>=5.4.0",
+"pytoml>=0.1.2"
+]
+documentation= [
+  "sphinx>=4.2.0",
+]
+all = [
+  "pytest>=7.0.0",
+  "pytest-cov>3.0.0",
+  "openpyxl>=3.0.10",
+  "black>=22.1.0",
+  "flake8>=4.0.1",
+  "bottleneck>=1.3.4",
+  "numba>=0.55.2",
+  "numexpr>=2.8.0",
+  "scipy>=1.8.1",
+  "xarray>=2022.03.0",
+  "notebook>=6.0.0",
+  "ipywidgets>=7.6.5",
+  "ipython>=7.28.0",
+  "jupyter>=1.0.0",
+  "ipykernel>=6.4.1",
+  "jupyterlab>=3.1.12",
+  "pandoc>=1.1.0",
+  "pandocfilters>=1.4.3",
+  "nbconvert>=6.2.0",
+  "pyyaml>=5.4.0",
+  "pytoml>=0.1.2",
+  "sphinx>=4.2.0",
+  ]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = [ "macrosynergy", "macrosynergy.*" ]
+namespaces = true
+
+[tool.setuptools.exclude-package-data]
+"*" = [ "*.c", "*.h" ]
+
+[tool.versioneer]
+VCS = "git"
+style = "pep440"
+versionfile_source = "macrosynergy/version.py"
+versionfile_build = "macrosynergy/version.py"
+tag_prefix = "v"
+
+[tool.black]
+target-version = [ "py38", "py39", "py310", "py311" ]
+exclude = '''
+(
+  | \.egg
+  | \.nox
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)
+'''
