@@ -382,7 +382,7 @@ class CategoryRelations(object):
                     fit_reg: bool = True, reg_ci: int = 95,
                     reg_order: int = 1, reg_robust: bool = False,
                     separator: Union[str, int] = None, title_adj: float = 1,
-                    single_chart: bool = False, time_color: bool = False,):
+                    single_chart: bool = False):
 
         """
         Display scatter-plot and regression line.
@@ -427,17 +427,14 @@ class CategoryRelations(object):
             are numerous charts, and the labels are excessively long). The default is
             False, and the names of the axis will be displayed on each grid if not
             conflicting with the label for each variable.
-        :param <bool> time_color: if True this adds continuous time colour coding to the scatter 
-            plot. The default is False.
         """
+
         coef_box_loc_error = "The parameter expects a string used to delimit the " \
                              "location of the box: 'upper left', 'lower right' etc."
         if coef_box is not None:
             assert isinstance(coef_box, str), coef_box_loc_error
 
         assert prob_est in ["pool", "map"], "prob_est must be 'pool' or 'map'"
-
-        assert time_color in [True, False], "time_color must be True or False"
 
         sns.set_theme(style="whitegrid")
         dfx = self.df.copy()
@@ -563,19 +560,7 @@ class CategoryRelations(object):
         elif separator is None:
             fig, ax = plt.subplots(figsize=size)
 
-            if time_color:
-                cmap = "RdBu_r"
-                dates = dfx.reset_index().real_date
-                palette = np.array(sns.color_palette(cmap, len(dates)))
-                ax = sns.regplot(data=dfx, x=self.xcats[0], y=self.xcats[1],
-                        ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
-                        scatter_kws={'s': 30, 'alpha': 0.5, 'color': 'lightgray', 'facecolors': palette[dates.index]},
-                        line_kws={'lw': 1})
-                norm = plt.Normalize(dates.min().value, dates.max().value)
-                cbar = ax.figure.colorbar(plt.cm.ScalarMappable(cmap=cmap,norm=norm), ax=ax)
-                cbar.ax.set_yticklabels(pd.to_datetime(cbar.get_ticks()).strftime(date_format='%b %Y'))
-            else:
-                sns.regplot(data=dfx, x=self.xcats[0], y=self.xcats[1],
+            sns.regplot(data=dfx, x=self.xcats[0], y=self.xcats[1],
                         ci=reg_ci, order=reg_order, robust=reg_robust, fit_reg=fit_reg,
                         scatter_kws={'s': 30, 'alpha': 0.5, 'color': 'lightgray'},
                         line_kws={'lw': 1})
@@ -683,7 +668,7 @@ if __name__ == "__main__":
 
     cr.reg_scatter(
         labels=False, separator=None, title="Carry and Return", xlab="Carry",
-        ylab="Return", coef_box="lower left", prob_est="map", time_color=True
+        ylab="Return", coef_box="lower left", prob_est="map",
     )
 
     cr = CategoryRelations(
@@ -699,7 +684,7 @@ if __name__ == "__main__":
 
     cr.reg_scatter(
         labels=False, separator=cids, title="Carry and Return", xlab="Carry",
-        ylab="Return", coef_box="lower left",
+        ylab="Return", coef_box="lower left"
     )
 
     cr.ols_table(type='pool')
