@@ -27,6 +27,8 @@ def view_timelines(
     label_adj: float = 0.05,
     title: Optional[str] = None,
     title_adj: float = 0.95,
+    title_xadj: float = 0.5,
+    title_fontsize: int = 16,
     cs_mean: bool = False,
     size: Tuple[float, float] = (12, 7),
     aspect: float = 1.7,
@@ -61,6 +63,8 @@ def view_timelines(
     :param <str> title: chart heading. Default is no title.
     :param <float> title_adj: parameter that sets top of figure to accommodate title.
         Default is 0.95.
+    :param <float> title_xadj: parameter that sets x position of title. Default is 0.5.
+    :param <int> title_fontsize: font size of title. Default is 16.
     :param <float> label_adj: parameter that sets bottom of figure to fit the label.
         Default is 0.05.
     :param <bool> cs_mean: if True this adds a line of cross-sectional averages to
@@ -200,7 +204,7 @@ def view_timelines(
             fg.set_axis_labels("", "")
             fg.set_titles("{col_name}")
             if title is not None:
-                plt.suptitle(title, y=title_adj)
+                plt.suptitle(title, y=title_adj, x=title_xadj, fontsize=title_fontsize)
 
         else:
             ax: plt.Axes = sns.lineplot(
@@ -212,7 +216,7 @@ def view_timelines(
             ax.set_ylabel("")
             ax.legend(ncol=legend_cols, fontsize=legend_fontsize)
             if title is not None:
-                plt.suptitle(title, y=title_adj)
+                plt.suptitle(title, y=title_adj, x=title_xadj, fontsize=title_fontsize)
 
     else:
         if not single_chart:
@@ -255,7 +259,7 @@ def view_timelines(
                     fontsize=legend_fontsize
                 )
             if title is not None:
-                plt.suptitle(title, y=title_adj)
+                plt.suptitle(title, y=title_adj, x=title_xadj, fontsize=title_fontsize)
 
         else:
             ax: plt.Axes = sns.lineplot(
@@ -282,7 +286,7 @@ def view_timelines(
             ax.set_ylabel("")
             ax.legend(ncol=legend_cols, fontsize=legend_fontsize)
             if title is not None:
-                plt.suptitle(title, y=title_adj)
+                plt.suptitle(title, y=title_adj, x=title_xadj, fontsize=title_fontsize)
 
     if all_xticks:
         if fg is not None:

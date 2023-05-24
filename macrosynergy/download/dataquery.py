@@ -25,7 +25,8 @@ from macrosynergy.download.exceptions import (
     DownloadError,
     InvalidResponseError,
     HeartbeatError,
-    KNOWN_EXCEPTIONS
+    NoContentError,
+    KNOWN_EXCEPTIONS,
 )
 from macrosynergy.management.utils import (
     is_valid_iso_date,
@@ -65,7 +66,10 @@ logger.addHandler(debug_stream_handler)
 egress_logger: dict = {}
 
 
-def validate_response(response: requests.Response) -> dict:
+def validate_response(
+    response: requests.Response,
+    user_id: str,
+) -> dict:
     """
     Validates a response from the API. Raises an exception if the response
     is invalid (e.g. if the response is not a 200 status code).
@@ -82,6 +86,7 @@ def validate_response(response: requests.Response) -> dict:
 
     error_str: str = (
         f"Response: {response}\n"
+        f"User ID: {user_id}\n"
         f"Requested URL: {response.request.url}\n"
         f"Response status code: {response.status_code}\n"
         f"Response headers: {response.headers}\n"
@@ -89,8 +94,8 @@ def validate_response(response: requests.Response) -> dict:
         f"Timestamp (UTC): {datetime.utcnow().isoformat()}; \n"
     )
     # TODO : Use response.raise_for_status() as a better way to check for errors
-    if response.status_code != 200:
-        logger.info("Non-200 response code from DataQuery: %s", response.status_code)
+    if not response.ok:
+        logger.info("Response status is NOT OK : %s", response.status_code)
         if response.status_code == 401:
             raise AuthenticationError(error_str)
 
@@ -151,6 +156,8 @@ def request_wrapper(
     if method not in ["get", "post"]:
         raise ValueError(f"Invalid method: {method}")
 
+    user_id: str = kwargs.pop("user_id", "unknown")
+
     # insert tracking info in headers
     if headers is None:
         headers: Dict = {}
@@ -203,7 +210,7 @@ def request_wrapper(
             }
 
             if isinstance(response, requests.Response):
-                return validate_response(response)
+                return validate_response(response=response, user_id=user_id)
 
         except Exception as exc:
             # if keyboard interrupt, raise as usual
@@ -217,6 +224,7 @@ def request_wrapper(
 
             error_statement = (
                 f"Request to {log_url} failed with error {exc}. "
+                f"User ID: {user_id}. "
                 f"Retry count: {retry_count}. "
                 f"Tracking ID: {tracking_id}"
             )
@@ -225,7 +233,7 @@ def request_wrapper(
 
             known_exceptions = KNOWN_EXCEPTIONS + [HeartbeatError]
             # NOTE : HeartBeat is a special case
-                
+
             # NOTE: exceptions that need the code to break should be caught before this
             # all other exceptions are caught here and retried after a delay
 
@@ -367,6 +375,7 @@ class OAuth(object):
                 method="post",
                 proxy=self.proxy,
                 tracking_id=OAUTH_TRACKING_ID,
+                user_id=self.token_data["client_id"],
             )
             # on failure, exception will be raised by request_wrapper
 
@@ -381,7 +390,11 @@ class OAuth(object):
 
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
         headers = {"Authorization": "Bearer " + self._get_token()}
-        return {"headers": headers, "cert": None}
+        return {
+            "headers": headers,
+            "cert": None,
+            "user_id": self.token_data["client_id"],
+        }
 
 
 class CertAuth(object):
@@ -423,10 +436,16 @@ class CertAuth(object):
                 raise FileNotFoundError(f"The file '{varx}' does not exist.")
         self.key: str = key
         self.crt: str = crt
+        self.username: str = username
+        self.password: str = password
 
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
         headers = {"Authorization": f"Basic {self.auth:s}"}
-        return {"headers": headers, "cert": (self.crt, self.key)}
+        return {
+            "headers": headers,
+            "cert": (self.crt, self.key),
+            "user_id": self.username,
+        }
 
 
 def validate_download_args(
@@ -583,7 +602,7 @@ class DataQueryInterface(object):
                 " Check macrosynergy.management.utils.Config "
                 "for more details."
             )
-
+        self.config: Config = config
         self.auth: Optional[Union[CertAuth, OAuth]] = None
         if oauth:
             self.auth: OAuth = OAuth(**config.oauth(mask=False), token_url=token_url)
@@ -675,8 +694,22 @@ class DataQueryInterface(object):
         )
 
         if (response is None) or ("instruments" not in response.keys()):
+            if response is not None:
+                if (
+                    ("info" in response)
+                    and ("code" in response["info"])
+                    and (int(response["info"]["code"]) == 204)
+                ):
+                    raise NoContentError(
+                        f"Content was not found for the request: {response}\n"
+                        f"User ID: {self.auth.get_auth()['user_id']}\n"
+                        f"URL: {form_full_url(url, params)}\n"
+                        f"Timestamp (UTC): {datetime.utcnow().isoformat()}"
+                    )
+
             raise InvalidResponseError(
                 f"Invalid response from DataQuery: {response}\n"
+                f"User ID: {self.auth.get_auth()['user_id']}\n"
                 f"URL: {form_full_url(url, params)}"
                 f"Timestamp (UTC): {datetime.utcnow().isoformat()}"
             )
@@ -712,11 +745,21 @@ class DataQueryInterface(object):
 
         :raises <ValueError>: if the response from the server is not valid.
         """
-        response_list: Dict = self._fetch(
-            url=self.base_url + CATALOGUE_ENDPOINT,
-            params={"group-id": group_id},
-            tracking_id=CATALOGUE_TRACKING_ID,
-        )
+        new_group_id: str = "JPMAQS"
+        try:
+            response_list: Dict = self._fetch(
+                url=self.base_url + CATALOGUE_ENDPOINT,
+                params={"group-id": group_id},
+                tracking_id=CATALOGUE_TRACKING_ID,
+            )
+        except NoContentError as e:
+            response_list: Dict = self._fetch(
+                url=self.base_url + CATALOGUE_ENDPOINT,
+                params={"group-id": new_group_id},
+                tracking_id=CATALOGUE_TRACKING_ID,
+            )
+        except Exception as e:
+            raise e
 
         tickers: List[str] = [d["instrument-name"] for d in response_list]
         utkr_count: int = len(tickers)
@@ -918,7 +961,8 @@ class DataQueryInterface(object):
                 raise ConnectionError(
                     HeartbeatError(
                         f"Heartbeat failed. Timestamp (UTC):"
-                        f" {datetime.utcnow().isoformat()}"
+                        f" {datetime.utcnow().isoformat()}\n"
+                        f"User ID: {self.auth.get_auth()['user_id']}\n"
                     )
                 )
             time.sleep(delay_param)

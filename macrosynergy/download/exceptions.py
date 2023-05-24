@@ -1,5 +1,6 @@
 import requests
 
+
 class ExceptionAdapter(Exception):
     """Base class for all exceptions raised by the macrosynergy package."""
 
@@ -33,18 +34,21 @@ class InvalidDataframeError(ExceptionAdapter):
 
 class MissingDataError(ExceptionAdapter):
     """Raised when data is missing from a requested dataframe."""
+    
+class NoContentError(ExceptionAdapter):
+    """Raised when no data is returned from a request."""
 
 
 KNOWN_EXCEPTIONS = [
-                requests.exceptions.ConnectionError,
-                requests.exceptions.ConnectTimeout,
-                requests.exceptions.ReadTimeout,
-                ConnectionResetError,
-                requests.exceptions.Timeout,
-                requests.exceptions.TooManyRedirects,
-                requests.exceptions.RequestException,
-                requests.exceptions.HTTPError,
-                requests.exceptions.InvalidURL,
-                requests.exceptions.InvalidSchema,
-                requests.exceptions.ChunkedEncodingError,
-                ]
+    requests.exceptions.ConnectionError,
+    requests.exceptions.ConnectTimeout,
+    requests.exceptions.ReadTimeout,
+    ConnectionResetError,
+    requests.exceptions.Timeout,
+    requests.exceptions.TooManyRedirects,
+    requests.exceptions.RequestException,
+    requests.exceptions.HTTPError,
+    requests.exceptions.InvalidURL,
+    requests.exceptions.InvalidSchema,
+    requests.exceptions.ChunkedEncodingError,
+]
