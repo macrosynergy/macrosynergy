@@ -7,3 +7,4 @@ numpy >= 1.21.6
 requests >= 2.27.1
 tqdm >= 4.62
 PyYAML>=5.4.0
+Cython >= 0.29.24
