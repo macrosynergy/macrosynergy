@@ -169,6 +169,7 @@ def nuitka_args(packages: List[str] = None) -> Dict[str, Any]:
                 "pytest",
             ],
             # "--clang": None,
+            "--disable-plugin" : ["anti-bloat"],
             "--include-package": "macrosynergy",
             "--include-module": plugin_packages, 
             "--include-package": subpackages + plugin_packages, 
