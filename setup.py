@@ -149,53 +149,30 @@ with open(os.path.join(os.path.dirname(__file__), "requirements.txt")) as f:
     REQUIREMENTS = f.read()
 
 
-def nuitka_args(packages: List[str]) -> Dict[str, Any]:
+def nuitka_args(packages: List[str] = None) -> Dict[str, Any]:
     from setuptools import setup, find_packages, find_namespace_packages
 
-    extra_packages: List[str] = [
-        "numpy",
-        "pandas",
-        "matplotlib",
-        "statsmodels",
-        "sklearn",
-        "scipy",
-        "requests",
+    subpackages = [
+        "macrosynergy.download",
+        "macrosynergy.management",
+        "macrosynergy.signal",
+        "macrosynergy.panel",
+        "macrosynergy.pnl",
     ]
-    # import all the modules from the required packages... such as numpy.core, numpy.testing, etc.
-
-    # find any submodules in the packages
-    submodules: List[str] = []
-    for package in packages:
-        submodules += [find_packages(package)]
-    # packages = [p for p in packages if "tests" not in p]
-
-    plugins: List[str] = ["matplotlib", "multiprocessing", #"anti-bloat", 
-                                "data-files", "implicit-imports",
-                                "pkg-resources", "tk-inter", "dll-files", 
-                                "delvewheel", "pylint-warnings"]
+    plugin_packages = ["numpy", "matplotlib" ]
 
     command_options = {
         "nuitka": {
-            # boolean option, e.g. if you cared for C compilation commands
-            # '--show-scons': True,
-            # options with several values, e.g. avoiding including modules
-            # "--nofollow-import-to": [
-            #     "unittest",
-            #     "pytest",
-            # ],
+            "--nofollow-import-to": [
+                "unittest",
+                "pytest",
+            ],
             # "--clang": None,
             "--include-package": "macrosynergy",
-            "--include-module": packages,
-            "--include-package": packages + [ "numpy", "matplotlib"],
-            # "--follow-import-to": [ "numpy", "matplotlib"],
-            # "--include-data-file": "*",
-            # "--standalone": None,
-            # "--include-package": [ "numpy"],
-            # "--include-module": [ "numpy"],
-            # "--enable-plugin": plugins,
-            # "--include-plugin-files": plugins,
+            # "--include-module": packages,
+            "--include-package": subpackages + plugin_packages, 
             "--prefer-source-code": True,
-            "--recurse-to": [ "numpy", "matplotlib"],
+            "--follow-import-to": subpackages + plugin_packages,
         }
     }
 
@@ -250,13 +227,13 @@ def setup_package():
     try:
         import nuitka
 
-        # nuitka_available = True
+        nuitka_available = True
     except:
         pass
 
     if nuitka_available:
-        # metadata["build_with_nuitka"] = True
-        metadata["command_options"] = nuitka_args(find_packages())
+        metadata["build_with_nuitka"] = True
+        metadata["command_options"] = nuitka_args()
 
     try:
         setup(**metadata)
