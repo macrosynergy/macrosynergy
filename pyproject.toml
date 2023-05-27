@@ -1,7 +1,5 @@
 [build-system]
-requires = [ "setuptools>=61.0.0", "wheel",  "nuitka", "toml" ]
-build-backend = "nuitka.distutils.Build"
-
+requires = [ "setuptools>=61.0.0", "wheel" ]
 
 [project]
 name = "macrosynergy"
@@ -114,8 +112,8 @@ include-package-data = true
 include = [ "macrosynergy", "macrosynergy.*" ]
 namespaces = true
 
-# [tool.setuptools.exclude-package-data]
-# "*" = [ "*.c", "*.h" ]
+[tool.setuptools.exclude-package-data]
+"*" = [ "*.c", "*.h" ]
 
 [tool.versioneer]
 VCS = "git"
@@ -138,10 +136,3 @@ exclude = '''
   | dist
 )
 '''
-
-
-[nuitka]
-enable-plugin = [ 'numpy', 'anti-bloat' ]
-include-package-data = true
-follow-import-to = [ 'numpy', 'pandas' ]
-nofollow-import-to = [ "tests", ".tests", "setup.py" ]
