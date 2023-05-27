@@ -174,7 +174,6 @@ def nuitka_args(packages: List[str] = None) -> Dict[str, Any]:
             "--include-package": subpackages + plugin_packages, 
             "--prefer-source-code": True,
             "--follow-import-to": subpackages + plugin_packages,
-            "--recurse-to": subpackages + plugin_packages,
         }
     }
 
