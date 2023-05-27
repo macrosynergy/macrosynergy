@@ -7,7 +7,7 @@ import warnings
 from pathlib import Path
 from typing import List, Dict, Any
 import importlib
-from Cython.Build import cythonize
+# from Cython.Build import cythonize
 
 DOCLINES = (__doc__ or "").split("\n")
 
