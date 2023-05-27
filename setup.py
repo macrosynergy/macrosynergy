@@ -159,7 +159,8 @@ def nuitka_args(packages: List[str] = None) -> Dict[str, Any]:
         "macrosynergy.panel",
         "macrosynergy.pnl",
     ]
-    plugin_packages = ["numpy", "matplotlib" ]
+    plugin_packages = ["numpy", "matplotlib" , "statsmodels" ]
+    # plugin_extras = ["numpy.testing" ]
 
     command_options = {
         "nuitka": {
@@ -169,10 +170,11 @@ def nuitka_args(packages: List[str] = None) -> Dict[str, Any]:
             ],
             # "--clang": None,
             "--include-package": "macrosynergy",
-            # "--include-module": packages,
+            "--include-module": plugin_packages, 
             "--include-package": subpackages + plugin_packages, 
             "--prefer-source-code": True,
             "--follow-import-to": subpackages + plugin_packages,
+            "--recurse-to": subpackages + plugin_packages,
         }
     }
 
