@@ -239,10 +239,10 @@ def setup_package():
         include_package_data=True,
         version=get_version_info()[0],
         packages=find_packages(),
-        ext_modules=cythonize(
-        get_ext_paths('macrosynergy', EXCLUDE_FILES),
-        compiler_directives={'language_level': 3}
-    )
+    #     ext_modules=cythonize(
+    #     get_ext_paths('macrosynergy', EXCLUDE_FILES),
+    #     compiler_directives={'language_level': 3}
+    # )
     )
     # __copyright__ = 'Copyright 2020 Macrosynergy Ltd'
 
