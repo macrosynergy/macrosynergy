@@ -3,6 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import List, Tuple
+from packaging import version
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.check_availability import reduce_df
@@ -97,10 +98,14 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
     fig, ax = plt.subplots(figsize=size)
 
     if kind == 'bar':
-        ax = sns.barplot(
-            x='cid', y=val, hue='xcat', hue_order=xcats,
-            palette='Paired', data=df, errorbar='sd', order=order
-        )
+        if version.parse(sns.__version__) >= version.parse('0.12.0'):        
+            ax = sns.barplot(
+                x='cid', y=val, hue='xcat', hue_order=xcats,
+                palette='Paired', data=df, errorbar='sd', order=order
+                )
+        else:
+            ax = sns.barplot(x='cid', y=val, hue='xcat', hue_order=xcats,
+                            palette='Paired', data=df, ci='sd', order=order)
     elif kind == 'box':
         ax = sns.boxplot(x='cid', y=val, hue='xcat', hue_order=xcats,
                          palette='Paired', data=df,  order=order)
