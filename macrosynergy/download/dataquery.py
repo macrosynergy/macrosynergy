@@ -390,10 +390,11 @@ class OAuth(object):
 
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
         headers = {"Authorization": "Bearer " + self._get_token()}
+        user_id = "OAuth_ClientID : " + self.token_data["client_id"]
         return {
             "headers": headers,
             "cert": None,
-            "user_id": self.token_data["client_id"],
+            "user_id": user_id,
         }
 
 
@@ -441,10 +442,11 @@ class CertAuth(object):
 
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
         headers = {"Authorization": f"Basic {self.auth:s}"}
+        user_id = "CertAuth_Username : " + self.username
         return {
             "headers": headers,
             "cert": (self.crt, self.key),
-            "user_id": self.username,
+            "user_id": user_id,
         }
 
 
