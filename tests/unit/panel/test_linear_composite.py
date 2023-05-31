@@ -3,17 +3,20 @@ import numpy as np
 import pandas as pd
 from typing import *
 
-from macrosynergy.panel.linear_composite import *
+from macrosynergy.panel.linear_composite import linear_composite
+from macrosynergy.management.simulate_quantamental_data import make_test_df
+
 
 def rle(arr):
     # take array and return as run length encoded array as [[v1, c1], [v2, c2], ...]
     oarr = []
     for k in arr:
-        if (oarr== k) and (oarr[-1][0]== k) :
+        if (oarr == k) and (oarr[-1][0] == k):
             oarr[-1][1] += 1
         else:
             oarr.append([k, 1])
     return oarr
+
 
 def un_rle(arr):
     # take run length encoded array as [[v1, c1], [v2, c2], ...] and return as array
@@ -132,27 +135,29 @@ class TestAll(unittest.TestCase):
         )
 
         expected_results = np.array(
-        un_rle(
-            [[10/9, 1], 
-            [3/2, 3],
-            [1.0, 1],
-            [3/2, 1],
-            [10/9, 2], 
-            [3/2, 1],
-            [10/9, 4], 
-            [3/2, 1],
-            [10/9, 7], 
-            [3/2, 1],
-            [10/9, 2], 
-            [1.0, 2],
-            [10/9, 3], 
-            [0.0, 1],
-            [10/9, 23],
-            [0.0, 1],
-            [10/9, 6]]
-        ))
-        self.assertTrue(np.allclose(outdf["value"], expected_results))           
-        
+            un_rle(
+                [
+                    [10 / 9, 1],
+                    [3 / 2, 3],
+                    [1.0, 1],
+                    [3 / 2, 1],
+                    [10 / 9, 2],
+                    [3 / 2, 1],
+                    [10 / 9, 4],
+                    [3 / 2, 1],
+                    [10 / 9, 7],
+                    [3 / 2, 1],
+                    [10 / 9, 2],
+                    [1.0, 2],
+                    [10 / 9, 3],
+                    [0.0, 1],
+                    [10 / 9, 23],
+                    [0.0, 1],
+                    [10 / 9, 6],
+                ]
+            )
+        )
+        self.assertTrue(np.allclose(outdf["value"], expected_results))
 
     def test_linear_composite_hc(self):
         # hard coded test
@@ -224,6 +229,170 @@ class TestAll(unittest.TestCase):
             )
         )
 
+    def test_linear_composite_agg_cid(self):
+        cids: List[str] = ["AUD", "CAD", "GBP"]
+        xcats: List[str] = ["XR", "CRY", "INFL"]
+        start: str = "2000-01-01"
+        end: str = "2000-02-01"
+
+        dfA: pd.DataFrame = make_test_df(
+            cids=cids,
+            xcats=xcats[:-1],
+            start_date=start,
+            end_date=end,
+            prefer="linear",
+        )
+
+        dfB: pd.DataFrame = make_test_df(
+            cids=cids,
+            xcats=["INFL"],
+            start_date=start,
+            end_date=end,
+            prefer="decreasing-linear",
+        )
+        # dfb["value"] = dfb["value"] / dfb["value"].max()
+
+        df = pd.concat([dfA, dfB], axis=0)
+
+        target_xcat: str = "CRY"
+        weights_xcat: str = "INFL"
+        lc_cid = linear_composite(
+            df=df,
+            update_freq="M",
+            xcats=target_xcat,
+            weights=weights_xcat,
+            vweights_threshold=None,
+        )
+
+        # assert there are no NaNs
+        self.assertFalse(lc_cid["value"].isna().any())
+
+        # test the values and whether the aggregation is correct
+        # create an series of 0s of bdate_rage(start, end,)
+        bdts: pd.DatetimeIndex = pd.bdate_range(start, end)
+        agg_series: pd.Series = pd.Series(np.zeros(len(bdts)), index=bdts, name="value")
+
+        dfc: pd.DataFrame = df.copy().set_index("real_date")
+
+        for cid in cids:
+            agg_series += dfc[(dfc["cid"] == cid) & (dfc["xcat"] == target_xcat)][
+                "value"
+            ]
+
+        # aggregate the weights for monthly; mimcking the function
+        tmp_weights: pd.DataFrame = dfc[
+            (dfc["cid"] == "AUD") & (dfc["xcat"] == weights_xcat)
+        ]
+        rsm_weights: pd.Series = (
+            tmp_weights.resample("M")
+            .mean(numeric_only=True)
+            .reindex(tmp_weights.index, method="bfill")
+        )
+        # mutiply agg_series with rsm_weights anbd store in new variable
+        agg_series = agg_series * rsm_weights["value"]
+        agg_series = agg_series.reset_index(drop=True)
+        self.assertTrue(np.allclose(agg_series, lc_cid["value"]))
+
+        ## Second test
+
+        df = pd.concat([dfA, dfB], axis=0)
+
+        target_xcat: str = "CRY"
+        weights_xcat: str = "INFL"
+        lc_cid = linear_composite(
+            df=df,
+            update_freq="D",
+            xcats=target_xcat,
+            weights=weights_xcat,
+            vweights_threshold=None,
+        )
+
+        # In this case, the result["value"] == result["value"][::-1]. Test that.
+        self.assertTrue(np.allclose(lc_cid["value"], lc_cid["value"][::-1]))
+
+        ## Test threshold
+        df: pd.DataFrame = pd.concat([dfA, dfB], axis=0)
+
+        # cids: List[str] = ["AUD", "CAD", "GBP"]
+        target_xcat: str = "CRY"
+        weights_xcat: str = "INFL"
+
+        for i, cid in enumerate(["AUD", "CAD", "GBP"]):
+            bools = (df["cid"] == cid) & (df["xcat"] == weights_xcat)
+            df.loc[bools, "value"] = df.loc[bools, "value"] * (i + 1)
+
+        df: pd.DataFrame = (
+            df.set_index(["real_date", "cid", "xcat"])["value"]
+            .unstack(level=1)
+            .apply(lambda x: x / sum(x), axis=1)
+            .stack()
+            .reset_index()
+            .rename(columns={0: "value"})
+        )
+        # where xcat!=weights_xcat, multiply value by random number
+        idxs: pd.Series = df["xcat"] != weights_xcat
+        df.loc[idxs, "value"] = df.loc[idxs, "value"] * np.random.rand(len(df[idxs]))
+        df.loc[df["cid"] == "GBP", "value"] = np.NaN
+
+        lc_cid = linear_composite(
+            df=df,
+            update_freq="D",
+            xcats=target_xcat,
+            weights=weights_xcat,
+            vweights_threshold=0.7,
+        )
+
+        # now, the whole result should be NaNs -
+        # since the vweights_threshold is 0.7,
+        # and the sum of the non-Nan weights is less than 0.7
+        self.assertTrue(lc_cid["value"].isna().all())
+
+        ## Test selective NaNs
+        df: pd.DataFrame = pd.concat([dfA, dfB], axis=0)
+
+        # cids: List[str] = ["AUD", "CAD", "GBP"]
+        target_xcat: str = "CRY"
+        weights_xcat: str = "INFL"
+
+        for i, cid in enumerate(["AUD", "CAD", "GBP"]):
+            bools = (df["cid"] == cid) & (df["xcat"] == weights_xcat)
+            df.loc[bools, "value"] = df.loc[bools, "value"] * (i + 1)
+
+        df: pd.DataFrame = (
+            df.set_index(["real_date", "cid", "xcat"])["value"]
+            .unstack(level=1)
+            .apply(lambda x: x / sum(x), axis=1)
+            .stack()
+            .reset_index()
+            .rename(columns={0: "value"})
+        )
+        # where xcat!=weights_xcat, multiply value by random number
+        idxs: pd.Series = df["xcat"] != weights_xcat
+        df.loc[idxs, "value"] = df.loc[idxs, "value"] * np.random.rand(len(df[idxs]))
+        # every alternate date on GBP should be NaN
+        miss_dates: List[pd.Timestamp] = []
+        for i, bdt in enumerate(pd.bdate_range(start, end)):
+            if i % 2 == 0:
+                df.loc[
+                    (df["cid"] == "GBP")
+                    & ((df["xcat"] == target_xcat))
+                    & (df["real_date"] == bdt),
+                    "value",
+                ] = np.NaN
+                miss_dates.append(bdt)
+
+        lc_cid = linear_composite(
+            df=df,
+            update_freq="D",
+            xcats=target_xcat,
+            weights=weights_xcat,
+            vweights_threshold=0.5001, # just above 0.5
+        )
+
+        # now, the result should be be nans where miss_dates are
+        self.assertTrue(
+            lc_cid[lc_cid["real_date"].isin(miss_dates)]["value"].isna().all()
+        )
 
 if __name__ == "__main__":
     unittest.main()
