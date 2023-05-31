@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import List, Tuple
+from typing import List, Tuple, Callable, Optional
 from packaging import version
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
