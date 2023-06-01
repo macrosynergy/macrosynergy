@@ -123,7 +123,7 @@ def view_timelines(
 
     if not isinstance(single_chart, bool):
         raise TypeError("`single_chart` parameter must be a Boolean object.")
-    if (xcat_grid and single_chart):
+    if xcat_grid and single_chart:
         raise ValueError("xcat_grid and single_chart cannot both be True.")
 
     df, xcats, cids = reduce_df(
@@ -174,9 +174,9 @@ def view_timelines(
             df["xcat"] = df["xcat"].replace(xc, xl)
         xcats = xcat_labels
 
-    sns.set(rc={"figure.figsize": size})
     plt.rcParams["figure.figsize"] = size
-    legend_cols : int = 3
+    plt.tight_layout()
+    legend_cols: int = 3
 
     fg: Optional[sns.FacetGrid] = None
     ax: Optional[plt.Axes] = None
@@ -204,11 +204,15 @@ def view_timelines(
             fg.set_axis_labels("", "")
             fg.set_titles("{col_name}")
             if title is not None:
-                plt.suptitle(title, y=title_adj, x=title_xadj, fontsize=title_fontsize)
+                plt.suptitle(title, fontsize=title_fontsize)
 
         else:
             ax: plt.Axes = sns.lineplot(
-                data=df, x="real_date", y=val, hue="xcat", estimator=None, #sizes=size
+                data=df,
+                x="real_date",
+                y=val,
+                hue="xcat",
+                estimator=None,
             )
             plt.axhline(y=0, c=".5")
 
@@ -216,7 +220,7 @@ def view_timelines(
             ax.set_ylabel("")
             ax.legend(ncol=legend_cols, fontsize=legend_fontsize)
             if title is not None:
-                plt.suptitle(title, y=title_adj, x=title_xadj, fontsize=title_fontsize)
+                plt.suptitle(title, fontsize=title_fontsize)
 
     else:
         if not single_chart:
@@ -254,12 +258,10 @@ def view_timelines(
             fg.set_axis_labels("", "")
             if cs_mean or (len(xcats) > 1):
                 fg.add_legend(
-                    loc="lower center",
-                    ncol=legend_cols,
-                    fontsize=legend_fontsize
+                    loc="lower center", ncol=legend_cols, fontsize=legend_fontsize
                 )
             if title is not None:
-                plt.suptitle(title, y=title_adj, x=title_xadj, fontsize=title_fontsize)
+                plt.suptitle(title, fontsize=title_fontsize)
 
         else:
             ax: plt.Axes = sns.lineplot(
@@ -286,7 +288,7 @@ def view_timelines(
             ax.set_ylabel("")
             ax.legend(ncol=legend_cols, fontsize=legend_fontsize)
             if title is not None:
-                plt.suptitle(title, y=title_adj, x=title_xadj, fontsize=title_fontsize)
+                plt.suptitle(title, fontsize=title_fontsize)
 
     if all_xticks:
         if fg is not None:
@@ -295,10 +297,10 @@ def view_timelines(
         else:
             ax.tick_params(labelbottom=True, pad=0)
 
-    if fg is not None:
-        fg.figure.subplots_adjust(bottom=label_adj)
-    else:
-        plt.subplots_adjust(bottom=label_adj)
+    # if fg is not None:
+    #     fg.figure.subplots_adjust(bottom=label_adj)
+    # else:
+    #     plt.subplots_adjust(bottom=label_adj)
 
     plt.show()
 
