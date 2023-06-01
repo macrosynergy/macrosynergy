@@ -158,7 +158,6 @@ def check_availability(df: pd.DataFrame, xcats: List[str] = None,
         visual_paneldates(dfs, size=start_size)
     if missing_recent:
         dfe = check_enddates(dfx)
-        plt.figure()
         visual_paneldates(dfe, size=end_size)
 
 
