@@ -187,4 +187,4 @@ if __name__ == "__main__":
     xxcats = xcats + ['TREND']
     xxcids = cids + ['USD']
     
-    check_availability(df=dfd, xcats=xcats, cids=cids,) # missing_recent=False)
+    check_availability(df=dfd, xcats=xcats, cids=cids, start_size=(10, 5), end_size=(10, 8))
