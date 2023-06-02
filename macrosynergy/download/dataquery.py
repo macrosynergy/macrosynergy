@@ -13,6 +13,7 @@ import itertools
 import base64
 import uuid
 import io
+import warnings
 import requests
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Union, Tuple
@@ -610,6 +611,18 @@ class DataQueryInterface(object):
             )
         self.config: Config = config
         self.auth: Optional[Union[CertAuth, OAuth]] = None
+        if oauth and (config.oauth() is None):
+            warnings.warn(
+                "OAuth credentials not found. "
+                "Trying to use certificate authentication.",)
+            if config.cert() is None:
+                raise ValueError(
+                    "Certificate credentials not found. "
+                    "Check the config_object passed."
+                )
+            else:
+                oauth: bool = False
+             
         if oauth:
             self.auth: OAuth = OAuth(
                 **config.oauth(mask=False),
