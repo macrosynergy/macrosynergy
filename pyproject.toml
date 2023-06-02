@@ -67,7 +67,8 @@ notebook = [
 "ipython>=7.28.0",
 "jupyter>=1.0.0",
 "ipykernel>=6.4.1",
-"jupyterlab>=3.1.12"
+"jupyterlab>=3.1.12",
+"nb_black>=1.0.7"
 ]
 markup = [
 "pandoc>=1.1.0",
@@ -96,6 +97,7 @@ all = [
   "jupyter>=1.0.0",
   "ipykernel>=6.4.1",
   "jupyterlab>=3.1.12",
+  "nb_black>=1.0.7",
   "pandoc>=1.1.0",
   "pandocfilters>=1.4.3",
   "nbconvert>=6.2.0",
