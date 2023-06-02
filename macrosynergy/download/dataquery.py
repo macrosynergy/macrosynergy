@@ -422,6 +422,7 @@ class CertAuth(object):
         password: str,
         crt: str,
         key: str,
+        proxy: Optional[dict] = None,
     ):
         for varx, namex in zip([username, password], ["username", "password"]):
             if not isinstance(varx, str):
@@ -441,6 +442,7 @@ class CertAuth(object):
         self.crt: str = crt
         self.username: str = username
         self.password: str = password
+        self.proxy: Optional[dict] = proxy
 
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
         headers = {"Authorization": f"Basic {self.auth:s}"}
@@ -609,7 +611,11 @@ class DataQueryInterface(object):
         self.config: Config = config
         self.auth: Optional[Union[CertAuth, OAuth]] = None
         if oauth:
-            self.auth: OAuth = OAuth(**config.oauth(mask=False), token_url=token_url)
+            self.auth: OAuth = OAuth(
+                **config.oauth(mask=False),
+                token_url=token_url,
+                proxy=config.proxy(mask=False),
+            )
         else:
             if base_url == OAUTH_BASE_URL:
                 base_url: str = CERT_BASE_URL
