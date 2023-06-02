@@ -363,7 +363,8 @@ class NaivePnL:
         agg_df = pd.concat([self.df, df_pnl[self.df.columns]])
         self.df = agg_df.reset_index(drop=True)
 
-    def make_long_pnl(self, vol_scale: float = None, label: str = None):
+    def make_long_pnl(self, vol_scale: Optional[float] = None, 
+                      label: Optional[str] = None):
         """
         The long-only returns will be computed which act as a basis for comparison
         against the signal-adjusted returns. Will take a long-only position in the
@@ -371,15 +372,17 @@ class NaivePnL:
 
         :param <bool> vol_scale: ex-post scaling of PnL to annualized volatility given.
             This is for comparative visualization and not out-of-sample, and is applied
-            to the long-only position. Default is none.
+            to the long-only position. Default is None.
         :param <str> label: associated label that will be mapped to the long-only
             DataFrame. The label will be used in the plotting graphic for plot_pnls().
             If a label is not defined, the default will be the name of the return
             category.
         """
-
-        error_vol = "The volatility scale must be a numerical value."
-        assert isinstance(vol_scale, (float, int)), error_vol
+        
+        if vol_scale is not None:
+            if not isinstance(vol_scale, (float, int)):
+                raise TypeError("The volatility scale `vol_scale`"
+                                "must be a numerical value.")
 
         if label is None:
             label = self.ret

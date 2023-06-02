@@ -365,6 +365,42 @@ class TestAll(unittest.TestCase):
         # computed using the functions above. Therefore, if the functionality is correct
         # above, the plotting methods do not explicitly need to be tested in the Unit
         # Test as a visual assessment will be sufficient.
+        
+        
+        # Another test run with vol_scale=None
+        
+
+        self.dataframe_construction()
+
+        ret = 'EQXR'
+        sigs = ['CRY', 'GROWTH', 'INFL']
+        pnl = NaivePnL(self.dfd, ret=ret, sigs=sigs, cids=self.cids,
+                       start='2000-01-01', blacklist=self.blacklist,
+                       bms=["EUR_DUXR", "USD_DUXR"]
+                       )
+
+        pnl.make_pnl(sig='GROWTH', sig_op='zn_score_pan', rebal_freq='daily',
+                     vol_scale=None, rebal_slip=0, pnl_name='PNL_GROWTH',
+                     min_obs=252, iis=True, sequential=True, neutral='zero',
+                     thresh=None)
+
+        pnl.make_long_pnl(vol_scale=None, label="Unit_Long_EQXR")
+
+        # same conditions as vol_scale=0 should apply.
+        long_equity = pnl.df[pnl.df['xcat'] == "Unit_Long_EQXR"]
+        self.assertTrue(list(long_equity['cid'].unique()) == ["ALL"])
+
+        df = self.dfd
+        return_df = df[df['xcat'] == "EQXR"]
+        random_date = "2016-01-19"
+        return_dfw = return_df.pivot(index='real_date', columns='cid',
+                                     values='value')
+        return_calc = sum(return_dfw.loc[random_date, :])
+        long_equity_series = long_equity.pivot(index='real_date', columns='cid',
+                                               values='value')
+
+        condition = return_calc - float(long_equity_series.loc[random_date])
+        self.assertTrue(abs(condition) < 0.0001)
 
 
 if __name__ == '__main__':

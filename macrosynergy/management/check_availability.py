@@ -39,7 +39,7 @@ def check_startyears(df: pd.DataFrame):
         columns: 'cid', 'xcats', 'real_date'.
 
     """
-
+    df: pd.DataFrame = df.copy()
     df = df.dropna(how='any')
     df_starts = df[['cid', 'xcat', 'real_date']].groupby(['cid', 'xcat']).min()
     df_starts['real_date'] = pd.DatetimeIndex(df_starts.loc[:, 'real_date']).year
@@ -54,7 +54,7 @@ def check_enddates(df: pd.DataFrame):
     :param <pd.DataFrame> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcats', 'real_date'.
     """
-
+    df: pd.DataFrame = df.copy()
     df = df.dropna(how='any')
     df_ends = df[['cid', 'xcat', 'real_date']].groupby(['cid', 'xcat']).max()
     df_ends['real_date'] = df_ends['real_date'].dt.strftime('%Y-%m-%d')
@@ -149,8 +149,10 @@ def check_availability(df: pd.DataFrame, xcats: List[str] = None,
         of missing date numbers for each cross-section and indicator.
         Default is True (display missing days).
     """
-    assert isinstance(start_years, bool), f"<bool> object expected and not {type(start_years)}."
-    assert isinstance(missing_recent, bool), f"<bool> object expected and not {type(missing_recent)}."
+    if not isinstance(start_years, bool):
+        raise TypeError(f"<bool> object expected and not {type(start_years)}.")
+    if not isinstance(missing_recent, bool):
+        raise TypeError(f"<bool> object expected and not {type(missing_recent)}.")
 
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start)
     if start_years:
@@ -158,7 +160,6 @@ def check_availability(df: pd.DataFrame, xcats: List[str] = None,
         visual_paneldates(dfs, size=start_size)
     if missing_recent:
         dfe = check_enddates(dfx)
-        plt.figure()
         visual_paneldates(dfe, size=end_size)
 
 
@@ -186,4 +187,4 @@ if __name__ == "__main__":
     xxcats = xcats + ['TREND']
     xxcids = cids + ['USD']
     
-    check_availability(df=dfd, xcats=xcats, cids=cids, missing_recent=False)
+    check_availability(df=dfd, xcats=xcats, cids=cids, start_size=(10, 5), end_size=(10, 8))
