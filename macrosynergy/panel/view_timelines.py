@@ -93,6 +93,7 @@ def view_timelines(
         except Exception as e:
             raise ValueError(fail_str)
 
+    df: pd.DataFrame = df.copy()
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
     if not isinstance(cs_mean, bool):
@@ -123,7 +124,7 @@ def view_timelines(
 
     if not isinstance(single_chart, bool):
         raise TypeError("`single_chart` parameter must be a Boolean object.")
-    if (xcat_grid and single_chart):
+    if xcat_grid and single_chart:
         raise ValueError("xcat_grid and single_chart cannot both be True.")
 
     df, xcats, cids = reduce_df(
@@ -176,7 +177,7 @@ def view_timelines(
 
     sns.set(rc={"figure.figsize": size})
     plt.rcParams["figure.figsize"] = size
-    legend_cols : int = 3
+    legend_cols: int = 3
 
     fg: Optional[sns.FacetGrid] = None
     ax: Optional[plt.Axes] = None
@@ -208,7 +209,11 @@ def view_timelines(
 
         else:
             ax: plt.Axes = sns.lineplot(
-                data=df, x="real_date", y=val, hue="xcat", estimator=None, #sizes=size
+                data=df,
+                x="real_date",
+                y=val,
+                hue="xcat",
+                estimator=None,
             )
             plt.axhline(y=0, c=".5")
 
@@ -254,30 +259,24 @@ def view_timelines(
             fg.set_axis_labels("", "")
             if cs_mean or (len(xcats) > 1):
                 fg.add_legend(
-                    loc="lower center",
-                    ncol=legend_cols,
-                    fontsize=legend_fontsize
+                    loc="lower center", ncol=legend_cols, fontsize=legend_fontsize
                 )
             if title is not None:
                 plt.suptitle(title, y=title_adj, x=title_xadj, fontsize=title_fontsize)
 
         else:
-            ax: plt.Axes = sns.lineplot(
-                data=df,
-                x="real_date",
-                y=val,
-                hue="cid",
-                hue_order=cids,
-                estimator=None,
-            )
-
+            for cid in cids:
+                dfc = df[df["cid"] == cid]
+                plt.plot(
+                    dfc["real_date"],
+                    dfc[val],
+                    label=cid,
+                )
             if cs_mean:
-                ax: plt.Axes = sns.lineplot(
-                    data=cross_mean,
-                    x="real_date",
-                    y="average",
+                plt.plot(
+                    cross_mean["real_date"],
+                    cross_mean["average"],
                     color="red",
-                    estimator=None,
                     label=cs_label,
                 )
 
@@ -340,6 +339,15 @@ if __name__ == "__main__":
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfdx = dfd[~((dfd["cid"] == "AUD") & (dfd["xcat"] == "XR"))]
+
+    view_timelines(
+        cids=[
+            "AUD",
+        ],
+        xcats=["XR", "CRY", "INFL"],
+        df=dfdx,
+        title="AUD Return, Carry & Inflation",
+    )
 
     view_timelines(
         dfd,
