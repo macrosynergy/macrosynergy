@@ -284,10 +284,6 @@ def view_timelines(
             ax.set_ylabel("")
             ax.legend(ncol=legend_ncol, fontsize=legend_fontsize)
 
-    if title is not None:
-        plt.suptitle(
-            title, y=title_adj, fontsize=title_fontsize, horizontalalignment="center"
-        )
 
     if all_xticks:
         if fg is not None:
@@ -300,6 +296,18 @@ def view_timelines(
         fg.figure.subplots_adjust(bottom=label_adj)
     else:
         plt.subplots_adjust(bottom=label_adj)
+        
+    if title is not None:
+        if fg is not None:
+            fg.figure.suptitle(
+                title,
+                y=title_adj,
+                fontsize=title_fontsize,
+                x=0.5, horizontalalignment="center"
+            )
+        else:
+            ax.set_title(title, y=title_adj, fontsize=title_fontsize,
+                            x=0.5, horizontalalignment="center")
 
     plt.show()
 
