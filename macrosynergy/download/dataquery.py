@@ -375,7 +375,7 @@ class OAuth(object):
                 method="post",
                 proxy=self.proxy,
                 tracking_id=OAUTH_TRACKING_ID,
-                user_id=self.token_data["client_id"],
+                user_id=self._get_user_id(),
             )
             # on failure, exception will be raised by request_wrapper
 
@@ -387,14 +387,16 @@ class OAuth(object):
             }
 
         return self._stored_token["access_token"]
+    
+    def _get_user_id(self) -> str:
+        return "OAuth_ClientID - " + self.token_data["client_id"]
 
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
-        headers = {"Authorization": "Bearer " + self._get_token()}
-        user_id = "OAuth_ClientID : " + self.token_data["client_id"]
+        headers: Dict = {"Authorization": "Bearer " + self._get_token()}
         return {
             "headers": headers,
             "cert": None,
-            "user_id": user_id,
+            "user_id": self._get_user_id(),
         }
 
 
@@ -442,7 +444,7 @@ class CertAuth(object):
 
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
         headers = {"Authorization": f"Basic {self.auth:s}"}
-        user_id = "CertAuth_Username : " + self.username
+        user_id = "CertAuth_Username - " + self.username
         return {
             "headers": headers,
             "cert": (self.crt, self.key),
