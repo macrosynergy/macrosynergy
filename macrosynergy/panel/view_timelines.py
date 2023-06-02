@@ -207,9 +207,11 @@ def view_timelines(
                 plt.suptitle(title, y=title_adj, x=title_xadj, fontsize=title_fontsize)
 
         else:
-            ax: plt.Axes = sns.lineplot(
-                data=df, x="real_date", y=val, hue="xcat", estimator=None, #sizes=size
-            )
+            ax: plt.Axes = plt.gca()
+            for xc in xcats:
+                dfc: pd.DataFrame = df[df["xcat"] == xc]
+                ax.plot(dfc["real_date"], dfc[val], label=xc)
+            
             plt.axhline(y=0, c=".5")
 
             ax.set_xlabel("")
