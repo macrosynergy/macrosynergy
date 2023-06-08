@@ -72,7 +72,6 @@ def linear_composite_on_xcat(
     normalize_weights: bool = False,
     complete_cids: bool = False,
     update_freq: str = "M",
-    vweights_threshold: float = 2 / 3,
     new_cid="GLB",
 ):
     # sort and filter
@@ -82,9 +81,6 @@ def linear_composite_on_xcat(
     # seekect the target and weights
     target_df: pd.DataFrame = df[(df["xcat"] == xcat) & cids_mask].copy()
     weights_df: pd.DataFrame = df[(df["xcat"] == weights) & cids_mask].copy()
-
-    # drop original df to save memory
-    df = None
 
     # set the targets and weights to wide indexing with cids as columns
     target_df = target_df.set_index(["real_date", "cid"])["value"].unstack(level=1)
@@ -117,17 +113,11 @@ def linear_composite_on_xcat(
 
     # Drop NaN cids as specified
     if complete_cids:
-        out_df[nan_mask.any(axis=1)] = np.NaN
+        out_df = out_df[out_df.columns[~nan_mask.any(axis=0)]]
     else:
-        out_df[nan_mask.all(axis=1)] = np.NaN
+        out_df = out_df[out_df.columns[~nan_mask.all(axis=0)]]
 
     out_df = out_df.sum(axis=1).reset_index().rename(columns={0: "value"})
-
-    # Sum the weights for each [date, cid]; if below threshold, drop the value
-    if vweights_threshold is not None:
-        weights_sum = weights_df[~nan_mask].abs().sum(axis=1)
-        out_df.set_index("real_date", inplace=True)
-        out_df.loc[(weights_sum < vweights_threshold), "value"] = np.NaN
 
     out_df["cid"] = new_cid
     out_df["xcat"] = xcat
@@ -144,7 +134,6 @@ def linear_composite(
     cids: Optional[List[str]] = None,
     weights: Optional[Union[List[float], np.ndarray, pd.Series, str]] = None,
     update_freq: str = "M",
-    vweights_threshold: Optional[float] = 2 / 3,
     signs: Optional[Union[List[float], np.ndarray, pd.Series]] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
@@ -176,11 +165,6 @@ def linear_composite(
     :param <str> update_freq: The sampling frequency of the output data. The output
         data will be downsampled to the specified frequency. Options are 'D', 'W', 'M',
         'Q', 'A'. Default is 'M' (monthly).
-    :param <float> vweights_threshold: Applies only when aggregating over cross-sections,
-        i.e. when a single category is given in `xcats`. This threshold specifies the
-        minumum sum of values for a given date (across all cross-sections) for which the
-        linear combination is calculated. If the sum of values is below the threshold,
-        the output value is set to NaN. Default is 2/3; set to None to disable.
     :param <List[float]> signs: An array of [1, -1] of the same length as the number of
         categories in `xcats` to indicate whether the respective category should be
         added or subtracted from the linear combination. Not relevant when aggregating
@@ -278,12 +262,6 @@ def linear_composite(
                 "`weights` must be a string specifying a category to be used as a weight"
             )
 
-        if vweights_threshold is not None:
-            if not isinstance(vweights_threshold, (int, float)):
-                raise TypeError("`vweights_threshold` must be positive float or None")
-            if vweights_threshold <= 0:
-                raise ValueError("`vweights_threshold` must be positive float or None")
-
         tdf = dfx[dfx["cid"].isin(cids)]
         for cid in tdf["cid"].unique():
             avail_xcats: Set[str] = set(tdf[tdf["cid"] == cid]["xcat"].unique())
@@ -311,7 +289,6 @@ def linear_composite(
             complete_cids=complete_cids,
             new_cid=new_cid,
             update_freq=update_freq,
-            vweights_threshold=vweights_threshold,
         )
 
     elif isinstance(xcats, list):

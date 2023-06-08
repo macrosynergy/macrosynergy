@@ -261,7 +261,6 @@ class TestAll(unittest.TestCase):
             update_freq="M",
             xcats=target_xcat,
             weights=weights_xcat,
-            vweights_threshold=None,
         )
 
         # assert there are no NaNs
@@ -304,95 +303,60 @@ class TestAll(unittest.TestCase):
             update_freq="D",
             xcats=target_xcat,
             weights=weights_xcat,
-            vweights_threshold=None,
         )
 
         # In this case, the result["value"] == result["value"][::-1]. Test that.
         self.assertTrue(np.allclose(lc_cid["value"], lc_cid["value"][::-1]))
 
-        ## Test threshold
+        ## Test complete cid
         df: pd.DataFrame = pd.concat([dfA, dfB], axis=0)
+        df["value"] = 1
 
         # cids: List[str] = ["AUD", "CAD", "GBP"]
         target_xcat: str = "CRY"
         weights_xcat: str = "INFL"
 
-        for i, cid in enumerate(["AUD", "CAD", "GBP"]):
-            bools = (df["cid"] == cid) & (df["xcat"] == weights_xcat)
-            df.loc[bools, "value"] = df.loc[bools, "value"] * (i + 1)
+        # set the AUD values to NaN
+        df.loc[df["cid"] == "AUD", "value"] = np.NaN
 
-        df: pd.DataFrame = (
-            df.set_index(["real_date", "cid", "xcat"])["value"]
-            .unstack(level=1)
-            .apply(lambda x: x / sum(x), axis=1)
-            .stack()
-            .reset_index()
-            .rename(columns={0: "value"})
-        )
-        # where xcat!=weights_xcat, multiply value by random number
-        idxs: pd.Series = df["xcat"] != weights_xcat
-        df.loc[idxs, "value"] = df.loc[idxs, "value"] * np.random.rand(len(df[idxs]))
-        df.loc[df["cid"] == "GBP", "value"] = np.NaN
-
+        # now when we aggregate, the sum should be 2
         lc_cid = linear_composite(
             df=df,
             update_freq="D",
             xcats=target_xcat,
             weights=weights_xcat,
-            vweights_threshold=0.7,
+            complete_cids=True,
         )
 
-        # now, the whole result should be NaNs -
-        # since the vweights_threshold is 0.7,
-        # and the sum of the non-Nan weights is less than 0.7
-        self.assertTrue(lc_cid["value"].isna().all())
+        self.assertTrue(np.allclose(lc_cid["value"], 2))
 
-        ## Test selective NaNs
+        # Test again, single nan in AUD and GBP this time
         df: pd.DataFrame = pd.concat([dfA, dfB], axis=0)
+        df["value"] = 1
 
-        # cids: List[str] = ["AUD", "CAD", "GBP"]
         target_xcat: str = "CRY"
         weights_xcat: str = "INFL"
 
-        for i, cid in enumerate(["AUD", "CAD", "GBP"]):
-            bools = (df["cid"] == cid) & (df["xcat"] == weights_xcat)
-            df.loc[bools, "value"] = df.loc[bools, "value"] * (i + 1)
+        for cd, xc in zip(["AUD", "GBP"], ["CRY", "INFL"]):
+            random_date: pd.Timestamp = np.random.choice(df["real_date"].unique())
+            df.loc[
+                (df["cid"] == cd)
+                & (df["xcat"] == xc)
+                & (df["real_date"] == random_date),
+                "value",
+            ] = np.NaN
 
-        df: pd.DataFrame = (
-            df.set_index(["real_date", "cid", "xcat"])["value"]
-            .unstack(level=1)
-            .apply(lambda x: x / sum(x), axis=1)
-            .stack()
-            .reset_index()
-            .rename(columns={0: "value"})
-        )
-        # where xcat!=weights_xcat, multiply value by random number
-        idxs: pd.Series = df["xcat"] != weights_xcat
-        df.loc[idxs, "value"] = df.loc[idxs, "value"] * np.random.rand(len(df[idxs]))
-        # every alternate date on GBP should be NaN
-        miss_dates: List[pd.Timestamp] = []
-        for i, bdt in enumerate(pd.bdate_range(start, end)):
-            if i % 2 == 0:
-                df.loc[
-                    (df["cid"] == "GBP")
-                    & ((df["xcat"] == target_xcat))
-                    & (df["real_date"] == bdt),
-                    "value",
-                ] = np.NaN
-                miss_dates.append(bdt)
-
+        # now when we aggregate, the sum should be 2
         lc_cid = linear_composite(
             df=df,
             update_freq="D",
             xcats=target_xcat,
             weights=weights_xcat,
-            vweights_threshold=0.5001, # just above 0.5
+            complete_cids=True,
         )
 
-        # now, the result should be be nans where miss_dates are
-        self.assertTrue(
-            lc_cid[lc_cid["real_date"].isin(miss_dates)]["value"].isna().all()
-        )
+        self.assertTrue(np.allclose(lc_cid["value"], 1))
+
 
 if __name__ == "__main__":
     unittest.main()
