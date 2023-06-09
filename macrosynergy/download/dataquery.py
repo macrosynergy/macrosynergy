@@ -41,7 +41,7 @@ OAUTH_BASE_URL: str = (
 )
 OAUTH_TOKEN_URL: str = "https://authe.jpmchase.com/as/token.oauth2"
 OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
-JPMAQS_GROUP_ID: str = "CA_QI_MACRO_SYNERGY"
+JPMAQS_GROUP_ID: str = "JPMAQS"
 API_DELAY_PARAM: float = 0.3  # 300ms delay between requests
 API_RETRY_COUNT: int = 5  # retry count for transient errors
 HL_RETRY_COUNT: int = 5  # retry count for "high-level" requests
@@ -768,7 +768,7 @@ class DataQueryInterface(object):
 
         :raises <ValueError>: if the response from the server is not valid.
         """
-        new_group_id: str = "JPMAQS"
+        old_group_id: str = "CA_QI_MACRO_SYNERGY"
         try:
             response_list: Dict = self._fetch(
                 url=self.base_url + CATALOGUE_ENDPOINT,
@@ -778,7 +778,7 @@ class DataQueryInterface(object):
         except NoContentError as e:
             response_list: Dict = self._fetch(
                 url=self.base_url + CATALOGUE_ENDPOINT,
-                params={"group-id": new_group_id},
+                params={"group-id": old_group_id},
                 tracking_id=CATALOGUE_TRACKING_ID,
             )
         except Exception as e:
