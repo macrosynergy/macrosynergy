@@ -1,23 +1,27 @@
-# This test is for develop←branch , and test←develop or test←branch pull requests.
-# It runs on Ubuntu, and tests Python 3.11. For testing for production, see /.github/workflows/python-package-release.yml
+# This is a workflow in for running the package tests for the macrosynergy package when doing a release to PyPI.
+# It runs on Ubuntu, Windows and MacOS, for Python 3.8, 3.9, 3.10 and 3.11.
 
 name: Test Python package on Ubuntu
 
 on:
   pull_request:
-    branches: [ test, develop ]
+    branches: [ main ] 
   workflow_dispatch:
 
 jobs:
   build:
-
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ['3.8', '3.9', '3.10', '3.11']
+    runs-on: ${{ matrix.os }}
+    
     steps:
     - uses: actions/checkout@v3
-    - name: Set up Python 3.11
+    - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
       with:
-        python-version: 3.11
+        python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
