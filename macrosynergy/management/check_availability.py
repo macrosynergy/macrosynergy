@@ -47,7 +47,7 @@ def check_startyears(df: pd.DataFrame):
     return df_starts.unstack().loc[:, 'real_date'].astype(int, errors='ignore')
 
 
-def check_enddates(df: pd.DataFrame):
+def check_enddates(df: pd.DataFrame) -> pd.DataFrame:
     """
     DataFrame with end dates across all extended categories and cross sections.
 
@@ -84,12 +84,16 @@ def business_day_dif(df: pd.DataFrame, maxdate: pd.Timestamp):
     df = (maxdate - df).apply(lambda x: x.dt.days)
     return df - week_df
 
-def visual_paneldates(df: pd.DataFrame, size: Tuple[float] = None):
+def visual_paneldates(df: pd.DataFrame, size: Tuple[float] = None,
+                      use_last_businessday: bool = True
+                      ):
     """
     Visualize panel dates with color codes.
 
     :param <pd.DataFrame> df: DataFrame cross sections rows and category columns.
     :param <Tuple[float]> size: tuple of floats with width/length of displayed heatmap.
+    :param <bool> use_last_businessday: boolean indicating whether or not to use the
+        last business day before today as the end date. Default is True.
 
     """
 
@@ -99,7 +103,12 @@ def visual_paneldates(df: pd.DataFrame, size: Tuple[float] = None):
         df = df.apply(pd.to_datetime)
         # All series, in principle, should be populated to the last active release date
         # in the DataFrame.
-        maxdate = df.max().max()
+        
+        if use_last_businessday:
+            maxdate: pd.Timestamp = pd.Timestamp.today() - pd.tseries.offsets.BusinessDay()
+        else:
+            maxdate: pd.Timestamp = df.max().max()
+        
         df = business_day_dif(df=df, maxdate=maxdate)
 
         df = df.astype(float)
@@ -127,7 +136,9 @@ def visual_paneldates(df: pd.DataFrame, size: Tuple[float] = None):
 def check_availability(df: pd.DataFrame, xcats: List[str] = None,
                        cids: List[str] = None, start: str = None,
                        start_size: Tuple[float] = None, end_size: Tuple[float] = None,
-                       start_years: bool = True, missing_recent: bool = True):
+                       start_years: bool = True, missing_recent: bool = True,
+                       use_last_businessday: bool = True
+                       ):
     """
     Wrapper for visualizing start and end dates of a filtered DataFrame.
 
@@ -148,6 +159,8 @@ def check_availability(df: pd.DataFrame, xcats: List[str] = None,
     :param <bool> missing_recent: boolean indicating whether or not to display a chart 
         of missing date numbers for each cross-section and indicator.
         Default is True (display missing days).
+    :param <bool> use_last_businessday: boolean indicating whether or not to use the
+        last business day before today as the end date. Default is True.
     """
     if not isinstance(start_years, bool):
         raise TypeError(f"<bool> object expected and not {type(start_years)}.")
