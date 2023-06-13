@@ -21,14 +21,14 @@ def missing_in_df(df: pd.DataFrame, xcats: List[str] = None, cids: List[str] = N
         the DataFrame.
 
     """
-    print("Missing xcats across df: ", set(xcats) - set(df['xcat'].unique()))
+    print("Missing xcats across df: ", list(set(xcats) - set(df['xcat'])))
 
     cids = df["cid"].unique() if cids is None else cids
-    xcats_used = sorted(list(set(xcats).intersection(set(df["xcat"].unique()))))
+    xcats_used = sorted(list(set(xcats).intersection(set(df["xcat"]))))
 
     for xcat in xcats_used:
         cids_xcat = df.loc[df["xcat"] == xcat, "cid"].unique()
-        print(f"Missing cids for {xcat}: ", set(cids) - set(cids_xcat))
+        print(f"Missing cids for {xcat}: ", list(set(cids) - set(cids_xcat)))
 
 
 def check_startyears(df: pd.DataFrame):
