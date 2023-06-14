@@ -29,7 +29,7 @@ class TestAll(unittest.TestCase):
     def test_view_metrics(self):
         self.dataframe_construction()
 
-        # matplotlib.use("Agg")
+        matplotlib.use("Agg")
 
         good_args: Dict[str, Any] = {
             "df": self.df,
