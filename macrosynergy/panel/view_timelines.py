@@ -301,6 +301,9 @@ def view_timelines(
         for ax in fig.axes:
             plt.sca(ax)
             plt.xticks(visible=all_xticks)
+
+        fig.set_tight_layout(True)
+
     else:
         plt.xticks(visible=all_xticks)
 
@@ -314,7 +317,9 @@ def view_timelines(
 
     plt.gcf().set_size_inches(size[0], size[1])
     plt.subplots_adjust(bottom=label_adj)
-    plt.tight_layout()
+    if fig is not None:
+        plt.tight_layout()
+    
     plt.show()
 
 
