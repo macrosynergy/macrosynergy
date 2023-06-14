@@ -170,10 +170,10 @@ def check_availability(df: pd.DataFrame, xcats: List[str] = None,
     dfx = reduce_df(df, xcats=xcats, cids=cids, start=start)
     if start_years:
         dfs = check_startyears(dfx)
-        visual_paneldates(dfs, size=start_size)
+        visual_paneldates(dfs, size=start_size, use_last_businessday=use_last_businessday)
     if missing_recent:
         dfe = check_enddates(dfx)
-        visual_paneldates(dfe, size=end_size)
+        visual_paneldates(dfe, size=end_size, use_last_businessday=use_last_businessday)
 
 
 if __name__ == "__main__":
