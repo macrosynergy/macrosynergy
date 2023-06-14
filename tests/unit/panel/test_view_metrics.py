@@ -29,7 +29,6 @@ class TestAll(unittest.TestCase):
     def test_view_metrics(self):
         self.dataframe_construction()
 
-        mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
 
         good_args: Dict[str, Any] = {
@@ -169,7 +168,7 @@ class TestAll(unittest.TestCase):
             except Exception as e:
                 self.fail(f"view_metrics raised {e} unexpectedly")
             
-        matplotlib.use(mpl_backend)
+        
 
 if __name__ == "__main__":
     unittest.main()
