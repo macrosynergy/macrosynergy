@@ -315,8 +315,7 @@ def view_timelines(
 
     else:
         plt.xticks(visible=all_xticks)
-        plt.tight_layout()
-
+        plt.gcf().tight_layout()
     plt.subplots_adjust(bottom=label_adj)
 
     plt.show()
