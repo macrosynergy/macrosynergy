@@ -218,7 +218,7 @@ def view_timelines(
                 fig.delaxes(axes[j])
 
         else:
-            ax: plt.Axes = plt.gca()
+            fig, ax = plt.subplots(figsize=(size[0], size[1]))
             for xc in xcats:
                 dfc: pd.DataFrame = df[df["xcat"] == xc]
                 ax.plot(dfc["real_date"], dfc[val], label=xc)
@@ -279,7 +279,7 @@ def view_timelines(
             )
 
         else:
-            ax: plt.Axes = plt.gca()
+            fig, ax = plt.subplots(figsize=(size[0], size[1]))
             for cid in cids:
                 dfc: pd.DataFrame = df[df["cid"] == cid]
                 ax.plot(dfc["real_date"], dfc[val], label=cid)
@@ -311,13 +311,11 @@ def view_timelines(
             plt.sca(ax)
             plt.xticks(visible=all_xticks)
 
-        fig.set_tight_layout(True)
-
     else:
         plt.xticks(visible=all_xticks)
-        plt.gcf().tight_layout()
-    plt.subplots_adjust(bottom=label_adj)
 
+    plt.subplots_adjust(bottom=label_adj)
+    fig.set_tight_layout(True)
     plt.show()
 
 
