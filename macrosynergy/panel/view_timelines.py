@@ -2,8 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
-import seaborn as sns
-from typing import List, Union, Tuple, Optional
+from typing import List, Tuple, Optional, Union
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.check_availability import reduce_df
@@ -21,22 +20,23 @@ def view_timelines(
     ncol: int = 3,
     legend_ncol: int = 1,
     same_y: bool = True,
-    all_xticks: bool = False,
+    all_xticks: bool = True ,
     xcat_grid: bool = False,
     xcat_labels: Optional[List[str]] = None,
     single_chart: bool = False,
     label_adj: float = 0.05,
     title: Optional[str] = None,
-    title_adj: float = 0.95,
+    title_adj: float = 1.0,
     title_xadj: float = 0.5,
     title_fontsize: int = 16,
+    label_fontsize: int = 14,
     cs_mean: bool = False,
     size: Tuple[float, float] = (12, 7),
     aspect: float = 1.7,
     height: float = 3.0,
     legend_fontsize: int = 12,
+    legend_loc: Union[str, Tuple[float, float]] = "lower center",
 ):
-
     """Displays a facet grid of time line charts of one or more categories.
 
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
@@ -69,6 +69,7 @@ def view_timelines(
     :param <int> title_fontsize: font size of title. Default is 16.
     :param <float> label_adj: parameter that sets bottom of figure to fit the label.
         Default is 0.05.
+    :param <int> label_fontsize: font size of labels. Default is 12.
     :param <bool> cs_mean: if True this adds a line of cross-sectional averages to
         the line charts. This is only allowed for function calls with a single
         category. Default is False.
@@ -77,6 +78,16 @@ def view_timelines(
     :param <float> aspect: width-height ratio for plots in facet. Default is 1.7.
     :param <float> height: height of plots in facet. Default is 3.
     :param <int> legend_fontsize: font size of legend. Default is 12.
+    :param <str> legend_loc: location of legend. Default is 'lower center'.
+        The options are (strings) 'upper left', 'upper right', 'lower left',
+        'lower right', 'upper center', 'lower center', 'center left', 'center right'.
+        The string 'best' places the legend at the location, among the nine locations
+        defined so far, with the minimum overlap with other drawn features.
+        One can also pass a tuple (x, y) in axes coordinates to specify the
+        bottom-left corner of the legend. The coordinates (0, 0) are the
+        bottom-left corner of the plot's area (chart+labels).
+        Please see matplotlib documentation for more details -
+        https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.legend.html
 
     """
 
@@ -135,7 +146,6 @@ def view_timelines(
     # NOTE: casting var(cids) to list if it is a string is dependent on the reduce_df function
 
     if xcat_grid:
-
         if not len(cids) == 1:
             raise ValueError(
                 "`xcat_grid` can only be set to True if a "
@@ -156,7 +166,6 @@ def view_timelines(
         max_plots = len(cids)
     ncol: int = min(ncol, max_plots)
 
-    sns.set(style="darkgrid")
     cross_mean: Optional[pd.DataFrame] = None
     cs_label: str = f"cross-sectional average of {xcats[0]}."
     if cs_mean and (len(cids) > 1):
@@ -176,34 +185,37 @@ def view_timelines(
             df["xcat"] = df["xcat"].replace(xc, xl)
         xcats = xcat_labels
 
-    sns.set(rc={"figure.figsize": size})
-    plt.rcParams["figure.figsize"] = size
+    # use style=darkgrid
+    plt.style.use("seaborn-darkgrid")
+    # plt.rcParams["figure.figsize"] = size
 
-    fg: Optional[sns.FacetGrid] = None
+    fig: Optional[plt.Figure] = None
     ax: Optional[plt.Axes] = None
+
     if len(cids) == 1:
         if xcat_grid:
-            fg: sns.FacetGrid = sns.FacetGrid(
-                df,
-                col="xcat",
-                col_wrap=ncol,
-                sharey=same_y,
-                height=height,
-                aspect=aspect,
-                col_order=xcats,
-            )
-            fg.map_dataframe(
-                sns.lineplot,
-                x="real_date",
-                y=val,
-                hue="xcat",
-                hue_order=xcats,
-                estimator=None,
-            )
+            nrows = int(np.ceil(len(xcats) / float(ncol)))
 
-            fg.map(plt.axhline, y=0, c=".5")
-            fg.set_axis_labels("", "")
-            fg.set_titles("{col_name}")
+            fig, axes = plt.subplots(
+                nrows,
+                ncol,
+                figsize=(ncol * aspect * height, nrows * height),
+                sharey=same_y,
+            )
+            axes = np.ravel(axes)
+
+            for i, xc in enumerate(xcats):
+                ax: plt.Axes = axes[i]
+                df_xc: pd.DataFrame = df[df["xcat"] == xc]
+                ax.plot(df_xc["real_date"], df_xc[val], label=xc)
+
+                ax.axhline(y=0, c=".5")
+                ax.set_xlabel("")
+                ax.set_ylabel("")
+                ax.set_title(xc, fontsize=label_fontsize)
+
+            for j in range(i + 1, len(axes)):
+                fig.delaxes(axes[j])
 
         else:
             ax: plt.Axes = plt.gca()
@@ -218,134 +230,119 @@ def view_timelines(
             ax.legend(
                 ncol=legend_ncol,
                 fontsize=legend_fontsize,
+                loc=legend_loc,
             )
 
     else:
         if not single_chart:
-            fg: sns.FacetGrid = sns.FacetGrid(
-                df,
-                col="cid",
-                col_wrap=ncol,
+            nrows = int(np.ceil(len(cids) / float(ncol)))
+
+            fig, axes = plt.subplots(
+                nrows,
+                ncol,
+                figsize=(ncol * aspect * height, nrows * height),
                 sharey=same_y,
-                height=height,
-                aspect=aspect,
-                col_order=cids,
             )
-            fg.map_dataframe(
-                sns.lineplot,
-                x="real_date",
-                y=val,
-                hue="xcat",
-                hue_order=xcats,
-                estimator=None,
+            axes = np.ravel(axes)
+
+            for i, cid in enumerate(cids):
+                ax: plt.Axes = axes[i]
+                df_cid: pd.DataFrame = df[df["cid"] == cid]
+
+                for xc in xcats:
+                    dfc: pd.DataFrame = df_cid[df_cid["xcat"] == xc]
+                    ax.plot(dfc["real_date"], dfc[val], label=xc)
+                    ax.axhline(y=0, c=".5")
+
+                if cs_mean:
+                    ax.plot(
+                        cross_mean["real_date"],
+                        cross_mean["average"],
+                        color="red",
+                        label=cs_label,
+                    )
+
+                ax.set_xlabel("")
+                ax.set_ylabel("")
+                ax.set_title(cid, fontsize=label_fontsize)
+
+            for j in range(i + 1, len(axes)):
+                fig.delaxes(axes[j])
+
+            handles, labels = ax.get_legend_handles_labels()
+            fig.legend(
+                handles=handles,
+                labels=labels,
+                loc=legend_loc,
+                ncol=legend_ncol,
+                fontsize=legend_fontsize,
             )
-
-            if cs_mean:
-                fg.map(
-                    sns.lineplot,
-                    x="real_date",
-                    y="average",
-                    color="red",
-                    estimator=None,
-                    label=cs_label,
-                    data=cross_mean,
-                )
-
-            fg.map(plt.axhline, y=0, c=".5")
-            fg.set_titles(col_template="{col_name}")
-            fg.set_axis_labels("", "")
-            if cs_mean or (len(xcats) > 1):
-                fg.add_legend(
-                    loc="lower center", ncol=legend_ncol, fontsize=legend_fontsize
-                )
 
         else:
-            ax: plt.Axes = sns.lineplot(
-                data=df,
-                x="real_date",
-                y=val,
-                hue="cid",
-                hue_order=cids,
-                estimator=None,
-            )
+            ax: plt.Axes = plt.gca()
+            for cid in cids:
+                dfc: pd.DataFrame = df[df["cid"] == cid]
+                ax.plot(dfc["real_date"], dfc[val], label=cid)
 
             if cs_mean:
-                ax: plt.Axes = sns.lineplot(
-                    data=cross_mean,
-                    x="real_date",
-                    y="average",
+                ax.plot(
+                    cross_mean["real_date"],
+                    cross_mean["average"],
                     color="red",
-                    estimator=None,
                     label=cs_label,
                 )
 
             plt.axhline(y=0, c=".5")
             ax.set_xlabel("")
             ax.set_ylabel("")
-            ax.legend(ncol=legend_ncol, fontsize=legend_fontsize)
+            ax.legend(ncol=legend_ncol, fontsize=legend_fontsize, loc=legend_loc)
 
-
-    if all_xticks:
-        if fg is not None:
-            for ax in fg.axes.flat:
-                ax.tick_params(labelbottom=True, pad=0)
-        else:
-            ax.tick_params(labelbottom=True, pad=0)
-
-    if fg is not None:
-        fg.figure.subplots_adjust(bottom=label_adj)
+    if fig is not None:
+        for ax in fig.axes:
+            plt.sca(ax)
+            plt.xticks(visible=all_xticks)
     else:
-        plt.subplots_adjust(bottom=label_adj)
-        
-    if title is not None:
-        if fg is not None:
-            fg.figure.suptitle(
-                title,
-                y=title_adj,
-                fontsize=title_fontsize,
-                x=0.5, horizontalalignment="center"
-            )
-        else:
-            ax.set_title(title, y=title_adj, fontsize=title_fontsize,
-                            x=0.5, horizontalalignment="center")
+        plt.xticks(visible=all_xticks)
 
+    if title is not None:
+        plt.suptitle(
+            title,
+            fontsize=title_fontsize,
+            x=title_xadj,
+            y=title_adj,
+        )
+
+    
+
+    plt.gcf().set_size_inches(size[0], size[1])
+    plt.subplots_adjust(bottom=label_adj)
+    plt.tight_layout()
+    
+    # if things are still overlapping, try this
+    # if 
+    
     plt.show()
 
 
 if __name__ == "__main__":
-
     cids = ["AUD", "CAD", "GBP", "NZD"]
     xcats = ["XR", "CRY", "INFL"]
     df_cids = pd.DataFrame(
         index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
     )
-    df_cids.loc[
-        "AUD",
-    ] = ["2010-01-01", "2020-12-31", 0.2, 0.2]
-    df_cids.loc[
-        "CAD",
-    ] = ["2011-01-01", "2020-11-30", 0, 1]
-    df_cids.loc[
-        "GBP",
-    ] = ["2012-01-01", "2020-11-30", 0, 2]
-    df_cids.loc[
-        "NZD",
-    ] = ["2012-01-01", "2020-09-30", -0.1, 3]
+    df_cids.loc["AUD",] = ["2010-01-01", "2020-12-31", 0.2, 0.2]
+    df_cids.loc["CAD",] = ["2011-01-01", "2020-11-30", 0, 1]
+    df_cids.loc["GBP",] = ["2012-01-01", "2020-11-30", 0, 2]
+    df_cids.loc["NZD",] = ["2012-01-01", "2020-09-30", -0.1, 3]
 
     df_xcats = pd.DataFrame(
         index=xcats,
         columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
     )
 
-    df_xcats.loc[
-        "XR",
-    ] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-    df_xcats.loc[
-        "INFL",
-    ] = ["2015-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-    df_xcats.loc[
-        "CRY",
-    ] = ["2013-01-01", "2020-10-30", 1, 2, 0.95, 0.5]
+    df_xcats.loc["XR",] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["INFL",] = ["2015-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY",] = ["2013-01-01", "2020-10-30", 1, 2, 0.95, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfdx = dfd[~((dfd["cid"] == "AUD") & (dfd["xcat"] == "XR"))]
