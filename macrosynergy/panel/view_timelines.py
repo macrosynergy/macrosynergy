@@ -297,16 +297,6 @@ def view_timelines(
             ax.set_ylabel("")
             ax.legend(ncol=legend_ncol, fontsize=legend_fontsize, loc=legend_loc)
 
-    if fig is not None:
-        for ax in fig.axes:
-            plt.sca(ax)
-            plt.xticks(visible=all_xticks)
-
-        fig.set_tight_layout(True)
-
-    else:
-        plt.xticks(visible=all_xticks)
-
     if title is not None:
         plt.suptitle(
             title,
@@ -316,10 +306,19 @@ def view_timelines(
         )
 
     plt.gcf().set_size_inches(size[0], size[1])
-    plt.subplots_adjust(bottom=label_adj)
     if fig is not None:
+        for ax in fig.axes:
+            plt.sca(ax)
+            plt.xticks(visible=all_xticks)
+
+        fig.set_tight_layout(True)
+
+    else:
+        plt.xticks(visible=all_xticks)
         plt.tight_layout()
-    
+
+    plt.subplots_adjust(bottom=label_adj)
+
     plt.show()
 
 
@@ -329,19 +328,33 @@ if __name__ == "__main__":
     df_cids = pd.DataFrame(
         index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
     )
-    df_cids.loc["AUD",] = ["2010-01-01", "2020-12-31", 0.2, 0.2]
-    df_cids.loc["CAD",] = ["2011-01-01", "2020-11-30", 0, 1]
-    df_cids.loc["GBP",] = ["2012-01-01", "2020-11-30", 0, 2]
-    df_cids.loc["NZD",] = ["2012-01-01", "2020-09-30", -0.1, 3]
+    df_cids.loc[
+        "AUD",
+    ] = ["2010-01-01", "2020-12-31", 0.2, 0.2]
+    df_cids.loc[
+        "CAD",
+    ] = ["2011-01-01", "2020-11-30", 0, 1]
+    df_cids.loc[
+        "GBP",
+    ] = ["2012-01-01", "2020-11-30", 0, 2]
+    df_cids.loc[
+        "NZD",
+    ] = ["2012-01-01", "2020-09-30", -0.1, 3]
 
     df_xcats = pd.DataFrame(
         index=xcats,
         columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
     )
 
-    df_xcats.loc["XR",] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-    df_xcats.loc["INFL",] = ["2015-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-    df_xcats.loc["CRY",] = ["2013-01-01", "2020-10-30", 1, 2, 0.95, 0.5]
+    df_xcats.loc[
+        "XR",
+    ] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc[
+        "INFL",
+    ] = ["2015-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc[
+        "CRY",
+    ] = ["2013-01-01", "2020-10-30", 1, 2, 0.95, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfdx = dfd[~((dfd["cid"] == "AUD") & (dfd["xcat"] == "XR"))]
