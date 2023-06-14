@@ -20,7 +20,7 @@ def view_timelines(
     ncol: int = 3,
     legend_ncol: int = 1,
     same_y: bool = True,
-    all_xticks: bool = True ,
+    all_xticks: bool = True,
     xcat_grid: bool = False,
     xcat_labels: Optional[List[str]] = None,
     single_chart: bool = False,
@@ -312,15 +312,9 @@ def view_timelines(
             y=title_adj,
         )
 
-    
-
     plt.gcf().set_size_inches(size[0], size[1])
     plt.subplots_adjust(bottom=label_adj)
     plt.tight_layout()
-    
-    # if things are still overlapping, try this
-    # if 
-    
     plt.show()
 
 
