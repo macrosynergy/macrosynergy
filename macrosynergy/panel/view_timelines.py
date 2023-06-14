@@ -186,7 +186,7 @@ def view_timelines(
         xcats = xcat_labels
 
     # use style=darkgrid
-    plt.style.use("seaborn-darkgrid")
+    plt.style.use("seaborn-v0_8-darkgrid")
     # plt.rcParams["figure.figsize"] = size
 
     fig: Optional[plt.Figure] = None
