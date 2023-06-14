@@ -37,7 +37,7 @@ class TestAll(unittest.TestCase):
         # test that all the sample cases run
         
         # set backend to Agg to avoid spawning a window
-        matplotlib.use('Agg')
+        # matplotlib.use('Agg')
 
         try:
             view_timelines(dfd, xcats=xcats[:2], cids=cids[0],
