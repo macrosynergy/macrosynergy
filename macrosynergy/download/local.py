@@ -253,7 +253,8 @@ class DownloadSnapshot(JPMaQSDownload):
 
         # batch the expressions into 500
         batched_tickers: List[List[str]] = [
-            all_tickers[i : i + 500] for i in range(0, len(all_tickers), 500)
+            all_tickers[i : i + batch_size]
+            for i in range(0, len(all_tickers), batch_size)
         ]
 
         # download the data
@@ -264,5 +265,6 @@ class DownloadSnapshot(JPMaQSDownload):
                 tickers=batch,
                 start_date=start_date,
                 end_date=end_date,
+                show_progress=show_progress,
             )
             self._save_df(df=df)
