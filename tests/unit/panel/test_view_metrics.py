@@ -29,6 +29,7 @@ class TestAll(unittest.TestCase):
     def test_view_metrics(self):
         self.dataframe_construction()
 
+        mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
 
         good_args: Dict[str, Any] = {
@@ -76,12 +77,8 @@ class TestAll(unittest.TestCase):
 
         # test with empty df
         bad_args = good_args.copy()
-        bad_cases = [
-            pd.DataFrame(),
-            self.df.rename(
-            columns={"eop_lag": "bad_metric"})
-        ]
-            
+        bad_cases = [pd.DataFrame(), self.df.rename(columns={"eop_lag": "bad_metric"})]
+
         bad_args["df"] = pd.DataFrame()
 
         for case in bad_cases:
@@ -110,48 +107,48 @@ class TestAll(unittest.TestCase):
             bad_args[arg] = "bad_date"
             with self.assertRaises(ValueError):
                 view_metrics(**bad_args)
-                
+
         # test freq
         bad_args = good_args.copy()
         bad_args["freq"] = "z"
         with self.assertRaises(ValueError):
             view_metrics(**bad_args)
-            
+
         bad_args["freq"] = "m"
         try:
             view_metrics(**bad_args)
         except Exception as e:
             self.fail(f"view_metrics raised {e} unexpectedly")
-            
+
         # test agg
         bad_args = good_args.copy()
         bad_args["agg"] = "bad_agg"
         with self.assertRaises(ValueError):
             view_metrics(**bad_args)
-            
+
         bad_args["agg"] = "MEAN"
         try:
             view_metrics(**bad_args)
         except Exception as e:
             self.fail(f"view_metrics raised {e} unexpectedly")
-            
+
         # test if the figsize is a tuple
         bad_args = good_args.copy()
         bad_cases: List[Any] = [
-            ['apple', 10],
-            (10, 'apple'),
+            ["apple", 10],
+            (10, "apple"),
             [None, 10],
         ]
         for case in bad_cases:
             bad_args["figsize"] = case
             with self.assertRaises(ValueError):
                 view_metrics(**bad_args)
-                
+
         # pass a list of 3 ints as figsize. should raise a type error
         bad_args["figsize"] = [10, 10, 10]
         with self.assertRaises(TypeError):
             view_metrics(**bad_args)
-            
+
         # give it one where the first one is int, second one is none. should work
         bad_args["figsize"] = [10, None]
         try:
@@ -159,7 +156,7 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"view_metrics raised {e} unexpectedly")
 
-        rp_args: List[Dict[str, Any]] = ['cids', 'start', 'end', 'title']
+        rp_args: List[Dict[str, Any]] = ["cids", "start", "end", "title"]
         for rp_arg in rp_args:
             bad_args = good_args.copy()
             bad_args[rp_arg] = None
@@ -167,8 +164,9 @@ class TestAll(unittest.TestCase):
                 view_metrics(**bad_args)
             except Exception as e:
                 self.fail(f"view_metrics raised {e} unexpectedly")
-            
-        
+
+        matplotlib.use(mpl_backend)
+
 
 if __name__ == "__main__":
     unittest.main()
