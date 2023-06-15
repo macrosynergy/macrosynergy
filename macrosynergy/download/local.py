@@ -161,10 +161,8 @@ class LocalDataQueryInterface(DataQueryInterface):
 
 class LocalDownloader(JPMaQSDownload):
     def __init__(self, local_path: str, fmt="pkl"):
-        # GET ABSOLUTE PATH
         self.local_path = os.path.abspath(local_path)
         self.store_format = fmt
-        # init super with dummy values
         super().__init__(
             client_id="<local>",
             client_secret=f"<{self.local_path}>",
@@ -185,6 +183,16 @@ class LocalDownloader(JPMaQSDownload):
 
 class DownloadSnapshot(JPMaQSDownload):
     def __init__(self, store_path: str, store_format: str = "pkl", *args, **kwargs):
+        """
+        Downloads a snapshot of the entire database and stores it locally.
+
+        Parameters
+        :param <str> store_path: The path to store the data. Prefer absolute paths.
+        :param <str> store_format: The format to store the data in. Either "pkl", "csv" or "all".
+            "all" will store both formats.
+        :param <str> client_id: The client id for the JPMaQS API.
+        :param <str> client_secret: The client secret for the JPMaQS API.
+        """
         self.store_path: str = os.path.abspath(store_path)
         self.store_format: str = store_format
         super().__init__(*args, **kwargs)
@@ -193,21 +201,45 @@ class DownloadSnapshot(JPMaQSDownload):
         self,
         df: pd.DataFrame,
     ) -> None:
-        # group by cid and xcat
+        """
+        Saves the dataframe to the store_path.
+
+        :param df: The dataframe to save.
+
+
+        """
+        save_csv: bool = self.store_format == "csv" or self.store_format == "all"
+        save_pkl: bool = self.store_format == "pkl" or self.store_format == "all"
+        if save_csv:
+            os.makedirs(os.path.join(self.store_path, "csv"), exist_ok=True)
+            csvs_path: str = os.path.join(self.store_path, "csv")
+        if save_pkl:
+            os.makedirs(os.path.join(self.store_path, "pkl"), exist_ok=True)
+            pkls_path: str = os.path.join(self.store_path, "pkl")
+
         for (cid, xcat), dfx in df.groupby(["cid", "xcat"]):
             dfx = dfx.drop(["cid", "xcat"], axis=1)
-            if self.store_format == "pkl":
-                dfx.to_pickle(os.path.join(self.store_path, f"{cid}_{xcat}.pkl"))
-            elif self.store_format == "csv":
-                dfx.to_csv(
-                    os.path.join(self.store_path, f"{cid}_{xcat}.csv"),
-                    index=False,
-                )
+            if save_pkl:
+                dfx.to_pickle(os.path.join(pkls_path, f"{cid}_{xcat}.pkl"))
+            if save_csv:
+                dfx.to_csv(os.path.join(csvs_path, f"{cid}_{xcat}.csv"))
 
     def download(
         self,
+        batch_size: int = 500,
         show_progress: bool = False,
-    ) -> pd.DataFrame:
+    ) -> None:
+        """
+        Downloads the entire database and stores it locally.
+        All tickers are downloaded in batches of `batch_size`.
+        This is to avoid memory and connectivity issues.
+        NOTE: This will take a long time to run - 1hr+.
+
+        :param <int> batch_size: The batch size to use when downloading the data.
+        :param <bool> show_progress: Whether to show a progress bar or not.
+        :return: None
+        """
+
         all_tickers: List[str] = self.get_catalogue()
         start_date: str = "1990-01-01"
         end_date: str = None
