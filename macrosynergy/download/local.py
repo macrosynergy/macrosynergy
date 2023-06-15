@@ -134,7 +134,6 @@ class LocalDataQueryInterface(DataQueryInterface):
         retry_counter: int = 0,
         delay_param: float = ...,
     ) -> pd.DataFrame:
-
         # divide expressions into batches of 10
         batched_expressions: List[List[str]] = [
             expressions[i : i + 10] for i in range(0, len(expressions), 10)
@@ -184,47 +183,44 @@ class LocalDownloader(JPMaQSDownload):
         super().download(*args, **kwargs)
 
 
-
 class DownloadSnapshot(JPMaQSDownload):
-    def __init__(self, store_path: str, 
-                 store_format: str = "pkl", 
-                 *args, **kwargs):
+    def __init__(self, store_path: str, store_format: str = "pkl", *args, **kwargs):
         self.store_path: str = os.path.abspath(store_path)
         self.store_format: str = store_format
         super().__init__(*args, **kwargs)
 
-    def _save_df(self, df: pd.DataFrame,) -> None:
-        
+    def _save_df(
+        self,
+        df: pd.DataFrame,
+    ) -> None:
         # group by cid and xcat
         for (cid, xcat), dfx in df.groupby(["cid", "xcat"]):
             dfx = dfx.drop(["cid", "xcat"], axis=1)
             if self.store_format == "pkl":
-                dfx.to_pickle(
-                    os.path.join(self.store_path, f"{cid}_{xcat}.pkl")
-                )
+                dfx.to_pickle(os.path.join(self.store_path, f"{cid}_{xcat}.pkl"))
             elif self.store_format == "csv":
                 dfx.to_csv(
                     os.path.join(self.store_path, f"{cid}_{xcat}.csv"),
                     index=False,
                 )
-  
 
     def download(
         self,
         show_progress: bool = False,
     ) -> pd.DataFrame:
-        
         all_tickers: List[str] = self.get_catalogue()
-        start_date: str = '1990-01-01'
+        start_date: str = "1990-01-01"
         end_date: str = None
 
         # batch the expressions into 500
         batched_tickers: List[List[str]] = [
             all_tickers[i : i + 500] for i in range(0, len(all_tickers), 500)
         ]
-        
+
         # download the data
-        for batch in tqdm(batched_tickers, disable=not show_progress, desc="Downloading snapshot"):
+        for batch in tqdm(
+            batched_tickers, disable=not show_progress, desc="Downloading snapshot"
+        ):
             df: pd.DataFrame = super().download(
                 tickers=batch,
                 start_date=start_date,
