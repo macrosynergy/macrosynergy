@@ -159,7 +159,7 @@ class LocalDataQueryInterface(DataQueryInterface):
         return df
 
 
-class LocalDownloader(JPMaQSDownload):
+class LocalCache(JPMaQSDownload):
     def __init__(self, local_path: str, fmt="pkl"):
         self.local_path = os.path.abspath(local_path)
         self.store_format = fmt
