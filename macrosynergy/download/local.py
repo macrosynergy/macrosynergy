@@ -225,11 +225,15 @@ class DownloadSnapshot(JPMaQSDownload):
             pkls_path: str = os.path.join(self.store_path, "pkl")
 
         for (cid, xcat), dfx in df.groupby(["cid", "xcat"]):
-            dfx = dfx.drop(["cid", "xcat"], axis=1)
+            dfx = (
+                dfx.drop(["cid", "xcat"], axis=1)
+                .dropna(axis=0, how="any")
+                .reset_index(drop=True)
+            )
             if save_pkl:
                 dfx.to_pickle(os.path.join(pkls_path, f"{cid}_{xcat}.pkl"))
             if save_csv:
-                dfx.to_csv(os.path.join(csvs_path, f"{cid}_{xcat}.csv"))
+                dfx.to_csv(os.path.join(csvs_path, f"{cid}_{xcat}.csv"), index=False)
 
     def download(
         self,
@@ -249,6 +253,7 @@ class DownloadSnapshot(JPMaQSDownload):
 
         all_tickers: List[str] = self.get_catalogue()
         start_date: str = "1990-01-01"
+        metrics: List[str] = self.valid_metrics
         end_date: str = None
 
         # batch the expressions into 500
@@ -263,6 +268,7 @@ class DownloadSnapshot(JPMaQSDownload):
         ):
             df: pd.DataFrame = super().download(
                 tickers=batch,
+                metrics=metrics,
                 start_date=start_date,
                 end_date=end_date,
                 show_progress=show_progress,
