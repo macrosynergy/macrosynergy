@@ -174,11 +174,18 @@ class LocalDownloader(JPMaQSDownload):
 
     def download(
         self,
+        jpmaqs_df=True,
         *args,
         **kwargs,
     ) -> pd.DataFrame:
         kwargs.update({"as_dataframe": True, "get_catalogue": True})
-        super().download(*args, **kwargs)
+        df: pd.DataFrame = super().download(*args, **kwargs)
+        if jpmaqs_df:
+            return df
+        else:
+            df["ticker"]: str = df["cid"] + "_" + df["xcat"]
+            df = df.drop(["cid", "xcat"], axis=1)
+            return df
 
 
 class DownloadSnapshot(JPMaQSDownload):
