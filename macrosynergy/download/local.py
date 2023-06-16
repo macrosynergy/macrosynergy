@@ -233,11 +233,11 @@ class DownloadSnapshot(JPMaQSDownload):
                 .reset_index(drop=True)
             )[["real_date"] + self.valid_metrics]
 
-            fname: str = f"{cid}_{xcat}.{self.store_format}"
+            ticker: str = f"{cid}_{xcat}"
             if self._save_pkl:
-                dfx.to_pickle(os.path.join(self.pkl_path, fname))
+                dfx.to_pickle(os.path.join(self.pkl_path, f"{ticker}.pkl"))
             if self._save_csv:
-                dfx.to_csv(os.path.join(self.csv_path, fname), index=False)
+                dfx.to_csv(os.path.join(self.csv_path, f"{ticker}.csv"), index=False)
 
     def download(
         self,
