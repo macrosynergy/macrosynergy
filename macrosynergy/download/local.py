@@ -202,6 +202,15 @@ class DownloadSnapshot(JPMaQSDownload):
         """
         self.store_path: str = os.path.abspath(store_path)
         self.store_format: str = store_format
+        self._save_pkl: bool = self.store_format == "pkl" or self.store_format == "all"
+        self._save_csv: bool = self.store_format == "csv" or self.store_format == "all"
+        if self._save_pkl:
+            os.makedirs(os.path.join(self.store_path, "pkl"), exist_ok=True)
+            self.pkl_path: str = os.path.join(self.store_path, "pkl")
+        if self._save_csv:
+            os.makedirs(os.path.join(self.store_path, "csv"), exist_ok=True)
+            self.csv_path: str = os.path.join(self.store_path, "csv")
+
         super().__init__(*args, **kwargs)
 
     def _save_df(
@@ -215,25 +224,20 @@ class DownloadSnapshot(JPMaQSDownload):
 
 
         """
-        save_csv: bool = self.store_format == "csv" or self.store_format == "all"
-        save_pkl: bool = self.store_format == "pkl" or self.store_format == "all"
-        if save_csv:
-            os.makedirs(os.path.join(self.store_path, "csv"), exist_ok=True)
-            csvs_path: str = os.path.join(self.store_path, "csv")
-        if save_pkl:
-            os.makedirs(os.path.join(self.store_path, "pkl"), exist_ok=True)
-            pkls_path: str = os.path.join(self.store_path, "pkl")
 
         for (cid, xcat), dfx in df.groupby(["cid", "xcat"]):
+            logger.info(f"Saving DF for {cid}_{xcat}")
             dfx = (
                 dfx.drop(["cid", "xcat"], axis=1)
                 .dropna(axis=0, how="any")
                 .reset_index(drop=True)
-            )
-            if save_pkl:
-                dfx.to_pickle(os.path.join(pkls_path, f"{cid}_{xcat}.pkl"))
-            if save_csv:
-                dfx.to_csv(os.path.join(csvs_path, f"{cid}_{xcat}.csv"), index=False)
+            )[["real_date"] + self.valid_metrics]
+
+            fname: str = f"{cid}_{xcat}.{self.store_format}"
+            if self._save_pkl:
+                dfx.to_pickle(os.path.join(self.pkl_path, fname))
+            if self._save_csv:
+                dfx.to_csv(os.path.join(self.csv_path, fname), index=False)
 
     def download(
         self,
