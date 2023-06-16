@@ -254,6 +254,8 @@ class DownloadSnapshot(JPMaQSDownload):
         :param <bool> show_progress: Whether to show a progress bar or not.
         :return: None
         """
+        print("Initialising snapshot download...")
+        print("Downloading the JPMaQS catalogue from DataQuery...")
 
         all_tickers: List[str] = self.get_catalogue()
         start_date: str = "1990-01-01"
