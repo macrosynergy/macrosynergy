@@ -1,12 +1,32 @@
-from typing import List
+from typing import List, Union, Optional, Tuple, Dict, Any
 import pandas as pd
 import os
 import glob
 from functools import lru_cache
 import logging
+import pickle
+import json
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
-from macrosynergy.download.jpmaqs import JPMaQSDownload, DataQueryInterface
+import concurrent.futures
+import time
+import itertools
+import datetime
+from macrosynergy.download.jpmaqs import JPMaQSDownload
+from macrosynergy.download.dataquery import (
+    DataQueryInterface,
+    API_DELAY_PARAM,
+    HL_RETRY_COUNT,
+    MAX_CONTINUOUS_FAILURES,
+    TIMESERIES_ENDPOINT,
+    TIMESERIES_TRACKING_ID,
+)
+from macrosynergy.download.exceptions import (
+    AuthenticationError,
+    HeartbeatError,
+    DownloadError,
+)
+from macrosynergy.management.utils import Config, form_full_url
 
 logger = logging.getLogger(__name__)
 cache = lru_cache(maxsize=None)
@@ -188,95 +208,326 @@ class LocalCache(JPMaQSDownload):
             return df
 
 
-class DownloadSnapshot(JPMaQSDownload):
+class DownloadTimeseries(DataQueryInterface):
     def __init__(self, store_path: str, store_format: str = "pkl", *args, **kwargs):
-        """
-        Downloads a snapshot of the entire database and stores it locally.
 
-        Parameters
-        :param <str> store_path: The path to store the data. Prefer absolute paths.
-        :param <str> store_format: The format to store the data in. Either "pkl", "csv" or "all".
-            "all" will store both formats.
-        :param <str> client_id: The client id for the JPMaQS API.
-        :param <str> client_secret: The client secret for the JPMaQS API.
-        """
-        self.store_path: str = os.path.abspath(store_path)
-        self.store_format: str = store_format
-        self._save_pkl: bool = self.store_format == "pkl" or self.store_format == "all"
-        self._save_csv: bool = self.store_format == "csv" or self.store_format == "all"
-        if self._save_pkl:
-            os.makedirs(os.path.join(self.store_path, "pkl"), exist_ok=True)
-            self.pkl_path: str = os.path.join(self.store_path, "pkl")
-        if self._save_csv:
-            os.makedirs(os.path.join(self.store_path, "csv"), exist_ok=True)
-            self.csv_path: str = os.path.join(self.store_path, "csv")
+        if store_format not in ["pkl", "json"]:
+            raise ValueError(f"Store format {store_format} not supported.")
+
+        self.store_path = os.path.abspath(store_path)
+        self.store_format = store_format
+
+        os.makedirs(self.store_path, exist_ok=True)
+        os.makedirs(os.path.join(self.store_path, self.store_format), exist_ok=True)
 
         super().__init__(*args, **kwargs)
 
-    def _save_df(
+    def _extract_timeseries(
         self,
-        df: pd.DataFrame,
-    ) -> None:
-        """
-        Saves the dataframe to the store_path.
+        timeseries: Union[Dict[str, Any], List[Dict[str, Any]]],
+    ):
+        if isinstance(timeseries, list):
+            if len(timeseries) == 0:
+                return [{}]
 
-        :param df: The dataframe to save.
+            return [self._extract_timeseries(timeseries=ts) for ts in timeseries]
 
+        logger.debug(
+            f"Extracting timeseries for {timeseries['attributes'][0]['expression']}"
+        )
+        if timeseries["attributes"][0]["time-series"] is None:
+            return {}
+        else:
+            return {
+                "attributes": [
+                    {
+                        "expression": timeseries["attributes"][0]["expression"],
+                        "time-series": timeseries["attributes"][0]["time-series"],
+                    }
+                ]
+            }
 
-        """
-
-        for (cid, xcat), dfx in df.groupby(["cid", "xcat"]):
-            logger.info(f"Saving DF for {cid}_{xcat}")
-            dfx = (
-                dfx.drop(["cid", "xcat"], axis=1)
-                .dropna(axis=0, how="any")
-                .reset_index(drop=True)
-            )[["real_date"] + self.valid_metrics]
-
-            ticker: str = f"{cid}_{xcat}"
-            if self._save_pkl:
-                dfx.to_pickle(os.path.join(self.pkl_path, f"{ticker}.pkl"))
-            if self._save_csv:
-                dfx.to_csv(os.path.join(self.csv_path, f"{ticker}.csv"), index=False)
-
-    def download(
+    def _save_timeseries(
         self,
-        batch_size: int = 500,
+        timeseries: Union[Dict[str, Any], List[Dict[str, Any]]],
+    ):
+
+        if isinstance(timeseries, list):
+            for ts in timeseries:
+                if ts:
+                    self._save_timeseries(timeseries=ts)
+            return
+
+        expr = timeseries["attributes"][0]["expression"]
+        pathx = os.path.join(self.store_path, self.store_format)
+        logger.debug(
+            f"Saving timeseries for {expr}, format: {self.store_format}, path: {pathx}"
+        )
+        if self.store_format == "pkl":
+            with open(os.path.join(pathx, expr + ".pkl"), "wb") as f:
+                pickle.dump(timeseries, f)
+        elif self.store_format == "json":
+            with open(os.path.join(pathx, expr + ".json"), "w") as f:
+                json.dump(timeseries, f)
+
+        return True
+
+    def _get_data(
+        self,
+        url: str,
+        params: dict,
+        tracking_id: str,
+    ):
+        try:
+            data = self._fetch(url=url, params=params, tracking_id=tracking_id)
+            data = self._extract_timeseries(timeseries=data)
+            self._save_timeseries(timeseries=data)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to download data for {tracking_id} due to {e}")
+            return False
+
+    def _download(
+        self,
+        expressions: List[str],
+        params: dict,
+        url: str,
+        tracking_id: str,
+        delay_param: float,
         show_progress: bool = False,
-    ) -> None:
-        """
-        Downloads the entire database and stores it locally.
-        All tickers are downloaded in batches of `batch_size`.
-        This is to avoid memory and connectivity issues.
-        NOTE: This will take a long time to run - 1hr+.
+        retry_counter: int = 0,
+    ) -> List[bool]:
+        if retry_counter > 0:
+            print("Retrying failed downloads. Retry count:", retry_counter)
 
-        :param <int> batch_size: The batch size to use when downloading the data.
-        :param <bool> show_progress: Whether to show a progress bar or not.
-        :return: None
-        """
-        print("Initialising snapshot download...")
-        print("Downloading the JPMaQS catalogue from DataQuery...")
+        if retry_counter > HL_RETRY_COUNT:
+            raise DownloadError(
+                f"Failed {retry_counter} times to download data all requested data.\n"
+                f"No longer retrying."
+            )
 
-        all_tickers: List[str] = self.get_catalogue()
-        start_date: str = "1990-01-01"
-        metrics: List[str] = self.valid_metrics
-        end_date: str = None
-
-        # batch the expressions into 500
-        batched_tickers: List[List[str]] = [
-            all_tickers[i : i + batch_size]
-            for i in range(0, len(all_tickers), batch_size)
+        expr_batches: List[List[str]] = [
+            expressions[i : i + self.batch_size]
+            for i in range(0, len(expressions), self.batch_size)
         ]
 
-        # download the data
-        for batch in tqdm(
-            batched_tickers, disable=not show_progress, desc="Downloading snapshot"
-        ):
-            df: pd.DataFrame = super().download(
-                tickers=batch,
-                metrics=metrics,
-                start_date=start_date,
-                end_date=end_date,
-                show_progress=show_progress,
+        failed_batches: List[List[str]] = []
+        continuous_failures: int = 0
+        last_five_exc: List[Exception] = []
+
+        future_objects: List[concurrent.futures.Future] = []
+        results: List[bool] = []
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            for ib, expr_batch in tqdm(
+                enumerate(expr_batches),
+                desc="Requesting data",
+                disable=not show_progress,
+                total=len(expr_batches),
+            ):
+                curr_params: Dict = params.copy()
+                curr_params["expressions"] = expr_batch
+                logger.debug(f"Sending request with params: {curr_params}")
+
+                future_objects.append(
+                    executor.submit(
+                        self._get_data,
+                        url=url,
+                        params=curr_params,
+                        tracking_id=tracking_id,
+                    )
+                )
+                time.sleep(delay_param)
+
+            for ib, future_object in tqdm(
+                enumerate(concurrent.futures.as_completed(future_objects)),
+                desc="Downloading data",
+                disable=not show_progress,
+                total=len(future_objects),
+            ):
+                try:
+
+                    res: Dict[str, Any] = future_object.result()
+                    results.append(res)
+                    if not res:
+                        raise DownloadError(
+                            "Could not download data, will retry.\n"
+                            f"User ID: {self.auth.get_auth()['user_id']}\n"
+                            f"URL: {form_full_url(url, params)}"
+                            f"Timestamp (UTC): {datetime.datetime.utcnow().isoformat()}"
+                        )
+
+                    continuous_failures = 0
+
+                except Exception as exc:
+                    if isinstance(exc, (KeyboardInterrupt, AuthenticationError)):
+                        raise exc
+
+                    failed_batches.append(expr_batches[ib])
+                    self.msg_errors.append(f"Batch {ib} failed with exception: {exc}")
+                    continuous_failures += 1
+                    last_five_exc.append(exc)
+                    if continuous_failures > MAX_CONTINUOUS_FAILURES:
+                        exc_str: str = "\n".join([str(e) for e in last_five_exc])
+                        raise DownloadError(
+                            f"Failed {continuous_failures} times to download data."
+                            f" Last five exceptions: \n{exc_str}"
+                        )
+
+                    if self.debug:
+                        raise exc
+
+        if len(failed_batches) > 0:
+            print(f"Retrying {len(failed_batches)} failed batches. ")
+            self.msg_errors.append(
+                f"Failed to download {len(failed_batches)} batches. Retrying..."
             )
-            self._save_df(df=df)
+            results += self._download(
+                expressions=itertools.chain(*failed_batches),
+                params=params,
+                url=url,
+                tracking_id=tracking_id,
+                delay_param=delay_param,
+                show_progress=show_progress,
+                retry_counter=retry_counter + 1,
+            )
+
+        return results
+
+    def download_data(
+        self,
+        expressions: List[str] = None,
+        start_date: str = "1990-01-01",
+        end_date: str = None,
+        show_progress: bool = False,
+        endpoint: str = TIMESERIES_ENDPOINT,
+        calender: str = "CAL_ALLDAYS",
+        frequency: str = "FREQ_DAY",
+        conversion: str = "CONV_LASTBUS_ABS",
+        nan_treatment: str = "NA_NOTHING",
+        reference_data: str = "NO_REFERENCE_DATA",
+        retry_counter: int = 0,
+        delay_param: float = API_DELAY_PARAM,  # TODO do we want the user to have access to this?
+    ):
+        """
+        Download data from the DataQuery API.
+
+        :param <List[str]> expressions: list of expressions to download.
+        :param <str> start_date: start date for the data in the ISO-8601 format
+            (YYYY-MM-DD).
+        :param <str> end_date: end date for the data in the ISO-8601 format
+            (YYYY-MM-DD).
+        :param <bool> show_progress: whether to show a progress bar for the download.
+        :param <str> endpoint: endpoint to use for the download.
+        :param <str> calender: calendar setting to use for the download.
+        :param <str> frequency: frequency of data points to use for the download.
+        :param <str> conversion: conversion setting to use for the download.
+        :param <str> nan_treatment: NaN treatment setting to use for the download.
+        :param <str> reference_data: reference data to pass to the API kwargs.
+        :param <int> retry_counter: number of times the download has been retried.
+        :param <float> delay_param: delay between requests to the API.
+
+        :return <List[Dict]>: list of dictionaries containing the response data.
+
+        :raises <ValueError>: if any arguments are invalid or semantically incorrect
+            (see validate_download_args()).
+        :raises <DownloadError>: if the download fails.
+        :raises <ConnectionError(HeartbeatError)>: if the heartbeat fails.
+        :raises <Exception>: other exceptions may be raised by underlying functions.
+        """
+        download_start_time: float = time.time()
+
+        tracking_id: str = TIMESERIES_TRACKING_ID
+        if end_date is None:
+            end_date = datetime.datetime.today().strftime("%Y-%m-%d")
+
+        print("Downloading tickers catalogue...")
+        tickers: List[str] = self.get_catalogue()
+
+        metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+        expressions: List[str] = JPMaQSDownload.construct_expressions(
+            tickers=tickers, metrics=metrics
+        )
+
+        if datetime.datetime.strptime(
+            end_date, "%Y-%m-%d"
+        ) < datetime.datetime.strptime(start_date, "%Y-%m-%d"):
+            logger.warning(
+                "Start date (%s) is after end-date (%s): swap them!",
+                start_date,
+                end_date,
+            )
+            start_date, end_date = end_date, start_date
+
+        # remove dashes from dates to match DQ format
+        start_date: str = start_date.replace("-", "")
+        end_date: str = end_date.replace("-", "")
+
+        # check heartbeat before each "batch" of requests
+        if self._check_connection:
+            if not self.check_connection():
+                raise ConnectionError(
+                    HeartbeatError(
+                        f"Heartbeat failed. Timestamp (UTC):"
+                        f" {datetime.datetime.utcnow().isoformat()}\n"
+                        f"User ID: {self.auth.get_auth()['user_id']}\n"
+                    )
+                )
+            time.sleep(delay_param)
+
+        logger.info(
+            "Download %d expressions from DataQuery from %s to %s",
+            len(expressions),
+            datetime.datetime.strptime(start_date, "%Y%m%d").date(),
+            datetime.datetime.strptime(end_date, "%Y%m%d").date(),
+        )
+        params_dict: Dict = {
+            "format": "JSON",
+            "start-date": start_date,
+            "end-date": end_date,
+            "calendar": calender,
+            "frequency": frequency,
+            "conversion": conversion,
+            "nan_treatment": nan_treatment,
+            "data": reference_data,
+        }
+
+        final_output: List[dict] = self._download(
+            expressions=expressions,
+            params=params_dict,
+            url=self.base_url + endpoint,
+            tracking_id=tracking_id,
+            delay_param=delay_param,
+            show_progress=show_progress,
+        )
+
+        download_time_taken: float = time.time() - download_start_time
+
+        expressions_saved_files: List[str] = [
+            os.path.abspath(fx)
+            for fx in glob.glob(
+                os.path.join(self.store_path, self.store_format, "*"), recursive=True
+            )
+        ]
+        expressions_saved: List[str] = [
+            os.path.basename(fx).split(".")[0] for fx in expressions_saved_files
+        ]
+        expressions_missing: List[str] = list(set(expressions) - set(expressions_saved))
+
+        print(f"Number of expressions requested: {len(expressions)}")
+        print(f"Number of expressions downloaded: {len(expressions_saved)}")
+
+        print(f"Number of expressions missing: {len(expressions_missing)}")
+        if expressions_missing:
+            for expression in sorted(expressions_missing):
+                print(f"Esxpression missing: {expression}")
+
+        size_downloaded: float = sum(
+            [os.path.getsize(fx) for fx in expressions_saved_files]
+        )
+        print(
+            f"Total size of files downloaded: {size_downloaded / (1024 ** 2) :.2f} MB | {size_downloaded / (1024 ** 3) :.2f} GB"
+        )
+
+        print(
+            f"Time taken to download files: {download_time_taken / 60 :.2f} minutes | {download_time_taken / 3600 :.2f} hours"
+        )
