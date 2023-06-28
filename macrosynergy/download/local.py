@@ -219,8 +219,12 @@ class DownloadTimeseries(DataQueryInterface):
 
         os.makedirs(self.store_path, exist_ok=True)
         os.makedirs(os.path.join(self.store_path, self.store_format), exist_ok=True)
-
-        super().__init__(*args, **kwargs)
+        # get client id and secret from kwargs. remove them from kwargs
+        client_id: str = kwargs.pop("client_id", None)
+        client_secret: str = kwargs.pop("client_secret", None)
+        cfg: Config = Config(client_id=client_id, client_secret=client_secret)
+        
+        super().__init__(config=cfg, *args, **kwargs)
 
     def _extract_timeseries(
         self,
