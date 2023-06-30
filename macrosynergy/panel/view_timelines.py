@@ -36,7 +36,6 @@ def view_timelines(
     height: float = 3.0,
     legend_fontsize: int = 12,
 ):
-
     """Displays a facet grid of time line charts of one or more categories.
 
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
@@ -135,7 +134,6 @@ def view_timelines(
     # NOTE: casting var(cids) to list if it is a string is dependent on the reduce_df function
 
     if xcat_grid:
-
         if not len(cids) == 1:
             raise ValueError(
                 "`xcat_grid` can only be set to True if a "
@@ -284,7 +282,6 @@ def view_timelines(
             ax.set_ylabel("")
             ax.legend(ncol=legend_ncol, fontsize=legend_fontsize)
 
-
     if all_xticks:
         if fg is not None:
             for ax in fg.axes.flat:
@@ -296,56 +293,47 @@ def view_timelines(
         fg.figure.subplots_adjust(bottom=label_adj)
     else:
         plt.subplots_adjust(bottom=label_adj)
-        
+
     if title is not None:
         if fg is not None:
             fg.figure.suptitle(
                 title,
                 y=title_adj,
                 fontsize=title_fontsize,
-                x=0.5, horizontalalignment="center"
+                x=title_xadj,
+                horizontalalignment="center",
             )
         else:
-            ax.set_title(title, y=title_adj, fontsize=title_fontsize,
-                            x=0.5, horizontalalignment="center")
+            ax.set_title(
+                title,
+                y=title_adj,
+                fontsize=title_fontsize,
+                x=title_xadj,
+                horizontalalignment="center",
+            )
 
     plt.show()
 
 
 if __name__ == "__main__":
-
     cids = ["AUD", "CAD", "GBP", "NZD"]
     xcats = ["XR", "CRY", "INFL"]
     df_cids = pd.DataFrame(
         index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
     )
-    df_cids.loc[
-        "AUD",
-    ] = ["2010-01-01", "2020-12-31", 0.2, 0.2]
-    df_cids.loc[
-        "CAD",
-    ] = ["2011-01-01", "2020-11-30", 0, 1]
-    df_cids.loc[
-        "GBP",
-    ] = ["2012-01-01", "2020-11-30", 0, 2]
-    df_cids.loc[
-        "NZD",
-    ] = ["2012-01-01", "2020-09-30", -0.1, 3]
+    df_cids.loc["AUD",] = ["2010-01-01", "2020-12-31", 0.2, 0.2]
+    df_cids.loc["CAD",] = ["2011-01-01", "2020-11-30", 0, 1]
+    df_cids.loc["GBP",] = ["2012-01-01", "2020-11-30", 0, 2]
+    df_cids.loc["NZD",] = ["2012-01-01", "2020-09-30", -0.1, 3]
 
     df_xcats = pd.DataFrame(
         index=xcats,
         columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
     )
 
-    df_xcats.loc[
-        "XR",
-    ] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-    df_xcats.loc[
-        "INFL",
-    ] = ["2015-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-    df_xcats.loc[
-        "CRY",
-    ] = ["2013-01-01", "2020-10-30", 1, 2, 0.95, 0.5]
+    df_xcats.loc["XR",] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["INFL",] = ["2015-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY",] = ["2013-01-01", "2020-10-30", 1, 2, 0.95, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfdx = dfd[~((dfd["cid"] == "AUD") & (dfd["xcat"] == "XR"))]
