@@ -345,8 +345,8 @@ class NaivePnL:
         sig_neg_error = "Boolean object expected for negative conversion."
         assert isinstance(sig_neg, bool), sig_neg_error
 
-        sig_add_error = "Float object expected for signal addition."
-        assert isinstance(sig_add, float), sig_add_error
+        sig_add_error = "Numeric value expected for signal addition."
+        assert isinstance(sig_add, (float, int)), sig_add_error
 
         # B. Extract DataFrame of exclusively return and signal categories in time series
         # format.
