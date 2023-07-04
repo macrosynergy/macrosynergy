@@ -165,10 +165,11 @@ def linear_composite(
     :param <str> update_freq: The sampling frequency of the output data. The output
         data will be downsampled to the specified frequency. Options are 'D', 'W', 'M',
         'Q', 'A'. Default is 'M' (monthly).
-    :param <List[float]> signs: An array of consisting of 1s or -1s, of the same length
+    :param <List[float]> signs: An array of consisting of +1s or -1s, of the same length
         as the number of categories in `xcats` to indicate whether the respective category
         should be added or subtracted from the linear combination. Not relevant when
         aggregating over cross-sections, i.e. when a single category is given in `xcats`.
+        Default is None and all signs are set to +1.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         for which the respective category is available is used.
     :param <str> end: latest date in ISO format. Default is None and latest date for
