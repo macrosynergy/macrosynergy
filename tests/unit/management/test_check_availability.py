@@ -8,8 +8,8 @@ class TestAll(unittest.TestCase):
 
     def dataframe_constructor(self):
 
-        self.__dict__["cids"] = ["AUD", "CAD", "GBP"]
-        self.__dict__["xcats"] = ["CRY", "XR", "GROWTH", "INFL", "GDP"]
+        self.cids: List[str] = ["AUD", "CAD", "GBP"]
+        self.xcats: List[str] = ["CRY", "XR", "GROWTH", "INFL", "GDP"]
 
         df_cids = pd.DataFrame(index=self.cids,
                                columns=["earliest", "latest", "mean_add", "sd_mult"])
@@ -30,7 +30,7 @@ class TestAll(unittest.TestCase):
 
         np.random.seed(0)
 
-        self.__dict__["dfd"] = make_qdf(df_cids, df_xcats, back_ar=0.75)
+        self.dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     def test_check_startyears(self):
 
@@ -85,10 +85,10 @@ class TestAll(unittest.TestCase):
     def test_business_day_dif(self):
 
         self.dataframe_constructor()
-        dfd = self.dfd
+        dfd: pd.DataFrame = self.dfd
 
-        dfe = check_enddates(dfd)
-        dfe = dfe.apply(pd.to_datetime)
+        dfe: pd.DataFrame = check_enddates(dfd)
+        dfe: pd.DataFrame = dfe.apply(pd.to_datetime)
 
         maxdate = dfe.max().max()
         bus_df = business_day_dif(df=dfe, maxdate=maxdate)
