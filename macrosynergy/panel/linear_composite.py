@@ -20,7 +20,6 @@ def linear_composite_on_cid(
     complete_xcats: bool = True,
     new_xcat="NEW",
 ):
-
     if not len(xcats) == len(weights) == len(signs):
         raise ValueError("xcats, weights, and signs must have same length")
     if not np.isclose(np.sum(weights), 1) or normalize_weights:
@@ -161,14 +160,16 @@ def linear_composite(
     :param <Union[List[float], np.ndarray, pd.Series, str]> weights: An array of weights
         of the same length as the number of categories in `xcats` to be used in the
         linear combination. If a single category is given in `xcats`, another category
-        can be specified in `weights` to be used as weights.
+        can be specified in `weights` to be used as weights. Default is None and all
+        categories in `xcats` are given equal weights.
     :param <str> update_freq: The sampling frequency of the output data. The output
         data will be downsampled to the specified frequency. Options are 'D', 'W', 'M',
         'Q', 'A'. Default is 'M' (monthly).
-    :param <List[float]> signs: An array of [1, -1] of the same length as the number of
-        categories in `xcats` to indicate whether the respective category should be
-        added or subtracted from the linear combination. Not relevant when aggregating
-        over cross-sections, i.e. when a single category is given in `xcats`.
+    :param <List[float]> signs: An array of consisting of +1s or -1s, of the same length
+        as the number of categories in `xcats` to indicate whether the respective category
+        should be added or subtracted from the linear combination. Not relevant when
+        aggregating over cross-sections, i.e. when a single category is given in `xcats`.
+        Default is None and all signs are set to +1.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         for which the respective category is available is used.
     :param <str> end: latest date in ISO format. Default is None and latest date for
@@ -298,7 +299,7 @@ def linear_composite(
             raise ValueError(f"Not all xcats in `xcats` are available in DataFrame")
 
         if weights is None:
-            weights: np.ndarray = np.ones(len(xcats))/len(xcats)
+            weights: np.ndarray = np.ones(len(xcats)) / len(xcats)
             # w←1/n
 
         if signs is None:
@@ -326,7 +327,6 @@ def linear_composite(
 
 
 if __name__ == "__main__":
-
     cids = ["AUD", "CAD", "GBP"]
     xcats = ["XR", "CRY", "INFL"]
 
