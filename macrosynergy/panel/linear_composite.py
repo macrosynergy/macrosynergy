@@ -297,17 +297,18 @@ def linear_composite(
         if not all(x in dfx["xcat"].unique() for x in xcats):
             raise ValueError(f"Not all xcats in `xcats` are available in DataFrame")
 
+        if weights is None:
+            weights: np.ndarray = np.ones(len(xcats))/len(xcats)
+            # w←1/n
+
+        if signs is None:
+            signs: np.ndarray = np.ones(len(xcats))
+
         for varx, namex in zip([weights, signs], ["weights", "signs"]):
             if not isinstance(varx, listtypes):
                 raise TypeError(
                     f"`{namex}` must be a list of floats, an np.ndarray or a pd.Series"
                 )
-
-        if weights is None:
-            weights: np.ndarray = np.ones(len(xcats))
-
-        if signs is None:
-            signs: np.ndarray = np.ones(len(xcats))
 
         if not len(weights) == len(xcats) == len(signs):
             raise ValueError("`xcats`, `weights` and `signs` must have the same length")

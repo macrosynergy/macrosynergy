@@ -172,7 +172,7 @@ def setup_package():
         python_requires='>=3.6',
         install_requires=REQUIREMENTS.split("\n"),
         include_package_data=True,
-        packages=find_packages(),
+        packages=find_packages(exclude=["tests", "tests.*"]),
         version=get_version_info()[0],
     )
     # __copyright__ = 'Copyright 2020 Macrosynergy Ltd'
