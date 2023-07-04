@@ -40,3 +40,7 @@ jobs:
         pytest tests/integration/
         # echo "Integration test temporarily disabled."
         echo 'Integration test complete'
+    - name: Test build settings
+      run: |
+        pip install .[all] 
+        python -c "import macrosynergy; print(macrosynergy.__version__)"

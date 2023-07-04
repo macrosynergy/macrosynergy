@@ -35,8 +35,8 @@ Development Status :: 4 - Beta
 
 MAJOR = 0
 MINOR = 0
-MICRO = 32
-ISRELEASED = True
+MICRO = 33
+ISRELEASED = False
 VERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
 
 if sys.version_info >= (3, 12):
@@ -172,7 +172,7 @@ def setup_package():
         python_requires='>=3.6',
         install_requires=REQUIREMENTS.split("\n"),
         include_package_data=True,
-        packages=find_packages(),
+        packages=find_packages(exclude=["tests", "tests.*"]),
         version=get_version_info()[0],
     )
     # __copyright__ = 'Copyright 2020 Macrosynergy Ltd'
