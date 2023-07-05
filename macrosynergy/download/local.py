@@ -184,7 +184,7 @@ class LocalDataQueryInterface(DataQueryInterface):
 
 
 class LocalCache(JPMaQSDownload):
-    def __init__(self, local_path: str, fmt="pkl"):
+    def __init__(self, local_path: str, fmt="pkl", *args, **kwargs):
         self.local_path = os.path.abspath(local_path)
         self.store_format = fmt
         config: Config = Config(
