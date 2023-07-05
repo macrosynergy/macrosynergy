@@ -35,6 +35,8 @@ cache = lru_cache(maxsize=None)
 
 class LocalDataQueryInterface(DataQueryInterface):
     def __init__(self, local_path: str, fmt="pkl", *args, **kwargs):
+        if local_path.startswith("~"):
+            local_path = os.path.expanduser(local_path)
         self.local_path = os.path.abspath(local_path)
         # check if the local path exists
         if not os.path.exists(self.local_path):
@@ -185,6 +187,8 @@ class LocalDataQueryInterface(DataQueryInterface):
 
 class LocalCache(JPMaQSDownload):
     def __init__(self, local_path: str, fmt="pkl", *args, **kwargs):
+        if local_path.startswith("~"):
+            local_path = os.path.expanduser(local_path)
         self.local_path = os.path.abspath(local_path)
         self.store_format = fmt
         config: Config = Config(
@@ -622,6 +626,8 @@ class DownloadTimeseries(DataQueryInterface):
         )
 
 
-# print(LocalCache(
-#     local_path=r"C:\Users\PalashTyagi\Code\LocalTickerStore\stored_data"
-# ).download(tickers="USD_DU05YXR_NSA").head())
+print(
+    LocalCache(local_path=r"~\Macrosynergy\Macrosynergy - Documents\SharedData\JPMaQSTickers")
+    .download(tickers="USD_DU05YXR_NSA")
+    .head()
+)
