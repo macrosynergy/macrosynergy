@@ -1,4 +1,4 @@
-from typing import List, Union, Optional, Tuple, Dict, Any
+from typing import List, Union, Optional, Dict, Any, Callable
 import pandas as pd
 import os
 import glob
@@ -25,6 +25,7 @@ from macrosynergy.download.exceptions import (
     AuthenticationError,
     HeartbeatError,
     DownloadError,
+    InvalidDataframeError,
 )
 from macrosynergy.management.utils import Config, form_full_url
 
@@ -33,7 +34,7 @@ cache = lru_cache(maxsize=None)
 
 
 class LocalDataQueryInterface(DataQueryInterface):
-    def __init__(self, local_path: str, fmt="pkl"):
+    def __init__(self, local_path: str, fmt="pkl", *args, **kwargs):
         self.local_path = os.path.abspath(local_path)
         # check if the local path exists
         if not os.path.exists(self.local_path):
@@ -42,23 +43,30 @@ class LocalDataQueryInterface(DataQueryInterface):
             )
         self.store_format = fmt
         logger.info(f"LocalDataQuery initialized with local_path: {self.local_path}")
+        self._find_expression_files()
+        super().__init__(*args, **kwargs)
 
     @cache
-    def _find_ticker_files(
+    def _find_expression_files(
         self,
     ) -> List[str]:
         """
         Returns a list of files in the local path
         """
         # get all files in the local path with the correct extension, at any depth
-
         files: List[str] = glob.glob(
-            os.path.join(self.local_path, f"*.{self.store_format}"), recursive=True
+            os.path.join(self.local_path, self.store_format, f"*.{self.store_format}"),
+            recursive=True,
         )
+        self.expression_paths: Dict[str, str] = {
+            os.path.basename(f).split(".")[0]: os.path.normpath(os.path.abspath(f))
+            for f in files
+        }
+
         return files
 
     @cache
-    def _get_ticker_path(self, ticker: str) -> str:
+    def _get_expression_path(self, expression: str) -> str:
         """
         Returns the absolute path to the ticker file.
 
@@ -66,25 +74,58 @@ class LocalDataQueryInterface(DataQueryInterface):
         :return: The absolute path to the ticker file.
         :raises FileNotFoundError: If the ticker is not found in the local path.
         """
-        files: List[str] = self._find_ticker_files()
-        for f in files:
-            if ticker == f.split(os.sep)[-1].split(".")[0]:
-                return f
-        raise FileNotFoundError(f"Ticker {ticker} not found in {self.local_path}")
+        files: List[str] = self._find_expression_files()
+        r = self.expression_paths.get(expression, None)
+        if r is None:
+            raise FileNotFoundError(
+                f"Could not find expression {expression} in the local path."
+            )
+        return r
 
     def get_catalogue(self, *args, **kwargs) -> List[str]:
         """
         Returns a list of tickers available in the local
         tickerstore.
         """
-        tickers: List[str] = [
-            os.path.basename(f).split(".")[0] for f in self._find_ticker_files()
-        ]
+        exprs: List[List[str]] = JPMaQSDownload.deconstruct_expression(
+            expression=[
+                os.path.basename(f).split(".")[0] for f in self._find_expression_files()
+            ]
+        )
+        tickers: List[str] = sorted(
+            list(set([f"{expr[0]}_{expr[1]}" for expr in exprs]))
+        )
         return tickers
+
+    def get_metrics(self, *args, **kwargs) -> List[str]:
+        """
+        Returns a list of metrics available in the local
+        tickerstore.
+        """
+        exprs: List[List[str]] = [
+            JPMaQSDownload.deconstruct_expression(
+                expression=os.path.basename(f).split(".")[0]
+            )
+            for f in self._find_expression_files()
+        ]
+        metrics: List[str] = sorted(list(set([expr[2] for expr in exprs])))
+        return metrics
 
     def check_connection(self, verbose=False) -> bool:
         # check if _find_ticker_files returns anything
-        if len(self._find_ticker_files()) > 0:
+        if len(self._find_expression_files()) > 0:
+            ctl: List[str] = self.get_catalogue()
+            metrics: List[str] = self.get_metrics()
+            for ticker in ctl:
+                self._get_expression_path(
+                    JPMaQSDownload.construct_expressions(
+                        tickers=[ticker], metrics=metrics
+                    )[0]
+                )
+                # verifies local paths, and builds cache
+            if verbose:
+                print("Connection to local tickerstore successful.")
+
             return True
         else:
             fmt_long: str = (
@@ -95,49 +136,21 @@ class LocalDataQueryInterface(DataQueryInterface):
                 f"does not contain {fmt_long} files."
             )
 
-    def load_data(
+    def _load_timeseries(self, expression: str) -> Dict[str, Any]:
+        loader: Callable = pickle.load if self.store_format == "pkl" else json.load
+        with open(self._get_expression_path(expression=expression), "rb") as f:
+            return loader(f)
+
+    def _load_expressions(
         self,
         expressions: List[str],
-        start_date: str,
-        end_date: str,
-    ) -> pd.DataFrame:
-        def _load_df(ticker: str) -> pd.DataFrame:
-            if self.store_format == "pkl":
-                return pd.read_pickle(os.path.join(self.local_path, ticker + ".pkl"))
-            elif self.store_format == "csv":
-                return pd.read_csv(os.path.join(self.local_path, ticker + ".csv"))
+    ) -> List[Dict[str, Any]]:
+        """
+        Loads a list of expressions from the local path.
 
-        def _get_df(
-            cid: str, xcat: str, metrics: List[str], start_date: str, end_date: str
-        ) -> pd.DataFrame:
-            df: pd.DataFrame = _load_df(ticker=f"{cid}_{xcat}")
-            df = df[["real_date"] + metrics]
-            df["real_date"] = pd.to_datetime(df["real_date"])
-            df = df.loc[(df["real_date"] >= start_date) & (df["real_date"] <= end_date)]
-            df["cid"] = cid
-            df["xcat"] = xcat
-            return df[["real_date", "cid", "xcat"] + metrics]
-
-        # is overloaded to accept a list of expressions
-        deconstr_expressions: List[List[str]] = JPMaQSDownload.deconstruct_expression(
-            expression=expressions
-        )
-
-        pd.DataFrame = pd.concat(
-            [
-                _get_df(
-                    cid=cidx,
-                    xcat=xcatx,
-                    metrics=metricsx,
-                    start_date=start_date,
-                    end_date=end_date,
-                )
-                for cidx, xcatx, metricsx in deconstr_expressions
-            ],
-            ignore_index=True,
-            axis=0,
-        )
-        return pd.DataFrame
+        :param expressions: list of expressions to load.
+        """
+        return [self._load_timeseries(expression=expr) for expr in expressions]
 
     def download_data(
         self,
@@ -153,44 +166,118 @@ class LocalDataQueryInterface(DataQueryInterface):
         reference_data: str = "NO_REFERENCE_DATA",
         retry_counter: int = 0,
         delay_param: float = ...,
-    ) -> pd.DataFrame:
-        # divide expressions into batches of 10
+    ) -> List[Dict[str, Any]]:
         batched_expressions: List[List[str]] = [
-            expressions[i : i + 10] for i in range(0, len(expressions), 10)
+            expressions[i : i + 50] for i in range(0, len(expressions), 50)
         ]
 
-        with Pool(cpu_count() - 1) as p:
-            df: pd.DataFrame = pd.concat(
-                list(
-                    tqdm(
-                        p.imap(
-                            self.load_data,
-                            batched_expressions,
-                        ),
-                        total=len(batched_expressions),
-                        disable=not show_progress,
-                        desc="Downloading data",
-                    )
-                ),
-                ignore_index=True,
-                axis=0,
-            )
-
-        return df
+        return itertools.chain.from_iterable(
+            [
+                self._load_expressions(expr_batch)
+                for expr_batch in tqdm(
+                    batched_expressions,
+                    desc="Downloading data",
+                    disable=not show_progress,
+                )
+            ]
+        )
 
 
 class LocalCache(JPMaQSDownload):
     def __init__(self, local_path: str, fmt="pkl"):
         self.local_path = os.path.abspath(local_path)
         self.store_format = fmt
+        config: Config = Config(
+            client_id="<local>", client_secret=f"<{self.local_path}>"
+        )
         super().__init__(
-            client_id="<local>",
-            client_secret=f"<{self.local_path}>",
+            **config.oauth(mask=False),
             check_connection=False,
         )
         self.dq_interface = LocalDataQueryInterface(
-            local_path=self.local_path, fmt=self.store_format
+            local_path=self.local_path,
+            fmt=self.store_format,
+            config=config,
         )
+
+    def time_series_to_df(
+        self,
+        dicts_list: List[Dict],
+        validate_df: bool = True,
+        expected_expressions: Optional[List[str]] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        verbose: bool = True,
+    ) -> pd.DataFrame:
+        """
+        Convert the downloaded data to a pandas DataFrame.
+        Parameters
+        :param dicts_list <list>: List of dictionaries containing time series
+            data from the DataQuery API
+        Returns
+        :return <pd.DataFrame>: JPMaQS standard dataframe with columns:
+            real_date, cid, xcat, <metric>. The <metric> column contains the
+            observed data for the given cid and xcat on the given real_date.
+
+        :raises <InvalidDataError>: if the downloaded dataframe is invalid.
+        """
+        dfs: List[pd.DataFrame] = []
+        cid: str
+        xcat: str
+        found_expressions: List[str] = []
+        for d in dicts_list:
+            cid, xcat, metricx = JPMaQSDownload.deconstruct_expression(
+                d["attributes"][0]["expression"]
+            )
+            if d["attributes"][0]["time-series"] is not None:
+                found_expressions.append(d["attributes"][0]["expression"])
+                df: pd.DataFrame = (
+                    pd.DataFrame(
+                        d["attributes"][0]["time-series"],
+                        columns=["real_date", metricx],
+                    )
+                    .assign(cid=cid, xcat=xcat, metric=metricx)
+                    .rename(columns={metricx: "obs"})
+                )
+                df = df[["real_date", "cid", "xcat", "obs", "metric"]]
+                dfs.append(df)
+            else:
+                pass
+
+        final_df: pd.DataFrame = pd.concat(dfs, ignore_index=True)
+
+        final_df = (
+            final_df.set_index(["real_date", "cid", "xcat", "metric"])["obs"]
+            .unstack(3)
+            .rename_axis(None, axis=1)
+            .reset_index()
+        )
+
+        final_df["real_date"] = pd.to_datetime(final_df["real_date"])
+
+        expc_bdates: pd.DatetimeIndex = pd.bdate_range(start=start_date, end=end_date)
+        final_df = final_df[final_df["real_date"].isin(expc_bdates)]
+        final_df = final_df.sort_values(["real_date", "cid", "xcat"])
+        found_metrics = sorted(
+            list(set(final_df.columns) - {"real_date", "cid", "xcat"}),
+            key=lambda x: self.valid_metrics.index(x),
+        )
+        final_df = final_df[["real_date", "cid", "xcat"] + found_metrics]
+
+        final_df = final_df.dropna(axis=0, how="any").reset_index(drop=True)
+
+        vdf = self.validate_downloaded_df(
+            data_df=final_df,
+            expected_expressions=expected_expressions,
+            found_expressions=found_expressions,
+            start_date=start_date,
+            end_date=end_date,
+            verbose=verbose,
+        )
+        if not vdf:
+            raise InvalidDataframeError(f"Downloaded dataframe is invalid.")
+
+        return final_df
 
     def download(
         self,
@@ -199,6 +286,7 @@ class LocalCache(JPMaQSDownload):
         **kwargs,
     ) -> pd.DataFrame:
         kwargs.update({"as_dataframe": True, "get_catalogue": True})
+        self.check_connection()
         df: pd.DataFrame = super().download(*args, **kwargs)
         if jpmaqs_df:
             return df
@@ -210,7 +298,6 @@ class LocalCache(JPMaQSDownload):
 
 class DownloadTimeseries(DataQueryInterface):
     def __init__(self, store_path: str, store_format: str = "pkl", *args, **kwargs):
-
         if store_format not in ["pkl", "json"]:
             raise ValueError(f"Store format {store_format} not supported.")
 
@@ -223,7 +310,7 @@ class DownloadTimeseries(DataQueryInterface):
         client_id: str = kwargs.pop("client_id", None)
         client_secret: str = kwargs.pop("client_secret", None)
         cfg: Config = Config(client_id=client_id, client_secret=client_secret)
-        
+
         super().__init__(config=cfg, *args, **kwargs)
 
     def _extract_timeseries(
@@ -255,7 +342,6 @@ class DownloadTimeseries(DataQueryInterface):
         self,
         timeseries: Union[Dict[str, Any], List[Dict[str, Any]]],
     ):
-
         if isinstance(timeseries, list):
             for ts in timeseries:
                 if ts:
@@ -349,7 +435,6 @@ class DownloadTimeseries(DataQueryInterface):
                 total=len(future_objects),
             ):
                 try:
-
                     res: Dict[str, Any] = future_object.result()
                     results.append(res)
                     if not res:
@@ -535,3 +620,8 @@ class DownloadTimeseries(DataQueryInterface):
         print(
             f"Time taken to download files: {download_time_taken / 60 :.2f} minutes | {download_time_taken / 3600 :.2f} hours"
         )
+
+
+# print(LocalCache(
+#     local_path=r"C:\Users\PalashTyagi\Code\LocalTickerStore\stored_data"
+# ).download(tickers="USD_DU05YXR_NSA").head())
