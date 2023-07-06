@@ -226,6 +226,11 @@ def linear_composite(
             if not is_valid_iso_date(varx):
                 raise ValueError(f"`{namex}` must be a valid ISO date")
 
+    xcats = xcats.copy() if isinstance(xcats, list) else [xcats]
+    cids = cids.copy() if cids is not None else dfx["cid"].unique().tolist()
+    weights = weights.copy() if isinstance(weights, listtypes) else weights
+    signs = signs.copy() if isinstance(signs, listtypes) else signs
+
     dfx["real_date"] = pd.to_datetime(dfx["real_date"])
     if start is None:
         start = dfx["real_date"].min()
@@ -254,7 +259,8 @@ def linear_composite(
         cids: List[str] = sorted(list(dfx["cid"].unique()))
 
     # Branch off for the single category case
-    if isinstance(xcats, str):
+    if isinstance(xcats, str) or (isinstance(xcats, list) and len(xcats) == 1):
+        xcats: str = xcats if isinstance(xcats, str) else xcats[0]
         if not xcats in dfx["xcat"].unique():
             raise ValueError(f"Category '{xcats}' not available in DataFrame")
 
