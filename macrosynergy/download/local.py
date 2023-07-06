@@ -1,4 +1,5 @@
-from typing import List, Union, Optional, Dict, Any, Callable
+from typing import List, Union, Optional, Dict, Any, Callable, Tuple
+
 import pandas as pd
 import os
 import glob
@@ -143,16 +144,79 @@ class LocalDataQueryInterface(DataQueryInterface):
         with open(self._get_expression_path(expression=expression), "rb") as f:
             return loader(f)
 
+    def binary_search_dates(
+        self,
+        date_values: List[Tuple[str, float]],
+        start_date: datetime.date,
+        end_date: datetime.date,
+    ) -> int:
+        low = 0
+        high = len(date_values) - 1
+        while low <= high:
+            curr = (low + high) // 2
+            curr_date = datetime.datetime.strptime(
+                date_values[curr][0], "%Y%m%d"
+            ).date()
+
+            if start_date <= curr_date <= end_date:
+                return curr
+            elif curr_date < start_date:
+                low = curr + 1
+            else:
+                high = curr - 1
+
+        return -1
+
+    def _filter_timeseries(
+        self,
+        timeseries: Dict[str, Any],
+        start_date: str,
+        end_date: str,
+    ) -> Dict[str, Any]:
+        sorted_date_values = sorted(
+            timeseries["attributes"][0]["time-series"], key=lambda x: x[0]
+        )
+        sdt: datetime.date = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
+        edt: datetime.date = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
+
+        start_index = self.binary_search_dates(
+            date_values=sorted_date_values, start_date=sdt, end_date=sdt
+        )
+        if start_index == -1:
+            start_index = len(sorted_date_values) - 1
+
+        end_index = self.binary_search_dates(
+            date_values=sorted_date_values, start_date=edt, end_date=edt
+        )
+        if end_index == -1:
+            end_index = len(sorted_date_values) - 1
+
+        # filtered_values = sorted_date_values[start_index : end_index + 1]
+        timeseries["attributes"][0]["time-series"] = sorted_date_values[
+            start_index : end_index + 1
+        ]
+        return timeseries
+
     def _load_expressions(
         self,
         expressions: List[str],
+        start_date: str = "2000-01-01",
+        end_date: str = datetime.datetime.today().strftime("%Y-%m-%d"),
     ) -> List[Dict[str, Any]]:
         """
         Loads a list of expressions from the local path.
 
         :param expressions: list of expressions to load.
         """
-        return [self._load_timeseries(expression=expr) for expr in expressions]
+
+        return [
+            self._filter_timeseries(
+                timeseries=self._load_timeseries(expression=expr),
+                start_date=start_date,
+                end_date=end_date,
+            )
+            for expr in expressions
+        ]
 
     def download_data(
         self,
@@ -631,14 +695,34 @@ class DownloadTimeseries(DataQueryInterface):
 
 # import pandas as pd
 # import time
+# from typing import List
+# from macrosynergy.download.local import LocalCache
+# LOCAL_CACHE="~/Macrosynergy/Macrosynergy - Documents/SharedData/JPMaQSTickers"
 
 # start_time: float = time.time()
-
-# lc: LocalCache = LocalCache(local_path=r"~\Macrosynergy\Macrosynergy - Documents\SharedData\JPMaQSTickers")
-# tickers: List[str] = lc.get_catalogue()[:10]
+# lc: LocalCache = LocalCache(local_path=LOCAL_CACHE)
+# tickers: List[str] = lc.get_catalogue()[:1000]
 # df: pd.DataFrame = lc.download(tickers=tickers, start_date="2023-01-01", show_progress=True)
 
 # print(df.head())
 # print(df.info())
-
 # print(f"Time taken: {time.time() - start_time :.2f} seconds")
+
+
+if __name__ == "__main__":
+
+    import time
+
+    start_time: float = time.time()
+
+    lc: LocalCache = LocalCache(
+        local_path=r"~\Macrosynergy\Macrosynergy - Documents\SharedData\JPMaQSTickers"
+    )
+    tickers: List[str] = lc.get_catalogue()[:10]
+    df: pd.DataFrame = lc.download(tickers=tickers, start_date="2023-01-01")
+
+    print(df.head())
+    print(df.info())
+
+    print(f"Time taken: {time.time() - start_time :.2f} seconds")
+
