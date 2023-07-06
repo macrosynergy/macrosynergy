@@ -173,15 +173,18 @@ class LocalDataQueryInterface(DataQueryInterface):
             expressions[i : i + 50] for i in range(0, len(expressions), 50)
         ]
 
-        return itertools.chain.from_iterable(
-            [
-                self._load_expressions(expr_batch)
-                for expr_batch in tqdm(
-                    batched_expressions,
-                    desc="Downloading data",
-                    disable=not show_progress,
-                )
-            ]
+        return list(
+            itertools.chain.from_iterable(
+                [
+                    self._load_expressions(expressions=expr_batch)
+                    for expr_batch in tqdm(
+                        batched_expressions,
+                        desc="Loading data",
+                        disable=not show_progress,
+                        total=len(batched_expressions),
+                    )
+                ]
+            )
         )
 
 
@@ -626,8 +629,16 @@ class DownloadTimeseries(DataQueryInterface):
         )
 
 
-print(
-    LocalCache(local_path=r"~\Macrosynergy\Macrosynergy - Documents\SharedData\JPMaQSTickers")
-    .download(tickers="USD_DU05YXR_NSA")
-    .head()
-)
+# import pandas as pd
+# import time
+
+# start_time: float = time.time()
+
+# lc: LocalCache = LocalCache(local_path=r"~\Macrosynergy\Macrosynergy - Documents\SharedData\JPMaQSTickers")
+# tickers: List[str] = lc.get_catalogue()[:10]
+# df: pd.DataFrame = lc.download(tickers=tickers, start_date="2023-01-01", show_progress=True)
+
+# print(df.head())
+# print(df.info())
+
+# print(f"Time taken: {time.time() - start_time :.2f} seconds")
