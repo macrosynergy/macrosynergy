@@ -803,7 +803,7 @@ class JPMaQSDownload(object):
                     f"Time taken to convert to dataframe: \t{dfs_time_taken:.2f} seconds."
                 )
 
-        if report_egress:
+        if report_egress and len(egress_data) > 0:
             # create averages for egress_data like
             #  egress_data[tracking_id] = {
             #     "url": log_url,
