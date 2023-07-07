@@ -332,7 +332,7 @@ class TestAll(unittest.TestCase):
         )
 
         self.assertTrue(np.allclose(lc_cid["value"], 2))
-        
+
         lc_cid = linear_composite(
             df=df,
             update_freq="D",
@@ -341,7 +341,7 @@ class TestAll(unittest.TestCase):
             complete_cids=True,
             normalize_weights=True,
         )
-        
+
         self.assertTrue(np.isclose(sum(lc_cid["value"]), 2))
 
         # Test again, single nan in AUD and GBP this time
@@ -370,7 +370,7 @@ class TestAll(unittest.TestCase):
         )
 
         self.assertTrue(np.isclose(sum(lc_cid["value"]), 1))
-        
+
         lc_cid = linear_composite(
             df=df,
             update_freq="D",
@@ -379,8 +379,9 @@ class TestAll(unittest.TestCase):
             complete_cids=True,
             normalize_weights=False,
         )
-                                            
+
         self.assertTrue(np.allclose(lc_cid["value"], 1))
+
 
 if __name__ == "__main__":
     unittest.main()
