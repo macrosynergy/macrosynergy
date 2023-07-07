@@ -287,6 +287,8 @@ class TestAll(unittest.TestCase):
             .mean(numeric_only=True)
             .reindex(tmp_weights.index, method="bfill")
         )
+        # the weights must be normalized
+        rsm_weights = rsm_weights.div(rsm_weights.abs().sum(axis=0), axis=1)
         # mutiply agg_series with rsm_weights anbd store in new variable
         agg_series = agg_series * rsm_weights["value"]
         agg_series = agg_series.reset_index(drop=True)
@@ -326,9 +328,21 @@ class TestAll(unittest.TestCase):
             xcats=target_xcat,
             weights=weights_xcat,
             complete_cids=True,
+            normalize_weights=False,
         )
 
         self.assertTrue(np.allclose(lc_cid["value"], 2))
+
+        lc_cid = linear_composite(
+            df=df,
+            update_freq="D",
+            xcats=target_xcat,
+            weights=weights_xcat,
+            complete_cids=True,
+            normalize_weights=True,
+        )
+
+        self.assertTrue(np.isclose(sum(lc_cid["value"]), 2))
 
         # Test again, single nan in AUD and GBP this time
         df: pd.DataFrame = pd.concat([dfA, dfB], axis=0)
@@ -353,6 +367,17 @@ class TestAll(unittest.TestCase):
             xcats=target_xcat,
             weights=weights_xcat,
             complete_cids=True,
+        )
+
+        self.assertTrue(np.isclose(sum(lc_cid["value"]), 1))
+
+        lc_cid = linear_composite(
+            df=df,
+            update_freq="D",
+            xcats=target_xcat,
+            weights=weights_xcat,
+            complete_cids=True,
+            normalize_weights=False,
         )
 
         self.assertTrue(np.allclose(lc_cid["value"], 1))
