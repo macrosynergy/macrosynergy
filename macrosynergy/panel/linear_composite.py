@@ -26,6 +26,10 @@ def linear_composite_on_cid(
         if not normalize_weights:
             warnings.warn("`weights` does not sum to 1 and will be normalized. w←w/∑w")
         weights = weights / np.sum(weights)
+        assert np.isclose(
+            np.sum(weights), 1
+        ), "Weights do not sum to 1. Normalization failed."
+
     if not np.all(np.isin(signs, [1, -1])):
         warnings.warn("signs must be 1 or -1. They will be coerced to 1 or -1.")
         signs = np.abs(signs) / signs  # should be faster?
@@ -95,7 +99,10 @@ def linear_composite_on_xcat(
 
     # Normalize the weights to sum to 1 if specified
     if normalize_weights:
-        weights_df = weights_df.div(weights_df.abs().sum(axis=0), axis=1)
+        weights_df = weights_df.div(weights_df.abs().sum(axis=1), axis=0)
+        assert np.allclose(
+            weights_df.abs().sum(axis=1), 1
+        ), "Weights do not sum to 1. Normalization failed."
 
     # Downsample the weights to the update frequency
     weights_df = (

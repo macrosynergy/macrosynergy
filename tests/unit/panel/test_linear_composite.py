@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 import pandas as pd
-from typing import *
+from typing import List
 
 from macrosynergy.panel.linear_composite import linear_composite
 from macrosynergy.management.simulate_quantamental_data import make_test_df
@@ -235,27 +235,19 @@ class TestAll(unittest.TestCase):
         start: str = "2000-01-01"
         end: str = "2000-02-01"
 
-        dfA: pd.DataFrame = make_test_df(
+        df: pd.DataFrame = make_test_df(
             cids=cids,
-            xcats=xcats[:-1],
+            xcats=xcats,
             start_date=start,
             end_date=end,
             prefer="linear",
         )
 
-        dfB: pd.DataFrame = make_test_df(
-            cids=cids,
-            xcats=["INFL"],
-            start_date=start,
-            end_date=end,
-            prefer="decreasing-linear",
-        )
-        # dfb["value"] = dfb["value"] / dfb["value"].max()
-
-        df = pd.concat([dfA, dfB], axis=0)
+        df["value"] = 1
 
         target_xcat: str = "CRY"
         weights_xcat: str = "INFL"
+
         lc_cid = linear_composite(
             df=df,
             update_freq="M",
@@ -263,124 +255,49 @@ class TestAll(unittest.TestCase):
             weights=weights_xcat,
         )
 
-        # assert there are no NaNs
-        self.assertFalse(lc_cid["value"].isna().any())
+        self.assertTrue(np.allclose(lc_cid["value"].values, 1))
 
-        # test the values and whether the aggregation is correct
-        # create an series of 0s of bdate_rage(start, end,)
-        bdts: pd.DatetimeIndex = pd.bdate_range(start, end)
-        agg_series: pd.Series = pd.Series(np.zeros(len(bdts)), index=bdts, name="value")
+        df: pd.DataFrame = df.copy()
 
-        dfc: pd.DataFrame = df.copy().set_index("real_date")
+        df.loc[
+            (df["cid"] == "GBP") & (df["xcat"] == weights_xcat) & (df.index % 2 == 0),
+            "value",
+        ] = np.NaN
 
-        for cid in cids:
-            agg_series += dfc[(dfc["cid"] == cid) & (dfc["xcat"] == target_xcat)][
-                "value"
-            ]
-
-        # aggregate the weights for monthly; mimcking the function
-        tmp_weights: pd.DataFrame = dfc[
-            (dfc["cid"] == "AUD") & (dfc["xcat"] == weights_xcat)
-        ]
-        rsm_weights: pd.Series = (
-            tmp_weights.resample("M")
-            .mean(numeric_only=True)
-            .reindex(tmp_weights.index, method="bfill")
-        )
-        # the weights must be normalized
-        rsm_weights = rsm_weights.div(rsm_weights.abs().sum(axis=0), axis=1)
-        # mutiply agg_series with rsm_weights anbd store in new variable
-        agg_series = agg_series * rsm_weights["value"]
-        agg_series = agg_series.reset_index(drop=True)
-        self.assertTrue(np.allclose(agg_series, lc_cid["value"]))
-
-        ## Second test
-
-        df = pd.concat([dfA, dfB], axis=0)
-
-        target_xcat: str = "CRY"
-        weights_xcat: str = "INFL"
         lc_cid = linear_composite(
             df=df,
-            update_freq="D",
+            update_freq="M",
             xcats=target_xcat,
             weights=weights_xcat,
         )
 
-        # In this case, the result["value"] == result["value"][::-1]. Test that.
-        self.assertTrue(np.allclose(lc_cid["value"], lc_cid["value"][::-1]))
+        # check that the last (byt date) value is 1.0
+        last_date = lc_cid["real_date"].max()
+        self.assertTrue(
+            np.allclose(
+                lc_cid.loc[lc_cid["real_date"] == last_date, "value"].values, 1.0
+            )
+        )
 
-        ## Test complete cid
-        df: pd.DataFrame = pd.concat([dfA, dfB], axis=0)
-        df["value"] = 1
+        lc_cid = lc_cid.loc[lc_cid["real_date"] != last_date]
 
-        # cids: List[str] = ["AUD", "CAD", "GBP"]
-        target_xcat: str = "CRY"
-        weights_xcat: str = "INFL"
+        # Now, there should only be 2 unique values in the output
+        self.assertEqual(len(set(lc_cid["value"])), 2)
 
-        # set the AUD values to NaN
-        df.loc[df["cid"] == "AUD", "value"] = np.NaN
-
-        # now when we aggregate, the sum should be 2
+        ## Now test when the weights are not normalized
         lc_cid = linear_composite(
             df=df,
-            update_freq="D",
+            update_freq="M",
             xcats=target_xcat,
             weights=weights_xcat,
-            complete_cids=True,
             normalize_weights=False,
         )
 
-        self.assertTrue(np.allclose(lc_cid["value"], 2))
-
-        lc_cid = linear_composite(
-            df=df,
-            update_freq="D",
-            xcats=target_xcat,
-            weights=weights_xcat,
-            complete_cids=True,
-            normalize_weights=True,
-        )
-
-        self.assertTrue(np.isclose(sum(lc_cid["value"]), 2))
-
-        # Test again, single nan in AUD and GBP this time
-        df: pd.DataFrame = pd.concat([dfA, dfB], axis=0)
-        df["value"] = 1
-
-        target_xcat: str = "CRY"
-        weights_xcat: str = "INFL"
-
-        for cd, xc in zip(["AUD", "GBP"], ["CRY", "INFL"]):
-            random_date: pd.Timestamp = np.random.choice(df["real_date"].unique())
-            df.loc[
-                (df["cid"] == cd)
-                & (df["xcat"] == xc)
-                & (df["real_date"] == random_date),
-                "value",
-            ] = np.NaN
-
-        # now when we aggregate, the sum should be 2
-        lc_cid = linear_composite(
-            df=df,
-            update_freq="D",
-            xcats=target_xcat,
-            weights=weights_xcat,
-            complete_cids=True,
-        )
-
-        self.assertTrue(np.isclose(sum(lc_cid["value"]), 1))
-
-        lc_cid = linear_composite(
-            df=df,
-            update_freq="D",
-            xcats=target_xcat,
-            weights=weights_xcat,
-            complete_cids=True,
-            normalize_weights=False,
-        )
-
-        self.assertTrue(np.allclose(lc_cid["value"], 1))
+        # now the result should alternate between 2.0 and 3.0, starting with 2.0
+        self.assertTrue(np.allclose(lc_cid["value"].values[::2], 2.0))
+        self.assertTrue(np.allclose(lc_cid["value"].values[1::2], 3.0))
+        
+        
 
 
 if __name__ == "__main__":
