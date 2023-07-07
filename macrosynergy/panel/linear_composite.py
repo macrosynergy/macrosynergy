@@ -16,7 +16,7 @@ def linear_composite_on_cid(
     signs: Union[List[float], np.ndarray, pd.Series] = None,
     start: str = None,
     end: str = None,
-    normalize_weights: bool = False,
+    normalize_weights: bool = True,
     complete_xcats: bool = True,
     new_xcat="NEW",
 ):
@@ -68,7 +68,7 @@ def linear_composite_on_xcat(
     xcat: str,
     cids: List[str],
     weights: str,
-    normalize_weights: bool = False,
+    normalize_weights: bool = True,
     complete_cids: bool = False,
     update_freq: str = "M",
     new_cid="GLB",
@@ -132,6 +132,7 @@ def linear_composite(
     xcats: Union[str, List[str]],
     cids: Optional[List[str]] = None,
     weights: Optional[Union[List[float], np.ndarray, pd.Series, str]] = None,
+    normalize_weights: bool = True,
     update_freq: str = "M",
     signs: Optional[Union[List[float], np.ndarray, pd.Series]] = None,
     start: Optional[str] = None,
@@ -162,6 +163,8 @@ def linear_composite(
         linear combination. If a single category is given in `xcats`, another category
         can be specified in `weights` to be used as weights. Default is None and all
         categories in `xcats` are given equal weights.
+    :param <bool> normalize_weights: If True (default) the weights are normalized to sum
+        to 1. If False the weights are used as specified.
     :param <str> update_freq: The sampling frequency of the output data. The output
         data will be downsampled to the specified frequency. Options are 'D', 'W', 'M',
         'Q', 'A'. Default is 'M' (monthly).
@@ -223,6 +226,11 @@ def linear_composite(
             if not is_valid_iso_date(varx):
                 raise ValueError(f"`{namex}` must be a valid ISO date")
 
+    xcats = xcats.copy() if isinstance(xcats, list) else [xcats]
+    cids = cids.copy() if cids is not None else dfx["cid"].unique().tolist()
+    weights = weights.copy() if isinstance(weights, listtypes) else weights
+    signs = signs.copy() if isinstance(signs, listtypes) else signs
+
     dfx["real_date"] = pd.to_datetime(dfx["real_date"])
     if start is None:
         start = dfx["real_date"].min()
@@ -251,7 +259,8 @@ def linear_composite(
         cids: List[str] = sorted(list(dfx["cid"].unique()))
 
     # Branch off for the single category case
-    if isinstance(xcats, str):
+    if isinstance(xcats, str) or (isinstance(xcats, list) and len(xcats) == 1):
+        xcats: str = xcats if isinstance(xcats, str) else xcats[0]
         if not xcats in dfx["xcat"].unique():
             raise ValueError(f"Category '{xcats}' not available in DataFrame")
 
@@ -286,7 +295,7 @@ def linear_composite(
             xcat=xcats,
             cids=cids,
             weights=weights,
-            normalize_weights=False,
+            normalize_weights=normalize_weights,
             complete_cids=complete_cids,
             new_cid=new_cid,
             update_freq=update_freq,
@@ -320,7 +329,7 @@ def linear_composite(
             cids=cids,
             weights=weights,
             signs=signs,
-            normalize_weights=True,
+            normalize_weights=normalize_weights,
             complete_xcats=complete_xcats,
             new_xcat=new_xcat,
         )
