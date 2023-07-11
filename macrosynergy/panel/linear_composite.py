@@ -23,12 +23,10 @@ def linear_composite_on_cid(
     """Linear composite of various xcats across all cids and periods"""
 
     if not len(xcats) == len(weights) == len(signs):
-        raise ValueError("xcats, weights, and signs must have same length")
+        raise ValueError("xcats, weights, and signs must have same length") 
     # TODO: weight not near 1 only a problem if normalize_weights is True
     # TODO:  hence this cannot be an or statement
-    if not np.isclose(np.sum(weights), 1) or normalize_weights:
-        if not normalize_weights:
-            warnings.warn("`weights` does not sum to 1 and will be normalized. w←w/∑w")
+    if normalize_weights:
         weights = weights / np.sum(weights)
         assert np.isclose(
             np.sum(weights), 1
@@ -109,17 +107,19 @@ def linear_composite_on_xcat(
             columns=target_df.columns,
         )
 
-    # TODO: For mormalization we need to multiply weights with signs of xcat values first
-    # TODO: if weights are a category we need to assert that all values are positive
-    # Normalize the weights to sum to 1 if specified
-    if normalize_weights:
-        weights_df = weights_df.div(weights_df.abs().sum(axis=1), axis=0)
-        assert np.allclose(
-            weights_df.abs().sum(axis=1), 1
-        ), "Weights do not sum to 1. Normalization failed."
-
-    # Form a mask to apply NaNs where the weight or the target is NaN
     nan_mask = target_df.isna() | weights_df.isna()
+    if normalize_weights:
+        # weights_df = weights_df.div(weights_df.abs().sum(axis=1), axis=0)
+        adj_weights_df = weights_df[~nan_mask].div(
+            weights_df[~nan_mask].abs().sum(axis=1), axis=0
+        )
+        # put nans in weights_df where there are nans in target_df
+        adj_weights_df[nan_mask] = np.NaN
+        
+        assert np.allclose(adj_weights_df.sum(axis=1), 1), \
+            "Weights do not sum to 1. Normalization failed."
+        
+        weights_df = adj_weights_df
 
     # Apply the weights to the target
     out_df = target_df * weights_df
@@ -365,6 +365,10 @@ if __name__ == "__main__":
     )
 
     # all infls are now decreasing-linear, while everything else is increasing-linear
+    
+    df.loc[(df["cid"] == "GBP") & (df["xcat"] == "INFL") & (df["real_date"] == "2000-01-17"), "value"] = np.NaN
+
+    df.loc[(df["cid"] == "AUD") & (df["xcat"] == "CRY") & (df["real_date"] == "2000-01-17"), "value"] = np.NaN
 
     lc_cid = linear_composite(
         df=df,
