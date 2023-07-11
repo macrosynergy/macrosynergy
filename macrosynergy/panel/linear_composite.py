@@ -20,8 +20,12 @@ def linear_composite_on_cid(
     complete_xcats: bool = True,
     new_xcat="NEW",
 ):
+    """Linear composite of various xcats across all cids and periods"""
+
     if not len(xcats) == len(weights) == len(signs):
         raise ValueError("xcats, weights, and signs must have same length")
+    # TODO: weight not near 1 only a problem if normalize_weights is True
+    # TODO:  hence this cannot be an or statement
     if not np.isclose(np.sum(weights), 1) or normalize_weights:
         if not normalize_weights:
             warnings.warn("`weights` does not sum to 1 and will be normalized. w←w/∑w")
@@ -45,6 +49,9 @@ def linear_composite_on_cid(
     weights_wide = pd.DataFrame(
         data=[weights.sort_index()], index=dfc_wide.index, columns=dfc_wide.columns
     )
+
+    # TODO: The below is all the normalization you need but should be conditional on
+    #    normalize_weights == True.
     # boolean mask to help us work out the calcs
     mask = dfc_wide.isna()
     # series with an index of dfc_wide, and a value equal to the sum of the weights
@@ -74,14 +81,18 @@ def linear_composite_on_xcat(
     weights: str,
     normalize_weights: bool = True,
     complete_cids: bool = False,
-    update_freq: str = "M",
     new_cid="GLB",
 ):
+    """Linear combination of one xcat across cids"""
+    
+    # TODO: The whole section only works for weights that are a category.
+    #   but it should also work with fixed weights and signs as below.
+
     # sort and filter
     df = df.copy().sort_values(by=["cid", "xcat", "real_date"])
     cids_mask = df["cid"].isin(cids)
 
-    # seekect the target and weights
+    # select the target and weights
     target_df: pd.DataFrame = df[(df["xcat"] == xcat) & cids_mask].copy()
     weights_df: pd.DataFrame = df[(df["xcat"] == weights) & cids_mask].copy()
 
@@ -89,6 +100,7 @@ def linear_composite_on_xcat(
     target_df = target_df.set_index(["real_date", "cid"])["value"].unstack(level=1)
     weights_df = weights_df.set_index(["real_date", "cid"])["value"].unstack(level=1)
 
+    # TODO: Undocumented feature: if weights is the same as xcat there is no problem
     # Edge case where `weights` is the same as `xcat`, set weights to 1
     if weights is None or weights == "" or weights == xcat:
         weights_df = pd.DataFrame(
@@ -97,19 +109,14 @@ def linear_composite_on_xcat(
             columns=target_df.columns,
         )
 
+    # TODO: For mormalization we need to multiply weights with signs of xcat values first
+    # TODO: if weights are a category we need to assert that all values are positive
     # Normalize the weights to sum to 1 if specified
     if normalize_weights:
         weights_df = weights_df.div(weights_df.abs().sum(axis=1), axis=0)
         assert np.allclose(
             weights_df.abs().sum(axis=1), 1
         ), "Weights do not sum to 1. Normalization failed."
-
-    # Downsample the weights to the update frequency
-    weights_df = (
-        weights_df.resample(update_freq)
-        .mean(numeric_only=True)
-        .reindex(target_df.index, method="bfill")
-    )
 
     # Form a mask to apply NaNs where the weight or the target is NaN
     nan_mask = target_df.isna() | weights_df.isna()
@@ -140,7 +147,6 @@ def linear_composite(
     cids: Optional[List[str]] = None,
     weights: Optional[Union[List[float], np.ndarray, pd.Series, str]] = None,
     normalize_weights: bool = True,
-    update_freq: str = "M",
     signs: Optional[Union[List[float], np.ndarray, pd.Series]] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
@@ -150,31 +156,33 @@ def linear_composite(
     new_cid="GLB",
 ):
     """
-    Returns new category panel as linear combination of others as standard dataframe
+    Weighted linear combinations of cross sections or categories
 
     :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
-    :param <Union[str, List[str]> xcats: If a single category
-        is given, the linear combination is calculated for all cross-sections available
-        for that category - aggregating over cross-sections specified in `cids`,
-        resulting in a single output series labelled with the new cross section name
-        specified by `new_cid`.
-        If a list of categories is given, the linear combination is calculated for all
-        cross-sections available for each category specified in `xcats`, resulting in a
-        panel of series labelled with the new category name specified by `new_xcat` and
-        the same cross-sections as the input data.
-    :param <List[str]> cids: cross-sections for which the linear combination is to be
+    :param <Union[str, List[str]> xcats: One or more categories to be combined.
+        If a single category is given the linear combination is calculated across 
+        sections. This results in a single series to which a new cross-sectional
+        identifier is assigned.
+        If more than pne category string is given the output will be a new category,
+        i.e. a panel that is a linear combination of the categories specified.
+    :param <List[str]> cids: cross-sections for which the linear combinations are
         calculated. Default is all cross-section available.
-    :param <Union[List[float], np.ndarray, pd.Series, str]> weights: An array of weights
-        of the same length as the number of categories in `xcats` to be used in the
-        linear combination. If a single category is given in `xcats`, another category
-        can be specified in `weights` to be used as weights. Default is None and all
-        categories in `xcats` are given equal weights.
+    :param <Union[List[float], str]> weights: This specifies how categories or cross 
+        sections are combined. There are three principal options. 
+        The first (default) is None, in which case equal weights are given to all 
+        categories or cross sections that are available. 
+        The second case is a set of fixed coefficients, in which case these very 
+        coefficients are applied to all available categories of cross sections. 
+        Per default the coefficients are normalized so that they add up to one for each 
+        period. This can be changed with the argument `normalize_weights`. 
+        The third case is the assignment of a weighting category. This only applies to 
+        combinations of cross sections. In this care the weighting category is multiplied 
+        for each period with the corresponding value of main category of the same cross 
+        section. Per default the weight category values are normalized so that they add up 
+        to one for each period. This can be changed with the argument `normalize_weights`.
     :param <bool> normalize_weights: If True (default) the weights are normalized to sum
         to 1. If False the weights are used as specified.
-    :param <str> update_freq: The sampling frequency of the output data. The output
-        data will be downsampled to the specified frequency. Options are 'D', 'W', 'M',
-        'Q', 'A'. Default is 'M' (monthly).
     :param <List[float]> signs: An array of consisting of +1s or -1s, of the same length
         as the number of categories in `xcats` to indicate whether the respective category
         should be added or subtracted from the linear combination. Not relevant when
@@ -216,14 +224,6 @@ def linear_composite(
         raise ValueError("`df` is empty")
 
     dfx: pd.DataFrame = df.copy()
-
-    # udpate_freq check
-    if not isinstance(update_freq, str):
-        raise TypeError("`update_freq` must be a string")
-
-    update_freq = update_freq.upper()
-    if update_freq not in ["D", "W", "M", "Q", "A"]:
-        raise ValueError("`update_freq` must be one of 'D', 'W', 'M', 'Q', 'A'")
 
     # dates check
     for varx, namex in zip([start, end], ["start", "end"]):
@@ -305,7 +305,6 @@ def linear_composite(
             normalize_weights=normalize_weights,
             complete_cids=complete_cids,
             new_cid=new_cid,
-            update_freq=update_freq,
         )
 
     elif isinstance(xcats, list):
