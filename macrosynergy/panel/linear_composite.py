@@ -12,8 +12,8 @@ def linear_composite_on_cid(
     df: pd.DataFrame,
     xcats: Union[str, List[str]],
     cids: Optional[List[str]] = None,
-    weights: Union[List[float], np.ndarray, pd.Series] = None,
-    signs: Union[List[float], np.ndarray, pd.Series] = None,
+    weights: List[float] = None,
+    signs: List[float] = None,
     start: str = None,
     end: str = None,
     normalize_weights: bool = True,
@@ -23,17 +23,19 @@ def linear_composite_on_cid(
     """Linear composite of various xcats across all cids and periods"""
 
     if not len(xcats) == len(weights) == len(signs):
-        raise ValueError("xcats, weights, and signs must have same length") 
-    # TODO: weight not near 1 only a problem if normalize_weights is True
-    # TODO:  hence this cannot be an or statement
-    if normalize_weights:
+        raise ValueError("`xcats`, `weights`, and `signs` must have same length")
+
+    if normalize_weights and not np.allclose(np.sum(weights), 1):
         weights = weights / np.sum(weights)
         assert np.isclose(
             np.sum(weights), 1
         ), "Weights do not sum to 1. Normalization failed."
 
     if not np.all(np.isin(signs, [1, -1])):
-        warnings.warn("signs must be 1 or -1. They will be coerced to 1 or -1.")
+        warnings.warn(
+            "signs must be 1 or -1. All other values will be coerced "
+            "to 1/-1, i.e. `signs ← abs(signs) / signs`"
+        )
         signs = np.abs(signs) / signs  # should be faster?
 
     # main function is here and below.
@@ -76,15 +78,12 @@ def linear_composite_on_xcat(
     df: pd.DataFrame,
     xcat: str,
     cids: List[str],
-    weights: str,
+    weights: Union[str, List[float]] = None,
     normalize_weights: bool = True,
     complete_cids: bool = False,
     new_cid="GLB",
 ):
     """Linear combination of one xcat across cids"""
-    
-    # TODO: The whole section only works for weights that are a category.
-    #   but it should also work with fixed weights and signs as below.
 
     # sort and filter
     df = df.copy().sort_values(by=["cid", "xcat", "real_date"])
@@ -92,15 +91,24 @@ def linear_composite_on_xcat(
 
     # select the target and weights
     target_df: pd.DataFrame = df[(df["xcat"] == xcat) & cids_mask].copy()
-    weights_df: pd.DataFrame = df[(df["xcat"] == weights) & cids_mask].copy()
+    if isinstance(weights, str):
+        weights_df: pd.DataFrame = df[(df["xcat"] == weights) & cids_mask].copy()
+    elif isinstance(weights, list):
+        assert len(weights) == len(cids), "`weights` must have same length as `cids`"
+        # create a df of the same length as target_df with the weights corresponding to the cids
+        weights_df: pd.DataFrame = target_df.copy()
+        for cid, weight in zip(cids, weights):
+            weights_df.loc[weights_df["cid"] == cid, "value"] = weight
+    else:
+        raise TypeError("`weights` must be a string or a `List[float]`")
 
     # set the targets and weights to wide indexing with cids as columns
     target_df = target_df.set_index(["real_date", "cid"])["value"].unstack(level=1)
     weights_df = weights_df.set_index(["real_date", "cid"])["value"].unstack(level=1)
 
-    # TODO: Undocumented feature: if weights is the same as xcat there is no problem
     # Edge case where `weights` is the same as `xcat`, set weights to 1
-    if weights is None or weights == "" or weights == xcat:
+    # if weights == xcat or not weights:
+    if weights is None or weights == "" or weights == xcat or weights == []:
         weights_df = pd.DataFrame(
             data=np.ones(target_df.shape),
             index=target_df.index,
@@ -108,17 +116,21 @@ def linear_composite_on_xcat(
         )
 
     nan_mask = target_df.isna() | weights_df.isna()
+
+    # The weights are normalized to sum to 1.
+    # Weights are also "redisributed", such that the sum of all
+    # weights being *considered* for a given date is 1.
     if normalize_weights:
-        # weights_df = weights_df.div(weights_df.abs().sum(axis=1), axis=0)
         adj_weights_df = weights_df[~nan_mask].div(
             weights_df[~nan_mask].abs().sum(axis=1), axis=0
         )
-        # put nans in weights_df where there are nans in target_df
+
         adj_weights_df[nan_mask] = np.NaN
-        
-        assert np.allclose(adj_weights_df.sum(axis=1), 1), \
-            "Weights do not sum to 1. Normalization failed."
-        
+
+        assert np.allclose(
+            adj_weights_df.sum(axis=1), 1
+        ), "Weights do not sum to 1. Normalization failed."
+
         weights_df = adj_weights_df
 
     # Apply the weights to the target
@@ -145,9 +157,9 @@ def linear_composite(
     df: pd.DataFrame,
     xcats: Union[str, List[str]],
     cids: Optional[List[str]] = None,
-    weights: Optional[Union[List[float], np.ndarray, pd.Series, str]] = None,
+    weights: Optional[Union[List[float], str]] = None,
     normalize_weights: bool = True,
-    signs: Optional[Union[List[float], np.ndarray, pd.Series]] = None,
+    signs: Optional[List[float]] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
     complete_xcats: bool = True,
@@ -161,25 +173,25 @@ def linear_composite(
     :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
     :param <Union[str, List[str]> xcats: One or more categories to be combined.
-        If a single category is given the linear combination is calculated across 
+        If a single category is given the linear combination is calculated across
         sections. This results in a single series to which a new cross-sectional
         identifier is assigned.
         If more than pne category string is given the output will be a new category,
         i.e. a panel that is a linear combination of the categories specified.
     :param <List[str]> cids: cross-sections for which the linear combinations are
         calculated. Default is all cross-section available.
-    :param <Union[List[float], str]> weights: This specifies how categories or cross 
-        sections are combined. There are three principal options. 
-        The first (default) is None, in which case equal weights are given to all 
-        categories or cross sections that are available. 
-        The second case is a set of fixed coefficients, in which case these very 
-        coefficients are applied to all available categories of cross sections. 
-        Per default the coefficients are normalized so that they add up to one for each 
-        period. This can be changed with the argument `normalize_weights`. 
-        The third case is the assignment of a weighting category. This only applies to 
-        combinations of cross sections. In this care the weighting category is multiplied 
-        for each period with the corresponding value of main category of the same cross 
-        section. Per default the weight category values are normalized so that they add up 
+    :param <Union[List[float], str]> weights: This specifies how categories or cross
+        sections are combined. There are three principal options.
+        The first (default) is None, in which case equal weights are given to all
+        categories or cross sections that are available.
+        The second case is a set of fixed coefficients, in which case these very
+        coefficients are applied to all available categories of cross sections.
+        Per default the coefficients are normalized so that they add up to one for each
+        period. This can be changed with the argument `normalize_weights`.
+        The third case is the assignment of a weighting category. This only applies to
+        combinations of cross sections. In this care the weighting category is multiplied
+        for each period with the corresponding value of main category of the same cross
+        section. Per default the weight category values are normalized so that they add up
         to one for each period. This can be changed with the argument `normalize_weights`.
     :param <bool> normalize_weights: If True (default) the weights are normalized to sum
         to 1. If False the weights are used as specified.
@@ -365,10 +377,20 @@ if __name__ == "__main__":
     )
 
     # all infls are now decreasing-linear, while everything else is increasing-linear
-    
-    df.loc[(df["cid"] == "GBP") & (df["xcat"] == "INFL") & (df["real_date"] == "2000-01-17"), "value"] = np.NaN
 
-    df.loc[(df["cid"] == "AUD") & (df["xcat"] == "CRY") & (df["real_date"] == "2000-01-17"), "value"] = np.NaN
+    df.loc[
+        (df["cid"] == "GBP")
+        & (df["xcat"] == "INFL")
+        & (df["real_date"] == "2000-01-17"),
+        "value",
+    ] = np.NaN
+
+    df.loc[
+        (df["cid"] == "AUD")
+        & (df["xcat"] == "CRY")
+        & (df["real_date"] == "2000-01-17"),
+        "value",
+    ] = np.NaN
 
     lc_cid = linear_composite(
         df=df,
