@@ -158,7 +158,7 @@ def linear_composite(
         If a single category is given the linear combination is calculated across
         sections. This results in a single series to which a new cross-sectional
         identifier is assigned.
-        If more than pne category string is given the output will be a new category,
+        If more than one category string is given the output will be a new category,
         i.e. a panel that is a linear combination of the categories specified.
     :param <List[str]> cids: cross-sections for which the linear combinations are
         calculated. Default is all cross-section available.
