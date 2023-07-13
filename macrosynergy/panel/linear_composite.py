@@ -42,16 +42,16 @@ def _linear_composite_basic(
     # Multiply the weights by the target data
     out_df = data_df * weights_df
 
-
-    # Remove periods with missing data (if requested)
+    # NOTE: Using `axis` with strings, to make it more readable
+    # Remove periods with missing data (if requested) (rows with any NaNs)
     if complete:
-        out_df[nan_mask.any(axis=1)] = np.NaN
-        
+        out_df.dropna(how="any", axis="rows")
+
     # Drop any rows with all NaNs
-    out_df = out_df.dropna(how="all", axis=1)
+    out_df.dropna(how="all", axis="rows")
 
     # Sum across the columns
-    out_df = out_df.sum(axis=1)
+    out_df = out_df.sum(axis="columns")
 
     # Reset index, rename columns and return
     out_df = out_df.reset_index().rename(columns={0: "value"})
@@ -77,7 +77,6 @@ def linear_composite_cid_agg(
     # remove the `xcat` from the dataframe
     df = df[(df["xcat"] != xcat)].copy()
 
-
     # Create wide dataframes for the data and weights
     data_df = df.set_index(["real_date", "cid"])["value"].unstack(level=1)
     weights_df = weights_df.set_index(["real_date", "cid"])["value"].unstack(level=1)
@@ -86,14 +85,16 @@ def linear_composite_cid_agg(
         weights_str: str = weights
         more_weights: pd.DataFrame = df[(df["xcat"] == weights_str)].copy()
         df = df[(df["xcat"] != weights_str)].copy()
-        more_weights_df = more_weights.set_index(["real_date", "cid"])[
-            "value"].unstack(level=1)
+        more_weights_df = more_weights.set_index(["real_date", "cid"])["value"].unstack(
+            level=1
+        )
         weights_df = weights_df.mul(more_weights_df, axis=1)
         weights_df = weights_df.mul(signs, axis=1)
         df = df[(df["xcat"] != weights_str)].copy()
     else:
         weights_series: pd.Series = pd.Series(
-            np.array(weights) * np.array(signs), index=weights_df["cid"].unique().tolist()
+            np.array(weights) * np.array(signs),
+            index=weights_df["cid"].unique().tolist(),
         )
         weights_df = weights_df.mul(weights_series, axis=1)
 
@@ -381,10 +382,10 @@ def linear_composite(
             raise ValueError(
                 "No `cids` have complete `xcat` data required for the calculation."
             )
-        
+
         if not isinstance(weights, str):
             weights: List[float] = [1.0] * len(cids)
-                
+
         return linear_composite_cid_agg(
             df=df,
             xcat=xcatx,
@@ -394,9 +395,6 @@ def linear_composite(
             complete_cids=complete_cids,
             new_cid=new_cid,
         )
-            
-
-
 
 
 if __name__ == "__main__":
@@ -441,10 +439,7 @@ if __name__ == "__main__":
     # there are now missing values for AUD-CRY and GBP-INFL on 2000-01-17
 
     lc_cid = linear_composite(
-        df=df,
-        xcats="XR",
-        weights="INFL",
-        normalize_weights=False
+        df=df, xcats="XR", weights="INFL", normalize_weights=False
     )
 
     lc_xcat = linear_composite(
