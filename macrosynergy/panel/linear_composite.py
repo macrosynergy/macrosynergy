@@ -47,14 +47,11 @@ def _linear_composite_basic(
     if complete:
         out_df.dropna(how="any", axis="rows", inplace=True)
 
-    # Drop any rows with all NaNs
-    out_df.dropna(how="all", axis="rows", inplace=True)
-
     # Sum across the columns
     out_df = out_df.sum(axis="columns")
 
-    # sanity check: there should be no nans in the output
-    assert not out_df.isna().any()
+    # put NaNs back in, as sum() removes them
+    out_df[nan_mask.all(axis=1)] = np.NaN
 
     # Reset index, rename columns and return
     out_df = out_df.reset_index().rename(columns={0: "value"})
