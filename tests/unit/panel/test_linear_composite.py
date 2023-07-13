@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 from typing import List
 
-import sys
 
 
 from macrosynergy.panel.linear_composite import linear_composite
