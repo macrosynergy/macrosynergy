@@ -60,7 +60,7 @@ def _calc(
 def linear_composite_cid_agg(
     df: pd.DataFrame,
     xcat: str,
-    weights: List[float],
+    weights: Union[str, List[float]],
     signs: List[float],
     normalize_weights: bool = True,
     complete_cids: bool = True,
@@ -73,16 +73,25 @@ def linear_composite_cid_agg(
     # remove the `xcat` from the dataframe
     df = df[(df["xcat"] != xcat)].copy()
 
-    weights_series: pd.Series = pd.Series(
-        np.array(weights) * np.array(signs), index=weights_df["cid"].unique().tolist()
-    )
 
     # Create wide dataframes for the data and weights
     data_df = df.set_index(["real_date", "cid"])["value"].unstack(level=1)
     weights_df = weights_df.set_index(["real_date", "cid"])["value"].unstack(level=1)
 
-    # multiply the weights_df by the weights_series, matching the index
-    weights_df = weights_df.mul(weights_series, axis=1)
+    if isinstance(weights, str):
+        weights_str: str = weights
+        more_weights: pd.DataFrame = df[(df["xcat"] == weights_str)].copy()
+        df = df[(df["xcat"] != weights_str)].copy()
+        more_weights_df = more_weights.set_index(["real_date", "cid"])[
+            "value"].unstack(level=1)
+        weights_df = weights_df.mul(more_weights_df, axis=1)
+        weights_df = weights_df.mul(signs, axis=1)
+        df = df[(df["xcat"] != weights_str)].copy()
+    else:
+        weights_series: pd.Series = pd.Series(
+            np.array(weights) * np.array(signs), index=weights_df["cid"].unique().tolist()
+        )
+        weights_df = weights_df.mul(weights_series, axis=1)
 
     # Calculate the linear combination
     out_df: pd.DataFrame = _calc(
@@ -260,6 +269,12 @@ def linear_composite(
     _xcat_agg: bool = len(xcats) > 1
     mode: str = "xcat_agg" if _xcat_agg else "cid_agg"
 
+    if _xcat_agg and isinstance(weights, str):
+        raise ValueError(
+            "When aggregating over xcats, `weights` "
+            "must be a list of floats or integers."
+        )
+
     # check weights
     expc_weights_len: int = len(xcats) if _xcat_agg else len(cids)
 
@@ -284,7 +299,7 @@ def linear_composite(
 
     # check signs
     if signs is None:
-        signs: List[float] = [1.0] * len(xcats)
+        signs: List[float] = [1.0] * (len(xcats) if _xcat_agg else len(cids))
     elif isinstance(signs, listtypes):
         signs: List[float] = list(signs)
         if len(signs) != expc_weights_len:
@@ -313,9 +328,10 @@ def linear_composite(
         blacklist=blacklist,
     )
 
-    if _xcat_agg or not isinstance(weights, str):
+    if _xcat_agg:
+        found_cids: List[str] = df["cid"].unique().tolist()
         found_xcats: List[str] = df["xcat"].unique().tolist()
-        for cidx in cids:
+        for cidx in found_cids:
             if set(found_xcats) != set(df.loc[df["cid"] == cidx, "xcat"].unique()):
                 raise ValueError(
                     "Not all `xcats` are available in `df` for each `cid`."
@@ -335,51 +351,45 @@ def linear_composite(
         found_xcats: List[str] = df["xcat"].unique().tolist()
         if isinstance(weights, str):
             found_xcats.remove(weights)
+        # there should now only be one xcat in df in found_xcats
+        # sanity check:
+        assert len(found_xcats) == 1, (
+            "There should only be one xcat in df"
+            f" when cid_agg, found_xcats: {found_xcats}"
+        )
+        xcatx: str = found_xcats[0]
         for cidx in found_cids:
-            for xcatx in found_xcats:
-                if xcatx not in df.loc[df["cid"] == cidx, "xcat"].unique():
-                    err_msg: str = ""
-                    if isinstance(weights, str) and weights == xcatx:
-                        err_msg = "used as weights"
-                    warnings.warn(
-                        f"Category data for `{xcatx}` ({err_msg})"
-                        f" is not available for `{cidx}`, "
-                        "dropping cid from `cids`."
-                    )
-                    cids.remove(cidx)
+            if xcatx not in df.loc[df["cid"] == cidx, "xcat"].unique():
+                err_msg: str = ""
+                if isinstance(weights, str) and weights == xcatx:
+                    err_msg = " (used as weights)"
+                warnings.warn(
+                    f"Category data for `{xcatx}`{err_msg}"
+                    f" is not available for `{cidx}`, "
+                    "dropping cid from `cids`."
+                )
+                cids.remove(cidx)
 
         if len(cids) == 0:
             raise ValueError(
                 "No `cids` have complete `xcat` data required for the calculation."
             )
+        
+        if not isinstance(weights, str):
+            weights: List[float] = [1.0] * len(cids)
+                
+        return linear_composite_cid_agg(
+            df=df,
+            xcat=xcatx,
+            weights=weights,
+            signs=signs,
+            normalize_weights=normalize_weights,
+            complete_cids=complete_cids,
+            new_cid=new_cid,
+        )
+            
 
-        if isinstance(weights, str):
-            dfs: List[pd.DataFrame] = []
-            equal_weights: np.array = np.ones(len(cids)) / len(cids)
-            for xcatx in found_xcats:
-                dfs.append(
-                    linear_composite_cid_agg(
-                        df=df,
-                        xcat=weights,
-                        weights=equal_weights,
-                        signs=signs,
-                        normalize_weights=normalize_weights,
-                        complete_cids=complete_cids,
-                        new_cid=new_cid,
-                    )
-                )
-            return pd.concat(dfs)
 
-        else:
-            return linear_composite_cid_agg(
-                df=df,
-                xcat=xcats[0],
-                weights=weights,
-                signs=signs,
-                normalize_weights=normalize_weights,
-                complete_cids=complete_cids,
-                new_cid=new_cid,
-            )
 
 
 if __name__ == "__main__":
@@ -425,7 +435,7 @@ if __name__ == "__main__":
 
     lc_cid = linear_composite(
         df=df,
-        xcats=["XR", "CRY"],
+        xcats="XR",
         weights="INFL",
     )
 
