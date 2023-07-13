@@ -42,14 +42,13 @@ def _linear_composite_basic(
     # Multiply the weights by the target data
     out_df = data_df * weights_df
 
-    # Drop any rows with all NaNs
-    out_df = out_df.dropna(how="all", axis=1)
 
     # Remove periods with missing data (if requested)
     if complete:
         out_df[nan_mask.any(axis=1)] = np.NaN
-    else:
-        out_df[nan_mask.all(axis=1)] = np.NaN
+        
+    # Drop any rows with all NaNs
+    out_df = out_df.dropna(how="all", axis=1)
 
     # Sum across the columns
     out_df = out_df.sum(axis=1)
