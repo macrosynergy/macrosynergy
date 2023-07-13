@@ -14,7 +14,7 @@ from macrosynergy.management.utils import is_valid_iso_date
 listtypes: Tuple[Type, ...] = (list, np.ndarray, pd.Series, tuple)
 
 
-def _calc(
+def _linear_composite_basic(
     data_df: pd.DataFrame,
     weights_df: pd.DataFrame,
     normalize_weights: bool = True,
@@ -94,7 +94,7 @@ def linear_composite_cid_agg(
         weights_df = weights_df.mul(weights_series, axis=1)
 
     # Calculate the linear combination
-    out_df: pd.DataFrame = _calc(
+    out_df: pd.DataFrame = _linear_composite_basic(
         data_df=data_df,
         weights_df=weights_df,
         normalize_weights=normalize_weights,
@@ -131,7 +131,7 @@ def linear_composite_xcat_agg(
     )
 
     # Calculate the linear combination
-    out_df: pd.DataFrame = _calc(
+    out_df: pd.DataFrame = _linear_composite_basic(
         data_df=data_df,
         weights_df=weights_df,
         normalize_weights=normalize_weights,
