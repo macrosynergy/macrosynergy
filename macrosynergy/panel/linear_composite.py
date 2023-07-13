@@ -37,8 +37,10 @@ def _linear_composite_basic(
             adj_weights_wide.abs().sum(axis=1), 1
         ), "Weights do not sum to 1. Normalization failed."
 
+        weights_df = adj_weights_wide.copy()
+
     # Multiply the weights by the target data
-    out_df = data_df * adj_weights_wide
+    out_df = data_df * weights_df
 
     # Remove periods with missing data (if requested)
     if complete:
@@ -221,6 +223,9 @@ def linear_composite(
             "`df` must be a standardized JPMaQS DataFrame with the necessary columns: "
             "'cid', 'xcat', 'real_date' and 'value'."
         )
+
+    if df["value"].isna().all():
+        raise ValueError("`df` does not contain any valid values.")
 
     # copy df to avoid side effects
     # NOTE: The below arg validation contains code that "copy" the args.
