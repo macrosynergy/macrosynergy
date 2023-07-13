@@ -1,155 +1,136 @@
+"""
+Implementation of linear_composite() function as a module.
+"""
+
 import numpy as np
 import pandas as pd
-from typing import *
+from typing import List, Dict, Union, Optional, Tuple, Any, Callable, Type
 import warnings
 
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf, make_test_df
 from macrosynergy.management.utils import is_valid_iso_date
 
+listtypes: Tuple[Type, ...] = (list, np.ndarray, pd.Series, tuple)
 
-def linear_composite_on_cid(
+
+def _calc(
+    data_df: pd.DataFrame,
+    weights_df: pd.DataFrame,
+    normalize_weights: bool = True,
+    complete: bool = False,
+    mode: str = "xcat_agg",
+):
+    """Main calculation function for linear_composite()"""
+
+    # Create a boolean mask to help us work out the calcs
+    nan_mask: pd.DataFrame = data_df.isna() | weights_df.isna()
+
+    # Normalize weights (if requested)
+    if normalize_weights:
+        adj_weights_wide = weights_df[~nan_mask].div(
+            weights_df[~nan_mask].abs().sum(axis=1), axis=0
+        )
+        adj_weights_wide[nan_mask] = np.NaN
+
+        assert np.allclose(
+            adj_weights_wide.abs().sum(axis=1), 1
+        ), "Weights do not sum to 1. Normalization failed."
+
+    # Multiply the weights by the target data
+    out_df = data_df * adj_weights_wide
+
+    # Remove periods with missing data (if requested)
+    if complete:
+        out_df[nan_mask.any(axis=1)] = np.NaN
+    else:
+        out_df[nan_mask.all(axis=1)] = np.NaN
+
+    # Sum across the columns
+    out_df = out_df.sum(axis=1)
+
+    # Reset index, rename columns and return
+    out_df = out_df.reset_index().rename(columns={0: "value"})
+
+    # TODO: out_df from cid_agg and xcat_agg are not in the same format...
+
+    return out_df
+
+
+def linear_composite_cid_agg(
     df: pd.DataFrame,
-    xcats: Union[str, List[str]],
-    cids: Optional[List[str]] = None,
-    weights: List[float] = None,
-    signs: List[float] = None,
-    start: str = None,
-    end: str = None,
+    xcat: str,
+    weights: List[float],
+    signs: List[float],
+    normalize_weights: bool = True,
+    complete_cids: bool = True,
+    new_cid="GLB",
+):
+    """Linear composite of various cids for a given xcat across all periods."""
+
+    # Create a weights series with the cids as index
+    weights_df: pd.DataFrame = df[(df["xcat"] == xcat)].copy()
+    # remove the `xcat` from the dataframe
+    df = df[(df["xcat"] != xcat)].copy()
+
+    weights_series: pd.Series = pd.Series(
+        np.array(weights) * np.array(signs), index=weights_df["cid"].unique().tolist()
+    )
+
+    # Create wide dataframes for the data and weights
+    data_df = df.set_index(["real_date", "cid"])["value"].unstack(level=1)
+    weights_df = weights_df.set_index(["real_date", "cid"])["value"].unstack(level=1)
+
+    # multiply the weights_df by the weights_series, matching the index
+    weights_df = weights_df.mul(weights_series, axis=1)
+
+    # Calculate the linear combination
+    out_df: pd.DataFrame = _calc(
+        data_df=data_df,
+        weights_df=weights_df,
+        normalize_weights=normalize_weights,
+        complete=complete_cids,
+        mode="cid_agg",
+    )
+    out_df["cid"] = new_cid
+    out_df["xcat"] = xcat
+    out_df = out_df[["cid", "xcat", "real_date", "value"]]
+    return out_df
+
+
+def linear_composite_xcat_agg(
+    df: pd.DataFrame,
+    weights: List[float],
+    signs: List[float],
     normalize_weights: bool = True,
     complete_xcats: bool = True,
     new_xcat="NEW",
 ):
     """Linear composite of various xcats across all cids and periods"""
 
-    if not len(xcats) == len(weights) == len(signs):
-        raise ValueError("`xcats`, `weights`, and `signs` must have same length")
-
-    if normalize_weights and not np.allclose(np.sum(weights), 1):
-        weights = weights / np.sum(weights)
-        assert np.isclose(
-            np.sum(weights), 1
-        ), "Weights do not sum to 1. Normalization failed."
-
-    if not np.all(np.isin(signs, [1, -1])):
-        warnings.warn(
-            "signs must be 1 or -1. All other values will be coerced "
-            "to 1/-1, i.e. `signs ← abs(signs) / signs`"
-        )
-        signs = np.abs(signs) / signs  # should be faster?
-
-    # main function is here and below.
-    weights = pd.Series(weights * signs, index=xcats)
-
-    dfc: pd.DataFrame = reduce_df(df=df, cids=cids, xcats=xcats, start=start, end=end)
-
-    # dataframe with the xcats as columns and rows as cid-date combinations
-    dfc_wide = dfc.set_index(["cid", "real_date", "xcat"])["value"].unstack(level=2)
-    # dataframe for weights with same index as dfc_wide: each column will be a weight
-    weights_wide = pd.DataFrame(
-        data=[weights.sort_index()], index=dfc_wide.index, columns=dfc_wide.columns
+    # Create a weights series with the xcats as index
+    weights_series: pd.Series = pd.Series(
+        np.array(weights) * np.array(signs), index=df["xcat"].unique().tolist()
     )
 
-    # TODO: The below is all the normalization you need but should be conditional on
-    #    normalize_weights == True.
-    # boolean mask to help us work out the calcs
-    mask = dfc_wide.isna()
-    # series with an index of dfc_wide, and a value equal to the sum of the weights
-    weights_sum = weights_wide[~mask].abs().sum(axis=1)
-    # re-weighting the weights to sum to 1 considering the available xcats
-    adj_weights_wide = weights_wide[~mask].div(weights_sum, axis=0)
-    # final single series: the linear combination of the xcats and the weights
+    # Create wide dataframes for the data and weights
+    data_df = df.set_index(["cid", "real_date", "xcat"])["value"].unstack(level=2)
+    weights_df = pd.DataFrame(
+        data=[weights_series.sort_index()],
+        index=data_df.index,
+        columns=data_df.columns,
+    )
 
-    out_df = (dfc_wide * adj_weights_wide).sum(axis=1)
-
-    if complete_xcats:
-        out_df[mask.any(axis=1)] = np.NaN
-    else:
-        out_df[mask.all(axis=1)] = np.NaN
-
-    out_df = out_df.reset_index().rename(columns={0: "value"})
+    # Calculate the linear combination
+    out_df: pd.DataFrame = _calc(
+        data_df=data_df,
+        weights_df=weights_df,
+        normalize_weights=normalize_weights,
+        complete=complete_xcats,
+        mode="xcat_agg",
+    )
     out_df["xcat"] = new_xcat
     out_df = out_df[["cid", "xcat", "real_date", "value"]]
-
-    return out_df
-
-
-def linear_composite_on_xcat(
-    df: pd.DataFrame,
-    xcat: str,
-    cids: List[str],
-    weights: Union[str, List[float]] = None,
-    normalize_weights: bool = True,
-    complete_cids: bool = False,
-    new_cid="GLB",
-):
-    """Linear combination of one xcat across cids"""
-
-    # sort and filter
-    df = df.copy().sort_values(by=["cid", "xcat", "real_date"])
-    cids_mask = df["cid"].isin(cids)
-
-    # select the target and weights
-    target_df: pd.DataFrame = df[(df["xcat"] == xcat) & cids_mask].copy()
-    if isinstance(weights, str):
-        weights_df: pd.DataFrame = df[(df["xcat"] == weights) & cids_mask].copy()
-    elif isinstance(weights, list):
-        assert len(weights) == len(cids), "`weights` must have same length as `cids`"
-        # create a df of the same length as target_df with the weights corresponding to the cids
-        weights_df: pd.DataFrame = target_df.copy()
-        for cid, weight in zip(cids, weights):
-            weights_df.loc[weights_df["cid"] == cid, "value"] = weight
-    else:
-        raise TypeError("`weights` must be a string or a `List[float]`")
-
-    # set the targets and weights to wide indexing with cids as columns
-    target_df = target_df.set_index(["real_date", "cid"])["value"].unstack(level=1)
-    weights_df = weights_df.set_index(["real_date", "cid"])["value"].unstack(level=1)
-
-    # Edge case where `weights` is the same as `xcat`, set weights to 1
-    # if weights == xcat or not weights:
-    if weights is None or weights == "" or weights == xcat or weights == []:
-        weights_df = pd.DataFrame(
-            data=np.ones(target_df.shape),
-            index=target_df.index,
-            columns=target_df.columns,
-        )
-
-    nan_mask = target_df.isna() | weights_df.isna()
-
-    # The weights are normalized to sum to 1.
-    # Weights are also "redisributed", such that the sum of all
-    # weights being *considered* for a given date is 1.
-    if normalize_weights:
-        adj_weights_df = weights_df[~nan_mask].div(
-            weights_df[~nan_mask].abs().sum(axis=1), axis=0
-        )
-
-        adj_weights_df[nan_mask] = np.NaN
-
-        assert np.allclose(
-            adj_weights_df.sum(axis=1), 1
-        ), "Weights do not sum to 1. Normalization failed."
-
-        weights_df = adj_weights_df
-
-    # Apply the weights to the target
-    out_df = target_df * weights_df
-
-    # Drop NaN cids as specified
-    if complete_cids:
-        out_df = out_df[out_df.columns[~nan_mask.any(axis=0)]]
-    else:
-        out_df = out_df[out_df.columns[~nan_mask.all(axis=0)]]
-
-    out_df = out_df.sum(axis=1).reset_index().rename(columns={0: "value"})
-
-    out_df["cid"] = new_cid
-    out_df["xcat"] = xcat
-    out_df = out_df.reset_index()[["cid", "xcat", "real_date", "value"]].sort_values(
-        by=["cid", "xcat", "real_date"]
-    )
-
     return out_df
 
 
@@ -162,7 +143,8 @@ def linear_composite(
     signs: Optional[List[float]] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
-    complete_xcats: bool = True,
+    blacklist: Dict[str, List[str]] = None,
+    complete_xcats: bool = False,
     complete_cids: bool = False,
     new_xcat="NEW",
     new_cid="GLB",
@@ -220,7 +202,6 @@ def linear_composite(
     :return <pd.DataFrame>: standardized DataFrame with the relative values, featuring
         the categories: 'cid', 'xcat', 'real_date' and 'value'.
     """
-    listtypes = (list, np.ndarray, pd.Series)
 
     # df check
     if not isinstance(df, pd.DataFrame):
@@ -232,125 +213,173 @@ def linear_composite(
             "'cid', 'xcat', 'real_date' and 'value'."
         )
 
-    if df.empty:
-        raise ValueError("`df` is empty")
+    # copy df to avoid side effects
+    # NOTE: The below arg validation contains code that "copy" the args.
+    # Be careful when making changes.
+    df: pd.DataFrame = df.copy()
 
-    dfx: pd.DataFrame = df.copy()
+    if start is None:
+        start: str = pd.to_datetime(df["real_date"]).min().strftime("%Y-%m-%d")
+    if end is None:
+        end: str = pd.to_datetime(df["real_date"]).max().strftime("%Y-%m-%d")
 
     # dates check
     for varx, namex in zip([start, end], ["start", "end"]):
         if varx is not None:
-            if not isinstance(varx, str):
-                raise TypeError(f"`{namex}` must be a string")
-            if not is_valid_iso_date(varx):
-                raise ValueError(f"`{namex}` must be a valid ISO date")
+            if not (isinstance(varx, str) and is_valid_iso_date(varx)):
+                raise ValueError(f"`{namex}` must be a valid ISO date string.")
 
-    xcats = xcats.copy() if isinstance(xcats, list) else [xcats]
-    cids = cids.copy() if cids is not None else dfx["cid"].unique().tolist()
-    weights = weights.copy() if isinstance(weights, listtypes) else weights
-    signs = signs.copy() if isinstance(signs, listtypes) else signs
-
-    dfx["real_date"] = pd.to_datetime(dfx["real_date"])
-    if start is None:
-        start = dfx["real_date"].min()
+    # check xcats
+    if xcats is None:
+        xcats: List[str] = df["xcat"].unique().tolist()
+    elif isinstance(xcats, str):
+        xcats: List[str] = [xcats]
+    elif isinstance(xcats, listtypes):
+        xcats: List[str] = list(xcats)
     else:
-        start = pd.to_datetime(start)
+        raise TypeError("`xcats` must be a string or list of strings.")
 
-    if end is None:
-        end = dfx["real_date"].max()
+    # check xcats in df
+    if not set(xcats).issubset(set(df["xcat"].unique().tolist())):
+        raise ValueError("Not all `xcats` are available in `df`.")
+
+    # check cids
+    if cids is None:
+        cids: List[str] = df["cid"].unique().tolist()
+    elif isinstance(cids, str):
+        cids: List[str] = [cids]
+    elif isinstance(cids, listtypes):
+        cids: List[str] = list(cids)
     else:
-        end = pd.to_datetime(end)
+        raise TypeError("`cids` must be a string or list of strings.")
 
-    # crop the df
-    dfx = dfx[(dfx["real_date"] >= start) & (dfx["real_date"] <= end)]
+    # check cids in df
+    if not set(cids).issubset(set(df["cid"].unique().tolist())):
+        raise ValueError("Not all `cids` are available in `df`.")
 
-    # now make sure the specified cids are in the df
-    if cids is not None:
-        if (
-            (not isinstance(cids, list))
-            or (not len(cids))
-            or (not all(isinstance(x, str) for x in cids))
-        ):
-            raise TypeError("`cids` must be a non-empty list of strings")
-        if not all(x in dfx["cid"].unique() for x in cids):
-            raise ValueError(f"not all cids in `cids` are available in DataFrame")
-    else:
-        cids: List[str] = sorted(list(dfx["cid"].unique()))
+    _xcat_agg: bool = len(xcats) > 1
+    mode: str = "xcat_agg" if _xcat_agg else "cid_agg"
 
-    # Branch off for the single category case
-    if isinstance(xcats, str) or (isinstance(xcats, list) and len(xcats) == 1):
-        xcats: str = xcats if isinstance(xcats, str) else xcats[0]
-        if not xcats in dfx["xcat"].unique():
-            raise ValueError(f"Category '{xcats}' not available in DataFrame")
+    # check weights
+    expc_weights_len: int = len(xcats) if _xcat_agg else len(cids)
 
-        if isinstance(weights, str):
-            if not weights in dfx["xcat"].unique():
-                raise ValueError(f"Category '{weights}' not available in DataFrame")
-        else:
-            raise TypeError(
-                "`weights` must be a string specifying a category to be used as a weight"
+    if weights is None:
+        weights: List[float] = list(np.ones(expc_weights_len) / expc_weights_len)
+    elif isinstance(weights, listtypes):
+        weights: List[float] = list(weights)
+        if not all([isinstance(x, (float, int)) for x in weights]):
+            raise TypeError("`weights` must be a list of floats or integers.")
+        if len(weights) != expc_weights_len:
+            raise ValueError(
+                "`weights` must be a list of floats of the same length as `xcats`."
             )
+    elif isinstance(weights, str):
+        if weights not in df["xcat"].unique().tolist():
+            raise ValueError(
+                "When using a category-string as `weights`"
+                " it must be present in `df`."
+            )
+    else:
+        raise TypeError("`weights` must be a list of floats, a string or None.")
 
-        tdf = dfx[dfx["cid"].isin(cids)]
-        for cid in tdf["cid"].unique():
-            avail_xcats: Set[str] = set(tdf[tdf["cid"] == cid]["xcat"].unique())
-            if not xcats in avail_xcats:
-                warnings.warn(
-                    f"Category '{xcats}' (target category) not available for cid '{cid}',"
-                    f"dropping cid from `cids`"
+    # check signs
+    if signs is None:
+        signs: List[float] = [1.0] * len(xcats)
+    elif isinstance(signs, listtypes):
+        signs: List[float] = list(signs)
+        if len(signs) != expc_weights_len:
+            raise ValueError(
+                "`signs` must be a list of floats of the same length as `xcats`."
+            )
+        if not all([x in [-1.0, 1.0] for x in signs]):
+            warnings.warn(
+                "`signs` must be a list of +1s or -1s. "
+                "`signs` will be coerced to +1s/-1s. "
+                "(i.e. signs ← abs(signs) / signs)"
+            )
+            signs: List[float] = [abs(x) / x for x in signs]
+
+    else:
+        raise TypeError("`signs` must be a list of floats/ints or None.")
+
+    _xcats: List[str] = xcats + ([weights] if isinstance(weights, str) else [])
+
+    df: pd.DataFrame = reduce_df(
+        df=df,
+        xcats=_xcats,
+        cids=cids,
+        start=start,
+        end=end,
+        blacklist=blacklist,
+    )
+
+    if _xcat_agg or not isinstance(weights, str):
+        found_xcats: List[str] = df["xcat"].unique().tolist()
+        for cidx in cids:
+            if set(found_xcats) != set(df.loc[df["cid"] == cidx, "xcat"].unique()):
+                raise ValueError(
+                    "Not all `xcats` are available in `df` for each `cid`."
                 )
-                cids.remove(cid)
-            if not weights in avail_xcats:
-                warnings.warn(
-                    f"Category '{weights}' (used as weights) not available for cid '{cid}',"
-                    f"dropping cid from `cids`"
-                )
-                cids.remove(cid)
 
-        dfx = reduce_df(dfx, cids=cids, xcats=[xcats, weights], start=start, end=end)
-
-        return linear_composite_on_xcat(
-            df=dfx,
-            xcat=xcats,
-            cids=cids,
-            weights=weights,
-            normalize_weights=normalize_weights,
-            complete_cids=complete_cids,
-            new_cid=new_cid,
-        )
-
-    elif isinstance(xcats, list):
-        if not all(isinstance(x, str) for x in xcats):
-            raise TypeError("`xcats` must be a list of strings")
-        if not all(x in dfx["xcat"].unique() for x in xcats):
-            raise ValueError(f"Not all xcats in `xcats` are available in DataFrame")
-
-        if weights is None:
-            weights: np.ndarray = np.ones(len(xcats)) / len(xcats)
-            # w←1/n
-
-        if signs is None:
-            signs: np.ndarray = np.ones(len(xcats))
-
-        for varx, namex in zip([weights, signs], ["weights", "signs"]):
-            if not isinstance(varx, listtypes):
-                raise TypeError(
-                    f"`{namex}` must be a list of floats, an np.ndarray or a pd.Series"
-                )
-
-        if not len(weights) == len(xcats) == len(signs):
-            raise ValueError("`xcats`, `weights` and `signs` must have the same length")
-
-        return linear_composite_on_cid(
-            df=dfx,
-            xcats=xcats,
-            cids=cids,
+        return linear_composite_xcat_agg(
+            df=df,
             weights=weights,
             signs=signs,
             normalize_weights=normalize_weights,
             complete_xcats=complete_xcats,
             new_xcat=new_xcat,
         )
+
+    else:  # mode == "cid_agg" -- single xcat
+        found_cids: List[str] = df["cid"].unique().tolist()
+        found_xcats: List[str] = df["xcat"].unique().tolist()
+        if isinstance(weights, str):
+            found_xcats.remove(weights)
+        for cidx in found_cids:
+            for xcatx in found_xcats:
+                if xcatx not in df.loc[df["cid"] == cidx, "xcat"].unique():
+                    err_msg: str = ""
+                    if isinstance(weights, str) and weights == xcatx:
+                        err_msg = "used as weights"
+                    warnings.warn(
+                        f"Category data for `{xcatx}` ({err_msg})"
+                        f" is not available for `{cidx}`, "
+                        "dropping cid from `cids`."
+                    )
+                    cids.remove(cidx)
+
+        if len(cids) == 0:
+            raise ValueError(
+                "No `cids` have complete `xcat` data required for the calculation."
+            )
+
+        if isinstance(weights, str):
+            dfs: List[pd.DataFrame] = []
+            equal_weights: np.array = np.ones(len(cids)) / len(cids)
+            for xcatx in found_xcats:
+                dfs.append(
+                    linear_composite_cid_agg(
+                        df=df,
+                        xcat=weights,
+                        weights=equal_weights,
+                        signs=signs,
+                        normalize_weights=normalize_weights,
+                        complete_cids=complete_cids,
+                        new_cid=new_cid,
+                    )
+                )
+            return pd.concat(dfs)
+
+        else:
+            return linear_composite_cid_agg(
+                df=df,
+                xcat=xcats[0],
+                weights=weights,
+                signs=signs,
+                normalize_weights=normalize_weights,
+                complete_cids=complete_cids,
+                new_cid=new_cid,
+            )
 
 
 if __name__ == "__main__":
@@ -392,9 +421,11 @@ if __name__ == "__main__":
         "value",
     ] = np.NaN
 
+    # there are now missing values for AUD-CRY and GBP-INFL on 2000-01-17
+
     lc_cid = linear_composite(
         df=df,
-        xcats="CRY",
+        xcats=["XR", "CRY"],
         weights="INFL",
     )
 
