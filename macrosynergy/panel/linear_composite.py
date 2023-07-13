@@ -34,7 +34,7 @@ def _linear_composite_basic(
         adj_weights_wide[nan_mask] = np.NaN
 
         assert np.allclose(
-            adj_weights_wide.abs().sum(axis=1), 1
+            adj_weights_wide[~adj_weights_wide.isna().all(axis=1)].abs().sum(axis=1), 1
         ), "Weights do not sum to 1. Normalization failed."
 
         weights_df = adj_weights_wide.copy()
@@ -45,13 +45,16 @@ def _linear_composite_basic(
     # NOTE: Using `axis` with strings, to make it more readable
     # Remove periods with missing data (if requested) (rows with any NaNs)
     if complete:
-        out_df.dropna(how="any", axis="rows")
+        out_df.dropna(how="any", axis="rows", inplace=True)
 
     # Drop any rows with all NaNs
-    out_df.dropna(how="all", axis="rows")
+    out_df.dropna(how="all", axis="rows", inplace=True)
 
     # Sum across the columns
     out_df = out_df.sum(axis="columns")
+
+    # sanity check: there should be no nans in the output
+    assert not out_df.isna().any()
 
     # Reset index, rename columns and return
     out_df = out_df.reset_index().rename(columns={0: "value"})
