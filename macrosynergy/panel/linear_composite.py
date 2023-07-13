@@ -45,7 +45,7 @@ def _linear_composite_basic(
     # NOTE: Using `axis` with strings, to make it more readable
     # Remove periods with missing data (if requested) (rows with any NaNs)
     if complete:
-        out_df.dropna(how="any", axis="rows", inplace=True)
+        out_df[nan_mask.any(axis=1)] = np.NaN
 
     # Sum across the columns
     out_df = out_df.sum(axis="columns")
