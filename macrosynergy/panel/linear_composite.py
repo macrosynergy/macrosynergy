@@ -296,6 +296,9 @@ def linear_composite(
             raise ValueError(
                 "`weights` must be a list of floats of the same length as `xcats`."
             )
+        if any([x == 0.0 for x in weights]):
+            raise ValueError("`weights` must not contain any 0s.")
+
     elif isinstance(weights, str):
         if weights not in df["xcat"].unique().tolist():
             raise ValueError(
@@ -320,6 +323,9 @@ def linear_composite(
                 "`signs` will be coerced to +1s/-1s. "
                 "(i.e. signs ← abs(signs) / signs)"
             )
+            if any([x == 0.0 for x in signs]):
+                raise ValueError("`signs` must not contain any 0s.")
+
             signs: List[float] = [abs(x) / x for x in signs]
 
     else:
