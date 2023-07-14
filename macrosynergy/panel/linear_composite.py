@@ -93,7 +93,7 @@ def linear_composite_cid_agg(
     else:
         weights_series: pd.Series = pd.Series(
             np.array(weights) * np.array(signs),
-            index=weights_df.index,
+            index=weights_df.columns,
         )
         weights_df = weights_df.mul(weights_series, axis=1)
 
