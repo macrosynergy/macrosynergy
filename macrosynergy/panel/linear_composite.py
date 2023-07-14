@@ -74,7 +74,6 @@ def linear_composite_cid_agg(
     # Create a weights series with the cids as index
     weights_df: pd.DataFrame = df[(df["xcat"] == xcat)].copy()
     # remove the `xcat` from the dataframe
-    df = df[(df["xcat"] != xcat)].copy()
 
     # Create wide dataframes for the data and weights
     data_df = df.set_index(["real_date", "cid"])["value"].unstack(level=1)
@@ -387,9 +386,6 @@ def linear_composite(
             raise ValueError(
                 "No `cids` have complete `xcat` data required for the calculation."
             )
-
-        if not isinstance(weights, str):
-            weights: List[float] = [1.0] * len(cids)
 
         return linear_composite_cid_agg(
             df=df,
