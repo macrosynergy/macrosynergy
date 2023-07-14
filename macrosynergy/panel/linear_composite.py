@@ -87,8 +87,8 @@ def linear_composite_cid_agg(
         )
         weights_df = pd.DataFrame(
             data=[weights_series.sort_index()],
-            index=df["real_date"].unique().tolist(),
-            columns=df["cid"].unique().tolist(),
+            index=pd.to_datetime(df["real_date"].unique().tolist()),
+            columns=df["cid"].unique(),
         )
 
         weights_df.index.names = ["real_date"]
