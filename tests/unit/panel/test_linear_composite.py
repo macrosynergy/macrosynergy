@@ -1,8 +1,7 @@
 import unittest
 import numpy as np
 import pandas as pd
-from typing import List
-
+from typing import List, Tuple, Union, Dict, Any
 
 
 from macrosynergy.panel.linear_composite import linear_composite
@@ -90,7 +89,7 @@ class TestAll(unittest.TestCase):
         self.assertTrue(rdf["xcat"].unique().tolist() == ["TEST-1C"])
         self.assertTrue(set(rdf["real_date"].values) == set(dfd["real_date"].values))
 
-        ## Test Case 2a
+        ## Test Case 2a & b - Testing nan logic
         _end: str = "2000-02-01"
         dfd = make_test_df(
             cids=all_cids, xcats=all_xcats, start_date=start, end_date=_end
@@ -105,14 +104,147 @@ class TestAll(unittest.TestCase):
         ] = np.nan
 
         _cids: List[str] = ["AUD", "CAD"]
+
+        for iter_bool in [True, False]:
+            rdf: pd.DataFrame = linear_composite(
+                df=dfd,
+                cids=_cids,
+                xcats=all_xcats,
+                complete_xcats=iter_bool,
+            )
+            # 2000-01-17 should be nan on both settings of complete_xcats (True and False)
+            self.assertTrue(rdf[rdf["real_date"] == "2000-01-17"]["value"].isna().all())
+
+        ## Test Case 3a - Testing weights with nan values
+        _xcats: List[str] = ["XR", "CRY", "INFL"]
+        weights: List[str] = [1, 2, 4]
+        _end: str = "2000-02-01"
+        dfd = make_test_df(
+            cids=all_cids, xcats=all_xcats, start_date=start, end_date=_end
+        )
+        dfd["value"] = 1
+
+        # make 2000-01-17 for CAD and AUD XR values a nan
+        dfd.loc[
+            (dfd["real_date"] == "2000-01-17")
+            & ((dfd["cid"] == "CAD") | (dfd["cid"] == "AUD"))
+            & ((dfd["xcat"] == "XR") | (dfd["xcat"] == "CRY")),
+            "value",
+        ] = np.nan
+
+        # also blank out GBP INFL for 2023-01-18
+        dfd.loc[
+            (dfd["real_date"] == "2000-01-18")
+            & (dfd["cid"] == "GBP")
+            & (dfd["xcat"] == "INFL"),
+            "value",
+        ] = np.nan
+
         rdf: pd.DataFrame = linear_composite(
             df=dfd,
-            cids=_cids,
-            xcats=all_xcats,
+            xcats=_xcats,
+            weights=weights,
         )
-        # 2000-01-17 should be nan
-        self.assertTrue(rdf[rdf["real_date"] == "2000-01-17"]["value"].isna().all())
 
+        # all values should be 1
+        self.assertTrue(np.all(rdf["value"].values == 1))
+
+        # testing with normalize_weights=False
+        rdf: pd.DataFrame = linear_composite(
+            df=dfd,
+            xcats=_xcats,
+            weights=weights,
+            normalize_weights=False,
+        )
+
+        test_cases: List[Dict[str, Union[str, float]]] = [
+            {
+                "cid": "CAD",
+                "real_date": "2000-01-17",
+                "expc_value": 7.0,
+                "outl_value": 4.0,
+            },
+            {
+                "cid": "AUD",
+                "real_date": "2000-01-17",
+                "expc_value": 7.0,
+                "outl_value": 4.0,
+            },
+            {
+                "cid": "GBP",
+                "real_date": "2000-01-18",
+                "expc_value": 7.0,
+                "outl_value": 3.0,
+            },
+        ]
+
+        for casex in test_cases:
+            rdf_casex: pd.DataFrame = rdf[(rdf["cid"] == casex["cid"])].copy()
+            # there should only be two values for each cid
+            self.assertTrue(
+                set(rdf_casex["value"].unique().tolist())
+                == {casex["expc_value"], casex["outl_value"]}
+            )
+            # on the "outlier" date, the value should be 3
+            self.assertTrue(
+                rdf_casex[rdf_casex["value"] == casex["outl_value"]][
+                    "real_date"
+                ].values[0]
+                == pd.to_datetime(casex["real_date"])
+            )
+            # all other dates should be expc_value
+            self.assertTrue(
+                np.all(
+                    rdf_casex[rdf["real_date"] != pd.to_datetime(casex["real_date"])][
+                        "value"
+                    ]
+                    == casex["expc_value"]
+                )
+            )
+
+            # Testing with signs
+
+            _xcats: List[str] = ["XR", "CRY"]
+            signs: List[str] = [1, -1]
+
+            dfd: pd.DataFrame = make_test_df(
+                cids=all_cids, xcats=_xcats, start_date=start, end_date=end
+            )
+            dfd["value"] = 1
+
+            adf: pd.DataFrame = linear_composite(
+                df=dfd,
+                xcats=_xcats,
+                signs=signs,
+                normalize_weights=True,
+            )
+
+            bdf: pd.DataFrame = linear_composite(
+                df=dfd,
+                xcats=_xcats,
+                signs=signs,
+                normalize_weights=False,
+            )
+            # both should be the same
+            self.assertTrue(np.all(adf["value"].values == bdf["value"].values))
+            # all values should be 0
+            self.assertTrue(np.all(adf["value"].values == 0))
+
+            # small tweak to the test df
+            dfd: pd.DataFrame = make_test_df(
+                cids=all_cids,
+                xcats=_xcats,
+                start_date=start,
+                end_date=end,
+                prefer="linear",
+            )
+            adf: pd.DataFrame = linear_composite(
+                df=dfd,
+                xcats=_xcats,
+                signs=signs,
+            )
+            # all values should be 0
+            self.assertTrue(np.all(adf["value"].values == 0))
 
 
 if __name__ == "__main__":
