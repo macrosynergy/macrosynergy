@@ -93,7 +93,7 @@ def linear_composite_cid_agg(
     else:
         weights_series: pd.Series = pd.Series(
             np.array(weights) * np.array(signs),
-            index=weights_df["cid"].unique().tolist(),
+            index=weights_df.index,
         )
         weights_df = weights_df.mul(weights_series, axis=1)
 
@@ -317,13 +317,13 @@ def linear_composite(
                 "`signs` must be a list of floats of the same length as `xcats`."
             )
         if not all([x in [-1.0, 1.0] for x in signs]):
+            if any([x == 0.0 for x in signs]):
+                raise ValueError("`signs` must not contain any 0s.")
             warnings.warn(
                 "`signs` must be a list of +1s or -1s. "
                 "`signs` will be coerced to +1s/-1s. "
                 "(i.e. signs ← abs(signs) / signs)"
             )
-            if any([x == 0.0 for x in signs]):
-                raise ValueError("`signs` must not contain any 0s.")
 
             signs: List[float] = [abs(x) / x for x in signs]
 
