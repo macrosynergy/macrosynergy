@@ -422,7 +422,7 @@ class TestAll(unittest.TestCase):
         # Test Case 2b - Testing nan logic
 
         # make 2000-01-17 for all CAD & AUD-XR values a nan
-        _cids: List[str] = all_cids
+        _cids: List[str] = ["AUD", "CAD", "GBP"]
         _xcat: str = "XR"
         _weights: List[str] = [1, 2, 4]
         _end: str = "2000-02-01"
@@ -445,19 +445,56 @@ class TestAll(unittest.TestCase):
             "value",
         ] = np.nan
 
-        # rdf: pd.DataFrame = linear_composite(
-        #     df=dfd,
-        #     cids=all_cids,
-        #     xcats=_xcat,
-        #     complete_xcats=True,
-        # )
-        # # chekc that all the dates in the input are there in the output, cast to pd.Timestamp
-        # self.assertTrue(
-        #     set(rdf["real_date"].unique().tolist())
-        #     == set(pd.to_datetime(dfd["real_date"].unique().tolist()))
-        # )
+        # for 2023-01-19, all entires are nan
+        dfd.loc[(dfd["real_date"] == "2000-01-19"), "value"] = np.nan
 
-        # self.assertTrue(rdf["value"].isna().any())
+        rdf: pd.DataFrame = linear_composite(
+            df=dfd, cids=_cids, xcats=_xcat, complete_cids=True, weights=_weights
+        )
+        # chekc that all the dates in the input are there in the output, cast to pd.Timestamp
+        self.assertTrue(
+            set(rdf["real_date"].unique().tolist())
+            == set(pd.to_datetime(dfd["real_date"].unique().tolist()))
+        )
+        interesting_dates: List[str] = ["2000-01-17", "2000-01-18", "2000-01-19"]
+        # with complete_cids=True, 2000-01-17 to 2000-01-19 should be nan
+        self.assertTrue(
+            rdf[rdf["real_date"].isin(interesting_dates)]["value"].isna().all()
+        )
+
+        # for all other dates, the value should be 1
+        self.assertTrue(
+            np.all(rdf[~rdf["real_date"].isin(interesting_dates)]["value"].values == 1)
+        )
+
+        rdf: pd.DataFrame = linear_composite(
+            df=dfd,
+            cids=_cids,
+            xcats=_xcat,
+            complete_cids=False,
+            weights=_weights,
+            normalize_weights=False,
+        )
+
+        self.assertTrue(
+            rdf[rdf["real_date"].isin(["2000-01-19"])]["value"].isna().all()
+        )
+
+        self.assertTrue(
+            np.all(
+                rdf[~rdf["real_date"].isin(interesting_dates)]["value"].values
+                == sum(_weights)
+            )
+        )
+
+        # value on 2000-01-17 should be 4:
+        self.assertTrue(
+            rdf[rdf["real_date"].isin(["2000-01-17"])]["value"].values[0] == 4
+        )
+        # value on 2000-01-18 should be 3
+        self.assertTrue(
+            rdf[rdf["real_date"].isin(["2000-01-18"])]["value"].values[0] == 3
+        )
 
 
 if __name__ == "__main__":
