@@ -346,14 +346,20 @@ def linear_composite(
 
     _xcats: List[str] = xcats + ([weights] if isinstance(weights, str) else [])
 
-    df: pd.DataFrame = reduce_df(
+    df, remaining_xcats, remaining_cids = reduce_df(
         df=df,
         xcats=_xcats,
         cids=cids,
         start=start,
         end=end,
         blacklist=blacklist,
+        intersect=False,
+        out_all=True,
     )
+    if len(remaining_xcats) == 1 and len(remaining_cids) < len(cids) and not _xcat_agg:
+        raise ValueError(
+            "Not all `cids` have complete `xcat` data required for the calculation."
+        )
 
     if _xcat_agg:
         found_cids: List[str] = df["cid"].unique().tolist()
