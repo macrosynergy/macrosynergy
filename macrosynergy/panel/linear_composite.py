@@ -42,12 +42,13 @@ def _linear_composite_basic(
     # Multiply the weights by the target data
     out_df = data_df * weights_df
 
+    # Sum across the columns
+    out_df = out_df.sum(axis="columns")
+
     # NOTE: Using `axis` with strings, to make it more readable
     # Remove periods with missing data (if requested) (rows with any NaNs)
     if complete:
         out_df[nan_mask.any(axis="columns")] = np.NaN
-    # Sum across the columns
-    out_df = out_df.sum(axis="columns")
 
     # put NaNs back in, as sum() removes them
     out_df[nan_mask.all(axis="columns")] = np.NaN
@@ -71,30 +72,44 @@ def linear_composite_cid_agg(
 ):
     """Linear composite of various cids for a given xcat across all periods."""
 
-    # Create a weights series with the cids as index
-    weights_df: pd.DataFrame = df[(df["xcat"] == xcat)].copy()
-    # remove the `xcat` from the dataframe
-
-    # Create wide dataframes for the data and weights
-    data_df = df.set_index(["real_date", "cid"])["value"].unstack(level=1)
-    weights_df = weights_df.set_index(["real_date", "cid"])["value"].unstack(level=1)
-
     if isinstance(weights, str):
-        weights_str: str = weights
-        more_weights: pd.DataFrame = df[(df["xcat"] == weights_str)].copy()
-        df = df[(df["xcat"] != weights_str)].copy()
-        more_weights_df = more_weights.set_index(["real_date", "cid"])["value"].unstack(
+        weights_df: pd.DataFrame = df[(df["xcat"] == weights)].copy()
+        df = df[(df["xcat"] != weights)].copy()
+        weights_df = weights_df.set_index(["real_date", "cid"])["value"].unstack(
             level=1
         )
-        weights_df = weights_df.mul(more_weights_df, axis=1)
         weights_df = weights_df.mul(signs, axis=1)
-        df = df[(df["xcat"] != weights_str)].copy()
+
     else:
         weights_series: pd.Series = pd.Series(
             np.array(weights) * np.array(signs),
-            index=weights_df.columns,
+            index=df["cid"].unique().tolist(),
         )
-        weights_df = weights_df.mul(weights_series, axis=1)
+        weights_df = pd.DataFrame(
+            data=[weights_series.sort_index()],
+            index=df["real_date"].unique().tolist(),
+            columns=df["cid"].unique().tolist(),
+        )
+
+        weights_df.index.names = ["real_date"]
+        weights_df.columns.names = ["cid"]
+
+    # create the data_df
+    data_df: pd.DataFrame = (
+        df[(df["xcat"] == xcat)]
+        .set_index(["real_date", "cid"])["value"]
+        .unstack(level=1)
+    )
+
+    # assert that data_df and weights_df have the same shape, index and columns
+    assert (
+        (data_df.shape == weights_df.shape)
+        and (data_df.index.equals(weights_df.index))
+        and (data_df.columns.equals(weights_df.columns))
+    ), (
+        "Unexpected shape of `data_df` and `weights_df`. "
+        "Unable to shape data for calculation."
+    )
 
     # Calculate the linear combination
     out_df: pd.DataFrame = _linear_composite_basic(
