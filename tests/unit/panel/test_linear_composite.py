@@ -75,14 +75,23 @@ class TestAll(unittest.TestCase):
                 rdf: pd.DataFrame = linear_composite(**argsx)
 
         # value error cases
+        bad_df: pd.DataFrame = self.dfd.copy()
+        # remove any entries for AUD XR
+        bad_df = bad_df[
+            (bad_df["cid"] != self.cids[0]) | (bad_df["xcat"] != self.xcats[1])
+        ].reset_index(drop=True)
+
         value_error_cases: List[Dict[str, Any]] = [
             {"df": pd.DataFrame()},
             {"df": self.dfd.assign(value=np.NaN)},
+            {"df": bad_df},
             {"start": 1},
             {"end": 1},
             {"xcats": ["foo"]},
             {"cids": ["bar"]},
+            {"cids": [self.cids[0], "foo"]},
             {"xcats": self.xcats[0], "weights": "foo"},
+            {"weights": "foo"},
             {"weights": [1] * 100},
             {"signs": [1] * 100},
             {"weights": [1] * (len(self.xcats) - 1) + [0]},
