@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 from typing import List, Tuple, Union, Dict, Any
 
-
 from macrosynergy.panel.linear_composite import linear_composite
 from macrosynergy.management.simulate_quantamental_data import make_test_df, make_qdf
 
@@ -39,7 +38,77 @@ class TestAll(unittest.TestCase):
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
         self.dfd: pd.DataFrame = dfd
 
+    def test_linear_composite_args(self):
+        """
+        This section is meant to test the arguments of the linear_composite function.
+        It simply runs the function with a set of arguments and checks for errors.
+        No return values are checked.
+        """
+
+        self.dataframe_generator()
+        rdf: pd.DataFrame = linear_composite(
+            df=self.dfd,
+            cids=self.cids[0],
+            xcats=None,
+        )
+        # any return data implies success
+        self.assertTrue(not rdf.empty)
+
+        # base case
+        base_args: Dict[str, Any] = {
+            "df": self.dfd,
+            "xcats": self.xcats,
+        }
+        # type error cases
+        type_error_cases: List[Dict[str, Any]] = [
+            {"df": 1},
+            {"signs": 1},
+            {"xcats": 1},
+            {"cids": 1},
+            {"weights": pd.DataFrame()},
+            {"weights": [1, 2, "bar"]},
+        ]
+        for case in type_error_cases:
+            argsx: Dict[str, Any] = base_args.copy()
+            argsx.update(case)
+            with self.assertRaises(TypeError):
+                rdf: pd.DataFrame = linear_composite(**argsx)
+
+        # value error cases
+        value_error_cases: List[Dict[str, Any]] = [
+            {"df": pd.DataFrame()},
+            {"df": self.dfd.assign(value=np.NaN)},
+            {"start": 1},
+            {"end": 1},
+            {"xcats": ["foo"]},
+            {"cids": ["bar"]},
+            {"xcats": self.xcats[0], "weights": "foo"},
+            {"weights": [1] * 100},
+            {"signs": [1] * 100},
+            {"weights": [1] * (len(self.xcats) - 1) + [0]},
+            {"signs": [1] * (len(self.xcats) - 1) + [0]},
+        ]
+        for case in value_error_cases:
+            argsx: Dict[str, Any] = base_args.copy()
+            argsx.update(case)
+            with self.assertRaises(ValueError):
+                rdf: pd.DataFrame = linear_composite(**argsx)
+
+        # check that passings signs as random values works
+        alt_signs: List[float] = [
+            (rnd - 0.5) * 2 for rnd in np.random.random(len(self.xcats))
+        ]
+
+        with self.assertWarns(UserWarning):
+            rdf: pd.DataFrame = linear_composite(
+                df=self.dfd,
+                xcats=self.xcats,
+                signs=alt_signs,
+            )
+
     def test_linear_composite_xcat_agg_mode(self):
+        self.dataframe_generator()
+
         all_cids: List[str] = ["AUD", "CAD", "GBP"]
         all_xcats: List[str] = ["XR", "CRY", "INFL"]
         start: str = "2000-01-01"
@@ -202,7 +271,7 @@ class TestAll(unittest.TestCase):
                 )
             )
 
-            # Testing with signs
+            # Test Case 3b - Testing weights with nan values
 
             _xcats: List[str] = ["XR", "CRY"]
             signs: List[str] = [1, -1]
