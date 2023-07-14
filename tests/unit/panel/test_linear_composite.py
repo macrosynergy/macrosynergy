@@ -103,6 +103,23 @@ class TestAll(unittest.TestCase):
             with self.assertRaises(ValueError):
                 rdf: pd.DataFrame = linear_composite(**argsx)
 
+        # Case with agg_cid, with only one xcat (no weights), with one cid missing the xcat
+        _test_df: pd.DataFrame = make_test_df(
+            cids=self.cids,
+            xcats=self.xcats,
+            start_date="2000-01-01",
+            end_date="2000-02-01",
+        )
+
+        _test_df = _test_df[
+            ~((_test_df["cid"] == "AUD") & (_test_df["xcat"] == "XR"))
+        ].reset_index(drop=True)
+
+        with self.assertRaises(ValueError):
+            rdf: pd.DataFrame = linear_composite(
+                df=_test_df, xcats="XR", cids=self.cids
+            )
+
         # check that passings signs as random values works
         alt_signs: List[float] = [
             (rnd - 0.5) * 2 for rnd in np.random.random(len(self.xcats))
@@ -114,6 +131,25 @@ class TestAll(unittest.TestCase):
                 xcats=self.xcats,
                 signs=alt_signs,
             )
+
+        _test_df: pd.DataFrame = make_test_df(
+            cids=self.cids,
+            xcats=self.xcats,
+            start_date="2000-01-01",
+            end_date="2000-02-01",
+        )
+
+        _test_df = _test_df[
+            ~((_test_df["cid"] == "AUD") & (_test_df["xcat"] == "XR"))
+        ].reset_index(drop=True)
+
+        # with self.assertWarns(UserWarning):
+        #     rdf: pd.DataFrame = linear_composite(
+        #         df=_test_df,
+        #         xcats="INFL",
+        #         weights="XR",
+        #         cids=self.cids
+        #     )
 
     def test_linear_composite_xcat_agg_mode(self):
         """
@@ -494,6 +530,155 @@ class TestAll(unittest.TestCase):
         # value on 2000-01-18 should be 3
         self.assertTrue(
             rdf[rdf["real_date"].isin(["2000-01-18"])]["value"].values[0] == 3
+        )
+
+        ## Testing category-weights
+        _cids: List[str] = ["AUD", "CAD", "GBP"]
+        _xcat: str = "XR"
+        _weights: str = "INFL"
+        _end: str = "2000-02-01"
+        dfd: pd.DataFrame = make_test_df(
+            cids=all_cids, xcats=all_xcats, start_date=start, end_date=_end
+        )
+        dfd["value"] = 1
+
+        dfd.loc[
+            (dfd["real_date"] == "2000-01-17") & (dfd["xcat"] == "INFL"),
+            "value",
+        ] = 10
+
+        rdf: pd.DataFrame = linear_composite(
+            df=dfd,
+            cids=_cids,
+            xcats=_xcat,
+            weights=_weights,
+            normalize_weights=False,
+        )
+
+        # value on 2000-01-17 should be 30:
+        self.assertTrue(
+            rdf[rdf["real_date"].isin(["2000-01-17"])]["value"].values[0] == 30
+        )
+        # all else should be 3
+        self.assertTrue(
+            np.all(rdf[~rdf["real_date"].isin(["2000-01-17"])]["value"].values == 3)
+        )
+        self.assertTrue(rdf["cid"].unique().tolist() == ["GLB"])
+        self.assertTrue(rdf["xcat"].unique().tolist() == ["XR"])
+
+        # with normalized wieghts, all values should be 1
+
+        rdf: pd.DataFrame = linear_composite(
+            df=dfd,
+            cids=_cids,
+            xcats=_xcat,
+            weights=_weights,
+        )
+
+        self.assertTrue(np.all(rdf["value"].values == 1))
+        self.assertTrue(rdf["cid"].unique().tolist() == ["GLB"])
+        self.assertTrue(rdf["xcat"].unique().tolist() == ["XR"])
+
+        # Test Case 3a - Testing signs with nan values
+        _cids: List[str] = ["AUD", "CAD", "GBP"]
+        _xcat: str = "XR"
+        _weights: str = "INFL"
+        _end: str = "2000-02-01"
+        dfd: pd.DataFrame = make_test_df(
+            cids=all_cids, xcats=all_xcats, start_date=start, end_date=_end
+        )
+        dfd["value"] = 1
+
+        # set AUD INFL on 2000-01-17 to nan
+        # set GBP XR on 2000-01-17 to nan
+        dfd.loc[
+            (
+                (
+                    (dfd["real_date"] == "2000-01-17")
+                    & (dfd["xcat"] == "INFL")
+                    & (dfd["cid"] == "AUD")
+                )
+                | (
+                    (dfd["real_date"] == "2000-01-17")
+                    & (dfd["xcat"] == "XR")
+                    & (dfd["cid"] == "GBP")
+                )
+            ),
+            "value",
+        ] = np.nan
+
+        rdf: pd.DataFrame = linear_composite(
+            df=dfd,
+            cids=_cids,
+            xcats=_xcat,
+            weights=_weights,
+            normalize_weights=False,
+        )
+        # on 2023-01-17, the value should be 1, all else should be 3
+        self.assertTrue(
+            np.all(rdf[rdf["real_date"] == "2000-01-17"]["value"].values == 1)
+        )
+        self.assertTrue(
+            np.all(rdf[rdf["real_date"] != "2000-01-17"]["value"].values == 3)
+        )
+
+        # Test Case 3b - Testing signs with nan values
+        _cids: List[str] = [
+            "AUD",
+            "CAD",
+        ]
+        signs: List[str] = [1, -1]
+        _xcat: str = "XR"
+        _weights: str = "INFL"
+        _end: str = "2000-02-01"
+        dfd: pd.DataFrame = make_test_df(
+            cids=all_cids, xcats=all_xcats, start_date=start, end_date=_end
+        )
+        # for each, mutiply the weight by the sign
+        dfd["value"] = 1
+
+        # set AUD INFL on 2000-01-17 to nan, set complete_cids=True
+        dfd.loc[
+            (dfd["real_date"] == "2000-01-17")
+            & (dfd["xcat"] == "INFL")
+            & (dfd["cid"] == "AUD"),
+            "value",
+        ] = np.nan
+
+        rdf: pd.DataFrame = linear_composite(
+            df=dfd,
+            cids=_cids,
+            xcats=_xcat,
+            weights=_weights,
+            signs=signs,
+            complete_cids=True,
+        )
+
+        # sum of the value col should be 0, with only 1 nan value on 2000-01-17
+        self.assertTrue(np.all(rdf.groupby("real_date")["value"].sum().values == 0))
+        self.assertTrue(
+            np.all(rdf[rdf["real_date"] == "2000-01-17"]["value"].isna().values)
+        )
+        self.assertTrue(
+            np.all(rdf[rdf["real_date"] != "2000-01-17"]["value"].values == 0)
+        )
+
+        rdf: pd.DataFrame = linear_composite(
+            df=dfd,
+            cids=_cids,
+            xcats=_xcat,
+            weights=_weights,
+            signs=signs,
+            complete_cids=False,
+        )
+
+        # sum of the value col should be -1, with -1 on 2000-01-17 and the rest 0
+        self.assertTrue(sum(rdf["value"].values) == -1)
+        self.assertTrue(
+            np.all(rdf[rdf["real_date"] == "2000-01-17"]["value"].values == -1)
+        )
+        self.assertTrue(
+            np.all(rdf[rdf["real_date"] != "2000-01-17"]["value"].values == 0)
         )
 
 
