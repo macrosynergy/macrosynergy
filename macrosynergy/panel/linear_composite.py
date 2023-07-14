@@ -45,13 +45,12 @@ def _linear_composite_basic(
     # NOTE: Using `axis` with strings, to make it more readable
     # Remove periods with missing data (if requested) (rows with any NaNs)
     if complete:
-        out_df[nan_mask.any(axis=1)] = np.NaN
-
+        out_df[nan_mask.any(axis="columns")] = np.NaN
     # Sum across the columns
     out_df = out_df.sum(axis="columns")
 
     # put NaNs back in, as sum() removes them
-    out_df[nan_mask.all(axis=1)] = np.NaN
+    out_df[nan_mask.all(axis="columns")] = np.NaN
 
     # Reset index, rename columns and return
     out_df = out_df.reset_index().rename(columns={0: "value"})
