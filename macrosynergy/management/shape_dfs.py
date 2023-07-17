@@ -127,14 +127,16 @@ def aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
 
     """
 
-    dfx = dfx.groupby(['xcat', 'cid', 'custom_date'])
-    dfx = dfx.agg(xcat_agg).reset_index()
+    col_exclude = list(set(dfx.columns).difference(set(['xcat', 'cid', 'custom_date', 'value'])))
+    
+    dfx2 = dfx.groupby(['xcat', 'cid', 'custom_date'])["value"]
+    dfx2 = dfx2.agg(xcat_agg).reset_index()
+    dfx2[col_exclude] = dfx.groupby(['xcat', 'cid', 'custom_date'])[col_exclude].first().reset_index()[col_exclude]
+    if 'real_date' in dfx2.columns:
+        dfx2 = dfx2.drop(['real_date'], axis=1)
+    dfx2 = dfx2.rename(columns={"custom_date": "real_date"})
 
-    if 'real_date' in dfx.columns:
-        dfx = dfx.drop(['real_date'], axis=1)
-    dfx = dfx.rename(columns={"custom_date": "real_date"})
-
-    return dfx
+    return dfx2
 
 def expln_df(df_w: pd.DataFrame, xpls: List[str], agg_meth: str, sum_condition: bool,
              lag: int):

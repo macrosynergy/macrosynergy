@@ -671,6 +671,18 @@ if __name__ == "__main__":
         ylab="Return", coef_box="lower left", prob_est="map",
     )
 
+    # years parameter
+
+    cr = CategoryRelations(
+        dfdx, xcats=["CRY", "XR"], freq="M", years=5, lag=0, cids=cidx, xcat_aggs=["mean", "sum"],
+        start="2001-01-01", blacklist=black
+    )
+
+    cr.reg_scatter(
+        labels=False, separator=None, title="Carry and Return, 5-year periods", xlab="Carry",
+        ylab="Return", coef_box="lower left", prob_est="map",
+    )
+
     cr = CategoryRelations(
         dfdx, xcats=["CRY", "XR"], 
         xcat1_chg="diff",
