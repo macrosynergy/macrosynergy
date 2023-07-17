@@ -63,7 +63,7 @@ def contract_signals(
 
     :return: <pd.DataFrame> with the contract signals for all traded contracts and the
         specified strategy. It has the standard JPMaQS DataFrame. The contract signals
-        have the following format "<cid>_<ctype><sname>_CSIG".
+        have the following format "<cid>_<ctype>_<sname>_CSIG".
               
     """
 
