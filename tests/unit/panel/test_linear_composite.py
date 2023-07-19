@@ -8,7 +8,7 @@ from macrosynergy.management.simulate_quantamental_data import make_test_df, mak
 
 
 class TestAll(unittest.TestCase):
-    def dataframe_generator(self) -> pd.DataFrame:
+    def generate_test_dfs(self) -> pd.DataFrame:
         self.cids: List[str] = ["AUD", "CAD", "GBP"]
         self.xcats: List[str] = ["CRY", "XR", "INFL"]
 
@@ -45,7 +45,7 @@ class TestAll(unittest.TestCase):
         No return values are checked.
         """
 
-        self.dataframe_generator()
+        self.generate_test_dfs()
         rdf: pd.DataFrame = linear_composite(
             df=self.dfd,
             cids=self.cids[0],
@@ -154,7 +154,7 @@ class TestAll(unittest.TestCase):
         (i.e. engaging `_linear_composite_xcat_agg()`)
         """
 
-        self.dataframe_generator()
+        self.generate_test_dfs()
 
         all_cids: List[str] = ["AUD", "CAD", "GBP"]
         all_xcats: List[str] = ["XR", "CRY", "INFL"]
@@ -363,7 +363,7 @@ class TestAll(unittest.TestCase):
             self.assertTrue(np.all(adf["value"].values == 0))
 
     def test_linear_composite_cid_agg_mode(self):
-        self.dataframe_generator()
+        self.generate_test_dfs()
 
         all_cids: List[str] = ["AUD", "CAD", "GBP"]
         all_xcats: List[str] = ["XR", "CRY", "INFL"]
