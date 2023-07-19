@@ -143,13 +143,10 @@ class TestAll(unittest.TestCase):
             ~((_test_df["cid"] == "AUD") & (_test_df["xcat"] == "XR"))
         ].reset_index(drop=True)
 
-        # with self.assertWarns(UserWarning):
-        #     rdf: pd.DataFrame = linear_composite(
-        #         df=_test_df,
-        #         xcats="INFL",
-        #         weights="XR",
-        #         cids=self.cids
-        #     )
+        with self.assertWarns(UserWarning):
+            rdf: pd.DataFrame = linear_composite(
+                df=_test_df, xcats="INFL", weights="XR", cids=self.cids
+            )
 
     def test_linear_composite_xcat_agg_mode(self):
         """

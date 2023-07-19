@@ -346,6 +346,11 @@ def linear_composite(
 
     _xcats: List[str] = xcats + ([weights] if isinstance(weights, str) else [])
 
+    df: pd.DataFrame
+    remaining_xcats: List[str]
+    remaining_cids: List[str]
+    # NOTE: the "remaining_*" variables will not be in the same order as the input cids/xcats.
+    # Do not used these for index based lookups/operations.
     df, remaining_xcats, remaining_cids = reduce_df(
         df=df,
         xcats=_xcats,
@@ -383,34 +388,41 @@ def linear_composite(
         found_cids: List[str] = df["cid"].unique().tolist()
         found_xcats: List[str] = df["xcat"].unique().tolist()
         if isinstance(weights, str):
-            found_xcats.remove(weights)
-        # there should now only be one xcat in df in found_xcats
-        # sanity check:
-        assert len(found_xcats) == 1, (
-            "There should only be one xcat in df"
-            f" when cid_agg, found_xcats: {found_xcats}"
-        )
-        xcatx: str = found_xcats[0]
-        for cidx in found_cids:
-            if xcatx not in df.loc[df["cid"] == cidx, "xcat"].unique():
-                err_msg: str = ""
-                if isinstance(weights, str) and weights == xcatx:
-                    err_msg = " (used as weights)"
+            # one of the found_xcats must be the weights, and there should be only one more
+            assert (weights in found_xcats) and len(
+                (set(found_xcats) - {weights})
+            ) == 1, (
+                "When using a category-string as `weights`"
+                " it must be present in `df` and there must be only one other `xcat`."
+            )
+
+        for icid, cidx in enumerate(
+            cids.copy()
+        ):  # copy to allow modification of `cids`
+            if set(found_xcats) != set(df.loc[df["cid"] == cidx, "xcat"].unique()):
+                cids.pop(icid)
+                signs.pop(icid)
+                if isinstance(weights, list):
+                    weights.pop(icid)
+                # drop from df
+                df = df.loc[df["cid"] != cidx, :]
                 warnings.warn(
-                    f"Category data for `{xcatx}`{err_msg}"
-                    f" is not available for `{cidx}`, "
-                    "dropping cid from `cids`."
+                    f"`cid` {cidx} does not have complete `xcat` data required for the calculation."
+                    " It will be dropped from dataframe."
                 )
-                cids.remove(cidx)
 
         if len(cids) == 0:
             raise ValueError(
                 "No `cids` have complete `xcat` data required for the calculation."
             )
 
+        _xcat: str = list(
+            set(found_xcats) - {weights if isinstance(weights, str) else ""}
+        )[0]
+
         return linear_composite_cid_agg(
             df=df,
-            xcat=xcatx,
+            xcat=_xcat,
             weights=weights,
             signs=signs,
             normalize_weights=normalize_weights,
