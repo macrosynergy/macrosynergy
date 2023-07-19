@@ -3,9 +3,6 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple, Union, Set
 
-import sys, os
-sys.path.append(os.path.abspath('.'))
-
 from tests.simulate import make_qdf
 from macrosynergy.panel.make_relative_value import make_relative_value, _prepare_basket
 from macrosynergy.management.shape_dfs import reduce_df
