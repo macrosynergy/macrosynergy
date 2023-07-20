@@ -128,7 +128,7 @@ def aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
     """
 
     dfx = dfx.groupby(['xcat', 'cid', 'custom_date'])
-    dfx = dfx.agg(xcat_agg).reset_index()
+    dfx = dfx.aggregate(xcat_agg, numeric_only=True).reset_index()
 
     if 'real_date' in dfx.columns:
         dfx = dfx.drop(['real_date'], axis=1)
