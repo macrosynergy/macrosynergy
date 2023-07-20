@@ -12,30 +12,6 @@ class TestAll(unittest.TestCase):
         self.cids: List[str] = ["AUD", "CAD", "GBP"]
         self.xcats: List[str] = ["CRY", "XR", "INFL"]
 
-        # df_cids = pd.DataFrame(
-        #     index=self.cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
-        # )
-        # df_cids.loc["AUD", :] = ["2010-01-01", "2020-12-31", 0.5, 2]
-        # df_cids.loc["CAD", :] = ["2011-01-01", "2020-11-30", 0, 1]
-        # df_cids.loc["GBP", :] = ["2012-01-01", "2020-11-30", -0.2, 0.5]
-
-        # df_xcats = pd.DataFrame(
-        #     index=self.xcats,
-        #     columns=[
-        #         "earliest",
-        #         "latest",
-        #         "mean_add",
-        #         "sd_mult",
-        #         "ar_coef",
-        #         "back_coef",
-        #     ],
-        # )
-
-        # df_xcats.loc["CRY", :] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
-        # df_xcats.loc["XR", :] = ["2010-01-01", "2020-12-31", 0, 1, 0, 0.3]
-        # df_xcats.loc["INFL", :] = ["2012-01-01", "2020-11-30", 0.5, 1, 0.5, 0.5]
-
-        # dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
         dfd: pd.DataFrame = make_test_df(
             cids=self.cids,
             xcats=self.xcats,
@@ -369,6 +345,10 @@ class TestAll(unittest.TestCase):
             self.assertTrue(np.all(adf["value"].values == 0))
 
     def test_linear_composite_cid_agg_mode(self):
+        """
+        Meant to test the "cid_agg" mode of the linear_composite function.
+        (i.e. engaging `_linear_composite_cid_agg()`)
+        """
         self.generate_test_dfs()
 
         all_cids: List[str] = ["AUD", "CAD", "GBP"]
