@@ -19,6 +19,9 @@ def proxy_pnl(
         rcost_l: str = None,
         size_l: str = None,
         roll_freqs: dict = None,
+        start: str = None,
+        end: str = None,
+        blacklist: dict = None,
 
 
 ):  
