@@ -4,7 +4,7 @@ import pandas as pd
 from typing import List, Tuple, Union, Dict, Any
 
 from macrosynergy.panel.linear_composite import linear_composite
-from macrosynergy.management.simulate_quantamental_data import make_test_df, make_qdf
+from macrosynergy.management.simulate_quantamental_data import make_test_df
 
 
 class TestAll(unittest.TestCase):
@@ -12,30 +12,36 @@ class TestAll(unittest.TestCase):
         self.cids: List[str] = ["AUD", "CAD", "GBP"]
         self.xcats: List[str] = ["CRY", "XR", "INFL"]
 
-        df_cids = pd.DataFrame(
-            index=self.cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+        # df_cids = pd.DataFrame(
+        #     index=self.cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+        # )
+        # df_cids.loc["AUD", :] = ["2010-01-01", "2020-12-31", 0.5, 2]
+        # df_cids.loc["CAD", :] = ["2011-01-01", "2020-11-30", 0, 1]
+        # df_cids.loc["GBP", :] = ["2012-01-01", "2020-11-30", -0.2, 0.5]
+
+        # df_xcats = pd.DataFrame(
+        #     index=self.xcats,
+        #     columns=[
+        #         "earliest",
+        #         "latest",
+        #         "mean_add",
+        #         "sd_mult",
+        #         "ar_coef",
+        #         "back_coef",
+        #     ],
+        # )
+
+        # df_xcats.loc["CRY", :] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
+        # df_xcats.loc["XR", :] = ["2010-01-01", "2020-12-31", 0, 1, 0, 0.3]
+        # df_xcats.loc["INFL", :] = ["2012-01-01", "2020-11-30", 0.5, 1, 0.5, 0.5]
+
+        # dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+        dfd: pd.DataFrame = make_test_df(
+            cids=self.cids,
+            xcats=self.xcats,
+            start_date="2000-01-01",
+            end_date="2020-12-31",
         )
-        df_cids.loc["AUD", :] = ["2010-01-01", "2020-12-31", 0.5, 2]
-        df_cids.loc["CAD", :] = ["2011-01-01", "2020-11-30", 0, 1]
-        df_cids.loc["GBP", :] = ["2012-01-01", "2020-11-30", -0.2, 0.5]
-
-        df_xcats = pd.DataFrame(
-            index=self.xcats,
-            columns=[
-                "earliest",
-                "latest",
-                "mean_add",
-                "sd_mult",
-                "ar_coef",
-                "back_coef",
-            ],
-        )
-
-        df_xcats.loc["CRY", :] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
-        df_xcats.loc["XR", :] = ["2010-01-01", "2020-12-31", 0, 1, 0, 0.3]
-        df_xcats.loc["INFL", :] = ["2012-01-01", "2020-11-30", 0.5, 1, 0.5, 0.5]
-
-        dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
         self.dfd: pd.DataFrame = dfd
 
     def test_linear_composite_args(self):
