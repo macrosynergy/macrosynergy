@@ -39,7 +39,7 @@ def notional_positions(
         which are typically calculated by the function contract_signals().
     :param <list[str]> contids: list of contract identifiers in the format 
         "<cid>_<ctype>". It must correspond to contract signals in the dataframe.
-    :param <float> aum: the assets under management in notional currancy (e.g. USD).
+    :param <float> aum: the assets under management in USD million (for consistency).
         This is basis for all position sizes. Default is 100.
     :param <float> dollar_per_signal: the amount of notional currency (e.g. USD) per
         contract signal value. Default is 1. The default scale has no specific meaning
@@ -86,8 +86,8 @@ def notional_positions(
     :param <str> pname: the name of the position. Default is 'POS'.
 
     :return: <pd.DataFrame> with the positions for all traded contracts and the
-        specified strategy. It has the standard JPMaQS DataFrame. The contract signals
-        have the following format "<cid>_<ctype>_<sname>_<pname>".
+        specified strategy in USD million. It has the standard JPMaQS DataFrame. 
+        The contract signals have the following format "<cid>_<ctype>_<sname>_<pname>".
     
     """
 
@@ -132,8 +132,8 @@ def historic_portfolio_vol(
         volatility-targeting method. Default is 'ma' for moving average. Alternative is 
         "xma", for exponential moving average. Again this is passed through to
         the function `historic_portfolio_vol()`.
-        :param <str> rstring: a general string of the return category. This identifies
-    the contract returns that are required for the volatility-targeting method, based
+    :param <str> rstring: a general string of the return category. This identifies
+        the contract returns that are required for the volatility-targeting method, based
         on the category identifier format <cid>_ <ctype><rstring>_<rstring> in accordance
         with JPMaQS conventions. Default is 'XR'.
     :param <str> start: the start date of the data. Default is None, which means that
