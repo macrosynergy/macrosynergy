@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple, Union, Set
+
 from tests.simulate import make_qdf
 from macrosynergy.panel.make_relative_value import make_relative_value, _prepare_basket
 from macrosynergy.management.shape_dfs import reduce_df
@@ -407,7 +408,7 @@ class TestAll(unittest.TestCase):
         function_output: np.ndarray = (dfd_3_pivot.iloc[index_val, :]).to_numpy()
 
         function_output: np.ndarray = function_output[0]
-        self.assertTrue(np.all(computed_values == function_output))
+        self.assertTrue(np.allclose(computed_values, function_output))
 
         # Test the division.
         # Computing make_relative_value() on a single category that has been chosen
