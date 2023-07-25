@@ -102,7 +102,7 @@ def linear_composite_cid_agg(
     )
     # aligning the index of weights_df to the data one
     # so that we have the same set of dates and same set of CIDs -- thank you @mikiinterfiore
-    weights_df = weights_df.stack().reindex(data_df.stack().index).unstack(1)
+    weights_df = weights_df.stack(dropna=False).reindex(data_df.stack(dropna=False).index).unstack(1)
 
     # assert that data_df and weights_df have the same shape, index and columns
     assert (
