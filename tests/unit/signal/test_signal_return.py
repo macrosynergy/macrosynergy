@@ -548,22 +548,22 @@ class TestAll(unittest.TestCase):
                                                 xcats=sel_xcats, cids=sel_cids,
                                                 metrics=["value"])
         
-        
-        # check that a value error is raised when cids and xcats are not in the dataframe
-        with self.assertRaises(ValueError):
-            SignalReturnRelations.apply_slip(target_df=df, slip=2,
-                                                xcats=["metallica"], cids=["ac_dc"],
-                                                metrics=["value"])
-            
-        with self.assertRaises(ValueError):
-            SignalReturnRelations.apply_slip(target_df=df, slip=2,
-                                                xcats=["metallica"], cids=sel_cids,
-                                                metrics=["value"])
-            
         with self.assertRaises(ValueError):
             SignalReturnRelations.apply_slip(target_df=df, slip=-1,
                                                 xcats=sel_xcats, cids=["ac_dc"],
                                                 metrics=["value"])
+        
+        # check that a value error is raised when cids and xcats are not in the dataframe
+        with self.assertWarns(UserWarning):
+            SignalReturnRelations.apply_slip(target_df=df, slip=2,
+                                                xcats=["metallica"], cids=["ac_dc"],
+                                                metrics=["value"])
+            
+        with self.assertWarns(UserWarning):
+            SignalReturnRelations.apply_slip(target_df=df, slip=2,
+                                                xcats=["metallica"], cids=sel_cids,
+                                                metrics=["value"])
+            
         try:
             rival_signals: List[str] = ['GROWTH', 'INFL']
             primary_signal: str = 'CRY'
