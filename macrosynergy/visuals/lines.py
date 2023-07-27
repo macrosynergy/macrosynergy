@@ -10,6 +10,7 @@ from macrosynergy.management import reduce_df
 
 from .plotter import Plotter
 
+
 class LinePlot(Plotter):
     """
     Class for plotting time series data on a line plot.
@@ -17,8 +18,8 @@ class LinePlot(Plotter):
 
     Parameters
     :param <pd.DataFrame> df: A DataFrame with the following columns:
-        'cid', 'xcat', 'real_date', and at least one metric from - 
-        'value', 'grading', 'eop_lag', or 'mop_lag'. 
+        'cid', 'xcat', 'real_date', and at least one metric from -
+        'value', 'grading', 'eop_lag', or 'mop_lag'.
     :param <List[str]> cids: A list of cids to select from the DataFrame.
         If None, all cids are selected.
     :param <List[str]> xcats: A list of xcats to select from the DataFrame.
@@ -30,6 +31,7 @@ class LinePlot(Plotter):
     :param <str> end_date: ISO-8601 formatted date. Select data up to
         and including this date. If None, all dates are selected.
     """
+
     def __init__(
         self,
         df: pd.DataFrame,
@@ -39,7 +41,6 @@ class LinePlot(Plotter):
         metrics: str = ["value"],
         end_date: str = None,
     ):
-
         super().__init__(
             df=df,
             cids=cids,
@@ -48,12 +49,41 @@ class LinePlot(Plotter):
             end_date=end_date,
             metrics=metrics,
         )
-        
+
     def plot(
-        
-    )
+        df: pd.DataFrame,
+        xcats: List[str] = None,
+        cids: List[str] = None,
+        intersect: bool = False,
+        metric: str = "value",
+        cumsum: bool = False,
+        start: str = "2000-01-01",
+        end: str = None,
+        ncol: int = 3,
+        same_y: bool = True,
+        all_xticks: bool = False,
+        xcat_grid: bool = False,
+        xcat_labels: List[str] = None,
+        single_chart: bool = False,
+        label_adj: float = 0.05,
+        title: str = None,
+        title_adj: float = 0.95,
+        cs_mean: bool = False,
+        size: Tuple[float] = (12, 7),
+        aspect: float = 1.7,
+        height: float = 3,
+    ):
+        pass
+    """
+    # TODO - implement this method
+    1. Generalize the view_timelines() specific arguments to generic arguments.
+    2. See if it is possible return a matplotlib figure object, that can be
+        further manipulated by the user - or even used as a subplot.
+    3. Add and implement:
+        - legend fine-tuning
+        - x-axis fine-tuning
+        - y-axis fine-tuning
+        - title fine-tuning
+        - grid fine-tuning
     
-    
-    
-    
-    
+    """

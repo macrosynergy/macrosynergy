@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import logging
 from macrosynergy.management.utils import standardise_dataframe
-from macrosynergy.management import reduce_df
+from macrosynergy.management import reduce_df, reduce_df_by_ticker
 
 logger = logging.getLogger(__name__)
 
@@ -43,36 +43,43 @@ class Plotter(object):
         cids: List[str] = None,
         xcats: List[str] = None,
         metrics: List[str] = None,
+        intersect: bool = False,
         tickers: List[str] = None,
         blacklist: Dict[str, List[str]] = None,
-        start_date: str = None,
-        end_date: str = None,
+        start: str = None,
+        end: str = None,
         backend: str = "matplotlib",
     ):
         sdf: pd.DataFrame = df.copy()
         df_cols: List[str] = ["real_date", "cid", "xcat"]
         df_cols += metrics
-        sdf = sdf[df_cols]
-        if cids:
-            sdf = sdf[sdf["cid"].isin(cids)]
-        if xcats:
-            sdf = sdf[sdf["xcat"].isin(xcats)]
-        if tickers:
-            sdf = sdf[(df["cid"] + "_" + df["xcat"]).isin(tickers)]
-        if start_date:
-            sdf = sdf[sdf["real_date"] >= pd.to_datetime(start_date)]
-        if end_date:
-            sdf = sdf[sdf["real_date"] <= pd.to_datetime(end_date)]
+        sdf = standardise_dataframe(
+            df=sdf,
+        )
+        if not set(df_cols).issubset(set(sdf.columns)):
+            raise ValueError(f"DataFrame must contain the following columns: {df_cols}")
 
-        if blacklist:
-            sdf: pd.DataFrame = reduce_df(df=sdf, blacklist=blacklist)
+        sdf: pd.DataFrame = reduce_df(
+            df=sdf,
+            cids=cids,
+            xcats=xcats,
+            intersect=intersect,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+        )
+
+        if tickers is not None:
+            sdf: pd.DataFrame = reduce_df_by_ticker(
+                df=sdf, tickers=tickers, start=start, end=end
+            )
 
         self.df: pd.DataFrame = sdf
 
-        if backend[0] == "m":
+        if backend.startswith("m"):
             self.backend: ModuleType = plt
             self.backend.style.use("seaborn-v0_8-darkgrid")
-        elif backend[0] == "s":
+        elif backend.startswith("s"):
             self.backend: ModuleType = sns
 
         else:
