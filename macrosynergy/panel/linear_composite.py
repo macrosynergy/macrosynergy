@@ -102,7 +102,11 @@ def linear_composite_cid_agg(
     )
     # aligning the index of weights_df to the data one
     # so that we have the same set of dates and same set of CIDs -- thank you @mikiinterfiore
-    weights_df = weights_df.stack(dropna=False).reindex(data_df.stack(dropna=False).index).unstack(1)
+    weights_df = (
+        weights_df.stack(dropna=False)
+        .reindex(data_df.stack(dropna=False).index)
+        .unstack(1)
+    )
 
     # assert that data_df and weights_df have the same shape, index and columns
     assert (
@@ -372,11 +376,33 @@ def linear_composite(
     if _xcat_agg:
         found_cids: List[str] = df["cid"].unique().tolist()
         found_xcats: List[str] = df["xcat"].unique().tolist()
-        for cidx in found_cids:
-            if set(found_xcats) != set(df.loc[df["cid"] == cidx, "xcat"].unique()):
-                raise ValueError(
-                    "Not all `xcats` are available in `df` for each `cid`."
+
+        for icid, cidx in enumerate(found_cids):
+            missing_xcats: List[str] = list(
+                set(found_xcats) - set(df.loc[df["cid"] == cidx, "xcat"].unique())
+            )
+            if missing_xcats:
+                # warn the user, and put in the dates with NaNs
+                warnings.warn(
+                    f"`cid` {cidx} does not have complete `xcat` data for {missing_xcats}."
+                    " These will be filled with NaNs for the calculation."
                 )
+                # artificially add the missing xcats
+                dt_range: pd.DatetimeIndex = pd.to_datetime(df["real_date"].unique())
+                for xc in missing_xcats:
+                    df = pd.concat(
+                        [
+                            df,
+                            pd.DataFrame(
+                                data={
+                                    "cid": cidx,
+                                    "xcat": xc,
+                                    "real_date": dt_range,
+                                    "value": np.NaN,
+                                }
+                            ),
+                        ]
+                    )
 
         return linear_composite_xcat_agg(
             df=df,
@@ -402,7 +428,10 @@ def linear_composite(
         for icid, cidx in enumerate(
             cids.copy()
         ):  # copy to allow modification of `cids`
-            if set(found_xcats) != set(df.loc[df["cid"] == cidx, "xcat"].unique()):
+            missing_xcats: List[str] = list(
+                set(found_xcats) - set(df.loc[df["cid"] == cidx, "xcat"].unique())
+            )
+            if missing_xcats:
                 cids.pop(icid)
                 signs.pop(icid)
                 if isinstance(weights, list):
@@ -410,7 +439,7 @@ def linear_composite(
                 # drop from df
                 df = df.loc[df["cid"] != cidx, :]
                 warnings.warn(
-                    f"`cid` {cidx} does not have complete `xcat` data required for the calculation."
+                    f"`cid` {cidx} does not have complete `xcat` data for {missing_xcats}."
                     " It will be dropped from dataframe."
                 )
 
