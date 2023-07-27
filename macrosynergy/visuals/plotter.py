@@ -57,11 +57,13 @@ class Plotter(object):
             sdf = sdf[sdf["cid"].isin(cids)]
         if xcats:
             sdf = sdf[sdf["xcat"].isin(xcats)]
+        if tickers:
+            sdf = sdf[(df["cid"] + "_" + df["xcat"]).isin(tickers)]
         if start_date:
             sdf = sdf[sdf["real_date"] >= pd.to_datetime(start_date)]
         if end_date:
             sdf = sdf[sdf["real_date"] <= pd.to_datetime(end_date)]
-            
+
         if blacklist:
             sdf: pd.DataFrame = reduce_df(df=sdf, blacklist=blacklist)
 
