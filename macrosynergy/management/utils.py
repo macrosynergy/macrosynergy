@@ -9,7 +9,7 @@ import datetime
 import os
 import yaml
 import json
-from typing import Any, List, Dict, Optional, Callable, Union
+from typing import Any, List, Dict, Optional, Callable, Union, Set
 import requests, requests.compat
 import itertools
 import functools
@@ -70,10 +70,8 @@ def get_dict_max_depth(d: dict) -> int:
         else 0
     )
 
-def rec_search_dict(d : dict,
-                    key : str,
-                    match_substring : bool = False,
-                    match_type=None):
+
+def rec_search_dict(d: dict, key: str, match_substring: bool = False, match_type=None):
     """
     Recursively searches a dictionary for a key and returns the value
     associated with it.
@@ -120,79 +118,6 @@ def is_valid_iso_date(date: str) -> bool:
         return False
 
 
-def convert_to_iso_format(date: Any = None) -> str:
-    raise NotImplementedError("This function is not yet implemented.")
-    """
-    Converts a datetime like object or string to an ISO date string.
-
-    Parameters
-    :param <Any> date: The date to be converted. This can be a
-        datetime object, a string, pd.Timestamp, or np.datetime64.
-
-    Returns
-    :return <str>: The ISO date string (YYYY-MM-DD).
-    """
-    if date is None:
-        ValueError("Argument `date` cannot be None.")
-
-    r: Optional[str] = None
-    if isinstance(date, str):
-        r: Optional[str] = None
-        if is_valid_iso_date(date):
-            r = date
-        else:
-            if len(date) == 8:
-                try:
-                    r = convert_dq_to_iso(date)
-                except Exception as e:
-                    if isinstance(e, (ValueError, AssertionError)):
-                        pass
-            else:
-                for sep in ["-", "/", ".", " "]:
-                    if sep in date:
-                        try:
-                            sd = date.split(sep)
-                            dx = date
-                            if len(sd) == 3:
-                                if len(sd[1]) == 3:
-                                    sd[1] = {
-                                        "JAN": "01",
-                                        "FEB": "02",
-                                        "MAR": "03",
-                                        "APR": "04",
-                                        "MAY": "05",
-                                        "JUN": "06",
-                                        "JUL": "07",
-                                        "AUG": "08",
-                                        "SEP": "09",
-                                        "OCT": "10",
-                                        "NOV": "11",
-                                        "DEC": "12",
-                                    }[sd[1].upper()]
-                                    dx = sep.join(sd)
-                                r = datetime.datetime.strptime(
-                                    dx, "%d" + sep + "%m" + sep + "%Y"
-                                ).strftime("%Y-%m-%d")
-                                break
-                        except Exception as e:
-                            if isinstance(e, ValueError):
-                                pass
-                            else:
-                                raise e
-
-        if r is None:
-            raise RuntimeError("Could not convert date to ISO format.")
-    elif isinstance(date, (datetime.datetime, pd.Timestamp, np.datetime64)):
-        r = date.strftime("%Y-%m-%d")
-    else:
-        raise TypeError(
-            "Argument `date` must be a string, datetime.datetime, pd.Timestamp or np.datetime64."
-        )
-
-    assert is_valid_iso_date(r), "Failed to convert date to ISO format."
-    return r
-
-
 def convert_iso_to_dq(date: str) -> str:
     if is_valid_iso_date(date):
         r = date.replace("-", "")
@@ -226,6 +151,7 @@ def form_full_url(url: str, params: Dict = {}) -> str:
         safe="%/:=&?~#+!$,;'@()*[]",
     )
 
+
 def common_cids(df: pd.DataFrame, xcats: List[str]):
     """
     Returns a list of cross-sectional identifiers (cids) for which the specified categories
@@ -233,7 +159,7 @@ def common_cids(df: pd.DataFrame, xcats: List[str]):
 
     :param <pd.Dataframe> df: Standardized JPMaQS DataFrame with necessary columns:
         'cid', 'xcat', 'real_date' and 'value'.
-    :param <List[str]> xcats: A list with least two categories whose cross-sectional 
+    :param <List[str]> xcats: A list with least two categories whose cross-sectional
         identifiers are being considered.
 
     return <List[str]>: List of cross-sectional identifiers for which all categories in `xcats`
@@ -249,16 +175,16 @@ def common_cids(df: pd.DataFrame, xcats: List[str]):
         raise TypeError("Argument `xcats` must be a list of strings.")
     elif len(xcats) < 2:
         raise ValueError("Argument `xcats` must contain at least two category tickers.")
-    elif not set(xcats).issubset(set(df['xcat'].unique())): 
+    elif not set(xcats).issubset(set(df["xcat"].unique())):
         raise ValueError("All categories in `xcats` must be present in the DataFrame.")
 
-    cid_sets : List[set]= []
+    cid_sets: List[set] = []
     for xc in xcats:
-        sc : set = set(df[df["xcat"] == xc]["cid"].unique())
+        sc: set = set(df[df["xcat"] == xc]["cid"].unique())
         if sc:
             cid_sets.append(sc)
 
-    ls : List[str] = list(cid_sets[0].intersection(*cid_sets[1:]))
+    ls: List[str] = list(cid_sets[0].intersection(*cid_sets[1:]))
     return sorted(ls)
 
 
@@ -268,7 +194,8 @@ def common_cids(df: pd.DataFrame, xcats: List[str]):
 
 
 def standardise_dataframe(df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
-    idx_cols: list = ["cid", "xcat", "real_date"]
+    idx_cols: List[str] = ["cid", "xcat", "real_date"]
+    commonly_used_cols: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
     if not set(df.columns).issuperset(set(idx_cols)):
         fail_str: str = (
             f"Error : Tried to standardize DataFrame but failed."
@@ -295,11 +222,13 @@ def standardise_dataframe(df: pd.DataFrame, verbose: bool = False) -> pd.DataFra
         df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
         df["cid"] = df["cid"].astype(str)
         df["xcat"] = df["xcat"].astype(str)
-        df = df.sort_values(by=["cid", "xcat", "real_date"])
-        df = df.reset_index(drop=True)
+        df = df.sort_values(by=["cid", "xcat", "real_date"]).reset_index(drop=True)
 
-        non_idx_cols: list = sorted(list(set(df.columns) - set(idx_cols)))
-        return df[idx_cols + non_idx_cols]
+    remaining_cols: Set[str] = set(df.columns).difference(
+        set(idx_cols + commonly_used_cols)
+    )
+
+    df = df[idx_cols + commonly_used_cols + sorted(list(remaining_cols))]
 
 
 def wide_to_long(
@@ -422,14 +351,22 @@ class Config(object):
                     # make all keys lowercase
                     config_dict = {k.lower(): v for k, v in config_dict.items()}
                     for var in loaded_vars.keys():
-                        loaded_vars[var] = rec_search_dict(d=config_dict, key=var, match_type=str)
+                        loaded_vars[var] = rec_search_dict(
+                            d=config_dict, key=var, match_type=str
+                        )
 
                     for var in proxy_var_names:
-                        loaded_vars[var] = rec_search_dict(d=config_dict, key=var, match_type=dict)
+                        loaded_vars[var] = rec_search_dict(
+                            d=config_dict, key=var, match_type=dict
+                        )
 
                     if loaded_vars["crt"] is None:
-                        loaded_vars["crt"] = rec_search_dict(d=config_dict, key="cert",
-                                                             match_substring=True, match_type=str)
+                        loaded_vars["crt"] = rec_search_dict(
+                            d=config_dict,
+                            key="cert",
+                            match_substring=True,
+                            match_type=str,
+                        )
 
         all_args_present: Callable = lambda x: all([v is not None for v in x])
 
@@ -450,7 +387,7 @@ class Config(object):
         ):
             if all_args_present([loaded_vars[v] for v in vx]):
                 r_auth[varsx] = {v: loaded_vars[v] for v in vx}
-            
+
         for px, pxn in zip(proxy_vars, proxy_var_names):
             if px is not None:
                 r_auth[pxn] = px
@@ -495,7 +432,6 @@ class Config(object):
                     if r_auth["proxy"]["proxy"] is not None:
                         r_auth["proxy"].update(r_auth["proxy"]["proxy"])
                         del r_auth["proxy"]["proxy"]
-
 
         self._credentials: Dict[str, dict] = r_auth
 
