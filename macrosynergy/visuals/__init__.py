@@ -1,3 +1,4 @@
-from .visuals import LinePlot, FacetPlot
+from .plotter import Plotter, argcopy, argvalidation
+from .lineplot import LinePlot
 
-__all__ = ["LinePlot", "FacetPlot"]
+__all__ = ["Plotter", "argcopy", "argvalidation", "LinePlot"]

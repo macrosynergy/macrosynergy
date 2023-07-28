@@ -1,14 +1,84 @@
-import pandas as pd
-from typing import List, Dict, Union, Tuple
-from types import ModuleType
-from collections.abc import Callable, Iterable
-import matplotlib.pyplot as plt
-import seaborn as sns
+import inspect
 import logging
-from macrosynergy.management.utils import standardise_dataframe
+import warnings
+from collections.abc import Callable, Iterable
+from functools import wraps
+from types import ModuleType
+from typing import Any, Dict, List, Tuple, Union
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+
 from macrosynergy.management import reduce_df, reduce_df_by_ticker
+from macrosynergy.management.utils import standardise_dataframe
 
 logger = logging.getLogger(__name__)
+
+
+def argvalidation(func: Callable) -> Callable:
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        func_sig: inspect.Signature = inspect.signature(func)
+        func_params: Dict[str, inspect.Parameter] = func_sig.parameters
+        func_annotations: Dict[str, Any] = func_sig.return_annotation
+        func_args: Dict[str, Any] = inspect.getcallargs(func, *args, **kwargs)
+
+        # validate the arguments
+        for arg_name, arg_value in func_args.items():
+            if arg_name in func_params:
+                arg_type: Any = func_params[arg_name].annotation
+                if arg_type is not inspect._empty:
+                    if not isinstance(arg_value, arg_type):
+                        raise TypeError(
+                            f"Argument `{arg_name}` must be of type `{arg_type}`."
+                        )
+
+        # validate the return value
+        return_value: Any = func(*args, **kwargs)
+        if func_annotations is not inspect._empty:
+            if not isinstance(return_value, func_annotations):
+                warnings.warn(
+                    f"Return value of `{func.__name__}` is not of type "
+                    f"`{func_annotations}`, but of type `{type(return_value)}`."
+                )
+
+        return return_value
+
+    return wrapper
+
+
+def argcopy(func: Callable) -> Callable:
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        copy_types = (
+            list,
+            dict,
+            pd.DataFrame,
+            np.ndarray,
+            pd.Series,
+            pd.Index,
+            pd.MultiIndex,
+            set,
+            tuple,
+        )
+        new_args: List[Tuple[Any, ...]] = []
+        for arg in args:
+            if isinstance(arg, copy_types) or issubclass(type(arg), copy_types):
+                new_args.append(arg.copy())
+            else:
+                new_args.append(arg)
+        new_kwargs: Dict[str, Any] = {}
+        for key, value in kwargs.items():
+            if isinstance(value, copy_types) or issubclass(type(value), copy_types):
+                new_kwargs[key] = value.copy()
+            else:
+                new_kwargs[key] = value
+
+        return func(*new_args, **new_kwargs)
+
+    return wrapper
 
 
 class Plotter(object):
@@ -36,7 +106,8 @@ class Plotter(object):
         'matplotlib' and 'seaborn' are supported, with 'matplotlib' as
         the default.
     """
-
+    @argvalidation
+    @argcopy
     def __init__(
         self,
         df: pd.DataFrame,
@@ -59,7 +130,16 @@ class Plotter(object):
         if not set(df_cols).issubset(set(sdf.columns)):
             raise ValueError(f"DataFrame must contain the following columns: {df_cols}")
 
-        sdf: pd.DataFrame = reduce_df(
+        if tickers is not None:
+            sdf = reduce_df_by_ticker(
+                df=sdf,
+                tickers=tickers,
+            )
+
+        sdf: pd.DataFrame
+        cids: List[str]
+        xcats: List[str]
+        sdf, xcats, cids = reduce_df(
             df=sdf,
             cids=cids,
             xcats=xcats,
@@ -67,23 +147,25 @@ class Plotter(object):
             start=start,
             end=end,
             blacklist=blacklist,
+            out_all=True,
         )
 
-        if tickers is not None:
-            sdf: pd.DataFrame = reduce_df_by_ticker(
-                df=sdf, tickers=tickers, start=start, end=end
-            )
-
         self.df: pd.DataFrame = sdf
-
+        self.cids: List[str] = cids
+        self.xcats: List[str] = xcats
+        self.metrics: List[str] = metrics
+        self.start: str = start
+        self.end: str = end
+        
+        self.backend: ModuleType
         if backend.startswith("m"):
-            self.backend: ModuleType = plt
+            self.backend = plt
             self.backend.style.use("seaborn-v0_8-darkgrid")
         elif backend.startswith("s"):
-            self.backend: ModuleType = sns
+            self.backend = sns
 
         else:
-            raise NotImplementedError(f"Backend {backend} is not supported.")
+            raise NotImplementedError(f"Backend `{backend}` is not supported.")
 
     def __enter__(self):
         return self
