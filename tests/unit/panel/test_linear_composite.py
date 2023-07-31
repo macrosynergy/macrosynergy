@@ -57,16 +57,9 @@ class TestAll(unittest.TestCase):
                 rdf: pd.DataFrame = linear_composite(**argsx)
 
         # value error cases
-        bad_df: pd.DataFrame = self.dfd.copy()
-        # remove any entries for AUD XR
-        bad_df = bad_df[
-            (bad_df["cid"] != self.cids[0]) | (bad_df["xcat"] != self.xcats[1])
-        ].reset_index(drop=True)
-
         value_error_cases: List[Dict[str, Any]] = [
             {"df": pd.DataFrame()},
             {"df": self.dfd.assign(value=np.NaN)},
-            {"df": bad_df},
             {"start": 1},
             {"end": 1},
             {"xcats": ["foo"]},
@@ -82,8 +75,19 @@ class TestAll(unittest.TestCase):
         for case in value_error_cases:
             argsx: Dict[str, Any] = base_args.copy()
             argsx.update(case)
-            with self.assertRaises(ValueError):
+            with self.assertRaises(ValueError, msg=f"Failed on case: {case}"):
                 rdf: pd.DataFrame = linear_composite(**argsx)
+
+        bad_df: pd.DataFrame = self.dfd.copy()
+        # remove any entries for AUD XR
+        bad_df = bad_df[
+            (bad_df["cid"] != self.cids[0]) | (bad_df["xcat"] != self.xcats[1])
+        ].reset_index(drop=True)
+
+        with self.assertWarns(UserWarning):
+            argsx: Dict[str, Any] = base_args.copy()
+            argsx.update({"df": bad_df})
+            rdf: pd.DataFrame = linear_composite(**argsx)
 
         # Case with agg_cid, with only one xcat (no weights), with one cid missing the xcat
         _test_df: pd.DataFrame = make_test_df(
