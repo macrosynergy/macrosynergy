@@ -7,7 +7,8 @@ from typing import List, Union, Tuple
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.check_availability import reduce_df
-from macrosynergy.visuals import FacetPlot, LinePlot
+from macrosynergy.visuals import LinePlot
+from macrosynergy.visuals import Plotter as FacetPlot
 
 
 def view_timelines(
