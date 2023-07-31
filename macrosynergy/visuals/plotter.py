@@ -106,6 +106,7 @@ class Plotter(object):
         'matplotlib' and 'seaborn' are supported, with 'matplotlib' as
         the default.
     """
+
     @argvalidation
     @argcopy
     def __init__(
@@ -123,12 +124,20 @@ class Plotter(object):
     ):
         sdf: pd.DataFrame = df.copy()
         df_cols: List[str] = ["real_date", "cid", "xcat"]
+        if metrics is None:
+            metrics: List[str] = list(set(sdf.columns) - set(df_cols))
+        
         df_cols += metrics
         sdf = standardise_dataframe(
             df=sdf,
         )
         if not set(df_cols).issubset(set(sdf.columns)):
             raise ValueError(f"DataFrame must contain the following columns: {df_cols}")
+
+        if cids is None:
+            cids = list(sdf["cid"].unique())
+        if xcats is None:
+            xcats = list(sdf["xcat"].unique())
 
         if tickers is not None:
             sdf = reduce_df_by_ticker(
@@ -156,13 +165,14 @@ class Plotter(object):
         self.metrics: List[str] = metrics
         self.start: str = start
         self.end: str = end
-        
+
         self.backend: ModuleType
         if backend.startswith("m"):
             self.backend = plt
             self.backend.style.use("seaborn-v0_8-darkgrid")
         elif backend.startswith("s"):
             self.backend = sns
+            self.backend.set_style("darkgrid")
 
         else:
             raise NotImplementedError(f"Backend `{backend}` is not supported.")
