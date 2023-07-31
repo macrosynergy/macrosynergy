@@ -224,11 +224,10 @@ def standardise_dataframe(df: pd.DataFrame, verbose: bool = False) -> pd.DataFra
         df["xcat"] = df["xcat"].astype(str)
         df = df.sort_values(by=["cid", "xcat", "real_date"]).reset_index(drop=True)
 
-    remaining_cols: Set[str] = set(df.columns).difference(
-        set(idx_cols + commonly_used_cols)
-    )
+    remaining_cols: Set[str] = set(df.columns) - set(idx_cols)
 
-    df = df[idx_cols + commonly_used_cols + sorted(list(remaining_cols))]
+    df = df[idx_cols + sorted(list(remaining_cols))]
+    return df
 
 
 def wide_to_long(
