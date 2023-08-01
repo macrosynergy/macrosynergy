@@ -74,6 +74,7 @@ class LinePlot(Plotter):
 
     def plot(
         self,
+        on_axis: Optional[plt.Axes] = None,
         # # DF specific arguments
         df: pd.DataFrame = None,
         xcats: List[str] = None,
@@ -132,7 +133,14 @@ class LinePlot(Plotter):
                 end=end,
             )
 
-        fig, ax = plt.subplots(figsize=figsize)
+        if on_axis:
+            fig: plt.Figure = on_axis.get_figure()
+            ax: plt.Axes = on_axis
+        else:
+            fig: plt.Figure
+            ax: plt.Axes
+            fig, ax = plt.subplots(figsize=figsize)
+
         dfx: pd.DataFrame = self.df.copy()
 
         if compare_series:
@@ -157,20 +165,20 @@ class LinePlot(Plotter):
             cid, xcat = cid_xcat
             _df = dfx.loc[(dfx["cid"] == cid) & (dfx["xcat"] == xcat), :].copy()
             _df = _df.sort_values(by="real_date", ascending=True).reset_index(drop=True)
-            plt.plot(_df["real_date"], _df[metric], label=f"{cid}_{xcat}")
+            ax.plot(_df["real_date"], _df[metric], label=f"{cid}_{xcat}")
 
         # if there is a compare_series, plot it on the same axis, using a red dashed line
         if compare_series:
-            plt.plot(comp_df["real_date"], comp_df[metric], color="red", linestyle="--")
+            ax.plot(comp_df["real_date"], comp_df[metric], color="red", linestyle="--")
 
         if grid:
-            plt.grid(axis="both", linestyle="--", alpha=0.5)
+            ax.grid(axis="both", linestyle="--", alpha=0.5)
 
         if x_axis_label:
-            plt.xlabel(x_axis_label, fontsize=axis_fontsize)
+            ax.set_xlabel(x_axis_label, fontsize=axis_fontsize)
 
         if y_axis_label:
-            plt.ylabel(y_axis_label, fontsize=axis_fontsize)
+            ax.set_ylabel(y_axis_label, fontsize=axis_fontsize)
 
         # if there is a title, add it
         if title:
@@ -219,7 +227,7 @@ if __name__ == "__main__":
         xcats=xcats,
         start_date="2000-01-01",
         end_date="2020-12-31",
-        prefer="sine",
+        # prefer="sine",
     )
 
     LinePlot(df=df).plot(

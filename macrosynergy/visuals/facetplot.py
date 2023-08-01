@@ -12,6 +12,8 @@ from typing import List, Dict, Union, Tuple, Optional, Union
 from types import ModuleType
 from collections.abc import Callable, Iterable
 import matplotlib.pyplot as plt
+import io
+import pickle
 import seaborn as sns
 import logging
 
@@ -40,7 +42,7 @@ class FacetPlot(Plotter):
 
     def __init__(
         self,
-        df: pd.DataFrame,
+        df: pd.DataFrame = None,
         cids: List[str] = None,
         xcats: List[str] = None,
         metrics: List[str] = None,
@@ -102,72 +104,84 @@ class FacetPlot(Plotter):
         """
         Render a facet plot from a list of subplots.
         """
+        # If the plots are a list of list, plot each list as a row. max cols becomes the length of the longest row.
 
-        # check if the plots are in a list of lists
         if isinstance(plots[0], list):
             nrows: int = len(plots)
-            ncols: int = len(plots[0])
+            ncols: int = max([len(row) for row in plots])
+
+        # If the plots are a list of figures, use user provided ncols and infer nrows.
+
         else:
-            nrows: int = 1
-            ncols: int = len(plots)
+            if ncols > len(plots):
+                ncols = len(plots)
+            nrows: int = int(np.ceil(len(plots) / ncols))
 
-        # attempt to make the arrangment of facets a square
-        if attempt_square:
-            nrows: int = int(np.ceil(np.sqrt(nrows * ncols)))
-            ncols: int = nrows
+            # If attempt_square is True, attempt to make the the grid of subplots square - i.e. ncols = nrows.
+            if attempt_square:
+                ncols: int = int(np.ceil(np.sqrt(len(plots))))
+                nrows: int = int(np.ceil(len(plots) / ncols))
 
-        # create the figure
+        # Create the figure and axes.]
         fig: plt.Figure
-        axes: List[plt.Axes]
-        fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
-
-        # flatten the axes if necessary
-        if nrows == 1:
-            axes: List[plt.Axes] = [axes]
-
-        # iterate over the axes and plots
-        ax: plt.Axes
-        plot: plt.Figure
-        for ax, plot in zip(axes, plots):
-            # set the axis title
-            if facet_titles is not None:
-                ax.set_title(facet_titles.pop(0))
-
-            # set the axis labels
-            if labels is not None:
-                ax.set_xlabel(labels[0])
-                ax.set_ylabel(labels[1])
-
-            # add the plot to the axis
-            ax.add_artist(plot)
-
-            # add the legend
-            if legend:
-                ax.legend(
-                    loc=legend_loc,
-                    ncol=legend_ncol,
-                    bbox_to_anchor=legend_bbox_to_anchor,
-                    frameon=legend_frame,
-                )
-
-        # remove the remaining axes
-        for ax in axes[len(plots) :]:
-            ax.remove()
-
-        # tight layout
-        plt.tight_layout()
-        title: str = (
-            title if title is not None else f"Facet Plot of {len(plots)} Subplots"
+        axes: np.ndarray
+        fig, axes = plt.subplots(
+            nrows=nrows,
+            ncols=ncols,
+            figsize=figsize,
+            sharex=True,
+            sharey=True,
+            squeeze=False,
         )
 
-        fig: plt.Figure = plt.gcf()
+        # Flatten the axes array.
+        axes: np.ndarray = axes.flatten()
 
+        # now simply "add" the each plt.Figure to each axis on the figure
+
+        # Loop through the plots and add them to the figure axes.
+        for idx, plot in enumerate(plots):
+            # Check if index is out of range of the axes.
+            if idx >= len(axes):
+                break
+
+            # Serialize the plot using pickle, then deserialize it onto the axes.
+            buf = io.BytesIO()
+            pickle.dump(plot, buf)
+            buf.seek(0)
+            ax = pickle.load(buf)
+
+            # Now add this ax to the figure.
+            axes[idx].cla()  # Clear the axes first
+            axes[idx].add_artist(ax)
+
+            # Add facet titles if provided
+            if facet_titles is not None:
+                try:
+                    axes[idx].set_title(facet_titles[idx])
+                except IndexError:
+                    pass  # If not enough titles are provided, ignore them.
+
+        # Add the overall title and labels.
+        if title:
+            fig.suptitle(title, fontsize=title_fontsize, x=title_xadjust, y=title_yadjust)
+        if x_axis_label:
+            fig.set_xlabel(x_axis_label, fontsize=axis_fontsize)
+        if y_axis_label:
+            fig.set_ylabel(y_axis_label, fontsize=axis_fontsize)
+
+        # Display the legend.
+        if legend:
+            fig.legend(labels, loc=legend_loc, ncol=legend_ncol, bbox_to_anchor=legend_bbox_to_anchor, frameon=legend_frame)
+
+        # Save the figure if a filename is provided.
         if save_to_file:
-            plt.savefig(save_to_file, dpi=dpi, bbox_inches="tight")
+            fig.savefig(save_to_file, dpi=dpi)
 
-        if return_figure:
-            return fig
-
+        # Show the figure.
         if show:
             plt.show()
-            return
+
+        # Return the figure if requested.
+        if return_figure:
+            return fig
