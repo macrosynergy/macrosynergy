@@ -701,7 +701,11 @@ class DownloadTimeseries(DataQueryInterface):
         # create a fodler for the new format
         os.makedirs(os.path.join(self.store_path, output_format), exist_ok=True)
         # loop through the tickers
-        for ticker in tickers:
+        for ticker in tqdm(
+            tickers,
+            desc="Converting files",
+            disable=not show_progress,
+        ):
             # get the ticker data
             df: pd.DataFrame = lc.download(tickers=[ticker])
             if df.empty:
@@ -722,6 +726,13 @@ class DownloadTimeseries(DataQueryInterface):
                 )
             else:
                 raise ValueError(f"Output format {output_format} not supported")
+            
+        if delete_files:
+            # delete the old files
+            for fx in glob.glob(
+                os.path.join(self.store_path, expected_format, "*"), recursive=True
+            ):
+                os.remove(fx)
 
 
 if __name__ == "__main__":
