@@ -35,7 +35,7 @@ cache = lru_cache(maxsize=None)
 
 
 class LocalDataQueryInterface(DataQueryInterface):
-    def __init__(self, local_path: str, fmt="pkl", *args, **kwargs):
+    def __init__(self, local_path: str, fmt="json.pkl", *args, **kwargs):
         if local_path.startswith("~"):
             local_path = os.path.expanduser(local_path)
         self.local_path = os.path.abspath(local_path)
@@ -132,7 +132,7 @@ class LocalDataQueryInterface(DataQueryInterface):
             return True
         else:
             fmt_long: str = (
-                "pickle (*.pkl)" if self.store_format == "pkl" else "csv (*.csv)"
+                "pickle (*.pkl)" if self.store_format == "json.pkl" else "csv (*.csv)"
             )
             raise FileNotFoundError(
                 f"The local path provided : {self.local_path}, "
@@ -140,7 +140,7 @@ class LocalDataQueryInterface(DataQueryInterface):
             )
 
     def _load_timeseries(self, expression: str) -> Dict[str, Any]:
-        loader: Callable = pickle.load if self.store_format == "pkl" else json.load
+        loader: Callable = pickle.load if self.store_format == "json.pkl" else json.load
         with open(self._get_expression_path(expression=expression), "rb") as f:
             return loader(f)
 
@@ -253,7 +253,7 @@ class LocalDataQueryInterface(DataQueryInterface):
 
 
 class LocalCache(JPMaQSDownload):
-    def __init__(self, local_path: str, fmt="pkl", *args, **kwargs):
+    def __init__(self, local_path: str, fmt="json.pkl", *args, **kwargs):
         if local_path.startswith("~"):
             local_path = os.path.expanduser(local_path)
         self.local_path = os.path.abspath(local_path)
@@ -274,11 +274,8 @@ class LocalCache(JPMaQSDownload):
     def time_series_to_df(
         self,
         dicts_list: List[Dict],
-        validate_df: bool = True,
-        expected_expressions: Optional[List[str]] = None,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        verbose: bool = True,
     ) -> pd.DataFrame:
         """
         Convert the downloaded data to a pandas DataFrame.
@@ -337,17 +334,6 @@ class LocalCache(JPMaQSDownload):
 
         final_df = final_df.dropna(axis=0, how="any").reset_index(drop=True)
 
-        vdf = self.validate_downloaded_df(
-            data_df=final_df,
-            expected_expressions=expected_expressions,
-            found_expressions=found_expressions,
-            start_date=start_date,
-            end_date=end_date,
-            verbose=verbose,
-        )
-        if not vdf:
-            raise InvalidDataframeError(f"Downloaded dataframe is invalid.")
-
         return final_df
 
     def download(
@@ -368,8 +354,12 @@ class LocalCache(JPMaQSDownload):
 
 
 class DownloadTimeseries(DataQueryInterface):
-    def __init__(self, store_path: str, store_format: str = "pkl", *args, **kwargs):
-        if store_format not in ["pkl", "json"]:
+    def __init__(
+        self, store_path: str, store_format: str = ".json.pkl", *args, **kwargs
+    ):
+        default_metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+
+        if store_format not in [".json.pkl", "json"]:
             raise ValueError(f"Store format {store_format} not supported.")
 
         self.store_path = os.path.abspath(store_path)
@@ -424,8 +414,8 @@ class DownloadTimeseries(DataQueryInterface):
         logger.debug(
             f"Saving timeseries for {expr}, format: {self.store_format}, path: {pathx}"
         )
-        if self.store_format == "pkl":
-            with open(os.path.join(pathx, expr + ".pkl"), "wb") as f:
+        if self.store_format == "json.pkl":
+            with open(os.path.join(pathx, expr + ".json.pkl"), "wb") as f:
                 pickle.dump(timeseries, f)
         elif self.store_format == "json":
             with open(os.path.join(pathx, expr + ".json"), "w") as f:
@@ -692,25 +682,49 @@ class DownloadTimeseries(DataQueryInterface):
             f"Time taken to download files: {download_time_taken / 60 :.2f} minutes | {download_time_taken / 3600 :.2f} hours"
         )
 
+    def convert_jsons_to_csvs(
+        self,
+        expected_format: str = "json.pkl",
+        output_format: str = "csv.pkl",
+        show_progress: bool = True,
+        delete_files: bool = False,
+    ):
+        # create a localcache object
+        lc: LocalCache = LocalCache(
+            local_path=self.store_path,
+            store_format=expected_format,
+        )
 
-# import pandas as pd
-# import time
-# from typing import List
-# from macrosynergy.download.local import LocalCache
-# LOCAL_CACHE="~/Macrosynergy/Macrosynergy - Documents/SharedData/JPMaQSTickers"
+        tickers: List[str] = lc.get_catalogue()
+        # save as the new format
 
-# start_time: float = time.time()
-# lc: LocalCache = LocalCache(local_path=LOCAL_CACHE)
-# tickers: List[str] = lc.get_catalogue()[:1000]
-# df: pd.DataFrame = lc.download(tickers=tickers, start_date="2023-01-01", show_progress=True)
+        # create a fodler for the new format
+        os.makedirs(os.path.join(self.store_path, output_format), exist_ok=True)
+        # loop through the tickers
+        for ticker in tickers:
+            # get the ticker data
+            df: pd.DataFrame = lc.download(tickers=[ticker])
+            if df.empty:
+                continue
 
-# print(df.head())
-# print(df.info())
-# print(f"Time taken: {time.time() - start_time :.2f} seconds")
+            # if output format is csv, save as csv
+            if output_format == "csv.pkl":
+                # df to pkl
+                df.to_pickle(
+                    os.path.join(self.store_path, output_format, ticker + ".pkl")
+                )
+
+            elif output_format == "csv":
+                # df to csv
+                df.to_csv(
+                    os.path.join(self.store_path, output_format, ticker + ".csv"),
+                    index=False,
+                )
+            else:
+                raise ValueError(f"Output format {output_format} not supported")
 
 
 if __name__ == "__main__":
-
     import time
 
     start_time: float = time.time()
@@ -725,4 +739,3 @@ if __name__ == "__main__":
     print(df.info())
 
     print(f"Time taken: {time.time() - start_time :.2f} seconds")
-
