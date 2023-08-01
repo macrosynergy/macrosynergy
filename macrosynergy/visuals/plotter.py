@@ -126,7 +126,7 @@ class Plotter(object):
         df_cols: List[str] = ["real_date", "cid", "xcat"]
         if metrics is None:
             metrics: List[str] = list(set(sdf.columns) - set(df_cols))
-        
+
         df_cols += metrics
         sdf = standardise_dataframe(
             df=sdf,
@@ -139,6 +139,11 @@ class Plotter(object):
         if xcats is None:
             xcats = list(sdf["xcat"].unique())
 
+        if start is None:
+            start: str = pd.Timestamp(sdf["real_date"].min()).strftime("%Y-%m-%d")
+        if end is None:
+            end: str = pd.Timestamp(sdf["real_date"].max()).strftime("%Y-%m-%d")
+
         if tickers is not None:
             sdf = reduce_df_by_ticker(
                 df=sdf,
@@ -150,8 +155,8 @@ class Plotter(object):
         xcats: List[str]
         sdf, xcats, cids = reduce_df(
             df=sdf,
-            cids=cids,
-            xcats=xcats,
+            cids=cids if isinstance(cids, list) else [cids],
+            xcats=xcats if isinstance(xcats, list) else [xcats],
             intersect=intersect,
             start=start,
             end=end,
@@ -163,6 +168,9 @@ class Plotter(object):
         self.cids: List[str] = cids
         self.xcats: List[str] = xcats
         self.metrics: List[str] = metrics
+        self.intersect: bool = intersect
+        self.tickers: List[str] = tickers
+        self.blacklist: Dict[str, List[str]] = blacklist
         self.start: str = start
         self.end: str = end
 
