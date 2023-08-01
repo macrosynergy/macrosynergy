@@ -1,3 +1,8 @@
+"""
+A subclass inheriting from `macrosynergy.visuals.plotter.Plotter`,
+designed to plot time series data on a line plot.
+"""
+
 import pandas as pd
 from typing import List, Dict, Union, Tuple, Optional, Union
 from types import ModuleType
@@ -21,7 +26,7 @@ from macrosynergy.visuals.plotter import Plotter, argcopy, argvalidation
 class LinePlot(Plotter):
     """
     Class for plotting time series data on a line plot.
-    Inherits from `class Plotter`.
+    Inherits from `macrosynergy.visuals.plotter.Plotter`.
 
     Parameters
     :param <pd.DataFrame> df: A DataFrame with the following columns:
@@ -39,8 +44,6 @@ class LinePlot(Plotter):
         and including this date. If None, all dates are selected.
     """
 
-    @argvalidation
-    @argcopy
     def __init__(
         self,
         df: pd.DataFrame,
@@ -69,17 +72,17 @@ class LinePlot(Plotter):
             **kwargs,
         )
 
-    @argvalidation
-    @argcopy
     def plot(
         self,
         # # DF specific arguments
-        # df: pd.DataFrame,
-        # xcats: List[str] = None,
-        # cids: List[str] = None,
-        # intersect: bool = False,
-        # start: str = "2000-01-01",
-        # end: Optional[str] = None,
+        df: pd.DataFrame = None,
+        xcats: List[str] = None,
+        cids: List[str] = None,
+        intersect: bool = False,
+        blacklist: Dict[str, List[str]] = None,
+        tickers: List[str] = None,
+        start: str = "2000-01-01",
+        end: Optional[str] = None,
         # df/plot args
         metric: str = "value",
         compare_series: str = None,
@@ -101,10 +104,11 @@ class LinePlot(Plotter):
         # legend args
         legend: bool = True,
         labels: Optional[List[str]] = None,
-        legend_loc: str = "upper left",
+        legend_title: Optional[str] = None,
+        legend_loc: str = "upper right",
         legend_fontsize: int = 12,
         legend_ncol: int = 1,
-        legend_bbox_to_anchor: Tuple[float, float] = (1.0, 1.0),
+        legend_bbox_to_anchor: Tuple[float, float] = (1.2, 1.0),
         legend_frame: bool = True,
         # return args
         show: bool = True,
@@ -115,6 +119,19 @@ class LinePlot(Plotter):
         *args,
         **kwargs,
     ):
+        if any([df, xcats, cids, intersect, blacklist, tickers, start, end]):
+            self.__init__(
+                df=df if df is not None else self.df,
+                xcats=xcats,
+                cids=cids,
+                metrics=[metric],
+                intersect=intersect,
+                blacklist=blacklist,
+                tickers=tickers,
+                start=start,
+                end=end,
+            )
+
         fig, ax = plt.subplots(figsize=figsize)
         dfx: pd.DataFrame = self.df.copy()
 
@@ -166,26 +183,18 @@ class LinePlot(Plotter):
 
         # if there is a legend, add it
         if legend:
-            if labels:
-                plt.legend(
-                    labels=labels,
-                    loc=legend_loc,
-                    fontsize=legend_fontsize,
-                    ncol=legend_ncol,
-                    bbox_to_anchor=legend_bbox_to_anchor,
-                    frameon=legend_frame,
-                )
-            else:
-                plt.legend(
-                    loc=legend_loc,
-                    fontsize=legend_fontsize,
-                    ncol=legend_ncol,
-                    bbox_to_anchor=legend_bbox_to_anchor,
-                    frameon=legend_frame,
-                )
+            plt.legend(
+                labels=labels if labels else None,
+                title=legend_title,
+                loc=legend_loc,
+                fontsize=legend_fontsize,
+                ncol=legend_ncol,
+                bbox_to_anchor=legend_bbox_to_anchor,
+                frameon=legend_frame,
+            )
 
-        # Tight layout to make sure everything fits
         plt.tight_layout()
+        title: str = title if title else f"LinePlot: Viewing `{metric}`"
 
         if save_to_file:
             plt.savefig(
@@ -193,7 +202,6 @@ class LinePlot(Plotter):
                 dpi=dpi,
                 bbox_inches="tight",
             )
-            return
 
         if return_figure:
             return fig
@@ -211,9 +219,9 @@ if __name__ == "__main__":
         xcats=xcats,
         start_date="2000-01-01",
         end_date="2020-12-31",
+        prefer="sine",
     )
 
-    # plot
-    LinePlot(
-        df=df,
-    ).plot()
+    LinePlot(df=df).plot(
+        cids=["USD", "EUR"], xcats=["FXXR"], labels=["The US", "Europe"]
+    )
