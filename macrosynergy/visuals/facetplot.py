@@ -11,7 +11,9 @@ import numpy as np
 from typing import List, Dict, Union, Tuple, Optional, Union
 from types import ModuleType
 from collections.abc import Callable, Iterable
+import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
 import io
 import pickle
 import seaborn as sns
@@ -28,6 +30,41 @@ from macrosynergy.management.simulate_quantamental_data import make_test_df
 
 from macrosynergy.visuals.plotter import Plotter, argcopy, argvalidation
 
+
+def _get_grid_dim(
+    num_plots: int,
+) -> Tuple[int, int]:
+    """
+    Given the number of plots, return a tuple of grid dimensions
+    that is closest to a square grid.
+    :param <int> num_plots: Number of plots.
+    :return <Tuple[int, int]>: Tuple of grid dimensions.
+    """
+    # Function to get the factors of a number
+    def get_factors(n):
+        factors = set()
+        for i in range(1, int(np.sqrt(n)) + 1):
+            div, mod = divmod(n, i)
+            if mod == 0:
+                factors.add(i)
+                factors.add(div)
+        return factors
+
+    # Get the factors of the number of plots
+    factors = sorted(get_factors(num_plots))
+
+    # Find the two factors that are closest to each other
+    min_difference = num_plots
+    grid_dims = (1, num_plots)  # Initialize with a single row
+    for i in range(len(factors) // 2):
+        factor1 = factors[i]
+        factor2 = num_plots // factor1
+        difference = abs(factor1 - factor2)
+        if difference < min_difference:
+            min_difference = difference
+            grid_dims = (factor1, factor2)
+
+    return grid_dims
 
 class FacetPlot(Plotter):
     """
@@ -93,6 +130,7 @@ class FacetPlot(Plotter):
         labels: List[str] = None,
         legend_loc: str = "upper right",
         legend_ncol: int = 1,
+        # should be forced outside the plot
         legend_bbox_to_anchor: Tuple[float, float] = None,
         legend_frame: bool = True,
         # return args
@@ -137,51 +175,178 @@ class FacetPlot(Plotter):
         # Flatten the axes array.
         axes: np.ndarray = axes.flatten()
 
-        # now simply "add" the each plt.Figure to each axis on the figure
+    @staticmethod
+    def _cart_plot(
+        df_wide: pd.DataFrame,
+        plot_func: Callable = plt.plot,
+        use_x: Union[str, List[str]] = "index",
+        grid_dim: Tuple[int, int] = None,
+        plot_func_args: List = None,
+        # figsize: Tuple[float, float] = (16, 9),
+        # title arguments
+        title: str = None,
+        title_fontsize: int = 16,
+        title_xadjust: float = 0.5,
+        title_yadjust: float = 1.05,
+        # subplot axis arguments
+        subplot_grid: bool = True,
+        ax_hline: bool = False,
+        ax_hline_val: float = 0,
+        ax_vline: bool = False,
+        ax_vline_val: float = 0,
+        x_axis_label: str = None,
+        y_axis_label: str = None,
+        axis_fontsize: int = 12,
+        # subplot arguments
+        facet_size: Tuple[float, float] = (4, 3),
+        facet_titles: List[str] = None,
+        facet_title_fontsize: int = 12,
+        facet_title_xadjust: float = 0.5,
+        facet_title_yadjust: float = 1.05,
+        # legend arguments
+        legend: bool = True,
+        legend_labels: List[str] = None,
+        legend_loc: str = "upper right",
+        legend_ncol: int = 1,
+        legend_bbox_to_anchor: Tuple[float, float] = None,
+        legend_frame: bool = True,
+        # return args
+        show: bool = True,
+        save_to_file: Optional[str] = None,
+        dpi: int = 300,
+        return_figure: bool = False,
+        *args,
+        **kwargs,
+    ):
+        """
+        Render a facet plot from a wide dataframe, a grid dimension and a plotting function.
+        """
+        # check that the df has an index called "real_date". there should be only one index. it also must be pd.DatetimeIndex type.
+        inval_df: str = (
+            "`df_wide` must have a single index called "
+            "`real_date` of type `pd.DatetimeIndex`."
+        )
+        assert df_wide.index.names == ["real_date"], inval_df
+        assert isinstance(df_wide.index, pd.DatetimeIndex), inval_df
 
-        # Loop through the plots and add them to the figure axes.
-        for idx, plot in enumerate(plots):
-            # Check if index is out of range of the axes.
-            if idx >= len(axes):
-                break
+        if isinstance(use_x, str):
+            if not use_x == "index":
+                # make sure that the column exists in the dataframe
+                inval_use_x: str = f"Column {use_x} does not exist in `df_wide`."
+                assert use_x in df_wide.columns, inval_use_x
+        else:
+            assert isinstance(
+                use_x, list
+            ), "`use_x` must be a string or a list of strings."
+            # make sure that all columns exist in the dataframe
+            inval_use_x: str = f"Columns {use_x} do not exist in `df_wide`."
+            assert all([col in df_wide.columns for col in use_x]), inval_use_x
 
-            # Serialize the plot using pickle, then deserialize it onto the axes.
-            buf = io.BytesIO()
-            pickle.dump(plot, buf)
-            buf.seek(0)
-            ax = pickle.load(buf)
+        x_values: List[List[float]] = []
+        if isinstance(use_x, str):
+            if use_x == "index":
+                x_values.append(df_wide.index.values.tolist())
+            else:
+                x_values.append(df_wide[use_x].values.tolist())
+        else:
+            for col in use_x:
+                x_values.append(df_wide[col].values.tolist())
+                df_wide: pd.DataFrame = df_wide.drop(col, axis=1)
 
-            # Now add this ax to the figure.
-            axes[idx].cla()  # Clear the axes first
-            axes[idx].add_artist(ax)
+            # ensure df_wide has the same number of columns as the number of x_values
+            assert df_wide.shape[1] == len(x_values), (
+                f"Number of x_axis values passed using `use_x` ({use_x}) "
+                f"must be equal to the number of data columns in `df_wide` ({df_wide.shape[1]})."
+            )
 
-            # Add facet titles if provided
-            if facet_titles is not None:
-                try:
-                    axes[idx].set_title(facet_titles[idx])
-                except IndexError:
-                    pass  # If not enough titles are provided, ignore them.
+        if grid_dim is None:
+            num_plots: int = df_wide.shape[1]
+            # distribute into a square grid
+            grid_dim: Tuple[int, int] = _get_grid_dim(num_plots)
+        else:
+            num_plots: int = grid_dim[0] * grid_dim[1]
 
-        # Add the overall title and labels.
-        if title:
-            fig.suptitle(title, fontsize=title_fontsize, x=title_xadjust, y=title_yadjust)
-        if x_axis_label:
-            fig.set_xlabel(x_axis_label, fontsize=axis_fontsize)
-        if y_axis_label:
-            fig.set_ylabel(y_axis_label, fontsize=axis_fontsize)
+        inval_grid_dims: str = (
+            f"Grid dimensions {grid_dim} must be greater than or "
+            f"equal to the number of columns in `df_wide` ({df_wide.shape[1]})."
+        )
 
-        # Display the legend.
+        assert num_plots >= df_wide.shape[1], inval_grid_dims
+
+        figsize: Tuple[float, float] = (
+            grid_dim[1] * facet_size[0],
+            grid_dim[0] * facet_size[1],
+        )
+
+        fig = plt.figure(figsize=figsize)
+        gs: GridSpec = GridSpec(*grid_dim, figure=fig)
+        if plot_func_args is None:
+            plot_func_args: List = []
+
+        if facet_titles is None:
+            facet_titles: List[str] = df_wide.columns.tolist()
+
+        mulx: int = int(len(x_values) > 1)
+        # if the index is the xval, then cast it to a pd.DatetimeIndex
+        if use_x == "index":
+            x_values[0] = pd.to_datetime(x_values[0])
+        for i in range(num_plots):
+            ax: plt.Axes = fig.add_subplot(gs[i // grid_dim[1], i % grid_dim[1]])
+            plot_func(
+                x_values[i * mulx],
+                df_wide.iloc[:, i].values.tolist(),
+                *plot_func_args,
+                **kwargs,
+            )
+            ax.set_title(
+                facet_titles[i],
+                fontsize=facet_title_fontsize,
+                x=facet_title_xadjust,
+                y=facet_title_yadjust,
+            )
+            if subplot_grid:
+                ax.grid()
+            if ax_hline:
+                ax.axhline(ax_hline_val, color="black", linestyle="--")
+            if ax_vline:
+                ax.axvline(ax_vline_val, color="black", linestyle="--")
+            if x_axis_label is not None:
+                ax.set_xlabel(x_axis_label, fontsize=axis_fontsize)
+            if y_axis_label is not None:
+                ax.set_ylabel(y_axis_label, fontsize=axis_fontsize)
+
+        if title is not None:
+            fig.suptitle(
+                title,
+                fontsize=title_fontsize,
+                x=title_xadjust,
+                y=title_yadjust,
+            )
+
         if legend:
-            fig.legend(labels, loc=legend_loc, ncol=legend_ncol, bbox_to_anchor=legend_bbox_to_anchor, frameon=legend_frame)
+            if legend_labels is None:
+                legend_labels = df_wide.columns.tolist()
+                if isinstance(use_x, list) and len(use_x) >= 1:
+                    legend_labels = [
+                        f"{legend_labels[i]} v/s {use_x[i]}"
+                        for i in range(len(legend_labels))
+                    ]
 
-        # Save the figure if a filename is provided.
-        if save_to_file:
+            fig.legend(
+                labels=legend_labels,
+                loc=legend_loc,
+                ncol=legend_ncol,
+                bbox_to_anchor=legend_bbox_to_anchor,
+                frameon=legend_frame,
+            )
+
+        fig.tight_layout()
+
+        if save_to_file is not None:
             fig.savefig(save_to_file, dpi=dpi)
 
-        # Show the figure.
         if show:
             plt.show()
 
-        # Return the figure if requested.
         if return_figure:
             return fig
