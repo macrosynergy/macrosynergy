@@ -40,31 +40,26 @@ def _get_grid_dim(
     :param <int> num_plots: Number of plots.
     :return <Tuple[int, int]>: Tuple of grid dimensions.
     """
-    # Function to get the factors of a number
-    def get_factors(n):
-        factors = set()
-        for i in range(1, int(np.sqrt(n)) + 1):
-            div, mod = divmod(n, i)
-            if mod == 0:
-                factors.add(i)
-                factors.add(div)
-        return factors
+    # take the square root of the number of plots, and try and iteratetively find the closest set of grid dimensions that will work
+    # for the number of plots.
+    sqrt_num_plots: float = np.ceil(np.sqrt(num_plots))
+    grid_dim: Tuple[int, int] = (int(sqrt_num_plots), int(sqrt_num_plots))
+    gd_copy: Tuple[int, int] = grid_dim
+    # the number of plots is less than grid_dim[0] * grid_dim[1], so iteratively try and reduce the row and column dimensions until sweet spot is found.
+    while 0 != 1:
+        if gd_copy[0] < gd_copy[1]:
+            gd_copy: Tuple[int, int] = (gd_copy[0], gd_copy[1] - 1)
+        else:
+            gd_copy: Tuple[int, int] = (gd_copy[0] - 1, gd_copy[1])
 
-    # Get the factors of the number of plots
-    factors = sorted(get_factors(num_plots))
+        # if gd_copy[0] * gd_copy[1] is more than num_plots, copy to grid_dim. if smaller, break.
+        if gd_copy[0] * gd_copy[1] >= num_plots:
+            grid_dim: Tuple[int, int] = gd_copy
+        else:
+            break
 
-    # Find the two factors that are closest to each other
-    min_difference = num_plots
-    grid_dims = (1, num_plots)  # Initialize with a single row
-    for i in range(len(factors) // 2):
-        factor1 = factors[i]
-        factor2 = num_plots // factor1
-        difference = abs(factor1 - factor2)
-        if difference < min_difference:
-            min_difference = difference
-            grid_dims = (factor1, factor2)
+    return grid_dim
 
-    return grid_dims
 
 class FacetPlot(Plotter):
     """
@@ -278,7 +273,7 @@ class FacetPlot(Plotter):
             grid_dim[0] * facet_size[1],
         )
 
-        fig = plt.figure(figsize=figsize)
+        fig = plt.figure(figsize=figsize, layout="tight")
         gs: GridSpec = GridSpec(*grid_dim, figure=fig)
         if plot_func_args is None:
             plot_func_args: List = []
@@ -331,7 +326,7 @@ class FacetPlot(Plotter):
                         f"{legend_labels[i]} v/s {use_x[i]}"
                         for i in range(len(legend_labels))
                     ]
-
+                    
             fig.legend(
                 labels=legend_labels,
                 loc=legend_loc,
@@ -339,8 +334,10 @@ class FacetPlot(Plotter):
                 bbox_to_anchor=legend_bbox_to_anchor,
                 frameon=legend_frame,
             )
-
+                            
         fig.tight_layout()
+        
+        # plt.tight_layout()
 
         if save_to_file is not None:
             fig.savefig(save_to_file, dpi=dpi)
