@@ -108,26 +108,6 @@ class FacetPlot(Plotter):
         figsize: Tuple[float, float] = (16, 9),
         ncols: int = 3,
         attempt_square: bool = False,
-        # figure arguments
-        grid: bool = True,
-        x_axis_label: str = None,
-        y_axis_label: str = None,
-        axis_fontsize: int = 12,
-        # title arguments
-        title: str = None,
-        title_fontsize: int = 16,
-        title_xadjust: float = 0.5,
-        title_yadjust: float = 1.05,
-        # subplot arguments
-        facet_size: Tuple[float, float] = (4, 4),
-        facet_titles: List[str] = None,
-        legend: bool = True,
-        labels: List[str] = None,
-        legend_loc: str = "upper right",
-        legend_ncol: int = 1,
-        # should be forced outside the plot
-        legend_bbox_to_anchor: Tuple[float, float] = None,
-        legend_frame: bool = True,
         # return args
         show: bool = True,
         save_to_file: Optional[str] = None,
@@ -152,23 +132,40 @@ class FacetPlot(Plotter):
 
             # If attempt_square is True, attempt to make the the grid of subplots square - i.e. ncols = nrows.
             if attempt_square:
-                ncols: int = int(np.ceil(np.sqrt(len(plots))))
-                nrows: int = int(np.ceil(len(plots) / ncols))
+                grid_dim: Tuple[int, int] = _get_grid_dim(len(plots))
+                ncols: int = grid_dim[1]
+                nrows: int = grid_dim[0]
 
-        # Create the figure and axes.]
-        fig: plt.Figure
-        axes: np.ndarray
-        fig, axes = plt.subplots(
-            nrows=nrows,
-            ncols=ncols,
-            figsize=figsize,
-            sharex=True,
-            sharey=True,
-            squeeze=False,
-        )
+        fig: plt.Figure = plt.figure(figsize=figsize)
+        gs: GridSpec = GridSpec(nrows, ncols, figure=fig)
 
-        # Flatten the axes array.
-        axes: np.ndarray = axes.flatten()
+        # iterate over the plots, and copy the lines, titles, legends, etc. to the new figure.
+        for i, plot in enumerate(plots):
+            ax: plt.Axes = fig.add_subplot(gs[i // ncols, i % ncols])
+            for line in plot.lines:
+                ax.add_line(line)
+            ax.set_title(plot.title.get_text())
+            ax.set_xlabel(plot.get_xlabel())
+            ax.set_ylabel(plot.get_ylabel())
+            ax.grid()
+            ax.legend()
+            ax.set_xlim(plot.get_xlim())
+            ax.set_ylim(plot.get_ylim())
+            ax.set_xticks(plot.get_xticks())
+            ax.set_xticklabels(plot.get_xticklabels())
+            ax.set_yticks(plot.get_yticks())
+            ax.set_yticklabels(plot.get_yticklabels())
+
+        fig.tight_layout()
+
+        if save_to_file is not None:
+            fig.savefig(save_to_file, dpi=dpi)
+
+        if show:
+            plt.show()
+
+        if return_figure:
+            return fig
 
     @staticmethod
     def _cart_plot(
@@ -326,7 +323,7 @@ class FacetPlot(Plotter):
                         f"{legend_labels[i]} v/s {use_x[i]}"
                         for i in range(len(legend_labels))
                     ]
-                    
+
             fig.legend(
                 labels=legend_labels,
                 loc=legend_loc,
@@ -334,9 +331,9 @@ class FacetPlot(Plotter):
                 bbox_to_anchor=legend_bbox_to_anchor,
                 frameon=legend_frame,
             )
-                            
+
         fig.tight_layout()
-        
+
         # plt.tight_layout()
 
         if save_to_file is not None:
