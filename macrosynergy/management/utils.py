@@ -219,10 +219,10 @@ def standardise_dataframe(df: pd.DataFrame, verbose: bool = False) -> pd.DataFra
         if len(df.columns) < 4:
             raise ValueError(fail_str)
 
-        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
-        df["cid"] = df["cid"].astype(str)
-        df["xcat"] = df["xcat"].astype(str)
-        df = df.sort_values(by=["cid", "xcat", "real_date"]).reset_index(drop=True)
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+    df["cid"] = df["cid"].astype(str)
+    df["xcat"] = df["xcat"].astype(str)
+    df = df.sort_values(by=["real_date", "cid", "xcat"]).reset_index(drop=True)
 
     remaining_cols: Set[str] = set(df.columns) - set(idx_cols)
 
