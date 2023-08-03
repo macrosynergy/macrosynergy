@@ -23,9 +23,9 @@ import sys, os
 
 sys.path.append(os.path.abspath("."))
 
-from macrosynergy.management.utils import standardise_dataframe
-from macrosynergy.management import reduce_df
-from macrosynergy.management.simulate_quantamental_data import make_test_df
+# from macrosynergy.management.utils import standardise_dataframe
+# from macrosynergy.management import reduce_df
+# from macrosynergy.management.simulate_quantamental_data import make_test_df
 
 
 from macrosynergy.visuals.plotter import Plotter, argcopy, argvalidation
@@ -100,8 +100,6 @@ class FacetPlot(Plotter):
             **kwargs,
         )
 
-    @argvalidation
-    @argcopy
     def from_subplots(
         # figure arguments
         plots: Union[List[plt.Figure], List[List[plt.Figure]]],
@@ -140,6 +138,7 @@ class FacetPlot(Plotter):
         gs: GridSpec = GridSpec(nrows, ncols, figure=fig)
 
         # iterate over the plots, and copy the lines, titles, legends, etc. to the new figure.
+        plot: plt.Figure
         for i, plot in enumerate(plots):
             ax: plt.Axes = fig.add_subplot(gs[i // ncols, i % ncols])
             for line in plot.lines:
@@ -344,3 +343,154 @@ class FacetPlot(Plotter):
 
         if return_figure:
             return fig
+
+    @argcopy
+    # @argvalidation
+    def lineplot(
+        self,
+        # dataframe arguments
+        df: pd.DataFrame = None,
+        cids: List[str] = None,
+        xcats: List[str] = None,
+        metric: str = None,
+        intersect: bool = False,
+        tickers: List[str] = None,
+        blacklist: Dict[str, List[str]] = None,
+        start: str = None,
+        end: str = None,
+        # plot arguments
+        cid_xcat_grid: bool = True,
+        ncols: int = 3,
+        grid_dim: Tuple[int, int] = None,
+        # figsize: Tuple[float, float] = (16, 9),
+        # title arguments
+        title: str = None,
+        title_fontsize: int = 16,
+        title_xadjust: float = 0.5,
+        title_yadjust: float = 1.05,
+        # subplot axis arguments
+        subplot_grid: bool = True,
+        ax_hline: bool = False,
+        ax_hline_val: float = 0,
+        ax_vline: bool = False,
+        ax_vline_val: float = 0,
+        x_axis_label: str = None,
+        y_axis_label: str = None,
+        axis_fontsize: int = 12,
+        # subplot arguments
+        facet_size: Tuple[float, float] = (4, 3),
+        facet_titles: List[str] = None,
+        facet_title_fontsize: int = 12,
+        facet_title_xadjust: float = 0.5,
+        facet_title_yadjust: float = 1.05,
+        # legend arguments
+        legend: bool = True,
+        legend_labels: List[str] = None,
+        legend_loc: str = "upper right",
+        legend_ncol: int = 1,
+        legend_bbox_to_anchor: Tuple[float, float] = None,
+        legend_frame: bool = True,
+        # return args
+        show: bool = True,
+        save_to_file: Optional[str] = None,
+        dpi: int = 300,
+        return_figure: bool = False,
+        *args,
+        **kwargs,
+    ):
+        """
+        Render a facet plot from a wide dataframe, a grid dimension and a plotting function.
+        """
+        if any([arg is not None for arg in [df, cids, xcats, metric, tickers]]):
+            self.__init__(
+                df=df,
+                cids=cids,
+                xcats=xcats,
+                metrics=[metric],
+                intersect=intersect,
+                tickers=tickers,
+                blacklist=blacklist,
+                start=start,
+                end=end,
+            )
+
+        if cid_xcat_grid:
+            grid_dim: Tuple[int, int] = (len(self.cids), len(self.xcats))
+        elif grid_dim is None:
+            # if ncols is specified, use it to infer nrows
+            if ncols is not None:
+                grid_dim: Tuple[int, int] = (
+                    int(np.ceil(len(self.cids) / ncols)),
+                    ncols,
+                )
+            else:
+                grid_dim: Tuple[int, int] = _get_grid_dim(
+                    len(self.cids) * len(self.xcats)
+                )
+
+        # if there is only one cid present, plot all xcats for that cid
+        cid_xcat_combos: List[Tuple[str, str]] = [
+            f"{cid}_{xcat}" for cid in self.cids for xcat in self.xcats
+        ]
+
+        existing_tickers: List[str] = (
+            (self.df["cid"] + "_" + self.df["xcat"]).unique().tolist()
+        )
+
+        # identify invalid cid_xcat_combos
+        inval_cid_xcat_combos: List[str] = [
+            combo for combo in cid_xcat_combos if combo not in existing_tickers
+        ]
+
+        # artifically add invalid cid_xcat_combos with nan values to the dataframe
+        if len(inval_cid_xcat_combos) > 0:
+            inval_df: pd.DataFrame = pd.DataFrame(
+                np.nan,
+                index=self.df.index,
+                columns=inval_cid_xcat_combos,
+            )
+            self.df: pd.DataFrame = pd.concat([self.df, inval_df], axis=1)
+
+        self.df["ticker"]: str = self.df["cid"] + "_" + self.df["xcat"]
+        # remove cid and xcat columns
+        self.df: pd.DataFrame = self.df.drop(["cid", "xcat"], axis=1)
+
+        # pivot the dataframe
+        df_wide: pd.DataFrame = self.df.pivot_table(
+            index="real_date", columns="ticker", values=metric
+        )
+
+        # now plot the dataframe
+        return self._cart_plot(
+            df_wide=df_wide,
+            grid_dim=grid_dim,
+            title=title,
+            title_fontsize=title_fontsize,
+            title_xadjust=title_xadjust,
+            title_yadjust=title_yadjust,
+            subplot_grid=subplot_grid,
+            ax_hline=ax_hline,
+            ax_hline_val=ax_hline_val,
+            ax_vline=ax_vline,
+            ax_vline_val=ax_vline_val,
+            x_axis_label=x_axis_label,
+            y_axis_label=y_axis_label,
+            axis_fontsize=axis_fontsize,
+            facet_size=facet_size,
+            facet_titles=facet_titles,
+            facet_title_fontsize=facet_title_fontsize,
+            facet_title_xadjust=facet_title_xadjust,
+            facet_title_yadjust=facet_title_yadjust,
+            legend=legend,
+            legend_labels=legend_labels,
+            legend_loc=legend_loc,
+            legend_ncol=legend_ncol,
+            legend_bbox_to_anchor=legend_bbox_to_anchor,
+            legend_frame=legend_frame,
+            show=show,
+            save_to_file=save_to_file,
+            dpi=dpi,
+            return_figure=return_figure,
+            *args,
+            **kwargs,
+        )

@@ -15,13 +15,11 @@ import sys, os
 
 sys.path.append(os.path.abspath("."))
 
-from macrosynergy.management.utils import standardise_dataframe
-from macrosynergy.management import reduce_df
-from macrosynergy.management.simulate_quantamental_data import make_test_df
+# from macrosynergy.management.utils import standardise_dataframe
+# from macrosynergy.management import reduce_df
+# from macrosynergy.management.simulate_quantamental_data import make_test_df
 
-
-from macrosynergy.visuals.plotter import Plotter, argcopy, argvalidation
-
+from .plotter import Plotter
 
 class LinePlot(Plotter):
     """
@@ -219,17 +217,17 @@ class LinePlot(Plotter):
             return
 
 
-if __name__ == "__main__":
-    cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
-    xcats: List[str] = ["FXXR", "EQXR", "RIR"]
-    df: pd.DataFrame = make_test_df(
-        cids=cids,
-        xcats=xcats,
-        start_date="2000-01-01",
-        end_date="2020-12-31",
-        # prefer="sine",
-    )
+# if __name__ == "__main__":
+#     cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
+#     xcats: List[str] = ["FXXR", "EQXR", "RIR"]
+#     df: pd.DataFrame = make_test_df(
+#         cids=cids,
+#         xcats=xcats,
+#         start_date="2000-01-01",
+#         end_date="2020-12-31",
+#         # prefer="sine",
+#     )
 
-    LinePlot(df=df).plot(
-        cids=["USD", "EUR"], xcats=["FXXR"], labels=["The US", "Europe"]
-    )
+#     LinePlot(df=df).plot(
+#         cids=["USD", "EUR"], xcats=["FXXR"], labels=["The US", "Europe"]
+#     )

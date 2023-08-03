@@ -4,7 +4,7 @@ import warnings
 from collections.abc import Callable, Iterable
 from functools import wraps
 from types import ModuleType
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Callable, Dict, List, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -128,9 +128,7 @@ class Plotter(object):
             metrics: List[str] = list(set(sdf.columns) - set(df_cols))
 
         df_cols += metrics
-        sdf = standardise_dataframe(
-            df=sdf,
-        )
+        sdf = standardise_dataframe(df=sdf)
         if not set(df_cols).issubset(set(sdf.columns)):
             raise ValueError(f"DataFrame must contain the following columns: {df_cols}")
 
