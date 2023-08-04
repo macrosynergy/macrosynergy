@@ -8,7 +8,7 @@ effectively allowing for a recursive facet plot.
 
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Union, Tuple, Optional, Union
+from typing import List, Dict, Any, Union, Tuple, Optional, Union
 from types import ModuleType
 from collections.abc import Callable, Iterable
 import matplotlib
@@ -171,11 +171,11 @@ class FacetPlot(Plotter):
         df_wide: pd.DataFrame,
         plot_func: Callable = plt.plot,
         use_x: Union[str, List[str]] = "index",
-        grid_dim: Tuple[int, int] = None,
-        plot_func_args: List = None,
+        grid_dim: Optional[Tuple[int, int]] = None,
+        plot_func_args: Optional[List[Any]] = None,
         # figsize: Tuple[float, float] = (16, 9),
         # title arguments
-        title: str = None,
+        title: Optional[str] = None,
         title_fontsize: int = 16,
         title_xadjust: float = 0.5,
         title_yadjust: float = 1.05,
@@ -185,21 +185,21 @@ class FacetPlot(Plotter):
         ax_hline_val: float = 0,
         ax_vline: bool = False,
         ax_vline_val: float = 0,
-        x_axis_label: str = None,
-        y_axis_label: str = None,
+        x_axis_label: Optional[str] = None,
+        y_axis_label: Optional[str] = None,
         axis_fontsize: int = 12,
         # subplot arguments
         facet_size: Tuple[float, float] = (4, 3),
-        facet_titles: List[str] = None,
+        facet_titles: Optional[List[str]] = None,
         facet_title_fontsize: int = 12,
         facet_title_xadjust: float = 0.5,
         facet_title_yadjust: float = 1.05,
         # legend arguments
         legend: bool = True,
-        legend_labels: List[str] = None,
+        legend_labels: Optional[List[str]] = None,
         legend_loc: str = "upper right",
         legend_ncol: int = 1,
-        legend_bbox_to_anchor: Tuple[float, float] = None,
+        legend_bbox_to_anchor: Optional[Tuple[float, float]] = None,
         legend_frame: bool = True,
         # return args
         show: bool = True,
@@ -281,7 +281,7 @@ class FacetPlot(Plotter):
         # if the index is the xval, then cast it to a pd.DatetimeIndex
         if use_x == "index":
             x_values[0] = pd.to_datetime(x_values[0])
-        for i in range(num_plots):
+        for i, colname in enumerate(df_wide.columns):
             ax: plt.Axes = fig.add_subplot(gs[i // grid_dim[1], i % grid_dim[1]])
             plot_func(
                 x_values[i * mulx],
@@ -296,7 +296,7 @@ class FacetPlot(Plotter):
                 y=facet_title_yadjust,
             )
             if subplot_grid:
-                ax.grid()
+                ax.grid(axis="both", linestyle="--", alpha=0.5)
             if ax_hline:
                 ax.axhline(ax_hline_val, color="black", linestyle="--")
             if ax_vline:
@@ -345,26 +345,26 @@ class FacetPlot(Plotter):
             return fig
 
     @argcopy
-    # @argvalidation
+    @argvalidation
     def lineplot(
         self,
         # dataframe arguments
-        df: pd.DataFrame = None,
-        cids: List[str] = None,
-        xcats: List[str] = None,
-        metric: str = None,
+        df: Optional[pd.DataFrame] = None,
+        cids: Optional[List[str]] = None,
+        xcats: Optional[List[str]] = None,
+        metric: Optional[str] = None,
         intersect: bool = False,
-        tickers: List[str] = None,
-        blacklist: Dict[str, List[str]] = None,
-        start: str = None,
-        end: str = None,
+        tickers: Optional[List[str]] = None,
+        blacklist: Optional[Dict[str, List[str]]] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
         # plot arguments
         cid_xcat_grid: bool = True,
         ncols: int = 3,
-        grid_dim: Tuple[int, int] = None,
+        grid_dim: Optional[Tuple[int, int]] = None,
         # figsize: Tuple[float, float] = (16, 9),
         # title arguments
-        title: str = None,
+        title: Optional[str] = None,
         title_fontsize: int = 16,
         title_xadjust: float = 0.5,
         title_yadjust: float = 1.05,
@@ -374,21 +374,21 @@ class FacetPlot(Plotter):
         ax_hline_val: float = 0,
         ax_vline: bool = False,
         ax_vline_val: float = 0,
-        x_axis_label: str = None,
-        y_axis_label: str = None,
+        x_axis_label: Optional[str] = None,
+        y_axis_label: Optional[str] = None,
         axis_fontsize: int = 12,
         # subplot arguments
         facet_size: Tuple[float, float] = (4, 3),
-        facet_titles: List[str] = None,
+        facet_titles: Optional[List[str]] = None,
         facet_title_fontsize: int = 12,
         facet_title_xadjust: float = 0.5,
         facet_title_yadjust: float = 1.05,
         # legend arguments
         legend: bool = True,
-        legend_labels: List[str] = None,
+        legend_labels: Optional[List[str]] = None,
         legend_loc: str = "upper right",
         legend_ncol: int = 1,
-        legend_bbox_to_anchor: Tuple[float, float] = None,
+        legend_bbox_to_anchor: Optional[Tuple[float, float]] = None,
         legend_frame: bool = True,
         # return args
         show: bool = True,
@@ -402,11 +402,14 @@ class FacetPlot(Plotter):
         Render a facet plot from a wide dataframe, a grid dimension and a plotting function.
         """
         if any([arg is not None for arg in [df, cids, xcats, metric, tickers]]):
+            metrics: List[str] = [metric] if metric is not None else self.metrics
+            metrics: Optional[List[str]] = metrics if metrics else None
+
             self.__init__(
                 df=df,
                 cids=cids,
                 xcats=xcats,
-                metrics=[metric],
+                metrics=metrics,
                 intersect=intersect,
                 tickers=tickers,
                 blacklist=blacklist,

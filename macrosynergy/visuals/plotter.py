@@ -30,7 +30,7 @@ def argvalidation(func: Callable) -> Callable:
             if arg_name in func_params:
                 arg_type: Any = func_params[arg_name].annotation
                 if arg_type is not inspect._empty:
-                    if not isinstance(arg_value, arg_type):
+                    if not isinstance(arg_value, arg_type.__origin__):
                         raise TypeError(
                             f"Argument `{arg_name}` must be of type `{arg_type}`."
                         )

@@ -21,6 +21,7 @@ sys.path.append(os.path.abspath("."))
 
 from .plotter import Plotter
 
+
 class LinePlot(Plotter):
     """
     Class for plotting time series data on a line plot.
@@ -118,15 +119,19 @@ class LinePlot(Plotter):
         *args,
         **kwargs,
     ):
-        if any([df, xcats, cids, intersect, blacklist, tickers, start, end]):
+        if any([arg is not None for arg in [df, cids, xcats, metric, tickers]]):
+            metrics: Optional[List[str]] = (
+                [metric] if metric else (self.metrics if self.metrics else None)
+            )
+
             self.__init__(
-                df=df if df is not None else self.df,
-                xcats=xcats,
+                df=df,
                 cids=cids,
-                metrics=[metric],
+                xcats=xcats,
+                metrics=metrics,
                 intersect=intersect,
-                blacklist=blacklist,
                 tickers=tickers,
+                blacklist=blacklist,
                 start=start,
                 end=end,
             )
