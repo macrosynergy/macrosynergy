@@ -5,19 +5,12 @@ designed to plot time series data on a line plot.
 
 import pandas as pd
 from typing import List, Dict, Union, Tuple, Optional, Union
-from types import ModuleType
-from collections.abc import Callable, Iterable
 import matplotlib.pyplot as plt
-import seaborn as sns
 import logging
 
 import sys, os
 
 sys.path.append(os.path.abspath("."))
-
-# from macrosynergy.management.utils import standardise_dataframe
-# from macrosynergy.management import reduce_df
-# from macrosynergy.management.simulate_quantamental_data import make_test_df
 
 from .plotter import Plotter
 
