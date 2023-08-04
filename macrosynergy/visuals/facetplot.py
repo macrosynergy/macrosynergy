@@ -274,8 +274,8 @@ class FacetPlot(Plotter):
         if plot_func_args is None:
             plot_func_args: List = []
 
-        if facet_titles is None:
-            facet_titles: List[str] = df_wide.columns.tolist()
+        # if facet_titles is None:
+        #     facet_titles: List[str] = df_wide.columns.tolist()
 
         mulx: int = int(len(x_values) > 1)
         # if the index is the xval, then cast it to a pd.DatetimeIndex
@@ -289,12 +289,13 @@ class FacetPlot(Plotter):
                 *plot_func_args,
                 **kwargs,
             )
-            ax.set_title(
-                facet_titles[i],
-                fontsize=facet_title_fontsize,
-                x=facet_title_xadjust,
-                y=facet_title_yadjust,
-            )
+            if facet_titles is not None:
+                ax.set_title(
+                    facet_titles[i],
+                    fontsize=facet_title_fontsize,
+                    x=facet_title_xadjust,
+                    y=facet_title_yadjust,
+                )
             if subplot_grid:
                 ax.grid(axis="both", linestyle="--", alpha=0.5)
             if ax_hline:
@@ -360,6 +361,7 @@ class FacetPlot(Plotter):
         end: Optional[str] = None,
         # plot arguments
         cid_xcat_grid: bool = True,
+        attempt_square: bool = True,
         ncols: int = 3,
         grid_dim: Optional[Tuple[int, int]] = None,
         # figsize: Tuple[float, float] = (16, 9),
@@ -371,14 +373,14 @@ class FacetPlot(Plotter):
         # subplot axis arguments
         subplot_grid: bool = True,
         ax_hline: bool = False,
-        ax_hline_val: float = 0,
+        ax_hline_val: float = 0.0,
         ax_vline: bool = False,
-        ax_vline_val: float = 0,
+        ax_vline_val: float = 0.0,
         x_axis_label: Optional[str] = None,
         y_axis_label: Optional[str] = None,
         axis_fontsize: int = 12,
         # subplot arguments
-        facet_size: Tuple[float, float] = (4, 3),
+        facet_size: Tuple[float, float] = (4.0, 3.0),
         facet_titles: Optional[List[str]] = None,
         facet_title_fontsize: int = 12,
         facet_title_xadjust: float = 0.5,
@@ -417,18 +419,23 @@ class FacetPlot(Plotter):
                 end=end,
             )
 
+        num_tickers_to_plot: int = len(
+            (self.df["cid"] + "_" + self.df["xcat"]).unique().tolist()
+        )
         if cid_xcat_grid:
             grid_dim: Tuple[int, int] = (len(self.cids), len(self.xcats))
         elif grid_dim is None:
-            # if ncols is specified, use it to infer nrows
-            if ncols is not None:
+            if attempt_square:
+                grid_dim: Tuple[int, int] = _get_grid_dim(num_tickers_to_plot)
+            elif ncols is not None:
                 grid_dim: Tuple[int, int] = (
-                    int(np.ceil(len(self.cids) / ncols)),
+                    int(np.ceil(num_tickers_to_plot / ncols)),
                     ncols,
                 )
             else:
-                grid_dim: Tuple[int, int] = _get_grid_dim(
-                    len(self.cids) * len(self.xcats)
+                raise ValueError(
+                    "Unable to infer grid dimensions. Please provide either "
+                    "`grid_dim`, `ncols` or set `attempt_square` to True."
                 )
 
         # if there is only one cid present, plot all xcats for that cid

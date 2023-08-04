@@ -1,11 +1,9 @@
 import inspect
 import logging
 import warnings
-from collections.abc import Callable, Iterable
 from functools import wraps
 from types import ModuleType
-from typing import Any, Callable, Dict, List, Tuple, Union
-from typing import get_args, get_origin
+from typing import Any, Callable, Dict, List, Tuple, Union, get_args, get_origin
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,7 +14,7 @@ from macrosynergy.management import reduce_df, reduce_df_by_ticker
 from macrosynergy.management.utils import standardise_dataframe
 
 logger = logging.getLogger(__name__)
-
+NoneType = type(None)
 
 
 def argvalidation(func: Callable) -> Callable:
@@ -32,18 +30,37 @@ def argvalidation(func: Callable) -> Callable:
             if arg_name in func_params:
                 arg_type: Any = func_params[arg_name].annotation
                 if arg_type is not inspect._empty:
-                    if get_origin(arg_type) == Union:
+                    origin = get_origin(arg_type)
+                    if origin is Union:
                         union_args = get_args(arg_type)
-                        if type(None) in union_args and arg_value is None:
+                        if arg_value is None and NoneType in union_args:
                             continue
-                        if not any(isinstance(arg_value, t) for t in union_args):
+                        if not any(
+                            isinstance(arg_value, t)
+                            for t in union_args
+                            if t is not NoneType
+                        ):
                             raise TypeError(
                                 f"Argument `{arg_name}` must be of type `{arg_type}`."
                             )
-                    elif not isinstance(arg_value, arg_type):
-                        raise TypeError(
-                            f"Argument `{arg_name}` must be of type `{arg_type}`."
-                        )
+                    elif origin is Tuple:
+                        tuple_args = get_args(arg_type)
+                        if (
+                            not isinstance(arg_value, tuple)
+                            or not len(arg_value) == len(tuple_args)
+                            or not all(
+                                isinstance(item, t)
+                                for item, t in zip(arg_value, tuple_args)
+                            )
+                        ):
+                            raise TypeError(
+                                f"Argument `{arg_name}` must be of type `{arg_type}`."
+                            )
+                    elif origin is None:  # For simple, non-generic types
+                        if not isinstance(arg_value, arg_type):
+                            raise TypeError(
+                                f"Argument `{arg_name}` must be of type `{arg_type}`."
+                            )
 
         # validate the return value
         return_value: Any = func(*args, **kwargs)
@@ -57,6 +74,7 @@ def argvalidation(func: Callable) -> Callable:
         return return_value
 
     return wrapper
+
 
 def argcopy(func: Callable) -> Callable:
     @wraps(func)
@@ -170,6 +188,12 @@ class Plotter(object):
             blacklist=blacklist,
             out_all=True,
         )
+        # if the DataFrame is empty, raise an error
+        if sdf.empty:
+            raise ValueError(
+                "The arguments provided resulted in an "
+                "empty DataFrame when filtered (see `reduce_df`)."
+            )
 
         self.df: pd.DataFrame = sdf
         self.cids: List[str] = cids
