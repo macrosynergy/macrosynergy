@@ -19,7 +19,6 @@ Intended Audience :: Science/Research
 Intended Audience :: Developers
 Programming Language :: Python
 Programming Language :: Python :: 3
-Programming Language :: Python :: 3.7
 Programming Language :: Python :: 3.8
 Programming Language :: Python :: 3.9
 Programming Language :: Python :: 3.10
@@ -36,8 +35,8 @@ Development Status :: 4 - Beta
 
 MAJOR = 0
 MINOR = 0
-MICRO = 28
-ISRELEASED = True
+MICRO = 34
+ISRELEASED = False
 VERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
 
 if sys.version_info >= (3, 12):
@@ -48,11 +47,11 @@ if sys.version_info >= (3, 12):
         RuntimeWarning,
     )
     
-if sys.version_info < (3, 7):
+if sys.version_info < (3, 8):
     warnings.warn(
         f"Python {sys.version_info.major}.{sys.version_info.minor} "
         "has reached end-of-life. The Macrosynergy package no longer supports this version. "
-        "Please upgrade to Python 3.7 or later.", 
+        "Please upgrade to Python 3.8 or later.", 
         RuntimeWarning,
     )
 
@@ -173,7 +172,7 @@ def setup_package():
         python_requires='>=3.6',
         install_requires=REQUIREMENTS.split("\n"),
         include_package_data=True,
-        packages=find_packages(),
+        packages=find_packages(exclude=["tests", "tests.*"]),
         version=get_version_info()[0],
     )
     # __copyright__ = 'Copyright 2020 Macrosynergy Ltd'

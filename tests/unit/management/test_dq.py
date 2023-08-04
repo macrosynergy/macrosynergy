@@ -1,4 +1,3 @@
-# from macrosynergy.dataquery import api
 import warnings
 import unittest
 
@@ -7,9 +6,9 @@ class TestDataQueryInterface(unittest.TestCase):
     def test_deprecation_warning(self):
         warnings.simplefilter("default")
         with self.assertWarns(DeprecationWarning):
-            from macrosynergy.dataquery.api import Interface
+            from macrosynergy.management.dq import DataQueryInterface as DQInterface
 
-            with Interface(
+            with DQInterface(
                 client_id="client_id",
                 client_secret="client_secret",
                 check_connection=False,
@@ -22,10 +21,10 @@ class TestDataQueryInterface(unittest.TestCase):
             # actually catch the warning.
 
     def test_successful_deprecation(self):
-        from macrosynergy.dataquery import api
+        from macrosynergy.management.dq import DataQueryInterface as DQInterface
         from macrosynergy.download import JPMaQSDownload
 
-        self.assertTrue(issubclass(api.Interface, JPMaQSDownload))
+        self.assertTrue(issubclass(DQInterface, JPMaQSDownload))
 
 
 if __name__ == "__main__":

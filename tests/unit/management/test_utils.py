@@ -4,11 +4,12 @@ import io
 import os
 import numpy as np
 import pandas as pd
+import warnings
 import datetime
 import yaml
 import json
 from unittest.mock import patch, MagicMock, Mock, mock_open
-from typing import List, Tuple, Dict, Union, Any
+from typing import List, Tuple, Dict, Union, Any, Set
 from macrosynergy.management.simulate_quantamental_data import make_test_df
 from macrosynergy.management.utils import (
     get_dict_max_depth,
@@ -19,7 +20,8 @@ from macrosynergy.management.utils import (
     convert_to_iso_format,
     form_full_url,
     generate_random_date,
-    common_cids
+    common_cids,
+    drop_nan_series
 )
 
 from macrosynergy.management.utils import (
@@ -221,6 +223,73 @@ class TestFunctions(unittest.TestCase):
         self.assertEqual(set(comm_cids), set(cids))
 
 
+    def test_drop_nan_series(self):
+        cids : List[str] = ["AUD", "USD", "GBP", "EUR", "CAD"]
+        xcats : List[str] = ["FXXR", "IR", "EQXR", "CRY", "FXFW"]
+        df_orig : pd.DataFrame = make_test_df(cids=cids, xcats=xcats)
+
+        # set warnings to error. test if a warning is raised in the obvious "clean" case
+        warnings.simplefilter("error")
+        for boolx in [True, False]:
+            try:
+                dfx : pd.DataFrame = drop_nan_series(df=df_orig, raise_warning=boolx)
+                self.assertTrue(dfx.equals(df_orig))
+            except Warning as w:
+                self.fail("Warning raised unexpectedly")
+
+        df_test : pd.DataFrame = df_orig.copy()
+        df_test.loc[(df_test["cid"] == "AUD") & (df_test["xcat"].isin(["FXXR", "IR"])), "value"] = pd.NA
+
+        warnings.simplefilter("always")
+        with warnings.catch_warnings(record=True) as w:
+            dfx : pd.DataFrame = drop_nan_series(df=df_test, raise_warning=True)
+            self.assertEqual(len(w), 2)
+            for ww in w:
+                self.assertTrue(issubclass(ww.category, UserWarning))
+                
+            found_tickers : Set = set(dfx['cid'] + '_' + dfx['xcat'])
+            if any([x in found_tickers for x in ["AUD_FXXR", "AUD_IR"]]):
+                self.fail("NaN series not dropped")
+
+        with warnings.catch_warnings(record=True) as w:
+            dfx : pd.DataFrame = drop_nan_series(df=df_test, raise_warning=False)
+            self.assertEqual(len(w), 0)
+            found_tickers : Set = set(dfx['cid'] + '_' + dfx['xcat'])
+            if any([x in found_tickers for x in ["AUD_FXXR", "AUD_IR"]]):
+                self.fail("NaN series not dropped")      
+          
+        self.assertRaises(TypeError, drop_nan_series, df=1, raise_warning=True)
+        self.assertRaises(TypeError, drop_nan_series, df=df_test, raise_warning=1)
+        
+        df_test_q = df_test.dropna(how="any")
+        with warnings.catch_warnings(record=True) as w:
+            dfx : pd.DataFrame = drop_nan_series(df=df_test_q, raise_warning=True)
+            dfu : pd.DataFrame = drop_nan_series(df=df_test_q, raise_warning=False)
+            self.assertEqual(len(w), 0)
+            self.assertTrue(dfx.equals(df_test_q))
+            self.assertTrue(dfu.equals(df_test_q))
+            
+        df_test : pd.DataFrame = df_orig.copy()
+        bcids : List[str] = ["AUD", "USD", "GBP",]
+        bxcats : List[str] = ["FXXR", "IR", "EQXR",]
+        df_test.loc[(df_test["cid"].isin(bcids)) & (df_test["xcat"].isin(bxcats)), "value"] = pd.NA
+        with warnings.catch_warnings(record=True) as w:
+            dfx : pd.DataFrame = drop_nan_series(df=df_test, raise_warning=True)
+            self.assertEqual(len(w), 9)
+            for ww in w:
+                self.assertTrue(issubclass(ww.category, UserWarning))
+                
+            found_tickers : Set = set(dfx['cid'] + '_' + dfx['xcat'])
+            if any([x in found_tickers for x in [f"{cid}_{xcat}" for cid in bcids for xcat in bxcats]]):
+                self.fail("NaN series not dropped")
+
+            dfu : pd.DataFrame = drop_nan_series(df=df_test, raise_warning=False)
+            self.assertEqual(len(w), 9)
+
+
+
+####################################################################################################
+####################################################################################################
 
 class TestJPMaQSAPIConfigObject(unittest.TestCase):
 

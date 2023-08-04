@@ -1,16 +1,24 @@
-.. figure:: ../_static/MACROSYNERGY_Logo_Primary.png
-
-signal
-======
+macrosynergy.signal package
+===========================
 
 Submodules
 ----------
 
-.. toctree::
-   :maxdepth: 4
+macrosynergy.signal.signal\_return module
+-----------------------------------------
 
-   macrosynergy.signal.signal_return
-   macrosynergy.signal.target_positions
+.. automodule:: macrosynergy.signal.signal_return
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+macrosynergy.signal.target\_positions module
+--------------------------------------------
+
+.. automodule:: macrosynergy.signal.target_positions
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 Module contents
 ---------------
@@ -19,4 +27,3 @@ Module contents
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members:

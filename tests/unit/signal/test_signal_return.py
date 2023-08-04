@@ -9,6 +9,7 @@ from scipy import stats
 import random
 import pandas as pd
 import numpy as np
+from typing import List, Dict
 
 
 class TestAll(unittest.TestCase):
@@ -18,8 +19,8 @@ class TestAll(unittest.TestCase):
         Create a standardised DataFrame defined over the three categories.
         """
 
-        self.__dict__['cids'] = ['AUD', 'CAD', 'GBP', 'NZD', 'USD']
-        self.__dict__['xcats'] = ['XR', 'CRY', 'GROWTH', 'INFL']
+        self.cids: List[str] = ['AUD', 'CAD', 'GBP', 'NZD', 'USD']
+        self.xcats: List[str] = ['XR', 'CRY', 'GROWTH', 'INFL']
 
         df_cids = pd.DataFrame(index=self.cids, columns=['earliest', 'latest',
                                                          'mean_add', 'sd_mult'])
@@ -44,12 +45,12 @@ class TestAll(unittest.TestCase):
         random.seed(2)
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-        self.__dict__['dfd'] = dfd
+        self.dfd: pd.DataFrame = dfd
 
         black = {'AUD': ['2000-01-01', '2003-12-31'],
                  'GBP': ['2018-01-01', '2100-01-01']}
 
-        self.__dict__['blacklist'] = black
+        self.blacklist: Dict[str, List[str]] = black 
 
         assert 'dfd' in vars(self).keys(), "Instantiation of DataFrame missing from " \
                                            "field dictionary."
@@ -68,7 +69,7 @@ class TestAll(unittest.TestCase):
                                         freq='D', blacklist=self.blacklist)
 
         signal = 'CRY'
-        srr = SignalReturnRelations(self.dfd, ret='XR', sig=signal,
+        srr: SignalReturnRelations = SignalReturnRelations(self.dfd, ret='XR', sig=signal,
                                     freq='D', blacklist=self.blacklist)
 
         # The signal will invariably be used as the explanatory variable and the return
@@ -81,25 +82,25 @@ class TestAll(unittest.TestCase):
         arbitrary_date_one = '2011-01-10'
         arbitrary_date_two = '2020-10-27'
 
-        test_aud = df_signal[df_signal['real_date'] == arbitrary_date_one]
+        test_aud: pd.Series = df_signal[df_signal['real_date'] == arbitrary_date_one]
         test_aud = test_aud[test_aud['cid'] == 'AUD']['value']
 
-        test_usd = df_signal[df_signal['real_date'] == arbitrary_date_two]
+        test_usd: pd.Series = df_signal[df_signal['real_date'] == arbitrary_date_two]
         test_usd = test_usd[test_usd['cid'] == 'USD']['value']
 
-        lagged_df = srr.df
-        aud_lagged = lagged_df.loc['AUD', signal]['2011-01-11']
-        condition = round(float(test_aud), 5) - round(aud_lagged, 5)
+        lagged_df: pd.DataFrame = srr.df
+        aud_lagged: float = lagged_df.loc['AUD', signal]['2011-01-11']
+        condition: float = round(test_aud.values[0], 5) - round(aud_lagged, 5)
         self.assertTrue(abs(condition) < 0.0001)
 
-        usd_lagged = lagged_df.loc['USD', signal]['2020-10-28']
-        condition = round(float(test_usd), 5) - round(usd_lagged, 5)
+        usd_lagged: float = lagged_df.loc['USD', signal]['2020-10-28']
+        condition: float = round(test_usd.values[0], 5) - round(usd_lagged, 5)
         self.assertTrue(condition < 0.0001)
 
         # In addition to the DataFrame returned by categories_df(), an instance of the
         # Class will hold two "tables" for each segmentation type.
         # Confirm the indices are the expected: cross-sections or years.
-        test_index = list(srr.df_cs.index)[3:]
+        test_index: List[str] = list(srr.df_cs.index)[3:]
         self.assertTrue(sorted(self.cids) == sorted(test_index))
 
     def test_constructor_multiple_sigs(self):
@@ -459,6 +460,120 @@ class TestAll(unittest.TestCase):
             self.assertTrue(ylim == min_value)
         else:
             self.assertTrue(ylim == 0.45)
+            
+    
+    def test_apply_slip(self):
+
+        self.dataframe_generator()
+
+        # pick 3 random cids
+        sel_xcats: List[str] = ["XR", "CRY"]
+        sel_cids: List[str] = ["AUD", "CAD", "GBP"]
+        sel_dates: pd.DatetimeIndex = pd.bdate_range(
+            start="2020-01-01", end="2020-02-01"
+        )
+
+        # reduce the dataframe to the selected cids and xcats
+        test_df: pd.DataFrame = self.dfd.copy()
+        test_df = test_df[
+            test_df["cid"].isin(sel_cids)
+            & test_df["xcat"].isin(sel_xcats)
+            & test_df["real_date"].isin(sel_dates)
+        ].reset_index(drop=True)
+
+        df: pd.DataFrame = test_df.copy()
+
+        # Test Case 1
+
+        # for every unique cid, xcat pair add a column "vx" which is just an integer 0→n ,
+        # where n is the number of unique dates for that cid, xcat pair
+        df["vx"] = (
+            df.groupby(["cid", "xcat"])["real_date"].rank(method="dense").astype(int)
+        )
+        test_slip: int = 5
+        # apply the slip method
+        print(int(min(df["vx"])))
+        out_df = SignalReturnRelations.apply_slip(
+            target_df=df,
+            slip=test_slip,
+            xcats=sel_xcats,
+            cids=sel_cids,
+            metrics=["value", "vx"],
+        )
+
+        # NOTE: casting df.vx to int as pandas casts it to float64
+        self.assertEqual(int(min(df["vx"])) + test_slip, int(min(out_df["vx"])))
+
+        for cid in sel_cids:
+            for xcat in sel_xcats:
+                inan_count = (
+                    df[(df["cid"] == cid) & (df["xcat"] == xcat)]["vx"].isna().sum()
+                )
+                onan_count = (
+                    out_df[(out_df["cid"] == cid) & (out_df["xcat"] == xcat)]["vx"]
+                    .isna()
+                    .sum()
+                )
+                assert inan_count == onan_count - test_slip
+
+        # Test Case 2 - slip is greater than the number of unique dates for a cid, xcat pair
+        
+        df : pd.DataFrame = test_df.copy()
+        df["vx"] = (
+            df.groupby(["cid", "xcat"])["real_date"].rank(method="dense").astype(int)
+        )
+        
+        test_slip = int(max(df["vx"])) + 1
+        
+        out_df = SignalReturnRelations.apply_slip(target_df=df, slip=test_slip,
+                                                xcats=sel_xcats, cids=sel_cids,
+                                                metrics=["value", "vx"])
+
+        self.assertTrue(out_df["vx"].isna().all())
+        self.assertTrue(out_df["value"].isna().all())
+        
+        out_df = SignalReturnRelations.apply_slip(target_df=df, slip=test_slip,
+                                                xcats=sel_xcats, cids=sel_cids,
+                                                metrics=["value"])
+        
+        self.assertTrue((df["vx"] == out_df["vx"]).all())
+        self.assertTrue(out_df["value"].isna().all())
+        
+        
+        # case 3 - slip is negative
+        df : pd.DataFrame = test_df.copy()
+        
+        with self.assertRaises(ValueError):
+            SignalReturnRelations.apply_slip(target_df=df, slip=-1,
+                                                xcats=sel_xcats, cids=sel_cids,
+                                                metrics=["value"])
+        
+        with self.assertRaises(ValueError):
+            SignalReturnRelations.apply_slip(target_df=df, slip=-1,
+                                                xcats=sel_xcats, cids=["ac_dc"],
+                                                metrics=["value"])
+        
+        # check that a value error is raised when cids and xcats are not in the dataframe
+        with self.assertWarns(UserWarning):
+            SignalReturnRelations.apply_slip(target_df=df, slip=2,
+                                                xcats=["metallica"], cids=["ac_dc"],
+                                                metrics=["value"])
+            
+        with self.assertWarns(UserWarning):
+            SignalReturnRelations.apply_slip(target_df=df, slip=2,
+                                                xcats=["metallica"], cids=sel_cids,
+                                                metrics=["value"])
+            
+        try:
+            rival_signals: List[str] = ['GROWTH', 'INFL']
+            primary_signal: str = 'CRY'
+            srr = SignalReturnRelations(self.dfd, ret="XR", sig=primary_signal,
+                            rival_sigs=rival_signals, sig_neg=False, freq="M",
+                            blacklist=self.blacklist, slip=100)
+        except:
+            self.fail("SignalReturnRelations init failed")
+
+
 
 
 if __name__ == "__main__":

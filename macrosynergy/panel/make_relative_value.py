@@ -1,9 +1,10 @@
 
 import numpy as np
 import pandas as pd
-from typing import List
+from typing import List, Set
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
+import warnings
 
 def _prepare_basket(df: pd.DataFrame, xcat: str, basket: List[str],
                     cids_avl: List[str], complete_cross: bool):
@@ -20,21 +21,25 @@ def _prepare_basket(df: pd.DataFrame, xcat: str, basket: List[str],
         sections, held in the basket, are available for that respective category.
     """
 
-    cids_used = sorted(set(basket) & set(cids_avl))
+    cids_used: List[str] = sorted(set(basket) & set(cids_avl))
     cids_miss = [b for b in basket if b not in cids_used]
 
     # Not able to be greater than because of assertion on line 126. If the basket
     # references a cross-section not defined in the DataFrame, an error will be thrown.
     condition = len(cids_used) < len(basket)
     if condition and complete_cross:
-        cids_used.clear()
-        print(f"The category, {xcat}, is missing {cids_miss} which are included "
+        cids_used = []
+        err_str: str = (f"The category, {xcat}, is missing {cids_miss} which are included "
               f"in the basket {basket}. Therefore, the category will be excluded "
               f"from the returned DataFrame.")
+        print(err_str)
+        warnings.warn(err_str, UserWarning)
 
     elif condition:
-        print(f"The category, {xcat}, is missing {cids_miss} from the requested "
+        err_str: str = (f"The category, {xcat}, is missing {cids_miss} from the requested "
               f"basket. The new basket will be {cids_used}.")
+        print(err_str)
+        warnings.warn(err_str, UserWarning)
 
     # Reduce the DataFrame to the specified basket given the available cross-sections.
     dfb = df[df['cid'].isin(cids_used)]
@@ -121,8 +126,15 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
     # Intersect parameter set to False. Therefore, cross-sections across the categories
     # can vary.
+    all_cids : List[str] = []
+    for cvar in [cids, basket]:
+        if cvar is not None:
+            all_cids.extend(cvar)
+    all_cids = list(set(all_cids))
+    if len(all_cids) < 1:
+        all_cids = None
     dfx = reduce_df(
-        df, xcats, cids, start, end, blacklist, out_all=False
+        df, xcats, all_cids, start, end, blacklist, out_all=False
     )
 
     if cids is None:
@@ -131,7 +143,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
     if basket is not None:
         # Basket must be a subset of the available cross-sections.
-        miss = set(basket) - set(cids)
+        miss : Set = set(basket) - set(df['cid'])
         error_basket = f"The basket elements {miss} are not specified or " \
                        f"are not available."
         assert len(miss) == 0, error_basket
@@ -165,7 +177,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
             # Mean of (available) cross-sections at each point in time. If all
             # cross-sections defined in the "basket" data structure are not available for
             # a specific date, compute the mean over the available subset.
-            bm = dfb.groupby(by='real_date').mean()
+            bm = dfb.groupby(by='real_date').mean(numeric_only=True)
         elif len(basket) == 1:
             # Relative value is mapped against a single cross-section.
             bm = dfb.set_index('real_date')['value']

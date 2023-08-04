@@ -5,14 +5,15 @@ from macrosynergy.management.shape_dfs import reduce_df
 import unittest
 import numpy as np
 import pandas as pd
+from typing import List, Dict, Tuple, Union
 
 
 class TestAll(unittest.TestCase):
 
     def dataframe_construction(self):
 
-        self.__dict__['cids'] = ['AUD', 'CAD', 'GBP', 'NZD', 'USD', 'EUR']
-        self.__dict__['xcats'] = ['EQXR', 'CRY', 'GROWTH', 'INFL', 'DUXR']
+        self.cids : List[str] = ['AUD', 'CAD', 'GBP', 'NZD', 'USD', 'EUR']
+        self.xcats : List[str] = ['EQXR', 'CRY', 'GROWTH', 'INFL', 'DUXR']
 
         df_cids = pd.DataFrame(index=self.cids, columns=['earliest', 'latest', 'mean_add',
                                                     'sd_mult'])
@@ -35,11 +36,11 @@ class TestAll(unittest.TestCase):
 
         black = {'AUD': ['2000-01-01', '2003-12-31'],
                  'GBP': ['2018-01-01', '2100-01-01']}
-        self.__dict__['blacklist'] = black
+        self.blacklist : Dict[str, List[str]] = black
 
         # Standard df for tests.
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-        self.__dict__['dfd'] = dfd
+        self.dfd : pd.DataFrame = reduce_df(dfd, blacklist=self.blacklist)
 
     def test_constructor(self):
         # Test NaivePnL's constructor and the instantiation of the respective fields.
@@ -364,6 +365,42 @@ class TestAll(unittest.TestCase):
         # computed using the functions above. Therefore, if the functionality is correct
         # above, the plotting methods do not explicitly need to be tested in the Unit
         # Test as a visual assessment will be sufficient.
+        
+        
+        # Another test run with vol_scale=None
+        
+
+        self.dataframe_construction()
+
+        ret = 'EQXR'
+        sigs = ['CRY', 'GROWTH', 'INFL']
+        pnl = NaivePnL(self.dfd, ret=ret, sigs=sigs, cids=self.cids,
+                       start='2000-01-01', blacklist=self.blacklist,
+                       bms=["EUR_DUXR", "USD_DUXR"]
+                       )
+
+        pnl.make_pnl(sig='GROWTH', sig_op='zn_score_pan', rebal_freq='daily',
+                     vol_scale=None, rebal_slip=0, pnl_name='PNL_GROWTH',
+                     min_obs=252, iis=True, sequential=True, neutral='zero',
+                     thresh=None)
+
+        pnl.make_long_pnl(vol_scale=None, label="Unit_Long_EQXR")
+
+        # same conditions as vol_scale=0 should apply.
+        long_equity = pnl.df[pnl.df['xcat'] == "Unit_Long_EQXR"]
+        self.assertTrue(list(long_equity['cid'].unique()) == ["ALL"])
+
+        df = self.dfd
+        return_df = df[df['xcat'] == "EQXR"]
+        random_date = "2016-01-19"
+        return_dfw = return_df.pivot(index='real_date', columns='cid',
+                                     values='value')
+        return_calc = sum(return_dfw.loc[random_date, :])
+        long_equity_series = long_equity.pivot(index='real_date', columns='cid',
+                                               values='value')
+
+        condition = return_calc - float(long_equity_series.loc[random_date])
+        self.assertTrue(abs(condition) < 0.0001)
 
 
 if __name__ == '__main__':
