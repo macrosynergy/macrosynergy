@@ -5,6 +5,7 @@ from collections.abc import Callable, Iterable
 from functools import wraps
 from types import ModuleType
 from typing import Any, Callable, Dict, List, Tuple, Union
+from typing import get_args, get_origin
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -15,6 +16,7 @@ from macrosynergy.management import reduce_df, reduce_df_by_ticker
 from macrosynergy.management.utils import standardise_dataframe
 
 logger = logging.getLogger(__name__)
+
 
 
 def argvalidation(func: Callable) -> Callable:
@@ -30,7 +32,15 @@ def argvalidation(func: Callable) -> Callable:
             if arg_name in func_params:
                 arg_type: Any = func_params[arg_name].annotation
                 if arg_type is not inspect._empty:
-                    if not isinstance(arg_value, arg_type.__origin__):
+                    if get_origin(arg_type) == Union:
+                        union_args = get_args(arg_type)
+                        if type(None) in union_args and arg_value is None:
+                            continue
+                        if not any(isinstance(arg_value, t) for t in union_args):
+                            raise TypeError(
+                                f"Argument `{arg_name}` must be of type `{arg_type}`."
+                            )
+                    elif not isinstance(arg_value, arg_type):
                         raise TypeError(
                             f"Argument `{arg_name}` must be of type `{arg_type}`."
                         )
@@ -47,7 +57,6 @@ def argvalidation(func: Callable) -> Callable:
         return return_value
 
     return wrapper
-
 
 def argcopy(func: Callable) -> Callable:
     @wraps(func)

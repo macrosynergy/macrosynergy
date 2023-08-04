@@ -11,9 +11,7 @@ import yaml
 import json
 from typing import Any, List, Dict, Optional, Callable, Union, Set
 import requests, requests.compat
-import itertools
-import functools
-
+import warnings
 
 ##############################
 #   Helpful Functions
@@ -230,6 +228,38 @@ def standardise_dataframe(df: pd.DataFrame, verbose: bool = False) -> pd.DataFra
     return df
 
 
+def drop_nan_series(df: pd.DataFrame, raise_warning: bool = False) -> pd.DataFrame:
+    """
+    Drops any series that are entirely NaNs.
+    Raises a user warning if any series are dropped.
+    
+    :param <pd.DataFrame> df: The dataframe to be cleaned.
+    :param <bool> raise_warning: Whether to raise a warning if any series are dropped.
+    """
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Error: The input must be a pandas DataFrame.")
+    elif not set(df.columns).issuperset(set(["cid", "xcat", "value"])):
+        raise ValueError("Error: The input DataFrame must have columns 'cid', 'xcat', 'value'.")
+    elif not df["value"].isna().any():
+        return df
+
+    if not isinstance(raise_warning, bool):
+        raise TypeError("Error: The raise_warning argument must be a boolean.")
+    
+    df_orig : pd.DataFrame = df.copy()
+    for cd, xc in df_orig.groupby(["cid", "xcat"]).groups:
+        sel_series : pd.Series = df_orig[(df_orig["cid"] == cd) & (df_orig["xcat"] == xc)]["value"]
+        if sel_series.isna().all():
+            if raise_warning:
+                warnings.warn(message=f"The series {cd}_{xc} is populated "
+                                "with NaNs only, and will be dropped.",
+                                category=UserWarning)
+            df = df[~((df["cid"] == cd) & (df["xcat"] == xc))]
+
+    return df.reset_index(drop=True)
+
+
+
 def wide_to_long(
     df: pd.DataFrame,
     wide_var: str = "cid",
@@ -297,17 +327,17 @@ class Config(object):
             None or "env", the class will attempt to load the config
             file from the following environment variables:
             For OAuth authentication:
-                - JPMAQS_API_CLIENT_ID : your_client_id
-                - JPMAQS_API_CLIENT_SECRET : your_client_secret
+                - DQ_CLIENT_ID : your_client_id
+                - DQ_CLIENT_SECRET : your_client_secret
 
             For certificate authentication:
-                - JPMAQS_API_CRT : path_to_crt_file
-                - JPMAQS_API_KEY : path_to_key_file
-                - JPMAQS_API_USERNAME : your_username
-                - JPMAQS_API_PASSWORD : your_password
+                - DQ_CRT : path_to_crt_file
+                - DQ_KEY : path_to_key_file
+                - DQ_USERNAME : your_username
+                - DQ_PASSWORD : your_password
 
             For proxy settings:
-                - JPMAQS_API_PROXY : proxy_json_string
+                - DQ_PROXY : proxy_json_string
 
                 (See https://requests.readthedocs.io/en/master/user/advanced/#proxies)
         """
@@ -333,7 +363,7 @@ class Config(object):
         if isinstance(config_path, str):
             if config_path == "env":
                 for var in loaded_vars.keys():
-                    loaded_vars[var] = os.environ.get(f"JPMAQS_API_{var.upper()}", None)
+                    loaded_vars[var] = os.environ.get(f"DQ_{var.upper()}", None)
 
             else:
                 config_dict: Optional[dict] = None
@@ -525,7 +555,7 @@ class Config(object):
             )
 
         if export_file is None:
-            export_file = f"./jpmaqs_api_credentials_({datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}).{format}"
+            export_file = f"./jpmaqs_credentials_({datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}).{format}"
 
         output_dict: Dict[str, dict] = {}
         credentials: Dict[str, dict] = self.credentials(mask=mask)
@@ -563,7 +593,12 @@ class Config(object):
         return export_file
 
     def __repr__(self):
-        return f"JPMaQS API Config Object, methods : {list(self._credentials.keys())}"
+        try:
+            return (
+                f"JPMaQS API Config Object, methods : {list(self._credentials.keys())}"
+            )
+        except:
+            return "JPMaQS API Config Object"
 
     def __str__(self):
         creds_str: str
