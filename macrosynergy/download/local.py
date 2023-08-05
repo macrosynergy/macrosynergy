@@ -13,6 +13,7 @@ import concurrent.futures
 import time
 import itertools
 import datetime
+import random
 from macrosynergy.download.jpmaqs import JPMaQSDownload
 from macrosynergy.download.dataquery import (
     DataQueryInterface,
@@ -693,36 +694,71 @@ class DownloadTimeseries(DataQueryInterface):
         )
 
 
-# import pandas as pd
-# import time
-# from typing import List
-# from macrosynergy.download.local import LocalCache
-# LOCAL_CACHE="~/Macrosynergy/Macrosynergy - Documents/SharedData/JPMaQSTickers"
+def create_store(store_path: str, client_id: str, client_secret: str) -> None:
+    DownloadTimeseries(
+        store_path=store_path,
+        client_id=client_id,
+        client_secret=client_secret,
+    ).download_data(
+        show_progress=True,
+    )
+    total_start_time: float = time.time()
 
-# start_time: float = time.time()
-# lc: LocalCache = LocalCache(local_path=LOCAL_CACHE)
-# tickers: List[str] = lc.get_catalogue()[:1000]
-# df: pd.DataFrame = lc.download(tickers=tickers, start_date="2023-01-01", show_progress=True)
+    lc: LocalCache = LocalCache(local_path="./JPMaQSTickers")
+    # get 100 random tickers
+    start_time: float = time.time()
+    catalogue: List[str] = lc.get_catalogue()
 
-# print(df.head())
-# print(df.info())
-# print(f"Time taken: {time.time() - start_time :.2f} seconds")
+    print(f"Time taken: {(time.time() - start_time) * 1000 :.2f} milliseconds")
 
-
-if __name__ == "__main__":
-
-    import time
+    tickers: List[str] = random.sample(catalogue, 100)
 
     start_time: float = time.time()
+    df: pd.DataFrame = lc.download(tickers=tickers, start_date="1990-01-01")
 
-    lc: LocalCache = LocalCache(
-        local_path=r"~\Macrosynergy\Macrosynergy - Documents\SharedData\JPMaQSTickers"
-    )
-    tickers: List[str] = lc.get_catalogue()[:10]
-    df: pd.DataFrame = lc.download(tickers=tickers, start_date="2023-01-01")
+    print(f"Time taken: {(time.time() - start_time) * 1000 :.2f} milliseconds")
 
     print(df.head())
     print(df.info())
 
-    print(f"Time taken: {time.time() - start_time :.2f} seconds")
+    print(f"Total time taken: {(time.time() - total_start_time) / 60 :.2f} minutes")
 
+
+if __name__ == "__main__":
+    import argparse
+
+    client_id: str = os.getenv("DQ_CLIENT_ID")
+    client_secret: str = os.getenv("DQ_CLIENT_SECRET")
+
+    store_path: str = "./JPMaQSTickers"
+
+    parser = argparse.ArgumentParser(
+        description="Download JPMaQS data from DataQuery and store it locally."
+    )
+
+    parser.add_argument(
+        "--client_id",
+        type=str,
+        default=client_id,
+        help="Client ID for DataQuery API.",
+    )
+    parser.add_argument(
+        "--client_secret",
+        type=str,
+        default=client_secret,
+        help="Client Secret for DataQuery API.",
+    )
+    parser.add_argument(
+        "--store_path",
+        type=str,
+        default=store_path,
+        help="Path to store the downloaded data.",
+    )
+
+    args = parser.parse_args()
+
+    create_store(
+        store_path=args.store_path,
+        client_id=args.client_id,
+        client_secret=args.client_secret,
+    )
