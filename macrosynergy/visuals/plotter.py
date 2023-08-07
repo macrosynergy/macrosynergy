@@ -110,7 +110,7 @@ def argvalidation(func: Callable[..., Any]) -> Callable[..., Any]:
             return f"{', '.join([f'`{t}`' for t in expected_types[:-1]])}, or `{expected_types[-1]}`"
 
     @wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
+    def validation_wrapper(*args: Any, **kwargs: Any) -> Any:
         func_sig: inspect.Signature = inspect.signature(func)
         func_params: Dict[str, inspect.Parameter] = func_sig.parameters
         func_annotations: Dict[str, Any] = func_sig.return_annotation
@@ -147,12 +147,12 @@ def argvalidation(func: Callable[..., Any]) -> Callable[..., Any]:
 
         return return_value
 
-    return wrapper
+    return validation_wrapper
 
 
 def argcopy(func: Callable) -> Callable:
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def copy_wrapper(*args, **kwargs):
         copy_types = (
             list,
             dict,
@@ -179,7 +179,7 @@ def argcopy(func: Callable) -> Callable:
 
         return func(*new_args, **new_kwargs)
 
-    return wrapper
+    return copy_wrapper
 
 
 class PlotterMetaClass(type):
