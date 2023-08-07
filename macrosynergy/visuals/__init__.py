@@ -1,5 +1,5 @@
-from .plotter import Plotter
-from .lineplot import LinePlot
 from .facetplot import FacetPlot
+from .lineplot import LinePlot
+from .plotter import Plotter
 
-__all__ = ["Plotter", "argcopy", "argvalidation", "LinePlot", "FacetPlot"]
+__all__ = ["Plotter", "LinePlot", "FacetPlot"]

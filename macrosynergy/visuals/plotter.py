@@ -1,27 +1,15 @@
 import inspect
+import itertools
 import logging
 import warnings
 from functools import wraps
-import itertools
 from types import ModuleType
-from typing import (
-    Callable,
-    Dict,
-    Any,
-    Union,
-    Tuple,
-    List,
-    Dict,
-    Optional,
-    Type,
-    get_origin,
-    get_args,
-)
+from typing import (Any, Callable, Dict, List, Optional, Tuple, Type, Union,
+                    get_args, get_origin)
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 
 from macrosynergy.management import reduce_df, reduce_df_by_ticker
 from macrosynergy.management.utils import standardise_dataframe
@@ -195,6 +183,13 @@ def argcopy(func: Callable) -> Callable:
 
 
 class PlotterMetaClass(type):
+    """
+    Metaclass for the Plotter class. The purpose of this metaclass is to
+    wrap all methods of the Plotter class with the `argvalidation` and
+    `argcopy` decorators, so that all methods of the Plotter class are
+    automatically validated and copied.
+    """
+
     def __init__(cls, name, bases, dct: Dict[str, Any]):
         super().__init__(name, bases, dct)
         for attr_name, attr_value in dct.items():
@@ -301,10 +296,8 @@ class Plotter(metaclass=PlotterMetaClass):
         if backend.startswith("m"):
             self.backend = plt
             self.backend.style.use("seaborn-v0_8-darkgrid")
-        elif backend.startswith("s"):
-            self.backend = sns
-            self.backend.set_style("darkgrid")
-
+        elif ... :
+            ...
         else:
             raise NotImplementedError(f"Backend `{backend}` is not supported.")
 

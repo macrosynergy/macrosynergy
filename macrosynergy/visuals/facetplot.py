@@ -6,20 +6,20 @@ one can easily add any number of subplots, even the FacetPlot itself:
 effectively allowing for a recursive facet plot.
 """
 
-import pandas as pd
-import numpy as np
-from typing import List, Dict, Any, Union, Tuple, Optional, Union
-from types import ModuleType
+import io
+import logging
+import os
+import pickle
+import sys
 from collections.abc import Callable, Iterable
+from types import ModuleType
+from typing import Any, Dict, List, Optional, Tuple, Union
+
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from matplotlib.gridspec import GridSpec
-import io
-import pickle
-import seaborn as sns
-import logging
-
-import sys, os
 
 sys.path.append(os.path.abspath("."))
 
@@ -478,6 +478,7 @@ class FacetPlot(Plotter):
             curr_df: pd.DataFrame = curr_df.reindex(sorted(curr_df.columns), axis=1)
 
         return self._cart_plot(
+            plot_func=plt.plot,
             df_wide=curr_df,
             grid_dim=grid_dim,
             title=title,
@@ -528,10 +529,24 @@ if __name__ == "__main__":
     # FacetPlot(df).lineplot()
     import time
 
-    start_time: float = time.time()
+    sdkf: float = time.time()
 
     with FacetPlot(df) as fp:
-        fp.lineplot(ncols=3, facet_titles=[1], show=False, return_figure=True)
-        fp.lineplot(cid_xcat_grid=True, show=False, return_figure=True)
+        print(f"Initalization time: {(time.time() - sdkf) * 1000} ms")
+        start_time: float = time.time()
+        
+        fp.lineplot(ncols=3, facet_titles=[], show=False)
+        
+        print(f"Time taken: {(time.time() - start_time) * 1000} ms")
+        start_time: float = time.time()
+        
+        fp.lineplot(cid_xcat_grid=True, show=False)
+        
+        print(f"Time taken: {(time.time() - start_time) * 1000} ms")
+        start_time: float = time.time()
+        
+        fp.lineplot(attempt_square=True, show=False)
+        
+        print(f"Time taken: {(time.time() - start_time) * 1000} ms")
 
-    print(f"Time taken: {(time.time() - start_time) * 1000} ms")
+    print(f"Total taken: {(time.time() - sdkf) * 1000} ms")
