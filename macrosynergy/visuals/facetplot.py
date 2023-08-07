@@ -409,7 +409,7 @@ class FacetPlot(Plotter):
             metrics: Optional[List[str]] = metrics if metrics else None
 
             self.__init__(
-                df=df,
+                df=df if df is not None else self.df,
                 cids=cids,
                 xcats=xcats,
                 metrics=metrics,
@@ -517,8 +517,14 @@ if __name__ == "__main__":
     # from macrosynergy.visuals import FacetPlot
     from macrosynergy.management.simulate_quantamental_data import make_test_df
 
-    cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
-    xcats: List[str] = ["FXXR", "EQXR", "RIR", "IR", "REER"]
+    cids: List[str] = ["USD","EUR","GBP","AUD","CAD",
+                       "JPY","CHF","NZD","SEK","NOK","DKK","INR",
+    ]
+    xcats: List[str] = ["FXXR","EQXR","RIR","IR","REER",
+                        "CPI","PPI","M2","M1","M0","FXVOL","FX",
+    ]
+    sel_cids: List[str] = ["USD", "EUR", "GBP"]
+    sel_xcats: List[str] = ["FXXR", "EQXR", "RIR", "IR"]
 
     df: pd.DataFrame = make_test_df(
         cids=cids,
@@ -529,24 +535,45 @@ if __name__ == "__main__":
     # FacetPlot(df).lineplot()
     import time
 
+    print("From same object:")
     sdkf: float = time.time()
 
-    with FacetPlot(df) as fp:
+    with FacetPlot(df, cids=sel_cids, xcats=sel_xcats) as fp:
         print(f"Initalization time: {(time.time() - sdkf) * 1000} ms")
         start_time: float = time.time()
-        
+
         fp.lineplot(ncols=3, facet_titles=[], show=False)
-        
+
         print(f"Time taken: {(time.time() - start_time) * 1000} ms")
         start_time: float = time.time()
-        
+
         fp.lineplot(cid_xcat_grid=True, show=False)
-        
+
         print(f"Time taken: {(time.time() - start_time) * 1000} ms")
         start_time: float = time.time()
-        
+
         fp.lineplot(attempt_square=True, show=False)
-        
+
         print(f"Time taken: {(time.time() - start_time) * 1000} ms")
 
     print(f"Total taken: {(time.time() - sdkf) * 1000} ms")
+
+    print("From new object:")
+    total_time: float = time.time()
+    sdkf: float = time.time()
+    FacetPlot(df, cids=sel_cids, xcats=sel_xcats).lineplot(
+        ncols=3, facet_titles=[], show=False
+    )
+    print(f"Time taken: {(time.time() - sdkf) * 1000} ms")
+    sdkf: float = time.time()
+    FacetPlot(df).lineplot(
+        cid_xcat_grid=True, show=False, cids=sel_cids, xcats=sel_xcats
+    )
+    print(f"Time taken: {(time.time() - sdkf) * 1000} ms")
+    sdkf: float = time.time()
+    FacetPlot(df).lineplot(
+        attempt_square=True, show=False, cids=sel_cids, xcats=sel_xcats
+    )
+    print(f"Time taken: {(time.time() - sdkf) * 1000} ms")
+
+    print(f"Total taken: {(time.time() - total_time) * 1000} ms")
