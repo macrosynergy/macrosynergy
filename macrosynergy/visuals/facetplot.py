@@ -23,7 +23,7 @@ import sys, os
 
 sys.path.append(os.path.abspath("."))
 
-from macrosynergy.visuals.plotter import Plotter, argcopy, argvalidation
+from macrosynergy.visuals.plotter import Plotter
 
 
 def _get_grid_dim(
@@ -69,15 +69,15 @@ class FacetPlot(Plotter):
 
     def __init__(
         self,
-        df: pd.DataFrame = None,
-        cids: List[str] = None,
-        xcats: List[str] = None,
-        metrics: List[str] = None,
+        df: Optional[pd.DataFrame] = None,
+        cids: Optional[List[str]] = None,
+        xcats: Optional[List[str]] = None,
+        metrics: Optional[List[str]] = None,
         intersect: bool = False,
-        tickers: List[str] = None,
-        blacklist: Dict[str, List[str]] = None,
-        start: str = None,
-        end: str = None,
+        tickers: Optional[List[str]] = None,
+        blacklist: Optional[Dict[str, List[str]]] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
         *args,
         **kwargs,
     ):
@@ -269,8 +269,16 @@ class FacetPlot(Plotter):
         if plot_func_args is None:
             plot_func_args: List = []
 
-        # if facet_titles is None:
-        #     facet_titles: List[str] = df_wide.columns.tolist()
+        if facet_titles is None:
+            facet_titles: List[str] = df_wide.columns.tolist()
+        else:
+            # if empty, set to None
+            if len(facet_titles) == 0:
+                facet_titles: Optional[List[str]] = None
+            elif len(facet_titles) != df_wide.shape[1]:
+                raise ValueError(
+                    f"Number of facet titles ({len(facet_titles)}) must be equal to the number of columns in `df_wide` ({df_wide.shape[1]})."
+                )
 
         mulx: int = int(len(x_values) > 1)
         # if the index is the xval, then cast it to a pd.DatetimeIndex
@@ -340,8 +348,6 @@ class FacetPlot(Plotter):
         if return_figure:
             return fig
 
-    @argcopy
-    @argvalidation
     def lineplot(
         self,
         # dataframe arguments
@@ -355,9 +361,9 @@ class FacetPlot(Plotter):
         start: Optional[str] = None,
         end: Optional[str] = None,
         # plot arguments
-        cid_xcat_grid: bool = True,
         attempt_square: bool = True,
         ncols: int = 3,
+        cid_xcat_grid: bool = False,
         grid_dim: Optional[Tuple[int, int]] = None,
         # figsize: Tuple[float, float] = (16, 9),
         # title arguments
@@ -375,7 +381,7 @@ class FacetPlot(Plotter):
         y_axis_label: Optional[str] = None,
         axis_fontsize: int = 12,
         # subplot arguments
-        facet_size: Tuple[float, float] = (4.0, 3.0),
+        facet_size: Tuple[float, float] = (2.0, 2.0),
         facet_titles: Optional[List[str]] = None,
         facet_title_fontsize: int = 12,
         facet_title_xadjust: float = 0.5,
@@ -420,13 +426,13 @@ class FacetPlot(Plotter):
         if cid_xcat_grid:
             grid_dim: Tuple[int, int] = (len(self.cids), len(self.xcats))
         elif grid_dim is None:
-            if attempt_square:
-                grid_dim: Tuple[int, int] = _get_grid_dim(num_tickers_to_plot)
-            elif ncols is not None:
+            if ncols is not None:
                 grid_dim: Tuple[int, int] = (
                     int(np.ceil(num_tickers_to_plot / ncols)),
                     ncols,
                 )
+            elif attempt_square:
+                grid_dim: Tuple[int, int] = _get_grid_dim(num_tickers_to_plot)
             else:
                 raise ValueError(
                     "Unable to infer grid dimensions. Please provide either "
@@ -446,28 +452,33 @@ class FacetPlot(Plotter):
         inval_cid_xcat_combos: List[str] = [
             combo for combo in cid_xcat_combos if combo not in existing_tickers
         ]
+        # copy the dataframe to preserve the object's state
+        curr_df: pd.DataFrame = self.df.copy()
 
         # artifically add invalid cid_xcat_combos with nan values to the dataframe
         if len(inval_cid_xcat_combos) > 0:
             inval_df: pd.DataFrame = pd.DataFrame(
                 np.nan,
-                index=self.df.index,
+                index=curr_df.index,
                 columns=inval_cid_xcat_combos,
             )
-            self.df: pd.DataFrame = pd.concat([self.df, inval_df], axis=1)
+            curr_df: pd.DataFrame = pd.concat([curr_df, inval_df], axis=1)
 
-        self.df["ticker"]: str = self.df["cid"] + "_" + self.df["xcat"]
+        curr_df["ticker"]: str = curr_df["cid"] + "_" + curr_df["xcat"]
         # remove cid and xcat columns
-        self.df: pd.DataFrame = self.df.drop(["cid", "xcat"], axis=1)
+        curr_df: pd.DataFrame = curr_df.drop(["cid", "xcat"], axis=1)
 
         # pivot the dataframe
-        df_wide: pd.DataFrame = self.df.pivot_table(
+        curr_df: pd.DataFrame = curr_df.pivot_table(
             index="real_date", columns="ticker", values=metric
         )
+        curr_df.columns = curr_df.columns.droplevel(0)
 
-        # now plot the dataframe
+        if cid_xcat_grid:
+            curr_df: pd.DataFrame = curr_df.reindex(sorted(curr_df.columns), axis=1)
+
         return self._cart_plot(
-            df_wide=df_wide,
+            df_wide=curr_df,
             grid_dim=grid_dim,
             title=title,
             title_fontsize=title_fontsize,
@@ -499,3 +510,28 @@ class FacetPlot(Plotter):
             *args,
             **kwargs,
         )
+
+
+if __name__ == "__main__":
+    # from macrosynergy.visuals import FacetPlot
+    from macrosynergy.management.simulate_quantamental_data import make_test_df
+
+    cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
+    xcats: List[str] = ["FXXR", "EQXR", "RIR", "IR", "REER"]
+
+    df: pd.DataFrame = make_test_df(
+        cids=cids,
+        xcats=xcats,
+        start_date="2000-01-01",
+    )
+
+    # FacetPlot(df).lineplot()
+    import time
+
+    start_time: float = time.time()
+
+    with FacetPlot(df) as fp:
+        fp.lineplot(ncols=3, facet_titles=[1], show=False, return_figure=True)
+        fp.lineplot(cid_xcat_grid=True, show=False, return_figure=True)
+
+    print(f"Time taken: {(time.time() - start_time) * 1000} ms")

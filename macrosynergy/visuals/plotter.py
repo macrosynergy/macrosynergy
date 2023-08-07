@@ -2,8 +2,21 @@ import inspect
 import logging
 import warnings
 from functools import wraps
+import itertools
 from types import ModuleType
-from typing import Any, Callable, Dict, List, Tuple, Union, get_args, get_origin
+from typing import (
+    Callable,
+    Dict,
+    Any,
+    Union,
+    Tuple,
+    List,
+    Dict,
+    Optional,
+    Type,
+    get_origin,
+    get_args,
+)
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -17,9 +30,99 @@ logger = logging.getLogger(__name__)
 NoneType = type(None)
 
 
-def argvalidation(func: Callable) -> Callable:
+def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
+    origin = get_origin(type_hint)
+    args = get_args(type_hint)
+
+    # handling lists
+    if origin in [list, List]:
+        if not isinstance(value, list):
+            return False
+        return all(isinstance(item, args[0]) for item in value)
+
+    # tuples
+    if origin in [tuple, Tuple]:
+        if not isinstance(value, tuple) or len(value) != len(args):
+            return False
+        return all(isinstance(item, expected) for item, expected in zip(value, args))
+
+    # dicts
+    if origin in [dict, Dict]:
+        if not isinstance(value, dict):
+            return False
+        key_type, value_type = args
+        return all(
+            isinstance(k, key_type) and isinstance(v, value_type)
+            for k, v in value.items()
+        )
+
+    # unions and optionals
+    if origin is Union:
+        for possible_type in args:
+            if get_origin(possible_type):  # is subscripted
+                if is_matching_subscripted_type(value, possible_type):
+                    return True
+            elif isinstance(value, possible_type):
+                return True
+        return False
+
+    return False
+
+
+def _get_expected(arg_type_hint: Type[Any]) -> List[str]:
+    """
+    Based on the type hint, return a list of strings that represent
+    the type hint - including any nested type hints.
+    """
+    origin = get_origin(arg_type_hint)
+    args = get_args(arg_type_hint)
+
+    # handling lists
+    if origin in [list, List]:
+        return [f"List[{_get_expected(args[0])[0]}]"]
+
+    # tuples
+    if origin in [tuple, Tuple]:
+        return [f"Tuple[{', '.join(_get_expected(arg) for arg in args)}]"]
+
+    # dicts
+    if origin in [dict, Dict]:
+        return [f"Dict[{', '.join(_get_expected(arg) for arg in args)}]"]
+
+    # unions and optionals
+    if origin in [Union, Optional]:
+        # get a flat list of all the expected types
+        expected_types: List[str] = []
+        for possible_type in args:
+            if get_origin(possible_type):
+                expected_types.extend(_get_expected(possible_type))
+            else:
+                expected_types.append(str(possible_type))
+        return expected_types
+
+    return [str(arg_type_hint)]
+
+
+def argvalidation(func: Callable[..., Any]) -> Callable[..., Any]:
+    def format_expected_type(expected_types: List[Any]) -> str:
+        # format the expected types to read nicely, and to remove 'typing.' from the string
+        if isinstance(expected_types, tuple):
+            expected_types = list(expected_types)
+        for i, et in enumerate(expected_types):
+            if str(et).startswith("typing."):
+                expected_types[i] = str(et).replace("typing.", "")
+            if et is NoneType:
+                expected_types[i] = "None"
+
+        if len(expected_types) == 1:
+            return f"`{expected_types[0]}`"
+        elif len(expected_types) == 2:
+            return f"`{expected_types[0]}` or `{expected_types[1]}`"
+        else:
+            return f"{', '.join([f'`{t}`' for t in expected_types[:-1]])}, or `{expected_types[-1]}`"
+
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
         func_sig: inspect.Signature = inspect.signature(func)
         func_params: Dict[str, inspect.Parameter] = func_sig.parameters
         func_annotations: Dict[str, Any] = func_sig.return_annotation
@@ -28,38 +131,21 @@ def argvalidation(func: Callable) -> Callable:
         # validate the arguments
         for arg_name, arg_value in func_args.items():
             if arg_name in func_params:
-                arg_type: Any = func_params[arg_name].annotation
+                arg_type: Type[Any] = func_params[arg_name].annotation
                 if arg_type is not inspect._empty:
                     origin = get_origin(arg_type)
-                    if origin is Union:
-                        union_args = get_args(arg_type)
-                        if arg_value is None and NoneType in union_args:
-                            continue
-                        if not any(
-                            isinstance(arg_value, t)
-                            for t in union_args
-                            if t is not NoneType
-                        ):
+                    if origin:  # Handling subscripted types
+                        if not is_matching_subscripted_type(arg_value, arg_type):
+                            exp_types: str = format_expected_type(get_args(arg_type))
                             raise TypeError(
-                                f"Argument `{arg_name}` must be of type `{arg_type}`."
+                                f"Argument `{arg_name}` must be of type {exp_types}, "
+                                f"not `{type(arg_value).__name__}` (with value `{arg_value}`)."
                             )
-                    elif origin is Tuple:
-                        tuple_args = get_args(arg_type)
-                        if (
-                            not isinstance(arg_value, tuple)
-                            or not len(arg_value) == len(tuple_args)
-                            or not all(
-                                isinstance(item, t)
-                                for item, t in zip(arg_value, tuple_args)
-                            )
-                        ):
-                            raise TypeError(
-                                f"Argument `{arg_name}` must be of type `{arg_type}`."
-                            )
-                    elif origin is None:  # For simple, non-generic types
+                    else:  # For simple, non-generic types
                         if not isinstance(arg_value, arg_type):
                             raise TypeError(
-                                f"Argument `{arg_name}` must be of type `{arg_type}`."
+                                f"Argument `{arg_name}` must be of type `{arg_type}`, "
+                                f"not `{type(arg_value).__name__}` (with value `{arg_value}`)."
                             )
 
         # validate the return value
@@ -108,7 +194,15 @@ def argcopy(func: Callable) -> Callable:
     return wrapper
 
 
-class Plotter(object):
+class PlotterMetaClass(type):
+    def __init__(cls, name, bases, dct: Dict[str, Any]):
+        super().__init__(name, bases, dct)
+        for attr_name, attr_value in dct.items():
+            if callable(attr_value):
+                setattr(cls, attr_name, argcopy(argvalidation(attr_value)))
+
+
+class Plotter(metaclass=PlotterMetaClass):
     """
     Base class for a DataFrame Plotter.
     It provides a shared interface for the plotter classes,
@@ -134,20 +228,18 @@ class Plotter(object):
         the default.
     """
 
-    @argvalidation
-    @argcopy
     def __init__(
         self,
         df: pd.DataFrame,
-        cids: List[str] = None,
-        xcats: List[str] = None,
-        metrics: List[str] = None,
-        intersect: bool = False,
-        tickers: List[str] = None,
-        blacklist: Dict[str, List[str]] = None,
-        start: str = None,
-        end: str = None,
-        backend: str = "matplotlib",
+        cids: Optional[List[str]] = None,
+        xcats: Optional[List[str]] = None,
+        metrics: Optional[List[str]] = None,
+        intersect: Optional[bool] = False,
+        tickers: Optional[List[str]] = None,
+        blacklist: Optional[Dict[str, List[str]]] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        backend: Optional[str] = "matplotlib",
     ):
         sdf: pd.DataFrame = df.copy()
         df_cols: List[str] = ["real_date", "cid", "xcat"]
