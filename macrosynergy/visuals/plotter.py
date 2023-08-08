@@ -4,8 +4,18 @@ import logging
 import warnings
 from functools import wraps
 from types import ModuleType
-from typing import (Any, Callable, Dict, List, Optional, Tuple, Type, Union,
-                    get_args, get_origin)
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+    get_args,
+    get_origin,
+)
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -188,6 +198,13 @@ class PlotterMetaClass(type):
     wrap all methods of the Plotter class with the `argvalidation` and
     `argcopy` decorators, so that all methods of the Plotter class are
     automatically validated and copied.
+    Meant to be used as a metaclass, i.e. use as follows:
+    ```python
+    ...
+    class MyCustomClass(metaclass=PlotterMetaClass):
+        def __init__(self, ...):
+        ...
+    ```
     """
 
     def __init__(cls, name, bases, dct: Dict[str, Any]):
@@ -199,11 +216,12 @@ class PlotterMetaClass(type):
 
 class Plotter(metaclass=PlotterMetaClass):
     """
-    Base class for a DataFrame Plotter.
-    It provides a shared interface for the plotter classes,
-    and some common functionality - currently just the filtering
+    Base class for a DataFrame Plotter. The inherited meta class automatically wraps all
+    methods of the Plotter class and any subclasses with the `argvalidation` and `argcopy`
+    decorators, so that all methods of the class are automatically validated and copied.
+    This class does not implement any plotting functionality, but provides a shared interface
+    for the plotter classes, and some common functionality - currently just the filtering
     of the DataFrame.
-
     Parameters
     :param <pd.DataFrame> df: A DataFrame with the following columns:
         'cid', 'xcat', 'real_date', and at least one metric from -
@@ -211,16 +229,19 @@ class Plotter(metaclass=PlotterMetaClass):
     :param <List[str]> cids: A list of cids to select from the DataFrame
         (self.df). If None, all cids are selected.
     :param <List[str]> xcats: A list of xcats to select from the DataFrame
-        (self.df). If None, all xcats are selected.F
-    :param <List[str]> metrics: A list of metrics to select from the DataFrame
+        (self.df). If None, all xcats are selected.
+    :param <List[str]> metrics: A list of metrics to select from the DataFrame 
         (self.df). If None, all metrics are selected.
-    :param <str> start_date: ISO-8601 formatted date. Select data from
+    :param <bool> intersect: if True only retains cids that are available for 
+        all xcats. Default is False.
+    :param <List[str]> tickers: A list of tickers to select from the DataFrame
+        (self.df). If None, all tickers are selected.
+    :param <str> start: ISO-8601 formatted date string. Select data from
         this date onwards. If None, all dates are selected.
-    :param <str> end_date: ISO-8601 formatted date. Select data up to
+    :param <str> end: ISO-8601 formatted date string. Select data up to
         and including this date. If None, all dates are selected.
     :param <str> backend: The plotting backend to use. Currently only
-        'matplotlib' and 'seaborn' are supported, with 'matplotlib' as
-        the default.
+        'matplotlib' is supported.
     """
 
     def __init__(
@@ -296,7 +317,7 @@ class Plotter(metaclass=PlotterMetaClass):
         if backend.startswith("m"):
             self.backend = plt
             self.backend.style.use("seaborn-v0_8-darkgrid")
-        elif ... :
+        elif ...:
             ...
         else:
             raise NotImplementedError(f"Backend `{backend}` is not supported.")
