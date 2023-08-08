@@ -21,21 +21,19 @@ The `macrosynergy.visuals` subpackage features the following functionality:
   - `.from_subplots()`: A method for copying and arranging a list of individual subplots (of any type) into a facet plot.
 
 - `LinePlot`: A class for a single line chart.
-
 - `ScatterPlot`: A class for a single scatter chart.
-
 - `BoxPlot`: A class for a single box plot.
-
-- `Heatmap`: A class for a single heatmap.
-
 - `BarPlot`: A class for a single bar chart.
+- `Heatmap`: A class for a single heatmap.
 
 ### User-facing functions:
 
-- `view.*` functions: A set of functions for quick preset methods to view data with commonly used, intuitive functions.
+- `view.*` functions: A set of preset methods to view data in commonly used contexts.
 
   - `timelines()`: A function for viewing time-series data. Uses `FacetPlot.lineplot()` and `LinePlot` internally.
   - `availability()`: A function for viewing data availability. Uses `Heatmap` internally.
   - `correlation()`: A function for viewing correlation matrices. Uses `Heatmap` internally.
+  - `metrics()`: A function for viewing metrics. Uses `Heatmap` internally.
+  - `ranges()`: A function for viewing ranges. Uses `BoxPlot` and `BarPlot` internally.
   - `distribution()`: A function for viewing distributions. Uses `FacetPlot.boxplot()` and `BoxPlot` internally.
   - `reg_scatter()`: A function for viewing scatter plots. Uses `FacetPlot.scatterplot()` and `ScatterPlot` internally.
