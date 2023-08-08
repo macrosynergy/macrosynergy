@@ -169,6 +169,7 @@ class FacetPlot(Plotter):
         use_x: Union[str, List[str]] = "index",
         grid_dim: Optional[Tuple[int, int]] = None,
         plot_func_args: Optional[List[Any]] = None,
+        compare_series: Optional[str] = None,
         # figsize: Tuple[float, float] = (16, 9),
         # title arguments
         title: Optional[str] = None,
@@ -258,7 +259,9 @@ class FacetPlot(Plotter):
             f"equal to the number of columns in `df_wide` ({df_wide.shape[1]})."
         )
 
-        assert num_plots >= df_wide.shape[1], inval_grid_dims
+        assert num_plots >= (
+            df_wide.shape[1] - (1 if compare_series is not None else 0)
+        ), inval_grid_dims
 
         figsize: Tuple[float, float] = (
             grid_dim[1] * facet_size[0],
@@ -290,6 +293,12 @@ class FacetPlot(Plotter):
                     f"Number of facet titles ({len(facet_titles)} provided) must be"
                     f"equal to the number of tickers ({df_wide.shape[1]} found)."
                 )
+        if compare_series is not None:
+            compare_series_values: pd.DataFrame = df_wide[
+                compare_series
+            ].values.tolist()
+
+            df_wide: pd.DataFrame = df_wide.drop(compare_series, axis=1)
 
         mulx: int = int(len(x_values) > 1)
         # if the index is the xval, then cast it to a pd.DatetimeIndex
@@ -303,6 +312,7 @@ class FacetPlot(Plotter):
                 *plot_func_args,
                 **kwargs,
             )
+
             if facet_titles is not None:
                 ax.set_title(
                     facet_titles[i],
@@ -323,6 +333,7 @@ class FacetPlot(Plotter):
 
             # fig.
 
+        fig.tight_layout()
         if legend:
             if legend_labels is None:
                 legend_labels = df_wide.columns.tolist()
@@ -339,19 +350,6 @@ class FacetPlot(Plotter):
                 bbox_to_anchor=legend_bbox_to_anchor,
                 frameon=legend_frame,
             )
-            legend_frame: matplotlib.patches.Rectangle = legend_obj.get_frame()
-            legend_size: Tuple[
-                float, float
-            ] = legend_obj.get_window_extent().transformed(
-                fig.dpi_scale_trans.inverted()
-            )
-
-            right_adj: float = (
-                legend_size.width if legend_loc == "lower right" else 0.0
-            )
-            fig.subplots_adjust(right=right_adj)
-
-        fig.tight_layout()
 
         if save_to_file is not None:
             fig.savefig(save_to_file, dpi=dpi)
@@ -374,6 +372,7 @@ class FacetPlot(Plotter):
         blacklist: Optional[Dict[str, List[str]]] = None,
         start: Optional[str] = None,
         end: Optional[str] = None,
+        compare_series: Optional[str] = None,
         # plot arguments
         attempt_square: bool = True,
         ncols: int = 3,
@@ -403,9 +402,9 @@ class FacetPlot(Plotter):
         # legend arguments
         legend: bool = True,
         legend_labels: Optional[List[str]] = None,
-        legend_loc: str = "lower right",
+        legend_loc: str = "center left",
         legend_ncol: int = 1,
-        legend_bbox_to_anchor: Optional[Tuple[float, float]] = None,
+        legend_bbox_to_anchor: Optional[Tuple[float, float]] = (1.0, 0.5),
         legend_frame: bool = True,
         # return args
         show: bool = True,
@@ -491,10 +490,22 @@ class FacetPlot(Plotter):
         if cid_xcat_grid:
             curr_df: pd.DataFrame = curr_df.reindex(sorted(curr_df.columns), axis=1)
 
+        if compare_series is not None:
+            # if it is "mean", then take a mean of all series, call it mean and pass it to the plotting function\
+            if compare_series == "mean":
+                curr_df[compare_series]: float = curr_df.mean(axis=1)
+
+            # verify that the compare_series exists in the dataframe
+            if compare_series not in curr_df.columns:
+                raise ValueError(
+                    f"Series {compare_series} used as `compare_series` does not exist in the dataframe."
+                )
+
         return self._cart_plot(
             plot_func=plt.plot,
             df_wide=curr_df,
             grid_dim=grid_dim,
+            compare_series=compare_series,
             title=title,
             title_fontsize=title_fontsize,
             title_xadjust=title_xadjust,
@@ -577,5 +588,6 @@ if __name__ == "__main__":
     with FacetPlot(df, cids=sel_cids, xcats=sel_xcats) as fp:
         fp.lineplot(
             ncols=3,
+            compare_series="mean",
             title="Test Title",
         )
