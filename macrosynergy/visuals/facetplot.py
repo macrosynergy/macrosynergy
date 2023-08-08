@@ -143,6 +143,7 @@ class FacetPlot(Plotter):
             ax.set_ylabel(plot.get_ylabel())
             ax.grid()
             ax.legend()
+
             ax.set_xlim(plot.get_xlim())
             ax.set_ylim(plot.get_ylim())
             ax.set_xticks(plot.get_xticks())
@@ -172,10 +173,10 @@ class FacetPlot(Plotter):
         # title arguments
         title: Optional[str] = None,
         title_fontsize: int = 16,
-        title_xadjust: float = 0.5,
-        title_yadjust: float = 1.05,
+        title_xadjust: Optional[float] = None,
+        title_yadjust: Optional[float] = None,
         # subplot axis arguments
-        subplot_grid: bool = True,
+        ax_grid: bool = True,
         ax_hline: bool = False,
         ax_hline_val: float = 0,
         ax_vline: bool = False,
@@ -188,11 +189,11 @@ class FacetPlot(Plotter):
         facet_titles: Optional[List[str]] = None,
         facet_title_fontsize: int = 12,
         facet_title_xadjust: float = 0.5,
-        facet_title_yadjust: float = 1.05,
+        facet_title_yadjust: float = 1.0,
         # legend arguments
         legend: bool = True,
         legend_labels: Optional[List[str]] = None,
-        legend_loc: str = "upper right",
+        legend_loc: str = "lower right",
         legend_ncol: int = 1,
         legend_bbox_to_anchor: Optional[Tuple[float, float]] = None,
         legend_frame: bool = True,
@@ -264,8 +265,17 @@ class FacetPlot(Plotter):
             grid_dim[0] * facet_size[1],
         )
 
-        fig = plt.figure(figsize=figsize, layout="tight")
+        fig = plt.figure(figsize=figsize)
         gs: GridSpec = GridSpec(*grid_dim, figure=fig)
+
+        # if title is not None:
+        fig.suptitle(
+            title,
+            fontsize=title_fontsize,
+            x=title_xadjust,
+            y=title_yadjust,
+        )
+
         if plot_func_args is None:
             plot_func_args: List = []
 
@@ -277,7 +287,8 @@ class FacetPlot(Plotter):
                 facet_titles: Optional[List[str]] = None
             elif len(facet_titles) != df_wide.shape[1]:
                 raise ValueError(
-                    f"Number of facet titles ({len(facet_titles)}) must be equal to the number of columns in `df_wide` ({df_wide.shape[1]})."
+                    f"Number of facet titles ({len(facet_titles)} provided) must be"
+                    f"equal to the number of tickers ({df_wide.shape[1]} found)."
                 )
 
         mulx: int = int(len(x_values) > 1)
@@ -299,7 +310,7 @@ class FacetPlot(Plotter):
                     x=facet_title_xadjust,
                     y=facet_title_yadjust,
                 )
-            if subplot_grid:
+            if ax_grid:
                 ax.grid(axis="both", linestyle="--", alpha=0.5)
             if ax_hline:
                 ax.axhline(ax_hline_val, color="black", linestyle="--")
@@ -310,13 +321,7 @@ class FacetPlot(Plotter):
             if y_axis_label is not None:
                 ax.set_ylabel(y_axis_label, fontsize=axis_fontsize)
 
-        if title is not None:
-            fig.suptitle(
-                title,
-                fontsize=title_fontsize,
-                x=title_xadjust,
-                y=title_yadjust,
-            )
+            # fig.
 
         if legend:
             if legend_labels is None:
@@ -327,17 +332,26 @@ class FacetPlot(Plotter):
                         for i in range(len(legend_labels))
                     ]
 
-            fig.legend(
+            legend_obj = fig.legend(
                 labels=legend_labels,
                 loc=legend_loc,
                 ncol=legend_ncol,
                 bbox_to_anchor=legend_bbox_to_anchor,
                 frameon=legend_frame,
             )
+            legend_frame: matplotlib.patches.Rectangle = legend_obj.get_frame()
+            legend_size: Tuple[
+                float, float
+            ] = legend_obj.get_window_extent().transformed(
+                fig.dpi_scale_trans.inverted()
+            )
+
+            right_adj: float = (
+                legend_size.width if legend_loc == "lower right" else 0.0
+            )
+            fig.subplots_adjust(right=right_adj)
 
         fig.tight_layout()
-
-        # plt.tight_layout()
 
         if save_to_file is not None:
             fig.savefig(save_to_file, dpi=dpi)
@@ -368,11 +382,11 @@ class FacetPlot(Plotter):
         # figsize: Tuple[float, float] = (16, 9),
         # title arguments
         title: Optional[str] = None,
-        title_fontsize: int = 16,
-        title_xadjust: float = 0.5,
-        title_yadjust: float = 1.05,
+        title_fontsize: int = 20,
+        title_xadjust: Optional[float] = None,
+        title_yadjust: Optional[float] = None,
         # subplot axis arguments
-        subplot_grid: bool = True,
+        ax_grid: bool = True,
         ax_hline: bool = False,
         ax_hline_val: float = 0.0,
         ax_vline: bool = False,
@@ -385,11 +399,11 @@ class FacetPlot(Plotter):
         facet_titles: Optional[List[str]] = None,
         facet_title_fontsize: int = 12,
         facet_title_xadjust: float = 0.5,
-        facet_title_yadjust: float = 1.05,
+        facet_title_yadjust: float = 1.0,
         # legend arguments
         legend: bool = True,
         legend_labels: Optional[List[str]] = None,
-        legend_loc: str = "upper right",
+        legend_loc: str = "lower right",
         legend_ncol: int = 1,
         legend_bbox_to_anchor: Optional[Tuple[float, float]] = None,
         legend_frame: bool = True,
@@ -485,7 +499,7 @@ class FacetPlot(Plotter):
             title_fontsize=title_fontsize,
             title_xadjust=title_xadjust,
             title_yadjust=title_yadjust,
-            subplot_grid=subplot_grid,
+            ax_grid=ax_grid,
             ax_hline=ax_hline,
             ax_hline_val=ax_hline_val,
             ax_vline=ax_vline,
@@ -517,11 +531,33 @@ if __name__ == "__main__":
     # from macrosynergy.visuals import FacetPlot
     from macrosynergy.management.simulate_quantamental_data import make_test_df
 
-    cids: List[str] = ["USD","EUR","GBP","AUD","CAD",
-                       "JPY","CHF","NZD","SEK","NOK","DKK","INR",
+    cids: List[str] = [
+        "USD",
+        "EUR",
+        "GBP",
+        "AUD",
+        "CAD",
+        "JPY",
+        "CHF",
+        "NZD",
+        "SEK",
+        "NOK",
+        "DKK",
+        "INR",
     ]
-    xcats: List[str] = ["FXXR","EQXR","RIR","IR","REER",
-                        "CPI","PPI","M2","M1","M0","FXVOL","FX",
+    xcats: List[str] = [
+        "FXXR",
+        "EQXR",
+        "RIR",
+        "IR",
+        "REER",
+        "CPI",
+        "PPI",
+        "M2",
+        "M1",
+        "M0",
+        "FXVOL",
+        "FX",
     ]
     sel_cids: List[str] = ["USD", "EUR", "GBP"]
     sel_xcats: List[str] = ["FXXR", "EQXR", "RIR", "IR"]
@@ -539,41 +575,7 @@ if __name__ == "__main__":
     sdkf: float = time.time()
 
     with FacetPlot(df, cids=sel_cids, xcats=sel_xcats) as fp:
-        print(f"Initalization time: {(time.time() - sdkf) * 1000} ms")
-        start_time: float = time.time()
-
-        fp.lineplot(ncols=3, facet_titles=[], show=False)
-
-        print(f"Time taken: {(time.time() - start_time) * 1000} ms")
-        start_time: float = time.time()
-
-        fp.lineplot(cid_xcat_grid=True, show=False)
-
-        print(f"Time taken: {(time.time() - start_time) * 1000} ms")
-        start_time: float = time.time()
-
-        fp.lineplot(attempt_square=True, show=False)
-
-        print(f"Time taken: {(time.time() - start_time) * 1000} ms")
-
-    print(f"Total taken: {(time.time() - sdkf) * 1000} ms")
-
-    print("From new object:")
-    total_time: float = time.time()
-    sdkf: float = time.time()
-    FacetPlot(df, cids=sel_cids, xcats=sel_xcats).lineplot(
-        ncols=3, facet_titles=[], show=False
-    )
-    print(f"Time taken: {(time.time() - sdkf) * 1000} ms")
-    sdkf: float = time.time()
-    FacetPlot(df).lineplot(
-        cid_xcat_grid=True, show=False, cids=sel_cids, xcats=sel_xcats
-    )
-    print(f"Time taken: {(time.time() - sdkf) * 1000} ms")
-    sdkf: float = time.time()
-    FacetPlot(df).lineplot(
-        attempt_square=True, show=False, cids=sel_cids, xcats=sel_xcats
-    )
-    print(f"Time taken: {(time.time() - sdkf) * 1000} ms")
-
-    print(f"Total taken: {(time.time() - total_time) * 1000} ms")
+        fp.lineplot(
+            ncols=3,
+            title="Test Title",
+        )
