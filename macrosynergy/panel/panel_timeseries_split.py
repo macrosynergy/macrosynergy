@@ -33,12 +33,12 @@ class PanelTimeSeriesSplit(object):
         date_last_train = unique_times[np.where(unique_times == date_first_min_cids)[0][0] + self.min_periods - 1]
         date_last_test = unique_times[np.where(unique_times == date_last_train)[0][0] + self.test_size]
         # (3) Get indices of all samples in X with observation dates <= date_last_min_cids
-        train1_idxs = X.reset_index().index[X.reset_index()["real_date"] <= date_last_train]
+        train_idxs = X.reset_index().index[X.reset_index()["real_date"] <= date_last_train]
         # (4) Get indices of all test samples corresponding with the initial training set
-        test1_idxs = X.reset_index().index[(X.reset_index()["real_date"] > date_last_train) & (X.reset_index()["real_date"] <= date_last_test)]
+        test_idxs = X.reset_index().index[(X.reset_index()["real_date"] > date_last_train) & (X.reset_index()["real_date"] <= date_last_test)]
         # (5) Return the first set of training and test indices
-        self.train_indices.append(train1_idxs)
-        self.test_indices.append(test1_idxs)
+        self.train_indices.append(train_idxs)
+        self.test_indices.append(test_idxs)
         # (6) if self.train_intervals: expand the training set by self.train_intervals number of time periods, and 
         # set the associated test set as all samples self.test_size after the end of the training set
         if self.train_intervals:
@@ -49,16 +49,17 @@ class PanelTimeSeriesSplit(object):
                 date_new_last_train = unique_times[current_train_end_date_idx]
                 date_new_last_test = unique_times[min(current_train_end_date_idx + self.test_size, len(unique_times) - 1)]
 
-                # Get indices for new training and testing sets - amend this part to ensure the the training set encapsulates the previous training set
-                # before max_periods is applied
-                train_idxs = X.reset_index().index[(X.reset_index()["real_date"] > date_last_train) & (X.reset_index()["real_date"] <= date_new_last_train)]
-                test_idxs = X.reset_index().index[(X.reset_index()["real_date"] > date_new_last_train) & (X.reset_index()["real_date"] <= date_new_last_test)]
+                if self.max_periods is not None and current_train_end_date_idx + 1 > self.max_periods:
+                    date_start_train = unique_times[current_train_end_date_idx + 1 - self.max_periods]
+                else:
+                    date_start_train = unique_times[0]
 
+                # Get indices for new training and testing sets - amend this part to ensure the the training set encapsulates the previous training set
+                train_idxs = X.reset_index().index[(X.reset_index()["real_date"] >= date_start_train) & (X.reset_index()["real_date"] <= date_new_last_train)]
+                test_idxs = X.reset_index().index[(X.reset_index()["real_date"] > date_new_last_train) & (X.reset_index()["real_date"] <= date_new_last_test)]
+                
                 self.train_indices.append(train_idxs)
                 self.test_indices.append(test_idxs)
-
-                # Update last train date
-                date_last_train = date_new_last_train
 
             return zip(self.train_indices, self.test_indices)
 """
@@ -178,7 +179,7 @@ if __name__ == "__main__":
     )
 
     splitter = PanelTimeSeriesSplit(
-        train_intervals=6, test_size=2, min_periods=12, min_cids=4
+        train_intervals=6, test_size=2, min_periods=12, min_cids=4, max_periods=6
     )
     splitter.split(train_wide)
 
