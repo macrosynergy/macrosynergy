@@ -61,6 +61,18 @@ class PanelTimeSeriesSplit(object):
                 self.train_indices.append(train_idxs)
                 self.test_indices.append(test_idxs)
 
+            # Deal with residual splits
+            last_train_date = max(X.reset_index().iloc[train_idxs].real_date.unique())
+            if last_train_date != unique_times[-self.test_size-1]:
+                test_idxs = X.reset_index().index[X.reset_index()["real_date"] >= unique_times[-self.test_size]]
+                if self.max_periods:
+                    train_idxs = X.reset_index().index[(X.reset_index()["real_date"] < unique_times[-self.test_size]) & (X.reset_index()["real_date"] >= unique_times[-self.test_size-self.max_periods])]
+                else:
+                    train_idxs = X.reset_index().index[X.reset_index()["real_date"] < unique_times[-self.test_size]]
+
+                self.train_indices.append(train_idxs)
+                self.test_indices.append(test_idxs)
+                
             return zip(self.train_indices, self.test_indices)
 """
 ---------------
@@ -179,7 +191,7 @@ if __name__ == "__main__":
     )
 
     splitter = PanelTimeSeriesSplit(
-        train_intervals=6, test_size=2, min_periods=12, min_cids=4, max_periods=6
+        train_intervals=5, test_size=2, min_periods=12, min_cids=4, max_periods=5
     )
     splitter.split(train_wide)
 
