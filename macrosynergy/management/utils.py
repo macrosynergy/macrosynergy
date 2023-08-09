@@ -68,7 +68,6 @@ def get_dict_max_depth(d: dict) -> int:
         else 0
     )
 
-
 def rec_search_dict(d: dict, key: str, match_substring: bool = False, match_type=None):
     """
     Recursively searches a dictionary for a key and returns the value
@@ -232,32 +231,37 @@ def drop_nan_series(df: pd.DataFrame, raise_warning: bool = False) -> pd.DataFra
     """
     Drops any series that are entirely NaNs.
     Raises a user warning if any series are dropped.
-    
+
     :param <pd.DataFrame> df: The dataframe to be cleaned.
     :param <bool> raise_warning: Whether to raise a warning if any series are dropped.
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Error: The input must be a pandas DataFrame.")
     elif not set(df.columns).issuperset(set(["cid", "xcat", "value"])):
-        raise ValueError("Error: The input DataFrame must have columns 'cid', 'xcat', 'value'.")
+        raise ValueError(
+            "Error: The input DataFrame must have columns 'cid', 'xcat', 'value'."
+        )
     elif not df["value"].isna().any():
         return df
 
     if not isinstance(raise_warning, bool):
         raise TypeError("Error: The raise_warning argument must be a boolean.")
-    
-    df_orig : pd.DataFrame = df.copy()
+
+    df_orig: pd.DataFrame = df.copy()
     for cd, xc in df_orig.groupby(["cid", "xcat"]).groups:
-        sel_series : pd.Series = df_orig[(df_orig["cid"] == cd) & (df_orig["xcat"] == xc)]["value"]
+        sel_series: pd.Series = df_orig[
+            (df_orig["cid"] == cd) & (df_orig["xcat"] == xc)
+        ]["value"]
         if sel_series.isna().all():
             if raise_warning:
-                warnings.warn(message=f"The series {cd}_{xc} is populated "
-                                "with NaNs only, and will be dropped.",
-                                category=UserWarning)
+                warnings.warn(
+                    message=f"The series {cd}_{xc} is populated "
+                    "with NaNs only, and will be dropped.",
+                    category=UserWarning,
+                )
             df = df[~((df["cid"] == cd) & (df["xcat"] == xc))]
 
     return df.reset_index(drop=True)
-
 
 
 def wide_to_long(
