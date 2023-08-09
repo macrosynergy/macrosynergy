@@ -25,8 +25,7 @@ sys.path.append(os.path.abspath("."))
 
 from macrosynergy.visuals.plotter import Plotter
 
-
-def _get_grid_dim(
+def _get_square_grid(
     num_plots: int,
 ) -> Tuple[int, int]:
     """
@@ -35,12 +34,11 @@ def _get_grid_dim(
     :param <int> num_plots: Number of plots.
     :return <Tuple[int, int]>: Tuple of grid dimensions.
     """
-    # take the square root of the number of plots, and try and iteratetively find the closest set of grid dimensions that will work
-    # for the number of plots.
     sqrt_num_plots: float = np.ceil(np.sqrt(num_plots))
     grid_dim: Tuple[int, int] = (int(sqrt_num_plots), int(sqrt_num_plots))
     gd_copy: Tuple[int, int] = grid_dim
-    # the number of plots is less than grid_dim[0] * grid_dim[1], so iteratively try and reduce the row and column dimensions until sweet spot is found.
+    # the number of plots is less than grid_dim[0] * grid_dim[1],
+    # so iteratively try and reduce the row and column dimensions until sweet spot is found.
     while 0 != 1:
         if gd_copy[0] < gd_copy[1]:
             gd_copy: Tuple[int, int] = (gd_copy[0], gd_copy[1] - 1)
@@ -95,82 +93,61 @@ class FacetPlot(Plotter):
             **kwargs,
         )
 
-    def from_subplots(
-        # figure arguments
-        plots: Union[List[plt.Figure], List[List[plt.Figure]]],
-        figsize: Tuple[float, float] = (16, 9),
-        ncols: int = 3,
+    def _get_grid_dim(
+        self,
+        tickers: List[str],
+        ncols: Optional[int] = None,
         attempt_square: bool = False,
-        # return args
-        show: bool = True,
-        save_to_file: Optional[str] = None,
-        dpi: int = 300,
-        return_figure: bool = False,
-    ):
+        cid_grid: bool = False,
+        xcat_grid: bool = False,
+        cid_xcat_grid: bool = False,
+    ) -> Tuple[int, int]:
         """
-        Render a facet plot from a list of subplots.
+        Returns a tuple of grid dimensions that matches the plot settings.
         """
-        # If the plots are a list of list, plot each list as a row. max cols becomes the length of the longest row.
+        # only one of cid_grid, xcat_grid, cid_xcat_grid or attempt_square can be True
+        if sum([cid_grid, xcat_grid, cid_xcat_grid]) > 1:
+            raise ValueError(
+                "Only one of `cid_grid`, `xcat_grid`, or "
+                "`cid_xcat_grid` can be True."
+            )
 
-        if isinstance(plots[0], list):
-            nrows: int = len(plots)
-            ncols: int = max([len(row) for row in plots])
+        if (ncols is None) and (not attempt_square):
+            raise ValueError("Either `ncols` or `attempt_square` must be provided.")
 
-        # If the plots are a list of figures, use user provided ncols and infer nrows.
+        if attempt_square:
+            return _get_square_grid(num_plots=len(tickers))
 
-        else:
-            if ncols > len(plots):
-                ncols = len(plots)
-            nrows: int = int(np.ceil(len(plots) / ncols))
+        if cid_grid:
+            found_cids: List[str] = self.cids
+            return self._get_grid_dim(
+                tickers=tickers, ncols=ncols, attempt_square=attempt_square
+            )
 
-            # If attempt_square is True, attempt to make the the grid of subplots square - i.e. ncols = nrows.
-            if attempt_square:
-                grid_dim: Tuple[int, int] = _get_grid_dim(len(plots))
-                ncols: int = grid_dim[1]
-                nrows: int = grid_dim[0]
+        if xcat_grid:
+            found_xcats: List[str] = self.xcats
+            return self._get_grid_dim(
+                tickers=tickers, ncols=ncols, attempt_square=attempt_square
+            )
 
-        fig: plt.Figure = plt.figure(figsize=figsize)
-        gs: GridSpec = GridSpec(nrows, ncols, figure=fig)
+        if ncols is not None:
+            return (ncols, int(np.ceil(len(tickers) / ncols)))
 
-        # iterate over the plots, and copy the lines, titles, legends, etc. to the new figure.
-        plot: plt.Figure
-        for i, plot in enumerate(plots):
-            ax: plt.Axes = fig.add_subplot(gs[i // ncols, i % ncols])
-            for line in plot.lines:
-                ax.add_line(line)
-            ax.set_title(plot.title.get_text())
-            ax.set_xlabel(plot.get_xlabel())
-            ax.set_ylabel(plot.get_ylabel())
-            ax.grid()
-            ax.legend()
+        if cid_xcat_grid:
+            found_cids: List[str] = self.cids
+            found_xcats: List[str] = self.xcats
+            return (len(found_cids), len(found_xcats))
 
-            ax.set_xlim(plot.get_xlim())
-            ax.set_ylim(plot.get_ylim())
-            ax.set_xticks(plot.get_xticks())
-            ax.set_xticklabels(plot.get_xticklabels())
-            ax.set_yticks(plot.get_yticks())
-            ax.set_yticklabels(plot.get_yticklabels())
+        raise ValueError("Unable to infer grid dimensions.")
 
-        fig.tight_layout()
-
-        if save_to_file is not None:
-            fig.savefig(save_to_file, dpi=dpi)
-
-        if show:
-            plt.show()
-
-        if return_figure:
-            return fig
-
-    @staticmethod
     def _cart_plot(
-        df_wide: pd.DataFrame,
+        self,
+        grid_dim: Tuple[int, int],
+        plot_dict: Dict[int, Dict[str, Any]],
+        metric: Optional[str] = None,
         plot_func: Callable = plt.plot,
-        use_x: Union[str, List[str]] = "index",
-        grid_dim: Optional[Tuple[int, int]] = None,
         plot_func_args: Optional[List[Any]] = None,
-        compare_series: Optional[str] = None,
-        # figsize: Tuple[float, float] = (16, 9),
+        figsize: Tuple[float, float] = (16.0, 9.0),
         # title arguments
         title: Optional[str] = None,
         title_fontsize: int = 16,
@@ -186,7 +163,7 @@ class FacetPlot(Plotter):
         y_axis_label: Optional[str] = None,
         axis_fontsize: int = 12,
         # subplot arguments
-        facet_size: Tuple[float, float] = (4, 3),
+        facet_size: Optional[Tuple[float, float]] = None,
         facet_titles: Optional[List[str]] = None,
         facet_title_fontsize: int = 12,
         facet_title_xadjust: float = 0.5,
@@ -209,64 +186,6 @@ class FacetPlot(Plotter):
         """
         Render a facet plot from a wide dataframe, a grid dimension and a plotting function.
         """
-        # check that the df has an index called "real_date". there should be only one index. it also must be pd.DatetimeIndex type.
-        inval_df: str = (
-            "`df_wide` must have a single index called "
-            "`real_date` of type `pd.DatetimeIndex`."
-        )
-        assert df_wide.index.names == ["real_date"], inval_df
-        assert isinstance(df_wide.index, pd.DatetimeIndex), inval_df
-
-        if isinstance(use_x, str):
-            if not use_x == "index":
-                # make sure that the column exists in the dataframe
-                inval_use_x: str = f"Column {use_x} does not exist in `df_wide`."
-                assert use_x in df_wide.columns, inval_use_x
-        else:
-            assert isinstance(
-                use_x, list
-            ), "`use_x` must be a string or a list of strings."
-            # make sure that all columns exist in the dataframe
-            inval_use_x: str = f"Columns {use_x} do not exist in `df_wide`."
-            assert all([col in df_wide.columns for col in use_x]), inval_use_x
-
-        x_values: List[List[float]] = []
-        if isinstance(use_x, str):
-            if use_x == "index":
-                x_values.append(df_wide.index.values.tolist())
-            else:
-                x_values.append(df_wide[use_x].values.tolist())
-        else:
-            for col in use_x:
-                x_values.append(df_wide[col].values.tolist())
-                df_wide: pd.DataFrame = df_wide.drop(col, axis=1)
-
-            # ensure df_wide has the same number of columns as the number of x_values
-            assert df_wide.shape[1] == len(x_values), (
-                f"Number of x_axis values passed using `use_x` ({use_x}) "
-                f"must be equal to the number of data columns in `df_wide` ({df_wide.shape[1]})."
-            )
-
-        if grid_dim is None:
-            num_plots: int = df_wide.shape[1]
-            # distribute into a square grid
-            grid_dim: Tuple[int, int] = _get_grid_dim(num_plots)
-        else:
-            num_plots: int = grid_dim[0] * grid_dim[1]
-
-        inval_grid_dims: str = (
-            f"Grid dimensions {grid_dim} must be greater than or "
-            f"equal to the number of columns in `df_wide` ({df_wide.shape[1]})."
-        )
-
-        assert num_plots >= (
-            df_wide.shape[1] - (1 if compare_series is not None else 0)
-        ), inval_grid_dims
-
-        figsize: Tuple[float, float] = (
-            grid_dim[1] * facet_size[0],
-            grid_dim[0] * facet_size[1],
-        )
 
         fig = plt.figure(figsize=figsize)
         gs: GridSpec = GridSpec(*grid_dim, figure=fig)
@@ -282,36 +201,17 @@ class FacetPlot(Plotter):
         if plot_func_args is None:
             plot_func_args: List = []
 
-        if facet_titles is None:
-            facet_titles: List[str] = df_wide.columns.tolist()
-        else:
-            # if empty, set to None
-            if len(facet_titles) == 0:
-                facet_titles: Optional[List[str]] = None
-            elif len(facet_titles) != df_wide.shape[1]:
-                raise ValueError(
-                    f"Number of facet titles ({len(facet_titles)} provided) must be"
-                    f"equal to the number of tickers ({df_wide.shape[1]} found)."
-                )
-        if compare_series is not None:
-            compare_series_values: pd.DataFrame = df_wide[
-                compare_series
-            ].values.tolist()
-
-            df_wide: pd.DataFrame = df_wide.drop(compare_series, axis=1)
-
-        mulx: int = int(len(x_values) > 1)
-        # if the index is the xval, then cast it to a pd.DatetimeIndex
-        if use_x == "index":
-            x_values[0] = pd.to_datetime(x_values[0])
-        for i, colname in enumerate(df_wide.columns):
+        for i, (plot_id, plot_dict) in enumerate(plot_dict.items()):
             ax: plt.Axes = fig.add_subplot(gs[i // grid_dim[1], i % grid_dim[1]])
-            plot_func(
-                x_values[i * mulx],
-                df_wide.iloc[:, i].values.tolist(),
-                *plot_func_args,
-                **kwargs,
-            )
+            for y in plot_dict["Y"]:
+                # split on the first underscore
+                cidx, xcatx = y.split("_", 1)
+                plot_func(
+                    self.df.loc[plot_dict["X"]],
+                    self.df.loc[(df["cid"] == cidx) & (df["xcat"] == xcatx)] ,
+                    *plot_func_args,
+                    **kwargs,
+                )
 
             if facet_titles is not None:
                 ax.set_title(
@@ -331,18 +231,8 @@ class FacetPlot(Plotter):
             if y_axis_label is not None:
                 ax.set_ylabel(y_axis_label, fontsize=axis_fontsize)
 
-            # fig.
-
         fig.tight_layout()
         if legend:
-            if legend_labels is None:
-                legend_labels = df_wide.columns.tolist()
-                if isinstance(use_x, list) and len(use_x) >= 1:
-                    legend_labels = [
-                        f"{legend_labels[i]} v/s {use_x[i]}"
-                        for i in range(len(legend_labels))
-                    ]
-
             legend_obj = fig.legend(
                 labels=legend_labels,
                 loc=legend_loc,
@@ -372,14 +262,18 @@ class FacetPlot(Plotter):
         blacklist: Optional[Dict[str, List[str]]] = None,
         start: Optional[str] = None,
         end: Optional[str] = None,
-        compare_series: Optional[str] = None,
         # plot arguments
-        attempt_square: bool = True,
         ncols: int = 3,
+        attempt_square: bool = False,
+        cid_grid: bool = False,
+        xcat_grid: bool = False,
         cid_xcat_grid: bool = False,
         grid_dim: Optional[Tuple[int, int]] = None,
-        # figsize: Tuple[float, float] = (16, 9),
+        cids_mean: bool = False,
+        compare_series: Optional[str] = None,
+        # xcats_mean: bool = False,
         # title arguments
+        figsize: Tuple[float, float] = (16.0, 9.0),
         title: Optional[str] = None,
         title_fontsize: int = 20,
         title_xadjust: Optional[float] = None,
@@ -394,11 +288,14 @@ class FacetPlot(Plotter):
         y_axis_label: Optional[str] = None,
         axis_fontsize: int = 12,
         # subplot arguments
-        facet_size: Tuple[float, float] = (2.0, 2.0),
+        facet_size: Optional[Tuple[Union[float, int], Union[float, int]]] = None,
         facet_titles: Optional[List[str]] = None,
         facet_title_fontsize: int = 12,
         facet_title_xadjust: float = 0.5,
         facet_title_yadjust: float = 1.0,
+        facet_xlabel: Optional[str] = None,
+        facet_ylabel: Optional[str] = None,
+        facet_label_fontsize: int = 12,
         # legend arguments
         legend: bool = True,
         legend_labels: Optional[List[str]] = None,
@@ -418,9 +315,9 @@ class FacetPlot(Plotter):
         Render a facet plot from a wide dataframe, a grid dimension and a plotting function.
         """
         if any([arg is not None for arg in [df, cids, xcats, metric, tickers]]):
+            # undesirable, as the state of the object will change kept for ease of use
             metrics: List[str] = [metric] if metric is not None else self.metrics
             metrics: Optional[List[str]] = metrics if metrics else None
-
             self.__init__(
                 df=df if df is not None else self.df,
                 cids=cids,
@@ -432,84 +329,121 @@ class FacetPlot(Plotter):
                 start=start,
                 end=end,
             )
+        if metric is None:
+            metric: str = self.metrics[0]
 
-        num_tickers_to_plot: int = len(
-            (self.df["cid"] + "_" + self.df["xcat"]).unique().tolist()
-        )
-        if cid_xcat_grid:
-            grid_dim: Tuple[int, int] = (len(self.cids), len(self.xcats))
-        elif grid_dim is None:
-            if ncols is not None:
-                grid_dim: Tuple[int, int] = (
-                    int(np.ceil(num_tickers_to_plot / ncols)),
-                    ncols,
-                )
-            elif attempt_square:
-                grid_dim: Tuple[int, int] = _get_grid_dim(num_tickers_to_plot)
-            else:
-                raise ValueError(
-                    "Unable to infer grid dimensions. Please provide either "
-                    "`grid_dim`, `ncols` or set `attempt_square` to True."
-                )
-
-        # if there is only one cid present, plot all xcats for that cid
-        cid_xcat_combos: List[Tuple[str, str]] = [
-            f"{cid}_{xcat}" for cid in self.cids for xcat in self.xcats
-        ]
-
-        existing_tickers: List[str] = (
+        tickers_to_plot: List[str] = (
             (self.df["cid"] + "_" + self.df["xcat"]).unique().tolist()
         )
 
-        # identify invalid cid_xcat_combos
-        inval_cid_xcat_combos: List[str] = [
-            combo for combo in cid_xcat_combos if combo not in existing_tickers
-        ]
-        # copy the dataframe to preserve the object's state
-        curr_df: pd.DataFrame = self.df.copy()
-
-        # artifically add invalid cid_xcat_combos with nan values to the dataframe
-        if len(inval_cid_xcat_combos) > 0:
-            inval_df: pd.DataFrame = pd.DataFrame(
-                np.nan,
-                index=curr_df.index,
-                columns=inval_cid_xcat_combos,
+        if grid_dim is None:
+            grid_dim: Tuple[int, int] = self._get_grid_dim(
+                tickers=tickers_to_plot,
+                ncols=ncols,
+                attempt_square=attempt_square,
+                cid_grid=cid_grid,
+                xcat_grid=xcat_grid,
+                cid_xcat_grid=cid_xcat_grid,
             )
-            curr_df: pd.DataFrame = pd.concat([curr_df, inval_df], axis=1)
 
-        curr_df["ticker"]: str = curr_df["cid"] + "_" + curr_df["xcat"]
-        # remove cid and xcat columns
-        curr_df: pd.DataFrame = curr_df.drop(["cid", "xcat"], axis=1)
+        # if the facet size is not none, re-calc the figsize
+        if facet_size is not None:
+            figsize: Tuple[float, float] = (
+                grid_dim[1] * facet_size[0],
+                grid_dim[0] * facet_size[1],
+            )
 
-        # pivot the dataframe
-        curr_df: pd.DataFrame = curr_df.pivot_table(
-            index="real_date", columns="ticker", values=metric
-        )
-        curr_df.columns = curr_df.columns.droplevel(0)
-
-        if cid_xcat_grid:
-            curr_df: pd.DataFrame = curr_df.reindex(sorted(curr_df.columns), axis=1)
+        # form a dictionary of what goes on each plot
+        # each key is an int - identifying the plot (L-R, T-B)
+        # each value is a dict with keys "xs", "ys"
 
         if compare_series is not None:
-            # if it is "mean", then take a mean of all series, call it mean and pass it to the plotting function\
-            if compare_series == "mean":
-                curr_df[compare_series]: float = curr_df.mean(axis=1)
-
-            # verify that the compare_series exists in the dataframe
-            if compare_series not in curr_df.columns:
+            # check that the compare series exists in the dataframe
+            if compare_series not in tickers_to_plot:
                 raise ValueError(
-                    f"Series {compare_series} used as `compare_series` does not exist in the dataframe."
+                    f"Compare series {compare_series} not found in dataframe."
                 )
+            else:
+                tickers_to_plot.remove(compare_series)
+
+        if cids_mean:
+            if (not cid_grid) or len(self.xcats) > 1:
+                raise ValueError(
+                    "`cids_mean` can only be True if `cid_grid` is True and "
+                    "there is only one xcat."
+                )
+            else:
+                # add the mean for each cid to the dataframe
+                df_mean: pd.DataFrame = self.df.groupby("cid").mean(numeric_only=True).reset_index()
+                df_mean["xcat"] = "mean"
+                self.df: pd.DataFrame = pd.concat([self.df, df_mean], axis=0)
+
+        plot_dict: Dict[str, List[str]] = {}
+
+        if facet_titles is None:
+            if cid_grid:
+                facet_titles: List[str] = self.cids
+            elif xcat_grid:
+                facet_titles: List[str] = self.xcats
+            elif cid_xcat_grid:
+                ...
+                # cid_xcat_grid facets only make sense if they have cid_xcat as the title
+
+        if cid_grid or xcat_grid:
+            # flipper handles resolution between cid_grid and xcat_grid for binary variables
+            flipper: bool = 1 if cid_grid else -1
+            if facet_titles is None:
+                facet_titles: List[str] = [self.cids, self.xcats][::flipper][0]
+            if legend_labels is None:
+                legend_labels: List[str] = [self.cids, self.xcats][::flipper][0]
+
+            for i, fvar in enumerate([self.cids, self.xcats][::flipper][0]):
+                tks: List[str] = [
+                    "_".join([fvar, x][::flipper])
+                    for x in ([self.xcats, self.cids][::flipper][0])
+                ]
+
+                tks: List[str] = list(set(tks).intersection(tickers_to_plot))
+                if cid_grid and cids_mean:
+                    tks.append("_".join([fvar, "mean"]))
+
+                plot_dict[i] = {
+                    "X": "real_date",
+                    "Y": tks,
+                }
+
+        if cid_xcat_grid:
+            if facet_titles is None:
+                facet_titles: List[str] = [
+                    f"{cid}_{xcat}" for cid in self.cids for xcat in self.xcats
+                ]
+            # TODO fix : legend goes away in cid_xcat_grid
+            legend: bool = False
+
+            for i, cid in enumerate(self.cids):
+                for j, xcat in enumerate(self.xcats):
+                    tk: str = "_".join([cid, xcat])
+                    if tk in tickers_to_plot:
+                        plot_dict[i * len(self.xcats) + j] = {
+                            "X": "real_date",
+                            "Y": [tk],
+                        }
+
+        if len(plot_dict) == 0:
+            raise ValueError("Unable to resolve plot settings.")
 
         return self._cart_plot(
-            plot_func=plt.plot,
-            df_wide=curr_df,
+            plot_dict=plot_dict,
             grid_dim=grid_dim,
-            compare_series=compare_series,
+            plot_func=plt.plot,
+            plot_func_args=None,
+            figsize=figsize,
+            # title arguments
             title=title,
             title_fontsize=title_fontsize,
             title_xadjust=title_xadjust,
             title_yadjust=title_yadjust,
+            # subplot axis arguments
             ax_grid=ax_grid,
             ax_hline=ax_hline,
             ax_hline_val=ax_hline_val,
@@ -518,17 +452,23 @@ class FacetPlot(Plotter):
             x_axis_label=x_axis_label,
             y_axis_label=y_axis_label,
             axis_fontsize=axis_fontsize,
+            # subplot arguments
             facet_size=facet_size,
             facet_titles=facet_titles,
             facet_title_fontsize=facet_title_fontsize,
             facet_title_xadjust=facet_title_xadjust,
             facet_title_yadjust=facet_title_yadjust,
+            facet_xlabel=facet_xlabel,
+            facet_ylabel=facet_ylabel,
+            facet_label_fontsize=facet_label_fontsize,
+            # legend arguments
             legend=legend,
             legend_labels=legend_labels,
             legend_loc=legend_loc,
             legend_ncol=legend_ncol,
             legend_bbox_to_anchor=legend_bbox_to_anchor,
             legend_frame=legend_frame,
+            # return args
             show=show,
             save_to_file=save_to_file,
             dpi=dpi,
@@ -585,9 +525,10 @@ if __name__ == "__main__":
     print("From same object:")
     sdkf: float = time.time()
 
-    with FacetPlot(df, cids=sel_cids, xcats=sel_xcats) as fp:
+    with FacetPlot(df, cids=sel_cids, xcats=[xcats[1]]) as fp:
         fp.lineplot(
+            cid_grid=True,
             ncols=3,
-            compare_series="mean",
+            cids_mean=True,
             title="Test Title",
         )

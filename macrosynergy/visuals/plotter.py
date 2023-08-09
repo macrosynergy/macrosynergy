@@ -17,7 +17,6 @@ from typing import (
     get_origin,
 )
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -42,7 +41,12 @@ def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
     if origin in [tuple, Tuple]:
         if not isinstance(value, tuple) or len(value) != len(args):
             return False
-        return all(isinstance(item, expected) for item, expected in zip(value, args))
+        # return all(isinstance(item, expected) for item, expected in zip(value, args))
+        # should be is_matching_subscripted_type, to allow for nested tuples/recursion
+        return all(
+            is_matching_subscripted_type(item, expected) or isinstance(item, expected)
+            for item, expected in zip(value, args)
+        )
 
     # dicts
     if origin in [dict, Dict]:
@@ -50,7 +54,8 @@ def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
             return False
         key_type, value_type = args
         return all(
-            isinstance(k, key_type) and isinstance(v, value_type)
+            (is_matching_subscripted_type(k, key_type) or isinstance(k, key_type))
+            or (isinstance(k, key_type) and isinstance(v, value_type))
             for k, v in value.items()
         )
 
@@ -149,8 +154,13 @@ def argvalidation(func: Callable[..., Any]) -> Callable[..., Any]:
         # validate the return value
         return_value: Any = func(*args, **kwargs)
         if func_annotations is not inspect._empty:
-            if not isinstance(return_value, func_annotations):
-                warnings.warn(
+            origin = get_origin(func_annotations)
+            if (
+                origin
+                and (not is_matching_subscripted_type(return_value, func_annotations))
+            ) or (not origin and not isinstance(return_value, func_annotations)):
+                exp_types: str = format_expected_type(get_args(func_annotations))
+                raise warnings.warn(
                     f"Return value of `{func.__name__}` is not of type "
                     f"`{func_annotations}`, but of type `{type(return_value)}`."
                 )
@@ -172,7 +182,6 @@ def argcopy(func: Callable) -> Callable:
             pd.Index,
             pd.MultiIndex,
             set,
-            tuple,
         )
         new_args: List[Tuple[Any, ...]] = []
         for arg in args:
@@ -230,9 +239,9 @@ class Plotter(metaclass=PlotterMetaClass):
         (self.df). If None, all cids are selected.
     :param <List[str]> xcats: A list of xcats to select from the DataFrame
         (self.df). If None, all xcats are selected.
-    :param <List[str]> metrics: A list of metrics to select from the DataFrame 
+    :param <List[str]> metrics: A list of metrics to select from the DataFrame
         (self.df). If None, all metrics are selected.
-    :param <bool> intersect: if True only retains cids that are available for 
+    :param <bool> intersect: if True only retains cids that are available for
         all xcats. Default is False.
     :param <List[str]> tickers: A list of tickers to select from the DataFrame
         (self.df). If None, all tickers are selected.
@@ -286,7 +295,7 @@ class Plotter(metaclass=PlotterMetaClass):
         sdf: pd.DataFrame
         cids: List[str]
         xcats: List[str]
-        sdf, xcats, cids = reduce_df(
+        sdf, r_xcats, r_cids = reduce_df(
             df=sdf,
             cids=cids if isinstance(cids, list) else [cids],
             xcats=xcats if isinstance(xcats, list) else [xcats],
@@ -296,7 +305,17 @@ class Plotter(metaclass=PlotterMetaClass):
             blacklist=blacklist,
             out_all=True,
         )
-        # if the DataFrame is empty, raise an error
+
+        if (len(r_xcats) != len(xcats)) or (len(r_cids) != len(cids)):
+            m_cids: List[str] = list(set(cids) - set(r_cids))
+            m_xcats: List[str] = list(set(xcats) - set(r_xcats))
+            raise ValueError(
+                "The provided arguments resulted in a DataFrame that does not "
+                "contain all the requested cids and xcats. "
+                + (f"Missing cids: {m_cids}. " if m_cids else "")
+                + (f"Missing xcats: {m_xcats}. " if m_xcats else "")
+            )
+
         if sdf.empty:
             raise ValueError(
                 "The arguments provided resulted in an "
@@ -313,14 +332,14 @@ class Plotter(metaclass=PlotterMetaClass):
         self.start: str = start
         self.end: str = end
 
-        self.backend: ModuleType
-        if backend.startswith("m"):
-            self.backend = plt
-            self.backend.style.use("seaborn-v0_8-darkgrid")
-        elif ...:
-            ...
-        else:
-            raise NotImplementedError(f"Backend `{backend}` is not supported.")
+        # self.backend: ModuleType
+        # if backend.startswith("m"):
+        #     self.backend = plt
+        #     self.backend.style.use("seaborn-v0_8-darkgrid")
+        # elif ...:
+        #     ...
+        # else:
+        #     raise NotImplementedError(f"Backend `{backend}` is not supported.")
 
     def __enter__(self):
         return self
