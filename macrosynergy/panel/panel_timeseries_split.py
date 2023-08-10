@@ -53,16 +53,6 @@ class PanelTimeSeriesSplit(object):
         self.train_indices: List = []
         self.test_indices: List = []
 
-    def get_n_splits(self, X: pd.DataFrame, y: pd.DataFrame = None):
-        """
-        Returns the number of splits.
-        """
-        if self.n_splits:
-            return self.n_splits
-        else:
-            # Then train_intervals was specified instead
-            # TODO: Finish later
-            return None
     def split(self, X: pd.DataFrame, y: pd.DataFrame = None):
         """
         Splitter method.
@@ -78,7 +68,9 @@ class PanelTimeSeriesSplit(object):
         if self.n_splits:
             # (1) Divide the sorted unique times into equal (or as equal as possible) splits
             unique_times_train = unique_times[:-self.test_size]
-            train_splits = np.array_split(unique_times_train,self.n_splits)
+            train_splits_basic = np.array_split(unique_times_train,self.n_splits)
+            # aggregate each split 
+            train_splits = [np.concatenate(train_splits_basic[:i+1]) for i in range(self.n_splits)]
             # (2) If self.max_periods is specified, adjust each of the splits to only have the self.max_periods most recent times in each split
             if self.max_periods:
                 for split_idx in range(len(train_splits)):
@@ -91,6 +83,19 @@ class PanelTimeSeriesSplit(object):
                 self.test_indices.append(X.reset_index().index[(X.reset_index()["real_date"] > largest_date) & (X.reset_index()["real_date"] <= unique_times[np.where(unique_times==largest_date)[0][0] + self.test_size])])
 
         else:
+            # (1) Determine the first split based on min_cids and min_periods
+            init_mask = X.groupby(level=1).size() == self.min_cids
+            date_first_min_cids = init_mask[init_mask == True].reset_index().real_date.min()
+            date_last_train = unique_times[np.where(unique_times == date_first_min_cids)[0][0] + self.min_periods - 1]
+            date_last_test = unique_times[np.where(unique_times == date_last_train)[0][0] + self.test_size]
+            train_idxs = X.reset_index().index[X.reset_index()["real_date"] <= date_last_train]
+            test_idxs = X.reset_index().index[(X.reset_index()["real_date"] > date_last_train) & (X.reset_index()["real_date"] <= date_last_test)]
+            self.train_indices.append(train_idxs)
+            self.test_indices.append(test_idxs)
+            # (2) Determine the remaining splits based on train_intervals
+            unique_times_train = unique_times[:-self.test_size]
+            """
+            OLD SOLUTION
             # (1) Get the first time at which all features are available for min_cids number of cross-sections
             init_mask = X.groupby(level=1).size() == self.min_cids
             date_first_min_cids = init_mask[init_mask == True].reset_index().real_date.min()
@@ -136,9 +141,9 @@ class PanelTimeSeriesSplit(object):
                     train_idxs = X.reset_index().index[X.reset_index()["real_date"] < unique_times[-self.test_size]]
 
                 self.train_indices.append(train_idxs)
-                self.test_indices.append(test_idxs)
+                self.test_indices.append(test_idxs)"""
 
-            return zip(self.train_indices, self.test_indices)
+        return zip(self.train_indices, self.test_indices)
         
 """
 ---------------
@@ -256,5 +261,5 @@ if __name__ == "__main__":
         df=train, xcats=xcatx, cids=cidx, freq="M", lag=1, xcat_aggs=["mean", "sum"]
     )
 
-splitter = PanelTimeSeriesSplit(train_intervals=6, test_size=1, max_periods=3, min_periods=12,min_cids=4)
+splitter = PanelTimeSeriesSplit(n_splits=4,test_size=2, max_periods=5)
 splitter.split(train_wide)
