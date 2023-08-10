@@ -61,8 +61,27 @@ class FacetPlot(Plotter):
     Inherits from `macrosynergy.visuals.plotter.Plotter`.
 
     Parameters
-
-    :param <pd.DataFrame> df:
+    ----------
+    :param <pd.DataFrame> df: A DataFrame with the following columns:
+        'cid', 'xcat', 'real_date', and at least one metric from -
+        'value', 'grading', 'eop_lag', or 'mop_lag'.
+    :param <List[str]> cids: A list of cids to select from the DataFrame.
+        If None, all cids are selected.
+    :param <List[str]> xcats: A list of xcats to select from the DataFrame.
+        If None, all xcats are selected.
+    :param <List[str]> metrics: A list of metrics to select from the DataFrame.
+        If None, all metrics are selected.
+    :param <bool> intersect: if True only retains cids that are available for
+        all xcats. Default is False.
+    :param <List[str]> tickers: A list of tickers to select from the DataFrame.
+        If None, all tickers are selected.
+    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
+        the data frame. If one cross-section has several blacklist periods append numbers
+        to the cross-section code.
+    :param <str> start: ISO-8601 formatted date string. Select data from
+        this date onwards. If None, all dates are selected.
+    :param <str> end: ISO-8601 formatted date string. Select data up to
+        and including this date. If None, all dates are selected.
 
     """
 
@@ -339,6 +358,95 @@ class FacetPlot(Plotter):
         *args,
         **kwargs,
     ):
+        """
+        Showing a FacetPlot composed of linear plots from the data available in the
+        `FacetPlot` object after initialization.
+        Passing any of the arguments used to initialize the `FacetPlot` object will cause
+        the object to be re-initialized with the new arguments, and the plot will be rendered
+        from the new object state.
+
+        Parameters
+        ----------
+        :param <int> ncols: number of columns in the grid. Default is 3.
+        :param <bool> attempt_square: attempt to make the facet grid square. Ignores
+            `ncols` when `True`. Default is `False`.
+        :param <bool> cid_grid: Create the facet grid such that each facet is a `cid`.
+        :param <bool> xcat_grid: Create the facet grid such that each facet is an `xcat`.
+        :param <bool> cid_xcat_grid: Create the facet grid such that each facet is an
+            individual ticker. Each "row" contains plots for the same `cid`, and each
+            "column" would contain plots for the same `xcat`. Therefore, this mode does
+            not respect the `ncols` or `attempt_square` arguments.
+            NB: `facet_titles` and `legend` are overridden in this mode.
+        :param <Tuple[int, int]> grid_dim: a tuple of integers specifying the number of
+            rows and columns in the facet grid. Default is `None`, meaning the grid
+            dimensions will be inferred from the `ncols`/`attempt_square`/`cid_xcat_grid`
+            arguments.
+        :param <bool> cids_mean: Used with `cid_grid` with a single `xcat`. If `True`,
+            the mean of all `cids` for that `xcat` will be plotted on all charts. If `False`,
+            only the specified `cids` will be plotted. Default is `False`.
+        :param <str> compare_series: Used with `cid_grid` with a single `xcat`. If
+            specified, the series specified will be plotted in each facet. Ensure that
+            the comparison series is in the dataframe, and not filtered out when
+            initializing the `FacetPlot` object. Default is `None`.
+        :param <Tuple[float, float]> figsize: a tuple of floats specifying the width and
+            height of the figure. Default is `(16.0, 9.0)`.
+        :param <str> title: the title of the plot. Default is `None`.
+        :param <int> title_fontsize: the font size of the title. Default is `20`.
+        :param <float> title_xadjust: the x-adjustment of the title. Default is `None`.
+        :param <float> title_yadjust: the y-adjustment of the title. Default is `None`.
+        :param <bool> ax_grid: whether to show the grid on the axes, applied to all plots.
+            Default is `True`.
+        :param <bool> ax_hline: whether to show a horizontal line on the axes, applied to
+            all plots. Default is `False`.
+        :param <float> ax_hline_val: the value of the horizontal line on the axes, applied
+            to all plots. Default is `0.0`.
+        :param <bool> ax_vline: whether to show a vertical line on the axes, applied to
+            all plots. Default is `False`.
+        :param <float> ax_vline_val: the value of the vertical line on the axes, applied
+            to all plots. Default is `0.0`.
+        :param <str> x_axis_label: the label for the x-axis. Default is `None`.
+        :param <str> y_axis_label: the label for the y-axis. Default is `None`.
+        :param <int> axis_fontsize: the font size of the axis labels. Default is `12`.
+        :param <Tuple[float, float]> facet_size: a tuple of floats specifying the width
+            and height of each facet. Default is `None`, meaning the facet size will be
+            inferred from the `figsize` argument. If specified, the `figsize` argument
+            will be ignored and the figure size will be inferred from the dimensions of
+            the facet grid and the facet size.
+        :param <List[str]> facet_titles: a list of strings specifying the titles of each
+            facet. Default is `None`, meaning all facets will have the full
+            `ticker`, `cid`, or `xcat` as the title. If no `facet_titles` are required,
+            pass an empty list - `facet_titles=[]`.
+        :param <int> facet_title_fontsize: the font size of the facet titles. Default is
+            `12`.
+        :param <float> facet_title_xadjust: the x-adjustment of the facet titles. Default
+            is `None`.
+        :param <float> facet_title_yadjust: the y-adjustment of the facet titles. Default
+            is `None`.
+        :param <bool> facet_xlabel: The label to be used as the axis-label/title for the
+            x-axis of each facet. Default is `None`, meaning no label will be shown.
+        :param <bool> facet_ylabel: The label to be used as the axis-label/title for the
+            y-axis of each facet. Default is `None`, meaning no label will be shown.
+        :param <int> facet_label_fontsize: the font size of the facet labels. Default is
+            `12`.
+        :param <bool> legend: whether or not to show a legend for the plot. Default is
+            `True`. In `cid_xcat_grid` mode, the legend is never shown, as it would be
+            redundant.
+        :param <bool> legend: Show the legend. Default is `True`. When using
+        `cid_xcat_grid`, the legend will not be shown as it is redundant.
+        :param <list> legend_labels: Labels for the legend. Default is `None`,
+            meaning a list identifying the various `cids`/`xcats` will be used.
+        :param <str> legend_loc: Location of the legend. Default is `center left`.
+            See https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.legend.html
+            for more information.
+        :param <int> legend_ncol: Number of columns in the legend. Default is `1`.
+        :param <tuple> legend_bbox_to_anchor: Bounding box for the legend. Default is
+            `(1.0, 0.5)`.
+        :param <bool> legend_frame: Show the legend frame. Default is `True`.
+        :param <bool> show: Show the plot. Default is `True`.
+        :param <str> save_to_file: Save the plot to a file. Default is `None`.
+        :param <int> dpi: DPI of the saved image. Default is `300`.
+        :param <bool> return_figure: Return the figure object. Default is `False`.
+        """
         # if any([arg is not None for arg in [df, cids, xcats, metric, tickers]]):
         #     # undesirable, as the state of the object will change kept for ease of use
         #     metrics: List[str] = [metric] if metric is not None else self.metrics
