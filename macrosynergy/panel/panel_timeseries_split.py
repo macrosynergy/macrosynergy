@@ -50,8 +50,8 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
             
         assert self.test_size is not None, "test_size must be specified."
         assert self.test_size > 0, "test_size must be greater than 0."
-        self.train_indices: List = []
-        self.test_indices: List = []
+        self.train_indices: List[pd.Index] = []
+        self.test_indices: List[pd.Index] = []
  
     def get_n_splits(self, X: pd.DataFrame, y: pd.DataFrame = None):
         """
@@ -62,17 +62,16 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
                               is only included to be consistent with the sklearn API.
         """
         X = X.dropna() # Since the dataframe is in long-format, this will only drop rows where not all features are provided
-        unique_times = X.reset_index()["real_date"].sort_values().unique()
+        unique_times: pd.arrays.DatetimeArray = X.reset_index()["real_date"].sort_values().unique()
         if self.train_intervals:
-            init_mask = X.groupby(level=1).size() == self.min_cids
-            date_first_min_cids = init_mask[init_mask == True].reset_index().real_date.min()
-            date_last_train = unique_times[np.where(unique_times == date_first_min_cids)[0][0] + self.min_periods - 1]
-            train_idxs = X.reset_index().index[X.reset_index()["real_date"] <= date_last_train]
+            init_mask: pd.Series = X.groupby(level=1).size() == self.min_cids
+            date_first_min_cids: pd.Timestamp = init_mask[init_mask == True].reset_index().real_date.min()
+            date_last_train: pd.Timestamp = unique_times[np.where(unique_times == date_first_min_cids)[0][0] + self.min_periods - 1]
             # Determine the remaining splits based on train_intervals
-            unique_times_train = unique_times[np.where(unique_times == date_last_train)[0][0] + 1:-self.test_size]
-            self.n_splits = int(np.ceil(len(unique_times_train) / self.train_intervals)) + 1
+            unique_times_train: pd.arrays.DatetimeArray = unique_times[np.where(unique_times == date_last_train)[0][0] + 1:-self.test_size]
+            self.n_splits: int = int(np.ceil(len(unique_times_train) / self.train_intervals)) + 1
 
-        return self.n_splits 
+        return self.n_splits
 
     def split(self, X: pd.DataFrame, y: pd.DataFrame = None):
         """
@@ -83,32 +82,32 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
                               is only included to be consistent with the sklearn API.
         """
         X = X.dropna() # Since the dataframe is in long-format, this will only drop rows where not all features are provided
-        unique_times = X.reset_index()["real_date"].sort_values().unique()
+        unique_times: pd.arrays.DatetimeArray = X.reset_index()["real_date"].sort_values().unique()
         if self.min_periods is not None:
             assert self.min_periods <= len(unique_times), "The minimum number of time periods for the first split must be less than or equal to the number of time periods in the dataframe."
 
         if self.train_intervals:
             # (1) Determine the splits prior to aggregation
             # Deal with the initial split determined by min_cids and min_periods
-            init_mask = X.groupby(level=1).size() == self.min_cids
-            date_first_min_cids = init_mask[init_mask == True].reset_index().real_date.min()
-            date_last_train = unique_times[np.where(unique_times == date_first_min_cids)[0][0] + self.min_periods - 1]
-            train_idxs = X.reset_index().index[X.reset_index()["real_date"] <= date_last_train]
+            init_mask: pd.Series = X.groupby(level=1).size() == self.min_cids
+            date_first_min_cids: pd.Timestamp = init_mask[init_mask == True].reset_index().real_date.min()
+            date_last_train: pd.Timestamp = unique_times[np.where(unique_times == date_first_min_cids)[0][0] + self.min_periods - 1]
+            train_idxs: pd.Index = X.reset_index().index[X.reset_index()["real_date"] <= date_last_train]
             # Determine the remaining splits based on train_intervals
-            unique_times_train = unique_times[np.where(unique_times == date_last_train)[0][0] + 1:-self.test_size]
-            self.n_splits = int(np.ceil(len(unique_times_train) / self.train_intervals))
-            train_splits_basic = np.array_split(unique_times_train,self.n_splits)
+            unique_times_train: pd.arrays.DatetimeArray = unique_times[np.where(unique_times == date_last_train)[0][0] + 1:-self.test_size]
+            self.n_splits: int = int(np.ceil(len(unique_times_train) / self.train_intervals))
+            train_splits_basic: List = np.array_split(unique_times_train,self.n_splits)
             train_splits_basic.insert(0, pd.arrays.DatetimeArray(np.array(sorted(X.reset_index().real_date.iloc[train_idxs].unique()), dtype="datetime64[ns]")))
             # need to add one to n_splits because n_splits was determined by the number of train_intervals starting from the second split
             # need to take into account the split determined by min_cids and min_periods
             self.n_splits += 1
         else:
             # (1) Determine the splits prior to agglomeration
-            unique_times_train = unique_times[:-self.test_size]
-            train_splits_basic = np.array_split(unique_times_train,self.n_splits)
+            unique_times_train: pd.arrays.DatetimeArray = unique_times[:-self.test_size]
+            train_splits_basic: List[pd.arrays.DatetimeArray] = np.array_split(unique_times_train,self.n_splits)
         
         # (2) aggregate each split 
-        train_splits = [np.concatenate(train_splits_basic[:i+1]) for i in range(self.n_splits)]
+        train_splits: List[np.array] = [np.concatenate(train_splits_basic[:i+1]) for i in range(self.n_splits)]
 
         # (3) If self.max_periods is specified, adjust each of the splits to only have the self.max_periods most recent times in each split
         if self.max_periods:
@@ -117,8 +116,8 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
         # (4) Create the train and test indices
         for split in train_splits:
-            smallest_date = min(split) 
-            largest_date = max(split)
+            smallest_date: np.datetime64 = min(split) 
+            largest_date: np.datetime64 = max(split)
             self.train_indices.append(X.reset_index().index[(X.reset_index()["real_date"] >= smallest_date) & (X.reset_index()["real_date"] <= largest_date)])
             self.test_indices.append(X.reset_index().index[(X.reset_index()["real_date"] > largest_date) & (X.reset_index()["real_date"] <= unique_times[np.where(unique_times==largest_date)[0][0] + self.test_size])])
             
