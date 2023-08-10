@@ -237,19 +237,23 @@ class Plotter(metaclass=PlotterMetaClass):
     for the plotter classes, and some common functionality - currently just the filtering
     of the DataFrame.
     Parameters
+    ----------
     :param <pd.DataFrame> df: A DataFrame with the following columns:
         'cid', 'xcat', 'real_date', and at least one metric from -
         'value', 'grading', 'eop_lag', or 'mop_lag'.
-    :param <List[str]> cids: A list of cids to select from the DataFrame
-        (self.df). If None, all cids are selected.
-    :param <List[str]> xcats: A list of xcats to select from the DataFrame
-        (self.df). If None, all xcats are selected.
-    :param <List[str]> metrics: A list of metrics to select from the DataFrame
-        (self.df). If None, all metrics are selected.
+    :param <List[str]> cids: A list of cids to select from the DataFrame.
+        If None, all cids are selected.
+    :param <List[str]> xcats: A list of xcats to select from the DataFrame.
+        If None, all xcats are selected.
+    :param <List[str]> metrics: A list of metrics to select from the DataFrame.
+        If None, all metrics are selected.
     :param <bool> intersect: if True only retains cids that are available for
         all xcats. Default is False.
-    :param <List[str]> tickers: A list of tickers to select from the DataFrame
-        (self.df). If None, all tickers are selected.
+    :param <List[str]> tickers: A list of tickers to select from the DataFrame.
+        If None, all tickers are selected.
+    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
+        the data frame. If one cross-section has several blacklist periods append numbers
+        to the cross-section code.
     :param <str> start: ISO-8601 formatted date string. Select data from
         this date onwards. If None, all dates are selected.
     :param <str> end: ISO-8601 formatted date string. Select data up to
