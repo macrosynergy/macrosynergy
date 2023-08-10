@@ -52,6 +52,27 @@ class PanelTimeSeriesSplit(object):
         assert self.test_size > 0, "test_size must be greater than 0."
         self.train_indices: List = []
         self.test_indices: List = []
+ 
+    def get_n_splits(self, X: pd.DataFrame, y: pd.DataFrame = None):
+        """
+        Returns the number of splitting iterations in the cross-validator.
+        :param <pd.DataFrame> X: Pandas dataframe of features/quantamental indicators, multi-indexed by (cross-section, date). The dates must be in datetime format.
+                                 The dataframe must be in wide format, i.e. each feature/indicator is a column.
+        :param <pd.DataFrame> y: Pandas dataframe of target variable, multi-indexed by (cross-section, date). The dates must be in datetime format. This isn't used and 
+                              is only included to be consistent with the sklearn API.
+        """
+        X = X.dropna() # Since the dataframe is in long-format, this will only drop rows where not all features are provided
+        unique_times = X.reset_index()["real_date"].sort_values().unique()
+        if self.train_intervals:
+            init_mask = X.groupby(level=1).size() == self.min_cids
+            date_first_min_cids = init_mask[init_mask == True].reset_index().real_date.min()
+            date_last_train = unique_times[np.where(unique_times == date_first_min_cids)[0][0] + self.min_periods - 1]
+            train_idxs = X.reset_index().index[X.reset_index()["real_date"] <= date_last_train]
+            # Determine the remaining splits based on train_intervals
+            unique_times_train = unique_times[np.where(unique_times == date_last_train)[0][0] + 1:-self.test_size]
+            self.n_splits = int(np.ceil(len(unique_times_train) / self.train_intervals)) + 1
+
+        return self.n_splits 
 
     def split(self, X: pd.DataFrame, y: pd.DataFrame = None):
         """
@@ -65,55 +86,48 @@ class PanelTimeSeriesSplit(object):
         unique_times = X.reset_index()["real_date"].sort_values().unique()
         if self.min_periods is not None:
             assert self.min_periods <= len(unique_times), "The minimum number of time periods for the first split must be less than or equal to the number of time periods in the dataframe."
-        if self.n_splits:
-            # (1) Divide the sorted unique times into equal (or as equal as possible) splits
-            unique_times_train = unique_times[:-self.test_size]
-            train_splits_basic = np.array_split(unique_times_train,self.n_splits)
-            # aggregate each split 
-            train_splits = [np.concatenate(train_splits_basic[:i+1]) for i in range(self.n_splits)]
-            # (2) If self.max_periods is specified, adjust each of the splits to only have the self.max_periods most recent times in each split
-            if self.max_periods:
-                for split_idx in range(len(train_splits)):
-                    train_splits[split_idx] = train_splits[split_idx][-self.max_periods:]
-            # (3) Create the train and test indices
-            for split in train_splits:
-                smallest_date = min(split) 
-                largest_date = max(split)
-                self.train_indices.append(X.reset_index().index[(X.reset_index()["real_date"] >= smallest_date) & (X.reset_index()["real_date"] <= largest_date)])
-                self.test_indices.append(X.reset_index().index[(X.reset_index()["real_date"] > largest_date) & (X.reset_index()["real_date"] <= unique_times[np.where(unique_times==largest_date)[0][0] + self.test_size])])
 
-        else:
-            # (1) Determine the first split based on min_cids and min_periods
+        if self.train_intervals:
+            # (1) Determine the splits prior to aggregation
+            # Deal with the initial split determined by min_cids and min_periods
             init_mask = X.groupby(level=1).size() == self.min_cids
             date_first_min_cids = init_mask[init_mask == True].reset_index().real_date.min()
             date_last_train = unique_times[np.where(unique_times == date_first_min_cids)[0][0] + self.min_periods - 1]
             train_idxs = X.reset_index().index[X.reset_index()["real_date"] <= date_last_train]
-            # (2) Determine the remaining splits based on train_intervals
+            # Determine the remaining splits based on train_intervals
             unique_times_train = unique_times[np.where(unique_times == date_last_train)[0][0] + 1:-self.test_size]
             self.n_splits = int(np.ceil(len(unique_times_train) / self.train_intervals))
             train_splits_basic = np.array_split(unique_times_train,self.n_splits)
             train_splits_basic.insert(0, pd.arrays.DatetimeArray(np.array(sorted(X.reset_index().real_date.iloc[train_idxs].unique()), dtype="datetime64[ns]")))
-            # aggregate each split
             # need to add one to n_splits because n_splits was determined by the number of train_intervals starting from the second split
             # need to take into account the split determined by min_cids and min_periods
             self.n_splits += 1
-            train_splits = [np.concatenate(train_splits_basic[:i+1]) for i in range(self.n_splits)] 
-            # (2) If self.max_periods is specified, adjust each of the splits to only have the self.max_periods most recent times in each split
-            if self.max_periods:
-                for split_idx in range(len(train_splits)):
-                    train_splits[split_idx] = train_splits[split_idx][-self.max_periods:]
-            # (3) Create the train and test indices
-            for split in train_splits:
-                smallest_date = min(split) 
-                largest_date = max(split)
-                self.train_indices.append(X.reset_index().index[(X.reset_index()["real_date"] >= smallest_date) & (X.reset_index()["real_date"] <= largest_date)])
-                self.test_indices.append(X.reset_index().index[(X.reset_index()["real_date"] > largest_date) & (X.reset_index()["real_date"] <= unique_times[np.where(unique_times==largest_date)[0][0] + self.test_size])])
+        else:
+            # (1) Determine the splits prior to agglomeration
+            unique_times_train = unique_times[:-self.test_size]
+            train_splits_basic = np.array_split(unique_times_train,self.n_splits)
+        
+        # (2) aggregate each split 
+        train_splits = [np.concatenate(train_splits_basic[:i+1]) for i in range(self.n_splits)]
 
+        # (3) If self.max_periods is specified, adjust each of the splits to only have the self.max_periods most recent times in each split
+        if self.max_periods:
+            for split_idx in range(len(train_splits)):
+                train_splits[split_idx] = train_splits[split_idx][-self.max_periods:]
+
+        # (4) Create the train and test indices
+        for split in train_splits:
+            smallest_date = min(split) 
+            largest_date = max(split)
+            self.train_indices.append(X.reset_index().index[(X.reset_index()["real_date"] >= smallest_date) & (X.reset_index()["real_date"] <= largest_date)])
+            self.test_indices.append(X.reset_index().index[(X.reset_index()["real_date"] > largest_date) & (X.reset_index()["real_date"] <= unique_times[np.where(unique_times==largest_date)[0][0] + self.test_size])])
+            
         return zip(self.train_indices, self.test_indices)
         
 """
 ---------------
 Test class
+TODO: amend later to not download data but instead use make_qdf()
 ---------------
 """
 
@@ -230,8 +244,19 @@ if __name__ == "__main__":
     #splitter = PanelTimeSeriesSplit(train_intervals=6, test_size=3, min_periods=12, min_cids=3)
     #splitter.split(train_wide)
     
-    splitter = PanelTimeSeriesSplit(train_intervals=6, test_size=4, min_periods=12, min_cids=3, max_periods=3)
-    splitter.split(train_wide)
+    #splitter = PanelTimeSeriesSplit(train_intervals=6, test_size=4, min_periods=12, min_cids=3, max_periods=3)
+    #splitter.split(train_wide)
 
     #splitter = PanelTimeSeriesSplit(n_splits=5,test_size=6)
     #splitter.split(train_wide)
+
+    #splitter = PanelTimeSeriesSplit(n_splits=10,test_size=1)
+    #splitter.split(train_wide)
+
+    splitter = PanelTimeSeriesSplit(n_splits=10,test_size=1, max_periods=12)
+    splitter.split(train_wide)
+    print(splitter.get_n_splits(train_wide))
+    
+    splitter = PanelTimeSeriesSplit(train_intervals=1,test_size=1, max_periods=12, min_cids=3, min_periods=12)
+    splitter.split(train_wide)
+    print(splitter.get_n_splits(train_wide))
