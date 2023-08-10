@@ -23,7 +23,7 @@ from matplotlib.gridspec import GridSpec
 
 sys.path.append(os.path.abspath("."))
 
-from macrosynergy.visuals.plotter import Plotter
+from macrosynergy.visuals.plotter import Plotter, NoneType, Numeric
 
 
 def _get_square_grid(
@@ -140,21 +140,14 @@ class FacetPlot(Plotter):
                 target_var: List[str] = self.xcats
             return _get_square_grid(num_plots=len(target_var))
 
-        if cid_grid:
-            found_cids: List[str] = self.cids
+        if cid_grid or xcat_grid:
+            tks: List[str] = self.cids if cid_grid else self.xcats
             return self._get_grid_dim(
-                tickers=found_cids, ncols=ncols, attempt_square=attempt_square
+                tickers=tks, ncols=ncols, attempt_square=attempt_square
             )
 
-        if xcat_grid:
-            found_xcats: List[str] = self.xcats
-            return self._get_grid_dim(
-                tickers=found_xcats, ncols=ncols, attempt_square=attempt_square
-            )
         if cid_xcat_grid:
-            found_cids: List[str] = self.cids
-            found_xcats: List[str] = self.xcats
-            return (len(found_cids), len(found_xcats))
+            return (len(self.xcats), len(self.cids))
 
         if ncols is not None:
             return (
@@ -171,7 +164,7 @@ class FacetPlot(Plotter):
         metric: Optional[str] = None,
         plot_func: Callable = plt.plot,
         plot_func_args: Optional[List[Any]] = None,
-        figsize: Tuple[Union[int, float], Union[int, float]] = (16.0, 9.0),
+        figsize: Tuple[Numeric, Numeric] = (16.0, 9.0),
         # title arguments
         title: Optional[str] = None,
         title_fontsize: int = 16,
@@ -187,7 +180,7 @@ class FacetPlot(Plotter):
         y_axis_label: Optional[str] = None,
         axis_fontsize: int = 12,
         # subplot arguments
-        facet_size: Optional[Tuple[Union[int, float], Union[int, float]]] = None,
+        facet_size: Optional[Tuple[Numeric, Numeric]] = None,
         facet_titles: Optional[List[str]] = None,
         facet_title_fontsize: int = 12,
         facet_title_xadjust: float = 0.5,
@@ -200,9 +193,7 @@ class FacetPlot(Plotter):
         legend_labels: Optional[List[str]] = None,
         legend_loc: str = "lower right",
         legend_ncol: int = 1,
-        legend_bbox_to_anchor: Optional[
-            Tuple[Union[int, float], Union[int, float]]
-        ] = None,
+        legend_bbox_to_anchor: Optional[Tuple[Numeric, Numeric]] = None,
         legend_frame: bool = True,
         # return args
         show: bool = True,
@@ -264,8 +255,6 @@ class FacetPlot(Plotter):
                     x=facet_title_xadjust,
                     y=facet_title_yadjust,
                 )
-            # fig.autofmt_xdate()
-            # ax.xaxis.set_major_locator(mdates.MonthLocator())
 
             if ax_grid:
                 ax.grid(axis="both", linestyle="--", alpha=0.5)
@@ -280,7 +269,7 @@ class FacetPlot(Plotter):
 
         fig.tight_layout()
         if legend:
-            legend_obj = fig.legend(
+            fig.legend(
                 labels=legend_labels,
                 loc=legend_loc,
                 ncol=legend_ncol,
@@ -320,7 +309,7 @@ class FacetPlot(Plotter):
         compare_series: Optional[str] = None,
         # xcats_mean: bool = False,
         # title arguments
-        figsize: Tuple[float, float] = (16.0, 9.0),
+        figsize: Tuple[Numeric, Numeric] = (16.0, 9.0),
         title: Optional[str] = None,
         title_fontsize: int = 20,
         title_xadjust: Optional[float] = None,
@@ -335,7 +324,7 @@ class FacetPlot(Plotter):
         y_axis_label: Optional[str] = None,
         axis_fontsize: int = 12,
         # subplot arguments
-        facet_size: Optional[Tuple[Union[float, int], Union[float, int]]] = None,
+        facet_size: Optional[Tuple[Numeric, Numeric]] = None,
         facet_titles: Optional[List[str]] = None,
         facet_title_fontsize: int = 12,
         facet_title_xadjust: float = 0.5,
@@ -710,9 +699,10 @@ if __name__ == "__main__":
 
     with FacetPlot(df, cids=sel_cids, xcats=sel_xcats) as fp:
         fp.lineplot(
-            cid_xcat_grid=True,
+            figsize=(5, 4),
+            # cid_xcat_grid=True,
+            cid_grid=True,
             title="Test Title",
-            show=False,
-            save_to_file="test.png",
+            # save_to_file="test.png",
         )
     print(f"Time taken: {time.time() - timer_start}")

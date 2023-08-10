@@ -13,6 +13,8 @@ from typing import (
     Tuple,
     Type,
     Union,
+    SupportsFloat,
+    SupportsInt,
     get_args,
     get_origin,
 )
@@ -25,6 +27,7 @@ from macrosynergy.management.utils import standardise_dataframe
 
 logger = logging.getLogger(__name__)
 NoneType = type(None)
+Numeric = Union[int, float, np.int64, np.float64, SupportsInt, SupportsFloat]
 
 
 def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
@@ -163,6 +166,7 @@ def argvalidation(func: Callable[..., Any]) -> Callable[..., Any]:
                 if arg_type is not inspect._empty:
                     origin = get_origin(arg_type)
                     if origin:  # Handling subscripted types
+                        # replace 'float' with 'typng.Union[float, int]' to make life easier
                         if not is_matching_subscripted_type(arg_value, arg_type):
                             exp_types: str = format_expected_type(get_args(arg_type))
                             raise TypeError(
