@@ -41,11 +41,13 @@ def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
     if origin in [tuple, Tuple]:
         if not isinstance(value, tuple) or len(value) != len(args):
             return False
-        # return all(isinstance(item, expected) for item, expected in zip(value, args))
-        # should be is_matching_subscripted_type, to allow for nested tuples/recursion
+        # don't switch order of get_origin and is_matching_subscripted_type, is short-circuiting
         return all(
-            is_matching_subscripted_type(item, expected) or isinstance(item, expected)
-            for item, expected in zip(value, args)
+            [
+                (get_origin(expected) and is_matching_subscripted_type(item, expected))
+                or isinstance(item, expected)
+                for item, expected in zip(value, args)
+            ]
         )
 
     # dicts
@@ -54,9 +56,12 @@ def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
             return False
         key_type, value_type = args
         return all(
-            (is_matching_subscripted_type(k, key_type) or isinstance(k, key_type))
-            or (isinstance(k, key_type) and isinstance(v, value_type))
-            for k, v in value.items()
+            [
+                (get_origin(key_type) and is_matching_subscripted_type(k, key_type))
+                or isinstance(k, key_type)
+                or (isinstance(k, key_type) and isinstance(v, value_type))
+                for k, v in value.items()
+            ]
         )
 
     # unions and optionals
@@ -276,6 +281,8 @@ class Plotter(metaclass=PlotterMetaClass):
         if not set(df_cols).issubset(set(sdf.columns)):
             raise ValueError(f"DataFrame must contain the following columns: {df_cols}")
 
+        cids_provided: bool = cids is not None
+        xcats_provided: bool = xcats is not None
         if cids is None:
             cids = list(sdf["cid"].unique())
         if xcats is None:
@@ -293,8 +300,8 @@ class Plotter(metaclass=PlotterMetaClass):
             )
 
         sdf: pd.DataFrame
-        cids: List[str]
-        xcats: List[str]
+        r_xcats: List[str]
+        r_cids: List[str]
         sdf, r_xcats, r_cids = reduce_df(
             df=sdf,
             cids=cids if isinstance(cids, list) else [cids],
@@ -306,7 +313,9 @@ class Plotter(metaclass=PlotterMetaClass):
             out_all=True,
         )
 
-        if (len(r_xcats) != len(xcats)) or (len(r_cids) != len(cids)):
+        if ((len(r_xcats) != len(xcats)) and xcats_provided) or (
+            (len(r_cids) != len(cids)) and cids_provided
+        ):
             m_cids: List[str] = list(set(cids) - set(r_cids))
             m_xcats: List[str] = list(set(xcats) - set(r_xcats))
             raise ValueError(
