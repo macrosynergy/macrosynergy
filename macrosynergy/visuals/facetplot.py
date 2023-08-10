@@ -209,14 +209,20 @@ class FacetPlot(Plotter):
         for i, (plot_id, plt_dct) in enumerate(plot_dict.items()):
             # gs is a 2d grid with dims of tuple `grid_dim`
             ax: plt.Axes = fig.add_subplot(gs[i])
-            assert plt_dct["X"] == "real_date", "only real_date for now"
+            if plt_dct["X"] != "real_date":
+                raise NotImplementedError(
+                    "Only `real_date` is supported for the X axis."
+                )
+
             for y in plt_dct["Y"]:
                 # split on the first underscore
                 cidx, xcatx = str(y).split("_", 1)
                 plot_func(
                     self.df[(self.df["cid"] == cidx) & (self.df["xcat"] == xcatx)][
                         str(plt_dct["X"])
-                    ].values.tolist(),
+                    ]
+                    .reset_index()
+                    .values,
                     self.df[(self.df["cid"] == cidx) & (self.df["xcat"] == xcatx)][
                         metric
                     ].values.tolist(),
