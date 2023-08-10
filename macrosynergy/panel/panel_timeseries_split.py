@@ -87,61 +87,27 @@ class PanelTimeSeriesSplit(object):
             init_mask = X.groupby(level=1).size() == self.min_cids
             date_first_min_cids = init_mask[init_mask == True].reset_index().real_date.min()
             date_last_train = unique_times[np.where(unique_times == date_first_min_cids)[0][0] + self.min_periods - 1]
-            date_last_test = unique_times[np.where(unique_times == date_last_train)[0][0] + self.test_size]
             train_idxs = X.reset_index().index[X.reset_index()["real_date"] <= date_last_train]
-            test_idxs = X.reset_index().index[(X.reset_index()["real_date"] > date_last_train) & (X.reset_index()["real_date"] <= date_last_test)]
-            self.train_indices.append(train_idxs)
-            self.test_indices.append(test_idxs)
             # (2) Determine the remaining splits based on train_intervals
-            unique_times_train = unique_times[:-self.test_size]
-            """
-            OLD SOLUTION
-            # (1) Get the first time at which all features are available for min_cids number of cross-sections
-            init_mask = X.groupby(level=1).size() == self.min_cids
-            date_first_min_cids = init_mask[init_mask == True].reset_index().real_date.min()
-            # (2) In 'min_periods' number of time periods, at least 'min_periods' samples will be available for at least 'min_cids' number of cross-sections 
-            # The below line works because indicators are forward filled, meaning that there will be an indicator value for each date post the starting date. 
-            date_last_train = unique_times[np.where(unique_times == date_first_min_cids)[0][0] + self.min_periods - 1]
-            date_last_test = unique_times[np.where(unique_times == date_last_train)[0][0] + self.test_size]
-            # (3) Get indices of all samples in X with observation dates <= date_last_min_cids
-            train_idxs = X.reset_index().index[X.reset_index()["real_date"] <= date_last_train]
-            # (4) Get indices of all test samples corresponding with the initial training set
-            test_idxs = X.reset_index().index[(X.reset_index()["real_date"] > date_last_train) & (X.reset_index()["real_date"] <= date_last_test)]
-            # (5) Return the first set of training and test indices
-            self.train_indices.append(train_idxs)
-            self.test_indices.append(test_idxs)
-            # (6) if self.train_intervals: expand the training set by self.train_intervals number of time periods, and 
-            # set the associated test set as all samples self.test_size after the end of the training set
-            current_train_end_date_idx = np.where(unique_times == date_last_train)[0][0]
-            while current_train_end_date_idx + self.train_intervals < len(unique_times):
-                current_train_end_date_idx += self.train_intervals
-                # Get new end dates for training and testing sets
-                date_new_last_train = unique_times[current_train_end_date_idx]
-                date_new_last_test = unique_times[min(current_train_end_date_idx + self.test_size, len(unique_times) - 1)]
-
-                if self.max_periods is not None and current_train_end_date_idx + 1 > self.max_periods:
-                    date_start_train = unique_times[current_train_end_date_idx + 1 - self.max_periods]
-                else:
-                    date_start_train = unique_times[0]
-
-                # Get indices for new training and testing sets - amend this part to ensure the the training set encapsulates the previous training set
-                train_idxs = X.reset_index().index[(X.reset_index()["real_date"] >= date_start_train) & (X.reset_index()["real_date"] <= date_new_last_train)]
-                test_idxs = X.reset_index().index[(X.reset_index()["real_date"] > date_new_last_train) & (X.reset_index()["real_date"] <= date_new_last_test)]
-                
-                self.train_indices.append(train_idxs)
-                self.test_indices.append(test_idxs)
-
-            #(7) Deal with residual splits
-            last_train_date = max(X.reset_index().iloc[train_idxs].real_date.unique())
-            if last_train_date != unique_times[-self.test_size-1]:
-                test_idxs = X.reset_index().index[X.reset_index()["real_date"] >= unique_times[-self.test_size]]
-                if self.max_periods:
-                    train_idxs = X.reset_index().index[(X.reset_index()["real_date"] < unique_times[-self.test_size]) & (X.reset_index()["real_date"] >= unique_times[-self.test_size-self.max_periods])]
-                else:
-                    train_idxs = X.reset_index().index[X.reset_index()["real_date"] < unique_times[-self.test_size]]
-
-                self.train_indices.append(train_idxs)
-                self.test_indices.append(test_idxs)"""
+            unique_times_train = unique_times[np.where(unique_times == date_last_train)[0][0] + 1:-self.test_size]
+            self.n_splits = int(np.ceil(len(unique_times_train) / self.train_intervals))
+            train_splits_basic = np.array_split(unique_times_train,self.n_splits)
+            train_splits_basic.insert(0, pd.arrays.DatetimeArray(np.array(sorted(X.reset_index().real_date.iloc[train_idxs].unique()), dtype="datetime64[ns]")))
+            # aggregate each split
+            # need to add one to n_splits because n_splits was determined by the number of train_intervals starting from the second split
+            # need to take into account the split determined by min_cids and min_periods
+            self.n_splits += 1
+            train_splits = [np.concatenate(train_splits_basic[:i+1]) for i in range(self.n_splits)] 
+            # (2) If self.max_periods is specified, adjust each of the splits to only have the self.max_periods most recent times in each split
+            if self.max_periods:
+                for split_idx in range(len(train_splits)):
+                    train_splits[split_idx] = train_splits[split_idx][-self.max_periods:]
+            # (3) Create the train and test indices
+            for split in train_splits:
+                smallest_date = min(split) 
+                largest_date = max(split)
+                self.train_indices.append(X.reset_index().index[(X.reset_index()["real_date"] >= smallest_date) & (X.reset_index()["real_date"] <= largest_date)])
+                self.test_indices.append(X.reset_index().index[(X.reset_index()["real_date"] > largest_date) & (X.reset_index()["real_date"] <= unique_times[np.where(unique_times==largest_date)[0][0] + self.test_size])])
 
         return zip(self.train_indices, self.test_indices)
         
@@ -261,5 +227,11 @@ if __name__ == "__main__":
         df=train, xcats=xcatx, cids=cidx, freq="M", lag=1, xcat_aggs=["mean", "sum"]
     )
 
-splitter = PanelTimeSeriesSplit(n_splits=4,test_size=2, max_periods=5)
-splitter.split(train_wide)
+    #splitter = PanelTimeSeriesSplit(train_intervals=6, test_size=3, min_periods=12, min_cids=3)
+    #splitter.split(train_wide)
+    
+    splitter = PanelTimeSeriesSplit(train_intervals=6, test_size=4, min_periods=12, min_cids=3, max_periods=3)
+    splitter.split(train_wide)
+
+    #splitter = PanelTimeSeriesSplit(n_splits=5,test_size=6)
+    #splitter.split(train_wide)
