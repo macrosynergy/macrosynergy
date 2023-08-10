@@ -298,7 +298,7 @@ class FacetPlot(Plotter):
         # start: Optional[str] = None,
         # end: Optional[str] = None,
         # plot arguments
-        metric: Optional[str] = "value",
+        metric: Optional[str] = None,
         ncols: int = 3,
         attempt_square: bool = False,
         cid_grid: bool = False,
@@ -377,7 +377,7 @@ class FacetPlot(Plotter):
             specified, the series specified will be plotted in each facet. Ensure that
             the comparison series is in the dataframe, and not filtered out when
             initializing the `FacetPlot` object. Default is `None`.
-        :param <Tuple[float, float]> figsize: a tuple of floats specifying the width and
+        :param <Tuple[Numeric, Numeric]> figsize: a tuple of floats specifying the width and
             height of the figure. Default is `(16.0, 9.0)`.
         :param <str> title: the title of the plot. Default is `None`.
         :param <int> title_fontsize: the font size of the title. Default is `20`.
@@ -396,7 +396,7 @@ class FacetPlot(Plotter):
         :param <str> x_axis_label: the label for the x-axis. Default is `None`.
         :param <str> y_axis_label: the label for the y-axis. Default is `None`.
         :param <int> axis_fontsize: the font size of the axis labels. Default is `12`.
-        :param <Tuple[float, float]> facet_size: a tuple of floats specifying the width
+        :param <Tuple[Numeric, Numeric]> facet_size: a tuple of floats specifying the width
             and height of each facet. Default is `None`, meaning the facet size will be
             inferred from the `figsize` argument. If specified, the `figsize` argument
             will be ignored and the figure size will be inferred from the dimensions of
@@ -417,11 +417,8 @@ class FacetPlot(Plotter):
             y-axis of each facet. Default is `None`, meaning no label will be shown.
         :param <int> facet_label_fontsize: the font size of the facet labels. Default is
             `12`.
-        :param <bool> legend: whether or not to show a legend for the plot. Default is
-            `True`. In `cid_xcat_grid` mode, the legend is never shown, as it would be
-            redundant.
-        :param <bool> legend: Show the legend. Default is `True`. When using
-        `cid_xcat_grid`, the legend will not be shown as it is redundant.
+        :param <bool> legend: Show the legend. Default is `True`. When using `cid_xcat_grid`,
+            the legend will not be shown as it is redundant.
         :param <list> legend_labels: Labels for the legend. Default is `None`,
             meaning a list identifying the various `cids`/`xcats` will be used.
         :param <str> legend_loc: Location of the legend. Default is `center left`.
@@ -444,21 +441,21 @@ class FacetPlot(Plotter):
         #         intersect=intersect, tickers=tickers, blacklist=blacklist, start=start, end=end, )
 
         if any(
-            [(argx in kwargs.keys()) for argx in ["df", "cids", "xcats", "tickers"]]
+            [(argx in kwargs.keys()) for argx in ["df", "cids", "xcats", "tickers", "metrics"]]
         ):
             # undesirable, as the state of the object will change kept for ease of use
             metrics: List[str] = [metric] if metric is not None else self.metrics
             metrics: Optional[List[str]] = metrics if metrics else None
             self.__init__(
-                df=kwargs["df"] if "df" in kwargs.keys() else self.df,
-                cids=kwargs["cids"],
-                xcats=kwargs["xcats"],
+                df=kwargs.get("df", self.df),
+                cids=kwargs.get("cids", None),
+                xcats=kwargs.get("xcats", None),
                 metrics=metrics,
-                intersect=kwargs["intersect"],
-                tickers=kwargs["tickers"],
-                blacklist=kwargs["blacklist"],
-                start=kwargs["start"],
-                end=kwargs["end"],
+                intersect=kwargs.get("intersect", None),
+                tickers=kwargs.get("tickers", None),
+                blacklist=kwargs.get("blacklist", None),
+                start=kwargs.get("start", None),
+                end=kwargs.get("end", None),
             )
 
         if metric is None:
