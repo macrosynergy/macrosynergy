@@ -5,7 +5,7 @@ from sklearn.model_selection import BaseCrossValidator
 from typing import Union, Optional, List, Tuple, Iterable, Dict, Callable, Any 
 
 
-class PanelTimeSeriesSplit(object):
+class PanelTimeSeriesSplit(BaseCrossValidator):
     """
     This class provides a cross-validator for panel data. It could also be used for rolling model validation and training.
 
@@ -256,7 +256,7 @@ if __name__ == "__main__":
     splitter = PanelTimeSeriesSplit(n_splits=10,test_size=1, max_periods=12)
     splitter.split(train_wide)
     print(splitter.get_n_splits(train_wide))
-    
+
     splitter = PanelTimeSeriesSplit(train_intervals=1,test_size=1, max_periods=12, min_cids=3, min_periods=12)
     splitter.split(train_wide)
     print(splitter.get_n_splits(train_wide))
