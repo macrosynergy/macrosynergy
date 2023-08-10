@@ -25,6 +25,7 @@ sys.path.append(os.path.abspath("."))
 
 from macrosynergy.visuals.plotter import Plotter
 
+
 def _get_square_grid(
     num_plots: int,
 ) -> Tuple[int, int]:
@@ -112,31 +113,32 @@ class FacetPlot(Plotter):
                 "`cid_xcat_grid` can be True."
             )
 
-        if (ncols is None) and (not attempt_square):
-            raise ValueError("Either `ncols` or `attempt_square` must be provided.")
-
         if attempt_square:
-            return _get_square_grid(num_plots=len(tickers))
+            target_var: str = tickers
+            if cid_grid:
+                target_var: List[str] = self.cids
+            elif xcat_grid:
+                target_var: List[str] = self.xcats
+            return _get_square_grid(num_plots=len(target_var))
 
         if cid_grid:
             found_cids: List[str] = self.cids
             return self._get_grid_dim(
-                tickers=tickers, ncols=ncols, attempt_square=attempt_square
+                tickers=found_cids, ncols=ncols, attempt_square=attempt_square
             )
 
         if xcat_grid:
             found_xcats: List[str] = self.xcats
             return self._get_grid_dim(
-                tickers=tickers, ncols=ncols, attempt_square=attempt_square
+                tickers=found_xcats, ncols=ncols, attempt_square=attempt_square
             )
-
-        if ncols is not None:
-            return (ncols, int(np.ceil(len(tickers) / ncols)))
-
         if cid_xcat_grid:
             found_cids: List[str] = self.cids
             found_xcats: List[str] = self.xcats
             return (len(found_cids), len(found_xcats))
+
+        if ncols is not None:
+            return (int(np.ceil(len(tickers) / ncols)), ncols)
 
         raise ValueError("Unable to infer grid dimensions.")
 
@@ -168,6 +170,9 @@ class FacetPlot(Plotter):
         facet_title_fontsize: int = 12,
         facet_title_xadjust: float = 0.5,
         facet_title_yadjust: float = 1.0,
+        facet_xlabel: Optional[str] = None,
+        facet_ylabel: Optional[str] = None,
+        facet_label_fontsize: int = 12,
         # legend arguments
         legend: bool = True,
         legend_labels: Optional[List[str]] = None,
@@ -201,14 +206,20 @@ class FacetPlot(Plotter):
         if plot_func_args is None:
             plot_func_args: List = []
 
-        for i, (plot_id, plot_dict) in enumerate(plot_dict.items()):
-            ax: plt.Axes = fig.add_subplot(gs[i // grid_dim[1], i % grid_dim[1]])
-            for y in plot_dict["Y"]:
+        for i, (plot_id, plt_dct) in enumerate(plot_dict.items()):
+            # gs is a 2d grid with dims of tuple `grid_dim`
+            ax: plt.Axes = fig.add_subplot(gs[i])
+            assert plt_dct["X"] == "real_date", "only real_date for now"
+            for y in plt_dct["Y"]:
                 # split on the first underscore
-                cidx, xcatx = y.split("_", 1)
+                cidx, xcatx = str(y).split("_", 1)
                 plot_func(
-                    self.df.loc[plot_dict["X"]],
-                    self.df.loc[(df["cid"] == cidx) & (df["xcat"] == xcatx)] ,
+                    self.df[(self.df["cid"] == cidx) & (self.df["xcat"] == xcatx)][
+                        str(plt_dct["X"])
+                    ].values.tolist(),
+                    self.df[(self.df["cid"] == cidx) & (self.df["xcat"] == xcatx)][
+                        metric
+                    ].values.tolist(),
                     *plot_func_args,
                     **kwargs,
                 )
@@ -373,9 +384,14 @@ class FacetPlot(Plotter):
                     "there is only one xcat."
                 )
             else:
-                # add the mean for each cid to the dataframe
-                df_mean: pd.DataFrame = self.df.groupby("cid").mean(numeric_only=True).reset_index()
-                df_mean["xcat"] = "mean"
+                # create df_mean, with mean entries for each cid for every day, and xcat="mean"
+                df_mean: pd.DataFrame = (
+                    self.df.groupby(["real_date", "xcat"])[metric]
+                    .mean(numeric_only=True)
+                    .reset_index()
+                )
+
+                df_mean["cid"] = "mean"
                 self.df: pd.DataFrame = pd.concat([self.df, df_mean], axis=0)
 
         plot_dict: Dict[str, List[str]] = {}
@@ -405,7 +421,8 @@ class FacetPlot(Plotter):
 
                 tks: List[str] = list(set(tks).intersection(tickers_to_plot))
                 if cid_grid and cids_mean:
-                    tks.append("_".join([fvar, "mean"]))
+                    # there is only one xcat if cid_grid is True
+                    tks.append("_".join(["mean", self.xcats[0]]))
 
                 plot_dict[i] = {
                     "X": "real_date",
@@ -420,8 +437,8 @@ class FacetPlot(Plotter):
             # TODO fix : legend goes away in cid_xcat_grid
             legend: bool = False
 
-            for i, cid in enumerate(self.cids):
-                for j, xcat in enumerate(self.xcats):
+            for j, xcat in enumerate(self.xcats):
+                for i, cid in enumerate(self.cids):
                     tk: str = "_".join([cid, xcat])
                     if tk in tickers_to_plot:
                         plot_dict[i * len(self.xcats) + j] = {
@@ -438,6 +455,7 @@ class FacetPlot(Plotter):
             plot_func=plt.plot,
             plot_func_args=None,
             figsize=figsize,
+            metric=metric,
             # title arguments
             title=title,
             title_fontsize=title_fontsize,
@@ -514,21 +532,38 @@ if __name__ == "__main__":
     sel_xcats: List[str] = ["FXXR", "EQXR", "RIR", "IR"]
 
     df: pd.DataFrame = make_test_df(
-        cids=cids,
+        cids=list(set(cids) - set(sel_cids)),
         xcats=xcats,
         start_date="2000-01-01",
     )
+    dfB: pd.DataFrame = make_test_df(
+        cids=sel_cids,
+        xcats=sel_xcats,
+        start_date="2000-01-01",
+    )
+    df: pd.DataFrame = pd.concat([df, dfB], axis=0)
+
+    import random
+
+    random.seed(42)
+
+    for cidx, xcatx in df[["cid", "xcat"]].drop_duplicates().values.tolist():
+        # if random() > 0.5 multiply by random.random()*10
+        _bools = (df["cid"] == cidx) & (df["xcat"] == xcatx)
+        r = random.random()
+        df.loc[_bools, "value"] = df.loc[_bools, "value"] * r
 
     # FacetPlot(df).lineplot()
     import time
 
     print("From same object:")
-    sdkf: float = time.time()
+    timer_start: float = time.time()
 
-    with FacetPlot(df, cids=sel_cids, xcats=[xcats[1]]) as fp:
+    with FacetPlot(df, cids=sel_cids, xcats=sel_xcats) as fp:
         fp.lineplot(
-            cid_grid=True,
-            ncols=3,
-            cids_mean=True,
+            cid_xcat_grid=True,
             title="Test Title",
+            show=False,
+            save_to_file="test.png",
         )
+    print(f"Time taken: {time.time() - timer_start}")
