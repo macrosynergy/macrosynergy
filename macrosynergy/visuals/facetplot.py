@@ -23,7 +23,7 @@ from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 
 sys.path.append(os.path.abspath("."))
 
-from macrosynergy.visuals.plotter import Plotter, NoneType, Numeric
+from plotter import Plotter, NoneType, Numeric
 
 
 def _get_square_grid(
@@ -310,7 +310,6 @@ class FacetPlot(Plotter):
         xcat_grid: bool = False,
         cid_xcat_grid: bool = False,
         grid_dim: Optional[Tuple[int, int]] = None,
-        cids_mean: bool = False,
         compare_series: Optional[str] = None,
         # xcats_mean: bool = False,
         # title arguments
@@ -381,7 +380,9 @@ class FacetPlot(Plotter):
         :param <str> compare_series: Used with `cid_grid` with a single `xcat`. If
             specified, the series specified will be plotted in each facet. Ensure that
             the comparison series is in the dataframe, and not filtered out when
-            initializing the `FacetPlot` object. Default is `None`.
+            initializing the `FacetPlot` object. Default is `None`. NB: `compare_series`
+            can only be used when the series is not removed by `reduce_df()` in the object
+            initialization.
         :param <Tuple[Numeric, Numeric]> figsize: a tuple of floats specifying the width and
             height of the figure. Default is `(16.0, 9.0)`.
         :param <str> title: the title of the plot. Default is `None`.
@@ -444,12 +445,22 @@ class FacetPlot(Plotter):
         #     metrics: Optional[List[str]] = metrics if metrics else None
         #     self.__init__(df=df if df is not None else self.df, cids=cids, xcats=xcats, metrics=metrics,
         #         intersect=intersect, tickers=tickers, blacklist=blacklist, start=start, end=end, )
+        comp_series_flag: bool = False
+        if compare_series:
+            if compare_series not in set(
+                (kwargs["df"] if "df" in kwargs else self.df)[["cid", "xcat"]]
+                .drop_duplicates()
+                .apply(lambda x: "_".join(x), axis=1)
+                .tolist()
+            ):
+                comp_series_flag: bool = True
 
         if any(
             [
                 (argx in kwargs.keys())
                 for argx in ["df", "cids", "xcats", "tickers", "metrics"]
             ]
+            or comp_series_flag
         ):
             # undesirable, as the state of the object will change kept for ease of use
             metrics: List[str] = [metric] if metric is not None else self.metrics
@@ -460,7 +471,9 @@ class FacetPlot(Plotter):
                 xcats=kwargs.get("xcats", None),
                 metrics=metrics,
                 intersect=kwargs.get("intersect", None),
-                tickers=kwargs.get("tickers", None),
+                tickers=kwargs.get(
+                    "tickers", compare_series if comp_series_flag else None
+                ),
                 blacklist=kwargs.get("blacklist", None),
                 start=kwargs.get("start", None),
                 end=kwargs.get("end", None),
@@ -505,23 +518,6 @@ class FacetPlot(Plotter):
             else:
                 tickers_to_plot.remove(compare_series)
 
-        if cids_mean:
-            if (not cid_grid) or len(self.xcats) > 1:
-                raise ValueError(
-                    "`cids_mean` can only be True if `cid_grid` is True and "
-                    "there is only one xcat."
-                )
-            else:
-                # create df_mean, with mean entries for each cid for every day, and xcat="mean"
-                df_mean: pd.DataFrame = (
-                    self.df.groupby(["real_date", "xcat"])[metric]
-                    .mean(numeric_only=True)
-                    .reset_index()
-                )
-
-                df_mean["cid"] = "mean"
-                self.df: pd.DataFrame = pd.concat([self.df, df_mean], axis=0)
-
         plot_dict: Dict[str, Dict[str, Union[str, List[str]]]] = {}
 
         if facet_titles is None:
@@ -561,10 +557,6 @@ class FacetPlot(Plotter):
                 ]
 
                 tks: List[str] = list(set(tks).intersection(tickers_to_plot))
-                if cid_grid and cids_mean:
-                    # there is only one xcat if cid_grid is True
-                    tks.append("_".join(["mean", self.xcats[0]]))
-
                 plot_dict[i]: Dict[str, Union[str, List[str]]] = {
                     "X": "real_date",
                     "Y": tks,
