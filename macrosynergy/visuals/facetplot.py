@@ -19,7 +19,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.gridspec import GridSpec
+from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
 
 sys.path.append(os.path.abspath("."))
 
@@ -191,7 +191,7 @@ class FacetPlot(Plotter):
         # legend arguments
         legend: bool = True,
         legend_labels: Optional[List[str]] = None,
-        legend_loc: str = "lower right",
+        legend_loc: Optional[str] = None,
         legend_ncol: int = 1,
         legend_bbox_to_anchor: Optional[Tuple[Numeric, Numeric]] = None,
         legend_frame: bool = True,
@@ -209,7 +209,13 @@ class FacetPlot(Plotter):
 
         fig = plt.figure(figsize=figsize)
         # NB: nrows and ncols are flipped between mpl...GridSpec and mpl...figsize etc
-        gs: GridSpec = GridSpec(nrows=grid_dim[1], ncols=grid_dim[0], figure=fig)
+        outer_gs: GridSpec = GridSpec(1, 2, width_ratios=[grid_dim[0] * 2, 1])
+        # gs: GridSpec = GridSpec(
+        #     nrows=grid_dim[1], ncols=grid_dim[0], figure=fig
+        # )
+        inner_gs: GridSpec = GridSpecFromSubplotSpec(
+            nrows=grid_dim[1], ncols=grid_dim[0], subplot_spec=outer_gs[0]
+        )
 
         # if title is not None:
         fig.suptitle(
@@ -218,32 +224,31 @@ class FacetPlot(Plotter):
             x=title_xadjust,
             y=title_yadjust,
         )
+        colors: List[str] = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 
         if plot_func_args is None:
             plot_func_args: List = []
 
         for i, (plot_id, plt_dct) in enumerate(plot_dict.items()):
             # gs is a 2d grid with dims of tuple `grid_dim`
-            ax: plt.Axes = fig.add_subplot(gs[i])
+            ax: plt.Axes = fig.add_subplot(inner_gs[i])
             if plt_dct["X"] != "real_date":
                 raise NotImplementedError(
                     "Only `real_date` is supported for the X axis."
                 )
 
-            for y in plt_dct["Y"]:
+            for iy, y in enumerate(plt_dct["Y"]):
                 # split on the first underscore
                 cidx, xcatx = str(y).split("_", 1)
+                sel_bools: pd.Series = (self.df["cid"] == cidx) & (
+                    self.df["xcat"] == xcatx
+                )
                 plot_func(
-                    self.df[(self.df["cid"] == cidx) & (self.df["xcat"] == xcatx)][
-                        str(plt_dct["X"])
-                    ]
+                    self.df[sel_bools][str(plt_dct["X"])]
                     .reset_index(drop=True)
                     .tolist(),
-                    self.df[(self.df["cid"] == cidx) & (self.df["xcat"] == xcatx)][
-                        metric
-                    ]
-                    .reset_index(drop=True)
-                    .tolist(),
+                    self.df[sel_bools][metric].reset_index(drop=True).tolist(),
+                    color=colors[iy % len(colors)],
                     *plot_func_args,
                     **kwargs,
                 )
@@ -335,7 +340,7 @@ class FacetPlot(Plotter):
         # legend arguments
         legend: bool = True,
         legend_labels: Optional[List[str]] = None,
-        legend_loc: str = "center left",
+        legend_loc: str = "center right",
         legend_ncol: int = 1,
         legend_bbox_to_anchor: Optional[Tuple[Numeric, Numeric]] = None,  # (1.0, 0.5),
         legend_frame: bool = True,
@@ -547,7 +552,7 @@ class FacetPlot(Plotter):
             if facet_titles is None:
                 facet_titles: List[str] = [self.cids, self.xcats][::flipper][0]
             if legend_labels is None:
-                legend_labels: List[str] = [self.cids, self.xcats][::flipper][0]
+                legend_labels: List[str] = [self.xcats, self.cids][::flipper][0]
 
             for i, fvar in enumerate([self.cids, self.xcats][::flipper][0]):
                 tks: List[str] = [
@@ -668,28 +673,37 @@ if __name__ == "__main__":
     ]
     sel_cids: List[str] = ["USD", "EUR", "GBP"]
     sel_xcats: List[str] = ["FXXR", "EQXR", "RIR", "IR"]
-
+    r_styles: List[str] = [
+        "linear",
+        "decreasing-linear",
+        "sharp-hill",
+        "sine",
+        "four-bit-sine",
+    ]
     df: pd.DataFrame = make_test_df(
         cids=list(set(cids) - set(sel_cids)),
         xcats=xcats,
         start_date="2000-01-01",
     )
-    dfB: pd.DataFrame = make_test_df(
-        cids=sel_cids,
-        xcats=sel_xcats,
-        start_date="2000-01-01",
-    )
-    df: pd.DataFrame = pd.concat([df, dfB], axis=0)
+
+    for rstyle, xcatx in zip(r_styles, sel_xcats):
+        dfB: pd.DataFrame = make_test_df(
+            cids=sel_cids,
+            xcats=[xcatx],
+            start_date="2000-01-01",
+            prefer=rstyle,
+        )
+        df: pd.DataFrame = pd.concat([df, dfB], axis=0)
 
     import random
 
     random.seed(42)
 
-    for cidx, xcatx in df[["cid", "xcat"]].drop_duplicates().values.tolist():
-        # if random() > 0.5 multiply by random.random()*10
-        _bools = (df["cid"] == cidx) & (df["xcat"] == xcatx)
-        r = random.random()
-        df.loc[_bools, "value"] = df.loc[_bools, "value"] * r
+    # for cidx, xcatx in df[["cid", "xcat"]].drop_duplicates().values.tolist():
+    #     # if random() > 0.5 multiply by random.random()*10
+    #     _bools = (df["cid"] == cidx) & (df["xcat"] == xcatx)
+    #     r = random.random()
+    #     df.loc[_bools, "value"] = df.loc[_bools, "value"] * r
 
     # FacetPlot(df).lineplot()
     import time
