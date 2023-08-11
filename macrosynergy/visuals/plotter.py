@@ -316,7 +316,7 @@ class Plotter(metaclass=PlotterMetaClass):
         if not set(df_cols).issubset(set(sdf.columns)):
             raise ValueError(f"DataFrame must contain the following columns: {df_cols}")
 
-        cids_provided: bool = cids is not None
+        cids_provided: bool = cids is not None 
         xcats_provided: bool = xcats is not None
         if cids is None:
             cids = list(sdf["cid"].unique())
@@ -329,10 +329,12 @@ class Plotter(metaclass=PlotterMetaClass):
             end: str = pd.Timestamp(sdf["real_date"].max()).strftime("%Y-%m-%d")
 
         if tickers is not None:
-            sdf = reduce_df_by_ticker(
-                df=sdf,
-                tickers=tickers,
-            )
+            for ticker in tickers:
+                _cid, _xcats = ticker.split("_", 1)
+                if _cid not in cids:
+                    cids.append(_cid)
+                if _xcats not in xcats:
+                    xcats.append(_xcats)
 
         sdf: pd.DataFrame
         r_xcats: List[str]
