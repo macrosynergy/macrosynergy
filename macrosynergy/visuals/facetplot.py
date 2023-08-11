@@ -168,14 +168,14 @@ class FacetPlot(Plotter):
         # title arguments
         title: Optional[str] = None,
         title_fontsize: int = 16,
-        title_xadjust: Optional[float] = None,
-        title_yadjust: Optional[float] = None,
+        title_xadjust: Optional[Numeric] = None,
+        title_yadjust: Optional[Numeric] = None,
         # subplot axis arguments
         ax_grid: bool = True,
         ax_hline: bool = False,
-        ax_hline_val: float = 0,
+        ax_hline_val: Numeric = 0,
         ax_vline: bool = False,
-        ax_vline_val: float = 0,
+        ax_vline_val: Numeric = 0,
         x_axis_label: Optional[str] = None,
         y_axis_label: Optional[str] = None,
         axis_fontsize: int = 12,
@@ -183,8 +183,8 @@ class FacetPlot(Plotter):
         facet_size: Optional[Tuple[Numeric, Numeric]] = None,
         facet_titles: Optional[List[str]] = None,
         facet_title_fontsize: int = 12,
-        facet_title_xadjust: float = 0.5,
-        facet_title_yadjust: float = 1.0,
+        facet_title_xadjust: Numeric = 0.5,
+        facet_title_yadjust: Numeric = 1.0,
         facet_xlabel: Optional[str] = None,
         facet_ylabel: Optional[str] = None,
         facet_label_fontsize: int = 12,
@@ -312,14 +312,14 @@ class FacetPlot(Plotter):
         figsize: Tuple[Numeric, Numeric] = (16.0, 9.0),
         title: Optional[str] = None,
         title_fontsize: int = 20,
-        title_xadjust: Optional[float] = None,
-        title_yadjust: Optional[float] = None,
+        title_xadjust: Optional[Numeric] = None,
+        title_yadjust: Optional[Numeric] = None,
         # subplot axis arguments
         ax_grid: bool = True,
         ax_hline: bool = False,
-        ax_hline_val: float = 0.0,
+        ax_hline_val: Numeric = 0.0,
         ax_vline: bool = False,
-        ax_vline_val: float = 0.0,
+        ax_vline_val: Numeric = 0.0,
         x_axis_label: Optional[str] = None,
         y_axis_label: Optional[str] = None,
         axis_fontsize: int = 12,
@@ -327,8 +327,8 @@ class FacetPlot(Plotter):
         facet_size: Optional[Tuple[Numeric, Numeric]] = None,
         facet_titles: Optional[List[str]] = None,
         facet_title_fontsize: int = 12,
-        facet_title_xadjust: float = 0.5,
-        facet_title_yadjust: float = 1.0,
+        facet_title_xadjust: Numeric = 0.5,
+        facet_title_yadjust: Numeric = 1.0,
         facet_xlabel: Optional[str] = None,
         facet_ylabel: Optional[str] = None,
         facet_label_fontsize: int = 12,
@@ -337,7 +337,7 @@ class FacetPlot(Plotter):
         legend_labels: Optional[List[str]] = None,
         legend_loc: str = "center left",
         legend_ncol: int = 1,
-        legend_bbox_to_anchor: Optional[Tuple[float, float]] = (1.0, 0.5),
+        legend_bbox_to_anchor: Optional[Tuple[Numeric, Numeric]] = None,  # (1.0, 0.5),
         legend_frame: bool = True,
         # return args
         show: bool = True,
@@ -441,7 +441,10 @@ class FacetPlot(Plotter):
         #         intersect=intersect, tickers=tickers, blacklist=blacklist, start=start, end=end, )
 
         if any(
-            [(argx in kwargs.keys()) for argx in ["df", "cids", "xcats", "tickers", "metrics"]]
+            [
+                (argx in kwargs.keys())
+                for argx in ["df", "cids", "xcats", "tickers", "metrics"]
+            ]
         ):
             # undesirable, as the state of the object will change kept for ease of use
             metrics: List[str] = [metric] if metric is not None else self.metrics
@@ -567,7 +570,7 @@ class FacetPlot(Plotter):
                 facet_titles: List[str] = [
                     f"{cid}_{xcat}" for cid in self.cids for xcat in self.xcats
                 ]
-            # TODO fix : legend goes away in cid_xcat_grid
+            # NB : legend goes away in cid_xcat_grid
             legend: bool = False
 
             for j, xcat in enumerate(self.xcats):
@@ -696,7 +699,7 @@ if __name__ == "__main__":
 
     with FacetPlot(df, cids=sel_cids, xcats=sel_xcats) as fp:
         fp.lineplot(
-            figsize=(5, 4),
+            # facet_size=(5, 4),
             # cid_xcat_grid=True,
             cid_grid=True,
             title="Test Title",
