@@ -135,6 +135,7 @@ def argvalidation(func: Callable[..., Any]) -> Callable[..., Any]:
     :param <Callable[..., Any]> func: The function to validate.
     :return <Callable[..., Any]>: The decorated function.
     """
+
     def format_expected_type(expected_types: List[Any]) -> str:
         # format the expected types to read nicely, and to remove 'typing.' from the string
         if isinstance(expected_types, tuple):
@@ -207,6 +208,7 @@ def argcopy(func: Callable) -> Callable:
     :param <Callable> func: The function to copy arguments for.
     :return <Callable>: The decorated function.
     """
+
     @wraps(func)
     def copy_wrapper(*args, **kwargs):
         copy_types = (
@@ -316,7 +318,7 @@ class Plotter(metaclass=PlotterMetaClass):
         if not set(df_cols).issubset(set(sdf.columns)):
             raise ValueError(f"DataFrame must contain the following columns: {df_cols}")
 
-        cids_provided: bool = cids is not None 
+        cids_provided: bool = cids is not None
         xcats_provided: bool = xcats is not None
         if cids is None:
             cids = list(sdf["cid"].unique())
@@ -351,7 +353,7 @@ class Plotter(metaclass=PlotterMetaClass):
         )
 
         if ((len(r_xcats) != len(xcats)) and xcats_provided) or (
-            (len(r_cids) != len(cids)) and cids_provided
+            ((len(r_cids) != len(cids)) and cids_provided) and not intersect
         ):
             m_cids: List[str] = list(set(cids) - set(r_cids))
             m_xcats: List[str] = list(set(xcats) - set(r_xcats))
