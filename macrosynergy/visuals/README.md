@@ -1,4 +1,4 @@
-# macrosynergy.visuals
+# `macrosynergy.visuals` - subpackage for visualizing quantamental data
 
 ## Description
 
@@ -6,7 +6,7 @@ The `macrosynergy.visuals` subpackage contains functions for visualizing quantam
 
 The functionality is built around the ability to create quick generic plots of data, and to provide a framework for creating custom plots.
 Simplicity, speed, consistency and flexibility are the main goals.
-The core visualization functions are built around `matplotlib`, with goals of mimicking the rich and dataframe-friendly nature of `seaborn`.
+The core visualization functions are built around matplotlib, with goals of mimicking the rich and dataframe-friendly nature of seaborn without the overheads it comes with.
 
 ## Functionality
 
