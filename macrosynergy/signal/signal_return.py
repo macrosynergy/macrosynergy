@@ -7,6 +7,7 @@ from scipy import stats
 from typing import List, Union, Tuple
 from datetime import timedelta
 from collections import defaultdict
+import warnings
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df, categories_df
@@ -183,7 +184,6 @@ class SignalReturnRelations:
         for the given cross-sections and categories, on the given metrics.
         
         Parameters
-        ----------
         :param <pd.DataFrame> target_df: DataFrame to which the slip is applied.
         :param <int> slip: Slip to be applied.
         :param <List[str]> cids: List of cross-sections.
@@ -207,8 +207,8 @@ class SignalReturnRelations:
         target_df['tickers'] = target_df['cid'] + '_' + target_df['xcat']
 
         if not set(sel_tickers).issubset(set(target_df['tickers'].unique())):
-            raise ValueError("Tickers targetted for applying slip are not present in the DataFrame.\n"
-             f"Missing tickers: {set(sel_tickers) - set(target_df['tickers'].unique())}")
+            warnings.warn("Tickers targetted for applying slip are not present in the DataFrame.\n"
+             f"Missing tickers: {sorted(list(set(sel_tickers) - set(target_df['tickers'].unique())))}")
 
         slip : int = slip.__neg__()
         
