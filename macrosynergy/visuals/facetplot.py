@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
+import matplotlib.colors as mcolors
 
 sys.path.append(os.path.abspath("."))
 
@@ -157,139 +158,55 @@ class FacetPlot(Plotter):
 
         raise ValueError("Unable to infer grid dimensions.")
 
-    def _cart_plot(
-        self,
-        grid_dim: Tuple[int, int],
-        plot_dict: Dict[int, Dict[str, Any]],
-        metric: Optional[str] = None,
-        plot_func: Callable = plt.plot,
-        plot_func_args: Optional[List[Any]] = None,
-        figsize: Tuple[Numeric, Numeric] = (16.0, 9.0),
-        # title arguments
-        title: Optional[str] = None,
-        title_fontsize: int = 16,
-        title_xadjust: Optional[Numeric] = None,
-        title_yadjust: Optional[Numeric] = None,
-        # subplot axis arguments
-        ax_grid: bool = True,
-        ax_hline: bool = False,
-        ax_hline_val: Numeric = 0,
-        ax_vline: bool = False,
-        ax_vline_val: Numeric = 0,
-        x_axis_label: Optional[str] = None,
-        y_axis_label: Optional[str] = None,
-        axis_fontsize: int = 12,
-        # subplot arguments
-        facet_size: Optional[Tuple[Numeric, Numeric]] = None,
-        facet_titles: Optional[List[str]] = None,
-        facet_title_fontsize: int = 12,
-        facet_title_xadjust: Numeric = 0.5,
-        facet_title_yadjust: Numeric = 1.0,
-        facet_xlabel: Optional[str] = None,
-        facet_ylabel: Optional[str] = None,
-        facet_label_fontsize: int = 12,
-        # legend arguments
-        legend: bool = True,
-        legend_labels: Optional[List[str]] = None,
-        legend_loc: Optional[str] = None,
-        legend_ncol: int = 1,
-        legend_bbox_to_anchor: Optional[Tuple[Numeric, Numeric]] = None,
-        legend_frame: bool = True,
-        # return args
-        show: bool = True,
-        save_to_file: Optional[str] = None,
-        dpi: int = 300,
-        return_figure: bool = False,
-        *args,
-        **kwargs,
-    ):
-        """
-        Render a facet plot from a wide dataframe, a grid dimension and a plotting function.
-        """
-
-        fig = plt.figure(figsize=figsize)
-        # NB: nrows and ncols are flipped between mpl...GridSpec and mpl...figsize etc
-        outer_gs: GridSpec = GridSpec(1, 2, width_ratios=[grid_dim[0] * 2, 1])
-        # gs: GridSpec = GridSpec(
-        #     nrows=grid_dim[1], ncols=grid_dim[0], figure=fig
-        # )
-        inner_gs: GridSpec = GridSpecFromSubplotSpec(
-            nrows=grid_dim[1], ncols=grid_dim[0], subplot_spec=outer_gs[0]
-        )
-
-        # if title is not None:
-        fig.suptitle(
-            title,
-            fontsize=title_fontsize,
-            x=title_xadjust,
-            y=title_yadjust,
-        )
-        colors: List[str] = plt.rcParams["axes.prop_cycle"].by_key()["color"]
-
-        if plot_func_args is None:
-            plot_func_args: List = []
-
-        for i, (plot_id, plt_dct) in enumerate(plot_dict.items()):
-            # gs is a 2d grid with dims of tuple `grid_dim`
-            ax: plt.Axes = fig.add_subplot(inner_gs[i])
-            if plt_dct["X"] != "real_date":
-                raise NotImplementedError(
-                    "Only `real_date` is supported for the X axis."
-                )
-
-            for iy, y in enumerate(plt_dct["Y"]):
-                # split on the first underscore
-                cidx, xcatx = str(y).split("_", 1)
-                sel_bools: pd.Series = (self.df["cid"] == cidx) & (
-                    self.df["xcat"] == xcatx
-                )
-                plot_func(
-                    self.df[sel_bools][str(plt_dct["X"])]
-                    .reset_index(drop=True)
-                    .tolist(),
-                    self.df[sel_bools][metric].reset_index(drop=True).tolist(),
-                    color=colors[iy % len(colors)],
-                    *plot_func_args,
-                    **kwargs,
-                )
-
-            if facet_titles:
-                ax.set_title(
-                    facet_titles[i],
-                    fontsize=facet_title_fontsize,
-                    x=facet_title_xadjust,
-                    y=facet_title_yadjust,
-                )
-
-            if ax_grid:
-                ax.grid(axis="both", linestyle="--", alpha=0.5)
-            if ax_hline:
-                ax.axhline(ax_hline_val, color="black", linestyle="--")
-            if ax_vline:
-                ax.axvline(ax_vline_val, color="black", linestyle="--")
-            if x_axis_label is not None:
-                ax.set_xlabel(x_axis_label, fontsize=axis_fontsize)
-            if y_axis_label is not None:
-                ax.set_ylabel(y_axis_label, fontsize=axis_fontsize)
-
-        fig.tight_layout()
-        if legend:
-            fig.legend(
-                labels=legend_labels,
-                loc=legend_loc,
-                ncol=legend_ncol,
-                bbox_to_anchor=legend_bbox_to_anchor,
-                frameon=legend_frame,
-            )
-
-        if save_to_file is not None:
-            fig.savefig(save_to_file, dpi=dpi)
-
-        if show:
-            plt.show()
-
-        if return_figure:
-            return fig
+    # def _cart_plot(
+    #     self,
+    #     grid_dim: Tuple[int, int],
+    #     plot_dict: Dict[int, Dict[str, Any]],
+    #     metric: Optional[str] = None,
+    #     plot_func: Callable = plt.plot,
+    #     plot_func_args: Optional[List[Any]] = None,
+    #     figsize: Tuple[Numeric, Numeric] = (16.0, 9.0),
+    #     # title arguments
+    #     title: Optional[str] = None,
+    #     title_fontsize: int = 16,
+    #     title_xadjust: Optional[Numeric] = None,
+    #     title_yadjust: Optional[Numeric] = None,
+    #     # subplot axis arguments
+    #     ax_grid: bool = True,
+    #     ax_hline: bool = False,
+    #     ax_hline_val: Numeric = 0,
+    #     ax_vline: bool = False,
+    #     ax_vline_val: Numeric = 0,
+    #     x_axis_label: Optional[str] = None,
+    #     y_axis_label: Optional[str] = None,
+    #     axis_fontsize: int = 12,
+    #     # subplot arguments
+    #     facet_size: Optional[Tuple[Numeric, Numeric]] = None,
+    #     facet_titles: Optional[List[str]] = None,
+    #     facet_title_fontsize: int = 12,
+    #     facet_title_xadjust: Numeric = 0.5,
+    #     facet_title_yadjust: Numeric = 1.0,
+    #     facet_xlabel: Optional[str] = None,
+    #     facet_ylabel: Optional[str] = None,
+    #     facet_label_fontsize: int = 12,
+    #     # legend arguments
+    #     legend: bool = True,
+    #     legend_labels: Optional[List[str]] = None,
+    #     legend_loc: Optional[str] = None,
+    #     legend_ncol: int = 1,
+    #     legend_bbox_to_anchor: Optional[Tuple[Numeric, Numeric]] = None,
+    #     legend_frame: bool = True,
+    #     # return args
+    #     show: bool = True,
+    #     save_to_file: Optional[str] = None,
+    #     dpi: int = 300,
+    #     return_figure: bool = False,
+    #     *args,
+    #     **kwargs,
+    # ):
+    #     """
+    #     Render a facet plot from a wide dataframe, a grid dimension and a plotting function.
+    #     """
 
     def lineplot(
         self,
@@ -348,6 +265,7 @@ class FacetPlot(Plotter):
         save_to_file: Optional[str] = None,
         dpi: int = 300,
         return_figure: bool = False,
+        plot_func_args: Dict[str, Any] = {},
         *args,
         **kwargs,
     ):
@@ -408,8 +326,8 @@ class FacetPlot(Plotter):
             will be ignored and the figure size will be inferred from the dimensions of
             the facet grid and the facet size.
         :param <List[str]> facet_titles: a list of strings specifying the titles of each
-            facet. Default is `None`, meaning all facets will have the full
-            `ticker`, `cid`, or `xcat` as the title. If no `facet_titles` are required,
+            facet. Default is `None`, meaning all facets will have the full `ticker`,
+            `cid`, or `xcat` as the title. If no `facet_titles` are required,
             pass an empty list - `facet_titles=[]`.
         :param <int> facet_title_fontsize: the font size of the facet titles. Default is
             `12`.
@@ -438,13 +356,9 @@ class FacetPlot(Plotter):
         :param <str> save_to_file: Save the plot to a file. Default is `None`.
         :param <int> dpi: DPI of the saved image. Default is `300`.
         :param <bool> return_figure: Return the figure object. Default is `False`.
+        :param <dict> plot_func_args: A dictionary of arguments to be passed to the
+            plotting function. Default is an empty dictionary.
         """
-        # if any([arg is not None for arg in [df, cids, xcats, metric, tickers]]):
-        #     # undesirable, as the state of the object will change kept for ease of use
-        #     metrics: List[str] = [metric] if metric is not None else self.metrics
-        #     metrics: Optional[List[str]] = metrics if metrics else None
-        #     self.__init__(df=df if df is not None else self.df, cids=cids, xcats=xcats, metrics=metrics,
-        #         intersect=intersect, tickers=tickers, blacklist=blacklist, start=start, end=end, )
         comp_series_flag: bool = False
         if compare_series:
             if compare_series not in set(
@@ -466,17 +380,17 @@ class FacetPlot(Plotter):
             metrics: List[str] = [metric] if metric is not None else self.metrics
             metrics: Optional[List[str]] = metrics if metrics else None
             self.__init__(
-                df=kwargs.get("df", self.df),
-                cids=kwargs.get("cids", None),
-                xcats=kwargs.get("xcats", None),
+                df=kwargs.pop("df", self.df),
+                cids=kwargs.pop("cids", None),
+                xcats=kwargs.pop("xcats", None),
                 metrics=metrics,
-                intersect=kwargs.get("intersect", None),
-                tickers=kwargs.get(
+                intersect=kwargs.pop("intersect", None),
+                tickers=kwargs.pop(
                     "tickers", compare_series if comp_series_flag else None
                 ),
-                blacklist=kwargs.get("blacklist", None),
-                start=kwargs.get("start", None),
-                end=kwargs.get("end", None),
+                blacklist=kwargs.pop("blacklist", None),
+                start=kwargs.pop("start", None),
+                end=kwargs.pop("end", None),
             )
 
         if metric is None:
@@ -520,6 +434,9 @@ class FacetPlot(Plotter):
 
         plot_dict: Dict[str, Dict[str, Union[str, List[str]]]] = {}
 
+        colormap = plt.cm.tab10
+        legend_color_map: Optional[Dict[str, str]] = None
+
         if facet_titles is None:
             if cid_grid:
                 facet_titles: List[str] = self.cids
@@ -550,13 +467,18 @@ class FacetPlot(Plotter):
             if legend_labels is None:
                 legend_labels: List[str] = [self.xcats, self.cids][::flipper][0]
 
+            if legend_color_map is None:
+                legend_color_map: Dict[str, str] = {
+                    x: colormap(i) for i, x in enumerate(legend_labels)
+                }
+
             for i, fvar in enumerate([self.cids, self.xcats][::flipper][0]):
                 tks: List[str] = [
                     "_".join([fvar, x][::flipper])
                     for x in ([self.xcats, self.cids][::flipper][0])
                 ]
 
-                tks: List[str] = list(set(tks).intersection(tickers_to_plot))
+                tks: List[str] = sorted(tks)
                 plot_dict[i]: Dict[str, Union[str, List[str]]] = {
                     "X": "real_date",
                     "Y": tks,
@@ -583,52 +505,93 @@ class FacetPlot(Plotter):
 
         if len(plot_dict) == 0:
             raise ValueError("Unable to resolve plot settings.")
-
-        return self._cart_plot(
-            plot_dict=plot_dict,
-            grid_dim=grid_dim,
-            plot_func=plt.plot,
-            plot_func_args=None,
-            figsize=figsize,
-            metric=metric,
-            # title arguments
-            title=title,
-            title_fontsize=title_fontsize,
-            title_xadjust=title_xadjust,
-            title_yadjust=title_yadjust,
-            # subplot axis arguments
-            ax_grid=ax_grid,
-            ax_hline=ax_hline,
-            ax_hline_val=ax_hline_val,
-            ax_vline=ax_vline,
-            ax_vline_val=ax_vline_val,
-            x_axis_label=x_axis_label,
-            y_axis_label=y_axis_label,
-            axis_fontsize=axis_fontsize,
-            # subplot arguments
-            facet_size=facet_size,
-            facet_titles=facet_titles,
-            facet_title_fontsize=facet_title_fontsize,
-            facet_title_xadjust=facet_title_xadjust,
-            facet_title_yadjust=facet_title_yadjust,
-            facet_xlabel=facet_xlabel,
-            facet_ylabel=facet_ylabel,
-            facet_label_fontsize=facet_label_fontsize,
-            # legend arguments
-            legend=legend,
-            legend_labels=legend_labels,
-            legend_loc=legend_loc,
-            legend_ncol=legend_ncol,
-            legend_bbox_to_anchor=legend_bbox_to_anchor,
-            legend_frame=legend_frame,
-            # return args
-            show=show,
-            save_to_file=save_to_file,
-            dpi=dpi,
-            return_figure=return_figure,
-            *args,
-            **kwargs,
+        fig = plt.figure(figsize=figsize)  # , layout="constrained")
+        # if the leg
+        # NB: nrows and ncols are flipped between mpl...GridSpec and mpl...figsize etc
+        outer_gs: GridSpec = GridSpec(1, 2, width_ratios=[grid_dim[0] * 2, 1])
+        # gs: GridSpec = GridSpec(
+        #     nrows=grid_dim[1], ncols=grid_dim[0], figure=fig
+        # )
+        inner_gs: GridSpec = GridSpecFromSubplotSpec(
+            nrows=grid_dim[1], ncols=grid_dim[0], subplot_spec=outer_gs[0]
         )
+
+        # if title is not None:
+        fig.suptitle(
+            title,
+            fontsize=title_fontsize,
+            x=title_xadjust,
+            y=title_yadjust,
+        )
+
+        # if plot_func_args is None:
+        plot_func_args: List = {}
+
+        for i, (plot_id, plt_dct) in enumerate(plot_dict.items()):
+            # gs is a 2d grid with dims of tuple `grid_dim`
+            ax: plt.Axes = fig.add_subplot(inner_gs[i])
+            if plt_dct["X"] != "real_date":
+                raise NotImplementedError(
+                    "Only `real_date` is supported for the X axis."
+                )
+
+            for iy, y in enumerate(plt_dct["Y"]):
+                # split on the first underscore
+                cidx, xcatx = str(y).split("_", 1)
+                sel_bools: pd.Series = (self.df["cid"] == cidx) & (
+                    self.df["xcat"] == xcatx
+                )
+                # lineplot
+                if legend_color_map:
+                    plot_func_args["color"] = legend_color_map[
+                        xcatx if cid_grid else cidx
+                    ]
+
+                ax.plot(
+                    self.df[sel_bools][plt_dct["X"]].reset_index(drop=True).tolist(),
+                    self.df[sel_bools][metric].reset_index(drop=True).tolist(),
+                    **plot_func_args,
+                    **kwargs,
+                )
+
+            if facet_titles:
+                ax.set_title(
+                    facet_titles[i],
+                    fontsize=facet_title_fontsize,
+                    x=facet_title_xadjust,
+                    y=facet_title_yadjust,
+                )
+
+            if ax_grid:
+                ax.grid(axis="both", linestyle="--", alpha=0.5)
+            if ax_hline:
+                ax.axhline(ax_hline_val, color="black", linestyle="--")
+            if ax_vline:
+                ax.axvline(ax_vline_val, color="black", linestyle="--")
+            if x_axis_label is not None:
+                ax.set_xlabel(x_axis_label, fontsize=axis_fontsize)
+            if y_axis_label is not None:
+                ax.set_ylabel(y_axis_label, fontsize=axis_fontsize)
+
+        if legend:
+            fig.legend(
+                labels=legend_labels,
+                loc=legend_loc,
+                ncol=legend_ncol,
+                bbox_to_anchor=legend_bbox_to_anchor,
+                frameon=legend_frame,
+            )
+
+        plt.tight_layout()
+
+        if save_to_file is not None:
+            fig.savefig(save_to_file, dpi=dpi)
+
+        if show:
+            plt.show()
+
+        if return_figure:
+            return fig
 
 
 if __name__ == "__main__":
@@ -672,30 +635,38 @@ if __name__ == "__main__":
         "sine",
         "four-bit-sine",
     ]
-    df: pd.DataFrame = make_test_df(
-        cids=list(set(cids) - set(sel_cids)),
-        xcats=xcats,
-        start_date="2000-01-01",
-    )
-
-    for rstyle, xcatx in zip(r_styles, sel_xcats):
+    # df: pd.DataFrame = make_test_df(
+    #     cids=list(set(cids) - set(sel_cids)),
+    #     xcats=xcats,
+    #     start_date="2000-01-01",
+    # )
+    df = pd.DataFrame()
+    # for rstyle, xcatx in zip(r_styles[: len(sel_xcats)], sel_xcats):
+    for ix, xcatx in enumerate(xcats):
+        rstyle: str = r_styles[(ix + len(r_styles)) % len(r_styles)]
         dfB: pd.DataFrame = make_test_df(
-            cids=sel_cids,
+            cids=cids,
             xcats=[xcatx],
             start_date="2000-01-01",
             prefer=rstyle,
         )
         df: pd.DataFrame = pd.concat([df, dfB], axis=0)
 
-    import random
+    df: pd.DataFrame = df[
+        ~((df["cid"] == "USD") & (df["xcat"] == "FXXR"))
+    ].reset_index()
 
-    random.seed(42)
+    from random import SystemRandom
 
-    # for cidx, xcatx in df[["cid", "xcat"]].drop_duplicates().values.tolist():
-    #     # if random() > 0.5 multiply by random.random()*10
-    #     _bools = (df["cid"] == cidx) & (df["xcat"] == xcatx)
-    #     r = random.random()
-    #     df.loc[_bools, "value"] = df.loc[_bools, "value"] * r
+    random = SystemRandom()
+
+    # random.seed(42)
+
+    for cidx, xcatx in df[["cid", "xcat"]].drop_duplicates().values.tolist():
+        # if random() > 0.5 multiply by random.random()*10
+        _bools = (df["cid"] == cidx) & (df["xcat"] == xcatx)
+        r = max(random.random(), 0.1)
+        df.loc[_bools, "value"] = df.loc[_bools, "value"] * r
 
     # FacetPlot(df).lineplot()
     import time
@@ -703,12 +674,14 @@ if __name__ == "__main__":
     print("From same object:")
     timer_start: float = time.time()
 
-    with FacetPlot(df, cids=sel_cids, xcats=sel_xcats) as fp:
+    with FacetPlot(df, cids=cids, xcats=xcats) as fp:
         fp.lineplot(
             # facet_size=(5, 4),
-            # cid_xcat_grid=True,
-            cid_grid=True,
+            cid_xcat_grid=True,
+            # xcat_grid=True,
+            # cid_grid=True,
             title="Test Title",
-            # save_to_file="test.png",
+            show=False,
+            save_to_file="test.png",
         )
     print(f"Time taken: {time.time() - timer_start}")
