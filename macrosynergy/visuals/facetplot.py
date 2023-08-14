@@ -210,15 +210,6 @@ class FacetPlot(Plotter):
 
     def lineplot(
         self,
-        # dataframe arguments
-        # df: Optional[pd.DataFrame] = None,
-        # cids: Optional[List[str]] = None,
-        # xcats: Optional[List[str]] = None,
-        # intersect: bool = False,
-        # tickers: Optional[List[str]] = None,
-        # blacklist: Optional[Dict[str, List[str]]] = None,
-        # start: Optional[str] = None,
-        # end: Optional[str] = None,
         # plot arguments
         metric: Optional[str] = None,
         ncols: int = 3,
@@ -505,15 +496,20 @@ class FacetPlot(Plotter):
 
         if len(plot_dict) == 0:
             raise ValueError("Unable to resolve plot settings.")
+
+        ##############################
+        # Plotting
+        ##############################
+
         fig = plt.figure(figsize=figsize)  # , layout="constrained")
+        # fig.set_tight_layout(True)
         # if the leg
         # NB: nrows and ncols are flipped between mpl...GridSpec and mpl...figsize etc
-        outer_gs: GridSpec = GridSpec(1, 2, width_ratios=[grid_dim[0] * 2, 1])
-        # gs: GridSpec = GridSpec(
-        #     nrows=grid_dim[1], ncols=grid_dim[0], figure=fig
-        # )
-        inner_gs: GridSpec = GridSpecFromSubplotSpec(
-            nrows=grid_dim[1], ncols=grid_dim[0], subplot_spec=outer_gs[0]
+
+        outer_gs: GridSpec = GridSpec(
+            nrows=grid_dim[1],
+            ncols=grid_dim[0],
+            figure=fig,
         )
 
         # if title is not None:
@@ -529,7 +525,7 @@ class FacetPlot(Plotter):
 
         for i, (plot_id, plt_dct) in enumerate(plot_dict.items()):
             # gs is a 2d grid with dims of tuple `grid_dim`
-            ax: plt.Axes = fig.add_subplot(inner_gs[i])
+            ax: plt.Axes = fig.add_subplot(outer_gs[i])
             if plt_dct["X"] != "real_date":
                 raise NotImplementedError(
                     "Only `real_date` is supported for the X axis."
@@ -573,8 +569,9 @@ class FacetPlot(Plotter):
             if y_axis_label is not None:
                 ax.set_ylabel(y_axis_label, fontsize=axis_fontsize)
 
+        re_adj: Tuple[float, float, float, float] = (0, 0, 0, 0)
         if legend:
-            fig.legend(
+            leg = fig.legend(
                 labels=legend_labels,
                 loc=legend_loc,
                 ncol=legend_ncol,
@@ -582,21 +579,51 @@ class FacetPlot(Plotter):
                 frameon=legend_frame,
             )
 
-        plt.tight_layout()
+            leg_width, leg_height = (
+                leg.get_window_extent().width,
+                leg.get_window_extent().height,
+            )
+            fig_width, fig_height = (
+                fig.get_window_extent().width,
+                fig.get_window_extent().height,
+            )
+
+            if "right" in legend_loc:
+                re_adj = (0, 0, leg_width / fig_width, 0)
+            elif "left" in legend_loc:
+                re_adj = (leg_width / fig_width, 0, 0, 0)
+            elif "top" in legend_loc:
+                re_adj = (0, leg_height / fig_height, 0, 0)
+            elif "bottom" in legend_loc:
+                re_adj = (0, 0, 0, leg_height / fig_height)
+
+        # adjust the spacing between subplots - re_adj is a tuple of (left, bottom, right, top)
+        # fig.subplots_adjust(
+        #     wspace=0.2,
+        #     hspace=0.2,
+        #     left=re_adj[0],
+        #     bottom=re_adj[1],
+        #     right=1-re_adj[2],
+        #     top=1-re_adj[3],
+        # )
+
+        outer_gs.tight_layout(
+            fig,
+            rect=[0 + re_adj[0], 0 + re_adj[1], 1 - re_adj[2], 1 - re_adj[3]],
+        )
+        # inner_gs.tight_layout(fig)
 
         if save_to_file is not None:
-            fig.savefig(save_to_file, dpi=dpi)
+            fig.savefig(save_to_file, dpi=dpi)  # , bbox_inches="tight")
 
         if show:
             plt.show()
-
-        if return_figure:
-            return fig
 
 
 if __name__ == "__main__":
     # from macrosynergy.visuals import FacetPlot
     from macrosynergy.management.simulate_quantamental_data import make_test_df
+    from macrosynergy.dev.local import LocalCache as JPMaQSDownload
 
     cids: List[str] = [
         "USD",
@@ -612,49 +639,67 @@ if __name__ == "__main__":
         "DKK",
         "INR",
     ]
-    xcats: List[str] = [
-        "FXXR",
-        "EQXR",
-        "RIR",
-        "IR",
-        "REER",
-        "CPI",
-        "PPI",
-        "M2",
-        "M1",
-        "M0",
-        "FXVOL",
-        "FX",
-    ]
-    sel_cids: List[str] = ["USD", "EUR", "GBP"]
-    sel_xcats: List[str] = ["FXXR", "EQXR", "RIR", "IR"]
-    r_styles: List[str] = [
-        "linear",
-        "decreasing-linear",
-        "sharp-hill",
-        "sine",
-        "four-bit-sine",
-    ]
-    # df: pd.DataFrame = make_test_df(
-    #     cids=list(set(cids) - set(sel_cids)),
-    #     xcats=xcats,
-    #     start_date="2000-01-01",
-    # )
-    df = pd.DataFrame()
-    # for rstyle, xcatx in zip(r_styles[: len(sel_xcats)], sel_xcats):
-    for ix, xcatx in enumerate(xcats):
-        rstyle: str = r_styles[(ix + len(r_styles)) % len(r_styles)]
-        dfB: pd.DataFrame = make_test_df(
-            cids=cids,
-            xcats=[xcatx],
-            start_date="2000-01-01",
-            prefer=rstyle,
-        )
-        df: pd.DataFrame = pd.concat([df, dfB], axis=0)
+    # Quantamental categories of interest
 
-    df: pd.DataFrame = df[
-        ~((df["cid"] == "USD") & (df["xcat"] == "FXXR"))
-    ].reset_index()
+    xcats = [
+        "CPIXFE_SA_P1M1ML12",
+        "CPIXFE_SJA_P3M3ML3AR",
+        "CPIXFE_SJA_P6M6ML6AR",
+        "CPIXFE_SA_P1M1ML12_D1M1ML3",
+        "CPIC_SA_P1M1ML12",
+        "CPIC_SJA_P3M3ML3AR",
+        "CPIC_SJA_P6M6ML6AR",
+        "CPIC_SA_P1M1ML12_D1M1ML3",
+        # "NIR_NSA",
+        # "RIR_NSA",
+        # "DU05YXR_NSA",
+        # "DU05YXR_VT10",
+        # "FXXR_NSA",
+        # "EQXR_NSA",
+        # "DU05YXR_NSA",
+        # "DU05YXR_VT10",
+        # "FXTARGETED_NSA",
+        # "FXUNTRADABLE_NSA",
+    ]  # market links
+
+    sel_cids: List[str] = ["USD", "EUR", "GBP"]
+    sel_xcats: List[str] = ["NIR_NSA", "RIR_NSA", "FXXR_NSA", "EQXR_NSA"]
+    # r_styles: List[str] = [
+    #     "linear",
+    #     "decreasing-linear",
+    #     "sharp-hill",
+    #     "sine",
+    #     "four-bit-sine",
+    # ]
+    # # df: pd.DataFrame = make_test_df(
+    # #     cids=list(set(cids) - set(sel_cids)),
+    # #     xcats=xcats,
+    # #     start_date="2000-01-01",
+    # # )
+    # df = pd.DataFrame()
+    # # for rstyle, xcatx in zip(r_styles[: len(sel_xcats)], sel_xcats):
+    # for ix, xcatx in enumerate(xcats):
+    #     rstyle: str = r_styles[(ix + len(r_styles)) % len(r_styles)]
+    #     dfB: pd.DataFrame = make_test_df(
+    #         cids=cids,
+    #         xcats=[xcatx],
+    #         start_date="2000-01-01",
+    #         prefer=rstyle,
+    #     )
+    #     df: pd.DataFrame = pd.concat([df, dfB], axis=0)
+
+    # df: pd.DataFrame = df[
+    #     ~((df["cid"] == "USD") & (df["xcat"] == "FXXR"))
+    # ].reset_index()
+
+    with JPMaQSDownload(
+        local_path=r"C:\Users\PalashTyagi\Macrosynergy\Macrosynergy - Documents\SharedData\JPMaQSTickers"
+    ) as jpmaqs:
+        df: pd.DataFrame = jpmaqs.download(
+            cids=cids,
+            xcats=xcats,
+            start_date="2016-01-01",
+        )
 
     from random import SystemRandom
 
@@ -662,11 +707,11 @@ if __name__ == "__main__":
 
     # random.seed(42)
 
-    for cidx, xcatx in df[["cid", "xcat"]].drop_duplicates().values.tolist():
-        # if random() > 0.5 multiply by random.random()*10
-        _bools = (df["cid"] == cidx) & (df["xcat"] == xcatx)
-        r = max(random.random(), 0.1)
-        df.loc[_bools, "value"] = df.loc[_bools, "value"] * r
+    # for cidx, xcatx in df[["cid", "xcat"]].drop_duplicates().values.tolist():
+    #     # if random() > 0.5 multiply by random.random()*10
+    #     _bools = (df["cid"] == cidx) & (df["xcat"] == xcatx)
+    #     r = max(random.random(), 0.1)
+    #     df.loc[_bools, "value"] = df.loc[_bools, "value"] * r
 
     # FacetPlot(df).lineplot()
     import time
@@ -677,11 +722,14 @@ if __name__ == "__main__":
     with FacetPlot(df, cids=cids, xcats=xcats) as fp:
         fp.lineplot(
             # facet_size=(5, 4),
-            cid_xcat_grid=True,
+            # cid_xcat_grid=True,
+            cid_grid=True,
+            # attempt_square=,
             # xcat_grid=True,
             # cid_grid=True,
             title="Test Title",
             show=False,
             save_to_file="test.png",
         )
+
     print(f"Time taken: {time.time() - timer_start}")

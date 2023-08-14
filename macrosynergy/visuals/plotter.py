@@ -352,17 +352,18 @@ class Plotter(metaclass=PlotterMetaClass):
             out_all=True,
         )
 
-        if ((len(r_xcats) != len(xcats)) and xcats_provided) or (
-            ((len(r_cids) != len(cids)) and cids_provided) and not intersect
-        ):
-            m_cids: List[str] = list(set(cids) - set(r_cids))
-            m_xcats: List[str] = list(set(xcats) - set(r_xcats))
-            raise ValueError(
-                "The provided arguments resulted in a DataFrame that does not "
-                "contain all the requested cids and xcats. "
-                + (f"Missing cids: {m_cids}. " if m_cids else "")
-                + (f"Missing xcats: {m_xcats}. " if m_xcats else "")
-            )
+        # if (
+        #     ((len(r_xcats) != len(xcats)) and xcats_provided)
+        #     or (((len(r_cids) != len(cids)) and cids_provided))
+        # ) and not intersect:
+        #     m_cids: List[str] = list(set(cids) - set(r_cids))
+        #     m_xcats: List[str] = list(set(xcats) - set(r_xcats))
+        #     raise ValueError(
+        #         "The provided arguments resulted in a DataFrame that does not "
+        #         "contain all the requested cids and xcats. "
+        #         + (f"Missing cids: {m_cids}. " if m_cids else "")
+        #         + (f"Missing xcats: {m_xcats}. " if m_xcats else "")
+        #     )
 
         if sdf.empty:
             raise ValueError(
