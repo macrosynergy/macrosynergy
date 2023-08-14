@@ -11,8 +11,8 @@ path = Path(__file__).parent
 with open(os.path.join(path, "README.md"), "r") as f:
     readme = f.read()
 
-if sys.version_info[:2] < (3, 6):
-    raise RuntimeError("Python version >= 3.6 required.")
+if sys.version_info[:2] < (3, 8):
+    raise RuntimeError("Python version >= 3.8 required.")
 
 CLASSIFIERS = """\
 Intended Audience :: Science/Research
@@ -36,7 +36,7 @@ Development Status :: 4 - Beta
 MAJOR = 0
 MINOR = 0
 MICRO = 34
-ISRELEASED = False
+ISRELEASED = True
 VERSION = '%d.%d.%d' % (MAJOR, MINOR, MICRO)
 
 if sys.version_info >= (3, 12):
