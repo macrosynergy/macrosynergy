@@ -598,7 +598,25 @@ class FacetPlot(Plotter):
 
         # re_adj: List[float] = (0, 0, 0, 0)
         if legend:
+            #
             leg = fig.legend(
+                labels=legend_labels,
+                loc=legend_loc,
+                ncol=legend_ncol,
+                bbox_to_anchor=legend_bbox_to_anchor,
+                frameon=legend_frame,
+            )
+            legend_handles = leg.get_lines()
+            legend_labels = [line.get_label() for line in legend_handles]
+            # get the index of the compare series
+            if compare_series is not None:
+                idx: int = legend_labels.index(compare_series)
+                legend_labels.pop(idx)
+                legend_handles.pop(idx)
+
+            # create a new legend with the new labels and handles
+            leg = fig.legend(
+                handles=legend_handles,
                 labels=legend_labels,
                 loc=legend_loc,
                 ncol=legend_ncol,
@@ -744,5 +762,5 @@ if __name__ == "__main__":
             save_to_file="test.png",
         )
 
-            # facet_size=(5, 4),
+        # facet_size=(5, 4),
     print(f"Time taken: {time.time() - timer_start}")
