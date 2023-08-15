@@ -33,6 +33,9 @@ def _get_square_grid(
     """
     Given the number of plots, return a tuple of grid dimensions
     that is closest to a square grid.
+
+    Parameters
+    ----------
     :param <int> num_plots: Number of plots.
     :return <Tuple[int, int]>: Tuple of grid dimensions.
     """
@@ -255,7 +258,6 @@ class FacetPlot(Plotter):
         save_to_file: Optional[str] = None,
         dpi: int = 300,
         return_figure: bool = False,
-        plot_func_args: Dict[str, Any] = {},
         *args,
         **kwargs,
     ):
@@ -346,8 +348,6 @@ class FacetPlot(Plotter):
         :param <str> save_to_file: Save the plot to a file. Default is `None`.
         :param <int> dpi: DPI of the saved image. Default is `300`.
         :param <bool> return_figure: Return the figure object. Default is `False`.
-        :param <dict> plot_func_args: A dictionary of arguments to be passed to the
-            plotting function. Default is an empty dictionary.
         """
         comp_series_flag: bool = False
         if compare_series:
@@ -391,8 +391,11 @@ class FacetPlot(Plotter):
         )
 
         if grid_dim is None:
+            _tk: List[str] = tickers_to_plot.copy()
+            if compare_series:
+                _tk.remove(compare_series)
             grid_dim: Tuple[int, int] = self._get_grid_dim(
-                tickers=tickers_to_plot,
+                tickers=_tk,
                 ncols=ncols,
                 attempt_square=attempt_square,
                 cid_grid=cid_grid,
@@ -465,6 +468,10 @@ class FacetPlot(Plotter):
                 legend_color_map: Dict[str, str] = {
                     x: colormap(i) for i, x in enumerate(legend_labels)
                 }
+            # if there is a compare series, add it as the last element of the list, give it a red color and a dashed line
+            if compare_series is not None:
+                legend_labels.append(compare_series)
+                legend_color_map[compare_series] = "red"
 
             for i, fvar in enumerate([self.cids, self.xcats][::flipper][0]):
                 tks: List[str] = [
@@ -473,9 +480,12 @@ class FacetPlot(Plotter):
                 ]
 
                 tks: List[str] = sorted(tks)
+                if tks == [compare_series]:
+                    continue
+
                 plot_dict[i]: Dict[str, Union[str, List[str]]] = {
                     "X": "real_date",
-                    "Y": tks,
+                    "Y": tks + ([compare_series] if compare_series else []),
                 }
 
         if cid_xcat_grid:
@@ -534,7 +544,6 @@ class FacetPlot(Plotter):
             re_adj[3] = re_adj[3] - fig_height / fig.get_window_extent().height
 
         # if plot_func_args is None:
-        plot_func_args: List = {}
 
         for i, (plot_id, plt_dct) in enumerate(plot_dict.items()):
             # gs is a 2d grid with dims of tuple `grid_dim`
@@ -550,11 +559,16 @@ class FacetPlot(Plotter):
                 sel_bools: pd.Series = (self.df["cid"] == cidx) & (
                     self.df["xcat"] == xcatx
                 )
+                plot_func_args: List = {}
+
                 # lineplot
                 if legend_color_map:
                     plot_func_args["color"] = legend_color_map[
                         xcatx if cid_grid else cidx
                     ]
+                    if y == compare_series:
+                        plot_func_args["color"] = "red"
+                        plot_func_args["linestyle"] = "--"
 
                 ax.plot(
                     self.df[sel_bools][plt_dct["X"]].reset_index(drop=True).tolist(),
