@@ -739,13 +739,10 @@ if __name__ == "__main__":
 
     with FacetPlot(df, cids=cids, xcats=xcats) as fp:
         fp.lineplot(
-            ncols=3,
-            facet_size=(5, 4),
             xcat_grid=True,
-            # facet_titles=[],
-            legend=False,
-            show=False,
+            title="Test Title with a very long title to see how it looks, \n and a new line - why not?",
             save_to_file="test.png",
         )
 
+            # facet_size=(5, 4),
     print(f"Time taken: {time.time() - timer_start}")

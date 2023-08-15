@@ -330,13 +330,18 @@ class Plotter(metaclass=PlotterMetaClass):
         if end is None:
             end: str = pd.Timestamp(sdf["real_date"].max()).strftime("%Y-%m-%d")
 
+        ticker_df: pd.DataFrame = pd.DataFrame()
         if tickers is not None:
+            df_tickers: List[pd.DataFrame] = [pd.DataFrame()]
             for ticker in tickers:
-                _cid, _xcats = ticker.split("_", 1)
-                if _cid not in cids:
-                    cids.append(_cid)
-                if _xcats not in xcats:
-                    xcats.append(_xcats)
+                _cid, _xcat = ticker.split("_", 1)
+                df_tickers.append(
+                    sdf.loc[
+                        (sdf["cid"] == _cid) & (sdf["xcat"] == _xcat),
+                        ["real_date", "cid", "xcat"] + metrics,
+                    ]
+                )
+            ticker_df: pd.DataFrame = pd.concat(df_tickers, axis=0)
 
         sdf: pd.DataFrame
         r_xcats: List[str]
@@ -351,6 +356,8 @@ class Plotter(metaclass=PlotterMetaClass):
             blacklist=blacklist,
             out_all=True,
         )
+
+        sdf: pd.DataFrame = pd.concat([sdf, ticker_df], axis=0)
 
         if (
             ((len(r_xcats) != len(xcats)) and xcats_provided)
