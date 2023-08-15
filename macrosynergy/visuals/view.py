@@ -3,6 +3,7 @@ Common functions for visualizing data.
 These functions make use of the classes in the `macrosynergy.visuals` module.
 """
 import os, sys
+
 sys.path.append(os.getcwd())
 
 from typing import Dict, List, Optional, Tuple, Union
@@ -83,12 +84,18 @@ def timelines(
 
     df: pd.DataFrame = df.copy()
 
-    if xcat_grid and single_chart:
-        # raise ValueError("`xcat_grid` and `single_chart` cannot be True simultaneously.")
-        ...
+    if isinstance(xcats, str):
+        xcats: List[str] = [xcats]
+    if isinstance(cids, str):
+        cids: List[str] = [cids]
 
-    if cs_mean and not xcat_grid:
-        raise ValueError("`cs_mean` requires `xcat_grid` to be True.")
+    if xcat_grid and single_chart:
+        raise ValueError(
+            "`xcat_grid` and `single_chart` cannot be True simultaneously."
+        )
+
+    if cs_mean and xcat_grid:
+        raise ValueError("`cs_mean` requires `xcat_grid` to be False.")
 
     if xcats is None:
         if xcat_labels:
@@ -98,6 +105,7 @@ def timelines(
     if cids is None:
         cids: List[str] = df["cid"].unique().tolist()
 
+    cross_mean_series: Optional[str] = f"mean_{xcats[0]}" if cs_mean else None
     if cs_mean:
         if len(xcats) > 1:
             raise ValueError("`cs_mean` cannot be True for multiple categories.")
@@ -119,7 +127,6 @@ def timelines(
         df["xcat"] = df["xcat"].map(dict(zip(xcats, xcat_labels)))
 
     if xcat_grid:
-        cross_mean_series: Optional[List[str]] = f"mean_{xcats[0]}" if cs_mean else None
         with FacetPlot(
             df=df,
             xcats=xcats,
@@ -160,21 +167,22 @@ def timelines(
             fp.lineplot(
                 figsize=size,
                 title=title,
+                cid_grid=True,
                 title_yadjust=title_adj,
                 title_xadjust=title_xadj,
+                compare_series=cross_mean_series if cs_mean else None,
                 title_fontsize=title_fontsize,
                 ncols=ncol,
                 legend_ncol=legend_ncol,
             )
 
 
-
-
-
-
 if __name__ == "__main__":
     # from macrosynergy.visuals import FacetPlot
     from macrosynergy.management.simulate_quantamental_data import make_test_df
+    from macrosynergy.dev.local import LocalCache
+
+    LOCAL_CACHE = "~/Macrosynergy/Macrosynergy - Documents/SharedData/JPMaQSTickers"
 
     cids: List[str] = [
         "USD",
@@ -228,13 +236,19 @@ if __name__ == "__main__":
         )
         df: pd.DataFrame = pd.concat([df, dfB], axis=0)
 
+    for ix, cidx in enumerate(sel_cids):
+        df.loc[df["cid"] == cidx, "value"] = (
+            ((df[df["cid"] == cidx]["value"]) * (ix + 1)).reset_index(drop=True).copy()
+        )
+
     import time
 
-    print("From same object:")
-    timer_start: float = time.time()
+    # timer_start: float = time.time()
 
     timelines(
         df=df,
-        xcats=sel_xcats,
+        xcats=sel_xcats[0],
         cids=sel_cids,
+        cs_mean=True,
+        # xcat_grid=True,
     )
