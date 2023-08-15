@@ -22,7 +22,7 @@ from typing import (
 import numpy as np
 import pandas as pd
 
-from macrosynergy.management import reduce_df, reduce_df_by_ticker
+from macrosynergy.management import reduce_df
 from macrosynergy.management.utils import standardise_dataframe
 
 logger = logging.getLogger(__name__)
@@ -352,18 +352,22 @@ class Plotter(metaclass=PlotterMetaClass):
             out_all=True,
         )
 
-        # if (
-        #     ((len(r_xcats) != len(xcats)) and xcats_provided)
-        #     or (((len(r_cids) != len(cids)) and cids_provided))
-        # ) and not intersect:
-        #     m_cids: List[str] = list(set(cids) - set(r_cids))
-        #     m_xcats: List[str] = list(set(xcats) - set(r_xcats))
-        #     raise ValueError(
-        #         "The provided arguments resulted in a DataFrame that does not "
-        #         "contain all the requested cids and xcats. "
-        #         + (f"Missing cids: {m_cids}. " if m_cids else "")
-        #         + (f"Missing xcats: {m_xcats}. " if m_xcats else "")
-        #     )
+        if (
+            ((len(r_xcats) != len(xcats)) and xcats_provided)
+            or (((len(r_cids) != len(cids)) and cids_provided))
+        ) and not intersect:
+            m_cids: List[str] = list(set(cids) - set(r_cids))
+            m_xcats: List[str] = list(set(xcats) - set(r_xcats))
+            warnings.warn(
+                "The provided arguments resulted in a DataFrame that does not "
+                "contain all the requested cids and xcats. "
+                + (f"Missing cids: {m_cids}. " if m_cids else "")
+                + (f"Missing xcats: {m_xcats}. " if m_xcats else "")
+            )
+            for m_cid in m_cids:
+                cids.remove(m_cid)
+            for m_xcat in m_xcats:
+                xcats.remove(m_xcat)
 
         if sdf.empty:
             raise ValueError(
