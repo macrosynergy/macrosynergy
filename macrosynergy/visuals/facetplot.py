@@ -158,55 +158,52 @@ class FacetPlot(Plotter):
 
         raise ValueError("Unable to infer grid dimensions.")
 
-    # def _cart_plot(
-    #     self,
-    #     grid_dim: Tuple[int, int],
-    #     plot_dict: Dict[int, Dict[str, Any]],
-    #     metric: Optional[str] = None,
-    #     plot_func: Callable = plt.plot,
-    #     plot_func_args: Optional[List[Any]] = None,
-    #     figsize: Tuple[Numeric, Numeric] = (16.0, 9.0),
-    #     # title arguments
-    #     title: Optional[str] = None,
-    #     title_fontsize: int = 16,
-    #     title_xadjust: Optional[Numeric] = None,
-    #     title_yadjust: Optional[Numeric] = None,
-    #     # subplot axis arguments
-    #     ax_grid: bool = True,
-    #     ax_hline: bool = False,
-    #     ax_hline_val: Numeric = 0,
-    #     ax_vline: bool = False,
-    #     ax_vline_val: Numeric = 0,
-    #     x_axis_label: Optional[str] = None,
-    #     y_axis_label: Optional[str] = None,
-    #     axis_fontsize: int = 12,
-    #     # subplot arguments
-    #     facet_size: Optional[Tuple[Numeric, Numeric]] = None,
-    #     facet_titles: Optional[List[str]] = None,
-    #     facet_title_fontsize: int = 12,
-    #     facet_title_xadjust: Numeric = 0.5,
-    #     facet_title_yadjust: Numeric = 1.0,
-    #     facet_xlabel: Optional[str] = None,
-    #     facet_ylabel: Optional[str] = None,
-    #     facet_label_fontsize: int = 12,
-    #     # legend arguments
-    #     legend: bool = True,
-    #     legend_labels: Optional[List[str]] = None,
-    #     legend_loc: Optional[str] = None,
-    #     legend_ncol: int = 1,
-    #     legend_bbox_to_anchor: Optional[Tuple[Numeric, Numeric]] = None,
-    #     legend_frame: bool = True,
-    #     # return args
-    #     show: bool = True,
-    #     save_to_file: Optional[str] = None,
-    #     dpi: int = 300,
-    #     return_figure: bool = False,
-    #     *args,
-    #     **kwargs,
-    # ):
-    #     """
-    #     Render a facet plot from a wide dataframe, a grid dimension and a plotting function.
-    #     """
+    def scatterplot(
+        self,
+        # plot arguments
+        x_y_pairs: Optional[List[Tuple[str, str]]] = None,
+        # xcats_mean: bool = False,
+        # title arguments
+        figsize: Tuple[Numeric, Numeric] = (16.0, 9.0),
+        title: Optional[str] = None,
+        title_fontsize: int = 20,
+        title_xadjust: Optional[Numeric] = None,
+        title_yadjust: Optional[Numeric] = None,
+        # subplot axis arguments
+        ax_grid: bool = True,
+        ax_hline: bool = False,
+        ax_hline_val: Numeric = 0.0,
+        ax_vline: bool = False,
+        ax_vline_val: Numeric = 0.0,
+        x_axis_label: Optional[str] = None,
+        y_axis_label: Optional[str] = None,
+        axis_fontsize: int = 12,
+        # subplot arguments
+        facet_size: Optional[Tuple[Numeric, Numeric]] = None,
+        facet_titles: Optional[List[str]] = None,
+        facet_title_fontsize: int = 12,
+        facet_title_xadjust: Numeric = 0.5,
+        facet_title_yadjust: Numeric = 1.0,
+        facet_xlabel: Optional[str] = None,
+        facet_ylabel: Optional[str] = None,
+        facet_label_fontsize: int = 12,
+        # legend arguments
+        legend: bool = True,
+        legend_labels: Optional[List[str]] = None,
+        legend_loc: str = "center right",
+        legend_ncol: int = 1,
+        legend_bbox_to_anchor: Optional[Tuple[Numeric, Numeric]] = None,  # (1.0, 0.5),
+        legend_frame: bool = True,
+        # return args
+        show: bool = True,
+        save_to_file: Optional[str] = None,
+        dpi: int = 300,
+        return_figure: bool = False,
+        plot_func_args: Dict[str, Any] = {},
+        *args,
+        **kwargs,
+    ):
+        ...
 
     def lineplot(
         self,
@@ -219,6 +216,8 @@ class FacetPlot(Plotter):
         cid_xcat_grid: bool = False,
         grid_dim: Optional[Tuple[int, int]] = None,
         compare_series: Optional[str] = None,
+        share_y: bool = False,
+        share_x: bool = False,
         # xcats_mean: bool = False,
         # title arguments
         figsize: Tuple[Numeric, Numeric] = (16.0, 9.0),
@@ -457,6 +456,10 @@ class FacetPlot(Plotter):
                 facet_titles: List[str] = [self.cids, self.xcats][::flipper][0]
             if legend_labels is None:
                 legend_labels: List[str] = [self.xcats, self.cids][::flipper][0]
+            elif len(legend_labels) != len([self.xcats, self.cids][::flipper][0]):
+                raise ValueError(
+                    "The number of legend labels does not match the lines to plot."
+                )
 
             if legend_color_map is None:
                 legend_color_map: Dict[str, str] = {
@@ -511,14 +514,24 @@ class FacetPlot(Plotter):
             ncols=grid_dim[0],
             figure=fig,
         )
+        # re_adj: List[float] = [Left, Bottom, Right, Top]
+        re_adj: List[float] = [0, 0, 1, 1]
 
-        # if title is not None:
-        fig.suptitle(
+        suptitle = fig.suptitle(
             title,
             fontsize=title_fontsize,
             x=title_xadjust,
             y=title_yadjust,
         )
+
+        if title is not None:
+            # get the figure coordinates of the title
+            fig_width, fig_height = (
+                suptitle.get_window_extent().width,
+                suptitle.get_window_extent().height,
+            )
+
+            re_adj[3] = re_adj[3] - fig_height / fig.get_window_extent().height
 
         # if plot_func_args is None:
         plot_func_args: List = {}
@@ -569,7 +582,7 @@ class FacetPlot(Plotter):
             if y_axis_label is not None:
                 ax.set_ylabel(y_axis_label, fontsize=axis_fontsize)
 
-        re_adj: Tuple[float, float, float, float] = (0, 0, 0, 0)
+        # re_adj: List[float] = (0, 0, 0, 0)
         if legend:
             leg = fig.legend(
                 labels=legend_labels,
@@ -589,35 +602,26 @@ class FacetPlot(Plotter):
             )
 
             if "right" in legend_loc:
-                re_adj = (0, 0, leg_width / fig_width, 0)
+                re_adj[2] = re_adj[2] - leg_width / fig_width
             elif "left" in legend_loc:
-                re_adj = (leg_width / fig_width, 0, 0, 0)
+                re_adj[0] = re_adj[0] + leg_width / fig_width
             elif "top" in legend_loc:
-                re_adj = (0, leg_height / fig_height, 0, 0)
+                re_adj[1] = re_adj[1] + leg_height / fig_height
             elif "bottom" in legend_loc:
-                re_adj = (0, 0, 0, leg_height / fig_height)
+                re_adj[3] = re_adj[3] - leg_height / fig_height
+            else:
+                pass
 
-        # adjust the spacing between subplots - re_adj is a tuple of (left, bottom, right, top)
-        # fig.subplots_adjust(
-        #     wspace=0.2,
-        #     hspace=0.2,
-        #     left=re_adj[0],
-        #     bottom=re_adj[1],
-        #     right=1-re_adj[2],
-        #     top=1-re_adj[3],
-        # )
-
-        outer_gs.tight_layout(
-            fig,
-            rect=[0 + re_adj[0], 0 + re_adj[1], 1 - re_adj[2], 1 - re_adj[3]],
-        )
-        # inner_gs.tight_layout(fig)
+        outer_gs.tight_layout(fig, rect=re_adj)
 
         if save_to_file is not None:
             fig.savefig(save_to_file, dpi=dpi)  # , bbox_inches="tight")
 
         if show:
             plt.show()
+
+        if return_figure:
+            return fig
 
 
 if __name__ == "__main__":
@@ -693,7 +697,7 @@ if __name__ == "__main__":
     # ].reset_index()
 
     with JPMaQSDownload(
-        local_path=r"C:\Users\PalashTyagi\Macrosynergy\Macrosynergy - Documents\SharedData\JPMaQSTickers"
+        local_path=r"~\Macrosynergy\Macrosynergy - Documents\SharedData\JPMaQSTickers"
     ) as jpmaqs:
         df: pd.DataFrame = jpmaqs.download(
             cids=cids,
@@ -721,13 +725,12 @@ if __name__ == "__main__":
 
     with FacetPlot(df, cids=cids, xcats=xcats) as fp:
         fp.lineplot(
-            # facet_size=(5, 4),
-            # cid_xcat_grid=True,
-            cid_grid=True,
-            # attempt_square=,
-            # xcat_grid=True,
-            # cid_grid=True,
-            title="Test Title",
+            ncols=3,
+            facet_size=(5, 4),
+            xcat_grid=True,
+            # title="Test Title",
+            facet_titles=[],
+            legend=False,
             show=False,
             save_to_file="test.png",
         )
