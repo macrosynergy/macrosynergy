@@ -606,23 +606,6 @@ class FacetPlot(Plotter):
                 bbox_to_anchor=legend_bbox_to_anchor,
                 frameon=legend_frame,
             )
-            legend_handles = leg.get_lines()
-            legend_labels = [line.get_label() for line in legend_handles]
-            # get the index of the compare series
-            if compare_series is not None:
-                idx: int = legend_labels.index(compare_series)
-                legend_labels.pop(idx)
-                legend_handles.pop(idx)
-
-            # create a new legend with the new labels and handles
-            leg = fig.legend(
-                handles=legend_handles,
-                labels=legend_labels,
-                loc=legend_loc,
-                ncol=legend_ncol,
-                bbox_to_anchor=legend_bbox_to_anchor,
-                frameon=legend_frame,
-            )
 
             leg_width, leg_height = (
                 leg.get_window_extent().width,
