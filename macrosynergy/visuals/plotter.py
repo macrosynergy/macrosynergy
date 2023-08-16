@@ -3,6 +3,7 @@ import itertools
 import logging
 import warnings
 from functools import wraps
+import matplotlib.pyplot as plt
 from types import ModuleType
 from typing import (
     Any,
@@ -324,6 +325,19 @@ class Plotter(metaclass=PlotterMetaClass):
             cids = list(sdf["cid"].unique())
         if xcats is None:
             xcats = list(sdf["xcat"].unique())
+
+        for varx, prov_bool, namex in zip(
+            [cids, xcats], [cids_provided, xcats_provided], ["cids", "xcats"]
+        ):
+            if prov_bool:
+                df_col = namex.replace("s", "")
+                if not set(varx).issubset(set(sdf[df_col].unique())):
+                    # warn
+                    warnings.warn(
+                        f"The following {namex.upper()}, passed in `{namex}`,"
+                        " are not in the DataFrame `df`: "
+                        f"{list(set(varx) - set(sdf[df_col].unique()))}."
+                    )
 
         if start is None:
             start: str = pd.Timestamp(sdf["real_date"].min()).strftime("%Y-%m-%d")
