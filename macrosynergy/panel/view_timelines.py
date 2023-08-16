@@ -32,6 +32,7 @@ def view_timelines(
     cs_mean: bool = False,
     size: Tuple[float] = (12, 7),
     aspect: float = 1.7,
+    legend_fontsize: int = 12,
     height: float = 3,
 ):
     """Displays a facet grid of time line charts of one or more categories.
@@ -116,17 +117,20 @@ if __name__ == "__main__":
     df_xcats.loc["CRY"] = ["2013-01-01", "2020-10-30", 1, 2, 0.95, 0.5]
     df_xcats.loc["FXXR"] = ["2013-01-01", "2020-10-30", 1, 2, 0.95, 0.5]
 
-    dfd : pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
-     # sort by cid, xcat, and real_date
+    dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    # sort by cid, xcat, and real_date
     dfd = dfd.sort_values(["cid", "xcat", "real_date"])
-    ctr :int = -1
+    ctr: int = -1
     for xcat in xcats[:2]:
         for cid in cids[:2]:
             ctr *= -1
             mask = (dfd["cid"] == cid) & (dfd["xcat"] == xcat)
-            dfd.loc[mask, "value"] = 10 * ctr * np.arange(
-                dfd.loc[mask, "value"].shape[0]) \
-                /(dfd.loc[mask, "value"].shape[0]-1)
+            dfd.loc[mask, "value"] = (
+                10
+                * ctr
+                * np.arange(dfd.loc[mask, "value"].shape[0])
+                / (dfd.loc[mask, "value"].shape[0] - 1)
+            )
 
     dfdx = dfd[~((dfd["cid"] == "AUD") & (dfd["xcat"] == "XR"))]
 
