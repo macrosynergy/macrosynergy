@@ -219,8 +219,8 @@ class FacetPlot(Plotter):
         cid_xcat_grid: bool = False,
         grid_dim: Optional[Tuple[int, int]] = None,
         compare_series: Optional[str] = None,
-        share_y: bool = False,
-        share_x: bool = False,
+        share_y: bool = True,
+        share_x: bool = True,
         # xcats_mean: bool = False,
         # title arguments
         figsize: Tuple[Numeric, Numeric] = (16.0, 9.0),
@@ -229,7 +229,7 @@ class FacetPlot(Plotter):
         title_xadjust: Optional[Numeric] = None,
         title_yadjust: Optional[Numeric] = None,
         # subplot axis arguments
-        ax_grid: bool = True,
+        ax_grid: bool = False,
         ax_hline: bool = False,
         ax_hline_val: Numeric = 0.0,
         ax_vline: bool = False,
@@ -250,6 +250,7 @@ class FacetPlot(Plotter):
         legend: bool = True,
         legend_labels: Optional[List[str]] = None,
         legend_loc: str = "center right",
+        legend_fontsize: int = 12,
         legend_ncol: int = 1,
         legend_bbox_to_anchor: Optional[Tuple[Numeric, Numeric]] = None,  # (1.0, 0.5),
         legend_frame: bool = True,
@@ -288,11 +289,16 @@ class FacetPlot(Plotter):
             the mean of all `cids` for that `xcat` will be plotted on all charts. If `False`,
             only the specified `cids` will be plotted. Default is `False`.
         :param <str> compare_series: Used with `cid_grid` with a single `xcat`. If
-            specified, the series specified will be plotted in each facet. Ensure that
-            the comparison series is in the dataframe, and not filtered out when
+            specified, the series specified will be plotted in each facet, as a red dashed
+            line. This is useful for comparing a single series, such as a benchmark/average.
+            Ensure that the comparison series is in the dataframe, and not filtered out when
             initializing the `FacetPlot` object. Default is `None`. NB: `compare_series`
             can only be used when the series is not removed by `reduce_df()` in the object
             initialization.
+        :param <bool> share_y: whether to share the y-axis across all plots. Default is
+            `True`.
+        :param <bool> share_x: whether to share the x-axis across all plots. Default is
+            `True`.
         :param <Tuple[Numeric, Numeric]> figsize: a tuple of floats specifying the width and
             height of the figure. Default is `(16.0, 9.0)`.
         :param <str> title: the title of the plot. Default is `None`.
@@ -340,6 +346,7 @@ class FacetPlot(Plotter):
         :param <str> legend_loc: Location of the legend. Default is `center left`.
             See https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.legend.html
             for more information.
+        :param <int> legend_fontsize: Font size of the legend. Default is `12`.
         :param <int> legend_ncol: Number of columns in the legend. Default is `1`.
         :param <tuple> legend_bbox_to_anchor: Bounding box for the legend. Default is
             `(1.0, 0.5)`.
@@ -514,9 +521,8 @@ class FacetPlot(Plotter):
         # Plotting
         ##############################
 
-        fig = plt.figure(figsize=figsize)  # , layout="constrained")
-        # fig.set_tight_layout(True)
-        # if the leg
+        fig = plt.figure(figsize=figsize)
+
         # NB: nrows and ncols are flipped between mpl...GridSpec and mpl...figsize etc
 
         outer_gs: GridSpec = GridSpec(
@@ -543,11 +549,14 @@ class FacetPlot(Plotter):
 
             re_adj[3] = re_adj[3] - fig_height / fig.get_window_extent().height
 
-        # if plot_func_args is None:
-
+        axs = outer_gs.subplots(
+            sharex=share_x,
+            sharey=share_y,
+        )
+        ax_list: List[plt.Axes] = axs.flatten().tolist()
         for i, (plot_id, plt_dct) in enumerate(plot_dict.items()):
             # gs is a 2d grid with dims of tuple `grid_dim`
-            ax: plt.Axes = fig.add_subplot(outer_gs[i])
+            ax: plt.Axes = ax_list[i]
             if plt_dct["X"] != "real_date":
                 raise NotImplementedError(
                     "Only `real_date` is supported for the X axis."
@@ -559,16 +568,16 @@ class FacetPlot(Plotter):
                 sel_bools: pd.Series = (self.df["cid"] == cidx) & (
                     self.df["xcat"] == xcatx
                 )
-                plot_func_args: List = {}
+                plot_func_args: Dict = {}
 
                 # lineplot
                 if legend_color_map:
                     plot_func_args["color"] = legend_color_map[
                         xcatx if cid_grid else cidx
                     ]
-                    if y == compare_series:
-                        plot_func_args["color"] = "red"
-                        plot_func_args["linestyle"] = "--"
+                if y == compare_series:
+                    plot_func_args["color"] = "red"
+                    plot_func_args["linestyle"] = "--"
 
                 ax.plot(
                     self.df[sel_bools][plt_dct["X"]].reset_index(drop=True).tolist(),
@@ -602,6 +611,7 @@ class FacetPlot(Plotter):
             leg = fig.legend(
                 labels=legend_labels,
                 loc=legend_loc,
+                fontsize=legend_fontsize,
                 ncol=legend_ncol,
                 bbox_to_anchor=legend_bbox_to_anchor,
                 frameon=legend_frame,
@@ -720,6 +730,20 @@ if __name__ == "__main__":
             start_date="2016-01-01",
         )
 
+    sel_dates = pd.bdate_range(start="2020-01-01", end="today")
+    t_xcat = "CPIC_SA_P1M1ML12_D1M1ML3"
+
+    # crop such that t_xcat only has data for sel_dates
+    df = pd.concat(
+        [
+            df[~((df["xcat"] == t_xcat))].reset_index(drop=True),
+            df[(df["xcat"] == t_xcat) & (df["real_date"].isin(sel_dates))].reset_index(
+                drop=True
+            ),
+        ],
+        axis=0,
+    ).reset_index(drop=True)
+
     from random import SystemRandom
 
     random = SystemRandom()
@@ -740,6 +764,8 @@ if __name__ == "__main__":
 
     with FacetPlot(df, cids=cids, xcats=xcats) as fp:
         fp.lineplot(
+            # share_y=False,
+            share_x=True,
             xcat_grid=True,
             title="Test Title with a very long title to see how it looks, \n and a new line - why not?",
             save_to_file="test.png",
