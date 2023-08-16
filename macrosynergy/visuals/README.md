@@ -16,13 +16,13 @@ The `macrosynergy.visuals` subpackage features the following functionality:
 
 - `view.*` functions: A set of preset methods to view data in commonly used contexts.
 
-  - `timelines()`: A function for viewing time-series data. Uses `FacetPlot.lineplot()` and `LinePlot` internally.
-  - `availability()`: A function for viewing data availability. Uses `Heatmap` internally.
-  - `correlation()`: A function for viewing correlation matrices. Uses `Heatmap` internally.
-  - `metrics()`: A function for viewing metrics. Uses `Heatmap` internally.
-  - `ranges()`: A function for viewing ranges. Uses `BoxPlot` and `BarPlot` internally.
-  - `distribution()`: A function for viewing distributions. Uses `FacetPlot.boxplot()` and `BoxPlot` internally.
-  - `reg_scatter()`: A function for viewing scatter plots. Uses `FacetPlot.scatterplot()` and `ScatterPlot` internally.
+  - `timelines()`: A function for viewing time-series data as line plots. Settings include viewing grouped by `cids`, `xcats`, or both.
+  - `availability()`: A function for viewing data availability. Plots a heatmap of the data availability for each `cid` and `xcat`.
+  - `correlation()`: A function for viewing correlation matrices.
+  - `metrics()`: A function for viewing metrics. Designed to view any on a heatmap; not ideal for viewing `value`.
+  - `ranges()`: A function for viewing ranges with box plots and bar charts.
+  - `reg_scatter()`: A function for viewing scatter plots with regression lines.
+  - `distribution()`: A function for viewing distributions as histograms or scatter plots. Can be extended to view distributions for a `reg_scatter` plot.
 
 ### Backend functions:
 
