@@ -406,14 +406,14 @@ class Plotter(metaclass=PlotterMetaClass):
         self.start: str = start
         self.end: str = end
 
-        # self.backend: ModuleType
-        # if backend.startswith("m"):
-        #     self.backend = plt
-        #     self.backend.style.use("seaborn-v0_8-darkgrid")
-        # elif ...:
-        #     ...
-        # else:
-        #     raise NotImplementedError(f"Backend `{backend}` is not supported.")
+        self.backend: ModuleType
+        if backend.startswith("m"):
+            self.backend = plt
+            self.backend.style.use("seaborn-v0_8-darkgrid")
+        elif ...:
+            ...
+        else:
+            raise NotImplementedError(f"Backend `{backend}` is not supported.")
 
     def __enter__(self):
         return self
