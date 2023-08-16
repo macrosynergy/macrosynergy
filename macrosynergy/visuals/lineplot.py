@@ -68,8 +68,6 @@ class LinePlot(Plotter):
     def plot(
         self,
         # df/plot args
-        cid_plot: bool = True,
-        xcat_plot: bool = False,
         metric: str = "value",
         compare_series: Optional[str] = None,
         # Plotting specific arguments
@@ -116,6 +114,13 @@ class LinePlot(Plotter):
 
         dfx: pd.DataFrame = self.df.copy()
 
+        ax.set_title(
+            title,
+            fontsize=title_fontsize,
+            x=title_xadjust,
+            y=title_yadjust,
+        )
+
         if compare_series:
             _cid, _xcat = compare_series.split("_", 1)
             if _cid not in dfx["cid"].unique() or _xcat not in dfx["xcat"].unique():
@@ -131,10 +136,13 @@ class LinePlot(Plotter):
                 .reset_index(drop=True)
             )
             # remove the compare_series from the dfx
-            dfx = dfx.loc[~((dfx["cid"] == _cid) & (dfx["xcat"] == _xcat)), :]
+            # dfx = dfx.loc[~((dfx["cid"] == _cid) & (dfx["xcat"] == _xcat)), :]
 
         # use plt to create a plot, and use cid_xcat to differentiate the lines, cid_xcat are not real colors
-        for cid_xcat in dfx[["cid", "xcat"]].drop_duplicates().values:
+        # for cid_xcat in dfx[["cid", "xcat"]].drop_duplicates().values.tolist()
+        for cid_xcat in dfx[["cid", "xcat"]].drop_duplicates().values.tolist():
+            if "_".join(cid_xcat) == compare_series:
+                continue
             cid, xcat = cid_xcat
             _df = dfx.loc[(dfx["cid"] == cid) & (dfx["xcat"] == xcat), :].copy()
             _df = _df.sort_values(by="real_date", ascending=True).reset_index(drop=True)
@@ -142,7 +150,13 @@ class LinePlot(Plotter):
 
         # if there is a compare_series, plot it on the same axis, using a red dashed line
         if compare_series:
-            ax.plot(comp_df["real_date"], comp_df[metric], color="red", linestyle="--")
+            ax.plot(
+                comp_df["real_date"],
+                comp_df[metric],
+                color="red",
+                linestyle="--",
+                label=compare_series,
+            )
 
         if grid:
             ax.grid(axis="both", linestyle="--", alpha=0.5)
@@ -155,7 +169,7 @@ class LinePlot(Plotter):
 
         # if there is a legend, add it
         if legend:
-            plt.legend(
+            ax.legend(
                 labels=legend_labels if legend_labels else None,
                 title=legend_title,
                 loc=legend_loc,
@@ -184,16 +198,68 @@ class LinePlot(Plotter):
 
 
 if __name__ == "__main__":
-    cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
-    xcats: List[str] = ["FXXR", "EQXR", "RIR"]
-    df: pd.DataFrame = make_test_df(
-        cids=cids,
-        xcats=xcats,
-        start_date="2000-01-01",
-        end_date="2020-12-31",
-        # prefer="sine",
+    from macrosynergy.management.simulate_quantamental_data import make_test_df
+    from macrosynergy.dev.local import LocalCache as JPMaQSDownload
+
+    cids: List[str] = [
+        "USD",
+        "EUR",
+        "GBP",
+        "AUD",
+        "CAD",
+        "JPY",
+        "CHF",
+        "NZD",
+        "SEK",
+        "INR",
+    ]
+    # Quantamental categories of interest
+
+    xcats = [
+        "NIR_NSA",
+        "RIR_NSA",
+        "DU05YXR_NSA",
+        "DU05YXR_VT10",
+        "FXXR_NSA",
+        "EQXR_NSA",
+        "DU05YXR_NSA",
+    ]  # market links
+
+    sel_cids: List[str] = ["USD", "EUR", "GBP"]
+    sel_xcats: List[str] = ["NIR_NSA", "RIR_NSA", "FXXR_NSA", "EQXR_NSA"]
+
+    with JPMaQSDownload(
+        local_path=r"~\Macrosynergy\Macrosynergy - Documents\SharedData\JPMaQSTickers"
+    ) as jpmaqs:
+        df: pd.DataFrame = jpmaqs.download(
+            cids=cids,
+            xcats=xcats,
+            start_date="2016-01-01",
+        )
+
+    from random import SystemRandom
+
+    random = SystemRandom()
+
+    # random.seed(42)
+
+    # for cidx, xcatx in df[["cid", "xcat"]].drop_duplicates().values.tolist():
+    #     # if random() > 0.5 multiply by random.random()*10
+    #     _bools = (df["cid"] == cidx) & (df["xcat"] == xcatx)
+    #     r = max(random.random(), 0.1)
+    #     df.loc[_bools, "value"] = df.loc[_bools, "value"] * r
+
+    # FacetPlot(df).lineplot()
+    import time
+
+    print("From same object:")
+    timer_start: float = time.time()
+
+    LinePlot(df, cids=cids, xcats=xcats).plot(
+        title="Test Title with a very long title to see how it looks, \n and a new line - why not?",
+        legend_fontsize=8,
+        compare_series="USD_RIR_NSA",
     )
 
-    LinePlot(df=df, cids=["USD", "EUR"], xcats=["FXXR"]).plot(
-        labels=["The US", "Europe"]
-    )
+    # facet_size=(5, 4),
+    print(f"Time taken: {time.time() - timer_start}")
