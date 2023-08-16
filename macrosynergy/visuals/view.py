@@ -8,8 +8,11 @@ sys.path.append(os.getcwd())
 
 from typing import Dict, List, Optional, Tuple, Union
 from macrosynergy.visuals import Plotter, LinePlot, FacetPlot
+from macrosynergy.management.utils import standardise_dataframe
 
 import pandas as pd
+
+IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
 
 
 def timelines(
@@ -83,12 +86,30 @@ def timelines(
 
     """
 
-    df: pd.DataFrame = df.copy()
+    df: pd.DataFrame = standardise_dataframe(df.copy())
+
+    if val not in df.columns:
+        if len(df.columns) == len(IDX_COLS) + 1:
+            val: str = list(set(df.columns) - set(IDX_COLS))[0]
+            if not pd.api.types.is_numeric_dtype(df[val]):
+                raise ValueError(
+                    f"Column '{val}' (passed as `metric`) is not numeric, and there are "
+                    f"no other numeric columns in the DataFrame."
+                )
+        else:
+            raise ValueError(
+                f"Column '{val}' (passed as `metric`) does not exist, and there are "
+                "none/many other numeric columns in the DataFrame."
+            )
 
     if isinstance(xcats, str):
         xcats: List[str] = [xcats]
     if isinstance(cids, str):
         cids: List[str] = [cids]
+
+    for varx, namex in zip([single_chart, xcat_grid], ["single_chart", "xcat_grid"]):
+        if not isinstance(varx, bool):
+            raise TypeError(f"`{namex}` must be a boolean.")
 
     if xcat_grid and single_chart:
         raise ValueError(
@@ -98,6 +119,11 @@ def timelines(
 
     if cs_mean and xcat_grid:
         raise ValueError("`cs_mean` requires `xcat_grid` to be False.")
+
+    if xcat_grid and (len(cids) != 1):
+        raise ValueError(
+            "`xcat_grid` cannot be True when multiple cross-sections are selected."
+        )
 
     if xcats is None:
         if xcat_labels:
@@ -156,7 +182,7 @@ def timelines(
             fp.lineplot(
                 share_y=same_y,
                 figsize=size,
-                xcat_grid=True,
+                xcat_grid=True,  # Not to be confused with `xcat_grid` parameter
                 # legend_labels=xcat_labels or None,
                 facet_titles=xcat_labels or None,
                 title=title,
@@ -182,6 +208,7 @@ def timelines(
             end=end,
         ) as lp:
             lp.plot(
+                metric=val,
                 figsize=size,
                 title=title,
                 title_yadjust=title_adj,
@@ -304,7 +331,7 @@ if __name__ == "__main__":
         xcat_grid=True,
         xcat_labels=["ForEx", "Equity", "Real Interest Rates", "Interest Rates"],
         square_grid=True,
-        cids=sel_cids,
+        cids=sel_cids[1],
         # single_chart=True,
     )
 
