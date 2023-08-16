@@ -22,6 +22,7 @@ def timelines(
     start: str = "2000-01-01",
     end: Optional[str] = None,
     ncol: int = 3,
+    square_grid: bool = False,
     legend_ncol: int = 1,
     same_y: bool = True,
     all_xticks: bool = False,
@@ -93,6 +94,7 @@ def timelines(
         raise ValueError(
             "`xcat_grid` and `single_chart` cannot be True simultaneously."
         )
+    # if not
 
     if cs_mean and xcat_grid:
         raise ValueError("`cs_mean` requires `xcat_grid` to be False.")
@@ -105,12 +107,19 @@ def timelines(
     if cids is None:
         cids: List[str] = df["cid"].unique().tolist()
 
+    if cumsum:
+        df[val] = (
+            df.sort_values(["cid", "xcat", "real_date"])[["cid", "xcat", val]]
+            .groupby(["cid", "xcat"])
+            .cumsum()
+        )
+
     cross_mean_series: Optional[str] = f"mean_{xcats[0]}" if cs_mean else None
     if cs_mean:
         if len(xcats) > 1:
             raise ValueError("`cs_mean` cannot be True for multiple categories.")
 
-        if len(cids) <= 1:
+        if len(cids) == 1:
             raise ValueError("`cs_mean` cannot be True for a single cross section.")
 
         df_mean: pd.DataFrame = (
@@ -119,12 +128,19 @@ def timelines(
 
         df_mean["cid"] = "mean"
         df: pd.DataFrame = pd.concat([df, df_mean], axis=0)
+        # Drop to save memory
+        df_mean: pd.DataFrame = pd.DataFrame()
 
     if xcat_labels:
-        if len(xcat_labels) != len(xcats):
-            raise ValueError("`xcat_labels` must have same length as `xcats`.")
-        # rename xcat<-label in df
+        if (len(xcat_labels) != len(xcats)) or (
+            cs_mean and (len(xcat_labels) != len(xcats) - 1)
+        ):
+            raise ValueError(
+                "`xcat_labels` must have same length as `xcats` "
+                "(or one extra label if `cs_mean` is True)."
+            )
         df["xcat"] = df["xcat"].map(dict(zip(xcats, xcat_labels)))
+        xcats: List[str] = xcat_labels.copy()
 
     if xcat_grid:
         with FacetPlot(
@@ -138,20 +154,43 @@ def timelines(
             end=end,
         ) as fp:
             fp.lineplot(
+                share_y=same_y,
                 figsize=size,
                 xcat_grid=True,
-                legend_labels=xcat_labels or None,
+                # legend_labels=xcat_labels or None,
+                facet_titles=xcat_labels or None,
                 title=title,
                 title_yadjust=title_adj,
                 title_xadjust=title_xadj,
                 compare_series=cross_mean_series if cs_mean else None,
                 title_fontsize=title_fontsize,
                 ncols=ncol,
+                attempt_square=square_grid,
                 legend_ncol=legend_ncol,
+                legend_fontsize=legend_fontsize,
             )
 
     elif single_chart:
-        ...
+        with LinePlot(
+            df=df,
+            cids=cids,
+            xcats=xcats,
+            intersect=intersect,
+            metrics=[val],
+            tickers=[cross_mean_series] if cs_mean else None,
+            start=start,
+            end=end,
+        ) as lp:
+            lp.plot(
+                figsize=size,
+                title=title,
+                title_yadjust=title_adj,
+                title_xadjust=title_xadj,
+                compare_series=cross_mean_series if cs_mean else None,
+                title_fontsize=title_fontsize,
+                legend_ncol=legend_ncol,
+                legend_fontsize=legend_fontsize,
+            )
 
     else:
         with FacetPlot(
@@ -164,16 +203,24 @@ def timelines(
             start=start,
             end=end,
         ) as fp:
+            # if no comparison series, pass legend = False
+            show_legend: bool = True if cross_mean_series else False
             fp.lineplot(
                 figsize=size,
+                share_y=same_y,
                 title=title,
+                # cid_xcat_grid=True,
                 cid_grid=True,
                 title_yadjust=title_adj,
                 title_xadjust=title_xadj,
                 compare_series=cross_mean_series if cs_mean else None,
                 title_fontsize=title_fontsize,
                 ncols=ncol,
+                attempt_square=square_grid,
+                legend=show_legend,
                 legend_ncol=legend_ncol,
+                legend_labels=xcat_labels or None,
+                legend_fontsize=legend_fontsize,
             )
 
 
@@ -241,14 +288,40 @@ if __name__ == "__main__":
             ((df[df["cid"] == cidx]["value"]) * (ix + 1)).reset_index(drop=True).copy()
         )
 
+    for ix, xcatx in enumerate(sel_xcats):
+        df.loc[df["xcat"] == xcatx, "value"] = (
+            ((df[df["xcat"] == xcatx]["value"]) * (ix * 10 + 1))
+            .reset_index(drop=True)
+            .copy()
+        )
+
     import time
 
     # timer_start: float = time.time()
-
     timelines(
         df=df,
-        xcats=sel_xcats[0],
+        xcats=sel_xcats,
+        xcat_grid=True,
+        xcat_labels=["ForEx", "Equity", "Real Interest Rates", "Interest Rates"],
+        square_grid=True,
         cids=sel_cids,
-        cs_mean=True,
-        # xcat_grid=True,
+        # single_chart=True,
     )
+
+    # timelines(
+    #     df=df,
+    #     xcats=sel_xcats[0],
+    #     cids=sel_cids,
+    #     # cs_mean=True,
+    #     # xcat_grid=False,
+    #     single_chart=True,
+    #     cs_mean=True,
+    # )
+
+    # timelines(
+    #     df=df,
+    #     same_y=False,
+    #     xcats=sel_xcats[0],
+    #     cids=sel_cids,
+    #     title="Plotting multiple cross sections for a single category \n with different y-axis!",
+    # )
