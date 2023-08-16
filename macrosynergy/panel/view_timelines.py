@@ -7,8 +7,8 @@ from typing import List, Union, Tuple
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.check_availability import reduce_df
-# from macrosynergy.visuals import LinePlot
-# from macrosynergy.visuals import Plotter as FacetPlot
+
+import macrosynergy.visuals as msv
 
 
 def view_timelines(
@@ -34,7 +34,6 @@ def view_timelines(
     aspect: float = 1.7,
     height: float = 3,
 ):
-
     """Displays a facet grid of time line charts of one or more categories.
 
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
@@ -71,124 +70,32 @@ def view_timelines(
     :param <float> height: height of plots in facet. Default is 3.
 
     """
-
-    if not set(df.columns).issuperset({"cid", "xcat", "real_date", val}):
-        fail_str: str = (
-            f"Error : Tried to standardize DataFrame but failed."
-            f"DataFrame not in the correct format. Please ensure "
-            f"that the DataFrame has the following columns: "
-            f"'cid', 'xcat', 'real_date' and column='{val}'."
-        )
-        try:
-            dft = df.reset_index()
-            assert set(dft.columns).issuperset(
-                {"cid", "xcat", "real_date", val}
-            ), fail_str
-
-            df = dft.copy()
-        except Exception as e:
-            raise Exception(f"Exception message: {e}", fail_str)
-
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
-
-    cs_mean_error = f"cs_mean parameter must be a Boolean Object."
-    assert isinstance(cs_mean, bool), cs_mean_error
-    error = (
-        f"cs_mean can only be set to True if a single category is passed. The "
-        f"received categories are {xcats}."
+    msv.view.timelines(
+        df=df,
+        xcats=xcats,
+        cids=cids,
+        intersect=intersect,
+        val=val,
+        cumsum=cumsum,
+        start=start,
+        end=end,
+        ncol=ncol,
+        same_y=same_y,
+        all_xticks=all_xticks,
+        xcat_grid=xcat_grid,
+        xcat_labels=xcat_labels,
+        single_chart=single_chart,
+        label_adj=label_adj,
+        title=title,
+        title_adj=title_adj,
+        cs_mean=cs_mean,
+        size=size,
+        aspect=aspect,
+        height=height,
     )
-    if cs_mean:
-        assert len(xcats) == 1, error
-
-    assert isinstance(xcat_grid, bool), "xcat_grid parameter must be a Boolean Object."
-    assert isinstance(
-        single_chart, bool
-    ), "single_chart parameter must be a Boolean Object."
-    assert not (
-        xcat_grid and single_chart
-    ), "xcat_grid and single_chart cannot both be True."
-
-    df, xcats, cids = reduce_df(
-        df, xcats, cids, start, end, out_all=True, intersect=intersect
-    )
-
-    # NOTE: casting var(cids) to list if it is a string is dependent on the reduce_df function
-
-    assert isinstance(xcat_grid, bool), "xcat_grid parameter must be a Boolean Object."
-    if xcat_grid:
-        assert (
-            len(cids) == 1
-        ), "xcat_grid can only be set to True if a single cross-section is passed."
-
-    if cumsum:
-        df[val] = (
-            df.sort_values(["cid", "xcat", "real_date"])[["cid", "xcat", val]]
-            .groupby(["cid", "xcat"])
-            .cumsum()
-        )
-
-    
-    face_plotter: FacetPlot = FacetPlot(
-        df=df, cids=cids, xcats=xcats, metrics=[val], start_date=start, end_date=end
-    )
-    line_plotter: LinePlot = LinePlot(
-        df=df, cids=cids, xcats=xcats, metrics=[val], start_date=start, end_date=end
-    )
-
-    cross_mean: pd.Series = None
-    cross_mean_label: str = None
-    if cs_mean:
-        cross_mean_label: str = f"cross-sectional average of {xcats[0]}"
-        if xcat_labels is not None:
-            if len(xcat_labels) == len(xcats) + 1:
-                cross_mean_label = xcat_labels.pop(-1)
-
-        cdf: pd.DataFrame = df.pivot(
-            index="real_date", columns="cid", values="value"
-        ).mean(axis=1)
-        cross_mean: pd.Series = pd.Series(
-            data=cdf.to_numpy(),
-            index=cdf.index,
-        )
-
-
-    plot_by_xcat: bool = (len(cids) == 1)
-    if xcat_grid or not single_chart:
-        face_plotter.plot(
-            plot_by_xcat=plot_by_xcat,
-            same_y=same_y,
-            same_x=same_y,
-            ncols=ncol,
-            xcat_labels=xcat_labels,
-            fig_title=title,
-            height=height,
-            fig_title_adj=title_adj,
-            label_adj=label_adj,
-            figsize=size,
-            aspect=aspect,
-            all_xticks=all_xticks,
-            compare_series=cross_mean,
-            compare_series_label=cross_mean_label,
-            legend=False or cs_mean,
-        )
-        plt.show()
-
-    else:
-        line_plotter.plot(
-            plot_by_xcat=plot_by_xcat,
-            xcat_labels=xcat_labels,
-            fig_title=title,
-            fig_title_adj=title_adj,
-            figsize=size,
-            aspect=aspect,
-            compare_series=cross_mean,
-            compare_series_label=cross_mean_label,
-        )
-        plt.show()
 
 
 if __name__ == "__main__":
-
     cids = ["AUD", "CAD", "GBP", "NZD"]
     xcats = ["XR", "CRY", "INFL", "FXXR"]
     df_cids = pd.DataFrame(
