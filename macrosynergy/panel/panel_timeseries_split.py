@@ -304,6 +304,11 @@ if __name__ == "__main__":
         print(f"Concatenated test set at iteration {idx+1}")
         print(test_i)
 
+    # c) train_intervals = 1, test_size = 1, min_periods = 21 , min_cids = 4
+    # This configuration means that on each iteration, the newest information state is added to the training set 
+    # and only the next date is in the test set. 
+    # since this is a balanced panel, the first set should be the first 21 dates in the whole dataframe
+
 """if __name__ == "__main__":
     import os
     import numpy as np
