@@ -198,9 +198,9 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
             )
 
         # (2) aggregate each split
-        train_splits: List[np.array] = [
-            np.concatenate(train_splits_basic[: i + 1]) for i in range(self.n_splits)
-        ]
+        train_splits: List[np.array] = [train_splits_basic[0]]
+        for i in range(1, self.n_splits):
+            train_splits.append(np.concatenate([train_splits[i-1], train_splits_basic[i]]))
 
         # (3) If self.max_periods is specified, adjust each of the splits to only have
         # he self.max_periods most recent times in each split
@@ -209,20 +209,21 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
                 train_splits[split_idx] = train_splits[split_idx][-self.max_periods :]
 
         # (4) Create the train and test indices
+        X_reset = X.reset_index()
         for split in train_splits:
-            smallest_date: np.datetime64 = min(split)
-            largest_date: np.datetime64 = max(split)
+            smallest_date: np.datetime64 = np.min(split)
+            largest_date: np.datetime64 = np.max(split)
             self.train_indices.append(
-                X.reset_index().index[
-                    (X.reset_index()["real_date"] >= smallest_date)
-                    & (X.reset_index()["real_date"] <= largest_date)
+                X_reset.index[
+                    (X_reset["real_date"] >= smallest_date)
+                    & (X_reset["real_date"] <= largest_date)
                 ]
             )
             self.test_indices.append(
-                X.reset_index().index[
-                    (X.reset_index()["real_date"] > largest_date)
+                X_reset.index[
+                    (X_reset["real_date"] > largest_date)
                     & (
-                        X.reset_index()["real_date"]
+                        X_reset["real_date"]
                         <= unique_times[
                             np.where(unique_times == largest_date)[0][0]
                             + self.test_size
@@ -308,6 +309,24 @@ if __name__ == "__main__":
     # This configuration means that on each iteration, the newest information state is added to the training set 
     # and only the next date is in the test set. 
     # since this is a balanced panel, the first set should be the first 21 dates in the whole dataframe
+    print("--------------------")
+    print("--------------------")
+    print(
+        "Balanced panel: train_intervals = 1 day, test_size = 1 day, min_periods = 21, min_cids = 4"
+    )
+    print("--------------------")
+    print("--------------------\n")
+    unique_dates_X = sorted(X.reset_index().real_date.unique())
+    splitter = PanelTimeSeriesSplit(train_intervals=1, test_size=1, min_periods = 21, min_cids=4)
+    for idx, (train_idxs, test_idxs) in enumerate(splitter.split(X, y)):
+        print(idx)
+    #    train_i = pd.concat([X.iloc[train_idxs], y.iloc[train_idxs]], axis=1)
+    #    test_i = pd.concat([X.iloc[test_idxs], y.iloc[test_idxs]], axis=1)
+    #    # For the first set, ensure that the only dates are the first 21 dates in the whole dataframe
+    #if idx == 0:
+    #    train_1_dates = sorted(X.iloc[train_i].reset_index().real_date.unique())
+    #    assert train_1_dates == unique_dates_X[:21], "The dates in the first training set aren't equal to the first 21 dates in X"
+        # First check there are only test samples for a single date 
 
 """if __name__ == "__main__":
     import os
