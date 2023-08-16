@@ -68,6 +68,7 @@ def get_dict_max_depth(d: dict) -> int:
         else 0
     )
 
+
 def rec_search_dict(d: dict, key: str, match_substring: bool = False, match_type=None):
     """
     Recursively searches a dictionary for a key and returns the value
@@ -207,7 +208,8 @@ def standardise_dataframe(df: pd.DataFrame, verbose: bool = False) -> pd.DataFra
             dft: pd.DataFrame = df.reset_index()
             found_cols: list = dft.columns.tolist()
             fail_str += f"\nFound columns: {found_cols}"
-            assert set(dft.columns).issuperset(set(idx_cols)), fail_str
+            if not set(dft.columns).issuperset(set(idx_cols)):
+                raise ValueError(fail_str)
             df = dft.copy()
         except:
             raise ValueError(fail_str)
@@ -224,6 +226,14 @@ def standardise_dataframe(df: pd.DataFrame, verbose: bool = False) -> pd.DataFra
     remaining_cols: Set[str] = set(df.columns) - set(idx_cols)
 
     df = df[idx_cols + sorted(list(remaining_cols))]
+
+    # for every remaining col, try to convert to float
+    for col in remaining_cols:
+        try:
+            df[col] = df[col].astype(float)
+        except:
+            pass
+
     return df
 
 
