@@ -76,11 +76,17 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
             assert (
                 self.min_cids is not None
             ), "min_cids must be specified when train_intervals are specified."
-            assert ((self.min_cids > 0) & (type(self.min_cids) == int)), "min_cids must be an integer greater than 0."
-            assert ((self.min_periods > 0) & (type(self.min_periods) == int)), "min_periods must be an integer greater than 0."
+            assert (self.min_cids > 0) & (
+                type(self.min_cids) == int
+            ), "min_cids must be an integer greater than 0."
+            assert (self.min_periods > 0) & (
+                type(self.min_periods) == int
+            ), "min_periods must be an integer greater than 0."
 
         assert self.test_size is not None, "test_size must be specified."
-        assert ((self.test_size > 0) & (type(self.test_size) == int)), "test_size must be an integer greater than 0."
+        assert (self.test_size > 0) & (
+            type(self.test_size) == int
+        ), "test_size must be an integer greater than 0."
         self.train_indices: List[pd.Index] = []
         self.test_indices: List[pd.Index] = []
 
@@ -94,7 +100,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         :param <pd.DataFrame> y: Pandas dataframe of target variable, multi-indexed by
             (cross-section, date). The dates must be in datetime format.
         """
-        X = pd.concat([X,y], axis=1)
+        X = pd.concat([X, y], axis=1)
         X = (
             X.dropna()
         )  # drops row, corresponding with a country & period, if either a feature or the target is missing
@@ -130,8 +136,10 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         :param <pd.DataFrame> y: Pandas dataframe of target variable, multi-indexed by
             (cross-section, date). The dates must be in datetime format.
         """
-        assert X.index.equals(y.index), "The indices of the input dataframe X and the output dataframe y don't match."
-        X = pd.concat([X,y], axis=1)
+        assert X.index.equals(
+            y.index
+        ), "The indices of the input dataframe X and the output dataframe y don't match."
+        X = pd.concat([X, y], axis=1)
         X = (
             X.dropna()
         )  # drops row, corresponding with a country & period, if either a feature or the target is missing
@@ -141,7 +149,8 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         if self.min_periods is not None:
             assert self.min_periods <= len(
                 unique_times
-            ), "The minimum number of time periods for each cross-section in the first split cannot be larger than the number of unique dates in the entire dataframe X"            
+            ), """The minimum number of time periods for each cross-section in the first split cannot be larger than
+            the number of unique dates in the entire dataframe X"""
 
         if self.train_intervals:
             # (1) Determine the splits prior to aggregation
@@ -193,7 +202,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
             np.concatenate(train_splits_basic[: i + 1]) for i in range(self.n_splits)
         ]
 
-        # (3) If self.max_periods is specified, adjust each of the splits to only have 
+        # (3) If self.max_periods is specified, adjust each of the splits to only have
         # he self.max_periods most recent times in each split
         if self.max_periods:
             for split_idx in range(len(train_splits)):
@@ -236,21 +245,22 @@ if __name__ == "__main__":
 
     """ Example 1: Balanced panel """
 
-    cids = ['AUD', 'CAD', 'GBP', 'USD']
-    xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
-    df_cids = pd.DataFrame(index=cids,
-                           columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
-    df_cids.loc['AUD'] = ['2000-01-01', '2020-12-31', 0, 1]
-    df_cids.loc['CAD'] = ['2000-01-01', '2020-12-31', 0, 1]
-    df_cids.loc['GBP'] = ['2000-01-01', '2020-12-31', 0, 1]
-    df_cids.loc['USD'] = ['2000-01-01', '2020-12-31', 0, 1]
+    cids = ["AUD", "CAD", "GBP", "USD"]
+    xcats = ["XR", "CRY", "GROWTH", "INFL"]
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD"] = ["2000-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["CAD"] = ["2000-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["GBP"] = ["2000-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["USD"] = ["2000-01-01", "2020-12-31", 0, 1]
 
-    cols = ['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef']
+    cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
     df_xcats = pd.DataFrame(index=xcats, columns=cols)
-    df_xcats.loc['XR'] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
-    df_xcats.loc['CRY'] = ['2000-01-01', '2020-12-31', 1, 2, 0.95, 1]
-    df_xcats.loc['GROWTH'] = ['2000-01-01', '2020-12-31', 1, 2, 0.9, 1]
-    df_xcats.loc['INFL'] = ['2000-01-01', '2020-12-31', 1, 2, 0.8, 0.5]
+    df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY"] = ["2000-01-01", "2020-12-31", 1, 2, 0.95, 1]
+    df_xcats.loc["GROWTH"] = ["2000-01-01", "2020-12-31", 1, 2, 0.9, 1]
+    df_xcats.loc["INFL"] = ["2000-01-01", "2020-12-31", 1, 2, 0.8, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfd["grading"] = np.ones(dfd.shape[0])
@@ -265,11 +275,11 @@ if __name__ == "__main__":
     print("--------------------\n")
     splitter = PanelTimeSeriesSplit(n_splits=4)
     for idx, (train_idxs, test_idxs) in enumerate(splitter.split(X, y)):
-        train_i = pd.concat([X.iloc[train_idxs], y.iloc[train_idxs]],axis=1)
-        test_i = pd.concat([X.iloc[test_idxs], y.iloc[test_idxs]],axis=1)
-        #print("--------------------")
+        train_i = pd.concat([X.iloc[train_idxs], y.iloc[train_idxs]], axis=1)
+        test_i = pd.concat([X.iloc[test_idxs], y.iloc[test_idxs]], axis=1)
+        # print("--------------------")
         print(f"Split {idx+1}:")
-        #print("--------------------")
+        # print("--------------------")
         print(f"Concatenated training set at iteration {idx+1}")
         print(train_i)
         print(f"Concatenated test set at iteration {idx+1}")
@@ -277,16 +287,18 @@ if __name__ == "__main__":
     # b) n_splits = 4, test_size = default (21), rolling window: most recent 21 days
     print("--------------------")
     print("--------------------")
-    print("Balanced panel: n_splits = 4, test_size = 21 days, rolling window: most recent quarter (21 x 3 days roughly)")
+    print(
+        "Balanced panel: n_splits = 4, test_size = 21 days, rolling window: most recent quarter (21 x 3 days roughly)"
+    )
     print("--------------------")
     print("--------------------\n")
-    splitter = PanelTimeSeriesSplit(n_splits=4,max_periods=21*3)
+    splitter = PanelTimeSeriesSplit(n_splits=4, max_periods=21 * 3)
     for idx, (train_idxs, test_idxs) in enumerate(splitter.split(X, y)):
-        train_i = pd.concat([X.iloc[train_idxs], y.iloc[train_idxs]],axis=1)
-        test_i = pd.concat([X.iloc[test_idxs], y.iloc[test_idxs]],axis=1)
-        #print("--------------------")
+        train_i = pd.concat([X.iloc[train_idxs], y.iloc[train_idxs]], axis=1)
+        test_i = pd.concat([X.iloc[test_idxs], y.iloc[test_idxs]], axis=1)
+        # print("--------------------")
         print(f"Split {idx+1}:")
-        #print("--------------------")
+        # print("--------------------")
         print(f"Concatenated training set at iteration {idx+1}")
         print(train_i)
         print(f"Concatenated test set at iteration {idx+1}")
