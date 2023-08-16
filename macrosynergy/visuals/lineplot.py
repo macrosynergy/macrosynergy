@@ -12,7 +12,8 @@ import sys, os
 
 sys.path.append(os.path.abspath("."))
 
-from .plotter import Plotter
+from macrosynergy.visuals.plotter import Plotter, Numeric
+from macrosynergy.management.simulate_quantamental_data import make_test_df
 
 
 class LinePlot(Plotter):
@@ -39,14 +40,14 @@ class LinePlot(Plotter):
     def __init__(
         self,
         df: pd.DataFrame,
-        cids: List[str] = None,
-        xcats: List[str] = None,
-        metrics: List[str] = None,
+        cids: Optional[List[str]] = None,
+        xcats: Optional[List[str]] = None,
+        metrics: Optional[List[str]] = None,
         intersect: bool = False,
-        tickers: List[str] = None,
-        blacklist: Dict[str, List[str]] = None,
-        start: str = None,
-        end: str = None,
+        tickers: Optional[List[str]] = None,
+        blacklist: Optional[Dict[str, List[str]]] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
         *args,
         **kwargs,
     ):
@@ -66,24 +67,16 @@ class LinePlot(Plotter):
 
     def plot(
         self,
-        on_axis: Optional[plt.Axes] = None,
-        # # DF specific arguments
-        df: pd.DataFrame = None,
-        xcats: List[str] = None,
-        cids: List[str] = None,
-        intersect: bool = False,
-        blacklist: Dict[str, List[str]] = None,
-        tickers: List[str] = None,
-        start: str = "2000-01-01",
-        end: Optional[str] = None,
         # df/plot args
+        cid_plot: bool = True,
+        xcat_plot: bool = False,
         metric: str = "value",
-        compare_series: str = None,
+        compare_series: Optional[str] = None,
         # Plotting specific arguments
         # fig args
-        figsize: Tuple[int, int] = (12, 8),
-        aspect: float = 1.618,
-        height: float = 0.8,
+        figsize: Tuple[Numeric, Numeric] = (12, 8),
+        aspect: Numeric = 1.618,
+        height: Numeric = 0.8,
         # plot args
         grid: bool = True,
         x_axis_label: Optional[str] = None,
@@ -92,43 +85,27 @@ class LinePlot(Plotter):
         # title args
         title: Optional[str] = None,
         title_fontsize: int = 16,
-        title_xadjust: float = 0.5,
-        title_yadjust: float = 1.05,
+        title_xadjust: Numeric = 0.5,
+        title_yadjust: Numeric = 1.05,
         # legend args
         legend: bool = True,
-        labels: Optional[List[str]] = None,
+        legend_labels: Optional[List[str]] = None,
         legend_title: Optional[str] = None,
         legend_loc: str = "upper right",
         legend_fontsize: int = 12,
         legend_ncol: int = 1,
-        legend_bbox_to_anchor: Tuple[float, float] = (1.2, 1.0),
+        legend_bbox_to_anchor: Optional[Tuple[Numeric, Numeric]] = (1.2, 1.0),
         legend_frame: bool = True,
         # return args
         show: bool = True,
         save_to_file: Optional[str] = None,
         dpi: int = 300,
         return_figure: bool = False,
+        on_axis: Optional[plt.Axes] = None,
         # args, kwargs
         *args,
         **kwargs,
     ):
-        if any([arg is not None for arg in [df, cids, xcats, metric, tickers]]):
-            metrics: Optional[List[str]] = (
-                [metric] if metric else (self.metrics if self.metrics else None)
-            )
-
-            self.__init__(
-                df=df,
-                cids=cids,
-                xcats=xcats,
-                metrics=metrics,
-                intersect=intersect,
-                tickers=tickers,
-                blacklist=blacklist,
-                start=start,
-                end=end,
-            )
-
         if on_axis:
             fig: plt.Figure = on_axis.get_figure()
             ax: plt.Axes = on_axis
@@ -176,19 +153,10 @@ class LinePlot(Plotter):
         if y_axis_label:
             ax.set_ylabel(y_axis_label, fontsize=axis_fontsize)
 
-        # if there is a title, add it
-        if title:
-            plt.title(
-                title,
-                fontsize=title_fontsize,
-                x=title_xadjust,
-                y=title_yadjust,
-            )
-
         # if there is a legend, add it
         if legend:
             plt.legend(
-                labels=labels if labels else None,
+                labels=legend_labels if legend_labels else None,
                 title=legend_title,
                 loc=legend_loc,
                 fontsize=legend_fontsize,
@@ -215,17 +183,17 @@ class LinePlot(Plotter):
             return
 
 
-# if __name__ == "__main__":
-#     cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
-#     xcats: List[str] = ["FXXR", "EQXR", "RIR"]
-#     df: pd.DataFrame = make_test_df(
-#         cids=cids,
-#         xcats=xcats,
-#         start_date="2000-01-01",
-#         end_date="2020-12-31",
-#         # prefer="sine",
-#     )
+if __name__ == "__main__":
+    cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
+    xcats: List[str] = ["FXXR", "EQXR", "RIR"]
+    df: pd.DataFrame = make_test_df(
+        cids=cids,
+        xcats=xcats,
+        start_date="2000-01-01",
+        end_date="2020-12-31",
+        # prefer="sine",
+    )
 
-#     LinePlot(df=df).plot(
-#         cids=["USD", "EUR"], xcats=["FXXR"], labels=["The US", "Europe"]
-#     )
+    LinePlot(df=df, cids=["USD", "EUR"], xcats=["FXXR"]).plot(
+        labels=["The US", "Europe"]
+    )
