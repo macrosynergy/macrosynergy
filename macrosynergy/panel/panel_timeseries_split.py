@@ -9,25 +9,24 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
     """
     Class for the production of cross-section splits for panel data.
 
-    :param <int> n_splits: number of time splits to make. If this is not specified then
-        the split will be governed by sequential training intervals.
+    :param <int> n_splits: number of time splits to make. If this is not specified, then
+        the split will be governed by sequential training intervals. Either n_splits or train_intervals
+        must be specified (not both).
     :param <int> train_intervals: training interval length in time periods for sequential
         training. This is the number of periods by which the training set is expanded at
         each subsequent split. Default is 21.
-        If this is set to 1 then one must specify n_splits.
     :param <int> test_size: test set length for interval training. This is the number of
         periods to use for the test set subsequent to the training set. Default is 21.
     :param <int> max_periods: maximum length of the training set in interval training.
-        If the maximum is exceeded then the earliest periods are being cut off.
-        Default is None. Only used if train_intervals is specified.
-        TODO: check is last sentence is correct
+        If the maximum is exceeded then the earliest periods are cut off.
+        Default is None.
     :param <int> min_periods: minimum number of time periods required for the initial
         training set. Default is 500. Only used if train_intervals is specified.
     :param <int> min_cids: minimum number of cross-sections required for the initial
         training set. Default is 4. Only used if train_intervals is specified.
 
-    N.B: The class provides train/validation indices to split the panel samples, observed
-    at fixed dates for a number of cross-sections, in sequential train/validation sets.
+    N.B: The class provides training/validation indices to split the panel samples, observed
+    at fixed dates for a number of cross-sections, in sequential training/validation sets.
     Unlike the sklearn class `TimeSeriesSplit`, this class makes splits based on the
     observation dates as opposed to the sample indices.
 
@@ -36,7 +35,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
     (2) the number of splits are determined by the number of forward time periods that are
     used to expand the training set at each iteration. Other parameters determine the
     configurations of the splits made and depend on the splitting method used.
-    Default is defining an expanding training window.
+    Default is defining an expanding training window, as opposed to a rolling window.
     """
 
     def __init__(
@@ -77,15 +76,15 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
             assert (
                 self.min_cids is not None
             ), "min_cids must be specified when train_intervals are specified."
-            assert self.min_cids > 0, "min_cids must be greater than 0."
-            assert self.min_periods > 0, "min_periods must be greater than 0."
+            assert ((self.min_cids > 0) & (type(self.min_cids) == int)), "min_cids must be an integer greater than 0."
+            assert ((self.min_periods > 0) & (type(self.min_periods) == int)), "min_periods must be an integer greater than 0."
 
         assert self.test_size is not None, "test_size must be specified."
-        assert self.test_size > 0, "test_size must be greater than 0."
+        assert ((self.test_size > 0) & (type(self.test_size) == int)), "test_size must be an integer greater than 0."
         self.train_indices: List[pd.Index] = []
         self.test_indices: List[pd.Index] = []
 
-    def get_n_splits(self, X: pd.DataFrame, y: pd.DataFrame = None):
+    def get_n_splits(self, X: pd.DataFrame, y: pd.DataFrame):
         """
         Returns the number of splitting iterations in the cross-validator.
 
@@ -94,18 +93,15 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
             Otherwise the frame must be in wide format: each feature is a column.
         :param <pd.DataFrame> y: Pandas dataframe of target variable, multi-indexed by
             (cross-section, date). The dates must be in datetime format.
-            This isn't used and is only included to be consistent with the sklearn API.
-            TODO: This above is problematic since NAs in targets should affect the splits.
         """
+        X = pd.concat([X,y], axis=1)
         X = (
             X.dropna()
-        )  # drops all features for a country/period if single feaure is missing
-        # TODO: this may need to be optional
+        )  # drops row, corresponding with a country & period, if either a feature or the target is missing
         unique_times: pd.arrays.DatetimeArray = (
             X.reset_index()["real_date"].sort_values().unique()
         )
         if self.train_intervals:
-            # TODO: It seems inconsistent to split X without considering y
             init_mask: pd.Series = X.groupby(level=1).size() == self.min_cids
             date_first_min_cids: pd.Timestamp = (
                 init_mask[init_mask == True].reset_index().real_date.min()
@@ -125,28 +121,27 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
         return self.n_splits
 
-    def split(self, X: pd.DataFrame, y: pd.DataFrame = None):
+    def split(self, X: pd.DataFrame, y: pd.DataFrame):
         """
         Splitter method.
         :param <pd.DataFrame> X: Pandas dataframe of features/quantamental indicators,
             multi-indexed by (cross-section, date). The dates must be in datetime format.
-            Otherwise the frame must be in wide format: each feature is a column.
+            Otherwise the dataframe must be in wide format: each feature is a column.
         :param <pd.DataFrame> y: Pandas dataframe of target variable, multi-indexed by
             (cross-section, date). The dates must be in datetime format.
-            This isn't used and is only included to be consistent with the sklearn API.
-            TODO: This above is problematic since NAs in targets should affect the splits.
         """
+        assert X.index.equals(y.index), "The indices of the input dataframe X and the output dataframe y don't match."
+        X = pd.concat([X,y], axis=1)
         X = (
             X.dropna()
-        )  # drops all features for a country/period if single feaure is missing
+        )  # drops row, corresponding with a country & period, if either a feature or the target is missing
         unique_times: pd.arrays.DatetimeArray = (
             X.reset_index()["real_date"].sort_values().unique()
         )
         if self.min_periods is not None:
             assert self.min_periods <= len(
                 unique_times
-            ), "The minimum number cannot be smaller than the length of the dataframe."
-            
+            ), "The minimum number of time periods for each cross-section in the first split cannot be larger than the number of unique dates in the entire dataframe X"            
 
         if self.train_intervals:
             # (1) Determine the splits prior to aggregation
@@ -171,6 +166,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
                 np.ceil(len(unique_times_train) / self.train_intervals)
             )
             train_splits_basic: List = np.array_split(unique_times_train, self.n_splits)
+            # insert the unique dates for the already-created first split at the start of train_splits_basic
             train_splits_basic.insert(
                 0,
                 pd.arrays.DatetimeArray(
@@ -180,9 +176,8 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
                     )
                 ),
             )
-            # need to add one to n_splits because n_splits was determined by the number 
-            # of train_intervals starting from the second split
-            # need to take into account the split determined by min_cids and min_periods
+            # need to add one to n_splits in order to take into account the split already determined by min_cids and min_periods,
+            # because n_splits was determined by the number of train_intervals starting from the second split
             self.n_splits += 1
         else:
             # (1) Determine the splits prior to agglomeration
@@ -232,12 +227,72 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
 """
 ---------------
-Test class
-TODO: amend later to not download data but instead use make_qdf()
+Testing
 ---------------
 """
 
 if __name__ == "__main__":
+    from macrosynergy.management.simulate_quantamental_data import make_qdf
+
+    """ Example 1: Balanced panel """
+
+    cids = ['AUD', 'CAD', 'GBP', 'USD']
+    xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
+    df_cids = pd.DataFrame(index=cids,
+                           columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
+    df_cids.loc['AUD'] = ['2000-01-01', '2020-12-31', 0, 1]
+    df_cids.loc['CAD'] = ['2000-01-01', '2020-12-31', 0, 1]
+    df_cids.loc['GBP'] = ['2000-01-01', '2020-12-31', 0, 1]
+    df_cids.loc['USD'] = ['2000-01-01', '2020-12-31', 0, 1]
+
+    cols = ['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef']
+    df_xcats = pd.DataFrame(index=xcats, columns=cols)
+    df_xcats.loc['XR'] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
+    df_xcats.loc['CRY'] = ['2000-01-01', '2020-12-31', 1, 2, 0.95, 1]
+    df_xcats.loc['GROWTH'] = ['2000-01-01', '2020-12-31', 1, 2, 0.9, 1]
+    df_xcats.loc['INFL'] = ['2000-01-01', '2020-12-31', 1, 2, 0.8, 0.5]
+
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    dfd["grading"] = np.ones(dfd.shape[0])
+    dfd = dfd.pivot(index=["cid", "real_date"], columns="xcat", values="value")
+    X = dfd.drop(columns=["XR"])
+    y = dfd["XR"]
+    # a) n_splits = 4, test_size = default (21), aggregation
+    print("--------------------")
+    print("--------------------")
+    print("Balanced panel: n_splits = 4, test_size = 21 days")
+    print("--------------------")
+    print("--------------------\n")
+    splitter = PanelTimeSeriesSplit(n_splits=4)
+    for idx, (train_idxs, test_idxs) in enumerate(splitter.split(X, y)):
+        train_i = pd.concat([X.iloc[train_idxs], y.iloc[train_idxs]],axis=1)
+        test_i = pd.concat([X.iloc[test_idxs], y.iloc[test_idxs]],axis=1)
+        #print("--------------------")
+        print(f"Split {idx+1}:")
+        #print("--------------------")
+        print(f"Concatenated training set at iteration {idx+1}")
+        print(train_i)
+        print(f"Concatenated test set at iteration {idx+1}")
+        print(test_i)
+    # b) n_splits = 4, test_size = default (21), rolling window: most recent 21 days
+    print("--------------------")
+    print("--------------------")
+    print("Balanced panel: n_splits = 4, test_size = 21 days, rolling window: most recent quarter (21 x 3 days roughly)")
+    print("--------------------")
+    print("--------------------\n")
+    splitter = PanelTimeSeriesSplit(n_splits=4,max_periods=21*3)
+    for idx, (train_idxs, test_idxs) in enumerate(splitter.split(X, y)):
+        train_i = pd.concat([X.iloc[train_idxs], y.iloc[train_idxs]],axis=1)
+        test_i = pd.concat([X.iloc[test_idxs], y.iloc[test_idxs]],axis=1)
+        #print("--------------------")
+        print(f"Split {idx+1}:")
+        #print("--------------------")
+        print(f"Concatenated training set at iteration {idx+1}")
+        print(train_i)
+        print(f"Concatenated test set at iteration {idx+1}")
+        print(test_i)
+
+"""if __name__ == "__main__":
     import os
     import numpy as np
     import pandas as pd
@@ -279,7 +334,7 @@ if __name__ == "__main__":
         "RGDP_SA_P1Q1QL4_20QMA",
     ]
     econ = []
-    mark = []
+    mark = ["DU05YXR_NSA"]
 
     xcats = main + econ + mark
 
@@ -346,8 +401,8 @@ if __name__ == "__main__":
         df=train, xcats=xcatx, cids=cidx, freq="M", lag=1, xcat_aggs=["mean", "sum"]
     )
 
-    # splitter = PanelTimeSeriesSplit(train_intervals=6, test_size=3, min_periods=12, min_cids=3)
-    # splitter.split(train_wide)
+    splitter = PanelTimeSeriesSplit(train_intervals=6, test_size=3, min_periods=12, min_cids=3)
+    splitter.split(train_wide.iloc[:,:-1],train_wide.iloc[:,-1])
 
     # splitter = PanelTimeSeriesSplit(train_intervals=6, test_size=4, min_periods=12, min_cids=3, max_periods=3)
     # splitter.split(train_wide)
@@ -358,12 +413,12 @@ if __name__ == "__main__":
     # splitter = PanelTimeSeriesSplit(n_splits=10,test_size=1)
     # splitter.split(train_wide)
 
-    splitter = PanelTimeSeriesSplit(n_splits=10, test_size=1, max_periods=12)
-    splitter.split(train_wide)
-    print(splitter.get_n_splits(train_wide))
+    #splitter = PanelTimeSeriesSplit(n_splits=10, test_size=1, max_periods=12)
+    #print(splitter.get_n_splits(train_wide))
+    ##splitter.split(train_wide)
 
-    splitter = PanelTimeSeriesSplit(
-        train_intervals=1, test_size=1, max_periods=12, min_cids=3, min_periods=12
-    )
-    splitter.split(train_wide)
-    print(splitter.get_n_splits(train_wide))
+    #splitter = PanelTimeSeriesSplit(
+    #    train_intervals=1, test_size=1, max_periods=12, min_cids=3, min_periods=12
+    #)
+    #splitter.split(train_wide)
+    #print(splitter.get_n_splits(train_wide))"""
