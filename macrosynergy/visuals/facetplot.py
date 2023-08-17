@@ -497,7 +497,7 @@ class FacetPlot(Plotter):
             # NB : legend goes away in cid_xcat_grid
             legend: bool = False
 
-            for i, cid in enumerate(_cids): 
+            for i, cid in enumerate(_cids):
                 for j, xcat in enumerate(_xcats):
                     tk: str = "_".join([cid, xcat])
                     if tk in tickers_to_plot:
@@ -594,6 +594,10 @@ class FacetPlot(Plotter):
             if y_axis_label is not None:
                 ax_i.set_ylabel(y_axis_label, fontsize=axis_fontsize)
 
+        # if there are more axes than ax_i, remove them
+        for ax in ax_list[len(plot_dict) :]:
+            fig.delaxes(ax)
+
         # re_adj: List[float] = (0, 0, 0, 0)
         if legend:
             #
@@ -646,31 +650,36 @@ if __name__ == "__main__":
 
     print("From same object:")
     timer_start: float = time.time()
-    cids_A: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
-    cids_B: List[str] = ["JPY", "CHF", "NZD", "SEK", "NOK", "DKK", "INR"]
-    cids_C: List[str] = ["INR", "JPY", "CHF", "NZD", "USD", "EUR"]
 
-    xcats_CPIX: List[str] = [
+    cids_A: List[str] = ["AUD", "CAD", "EUR", "GBP", "USD"]
+    cids_B: List[str] = ["CHF", "INR", "JPY", "NOK", "NZD", "SEK"]
+    cids_C: List[str] = ["CHF", "EUR", "INR", "JPY", "NOK", "NZD", "SEK", "USD"]
+
+    xcats_A: List[str] = [
         "CPIXFE_SA_P1M1ML12",
         "CPIXFE_SJA_P3M3ML3AR",
         "CPIXFE_SJA_P6M6ML6AR",
         "CPIXFE_SA_P1M1ML12_D1M1ML3",
+        "CPIXFE_SA_P1M1ML12_D1M1ML3",
     ]
-    xcats_CPIC: List[str] = [
+    xcats_B: List[str] = [
         "CPIC_SA_P1M1ML12",
         "CPIC_SJA_P3M3ML3AR",
         "CPIC_SJA_P6M6ML6AR",
         "CPIC_SA_P1M1ML12_D1M1ML3",
+        "CPIH_SA_P1M1ML12",
+        "EXALLOPENNESS_NSA_1YMA",
+        "EXMOPENNESS_NSA_1YMA",
     ]
-    xcats_DUO: List[str] = ["DU05YXR_NSA", "DU05YXR_VT10"]
-    xcats_ELSE: List[str] = [
+    xcats_C: List[str] = ["DU05YXR_NSA", "DU05YXR_VT10"]
+    xcats_D: List[str] = [
         "FXXR_NSA",
         "EQXR_NSA",
         "FXTARGETED_NSA",
         "FXUNTRADABLE_NSA",
     ]
     all_cids: List[str] = list(set(cids_A + cids_B + cids_C))
-    all_xcats: List[str] = list(set(xcats_CPIX + xcats_CPIC + xcats_DUO + xcats_ELSE))
+    all_xcats: List[str] = list(set(xcats_A + xcats_B + xcats_C + xcats_D))
 
     df: pd.DataFrame = make_test_df(
         cids=all_cids,
@@ -680,28 +689,31 @@ if __name__ == "__main__":
     with FacetPlot(
         df,
     ) as fp:
-        # fp.lineplot(
-        #     cids=cids_A,
-        #     share_x=True,
-        #     xcat_grid=True,
-        #     title="Test Title with a very long title to see how it looks, \n and a new line - why not?",
-        #     show=True,
-        # )
-        # fp.lineplot(
-        #     cids=cids_B,
-        #     xcats=xcats_CPIX,
-
-        #     show=True,
-        #     share_y=True,
-        #     cid_grid=True,
-        #     title="Another test title",
-        # )
+        fp.lineplot(
+            cids=cids_A,
+            share_x=True,
+            xcat_grid=True,
+            title="Test Title with a very long title to see how it looks, \n and a new line - why not?",
+            # save_to_file="test_0.png",
+            show=True,
+        )
+        fp.lineplot(
+            cids=cids_B,
+            xcats=xcats_A,
+            attempt_square=True,
+            share_y=True,
+            cid_grid=True,
+            title="Another test title",
+            # save_to_file="test_1.png",
+            show=True,
+        )
         fp.lineplot(
             cids=cids_C,
-            xcats=xcats_ELSE,
-            show=True,
+            xcats=xcats_D,
             cid_xcat_grid=True,
             title="Another test title",
+            # save_to_file="test_2.png",
+            show=True,
         )
 
         # facet_size=(5, 4),
