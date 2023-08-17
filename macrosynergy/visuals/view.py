@@ -45,6 +45,8 @@ def timelines(
 ):
     """Displays a facet grid of time line charts of one or more categories.
 
+    Parameters
+    ----------
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
     :param <List[str]> xcats: extended categories to plot. Default is all in DataFrame.
