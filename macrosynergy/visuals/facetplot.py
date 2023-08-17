@@ -125,6 +125,8 @@ class FacetPlot(Plotter):
         cid_grid: bool = False,
         xcat_grid: bool = False,
         cid_xcat_grid: bool = False,
+        _cids: Optional[List[str]] = None,
+        _xcats: Optional[List[str]] = None,
     ) -> Tuple[int, int]:
         """
         Returns a tuple of grid dimensions that matches the plot settings.
@@ -136,22 +138,31 @@ class FacetPlot(Plotter):
                 "`cid_xcat_grid` can be True."
             )
 
+        if _cids is None:
+            _cids: List[str] = self.cids
+        if _xcats is None:
+            _xcats: List[str] = self.xcats
+
         if attempt_square:
             target_var: str = tickers
             if cid_grid:
-                target_var: List[str] = self.cids
+                target_var: List[str] = _cids
             elif xcat_grid:
-                target_var: List[str] = self.xcats
+                target_var: List[str] = _xcats
             return _get_square_grid(num_plots=len(target_var))
 
         if cid_grid or xcat_grid:
-            tks: List[str] = self.cids if cid_grid else self.xcats
+            tks: List[str] = _cids if cid_grid else _xcats
             return self._get_grid_dim(
-                tickers=tks, ncols=ncols, attempt_square=attempt_square
+                tickers=tks,
+                ncols=ncols,
+                attempt_square=attempt_square,
+                _cids=_cids,
+                _xcats=_xcats,
             )
 
         if cid_xcat_grid:
-            return (len(self.xcats), len(self.cids))
+            return (len(_xcats), len(_cids))
 
         if ncols is not None:
             return (
@@ -211,6 +222,8 @@ class FacetPlot(Plotter):
     def lineplot(
         self,
         # plot arguments
+        cids: Optional[List[str]] = None,
+        xcats: Optional[List[str]] = None,
         metric: Optional[str] = None,
         ncols: int = 3,
         attempt_square: bool = False,
@@ -219,8 +232,8 @@ class FacetPlot(Plotter):
         cid_xcat_grid: bool = False,
         grid_dim: Optional[Tuple[int, int]] = None,
         compare_series: Optional[str] = None,
-        share_y: bool = True,
-        share_x: bool = True,
+        share_y: bool = False,
+        share_x: bool = False,
         # xcats_mean: bool = False,
         # title arguments
         figsize: Tuple[Numeric, Numeric] = (16.0, 9.0),
@@ -366,32 +379,11 @@ class FacetPlot(Plotter):
             ):
                 comp_series_flag: bool = True
 
-        if any(
-            [
-                (argx in kwargs.keys())
-                for argx in ["df", "cids", "xcats", "tickers", "metrics"]
-            ]
-            or comp_series_flag
-        ):
-            # undesirable, as the state of the object will change kept for ease of use
-            metrics: List[str] = [metric] if metric is not None else self.metrics
-            metrics: Optional[List[str]] = metrics if metrics else None
-            self.__init__(
-                df=kwargs.pop("df", self.df),
-                cids=kwargs.pop("cids", None),
-                xcats=kwargs.pop("xcats", None),
-                metrics=metrics,
-                intersect=kwargs.pop("intersect", None),
-                tickers=kwargs.pop(
-                    "tickers", compare_series if comp_series_flag else None
-                ),
-                blacklist=kwargs.pop("blacklist", None),
-                start=kwargs.pop("start", None),
-                end=kwargs.pop("end", None),
-            )
-
         if metric is None:
             metric: str = self.metrics[0]
+
+        _cids: List[str] = self.cids if cids is None else cids
+        _xcats: List[str] = self.xcats if xcats is None else xcats
 
         tickers_to_plot: List[str] = (
             (self.df["cid"] + "_" + self.df["xcat"]).unique().tolist()
@@ -408,6 +400,8 @@ class FacetPlot(Plotter):
                 cid_grid=cid_grid,
                 xcat_grid=xcat_grid,
                 cid_xcat_grid=cid_xcat_grid,
+                _cids=cids,
+                _xcats=xcats,
             )
 
         # if the facet size is not none, re-calc the figsize
@@ -439,9 +433,9 @@ class FacetPlot(Plotter):
 
         if facet_titles is None:
             if cid_grid:
-                facet_titles: List[str] = self.cids
+                facet_titles: List[str] = _cids
             elif xcat_grid:
-                facet_titles: List[str] = self.xcats
+                facet_titles: List[str] = _xcats
             elif cid_xcat_grid:
                 ...
                 # cid_xcat_grid facets only make sense if they have cid_xcat as the title
@@ -463,10 +457,10 @@ class FacetPlot(Plotter):
             # flipper handles resolution between cid_grid and xcat_grid for binary variables
             flipper: bool = 1 if cid_grid else -1
             if facet_titles is None:
-                facet_titles: List[str] = [self.cids, self.xcats][::flipper][0]
+                facet_titles: List[str] = [_cids, _xcats][::flipper][0]
             if legend_labels is None:
-                legend_labels: List[str] = [self.xcats, self.cids][::flipper][0]
-            elif len(legend_labels) != len([self.xcats, self.cids][::flipper][0]):
+                legend_labels: List[str] = [_xcats, _cids][::flipper][0]
+            elif len(legend_labels) != len([_xcats, _cids][::flipper][0]):
                 raise ValueError(
                     "The number of legend labels does not match the lines to plot."
                 )
@@ -480,10 +474,10 @@ class FacetPlot(Plotter):
                 legend_labels.append(compare_series)
                 legend_color_map[compare_series] = "red"
 
-            for i, fvar in enumerate([self.cids, self.xcats][::flipper][0]):
+            for i, fvar in enumerate([_cids, _xcats][::flipper][0]):
                 tks: List[str] = [
                     "_".join([fvar, x][::flipper])
-                    for x in ([self.xcats, self.cids][::flipper][0])
+                    for x in ([_xcats, _cids][::flipper][0])
                 ]
 
                 tks: List[str] = sorted(tks)
@@ -498,18 +492,16 @@ class FacetPlot(Plotter):
         if cid_xcat_grid:
             if facet_titles is None:
                 facet_titles: List[str] = [
-                    f"{cid}_{xcat}" for cid in self.cids for xcat in self.xcats
+                    f"{cid}_{xcat}" for cid in _cids for xcat in _xcats
                 ]
             # NB : legend goes away in cid_xcat_grid
             legend: bool = False
 
-            for j, xcat in enumerate(self.xcats):
-                for i, cid in enumerate(self.cids):
+            for i, cid in enumerate(_cids): 
+                for j, xcat in enumerate(_xcats):
                     tk: str = "_".join([cid, xcat])
                     if tk in tickers_to_plot:
-                        plot_dict[i * len(self.xcats) + j]: Dict[
-                            str, Union[str, List[str]]
-                        ] = {
+                        plot_dict[i * len(_xcats) + j]: Dict[str, List[str]] = {
                             "X": "real_date",
                             "Y": [tk],
                         }
@@ -523,13 +515,12 @@ class FacetPlot(Plotter):
 
         fig = plt.figure(figsize=figsize)
 
-        # NB: nrows and ncols are flipped between mpl...GridSpec and mpl...figsize etc
-
         outer_gs: GridSpec = GridSpec(
-            nrows=grid_dim[1],
             ncols=grid_dim[0],
+            nrows=grid_dim[1],
             figure=fig,
         )
+
         # re_adj: List[float] = [Left, Bottom, Right, Top]
         re_adj: List[float] = [0, 0, 1, 1]
 
@@ -549,14 +540,12 @@ class FacetPlot(Plotter):
 
             re_adj[3] = re_adj[3] - fig_height / fig.get_window_extent().height
 
-        axs = outer_gs.subplots(
+        axs: np.ndarray = outer_gs.subplots(
             sharex=share_x,
             sharey=share_y,
         )
         ax_list: List[plt.Axes] = axs.flatten().tolist()
-        for i, (plot_id, plt_dct) in enumerate(plot_dict.items()):
-            # gs is a 2d grid with dims of tuple `grid_dim`
-            ax: plt.Axes = ax_list[i]
+        for i, plt_dct, ax_i in zip(plot_dict.keys(), plot_dict.values(), ax_list):
             if plt_dct["X"] != "real_date":
                 raise NotImplementedError(
                     "Only `real_date` is supported for the X axis."
@@ -579,7 +568,7 @@ class FacetPlot(Plotter):
                     plot_func_args["color"] = "red"
                     plot_func_args["linestyle"] = "--"
 
-                ax.plot(
+                ax_i.plot(
                     self.df[sel_bools][plt_dct["X"]].reset_index(drop=True).tolist(),
                     self.df[sel_bools][metric].reset_index(drop=True).tolist(),
                     **plot_func_args,
@@ -587,7 +576,7 @@ class FacetPlot(Plotter):
                 )
 
             if facet_titles:
-                ax.set_title(
+                ax_i.set_title(
                     facet_titles[i],
                     fontsize=facet_title_fontsize,
                     x=facet_title_xadjust,
@@ -595,15 +584,15 @@ class FacetPlot(Plotter):
                 )
 
             if ax_grid:
-                ax.grid(axis="both", linestyle="--", alpha=0.5)
+                ax_i.grid(axis="both", linestyle="--", alpha=0.5)
             if ax_hline:
-                ax.axhline(ax_hline_val, color="black", linestyle="--")
+                ax_i.axhline(ax_hline_val, color="black", linestyle="--")
             if ax_vline:
-                ax.axvline(ax_vline_val, color="black", linestyle="--")
+                ax_i.axvline(ax_vline_val, color="black", linestyle="--")
             if x_axis_label is not None:
-                ax.set_xlabel(x_axis_label, fontsize=axis_fontsize)
+                ax_i.set_xlabel(x_axis_label, fontsize=axis_fontsize)
             if y_axis_label is not None:
-                ax.set_ylabel(y_axis_label, fontsize=axis_fontsize)
+                ax_i.set_ylabel(y_axis_label, fontsize=axis_fontsize)
 
         # re_adj: List[float] = (0, 0, 0, 0)
         if legend:
@@ -652,123 +641,67 @@ class FacetPlot(Plotter):
 if __name__ == "__main__":
     # from macrosynergy.visuals import FacetPlot
     from macrosynergy.management.simulate_quantamental_data import make_test_df
-    from macrosynergy.dev.local import LocalCache as JPMaQSDownload
 
-    cids: List[str] = [
-        "USD",
-        "EUR",
-        "GBP",
-        "AUD",
-        "CAD",
-        "JPY",
-        "CHF",
-        "NZD",
-        "SEK",
-        "NOK",
-        "DKK",
-        "INR",
-    ]
-    # Quantamental categories of interest
-
-    xcats = [
-        "CPIXFE_SA_P1M1ML12",
-        "CPIXFE_SJA_P3M3ML3AR",
-        "CPIXFE_SJA_P6M6ML6AR",
-        "CPIXFE_SA_P1M1ML12_D1M1ML3",
-        "CPIC_SA_P1M1ML12",
-        "CPIC_SJA_P3M3ML3AR",
-        "CPIC_SJA_P6M6ML6AR",
-        "CPIC_SA_P1M1ML12_D1M1ML3",
-        # "NIR_NSA",
-        # "RIR_NSA",
-        # "DU05YXR_NSA",
-        # "DU05YXR_VT10",
-        # "FXXR_NSA",
-        # "EQXR_NSA",
-        # "DU05YXR_NSA",
-        # "DU05YXR_VT10",
-        # "FXTARGETED_NSA",
-        # "FXUNTRADABLE_NSA",
-    ]  # market links
-
-    sel_cids: List[str] = ["USD", "EUR", "GBP"]
-    sel_xcats: List[str] = ["NIR_NSA", "RIR_NSA", "FXXR_NSA", "EQXR_NSA"]
-    # r_styles: List[str] = [
-    #     "linear",
-    #     "decreasing-linear",
-    #     "sharp-hill",
-    #     "sine",
-    #     "four-bit-sine",
-    # ]
-    # # df: pd.DataFrame = make_test_df(
-    # #     cids=list(set(cids) - set(sel_cids)),
-    # #     xcats=xcats,
-    # #     start_date="2000-01-01",
-    # # )
-    # df = pd.DataFrame()
-    # # for rstyle, xcatx in zip(r_styles[: len(sel_xcats)], sel_xcats):
-    # for ix, xcatx in enumerate(xcats):
-    #     rstyle: str = r_styles[(ix + len(r_styles)) % len(r_styles)]
-    #     dfB: pd.DataFrame = make_test_df(
-    #         cids=cids,
-    #         xcats=[xcatx],
-    #         start_date="2000-01-01",
-    #         prefer=rstyle,
-    #     )
-    #     df: pd.DataFrame = pd.concat([df, dfB], axis=0)
-
-    # df: pd.DataFrame = df[
-    #     ~((df["cid"] == "USD") & (df["xcat"] == "FXXR"))
-    # ].reset_index()
-
-    with JPMaQSDownload(
-        local_path=r"~\Macrosynergy\Macrosynergy - Documents\SharedData\JPMaQSTickers"
-    ) as jpmaqs:
-        df: pd.DataFrame = jpmaqs.download(
-            cids=cids,
-            xcats=xcats,
-            start_date="2016-01-01",
-        )
-
-    sel_dates = pd.bdate_range(start="2020-01-01", end="today")
-    t_xcat = "CPIC_SA_P1M1ML12_D1M1ML3"
-
-    # crop such that t_xcat only has data for sel_dates
-    df = pd.concat(
-        [
-            df[~((df["xcat"] == t_xcat))].reset_index(drop=True),
-            df[(df["xcat"] == t_xcat) & (df["real_date"].isin(sel_dates))].reset_index(
-                drop=True
-            ),
-        ],
-        axis=0,
-    ).reset_index(drop=True)
-
-    from random import SystemRandom
-
-    random = SystemRandom()
-
-    # random.seed(42)
-
-    # for cidx, xcatx in df[["cid", "xcat"]].drop_duplicates().values.tolist():
-    #     # if random() > 0.5 multiply by random.random()*10
-    #     _bools = (df["cid"] == cidx) & (df["xcat"] == xcatx)
-    #     r = max(random.random(), 0.1)
-    #     df.loc[_bools, "value"] = df.loc[_bools, "value"] * r
-
-    # FacetPlot(df).lineplot()
     import time
 
     print("From same object:")
     timer_start: float = time.time()
+    cids_A: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
+    cids_B: List[str] = ["JPY", "CHF", "NZD", "SEK", "NOK", "DKK", "INR"]
+    cids_C: List[str] = ["INR", "JPY", "CHF", "NZD", "USD", "EUR"]
 
-    with FacetPlot(df, cids=cids, xcats=xcats) as fp:
+    xcats_CPIX: List[str] = [
+        "CPIXFE_SA_P1M1ML12",
+        "CPIXFE_SJA_P3M3ML3AR",
+        "CPIXFE_SJA_P6M6ML6AR",
+        "CPIXFE_SA_P1M1ML12_D1M1ML3",
+    ]
+    xcats_CPIC: List[str] = [
+        "CPIC_SA_P1M1ML12",
+        "CPIC_SJA_P3M3ML3AR",
+        "CPIC_SJA_P6M6ML6AR",
+        "CPIC_SA_P1M1ML12_D1M1ML3",
+    ]
+    xcats_DUO: List[str] = ["DU05YXR_NSA", "DU05YXR_VT10"]
+    xcats_ELSE: List[str] = [
+        "FXXR_NSA",
+        "EQXR_NSA",
+        "FXTARGETED_NSA",
+        "FXUNTRADABLE_NSA",
+    ]
+    all_cids: List[str] = list(set(cids_A + cids_B + cids_C))
+    all_xcats: List[str] = list(set(xcats_CPIX + xcats_CPIC + xcats_DUO + xcats_ELSE))
+
+    df: pd.DataFrame = make_test_df(
+        cids=all_cids,
+        xcats=all_xcats,
+    )
+
+    with FacetPlot(
+        df,
+    ) as fp:
+        # fp.lineplot(
+        #     cids=cids_A,
+        #     share_x=True,
+        #     xcat_grid=True,
+        #     title="Test Title with a very long title to see how it looks, \n and a new line - why not?",
+        #     show=True,
+        # )
+        # fp.lineplot(
+        #     cids=cids_B,
+        #     xcats=xcats_CPIX,
+
+        #     show=True,
+        #     share_y=True,
+        #     cid_grid=True,
+        #     title="Another test title",
+        # )
         fp.lineplot(
-            # share_y=False,
-            share_x=True,
-            xcat_grid=True,
-            title="Test Title with a very long title to see how it looks, \n and a new line - why not?",
-            save_to_file="test.png",
+            cids=cids_C,
+            xcats=xcats_ELSE,
+            show=True,
+            cid_xcat_grid=True,
+            title="Another test title",
         )
 
         # facet_size=(5, 4),
