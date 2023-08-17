@@ -135,11 +135,7 @@ class LinePlot(Plotter):
                 .copy()
                 .reset_index(drop=True)
             )
-            # remove the compare_series from the dfx
-            # dfx = dfx.loc[~((dfx["cid"] == _cid) & (dfx["xcat"] == _xcat)), :]
 
-        # use plt to create a plot, and use cid_xcat to differentiate the lines, cid_xcat are not real colors
-        # for cid_xcat in dfx[["cid", "xcat"]].drop_duplicates().values.tolist()
         for cid_xcat in dfx[["cid", "xcat"]].drop_duplicates().values.tolist():
             if "_".join(cid_xcat) == compare_series:
                 continue
