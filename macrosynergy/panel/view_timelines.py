@@ -1,12 +1,8 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.axes
-import seaborn as sns
-from typing import List, Union, Tuple
+from typing import List, Tuple
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.check_availability import reduce_df
 
 import macrosynergy.visuals as msv
 
@@ -35,7 +31,9 @@ def view_timelines(
     legend_fontsize: int = 12,
     height: float = 3,
 ):
-    """Displays a facet grid of time line charts of one or more categories.
+    """
+    Wrapper to `macrosynergy.visuals.view.timelines`.
+    Displays a facet grid of time line charts of one or more categories.
 
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
