@@ -326,6 +326,8 @@ class Plotter(metaclass=PlotterMetaClass):
         if xcats is None:
             xcats = list(sdf["xcat"].unique())
 
+        missing_cids: List[str] = []
+        missing_xcats: List[str] = []
         for varx, prov_bool, namex in zip(
             [cids, xcats], [cids_provided, xcats_provided], ["cids", "xcats"]
         ):
@@ -338,6 +340,10 @@ class Plotter(metaclass=PlotterMetaClass):
                         " are not in the DataFrame `df`: "
                         f"{list(set(varx) - set(sdf[df_col].unique()))}."
                     )
+                    if namex == "cids":
+                        missing_cids += list(set(varx) - set(sdf[df_col].unique()))
+                    else:
+                        missing_xcats += list(set(varx) - set(sdf[df_col].unique()))
 
         if start is None:
             start: str = pd.Timestamp(sdf["real_date"].min()).strftime("%Y-%m-%d")
@@ -374,11 +380,11 @@ class Plotter(metaclass=PlotterMetaClass):
         sdf: pd.DataFrame = pd.concat([sdf, ticker_df], axis=0)
 
         if (
-            ((len(r_xcats) != len(xcats)) and xcats_provided)
-            or (((len(r_cids) != len(cids)) and cids_provided))
+            ((len(r_xcats) != len(xcats) - len(missing_xcats)) and xcats_provided)
+            or ((len(r_cids) != len(cids) - len(missing_cids)) and cids_provided)
         ) and not intersect:
-            m_cids: List[str] = list(set(cids) - set(r_cids))
-            m_xcats: List[str] = list(set(xcats) - set(r_xcats))
+            m_cids: List[str] = list(set(cids) - set(r_cids) - set(missing_cids))
+            m_xcats: List[str] = list(set(xcats) - set(r_xcats) - set(missing_xcats))
             warnings.warn(
                 "The provided arguments resulted in a DataFrame that does not "
                 "contain all the requested cids and xcats. "
