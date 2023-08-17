@@ -22,6 +22,7 @@ class LinePlot(Plotter):
     Inherits from `macrosynergy.visuals.plotter.Plotter`.
 
     Parameters
+    ----------
     :param <pd.DataFrame> df: A DataFrame with the following columns:
         'cid', 'xcat', 'real_date', and at least one metric from -
         'value', 'grading', 'eop_lag', or 'mop_lag'.
