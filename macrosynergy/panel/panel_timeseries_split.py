@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from sklearn.model_selection import BaseCrossValidator
-from typing import Union, Optional, List, Tuple, Iterable, Dict, Callable, Any
+from typing import Optional, List
 
 
 class PanelTimeSeriesSplit(BaseCrossValidator):
@@ -96,19 +96,20 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
         :param <pd.DataFrame> X: Pandas dataframe of features/quantamental indicators,
             multi-indexed by (cross-section, date). The dates must be in datetime format.
-            Otherwise the frame must be in wide format: each feature is a column.
+            The dataframe must be in wide format: each feature is a column.
         :param <pd.DataFrame> y: Pandas dataframe of target variable, multi-indexed by
             (cross-section, date). The dates must be in datetime format.
         """
+        # TODO: add a check that X is in wide format 
         X = pd.concat([X, y], axis=1)
         X = (
-            X.dropna()
-        )  # drops row, corresponding with a country & period, if either a feature or the target is missing
+            X.dropna().reset_index()
+        )  # drops row, corresponding with a country & period, if either a feature or the target is missing. Reset index for efficiency.
         unique_times: pd.arrays.DatetimeArray = (
-            X.reset_index()["real_date"].sort_values().unique()
+            X["real_date"].sort_values().unique()
         )
         if self.train_intervals:
-            init_mask: pd.Series = X.groupby(level=1).size() == self.min_cids
+            init_mask: pd.Series = X.groupby("real_date").size().sort_index() >= self.min_cids
             date_first_min_cids: pd.Timestamp = (
                 init_mask[init_mask == True].reset_index().real_date.min()
             )
@@ -136,15 +137,16 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         :param <pd.DataFrame> y: Pandas dataframe of target variable, multi-indexed by
             (cross-section, date). The dates must be in datetime format.
         """
+        # TODO: add a check that X is in wide format 
         assert X.index.equals(
             y.index
         ), "The indices of the input dataframe X and the output dataframe y don't match."
         X = pd.concat([X, y], axis=1)
         X = (
-            X.dropna()
-        )  # drops row, corresponding with a country & period, if either a feature or the target is missing
+            X.dropna().reset_index()
+        )  # drops row, corresponding with a country & period, if either a feature or the target is missing. Resets index for efficiency.
         unique_times: pd.arrays.DatetimeArray = (
-            X.reset_index()["real_date"].sort_values().unique()
+            X["real_date"].sort_values().unique()
         )
         if self.min_periods is not None:
             assert self.min_periods <= len(
@@ -155,7 +157,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         if self.train_intervals:
             # (1) Determine the splits prior to aggregation
             # Deal with the initial split determined by min_cids and min_periods
-            init_mask: pd.Series = X.groupby(level=1).size() == self.min_cids
+            init_mask: pd.Series = X.groupby("real_date").size().sort_index() >= self.min_cids
             date_first_min_cids: pd.Timestamp = (
                 init_mask[init_mask == True].reset_index().real_date.min()
             )
@@ -164,8 +166,8 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
                 + self.min_periods
                 - 1
             ]
-            train_idxs: pd.Index = X.reset_index().index[
-                X.reset_index()["real_date"] <= date_last_train
+            train_idxs: pd.Index = X.index[
+                X["real_date"] <= date_last_train
             ]
             # Determine the remaining splits based on train_intervals
             unique_times_train: pd.arrays.DatetimeArray = unique_times[
@@ -180,7 +182,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
                 0,
                 pd.arrays.DatetimeArray(
                     np.array(
-                        sorted(X.reset_index().real_date.iloc[train_idxs].unique()),
+                        sorted(X.real_date.iloc[train_idxs].unique()),
                         dtype="datetime64[ns]",
                     )
                 ),
@@ -204,26 +206,26 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
         # (3) If self.max_periods is specified, adjust each of the splits to only have
         # he self.max_periods most recent times in each split
+        # TODO: possibly combine in previous step
         if self.max_periods:
             for split_idx in range(len(train_splits)):
                 train_splits[split_idx] = train_splits[split_idx][-self.max_periods :]
 
         # (4) Create the train and test indices
-        X_reset = X.reset_index()
         for split in train_splits:
             smallest_date: np.datetime64 = np.min(split)
             largest_date: np.datetime64 = np.max(split)
             self.train_indices.append(
-                X_reset.index[
-                    (X_reset["real_date"] >= smallest_date)
-                    & (X_reset["real_date"] <= largest_date)
+                X.index[
+                    (X["real_date"] >= smallest_date)
+                    & (X["real_date"] <= largest_date)
                 ]
             )
             self.test_indices.append(
-                X_reset.index[
-                    (X_reset["real_date"] > largest_date)
+                X.index[
+                    (X["real_date"] > largest_date)
                     & (
-                        X_reset["real_date"]
+                        X["real_date"]
                         <= unique_times[
                             np.where(unique_times == largest_date)[0][0]
                             + self.test_size
@@ -268,6 +270,7 @@ if __name__ == "__main__":
     dfd = dfd.pivot(index=["cid", "real_date"], columns="xcat", values="value")
     X = dfd.drop(columns=["XR"])
     y = dfd["XR"]
+
     # a) n_splits = 4, test_size = default (21), aggregation
     print("--------------------")
     print("--------------------")
@@ -275,6 +278,7 @@ if __name__ == "__main__":
     print("--------------------")
     print("--------------------\n")
     splitter = PanelTimeSeriesSplit(n_splits=4)
+    print(f"Number of splits: {splitter.get_n_splits(X,y)}")
     for idx, (train_idxs, test_idxs) in enumerate(splitter.split(X, y)):
         train_i = pd.concat([X.iloc[train_idxs], y.iloc[train_idxs]], axis=1)
         test_i = pd.concat([X.iloc[test_idxs], y.iloc[test_idxs]], axis=1)
@@ -285,6 +289,7 @@ if __name__ == "__main__":
         print(train_i)
         print(f"Concatenated test set at iteration {idx+1}")
         print(test_i)
+
     # b) n_splits = 4, test_size = default (21), rolling window: most recent 21 days
     print("--------------------")
     print("--------------------")
@@ -294,6 +299,7 @@ if __name__ == "__main__":
     print("--------------------")
     print("--------------------\n")
     splitter = PanelTimeSeriesSplit(n_splits=4, max_periods=21 * 3)
+    print(f"Number of splits: {splitter.get_n_splits(X,y)}")
     for idx, (train_idxs, test_idxs) in enumerate(splitter.split(X, y)):
         train_i = pd.concat([X.iloc[train_idxs], y.iloc[train_idxs]], axis=1)
         test_i = pd.concat([X.iloc[test_idxs], y.iloc[test_idxs]], axis=1)
@@ -308,7 +314,6 @@ if __name__ == "__main__":
     # c) train_intervals = 1, test_size = 1, min_periods = 21 , min_cids = 4
     # This configuration means that on each iteration, the newest information state is added to the training set 
     # and only the next date is in the test set. 
-    # since this is a balanced panel, the first set should be the first 21 dates in the whole dataframe
     print("--------------------")
     print("--------------------")
     print(
@@ -316,145 +321,54 @@ if __name__ == "__main__":
     )
     print("--------------------")
     print("--------------------\n")
-    unique_dates_X = sorted(X.reset_index().real_date.unique())
+    # Since this is a balanced panel, the first set should be the first 21 dates in the whole dataframe
+    X_reset = X.reset_index()
+    unique_dates_X = np.unique(X_reset.real_date)
+
     splitter = PanelTimeSeriesSplit(train_intervals=1, test_size=1, min_periods = 21, min_cids=4)
+    print(f"Number of splits: {splitter.get_n_splits(X,y)}")
+
     for idx, (train_idxs, test_idxs) in enumerate(splitter.split(X, y)):
-        print(idx)
-    #    train_i = pd.concat([X.iloc[train_idxs], y.iloc[train_idxs]], axis=1)
-    #    test_i = pd.concat([X.iloc[test_idxs], y.iloc[test_idxs]], axis=1)
-    #    # For the first set, ensure that the only dates are the first 21 dates in the whole dataframe
-    #if idx == 0:
-    #    train_1_dates = sorted(X.iloc[train_i].reset_index().real_date.unique())
-    #    assert train_1_dates == unique_dates_X[:21], "The dates in the first training set aren't equal to the first 21 dates in X"
-        # First check there are only test samples for a single date 
+        train_dates = np.unique(X_reset.real_date.iloc[train_idxs])
+        test_dates = np.unique(X_reset.real_date.iloc[test_idxs])
+        if idx == 0:
+            assert (train_dates == unique_dates_X[:21]).all(), "The dates in the first training set aren't equal to the first 21 dates in X"
 
-"""if __name__ == "__main__":
-    import os
-    import numpy as np
-    import pandas as pd
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    import scipy.stats as stats
+        # check that there is only a single date in the test set
+        assert len(test_dates) == 1, "There are multiple test dates."
 
-    import macrosynergy.panel as msp
-    import macrosynergy.management as msm
+        # check that the last training date is immediately before the test date
+        assert unique_dates_X[np.where(unique_dates_X == train_dates[-1])[0][0] + 1] == test_dates, "There is a split where the last training date does not precede the test date."
 
-    from macrosynergy.download import JPMaQSDownload
+    print("The first training split comprises the first 21 days of the original input dataframe. Good.")
+    print("The test splits all contain a single date and immediate proceed the last training date. Good.")
 
-    from timeit import default_timer as timer
-    from datetime import timedelta, date, datetime
-
-    import warnings
-
-    # Imports
-
-    cids_dm = [
-        "AUD",
-        "EUR",
-        "GBP",
-        "JPY",
-        "NZD",
-        "SEK",
-        "USD",
-    ]  # DM currency areas
-
-    cids = cids_dm
-
-    main = [
-        "RYLDIRS05Y_NSA",
-        "INTRGDPv5Y_NSA_P1M1ML12_3MMA",
-        "CPIC_SJA_P6M6ML6AR",
-        "INFTEFF_NSA",
-        "PCREDITBN_SJA_P1M1ML12",
-        "SPACSGDP_NSA_D1M1ML1",
-        "RGDP_SA_P1Q1QL4_20QMA",
-    ]
-    econ = []
-    mark = ["DU05YXR_NSA"]
-
-    xcats = main + econ + mark
-
-    # Download series from J.P. Morgan DataQuery by tickers
-
-    start_date = "2000-01-01"
-    end_date = "2022-12-31"
-
-    tickers = [cid + "_" + xcat for cid in cids for xcat in xcats]
-    print(f"Maximum number of tickers is {len(tickers)}")
-
-    # Retrieve credentials
-
-    oauth_id = os.getenv("DQ_CLIENT_ID")  # Replace with own client ID
-    oauth_secret = os.getenv("DQ_CLIENT_SECRET")  # Replace with own secret
-
-    # Download from DataQuery
-
-    # with JPMaQSDownload(local_path=LOCAL_PATH) as downloader:
-    with JPMaQSDownload(client_id=oauth_id, client_secret=oauth_secret) as downloader:
-        start = timer()
-        df = downloader.download(
-            tickers=tickers,
-            start_date=start_date,
-            end_date=end_date,
-            metrics=["value"],
-            suppress_warning=True,
-            show_progress=True,
-        )
-        end = timer()
-
-    dfd = df
-
-    print("Download time from DQ: " + str(timedelta(seconds=end - start)))
-
-    xcatx = xcats
-    cidx = cids
-
-    train = msm.reduce_df(df=dfd, xcats=xcatx, cids=cidx, end="2020-12-31")
-    valid = msm.reduce_df(
-        df=dfd,
-        xcats=xcatx,
-        cids=cidx,
-        start="2020-12-01",
-        end="2021-12-31",
+    # d) train_intervals = 21, test_size = 5, max_periods = 21*3, min_periods = 21 , min_cids = 3
+    # This configuration means that on each iteration, the newest information state is added to the training set 
+    # and only the next date is in the test set. 
+    print("--------------------")
+    print("--------------------")
+    print(
+        "Balanced panel: train_intervals = 1 month, test_size = 5 days, max_periods = 1 quarter, min_periods = 21, min_cids = 3"
     )
-    test = msm.reduce_df(
-        df=dfd,
-        xcats=xcatx,
-        cids=cidx,
-        start="2021-12-01",
-        end="2022-12-31",
-    )
+    print("--------------------")
+    print("--------------------\n")
+    splitter = PanelTimeSeriesSplit(train_intervals=21, test_size=5, max_periods=21*3, min_periods = 21, min_cids=3)
+    print(f"Number of splits: {splitter.get_n_splits(X,y)}")
 
-    calcs = [
-        "XCPIC_SJA_P6M6ML6AR = CPIC_SJA_P6M6ML6AR - INFTEFF_NSA",
-        "XPCREDITBN_SJA_P1M1ML12 = PCREDITBN_SJA_P1M1ML12 - INFTEFF_NSA - RGDP_SA_P1Q1QL4_20QMA",
-    ]
+    for idx, (train_idxs, test_idxs) in enumerate(splitter.split(X, y)):
+        train_dates = np.unique(X_reset.real_date.iloc[train_idxs])
+        test_dates = np.unique(X_reset.real_date.iloc[test_idxs])
+        if idx == 0:
+            assert (train_dates == unique_dates_X[:21]).all(), "The dates in the first training set aren't equal to the first 21 dates in X"
 
-    dfa = msp.panel_calculator(train, calcs=calcs, cids=cidx)
-    train = msm.update_df(train, dfa)
+        # check that there are only five unique dates in the test set
+        assert len(test_dates) == 5, "There is a test set with unique dates different to five in it."
 
-    train_wide = msm.categories_df(
-        df=train, xcats=xcatx, cids=cidx, freq="M", lag=1, xcat_aggs=["mean", "sum"]
-    )
+        # check that the last training date is immediately before the test date
+        assert unique_dates_X[np.where(unique_dates_X == train_dates[-1])[0][0] + 1] == test_dates[0], "There is a split where the last training date does not immediately precede the test date."
 
-    splitter = PanelTimeSeriesSplit(train_intervals=6, test_size=3, min_periods=12, min_cids=3)
-    splitter.split(train_wide.iloc[:,:-1],train_wide.iloc[:,-1])
+        # check that the number of unique dates in each training split does not exceed a quarter. 
+        assert len(train_dates) <= 21*3, "There exists a training split with samples from before the previous quarter."
 
-    # splitter = PanelTimeSeriesSplit(train_intervals=6, test_size=4, min_periods=12, min_cids=3, max_periods=3)
-    # splitter.split(train_wide)
-
-    # splitter = PanelTimeSeriesSplit(n_splits=5,test_size=6)
-    # splitter.split(train_wide)
-
-    # splitter = PanelTimeSeriesSplit(n_splits=10,test_size=1)
-    # splitter.split(train_wide)
-
-    #splitter = PanelTimeSeriesSplit(n_splits=10, test_size=1, max_periods=12)
-    #print(splitter.get_n_splits(train_wide))
-    ##splitter.split(train_wide)
-
-    #splitter = PanelTimeSeriesSplit(
-    #    train_intervals=1, test_size=1, max_periods=12, min_cids=3, min_periods=12
-    #)
-    #splitter.split(train_wide)
-    #print(splitter.get_n_splits(train_wide))"""
+    # TODO: add cases for an unbalanced panel now.
