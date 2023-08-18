@@ -28,7 +28,7 @@ def timelines(
     square_grid: bool = False,
     legend_ncol: int = 1,
     same_y: bool = True,
-    all_xticks: bool = False, # same_x basically
+    all_xticks: bool = False,  # same_x basically
     xcat_grid: bool = False,
     xcat_labels: Optional[List[str]] = None,
     single_chart: bool = False,
@@ -41,7 +41,7 @@ def timelines(
     size: Tuple[float, float] = (12, 7),
     aspect: float = 1.7,
     height: float = 3.0,
-    legend_fontsize: int = 12,
+    legend_fontsize: int = 8,
 ):
     """Displays a facet grid of time line charts of one or more categories.
 
@@ -170,6 +170,12 @@ def timelines(
         df["xcat"] = df["xcat"].map(dict(zip(xcats, xcat_labels)))
         xcats: List[str] = xcat_labels.copy()
 
+    facet_size: Optional[Tuple[float, float]] = (
+        (aspect * height, height)
+        if (aspect is not None and height is not None)
+        else None
+    )
+
     if xcat_grid:
         with FacetPlot(
             df=df,
@@ -181,9 +187,6 @@ def timelines(
             start=start,
             end=end,
         ) as fp:
-            if aspect is not None and height is not None:
-                facet_size: Tuple[float, float] = (aspect * height, height)     
-                
             fp.lineplot(
                 share_y=same_y,
                 share_x=all_xticks,
@@ -237,10 +240,6 @@ def timelines(
             start=start,
             end=end,
         ) as fp:
-            # if no comparison series, pass legend = False            
-            if aspect is not None and height is not None:
-                facet_size: Tuple[float, float] = (aspect * height, height)     
-
             show_legend: bool = True if cross_mean_series else False
             fp.lineplot(
                 figsize=size,
@@ -251,12 +250,13 @@ def timelines(
                 cid_grid=True,
                 title_yadjust=title_adj,
                 title_xadjust=title_xadj,
-                compare_series=cross_mean_series if cs_mean else None,
+                # compare_series=cross_mean_series if cs_mean else None,
                 facet_size=facet_size,
                 title_fontsize=title_fontsize,
                 ncols=ncol,
                 attempt_square=square_grid,
-                legend=show_legend,
+                # legend=show_legend,
+                legend=True,
                 legend_ncol=legend_ncol,
                 legend_labels=xcat_labels or None,
                 legend_fontsize=legend_fontsize,

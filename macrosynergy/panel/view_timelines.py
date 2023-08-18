@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
@@ -9,31 +9,32 @@ import macrosynergy.visuals as msv
 
 def view_timelines(
     df: pd.DataFrame,
-    xcats: List[str] = None,
-    cids: List[str] = None,
+    xcats: Optional[List[str]] = None,
+    cids: Optional[List[str]] = None,
     intersect: bool = False,
     val: str = "value",
     cumsum: bool = False,
     start: str = "2000-01-01",
-    end: str = None,
+    end: Optional[str] = None,
     ncol: int = 3,
+    legend_ncol: int = 1,
     same_y: bool = True,
     all_xticks: bool = False,
     xcat_grid: bool = False,
-    xcat_labels: List[str] = None,
+    xcat_labels: Optional[List[str]] = None,
     single_chart: bool = False,
     label_adj: float = 0.05,
-    title: str = None,
+    title: Optional[str] = None,
     title_adj: float = 0.95,
+    title_xadj: float = 0.5,
+    title_fontsize: int = 16,
     cs_mean: bool = False,
-    size: Tuple[float] = (12, 7),
+    size: Tuple[float, float] = (12, 7),
     aspect: float = 1.7,
+    height: float = 3.0,
     legend_fontsize: int = 12,
-    height: float = 3,
 ):
-    """
-    Wrapper to `macrosynergy.visuals.view.timelines`.
-    Displays a facet grid of time line charts of one or more categories.
+    """Displays a facet grid of time line charts of one or more categories.
 
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
@@ -48,16 +49,21 @@ def view_timelines(
     :param <str> start: earliest date in ISO format. Default is earliest date available.
     :param <str> end: latest date in ISO format. Default is latest date available.
     :param <int> ncol: number of columns in facet grid. Default is 3.
+    :param <int> legend_ncol: number of columns in legend. Default is 1.
     :param <bool> same_y: if True (default) all plots in facet grid share same y axis.
     :param <bool> all_xticks:  if True x-axis tick labels are added to all plots in grid.
         Default is False, i.e only the lowest row displays the labels.
-    :param <bool> facet_grid: if True a facet grid is created. Default is False.
+    :param <bool> xcat_grid: if True, shows a facet grid of line charts for each xcat
+        for a single cross section. Default is False, only one cross section is allowed
+        with this option.
     :param <List[str]> xcat_labels: labels to be used for xcats. If not defined, the
         labels will be identical to extended categories.
     :param <bool> single_chart: if True, all lines are plotted in a single chart.
     :param <str> title: chart heading. Default is no title.
     :param <float> title_adj: parameter that sets top of figure to accommodate title.
         Default is 0.95.
+    :param <float> title_xadj: parameter that sets x position of title. Default is 0.5.
+    :param <int> title_fontsize: font size of title. Default is 16.
     :param <float> label_adj: parameter that sets bottom of figure to fit the label.
         Default is 0.05.
     :param <bool> cs_mean: if True this adds a line of cross-sectional averages to
@@ -67,6 +73,7 @@ def view_timelines(
         section plot. Default is (12, 7). This is irrelevant for facet grid.
     :param <float> aspect: width-height ratio for plots in facet. Default is 1.7.
     :param <float> height: height of plots in facet. Default is 3.
+    :param <int> legend_fontsize: font size of legend. Default is 12.
 
     """
     msv.view.timelines(
@@ -84,13 +91,17 @@ def view_timelines(
         xcat_grid=xcat_grid,
         xcat_labels=xcat_labels,
         single_chart=single_chart,
-        label_adj=label_adj,
         title=title,
-        title_adj=title_adj,
+        title_fontsize=title_fontsize,
+        legend_ncol=legend_ncol,
         cs_mean=cs_mean,
         size=size,
         aspect=aspect,
         height=height,
+        legend_fontsize=legend_fontsize,
+        # label_adj=label_adj,
+        # title_adj=title_adj,
+        # title_xadj=title_xadj,
     )
 
 
