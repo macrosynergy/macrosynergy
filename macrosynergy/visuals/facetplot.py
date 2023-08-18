@@ -175,10 +175,15 @@ class FacetPlot(Plotter):
     def scatterplot(
         self,
         # plot arguments
-        x_y_pairs: Optional[List[Tuple[str, str]]] = None,
+        cids: Optional[List[str]] = None,
+        xcats: Optional[List[str]] = None,
+        # fig arguments
+        figsize: Tuple[Numeric, Numeric] = (16.0, 9.0),
+        ncols: int = 3,
+        attempt_square: bool = False,
+        grid_dim: Optional[Tuple[int, int]] = None,
         # xcats_mean: bool = False,
         # title arguments
-        figsize: Tuple[Numeric, Numeric] = (16.0, 9.0),
         title: Optional[str] = None,
         title_fontsize: int = 20,
         title_xadjust: Optional[Numeric] = None,
@@ -219,6 +224,21 @@ class FacetPlot(Plotter):
     ):
         ...
 
+        if metric is None:
+            metric: str = self.metrics[0]
+
+        _cids: List[str] = self.cids if cids is None else cids
+        _xcats: List[str] = self.xcats if xcats is None else xcats
+
+        # if the facet size is not none, re-calc the figsize
+        if facet_size is not None:
+            figsize: Tuple[float, float] = (
+                grid_dim[0] * facet_size[0] * 1.5,
+                grid_dim[1] * facet_size[1] * 1.5,
+            )
+            # mul by 1.5 to account for the space taken up annotations, etc.
+            # fig.tight_layout() cleans this up
+
     def lineplot(
         self,
         # plot arguments
@@ -258,7 +278,6 @@ class FacetPlot(Plotter):
         facet_title_yadjust: Numeric = 1.0,
         facet_xlabel: Optional[str] = None,
         facet_ylabel: Optional[str] = None,
-        facet_label_fontsize: int = 12,
         # legend arguments
         legend: bool = True,
         legend_labels: Optional[List[str]] = None,
