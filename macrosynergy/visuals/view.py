@@ -28,7 +28,7 @@ def timelines(
     square_grid: bool = False,
     legend_ncol: int = 1,
     same_y: bool = True,
-    all_xticks: bool = False,
+    all_xticks: bool = False, # same_x basically
     xcat_grid: bool = False,
     xcat_labels: Optional[List[str]] = None,
     single_chart: bool = False,
@@ -181,8 +181,12 @@ def timelines(
             start=start,
             end=end,
         ) as fp:
+            if aspect is not None and height is not None:
+                facet_size: Tuple[float, float] = (aspect * height, height)     
+                
             fp.lineplot(
                 share_y=same_y,
+                share_x=all_xticks,
                 figsize=size,
                 xcat_grid=True,  # Not to be confused with `xcat_grid` parameter
                 # legend_labels=xcat_labels or None,
@@ -194,6 +198,7 @@ def timelines(
                 title_fontsize=title_fontsize,
                 ncols=ncol,
                 attempt_square=square_grid,
+                facet_size=facet_size,
                 legend_ncol=legend_ncol,
                 legend_fontsize=legend_fontsize,
             )
@@ -232,17 +237,22 @@ def timelines(
             start=start,
             end=end,
         ) as fp:
-            # if no comparison series, pass legend = False
+            # if no comparison series, pass legend = False            
+            if aspect is not None and height is not None:
+                facet_size: Tuple[float, float] = (aspect * height, height)     
+
             show_legend: bool = True if cross_mean_series else False
             fp.lineplot(
                 figsize=size,
                 share_y=same_y,
+                share_x=all_xticks,
                 title=title,
                 # cid_xcat_grid=True,
                 cid_grid=True,
                 title_yadjust=title_adj,
                 title_xadjust=title_xadj,
                 compare_series=cross_mean_series if cs_mean else None,
+                facet_size=facet_size,
                 title_fontsize=title_fontsize,
                 ncols=ncol,
                 attempt_square=square_grid,
