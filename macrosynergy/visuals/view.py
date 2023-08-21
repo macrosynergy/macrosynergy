@@ -176,7 +176,14 @@ def timelines(
         else None
     )
 
+    if xcat_grid and (len(cids) == 1):
+        xcat_grid: bool = False
+        single_chart: bool = True
+
     if xcat_grid:
+        if ncol > len(xcats):
+            ncol: int = len(xcats)
+        
         with FacetPlot(
             df=df,
             xcats=xcats,
@@ -241,6 +248,9 @@ def timelines(
             end=end,
         ) as fp:
             show_legend: bool = True if cross_mean_series else False
+            if ncol > len(cids):
+                ncol: int = len(cids)
+
             fp.lineplot(
                 figsize=size,
                 share_y=same_y,

@@ -209,7 +209,7 @@ class FacetPlot(Plotter):
         # legend arguments
         legend: bool = True,
         legend_labels: Optional[List[str]] = None,
-        legend_loc: str = "center right",
+        legend_loc: str = "upper center",
         legend_ncol: int = 1,
         legend_bbox_to_anchor: Optional[Tuple[Numeric, Numeric]] = None,  # (1.0, 0.5),
         legend_frame: bool = True,
@@ -281,7 +281,7 @@ class FacetPlot(Plotter):
         # legend arguments
         legend: bool = True,
         legend_labels: Optional[List[str]] = None,
-        legend_loc: str = "center right",
+        legend_loc: Optional[str] = "lower center",
         legend_fontsize: int = 12,
         legend_ncol: int = 1,
         legend_bbox_to_anchor: Optional[Tuple[Numeric, Numeric]] = None,  # (1.0, 0.5),
@@ -556,13 +556,24 @@ class FacetPlot(Plotter):
                 suptitle.get_window_extent().width,
                 suptitle.get_window_extent().height,
             )
+            title_newline_adjust: float = 0.2
+            if title_yadjust is not None and title_yadjust != 1.0:
+                title_newline_adjust = abs(title_yadjust - 1.0)
+            # count the number of newlines in the title
+            # num_newlines: int = title.count("\n")
+            title_height: float = title.count("\n") * title_newline_adjust
 
-            re_adj[3] = re_adj[3] - fig_height / fig.get_window_extent().height
+            # re_adj[3] = re_adj[3] + fig_height / fig.get_window_extent().height
+            re_adj[3] = (
+                re_adj[3] + title_height + fig_height / fig.get_window_extent().height
+            )
 
-        axs: np.ndarray = outer_gs.subplots(
+        axs: Union[np.ndarray, plt.Axes] = outer_gs.subplots(
             sharex=share_x,
             sharey=share_y,
         )
+        if not isinstance(axs, np.ndarray):
+            axs: np.ndarray = np.array([axs])
         ax_list: List[plt.Axes] = axs.flatten().tolist()
         for i, plt_dct, ax_i in zip(plot_dict.keys(), plot_dict.values(), ax_list):
             if plt_dct["X"] != "real_date":
@@ -619,7 +630,10 @@ class FacetPlot(Plotter):
 
         # re_adj: List[float] = (0, 0, 0, 0)
         if legend:
-            #
+            if "lower" in legend_loc:
+                if legend_ncol < grid_dim[0]:
+                    legend_ncol: int = grid_dim[0]
+
             leg = fig.legend(
                 labels=legend_labels,
                 loc=legend_loc,
@@ -638,16 +652,14 @@ class FacetPlot(Plotter):
                 fig.get_window_extent().height,
             )
 
+            if "lower" in legend_loc:
+                re_adj[1] = re_adj[1] + leg_height / fig_height
+            if "upper" in legend_loc:
+                re_adj[3] = re_adj[3] - leg_height / fig_height
+            if "left" in legend_loc:
+                re_adj[0] = re_adj[0] + leg_width / fig_width
             if "right" in legend_loc:
                 re_adj[2] = re_adj[2] - leg_width / fig_width
-            elif "left" in legend_loc:
-                re_adj[0] = re_adj[0] + leg_width / fig_width
-            elif "top" in legend_loc:
-                re_adj[1] = re_adj[1] + leg_height / fig_height
-            elif "bottom" in legend_loc:
-                re_adj[3] = re_adj[3] - leg_height / fig_height
-            else:
-                pass
 
         outer_gs.tight_layout(fig, rect=re_adj)
 

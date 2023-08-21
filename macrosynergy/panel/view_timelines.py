@@ -2,6 +2,11 @@ import numpy as np
 import pandas as pd
 from typing import List, Tuple, Optional
 
+import sys, os
+
+sys.path.append(os.path.abspath("."))
+
+
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 import macrosynergy.visuals as msv
@@ -27,7 +32,7 @@ def view_timelines(
     title: Optional[str] = None,
     title_adj: float = 0.95,
     title_xadj: float = 0.5,
-    title_fontsize: int = 16,
+    title_fontsize: int = 18,
     cs_mean: bool = False,
     size: Tuple[float, float] = (12, 7),
     aspect: float = 1.7,
@@ -88,17 +93,18 @@ def view_timelines(
         ncol=ncol,
         same_y=same_y,
         all_xticks=all_xticks,
+        title_adj=1.02,
         xcat_grid=xcat_grid,
         xcat_labels=xcat_labels,
         single_chart=single_chart,
         title=title,
-        title_fontsize=title_fontsize,
+        title_fontsize=18,
         legend_ncol=legend_ncol,
         cs_mean=cs_mean,
-        size=size,
-        aspect=aspect,
-        height=height,
-        legend_fontsize=legend_fontsize,
+        # size=size,
+        aspect=1.618,
+        height=2.85,
+        legend_fontsize=12,
         # label_adj=label_adj,
         # title_adj=title_adj,
         # title_xadj=title_xadj,
@@ -178,5 +184,3 @@ if __name__ == "__main__":
         aspect=2,
         single_chart=True,
     )
-
-    dfd.info()
