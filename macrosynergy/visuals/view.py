@@ -183,7 +183,7 @@ def timelines(
     if xcat_grid:
         if ncol > len(xcats):
             ncol: int = len(xcats)
-        
+
         with FacetPlot(
             df=df,
             xcats=xcats,
@@ -205,7 +205,8 @@ def timelines(
                 title_yadjust=title_adj,
                 title_xadjust=title_xadj,
                 compare_series=cross_mean_series if cs_mean else None,
-                title_fontsize=title_fontsize,
+                # title_fontsize=title_fontsize,
+                # title_fontsize=24,
                 ncols=ncol,
                 attempt_square=square_grid,
                 facet_size=facet_size,
@@ -213,7 +214,7 @@ def timelines(
                 legend_fontsize=legend_fontsize,
             )
 
-    elif single_chart:
+    elif single_chart or (len(cids) == 1):
         with LinePlot(
             df=df,
             cids=cids,
@@ -231,9 +232,11 @@ def timelines(
                 title_yadjust=title_adj,
                 title_xadjust=title_xadj,
                 compare_series=cross_mean_series if cs_mean else None,
-                title_fontsize=title_fontsize,
+                # title_fontsize=title_fontsize,
+                # title_fontsize=18,
                 legend_ncol=legend_ncol,
                 legend_fontsize=legend_fontsize,
+                legend_labels=xcat_labels or None,
             )
 
     else:
@@ -262,7 +265,8 @@ def timelines(
                 title_xadjust=title_xadj,
                 # compare_series=cross_mean_series if cs_mean else None,
                 facet_size=facet_size,
-                title_fontsize=title_fontsize,
+                # title_fontsize=title_fontsize,
+                # title_fontsize=24,
                 ncols=ncol,
                 attempt_square=square_grid,
                 # legend=show_legend,
