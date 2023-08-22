@@ -90,10 +90,10 @@ class LinePlot(Plotter):
         legend: bool = True,
         legend_labels: Optional[List[str]] = None,
         legend_title: Optional[str] = None,
-        legend_loc: str = "upper right",
-        legend_fontsize: int = 12,
+        legend_loc: Optional[str] = "best",
+        legend_fontsize: int = 14,
         legend_ncol: int = 1,
-        legend_bbox_to_anchor: Optional[Tuple[Numeric, Numeric]] = (1.2, 1.0),
+        legend_bbox_to_anchor: Optional[Tuple[Numeric, Numeric]] = None,
         legend_frame: bool = True,
         # return args
         show: bool = True,
@@ -114,6 +114,14 @@ class LinePlot(Plotter):
             fig, ax = plt.subplots(figsize=figsize)
 
         dfx: pd.DataFrame = self.df.copy()
+
+        if title is not None:
+            title_newline_adjust: float = 0.2
+            if title_yadjust is not None and title_yadjust != 1.0:
+                title_newline_adjust = abs(title_yadjust - 1.0)
+            title_height: float = title.count("\n") * title_newline_adjust
+            # increase the title_yadjust by the title_height
+            title_yadjust = title_yadjust + title_height
 
         ax.set_title(
             title,
