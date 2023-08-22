@@ -84,8 +84,7 @@ def business_day_dif(df: pd.DataFrame, maxdate: pd.Timestamp):
     df = (maxdate - df).apply(lambda x: x.dt.days)
     # set to zero if the difference is negative.
     df = df - week_df
-    df[df < 0] = 0
-    return df
+    return df.where(df >= 0, 0)
 
 
 def visual_paneldates(
