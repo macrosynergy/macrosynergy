@@ -357,7 +357,9 @@ class LocalCache(JPMaQSDownload):
         *args,
         **kwargs,
     ) -> pd.DataFrame:
-        kwargs.update({"as_dataframe": True, "get_catalogue": True})
+        kwargs.update(
+            {"as_dataframe": True, "get_catalogue": True, "report_egress": False}
+        )
         self.check_connection()
         df: pd.DataFrame = super().download(*args, **kwargs)
         if jpmaqs_df:
