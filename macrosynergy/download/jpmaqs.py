@@ -505,7 +505,7 @@ class JPMaQSDownload(object):
     ) -> bool:
         """Validate the arguments passed to the download function.
 
-        :params -- see macrosynergy.download.jpmaqs.JPMaQSDownload.download()
+        :params:  -- see `macrosynergy.download.jpmaqs.JPMaQSDownload.download()`.
 
         :return <bool>: True if valid.
 
