@@ -470,9 +470,9 @@ def validate_download_args(
     delay_param: float,
 ):
     """
-    Validate the arguments passed to the download_data method.
+    Validate the arguments passed to the `download_data()` method.
 
-    :params -- see download_data method.
+    :params: -- see `download_data()` method.
 
     :returns True if all arguments are valid.
 
