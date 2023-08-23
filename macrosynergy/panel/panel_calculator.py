@@ -21,7 +21,7 @@ def time_series_check(formula: str, index: int):
     :param <str> formula:
     :param <int> index: starting index to iterate over.
 
-    :return <int, bool>:
+    :return <Tuple[int, bool]>:
     """
 
     check = lambda a, b, c: (a.isupper() and b == "." and c.islower())
@@ -48,7 +48,7 @@ def xcat_isolator(expression: str, start_index: str, index: int):
     :param <str> start_index: starting index to search over.
     :param <int> index: defines the end of the search space over the expression.
 
-    :return <str> xcat.
+    :return <str>: xcat.
     """
 
     op_copy = expression[start_index:index + 1]
