@@ -128,7 +128,10 @@ def driver(readme: str, input_directory: str, output_directory: str):
     """
     Driver function for the script.
     """
-    # move the README to the output directory
+
+    if os.path.exists(output_directory):
+        shutil.rmtree(output_directory)
+    os.makedirs(output_directory)
 
     shutil.copy(src=readme, dst=output_directory)
 
@@ -171,6 +174,4 @@ if __name__ == "__main__":
     source_dir = os.path.abspath(os.path.normpath(os.path.expanduser(args.source)))
     output_dir = os.path.abspath(os.path.normpath(os.path.expanduser(args.output)))
 
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
     driver(input_directory=source_dir, output_directory=output_dir, readme=args.readme)
