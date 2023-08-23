@@ -28,7 +28,7 @@ def timelines(
     square_grid: bool = False,
     legend_ncol: int = 1,
     same_y: bool = True,
-    all_xticks: bool = False,  # same_x basically
+    all_xticks: bool = False,  # ~(same_x) basically
     xcat_grid: bool = False,
     xcat_labels: Optional[List[str]] = None,
     single_chart: bool = False,
@@ -41,7 +41,7 @@ def timelines(
     size: Tuple[float, float] = (12, 7),
     aspect: float = 1.7,
     height: float = 3.0,
-    legend_fontsize: int = 8,
+    legend_fontsize: int = 12,
 ):
     """Displays a facet grid of time line charts of one or more categories.
 
@@ -196,7 +196,7 @@ def timelines(
         ) as fp:
             fp.lineplot(
                 share_y=same_y,
-                share_x=all_xticks,
+                share_x=not all_xticks,
                 figsize=size,
                 xcat_grid=True,  # Not to be confused with `xcat_grid` parameter
                 # legend_labels=xcat_labels or None,
@@ -205,7 +205,7 @@ def timelines(
                 title_yadjust=title_adj,
                 title_xadjust=title_xadj,
                 compare_series=cross_mean_series if cs_mean else None,
-                # title_fontsize=title_fontsize,
+                title_fontsize=title_fontsize,
                 # title_fontsize=24,
                 ncols=ncol,
                 attempt_square=square_grid,
@@ -232,7 +232,7 @@ def timelines(
                 title_yadjust=title_adj,
                 title_xadjust=title_xadj,
                 compare_series=cross_mean_series if cs_mean else None,
-                # title_fontsize=title_fontsize,
+                title_fontsize=title_fontsize,
                 # title_fontsize=18,
                 legend_ncol=legend_ncol,
                 legend_fontsize=legend_fontsize,
@@ -257,7 +257,7 @@ def timelines(
             fp.lineplot(
                 figsize=size,
                 share_y=same_y,
-                share_x=all_xticks,
+                share_x=not all_xticks,
                 title=title,
                 # cid_xcat_grid=True,
                 cid_grid=True,
@@ -265,12 +265,12 @@ def timelines(
                 title_xadjust=title_xadj,
                 # compare_series=cross_mean_series if cs_mean else None,
                 facet_size=facet_size,
-                # title_fontsize=title_fontsize,
+                title_fontsize=title_fontsize,
                 # title_fontsize=24,
                 ncols=ncol,
                 attempt_square=square_grid,
                 # legend=show_legend,
-                legend=True,
+                legend=(len(xcats) > 1),
                 legend_ncol=legend_ncol,
                 legend_labels=xcat_labels or None,
                 legend_fontsize=legend_fontsize,

@@ -258,12 +258,12 @@ class FacetPlot(Plotter):
         # title arguments
         figsize: Tuple[Numeric, Numeric] = (16.0, 9.0),
         title: Optional[str] = None,
-        title_fontsize: int = 20,
+        title_fontsize: int = 22,
         title_xadjust: Optional[Numeric] = None,
         title_yadjust: Optional[Numeric] = None,
         # subplot axis arguments
         ax_grid: bool = False,
-        ax_hline: bool = False,
+        ax_hline: bool = True,
         ax_hline_val: Numeric = 0.0,
         ax_vline: bool = False,
         ax_vline_val: Numeric = 0.0,
