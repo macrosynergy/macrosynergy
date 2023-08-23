@@ -2,11 +2,12 @@ import ast
 import os
 from typing import Any, Dict, List, Optional, Tuple, Union
 import warnings
+import shutil
 import argparse
 import mdformat
 
 SOURCE_DIR = "macrosynergy"
-OUTPUT_DIR = "docs/md/"
+OUTPUT_DIR = "docs/build/md/"
 
 
 class DocstringMethods:
@@ -45,15 +46,19 @@ class DocstringMethods:
         lines = docstring.split("\n")
         formatted_lines = []
 
-        for line in lines:
-            kws: List[str] = ["param", "raises", "return", "yield"]
-            kw: str = [f":{kw}" for kw in kws if line.startswith(f":{kw}")]
-            if kw:
-                kw = kw[0]
-                # get the index of the first colon after the keyword
-                colon_index: int = line.index(":", len(kw))
-                # insert a '`' before the colon
-                line = "`" + line[:colon_index] + "`" + line[colon_index:] + ":"
+        for il, line in enumerate(lines):
+            try:
+                kws: List[str] = ["param", "raises", "return", "yield"]
+                kw: str = [f":{kw}" for kw in kws if line.startswith(f":{kw}")]
+                if kw:
+                    kw = kw[0]
+                    # get the index of the first colon after the keyword
+                    colon_index: int = line.index(":", len(kw))
+                    # insert a '`' before the colon
+                    line = "`" + line[:colon_index] + "`" + line[colon_index:] + ":"
+            except Exception as exc:
+                e_str: str = f"Parsing error on line {il}: {line}, {exc}"
+                raise Exception(e_str) from exc
 
         return DocstringMethods.markdown_format("\n".join(formatted_lines))
 
@@ -94,7 +99,11 @@ def process_file(filepath: str, output_directory: str) -> bool:
 
         with open(output_path, "w") as f:
             for name, doc in docstrings.items():
-                docx: str = DocstringMethods.format_parameters(doc)
+                try:
+                    docx: str = DocstringMethods.format_parameters(doc)
+                except Exception as exc:
+                    e_str: str = f"Error processing {name} in {filepath}"
+                    raise Exception(e_str) from exc
 
                 f.write(f"## {name}\n\n")
                 f.write(f"{docx}\n\n")
@@ -115,10 +124,13 @@ def process_directory(input_directory: str, output_directory: str):
                     warnings.warn(f"Could not process {file}.", RuntimeWarning)
 
 
-def driver(input_directory: str, output_directory: str):
+def driver(readme: str, input_directory: str, output_directory: str):
     """
     Driver function for the script.
     """
+    # move the README to the output directory
+
+    shutil.copy(src=readme, dst=output_directory)
 
     process_directory(
         input_directory=input_directory, output_directory=output_directory
@@ -144,6 +156,13 @@ if __name__ == "__main__":
         help="Path to the output directory",
     )
 
+    parser.add_argument(
+        "--readme",
+        type=str,
+        default="README.md",
+        help="Path to the README file",
+    )
+
     args = parser.parse_args()
 
     if not os.path.exists(args.source):
@@ -154,4 +173,4 @@ if __name__ == "__main__":
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    driver(input_directory=source_dir, output_directory=output_dir)
+    driver(input_directory=source_dir, output_directory=output_dir, readme=args.readme)
