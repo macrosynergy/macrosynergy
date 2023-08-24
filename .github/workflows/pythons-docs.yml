@@ -41,7 +41,6 @@ jobs:
         curl -Os https://uploader.codecov.io/latest/linux/codecov
         chmod +x codecov
         ./codecov -t ${CODECOV_TOKEN}
-    - name: Test sphinx build of documentation
+    - name: Test jupyterbook build of documentation
       run: |
-        cd docs
-        make html
+        bash ./docs/build.sh
