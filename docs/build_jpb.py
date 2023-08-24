@@ -10,8 +10,8 @@ import glob
 import mdformat
 import yaml
 
-SOURCE_DIR = "./docs/build/md/"
-BUILD_DIR = "./docs/build/nb/"
+SOURCE_DIR = "./docs/build/"
+BUILD_DIR = "./docs/build/"
 OUTPUT_DIR = "./docs/build/html/"
 
 BUILD_CONFIG = "./docs/static/jpb-config.yml"
@@ -124,7 +124,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # copy the source files to the build directory
-    copy_source_files(args.source_dir, args.build_dir)
+    # copy_source_files(args.source_dir, args.build_dir)
     # create the jpb config file
     create_jpb_config(args.build_dir)
     # create dummy readmes
@@ -134,6 +134,6 @@ if __name__ == "__main__":
         for folder in os.listdir(args.build_dir)
         if os.path.isdir(os.path.join(args.build_dir, folder))
     ][0]
-    create_dummy_readmes(destination_dir=folder)
+    # create_dummy_readmes(destination_dir=folder)
     # create the toc file
     create_toc(destination_dir=folder)
