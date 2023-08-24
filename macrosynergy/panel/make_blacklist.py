@@ -15,7 +15,7 @@ def startend(dti, start, length):
     :param <int> start: index of start
     :param <int> length: number of sequential days
 
-    :return tuple of start and end date
+    :return <Tuple[pd.Timestamp, pd.Timestamp]>: tuple of start and end date
     """
 
     tup = (dti[start], dti[start + (length - 1)])
