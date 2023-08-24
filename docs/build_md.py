@@ -117,6 +117,8 @@ def process_file(filepath: str, output_directory: str) -> bool:
         for function_name, function_doc in structure["functions"].items():
             output_str += f"## `{function_name}`\n\n{function_doc}\n\n"
 
+        output_str = DocstringMethods.format_parameters(docstring=output_str)
+
         with open(output_path, "w") as f:
             f.write(output_str)
 
@@ -143,6 +145,17 @@ def process_directory(
                         f"{os.path.abspath(os.path.join(root, file))}.",
                         RuntimeWarning,
                     )
+            if file.endswith(".md"):
+                # copy the file to the output directory
+                # create a var outputdir which is the relative path of the file in the input directory concatenated with the output directory
+                outputdir: str = os.path.join(
+                    output_directory,
+                    os.path.relpath(root, os.path.dirname(input_directory)),
+                )
+                shutil.copy(
+                    src=os.path.join(root, file),
+                    dst=os.path.join(outputdir, file),
+                )
 
 
 def driver(readme: str, input_directory: str, output_directory: str):
