@@ -1,0 +1,36 @@
+config:
+  # Book settings
+  title: null
+  author: "Macrosynergy Ltd."
+  copyright: "2023"
+
+  # Execution settings
+  # Whether to execute notebooks at build time. Must be one of ("auto", "force", "cache", "off")
+  execute:
+    execute_notebooks: "off"
+
+  # HTML-specific settings
+  html:
+    home_page_in_navbar: true # Whether to include your home page in the left Navigation Bar
+    use_repository_button: false
+    use_edit_page_button: false
+    use_issues_button: false
+  # Launch button settings
+  launch_buttons:
+    binderhub_url: ""
+
+  #sphinx:
+  #  config:
+  #    html_extra_path: ['assets']
+
+  parse:
+    myst_enable_extensions:
+      - "amsmath"
+      - "dollarmath"
+
+toc:
+  title: Macrosynergy Package Documentation
+  format: "jb-book"
+  root: macrosynergy/README.md
+  
+  
