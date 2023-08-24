@@ -35,7 +35,6 @@ def _get_square_grid(
     that is closest to a square grid.
 
     Parameters
-    ----------
     :param <int> num_plots: Number of plots.
     :return <Tuple[int, int]>: Tuple of grid dimensions.
     """
@@ -65,7 +64,6 @@ class FacetPlot(Plotter):
     Inherits from `macrosynergy.visuals.plotter.Plotter`.
 
     Parameters
-    ----------
     :param <pd.DataFrame> df: A DataFrame with the following columns:
         'cid', 'xcat', 'real_date', and at least one metric from -
         'value', 'grading', 'eop_lag', or 'mop_lag'.
@@ -302,7 +300,6 @@ class FacetPlot(Plotter):
         from the new object state.
 
         Parameters
-        ----------
         :param <int> ncols: number of columns in the grid. Default is 3.
         :param <bool> attempt_square: attempt to make the facet grid square. Ignores
             `ncols` when `True`. Default is `False`.
