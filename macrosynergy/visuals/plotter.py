@@ -36,7 +36,6 @@ def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
     Implementation of `insinstance()` for type-hints imported from the `typing` module,
     and for subscripted types (e.g. `List[int]`, `Tuple[str, int]`, etc.).
     Parameters
-    ----------
     :param <Any> value: The value to check.
     :param <Type[Any]> type_hint: The type hint to check against.
     :return <bool>: True if the value is of the type hint, False otherwise.
@@ -95,7 +94,6 @@ def _get_expected(arg_type_hint: Type[Any]) -> List[str]:
     Based on the type hint, return a list of strings that represent
     the type hint - including any nested type hints.
     Parameters
-    ----------
     :param <Type[Any]> arg_type_hint: The type hint to get the expected types for.
     :return <List[str]>: A list of strings that represent the type hint.
     """
@@ -132,7 +130,6 @@ def argvalidation(func: Callable[..., Any]) -> Callable[..., Any]:
     """
     Decorator for validating the arguments and return value of a function.
     Parameters
-    ----------
     :param <Callable[..., Any]> func: The function to validate.
     :return <Callable[..., Any]>: The decorated function.
     """
@@ -205,7 +202,6 @@ def argcopy(func: Callable) -> Callable:
     """
     Decorator for applying a "pass-by-value" method to the arguments of a function.
     Parameters
-    ----------
     :param <Callable> func: The function to copy arguments for.
     :return <Callable>: The decorated function.
     """
@@ -271,7 +267,6 @@ class Plotter(metaclass=PlotterMetaClass):
     for the plotter classes, and some common functionality - currently just the filtering
     of the DataFrame.
     Parameters
-    ----------
     :param <pd.DataFrame> df: A DataFrame with the following columns:
         'cid', 'xcat', 'real_date', and at least one metric from -
         'value', 'grading', 'eop_lag', or 'mop_lag'.
