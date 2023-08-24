@@ -161,6 +161,16 @@ def driver(readme: str, input_directory: str, output_directory: str):
         output_directory=output_directory,
         skip_files=["__init__.py", "version.py"],
     )
+    dirs_found: List[str] = [
+        os.path.normpath(os.path.join(output_directory, d + "/"))
+        for d in os.listdir(output_directory)
+        if os.path.isdir(d)
+    ]
+    if dirs_found:
+        # assert tjhere is only one directory
+        assert len(dirs_found) == 1
+        # move the readme into the first directory
+        shutil.move(os.path.join(output_directory, readme), dirs_found[0])
 
 
 if __name__ == "__main__":
