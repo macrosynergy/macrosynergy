@@ -109,7 +109,9 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
         """
         # Fill in here
-
+        if self.train_intervals:
+            _, _, self.n_splits = self.determine_unique_time_splits(X, y)
+            
         return self.n_splits
 
     def determine_unique_time_splits(self, X: pd.DataFrame, y: pd.DataFrame) -> List[pd.arrays.DatetimeArray]:
@@ -191,7 +193,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
                 del train_splits_basic[-1]
                 self.n_splits -= 1
             
-        return train_splits_basic, Xy
+        return train_splits_basic, Xy, self.n_splits
         
     def adjust_time_splits(self, train_splits_basic: List[pd.arrays.DatetimeArray]) -> List[pd.arrays.DatetimeArray]:
         # aggregates dates over splits unless max_periods is specified for interval training
@@ -258,7 +260,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
         :return <Iterator[Tuple[int,int]]> splits: iterator of (train,test) indices for walk-forward validation.
         """
-        train_splits_basic, Xy = self.determine_unique_time_splits(X, y)
+        train_splits_basic, Xy, _ = self.determine_unique_time_splits(X, y)
 
         # (2) Aggregate or roll training dates in train_splits_basic depending on whether or not max_periods is specified
         # This is done by looping over the training date splits and concatenating the dates in each split to the previous split.
