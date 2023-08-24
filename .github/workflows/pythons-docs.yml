@@ -43,5 +43,5 @@ jobs:
         ./codecov -t ${CODECOV_TOKEN}
     - name: Test sphinx build of documentation
       run: |
-        cd docs
-        make html
+        pip install -r docs/requirements.txt
+        python -m docs/build_md.py
