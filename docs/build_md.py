@@ -30,7 +30,7 @@ class DocstringMethods:
             "strikethrough": True,
             "autolinks": True,
             "wrap": 90,
-            # 'bullet': '-',
+            "bullet": "-",
         }
 
         return mdformat.text(docstring, options=options)
@@ -56,6 +56,7 @@ class DocstringMethods:
                     colon_index: int = line.index(":", len(kw))
                     # insert a '`' before the colon
                     line = "`" + line[:colon_index] + "`" + line[colon_index:] + ":"
+                formatted_lines.append(line)
             except Exception as exc:
                 e_str: str = f"Parsing error on line {il}: {line}, {exc}"
                 raise Exception(e_str) from exc
@@ -63,23 +64,32 @@ class DocstringMethods:
         return DocstringMethods.markdown_format("\n".join(formatted_lines))
 
 
-def extract_docstrings(source: str) -> Dict[str, str]:
+def extract_docstrings(source: str) -> Dict[str, Union[str, Dict[str, Any]]]:
     """
-    Extracts docstrings from the given Python source code.
+    Extracts docstrings from the given Python source code and returns a structured dictionary.
     """
     tree = ast.parse(source)
-    docstrings = {}
+    structure = {"<module>": ast.get_docstring(tree), "classes": {}, "functions": {}}
 
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            if ast.get_docstring(node):
-                docstrings[node.name] = ast.get_docstring(node)
-        elif isinstance(node, ast.Module):
-            doc = ast.get_docstring(node)
-            if doc:
-                docstrings["<module>"] = doc
+        if isinstance(node, ast.ClassDef):
+            class_methods = {}
+            for child in node.body:
+                if isinstance(
+                    child, (ast.FunctionDef, ast.AsyncFunctionDef)
+                ) and ast.get_docstring(child):
+                    class_methods[child.name] = ast.get_docstring(child)
 
-    return docstrings
+            structure["classes"][node.name] = {
+                "doc": ast.get_docstring(node),
+                "methods": class_methods,
+            }
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            # Ensure it's not nested inside classes (top-level function)
+            if not any(isinstance(parent, ast.ClassDef) for parent in ast.walk(node)):
+                structure["functions"][node.name] = ast.get_docstring(node)
+
+    return structure
 
 
 def process_file(filepath: str, output_directory: str) -> bool:
@@ -89,39 +99,50 @@ def process_file(filepath: str, output_directory: str) -> bool:
     with open(filepath, "r", encoding="utf8") as f:
         source = f.read()
 
-    docstrings = extract_docstrings(source=source)
+    structure = extract_docstrings(source=source)
 
-    if docstrings:
+    if structure:
         relative_path = os.path.relpath(filepath).replace(".py", ".md")
         output_path = os.path.join(output_directory, relative_path)
 
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
+        output_str: str = ""
+        output_str += f"# {relative_path}\n\n{structure['<module>']}\n\n"
+        for class_name, class_info in structure["classes"].items():
+            output_str += f"## `{class_name}`\n\n{class_info['doc']}\n\n"
+            for method_name, method_doc in class_info["methods"].items():
+                output_str += f"### `{class_name}.{method_name}`\n\n{method_doc}\n\n"
+
+        for function_name, function_doc in structure["functions"].items():
+            output_str += f"## `{function_name}`\n\n{function_doc}\n\n"
+
         with open(output_path, "w") as f:
-            for name, doc in docstrings.items():
-                try:
-                    docx: str = DocstringMethods.format_parameters(doc)
-                except Exception as exc:
-                    e_str: str = f"Error processing {name} in {filepath}"
-                    raise Exception(e_str) from exc
+            f.write(output_str)
 
-                f.write(f"## {name}\n\n")
-                f.write(f"{docx}\n\n")
-
-    return bool(docstrings)
+    return bool(structure["classes"] or structure["functions"] or structure["<module>"])
 
 
-def process_directory(input_directory: str, output_directory: str):
+def process_directory(
+    input_directory: str, output_directory: str, skip_files: Optional[List[str]] = None
+):
     """
     Processes an entire directory, extracting docstrings from each Python file.
     """
+
     for root, _, files in os.walk(input_directory):
         for file in files:
+            if skip_files and file in skip_files:
+                continue
             if file.endswith(".py"):
                 if not process_file(
                     filepath=os.path.join(root, file), output_directory=output_directory
                 ):
-                    warnings.warn(f"Could not process {file}.", RuntimeWarning)
+                    warnings.warn(
+                        "Could not process "
+                        f"{os.path.abspath(os.path.join(root, file))}.",
+                        RuntimeWarning,
+                    )
 
 
 def driver(readme: str, input_directory: str, output_directory: str):
@@ -136,7 +157,9 @@ def driver(readme: str, input_directory: str, output_directory: str):
     shutil.copy(src=readme, dst=output_directory)
 
     process_directory(
-        input_directory=input_directory, output_directory=output_directory
+        input_directory=input_directory,
+        output_directory=output_directory,
+        skip_files=["__init__.py", "version.py"],
     )
 
 
