@@ -163,7 +163,6 @@ class CategoryRelations(object):
         for the given cross-sections and categories, on the given metrics.
         
         Parameters
-        ----------
         :param <pd.DataFrame> target_df: DataFrame to which the slip is applied.
         :param <int> slip: Slip to be applied.
         :param <List[str]> cids: List of cross-sections.

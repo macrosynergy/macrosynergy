@@ -272,7 +272,6 @@ def make_test_df(
     and differentiate in a plot.
     
     Parameters
-    ----------
     :param <List[str]> cids: A list of strings for cids.
     :param <List[str]> xcats: A list of strings for xcats.
     :param <str> start_date: An ISO-formatted date string.
