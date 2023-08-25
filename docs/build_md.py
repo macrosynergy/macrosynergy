@@ -284,18 +284,17 @@ def process_directory(
                         RuntimeWarning,
                     )
             if file.endswith(".md"):
-                # copy the file to the output directory
-                # create a var outputdir which is the relative path of the file in the input directory concatenated with the output directory
-                outputdir: str = os.path.join(
-                    output_directory,
-                    os.path.relpath(
-                        os.path.abspath(root), os.path.dirname(input_directory)
-                    ),
+                # subtract the dirname(input_directory) from the root
+                r_file: str = os.path.relpath(root, os.path.dirname(input_directory))
+                # attach r_file to output_directory
+                output_dir: str = os.path.normpath(
+                    os.path.join(output_directory, r_file)
                 )
-                # if __pycache
+                # create the output directory
+                os.makedirs(os.path.dirname(output_dir), exist_ok=True)
+                # copy the file to the output directory
                 shutil.copy(
-                    src=os.path.join(root, os.path.basename(file)),
-                    dst=os.path.join(outputdir, os.path.basename(file)),
+                    src=os.path.join(root, file), dst=os.path.join(output_dir, file)
                 )
 
     # move the package readme to the package directory
