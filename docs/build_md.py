@@ -117,11 +117,14 @@ def process_file(filepath: str, output_directory: str) -> bool:
         mname = relative_path.replace(".md", "").replace("\\", ".").replace("/", ".")
         output_str += f"# **`{mname}`**\n\n{structure['<module>']}\n\n"
         output_str += LINE_SEPARATOR
+        if structure["classes"]:
+            output_str += "## **Classes**\n\n"
+            output_str += LINE_SEPARATOR
 
         for class_name, class_info in structure["classes"].items():
             # add line separators
-            output_str += LINE_SEPARATOR
             output_str += f"## **`{class_name}`**\n\n{class_info['doc']}\n\n"
+            output_str += LINE_SEPARATOR
 
             for method_name, method_info in class_info["methods"].items():
                 params = ", ".join([arg.arg for arg in method_info["parameters"]])
@@ -130,6 +133,8 @@ def process_file(filepath: str, output_directory: str) -> bool:
                 output_str += f" {method_info['doc']}\n\n"
                 output_str += LINE_SEPARATOR
 
+        if structure["functions"]:
+            output_str += "## **Functions**\n\n"
             output_str += LINE_SEPARATOR
 
         for function_name, function_info in structure["functions"].items():
@@ -138,6 +143,9 @@ def process_file(filepath: str, output_directory: str) -> bool:
             output_str += f"**`{function_name}({params})`**\n\n"
             output_str += f"{function_info['doc']}\n\n"
             output_str += LINE_SEPARATOR
+
+        # remove the last line separator
+        output_str = "\n".join(output_str.split("\n")[:-2])
 
         output_str = DocstringMethods.format_parameters(docstring=output_str)
 
@@ -208,6 +216,7 @@ def create_subpackage_readmes(package_dir: str, root_package_dir: str) -> bool:
 
     if "README.md" not in os.listdir(package_dir):
         with open(os.path.join(package_dir, "README.md"), "w") as f:
+            output_str = DocstringMethods.markdown_format(docstring=output_str)
             f.write(output_str)
 
     else:
@@ -221,7 +230,9 @@ def create_subpackage_readmes(package_dir: str, root_package_dir: str) -> bool:
             lines.insert(il + 1, output_str)
             # write the lines back to the file
         with open(os.path.join(package_dir, "README.md"), "w", encoding="utf8") as f:
-            f.writelines(lines)
+            output_str = "\n".join(lines)
+            output_str = DocstringMethods.markdown_format(docstring=output_str)
+            f.write(output_str)
 
     return True
 

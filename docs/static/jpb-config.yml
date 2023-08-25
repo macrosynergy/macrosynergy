@@ -1,6 +1,6 @@
 config:
   # Book settings
-  title: null
+  title: Macrosynergy Package Documentation
   author: "Macrosynergy Ltd."
   copyright: "2023"
 
@@ -8,18 +8,21 @@ config:
   # Whether to execute notebooks at build time. Must be one of ("auto", "force", "cache", "off")
   execute:
     execute_notebooks: "off"
+  repository:
+    url: https://github.com/macrosynergy/macrosynergy
 
   # HTML-specific settings
   html:
     home_page_in_navbar: true # Whether to include your home page in the left Navigation Bar
-    use_repository_button: false
+    use_repository_button: true
     use_edit_page_button: false
-    use_issues_button: false
+    use_issues_button: true
+    
   # Launch button settings
   launch_buttons:
     binderhub_url: ""
 
-  #sphinx:
+  # sphinx:
   #  config:
   #    html_extra_path: ['assets']
 
