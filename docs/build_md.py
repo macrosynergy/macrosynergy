@@ -56,7 +56,7 @@ class DocstringMethods:
                     # get the index of the first colon after the keyword
                     colon_index: int = line.index(":", len(kw))
                     # insert a '`' before the colon
-                    line = "\n`" + line[:colon_index] + "`" + line[colon_index:] + ":"
+                    line = "\n`" + line[:colon_index] + "`" + line[colon_index:]
                 formatted_lines.append(line)
             except Exception as exc:
                 e_str: str = f"Parsing error on line {il}: {line}, {exc}"
@@ -161,6 +161,7 @@ def create_subpackage_readmes(package_dir: str, root_package_dir: str) -> bool:
     # get all .py and .md files using glob
     files: List[str] = glob.glob(os.path.join(package_dir, "**/*.py"), recursive=True)
     files += glob.glob(os.path.join(package_dir, "**/*.md"), recursive=True)
+
     # get the relative path of each file
     rel_paths: List[str] = [
         os.path.relpath(file, root_package_dir).replace("\\", "/") for file in files
@@ -193,13 +194,17 @@ def create_subpackage_readmes(package_dir: str, root_package_dir: str) -> bool:
             output_str += f"- [{subpackage}](./{subpackage})\n"
     output_str += "\n"
     if modules:
+        # remove README.md from modules
+        modules = [
+            module for module in modules if os.path.basename(module) != "README.md"
+        ]
         output_str += "### Modules\n\n"
         for module in sorted(modules):
             mrpath: str = os.path.relpath(
                 os.path.join(package_dir, module), root_package_dir
             ).replace("\\", "/")
             mrname: str = mrpath.split(".")[0].replace("/", ".")
-            output_str += f"- [{mrname}](./{mrpath})\n"
+            output_str += f"- [{mrname}](./{os.path.basename(mrpath)})\n"
 
     if "README.md" not in os.listdir(package_dir):
         with open(os.path.join(package_dir, "README.md"), "w") as f:
@@ -285,6 +290,9 @@ def process_directory(
     ]
 
     subdirectories.remove(os.path.normpath(output_directory))
+    # remove the root package dir
+    subdirectories = sorted(subdirectories)
+    subdirectories.remove(os.path.normpath(package_dir[0]))
     # go to each dir, and see if there is a readme.md
     for dirx in subdirectories:
         if os.path.basename(dirx) == "__pycache__":
