@@ -271,7 +271,6 @@ def make_test_df(
     These values are simple lines, or waves that are easy to identify
     and differentiate in a plot.
     
-    Parameters
     :param <List[str]> cids: A list of strings for cids.
     :param <List[str]> xcats: A list of strings for xcats.
     :param <str> start_date: An ISO-formatted date string.
