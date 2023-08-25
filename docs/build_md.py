@@ -275,7 +275,7 @@ def process_directory(
                 )
                 # if __pycache
                 shutil.copy(
-                    src=os.path.join(root, file),
+                    src=os.path.join(root, os.path.basename(file)),
                     dst=os.path.join(outputdir, os.path.basename(file)),
                 )
 
