@@ -1,4 +1,6 @@
-
+"""
+Functionality to create contract-specific target positions from signals.
+"""
 import numpy as np
 import pandas as pd
 from typing import List, Union
