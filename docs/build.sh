@@ -5,7 +5,7 @@ cd ./docs/build/
 jupyter-book build macrosynergy
 jupyter-book config sphinx macrosynergy
 
-cd ../../..
+cd ../..
 
 python docs/post_build.py
 
