@@ -6,3 +6,6 @@ jupyter-book build macrosynergy
 jupyter-book config sphinx macrosynergy
 
 cd ../../..
+
+python docs/post_build.py
+
