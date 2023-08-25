@@ -25,7 +25,9 @@ os.rmdir(os.path.dirname(SOURCE_DIR))
 
 # print the abs path of  os.path.join(OUTPUT_DIR, "_build")
 print(
+    "Documentation is available at: \n\n\t\t",
     os.path.normpath(
         (os.path.abspath(os.path.join(OUTPUT_DIR, "_build/html/index.html")))
-    )
+    ),
+    "\n\n",
 )
