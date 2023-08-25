@@ -45,4 +45,9 @@ jobs:
     #     ./codecov -t ${CODECOV_TOKEN}
     - name: Test jupyterbook build of documentation
       run: |
+        # print name of directoy
+        echo "Current directory: $(pwd)"
+        # print name of files in directory
+        echo "Files in directory: $(ls)"
+        
         bash docs/build.sh
