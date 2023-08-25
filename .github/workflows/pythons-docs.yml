@@ -27,7 +27,7 @@ jobs:
         pip install flake8 pytest pytest-cov sphinx==5.3.0 sphinx_rtd_theme==1.1.1
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-        pip install -r docs/docs-requirements.txt
+        pip install -r docs/requirements.txt
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
