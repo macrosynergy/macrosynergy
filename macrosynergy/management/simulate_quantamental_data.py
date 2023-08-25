@@ -1,3 +1,7 @@
+"""
+Module with functionality for generating mock 
+quantamental data for testing purposes.
+"""
 import numpy as np
 import pandas as pd
 from statsmodels.tsa.arima_process import ArmaProcess
