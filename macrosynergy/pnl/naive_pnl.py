@@ -1,3 +1,6 @@
+"""
+"Naive" PnLs with limited signal options and disregarding transaction costs.
+"""
 import numpy as np
 import pandas as pd
 import seaborn as sns
