@@ -45,6 +45,7 @@ jobs:
     #     ./codecov -t ${CODECOV_TOKEN}
     - name: Test jupyterbook build of documentation
       run: |
+        ls -R 
         # copied contents of build.sh
         python docs/build_md.py
         python docs/build_jpb.py
