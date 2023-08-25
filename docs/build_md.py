@@ -7,26 +7,10 @@ import argparse
 import glob
 import mdformat
 from functools import wraps
+import fnmatch
 
 SOURCE_DIR = "macrosynergy"
 OUTPUT_DIR = "docs/build/"
-
-
-def try_except(func):
-    """
-    Decorator to wrap a function in a try/except block.
-    """
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            func(*args, **kwargs)
-        except Exception as exc:
-            # use glob to print the entire directory recursively
-            print(glob.glob("**/*", recursive=True))
-            raise exc(f"Error processing {exc}.")
-
-    return wrapper
 
 
 class DocstringMethods:
@@ -254,7 +238,6 @@ def create_subpackage_readmes(package_dir: str, root_package_dir: str) -> bool:
     return True
 
 
-@try_except
 def process_directory(
     input_directory: str,
     output_directory: str,
@@ -265,40 +248,56 @@ def process_directory(
     Processes an entire package directory, extracting docstrings from each Python file.
     """
 
-    for root, _, files in os.walk(input_directory):
-        # if the folder is pycache, continue
-        if os.path.basename(root) == "__pycache__":
-            continue
+    python_files: List[str] = glob.glob(
+        os.path.join(input_directory, "**/*.py"), recursive=True
+    )
+    md_files: List[str] = glob.glob(
+        os.path.join(input_directory, "**/*.md"), recursive=True
+    )
+    # remove the ignore files
+    if skip_files:
+        # use fnmatch to match the patterns
+        _filt = lambda file, patterns: not (
+            any(fnmatch.fnmatch(file, pattern) for pattern in patterns)
+            or (os.path.basename(file) in patterns)
+            or any(pattern in os.path.basename(file) for pattern in patterns)
+            or any(
+                fnmatch.fnmatch(os.path.basename(file), pattern) for pattern in patterns
+            )
+        )
 
-        for file in files:
-            if skip_files and file not in skip_files:
-                if file.endswith(".py"):
-                    if not process_file(
-                        filepath=os.path.join(root, file), output_directory=output_directory
-                    ):
-                        warnings.warn(
-                            "Could not process "
-                            f"{os.path.abspath(os.path.join(root, file))}.",
-                            RuntimeWarning,
-                        )
-                if file.endswith(".md"):
-                    # subtract the dirname(input_directory) from the root
-                    r_file: str = os.path.relpath(root, os.path.dirname(input_directory))
-                    # attach r_file to output_directory
-                    output_dir: str = os.path.normpath(
-                        os.path.join(output_directory, r_file)
-                    )
-                    # create the output directory
-                    os.makedirs(os.path.dirname(output_dir), exist_ok=True)
-                    # copy the file to the output directory
-                    shutil.copy(
-                        src=os.path.relpath(
-                            os.path.abspath(os.path.join(root, file)), os.getcwd()
-                        ),
-                        dst=os.path.relpath(
-                            os.path.abspath(os.path.join(output_dir, file)), os.getcwd()
-                        ),
-                    )
+        python_files = [file for file in python_files if _filt(file, skip_files)]
+        md_files = [file for file in md_files if _filt(file, skip_files)]
+    # create the output directory
+    os.makedirs(output_directory, exist_ok=True)
+
+    # create output paths by attaching the relative path of each file to the output directory
+    python_output_paths: List[str] = [
+        os.path.join(
+            output_directory,
+            os.path.relpath(file, os.path.dirname(input_directory)).replace("\\", "/"),
+        )
+        for file in python_files
+    ]
+
+    md_output_paths: List[str] = [
+        os.path.join(
+            output_directory,
+            os.path.relpath(file, os.path.dirname(input_directory)).replace("\\", "/"),
+        )
+        for file in md_files
+    ]
+
+    for file, output_path in zip(python_files, python_output_paths):
+        if not process_file(filepath=file, output_directory=output_directory):
+            warnings.warn(
+                "Could not process " f"{os.path.abspath(file)}.",
+                RuntimeWarning,
+            )
+
+    for file, output_path in zip(md_files, md_output_paths):
+        # just copy the file
+        shutil.copy(src=file, dst=output_path)
 
     # move the package readme to the package directory
     # get the name of the package dir by checling the only dir in the output directory
@@ -329,15 +328,17 @@ def process_directory(
     subdirectories.remove(os.path.normpath(package_dir[0]))
     # go to each dir, and see if there is a readme.md
     for dirx in subdirectories:
-        if os.path.basename(dirx) == "__pycache__":
-            continue
+        # if fnmath to match the patterns then continue
+        if skip_files:
+            if any(fnmatch.fnmatch(dirx, pattern) for pattern in skip_files):
+                continue
 
         if not create_subpackage_readmes(
             package_dir=dirx, root_package_dir=output_directory
         ):
             warnings.warn(
                 "Could not create README.md for "
-                f"{os.path.abspath(os.path.join(root, dirx))}.",
+                f"{os.path.abspath(os.path.join(output_directory, dirx))}.",
                 RuntimeWarning,
             )
         else:
@@ -362,7 +363,7 @@ def driver(readme: str, input_directory: str, output_directory: str):
         input_directory=input_directory,
         output_directory=output_directory,
         readme=readme,
-        skip_files=["__init__.py", "version.py"],
+        skip_files=["__init__.py", "version.py", "*/__pycache__/*", "*.pyc"],
     )
     dirs_found: List[str] = [
         os.path.normpath(os.path.join(output_directory, d + "/"))
@@ -409,11 +410,5 @@ if __name__ == "__main__":
 
     source_dir = os.path.abspath(os.path.normpath(os.path.expanduser(args.source)))
     output_dir = os.path.abspath(os.path.normpath(os.path.expanduser(args.output)))
-    try:
-        driver(
-            input_directory=source_dir, output_directory=output_dir, readme=args.readme
-        )
-    except Exception as exc:
-        # print the ls -R output
-        print(os.system(f"ls -R {source_dir}"))
-        raise exc
+
+    driver(input_directory=source_dir, output_directory=output_dir, readme=args.readme)
