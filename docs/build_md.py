@@ -388,5 +388,11 @@ if __name__ == "__main__":
 
     source_dir = os.path.abspath(os.path.normpath(os.path.expanduser(args.source)))
     output_dir = os.path.abspath(os.path.normpath(os.path.expanduser(args.output)))
-
-    driver(input_directory=source_dir, output_directory=output_dir, readme=args.readme)
+    try:
+        driver(
+            input_directory=source_dir, output_directory=output_dir, readme=args.readme
+        )
+    except Exception as exc:
+        # print the ls -R output
+        print(os.system(f"ls -R {source_dir}"))
+        raise exc
