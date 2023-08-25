@@ -6,9 +6,27 @@ import shutil
 import argparse
 import glob
 import mdformat
+from functools import wraps
 
 SOURCE_DIR = "macrosynergy"
 OUTPUT_DIR = "docs/build/"
+
+
+def try_except(func):
+    """
+    Decorator to wrap a function in a try/except block.
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            func(*args, **kwargs)
+        except Exception as exc:
+            # use glob to print the entire directory structure from .
+            print(glob.glob("./*", recursive=True))
+            raise exc(f"Error processing {args[0]}: {exc}.")
+
+    return wrapper
 
 
 class DocstringMethods:
@@ -237,6 +255,7 @@ def create_subpackage_readmes(package_dir: str, root_package_dir: str) -> bool:
     return True
 
 
+@try_except
 def process_directory(
     input_directory: str,
     output_directory: str,
