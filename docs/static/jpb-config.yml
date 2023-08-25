@@ -27,10 +27,20 @@ config:
     myst_enable_extensions:
       - "amsmath"
       - "dollarmath"
+      - "attrs_inline"
+      - "colon_fence"
+      - "deflist"
+      - "fieldlist"
+      - "html_admonition"
+      - "html_image"
+      - "linkify"
+      - "replacements"
+      - "smartquotes"
+      - "strikethrough"
+      - "substitution"
+      - "tasklist"
 
 toc:
   title: Macrosynergy Package Documentation
   format: "jb-book"
   root: macrosynergy/README.md
-  
-  
