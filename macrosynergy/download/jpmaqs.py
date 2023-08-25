@@ -29,7 +29,6 @@ class JPMaQSDownload(object):
     JPMaQSDownload Object. This object is used to download JPMaQS data via the DataQuery API.
     It can be extended to include the use of proxies, and even request generic DataQuery expressions.
 
-    Parameters
     :param <bool> oauth: True if using oauth, False if using username/password with crt/key.
 
     When using oauth:
@@ -169,7 +168,6 @@ class JPMaQSDownload(object):
     ) -> List[str]:
         """Construct expressions from the provided arguments.
 
-        Parameters
         :param <list[str]> tickers: list of tickers.
         :param <list[str]> cids: list of cids.
         :param <list[str]> xcats: list of xcats.
@@ -194,7 +192,6 @@ class JPMaQSDownload(object):
         Coupled with to JPMaQSDownload.time_series_to_df(), achieves the inverse of
         JPMaQSDownload.construct_expressions().
 
-        Parameters
         :param <str> expression: expression to deconstruct. If a list is provided,
             each element will be deconstructed and returned as a list of lists.
 
@@ -242,7 +239,6 @@ class JPMaQSDownload(object):
         """
         Validate the downloaded data in the provided dataframe.
 
-        Parameters
         :param <pd.DataFrame> data_df: dataframe containing the downloaded data.
         :param <list[str]> expected_expressions: list of expressions that were expected to be
             downloaded.
@@ -337,7 +333,6 @@ class JPMaQSDownload(object):
         """
         Convert the downloaded data to a pandas DataFrame.
 
-        Parameters
         :param dicts_list <list>: List of dictionaries containing time series
             data from the DataQuery API
 
@@ -513,7 +508,6 @@ class JPMaQSDownload(object):
     ) -> bool:
         """Validate the arguments passed to the download function.
 
-        Parameters
         :params:  -- see `macrosynergy.download.jpmaqs.JPMaQSDownload.download()`.
 
         :return <bool>: True if valid.
@@ -611,7 +605,6 @@ class JPMaQSDownload(object):
         and provides the user wuth the complete list of expressions that are in the
         catalogue.
 
-        Parameters
         :param <List[str]> tickers: list of tickers to filter.
 
         :return <List[str]>: list of tickers that are in the JPMaQS catalogue.
@@ -656,7 +649,6 @@ class JPMaQSDownload(object):
         `cids` and `xcats` (along with `metrics`) are used to construct
         expressions, which are ultimately passed to the DataQuery Interface.
 
-        Parameters
         :param <list[str]> tickers: list of tickers.
         :param <list[str]> cids: list of cids.
         :param <list[str]> xcats: list of xcats.
