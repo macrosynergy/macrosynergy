@@ -45,4 +45,4 @@ jobs:
         ./codecov -t ${CODECOV_TOKEN}
     - name: Test jupyterbook build of documentation
       run: |
-        bash ./docs/build.sh
+        bash docs/build.sh
