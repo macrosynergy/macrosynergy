@@ -553,7 +553,7 @@ class FacetPlot(Plotter):
                 suptitle.get_window_extent().width,
                 suptitle.get_window_extent().height,
             )
-            title_newline_adjust: float = 0.2
+            title_newline_adjust: float = 0.1
             if title_yadjust is not None and title_yadjust != 1.0:
                 title_newline_adjust = abs(title_yadjust - 1.0)
             # count the number of newlines in the title
@@ -562,7 +562,7 @@ class FacetPlot(Plotter):
 
             # re_adj[3] = re_adj[3] + fig_height / fig.get_window_extent().height
             re_adj[3] = (
-                re_adj[3] + title_height + fig_height / fig.get_window_extent().height
+                re_adj[3] - title_height + fig_height / fig.get_window_extent().height
             )
 
         axs: Union[np.ndarray, plt.Axes] = outer_gs.subplots(
