@@ -233,8 +233,8 @@ def create_subpackage_readmes(package_dir: str, root_package_dir: str) -> bool:
             output_str += f"- [{mrname}](./{os.path.basename(mrpath)})\n"
 
     if "README.md" not in os.listdir(package_dir):
+        output_str = DocstringMethods.markdown_format(docstring=output_str)
         with open(os.path.join(package_dir, "README.md"), "w") as f:
-            output_str = DocstringMethods.markdown_format(docstring=output_str)
             f.write(output_str)
 
     else:
@@ -244,12 +244,11 @@ def create_subpackage_readmes(package_dir: str, root_package_dir: str) -> bool:
             for il, line in enumerate(lines):
                 if line.strip():
                     break
-            # insert the output_str after the first line
             lines.insert(il + 1, output_str)
-            # write the lines back to the file
+
+        output_str = "\n".join(lines)
+        output_str = DocstringMethods.markdown_format(docstring=output_str)
         with open(os.path.join(package_dir, "README.md"), "w", encoding="utf8") as f:
-            output_str = "\n".join(lines)
-            output_str = DocstringMethods.markdown_format(docstring=output_str)
             f.write(output_str)
 
     return True
@@ -272,35 +271,34 @@ def process_directory(
             continue
 
         for file in files:
-            if skip_files and file in skip_files:
-                continue
-            if file.endswith(".py"):
-                if not process_file(
-                    filepath=os.path.join(root, file), output_directory=output_directory
-                ):
-                    warnings.warn(
-                        "Could not process "
-                        f"{os.path.abspath(os.path.join(root, file))}.",
-                        RuntimeWarning,
+            if skip_files and file not in skip_files:
+                if file.endswith(".py"):
+                    if not process_file(
+                        filepath=os.path.join(root, file), output_directory=output_directory
+                    ):
+                        warnings.warn(
+                            "Could not process "
+                            f"{os.path.abspath(os.path.join(root, file))}.",
+                            RuntimeWarning,
+                        )
+                if file.endswith(".md"):
+                    # subtract the dirname(input_directory) from the root
+                    r_file: str = os.path.relpath(root, os.path.dirname(input_directory))
+                    # attach r_file to output_directory
+                    output_dir: str = os.path.normpath(
+                        os.path.join(output_directory, r_file)
                     )
-            if file.endswith(".md"):
-                # subtract the dirname(input_directory) from the root
-                r_file: str = os.path.relpath(root, os.path.dirname(input_directory))
-                # attach r_file to output_directory
-                output_dir: str = os.path.normpath(
-                    os.path.join(output_directory, r_file)
-                )
-                # create the output directory
-                os.makedirs(os.path.dirname(output_dir), exist_ok=True)
-                # copy the file to the output directory
-                shutil.copy(
-                    src=os.path.relpath(
-                        os.path.abspath(os.path.join(root, file)), os.getcwd()
-                    ),
-                    dst=os.path.relpath(
-                        os.path.abspath(os.path.join(output_dir, file)), os.getcwd()
-                    ),
-                )
+                    # create the output directory
+                    os.makedirs(os.path.dirname(output_dir), exist_ok=True)
+                    # copy the file to the output directory
+                    shutil.copy(
+                        src=os.path.relpath(
+                            os.path.abspath(os.path.join(root, file)), os.getcwd()
+                        ),
+                        dst=os.path.relpath(
+                            os.path.abspath(os.path.join(output_dir, file)), os.getcwd()
+                        ),
+                    )
 
     # move the package readme to the package directory
     # get the name of the package dir by checling the only dir in the output directory
