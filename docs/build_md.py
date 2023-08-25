@@ -276,7 +276,7 @@ def process_directory(
                 # if __pycache
                 shutil.copy(
                     src=os.path.join(root, file),
-                    dst=os.path.join(outputdir, file),
+                    dst=os.path.join(outputdir, os.path.basename(file)),
                 )
 
     # move the package readme to the package directory
