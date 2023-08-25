@@ -217,7 +217,7 @@ class NaivePnL:
             dfw["month"] = dfw["real_date"].dt.month
             rebal_dates = dfw.groupby(["cid", "year", "month"])["real_date"].min()
         elif rebal_freq == "weekly":
-            dfw["week"] = dfw["real_date"].dt.week
+            dfw["week"] = dfw["real_date"].apply(lambda x: x.week)
             rebal_dates = dfw.groupby(["cid", "year", "week"])["real_date"].min()
 
         # Convert the index, 'cid', to a formal column aligned to the re-balancing dates.
