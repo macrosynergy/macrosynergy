@@ -269,7 +269,9 @@ def process_directory(
                 # create a var outputdir which is the relative path of the file in the input directory concatenated with the output directory
                 outputdir: str = os.path.join(
                     output_directory,
-                    os.path.relpath(root, os.path.dirname(input_directory)),
+                    os.path.relpath(
+                        os.path.abspath(root), os.path.dirname(input_directory)
+                    ),
                 )
                 # if __pycache
                 shutil.copy(
