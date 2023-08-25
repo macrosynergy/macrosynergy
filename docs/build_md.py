@@ -22,9 +22,9 @@ def try_except(func):
         try:
             func(*args, **kwargs)
         except Exception as exc:
-            # use glob to print the entire directory structure from .
-            print(glob.glob("./*", recursive=True))
-            raise exc(f"Error processing {args[0]}: {exc}.")
+            # use glob to print the entire directory recursively
+            print(glob.glob("**/*", recursive=True))
+            raise exc(f"Error processing {exc}.")
 
     return wrapper
 
