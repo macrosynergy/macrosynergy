@@ -294,7 +294,12 @@ def process_directory(
                 os.makedirs(os.path.dirname(output_dir), exist_ok=True)
                 # copy the file to the output directory
                 shutil.copy(
-                    src=os.path.join(root, file), dst=os.path.join(output_dir, file)
+                    src=os.path.relpath(
+                        os.path.abspath(os.path.join(root, file)), os.getcwd()
+                    ),
+                    dst=os.path.relpath(
+                        os.path.abspath(os.path.join(output_dir, file)), os.getcwd()
+                    ),
                 )
 
     # move the package readme to the package directory
