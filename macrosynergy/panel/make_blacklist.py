@@ -1,3 +1,8 @@
+"""
+Module with functions for processing "blacklist" data for cross-sections in a quantamental
+DataFrame.
+"""
+
 import numpy as np
 import pandas as pd
 from typing import List
