@@ -1,4 +1,6 @@
-
+"""
+Classes and functions for analyzing and visualizing the relations of two panel categories.
+"""
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
