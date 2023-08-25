@@ -7,8 +7,9 @@ from typing import Optional, List, Iterator, Tuple
 
 class PanelTimeSeriesSplit(BaseCrossValidator):
     """
-    Class for the production of cross-validation splits for panel data. The class can also 
-    be used for sequential training and sequential validation over a panel.
+    Class for the production of paired training and test splits for panel data. Thus, it 
+    can be used for sequential training, sequential validation and walk-forward validation
+    over a panel.
 
     :param <int> train_intervals: training interval length in time periods for sequential
         training. This is the number of periods by which the training set is expanded at
@@ -23,23 +24,20 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         If the maximum is exceeded, the earliest periods are cut off.
         Default is None.
     :param <int> n_splits: number of time splits to make. This is an alternative to
-        defining sequential training intervals. If specified, the overall panel
-        subject to the `min_cids` condition is split into n_splits blocks of
-        adjacent dates. Then, either expanding or rolling windows of these blocks are used
-        for training and testing.
-        When `n_splits` is specified `min_periods`, `test_size`, `max periods` and
-        `train_intervals` are ignored. Default is None.
+        defining sequential training intervals. If specified, the overall panel is split
+        into n_splits blocks of adjacent dates. Then, either expanding or rolling windows
+        of these blocks are used for training and testing. When `n_splits` is specified,
+        `min_periods`, `test_size`, `min_cids`, `max periods` and `train_intervals` are ignored.
+        Default is None.
     :param <int> n_split_method: either "expanding" (default) or "rolling". If "expanding"
         is chosen, the training sets are determined by sequential blocks of dates
         up to but including the last block. The test sets are always the block following
         the last date of training set, mimicking the sklearn class `TimeSeriesSplit` but
         splitting by observation date instead of index. If `rolling` is chosen, then the
         training sets are all combinations of adjacent blocks of dates, whereby the first
-        and the last block count as adjacent. This implies that cross-validation is not purely
+        and the last block count as adjacent. Thus in this case, the splits are not purely
         sequential.
 
-    Unlike the sklearn class `TimeSeriesSplit`, this class makes splits based on the
-    observation dates as opposed to the sample indices.
     """
 
     def __init__(
@@ -63,6 +61,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
             min_periods = None
             test_size = None
             max_periods = None
+            min_cids = None
             assert n_split_method in ["expanding", "rolling"], "n_split_method must be either 'expanding' or 'rolling'."
 
         else:
@@ -106,15 +105,25 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
             (cross-section, date). The dates must be in datetime format.
 
         :return <int> n_splits: number of splitting iterations in the cross-validator.
-
         """
-        # Fill in here
         if self.train_intervals:
             _, _, self.n_splits = self.determine_unique_time_splits(X, y)
             
         return self.n_splits
 
-    def determine_unique_time_splits(self, X: pd.DataFrame, y: pd.DataFrame) -> List[pd.arrays.DatetimeArray]:
+    def determine_unique_time_splits(self, X: pd.DataFrame, y: pd.DataFrame) -> Tuple[List[pd.arrays.DatetimeArray],pd.DataFrame,int]:
+        """
+        Helper method to determine the unique dates in each training split. This method is called by self.split().
+        It further returns other variables needed for ensuing components of the split method.
+        :param <pd.DataFrame> X: Pandas dataframe of features/quantamental indicators,
+            multi-indexed by (cross-section, date). The dates must be in datetime format.
+            The dataframe must be in wide format: each feature is a column.
+        :param <pd.DataFrame> y: Pandas dataframe of target variable, multi-indexed by
+            (cross-section, date). The dates must be in datetime format.
+
+        :return <Tuple[List[pd.arrays.DatetimeArray],pd.DataFrame,int]> (train_splits_basic, Xy, n_splits): 
+            Tuple comprising the unique dates in each training split, the concatenated dataframe of X and y, and the number of splits.
+        """
         self.logger.info("Sanity checks")
         # Check that X and y are multi-indexed
         assert isinstance(X.index, pd.MultiIndex), "X must be multi-indexed."
@@ -196,7 +205,15 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         return train_splits_basic, Xy, self.n_splits
         
     def adjust_time_splits(self, train_splits_basic: List[pd.arrays.DatetimeArray]) -> List[pd.arrays.DatetimeArray]:
-        # aggregates dates over splits unless max_periods is specified for interval training
+        """
+        Helper method for adjusting the training dates in each split. If aggregation is specified, through either neglecting to set max_periods or by setting n_splits_method="expanding".
+        then the training dates in each split are concatenated to the previous split.
+        If 'max_periods' is specified for interval training, then the concatenated dates are cut off at the maximum number of periods specified.
+
+        :param <List[pd.arrays.DatetimeArray]> train_splits_basic: list of numpy arrays of unique dates in each training split.
+        
+        :return <List[pd.arrays.DatetimeArray]> train_splits: list of numpy arrays of unique dates in each training split, adjusted for rolling or expanding windows.
+        """
         if self.train_intervals:
             train_splits: List[np.array] = [train_splits_basic[0] if not self.max_periods else train_splits_basic[0][-self.min_periods:]]
         elif self.n_splits and self.n_split_method == "expanding":
@@ -214,6 +231,14 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         return train_splits
     
     def create_train_test_indices(self, train_splits: List[pd.arrays.DatetimeArray], train_splits_basic: List[pd.arrays.DatetimeArray], Xy: pd.DataFrame) -> Iterator[Tuple[int,int]]:
+        """
+        Helper method for creating training and test indices from the unique dates in each training split.
+
+        :param <List[pd.arrays.DatetimeArray]> train_splits: list of numpy arrays of unique dates in each training split, adjusted for rolling or expanding windows.
+        :param <List[pd.arrays.DatetimeArray]> train_splits_basic: list of numpy arrays of unique dates in each training split, prior to adjustment.
+
+        :return <Iterator[Tuple[int,int]]> iterator: iterator of (train,test) indices, giving rise to the different splits.
+        """
         if self.train_intervals:
             for split in train_splits:
                 self.train_indices.append(
@@ -273,7 +298,6 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         iterator = self.create_train_test_indices(train_splits, train_splits_basic, Xy)
         
         return iterator
-
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate_quantamental_data import make_qdf
