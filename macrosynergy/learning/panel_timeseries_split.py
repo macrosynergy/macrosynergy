@@ -67,6 +67,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         else:
             # Note for Ralph: the below is needed because the user could still (accidentally) set train_intervals, min_periods and min_cids to None even if n_splits is None.
             # This is despite the defaults set in the function definition.
+            n_split_method = None
             assert (
                 (train_intervals is not None)
                 & (min_periods is not None)
@@ -211,19 +212,23 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         If 'max_periods' is specified for interval training, then the concatenated dates are cut off at the maximum number of periods specified.
 
         :param <List[pd.arrays.DatetimeArray]> train_splits_basic: list of numpy arrays of unique dates in each training split.
-        
+
         :return <List[pd.arrays.DatetimeArray]> train_splits: list of numpy arrays of unique dates in each training split, adjusted for rolling or expanding windows.
         """
         if self.train_intervals:
             train_splits: List[np.array] = [train_splits_basic[0] if not self.max_periods else train_splits_basic[0][-self.min_periods:]]
-        elif self.n_splits and self.n_split_method == "expanding":
-            train_splits: List[np.array] = [train_splits_basic[0]]
             for i in range(1, self.n_splits):
                 train_splits.append(
                     np.concatenate([train_splits[i - 1], train_splits_basic[i]])
                 )
                 if self.max_periods and self.train_intervals:
                     train_splits[i] = train_splits[i][-self.max_periods :]
+        elif self.n_splits and self.n_split_method == "expanding":
+            train_splits: List[np.array] = [train_splits_basic[0]]
+            for i in range(1, self.n_splits):
+                train_splits.append(
+                    np.concatenate([train_splits[i - 1], train_splits_basic[i]])
+                )
         else:
             # n_splits specified and n_split_method is rolling
             train_splits: List[np.array] = train_splits_basic
