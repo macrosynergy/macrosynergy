@@ -1,4 +1,7 @@
-
+"""
+Implementation of panel calculation functions for quantamental data.
+The functionality allows applying mathematical operations on time-series data.
+"""
 import numpy as np
 import pandas as pd
 from typing import List
