@@ -75,6 +75,7 @@ def validate_response(
     Validates a response from the API. Raises an exception if the response
     is invalid (e.g. if the response is not a 200 status code).
 
+    Parameters
     :param <requests.Response> response: response object from requests.request().
 
     :return <dict>: response as a dictionary. If the response is not valid,
@@ -133,6 +134,7 @@ def request_wrapper(
     Wrapper for requests.request() that handles retries and logging.
     All parameters and kwargs are passed to requests.request().
 
+    Parameters
     :param <str> url: URL to request.
     :param <dict> headers: headers to pass to requests.request().
     :param <dict> params: params to pass to requests.request().
@@ -285,6 +287,7 @@ class OAuth(object):
     """
     Class for handling OAuth authentication for the DataQuery API.
 
+    Parameters
     :param <str> client_id: client ID for the OAuth application.
     :param <str> client_secret: client secret for the OAuth application.
     :param <dict> proxy: proxy to use for requests. Defaults to None.
@@ -388,7 +391,7 @@ class OAuth(object):
             }
 
         return self._stored_token["access_token"]
-    
+
     def _get_user_id(self) -> str:
         return "OAuth_ClientID - " + self.token_data["client_id"]
 
@@ -405,6 +408,7 @@ class CertAuth(object):
     """
     Class for handling certificate based authentication for the DataQuery API.
 
+    Parameters
     :param <str> username: username for the DataQuery API.
     :param <str> password: password for the DataQuery API.
     :param <str> crt: path to the certificate file.
@@ -472,6 +476,7 @@ def validate_download_args(
     """
     Validate the arguments passed to the `download_data()` method.
 
+    Parameters
     :params : -- see `download_data()` method.
 
     :return <bool>: True if all arguments are valid.
@@ -542,6 +547,7 @@ def get_unavailable_expressions(
     Looks at the dict["attributes"][0]["expression"] field of each dict
     in the list.
 
+    Parameters
     :param <List[str]> expected_exprs: list of expressions that were requested.
     :param <List[Dict]> dicts_list: list of dicts to search for the expressions.
 
@@ -561,6 +567,7 @@ class DataQueryInterface(object):
     Must be instantiated with a valid Config object.
     (see macrosynergy.management.utils.Config class for more info)
 
+    Parameters
     :param <Config> config: Config object.
     :param <bool> oauth: whether to use OAuth authentication. Defaults to True.
     :param <bool> debug: whether to print debug messages. Defaults to False.
@@ -614,7 +621,8 @@ class DataQueryInterface(object):
         if oauth and (config.oauth() is None):
             warnings.warn(
                 "OAuth credentials not found. "
-                "Trying to use certificate authentication.",)
+                "Trying to use certificate authentication.",
+            )
             if config.cert() is None:
                 raise ValueError(
                     "Certificate credentials not found. "
@@ -622,7 +630,7 @@ class DataQueryInterface(object):
                 )
             else:
                 oauth: bool = False
-             
+
         if oauth:
             self.auth: OAuth = OAuth(
                 **config.oauth(mask=False),
@@ -655,6 +663,7 @@ class DataQueryInterface(object):
         """
         Check the connection to the DataQuery API using the Heartbeat endpoint.
 
+        Parameters
         :param <bool> verbose: whether to print a message if the heartbeat
             is successful. Useful for debugging. Defaults to False.
 
@@ -696,6 +705,7 @@ class DataQueryInterface(object):
         Used to wrap a request in a thread for concurrent requests, or to
         simplify the code for single requests.
 
+        Parameters
         :param <str> url: URL to request.
         :param <dict> params: parameters to send with the request.
         :param <dict> proxy: proxy to use for the request.
@@ -807,6 +817,11 @@ class DataQueryInterface(object):
         show_progress: bool = False,
         retry_counter: int = 0,
     ) -> List[dict]:
+        """
+        Backend method to download data from the DataQuery API.
+        Used by the `download_data()` method.
+        """
+
         if retry_counter > 0:
             print("Retrying failed downloads. Retry count:", retry_counter)
 
@@ -916,6 +931,7 @@ class DataQueryInterface(object):
         """
         Download data from the DataQuery API.
 
+        Parameters
         :param <List[str]> expressions: list of expressions to download.
         :param <str> start_date: start date for the data in the ISO-8601 format
             (YYYY-MM-DD).
