@@ -1,3 +1,10 @@
+"""
+Module containing code for the Plotter class, and all common functionality
+for the plotter classes. The Plotter class is a base class for all plotter
+classes, and provides a shared interface for dataframe filtering operations,
+as well as `argvalidation` and `argcopy` decorators for all methods of the
+plotter classes.
+"""
 import inspect
 import itertools
 import logging
