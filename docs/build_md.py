@@ -230,7 +230,7 @@ def create_subpackage_readmes(package_dir: str, root_package_dir: str) -> bool:
                     break
             lines.insert(il + 1, output_str)
 
-        output_str = "\n".join(lines)
+        output_str = "".join(lines)
         output_str = DocstringMethods.markdown_format(docstring=output_str)
         with open(os.path.join(package_dir, "README.md"), "w", encoding="utf8") as f:
             f.write(output_str)
