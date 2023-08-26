@@ -4,28 +4,13 @@ These functions make use of the classes in the `macrosynergy.visuals` module.
 Convinient when used as:
 ```python
 import macrosynergy.visuals as msv
-
-msv.view.timelines( df, 
-                    xcats=["FXXR", "EQXR", "RIR", "IR"], 
+...
+msv.view.timelines( df, xcats=["FXXR", "EQXR", "IR"], 
                     cids=["USD", "EUR", "GBP"])
 ...
 
-msv.FacetPlot(  df=df, 
-                cids=SELECTED_CIDS, 
-                xcats=SELECTED_XCATS, 
-                intersect=True
-            ) as fp:
-    fp.lineplot(share_y=True, 
-                share_x=False, 
-                title="Plot title",
-                ncols=5, 
-                )
-
-    fp.lineplot(xcat_grid=True, 
-                share_y=True, 
-                xcats=SOME_XCATS, 
-                title="Plot \n Title")
-
+msv.FacetPlot(df).lineplot(cid_grid=True)
+```
 """
 import os, sys
 
