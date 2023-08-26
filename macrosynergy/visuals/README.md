@@ -1,4 +1,4 @@
-# `macrosynergy.visuals` - subpackage for visualizing quantamental data
+# `macrosynergy.visuals`
 
 ## Description
 
@@ -57,7 +57,7 @@ To maintain readability, two generic type-aliases are defined in `macrosynergy.v
 
 The following parameters, are essentially all that is required to for the dataframe to be reduced and filtered to the desired subset:
 
-```
+```text
 :param <pd.DataFrame> df: A DataFrame with the following columns:
     'cid', 'xcat', 'real_date', and at least one metric from -
     'value', 'grading', 'eop_lag', or 'mop_lag'.
@@ -118,7 +118,7 @@ We use a direct subset of `matplotlib`'s functions, with some renaming where con
 
 Here are the generic arguments that behave the same across all plotting methods:
 
-```
+```text
 :param <Tuple[Numeric, Numeric]> figsize: a tuple of floats specifying the width and height of the figure.
 
 :param <str> title: the title of the plot.
