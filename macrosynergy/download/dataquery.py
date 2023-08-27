@@ -393,6 +393,10 @@ class OAuth(object):
         return "OAuth_ClientID - " + self.token_data["client_id"]
 
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
+        """
+        Returns a dictionary with the authentication information, in the same
+        format as the `macrosynergy.download.dataquery.CertAuth.get_auth()` method.
+        """
         headers: Dict = {"Authorization": "Bearer " + self._get_token()}
         return {
             "headers": headers,
@@ -446,6 +450,10 @@ class CertAuth(object):
         self.proxy: Optional[dict] = proxy
 
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
+        """
+        Returns a dictionary with the authentication information, in the same
+        format as the `macrosynergy.download.dataquery.OAuth.get_auth()` method.
+        """
         headers = {"Authorization": f"Basic {self.auth:s}"}
         user_id = "CertAuth_Username - " + self.username
         return {
