@@ -415,6 +415,7 @@ class Config(object):
 
     def __init__(
         self,
+        config_path: Optional[str] = None,
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
         crt: Optional[str] = None,
@@ -423,7 +424,6 @@ class Config(object):
         password: Optional[str] = None,
         proxy: Optional[dict] = None,
         proxies: Optional[dict] = None,
-        config_path: Optional[str] = None,
     ):
         if not isinstance(config_path, (str, type(None))):
             raise ValueError(
