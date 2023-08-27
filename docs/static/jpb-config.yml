@@ -13,12 +13,13 @@ config:
 
   # HTML-specific settings
   html:
+    favicon: "https://macrosynergy.com/wp-content/uploads/2022/10/macrosynergy-logo-favicon-300x300.png"
     home_page_in_navbar: true # Whether to include your home page in the left Navigation Bar
     use_repository_button: true
     use_edit_page_button: false
     use_issues_button: true
     google_analytics_id: ""
-    baseurl: ""
+    baseurl: "https://docs.macrosynergy.com/"
 
   # Launch button settings
   launch_buttons:
