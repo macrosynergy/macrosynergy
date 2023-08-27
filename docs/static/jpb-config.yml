@@ -17,7 +17,9 @@ config:
     use_repository_button: true
     use_edit_page_button: false
     use_issues_button: true
-    
+    google_analytics_id: ""
+    baseurl: ""
+
   # Launch button settings
   launch_buttons:
     binderhub_url: ""
