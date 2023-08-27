@@ -82,7 +82,7 @@ The `DataQueryInterface` class makes use of `concurrent.futures` to allow for co
 
 ### Authentication
 
-While certificate authentication does not require a lot of code, OAuth authentication is a bit more involved. The `macrosynergy.download.dataquery.OAuth` class manages the OAuth token and authentication. To allow for a "neat" interface between the two types of authentication, the `DataQueryInterface` class uses one of `OAuth` or `CertAuth` classes as an attribute. This allows for it to have a single method to insert authentication information in the request.
+While certificate authentication does not require a lot of code, OAuth authentication is a bit more involved. The `macrosynergy.download.dataquery.OAuth` class manages the OAuth token and authentication. To allow for a "neat" interface between the two types of authentication, the `DataQueryInterface` class uses one of `OAuth` or `CertAuth` classes \as an attribute. This allows for it to have a single method to insert authentication information in the request.
 
 ### Retries and Error handling
 
@@ -99,4 +99,4 @@ For hard errors, where the error is clearly non-transient, the process will brea
 ### Debugging SSL and Proxy issues
 
 If you're on a corporate/work network, you may have to use a proxy to access the internet. This can cause issues with connecting to the JPMorgan DataQuery API. The `JPMaQSDownload` allows for a proxy to be passed in as a dictionary, which is ultimately passed to the `requests` library. The `requests` library will then use the proxy to connect to the API.
-Please also take a look at the FAQs section of the package [README](../../README.md#faqs-and-troubleshooting) for more information on SSL and Proxy issues.
+Please also take a look at the [FAQs section of the package README](https://github.com/macrosynergy/macrosynergy#faqs-and-troubleshooting) for more information on SSL and Proxy issues.
