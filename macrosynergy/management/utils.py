@@ -379,9 +379,42 @@ def wide_to_long(
 
 
 class Config(object):
+    """
+    Class for handling the configuration of the JPMaQS API.
+
+    :param <str> client_id: The client ID for OAuth authentication.
+    :param <str> client_secret: The client secret for OAuth authentication.
+    :param <str> crt: The path to the certificate file for certificate
+        authentication.
+    :param <str> key: The path to the key file for certificate authentication.
+    :param <str> username: The username for certificate authentication.
+    :param <str> password: The password for certificate authentication.
+    :param <dict> proxy: The proxy settings for the API.
+    :param <dict> proxies: An alternative way to specify proxy settings.
+    :param <str> config_path: The path to the config file. If set to
+        None or "env", the class will attempt to load the config
+        file from the following environment variables:
+
+        For OAuth authentication:
+
+            - DQ_CLIENT_ID : your_client_id
+            - DQ_CLIENT_SECRET : your_client_secret
+
+        For certificate authentication:
+
+            - DQ_CRT : path_to_crt_file
+            - DQ_KEY : path_to_key_file
+            - DQ_USERNAME : your_username
+            - DQ_PASSWORD : your_password
+
+        For proxy settings:
+            - DQ_PROXY : proxy_json_string
+
+            (See https://requests.readthedocs.io/en/master/user/advanced/#proxies)
+    """
+
     def __init__(
         self,
-        config_path: Optional[str] = None,
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
         crt: Optional[str] = None,
@@ -390,30 +423,8 @@ class Config(object):
         password: Optional[str] = None,
         proxy: Optional[dict] = None,
         proxies: Optional[dict] = None,
+        config_path: Optional[str] = None,
     ):
-        """
-        Class for handling the configuration of the JPMaQS API.
-
-
-        :param <str> config_path: The path to the config file. If set to
-            None or "env", the class will attempt to load the config
-            file from the following environment variables:
-            For OAuth authentication:
-                - DQ_CLIENT_ID : your_client_id
-                - DQ_CLIENT_SECRET : your_client_secret
-
-            For certificate authentication:
-                - DQ_CRT : path_to_crt_file
-                - DQ_KEY : path_to_key_file
-                - DQ_USERNAME : your_username
-                - DQ_PASSWORD : your_password
-
-            For proxy settings:
-                - DQ_PROXY : proxy_json_string
-
-                (See https://requests.readthedocs.io/en/master/user/advanced/#proxies)
-        """
-
         if not isinstance(config_path, (str, type(None))):
             raise ValueError(
                 "Config file must be a string containing the path"
