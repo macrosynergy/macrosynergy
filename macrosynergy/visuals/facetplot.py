@@ -491,11 +491,10 @@ class FacetPlot(Plotter):
             for i, cid in enumerate(_cids):
                 for j, xcat in enumerate(_xcats):
                     tk: str = "_".join([cid, xcat])
-                    if tk in tickers_to_plot:
-                        plot_dict[i * len(_xcats) + j]: Dict[str, List[str]] = {
-                            "X": "real_date",
-                            "Y": [tk],
-                        }
+                    plot_dict[i * len(_xcats) + j]: Dict[str, List[str]] = {
+                        "X": "real_date",
+                        "Y": [tk],
+                    }
 
         if len(plot_dict) == 0:
             raise ValueError("Unable to resolve plot settings.")
@@ -532,10 +531,9 @@ class FacetPlot(Plotter):
             if title_yadjust is not None and title_yadjust != 1.0:
                 title_newline_adjust = abs(title_yadjust - 1.0)
             # count the number of newlines in the title
-            # num_newlines: int = title.count("\n")
-            title_height: float = title.count("\n") * title_newline_adjust
 
-            # re_adj[3] = re_adj[3] + fig_height / fig.get_window_extent().height
+            title_height: float = (title.count("\n") + 0.25) * title_newline_adjust
+
             re_adj[3] = (
                 re_adj[3] - title_height + fig_height / fig.get_window_extent().height
             )
@@ -553,12 +551,15 @@ class FacetPlot(Plotter):
                     "Only `real_date` is supported for the X axis."
                 )
 
+            is_empty_plot: bool = False
+
             for iy, y in enumerate(plt_dct["Y"]):
                 # split on the first underscore
                 cidx, xcatx = str(y).split("_", 1)
                 sel_bools: pd.Series = (self.df["cid"] == cidx) & (
                     self.df["xcat"] == xcatx
                 )
+                is_empty_plot = is_empty_plot and not sel_bools.any()
                 plot_func_args: Dict = {}
 
                 # lineplot
@@ -604,15 +605,22 @@ class FacetPlot(Plotter):
                         fontsize=axis_fontsize,
                     )
 
-            if ax_grid:
-                ax_i.grid(axis="both", linestyle="--", alpha=0.5)
-            if ax_hline is not None:
-                ax_i.axhline(ax_hline, color="black", linestyle="--")
-            if ax_vline is not None:
-                # ax_i.axvline(ax_vline, color="black", linestyle="--")
-                raise NotImplementedError(
-                    "Vertical axis lines are not supported at this time."
-                )
+            # if it's an empty plot, remove the axis labels and ticks
+            if is_empty_plot:
+                ax_i.set_xticklabels([])
+                ax_i.set_yticklabels([])
+                ax_i.set_xticks([])
+                ax_i.set_yticks([])
+            else:
+                if ax_grid:
+                    ax_i.grid(axis="both", linestyle="--", alpha=0.5)
+                if ax_hline is not None:
+                    ax_i.axhline(ax_hline, color="black", linestyle="--")
+                if ax_vline is not None:
+                    # ax_i.axvline(ax_vline, color="black", linestyle="--")
+                    raise NotImplementedError(
+                        "Vertical axis lines are not supported at this time."
+                    )
 
         # if there are more axes than ax_i, remove them
         for ax in ax_list[len(plot_dict) :]:
@@ -737,5 +745,4 @@ if __name__ == "__main__":
             show=True,
         )
 
-        # facet_size=(5, 4),
     print(f"Time taken: {time.time() - timer_start}")
