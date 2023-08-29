@@ -89,7 +89,7 @@ While certificate authentication does not require a lot of code, OAuth authentic
 The key to good error handling with context to this module is when and how to break. When a process breaks, it must include debug information such as nature of error and case-specific debug information.
 
 - Client ID/Certificate Username.
-- Request URL, Headers, and Response body (if available) for each request/
+- Request URL, Headers, and Response body (if available) for each request.
 - The number of retries attempted.
 - And of course, the error type and message.
 
