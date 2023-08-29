@@ -496,7 +496,6 @@ class FacetPlot(Plotter):
                     for x in ([_xcats, _cids][::flipper][0])
                 ]
 
-                tks: List[str] = sorted(tks)
                 if tks == [compare_series]:
                     continue
 
