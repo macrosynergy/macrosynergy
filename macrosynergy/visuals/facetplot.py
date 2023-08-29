@@ -251,10 +251,8 @@ class FacetPlot(Plotter):
         title_yadjust: Optional[Numeric] = None,
         # subplot axis arguments
         ax_grid: bool = False,
-        ax_hline: bool = True,
-        ax_hline_val: Numeric = 0.0,
-        ax_vline: bool = False,
-        ax_vline_val: Numeric = 0.0,
+        ax_hline: Optional[Numeric] = None,
+        ax_vline: Optional[str] = None,
         x_axis_label: Optional[str] = None,
         y_axis_label: Optional[str] = None,
         axis_fontsize: int = 12,
@@ -322,14 +320,11 @@ class FacetPlot(Plotter):
         :param <float> title_yadjust: the y-adjustment of the title. Default is `None`.
         :param <bool> ax_grid: whether to show the grid on the axes, applied to all plots.
             Default is `True`.
-        :param <bool> ax_hline: whether to show a horizontal line on the axes, applied to
-            all plots. Default is `True`.
-        :param <float> ax_hline_val: the value of the horizontal line on the axes, applied
-            to all plots. Default is `0.0`.
-        :param <bool> ax_vline: whether to show a vertical line on the axes, applied to
-            all plots. Default is `False`.
-        :param <float> ax_vline_val: the value of the vertical line on the axes, applied
-            to all plots. Default is `0.0`.
+        :param <Numeric> ax_hline: the value of the horizontal line on the axes, applied
+            to all plots. Default is `None`, meaning no horizontal line will be shown.
+        :param <str> ax_vline: the value of the vertical line on the axes, applied
+            to all plots. The value must be a ISO-8601 formatted date-string.
+            Default is `None`, meaning no vertical line will be shown.
         :param <str> x_axis_label: the label for the x-axis. Default is `None`.
         :param <str> y_axis_label: the label for the y-axis. Default is `None`.
         :param <int> axis_fontsize: the font size of the axis labels. Default is `12`.
@@ -596,10 +591,13 @@ class FacetPlot(Plotter):
 
             if ax_grid:
                 ax_i.grid(axis="both", linestyle="--", alpha=0.5)
-            if ax_hline:
-                ax_i.axhline(ax_hline_val, color="black", linestyle="--")
-            if ax_vline:
-                ax_i.axvline(ax_vline_val, color="black", linestyle="--")
+            if ax_hline is not None:
+                ax_i.axhline(ax_hline, color="black", linestyle="--")
+            if ax_vline is not None:
+                # ax_i.axvline(ax_vline, color="black", linestyle="--")
+                raise NotImplementedError(
+                    "Vertical axis lines are not supported at this time."
+                )
             if x_axis_label is not None:
                 ax_i.set_xlabel(x_axis_label, fontsize=axis_fontsize)
             if y_axis_label is not None:
@@ -707,6 +705,7 @@ if __name__ == "__main__":
             xcat_grid=True,
             title="Test Title with a very long title to see how it looks, \n and a new line - why not?",
             # save_to_file="test_0.png",
+            ax_hline=75,
             show=True,
         )
         fp.lineplot(
