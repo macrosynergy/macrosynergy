@@ -82,7 +82,7 @@ The `DataQueryInterface` class makes use of `concurrent.futures` to allow for co
 
 ### Authentication
 
-While certificate authentication does not require a lot of code, OAuth authentication is a bit more involved. The `macrosynergy.download.dataquery.OAuth` class manages the OAuth token and authentication. To allow for a "neat" interface between the two types of authentication, the `DataQueryInterface` class uses one of `OAuth` or `CertAuth` classes \as an attribute. This allows for it to have a single method to insert authentication information in the request.
+While certificate authentication does not require a lot of code, OAuth authentication is a bit more involved. The `macrosynergy.download.dataquery.OAuth` class manages the OAuth token and authentication. To allow for a "neat" interface between the two types of authentication, the `DataQueryInterface` class uses one of `OAuth` or `CertAuth` classes as an attribute. This allows for it to have a single method to insert authentication information in the request.
 
 ### Retries and Error handling
 
