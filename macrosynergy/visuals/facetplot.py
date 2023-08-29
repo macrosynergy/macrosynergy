@@ -179,7 +179,6 @@ class FacetPlot(Plotter):
         figsize: Tuple[Numeric, Numeric] = (16.0, 9.0),
         ncols: int = 3,
         attempt_square: bool = False,
-        grid_dim: Optional[Tuple[int, int]] = None,
         # xcats_mean: bool = False,
         # title arguments
         title: Optional[str] = None,
@@ -220,22 +219,13 @@ class FacetPlot(Plotter):
         *args,
         **kwargs,
     ):
-        ...
-
         if metric is None:
             metric: str = self.metrics[0]
 
         _cids: List[str] = self.cids if cids is None else cids
         _xcats: List[str] = self.xcats if xcats is None else xcats
 
-        # if the facet size is not none, re-calc the figsize
-        if facet_size is not None:
-            figsize: Tuple[float, float] = (
-                grid_dim[0] * facet_size[0] * 1.5,
-                grid_dim[1] * facet_size[1] * 1.5,
-            )
-            # mul by 1.5 to account for the space taken up annotations, etc.
-            # fig.tight_layout() cleans this up
+        ...
 
     def lineplot(
         self,
@@ -310,10 +300,6 @@ class FacetPlot(Plotter):
             "column" would contain plots for the same `xcat`. Therefore, this mode does
             not respect the `ncols` or `attempt_square` arguments.
             NB: `facet_titles` and `legend` are overridden in this mode.
-        :param <Tuple[int, int]> grid_dim: a tuple of integers specifying the number of
-            rows and columns in the facet grid. Default is `None`, meaning the grid
-            dimensions will be inferred from the `ncols`/`attempt_square`/`cid_xcat_grid`
-            arguments.
         :param <bool> cids_mean: Used with `cid_grid` with a single `xcat`. If `True`,
             the mean of all `cids` for that `xcat` will be plotted on all charts. If `False`,
             only the specified `cids` will be plotted. Default is `False`.
@@ -405,20 +391,19 @@ class FacetPlot(Plotter):
             (self.df["cid"] + "_" + self.df["xcat"]).unique().tolist()
         )
 
-        if grid_dim is None:
-            _tk: List[str] = tickers_to_plot.copy()
-            if compare_series:
-                _tk.remove(compare_series)
-            grid_dim: Tuple[int, int] = self._get_grid_dim(
-                tickers=_tk,
-                ncols=ncols,
-                attempt_square=attempt_square,
-                cid_grid=cid_grid,
-                xcat_grid=xcat_grid,
-                cid_xcat_grid=cid_xcat_grid,
-                _cids=cids,
-                _xcats=xcats,
-            )
+        _tk: List[str] = tickers_to_plot.copy()
+        if compare_series:
+            _tk.remove(compare_series)
+        grid_dim: Tuple[int, int] = self._get_grid_dim(
+            tickers=_tk,
+            ncols=ncols,
+            attempt_square=attempt_square,
+            cid_grid=cid_grid,
+            xcat_grid=xcat_grid,
+            cid_xcat_grid=cid_xcat_grid,
+            _cids=cids,
+            _xcats=xcats,
+        )
 
         # if the facet size is not none, re-calc the figsize
         if facet_size is not None:
