@@ -485,10 +485,6 @@ class FacetPlot(Plotter):
                 }
 
         if cid_xcat_grid:
-            if facet_titles is None:
-                facet_titles: List[str] = [
-                    f"{cid}_{xcat}" for cid in _cids for xcat in _xcats
-                ]
             # NB : legend goes away in cid_xcat_grid
             legend: bool = False
 
@@ -581,13 +577,32 @@ class FacetPlot(Plotter):
                     **kwargs,
                 )
 
-            if facet_titles:
-                ax_i.set_title(
-                    facet_titles[i],
-                    fontsize=facet_title_fontsize,
-                    x=facet_title_xadjust,
-                    y=facet_title_yadjust,
-                )
+            if not cid_xcat_grid:
+                if facet_titles:
+                    ax_i.set_title(
+                        facet_titles[i],
+                        fontsize=facet_title_fontsize,
+                        x=facet_title_xadjust,
+                        y=facet_title_yadjust,
+                    )
+                if x_axis_label is not None:
+                    ax_i.set_xlabel(x_axis_label, fontsize=axis_fontsize)
+                if y_axis_label is not None:
+                    ax_i.set_ylabel(y_axis_label, fontsize=axis_fontsize)
+
+            else:
+                if i < grid_dim[0]:
+                    ax_i.set_title(
+                        plt_dct["Y"][0].split("_", 1)[1],
+                        fontsize=axis_fontsize,
+                    )
+
+                if i % grid_dim[0] == 0:
+                    # this is the left column, and it gets a axis ylabel of the cid
+                    ax_i.set_ylabel(
+                        plt_dct["Y"][0].split("_", 1)[0],
+                        fontsize=axis_fontsize,
+                    )
 
             if ax_grid:
                 ax_i.grid(axis="both", linestyle="--", alpha=0.5)
@@ -598,10 +613,6 @@ class FacetPlot(Plotter):
                 raise NotImplementedError(
                     "Vertical axis lines are not supported at this time."
                 )
-            if x_axis_label is not None:
-                ax_i.set_xlabel(x_axis_label, fontsize=axis_fontsize)
-            if y_axis_label is not None:
-                ax_i.set_ylabel(y_axis_label, fontsize=axis_fontsize)
 
         # if there are more axes than ax_i, remove them
         for ax in ax_list[len(plot_dict) :]:
@@ -699,31 +710,30 @@ if __name__ == "__main__":
     with FacetPlot(
         df,
     ) as fp:
-        fp.lineplot(
-            cids=cids_A,
-            share_x=True,
-            xcat_grid=True,
-            title="Test Title with a very long title to see how it looks, \n and a new line - why not?",
-            # save_to_file="test_0.png",
-            ax_hline=75,
-            show=True,
-        )
-        fp.lineplot(
-            cids=cids_B,
-            xcats=xcats_A,
-            attempt_square=True,
-            share_y=True,
-            cid_grid=True,
-            title="Another test title",
-            # save_to_file="test_1.png",
-            show=True,
-        )
+        # fp.lineplot(
+        #     cids=cids_A,
+        #     share_x=True,
+        #     xcat_grid=True,
+        #     title="Test Title with a very long title to see how it looks, \n and a new line - why not?",
+        #     # save_to_file="test_0.png",
+        #     ax_hline=75,
+        #     show=True,
+        # )
+        # fp.lineplot(
+        #     cids=cids_B,
+        #     xcats=xcats_A,
+        #     attempt_square=True,
+        #     share_y=True,
+        #     cid_grid=True,
+        #     title="Another test title",
+        #     # save_to_file="test_1.png",
+        #     show=True,
+        # )
         fp.lineplot(
             cids=cids_C,
             xcats=xcats_D,
             cid_xcat_grid=True,
             title="Another test title",
-            # save_to_file="test_2.png",
             show=True,
         )
 
