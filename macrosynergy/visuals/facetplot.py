@@ -323,7 +323,7 @@ class FacetPlot(Plotter):
         :param <bool> ax_grid: whether to show the grid on the axes, applied to all plots.
             Default is `True`.
         :param <bool> ax_hline: whether to show a horizontal line on the axes, applied to
-            all plots. Default is `False`.
+            all plots. Default is `True`.
         :param <float> ax_hline_val: the value of the horizontal line on the axes, applied
             to all plots. Default is `0.0`.
         :param <bool> ax_vline: whether to show a vertical line on the axes, applied to
