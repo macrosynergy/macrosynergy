@@ -230,8 +230,15 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
                     np.concatenate([train_splits[i - 1], train_splits_basic[i]])
                 )
         else:
-            # n_splits specified and n_split_method is rolling
-            train_splits: List[np.array] = train_splits_basic
+            # n_splits specified and n_split_method is rolling.
+            # This should ultimately work in the sam eway as KFold but preserving time. 
+            train_splits: List[np.array] = []
+            for i in range(len(train_splits_basic)):
+                concatenated_array = np.array([], dtype=np.datetime64)
+                for j in range(len(train_splits_basic)):
+                    if i != j:
+                        concatenated_array = np.concatenate((concatenated_array, train_splits_basic[j]))
+                train_splits.append(concatenated_array)
 
         return train_splits
     
@@ -254,26 +261,31 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
                 )
         else:
             # then n_splits set
-            for split_idx in range(self.n_splits):
-                if split_idx != self.n_splits - 1:
+            if self.n_split_method == "expanding":
+                for split_idx in range(self.n_splits):
+                    if split_idx != self.n_splits - 1:
+                        self.train_indices.append(
+                            Xy.index[Xy["real_date"].isin(train_splits[split_idx])]
+                        )
+                        self.test_indices.append(
+                            Xy.index[Xy["real_date"].isin(train_splits_basic[split_idx+1])]
+                        )
+                    else:
+                        self.train_indices.append(
+                                Xy.index[Xy["real_date"].isin(train_splits[split_idx])]
+                        )
+                        if self.n_split_method == "expanding":
+                            self.test_indices.append(
+                                Xy.index[Xy["real_date"].isin(self.unique_times[np.where(self.unique_times == np.max(train_splits[split_idx]))[0][0] + 1:])])
+            else:
+                # rolling 
+                for split_idx in range(self.n_splits):
                     self.train_indices.append(
                         Xy.index[Xy["real_date"].isin(train_splits[split_idx])]
                     )
                     self.test_indices.append(
-                        Xy.index[Xy["real_date"].isin(train_splits_basic[split_idx+1])]
+                        Xy.index[~Xy["real_date"].isin(train_splits[split_idx])]
                     )
-                else:
-                    self.train_indices.append(
-                            Xy.index[Xy["real_date"].isin(train_splits[split_idx])]
-                    )
-                    if self.n_split_method == "expanding":
-                        self.test_indices.append(
-                            Xy.index[Xy["real_date"].isin(self.unique_times[np.where(self.unique_times == np.max(train_splits[split_idx]))[0][0] + 1:])])
-                    else:
-                        # rolling
-                        self.test_indices.append(
-                            Xy.index[Xy["real_date"].isin(train_splits_basic[0])]
-                        )
 
         return zip(self.train_indices, self.test_indices)
     
@@ -311,29 +323,7 @@ if __name__ == "__main__":
     xcats = ["XR", "CRY", "GROWTH", "INFL"]
     cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
 
-    """ Example 1: Balanced panel """
-
-    df_cids = pd.DataFrame(
-        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
-    )
-    df_cids.loc["AUD"] = ["2000-01-01", "2020-12-31", 0, 1]
-    df_cids.loc["CAD"] = ["2000-01-01", "2020-12-31", 0, 1]
-    df_cids.loc["GBP"] = ["2000-01-01", "2020-12-31", 0, 1]
-    df_cids.loc["USD"] = ["2000-01-01", "2020-12-31", 0, 1]
-
-    df_xcats = pd.DataFrame(index=xcats, columns=cols)
-    df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-    df_xcats.loc["CRY"] = ["2000-01-01", "2020-12-31", 1, 2, 0.95, 1]
-    df_xcats.loc["GROWTH"] = ["2000-01-01", "2020-12-31", 1, 2, 0.9, 1]
-    df_xcats.loc["INFL"] = ["2000-01-01", "2020-12-31", 1, 2, 0.8, 0.5]
-
-    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-    dfd["grading"] = np.ones(dfd.shape[0])
-    dfd = dfd.pivot(index=["cid", "real_date"], columns="xcat", values="value")
-    X = dfd.drop(columns=["XR"])
-    y = dfd["XR"]
-
-    """ Example 2: Unbalanced panel """
+    """ Example 1: Unbalanced panel """
 
     df_cids2 = pd.DataFrame(
         index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
@@ -418,103 +408,3 @@ if __name__ == "__main__":
         assert unique_dates_X2[np.where(unique_dates_X2 == train_dates[-1])[0][0] + 1] == test_dates, "There is a split where the last training date does not precede the test date."
 
     print("The test splits all contain a single date and immediate proceed the last training date. Good.")
-    """print("--------------------")
-    print("--------------------")
-    print("Balanced panel: n_splits = 4, test_size = 21 days")
-    print("--------------------")
-    print("--------------------\n")
-    splitter = PanelTimeSeriesSplit(n_splits=4)
-    print(f"Number of splits: {splitter.get_n_splits(X,y)}")
-    for idx, (train_idxs, test_idxs) in enumerate(splitter.split(X, y)):
-        train_i = pd.concat([X.iloc[train_idxs], y.iloc[train_idxs]], axis=1)
-        test_i = pd.concat([X.iloc[test_idxs], y.iloc[test_idxs]], axis=1)
-        print("--------------------")
-        print(f"Split {idx+1}:")
-        print("--------------------")
-        print(f"Concatenated training set at iteration {idx+1}")
-        print(train_i)
-        print(f"Concatenated test set at iteration {idx+1}")
-        print(test_i)
-
-    # # b) n_splits = 4, test_size = default (21), rolling window: most recent 21 days
-    # print("--------------------")
-    # print("--------------------")
-    # print(
-    #     "Balanced panel: n_splits = 4, test_size = 21 days, rolling window: most recent quarter (21 x 3 days roughly)"
-    # )
-    # print("--------------------")
-    # print("--------------------\n")
-    # splitter = PanelTimeSeriesSplit(n_splits=4, max_periods=21 * 3)
-    # print(f"Number of splits: {splitter.get_n_splits(X,y)}")
-    # for idx, (train_idxs, test_idxs) in enumerate(splitter.split(X, y)):
-    #     train_i = pd.concat([X.iloc[train_idxs], y.iloc[train_idxs]], axis=1)
-    #     test_i = pd.concat([X.iloc[test_idxs], y.iloc[test_idxs]], axis=1)
-    #     # print("--------------------")
-    #     print(f"Split {idx+1}:")
-    #     # print("--------------------")
-    #     print(f"Concatenated training set at iteration {idx+1}")
-    #     print(train_i)
-    #     print(f"Concatenated test set at iteration {idx+1}")
-    #     print(test_i)
-
-    # c) train_intervals = 1, test_size = 1, min_periods = 21 , min_cids = 4
-    # This configuration means that on each iteration, the newest information state is added to the training set
-    # and only the next date is in the test set.
-    print("--------------------")
-    print("--------------------")
-    print(
-        "Balanced panel: train_intervals = 1 day, test_size = 1 day, min_periods = 21, min_cids = 4"
-    )
-    print("--------------------")
-    print("--------------------\n")
-    # Since this is a balanced panel, the first set should be the first 21 dates in the whole dataframe
-    X_reset = X.reset_index()
-    unique_dates_X = np.unique(X_reset.real_date)
-
-    splitter = PanelTimeSeriesSplit(train_intervals=1, test_size=1, min_periods = 21, min_cids=4)
-    print(f"Number of splits: {splitter.get_n_splits(X,y)}")
-
-    for idx, (train_idxs, test_idxs) in enumerate(splitter.split(X, y)):
-        train_dates = np.unique(X_reset.real_date.iloc[train_idxs])
-        test_dates = np.unique(X_reset.real_date.iloc[test_idxs])
-        if idx == 0:
-            assert (train_dates == unique_dates_X[:21]).all(), "The dates in the first training set aren't equal to the first 21 dates in X"
-
-        # check that there is only a single date in the test set
-        assert len(test_dates) == 1, "There are multiple test dates."
-
-        # check that the last training date is immediately before the test date
-        assert unique_dates_X[np.where(unique_dates_X == train_dates[-1])[0][0] + 1] == test_dates, "There is a split where the last training date does not precede the test date."
-
-    print("The first training split comprises the first 21 days of the original input dataframe. Good.")
-    print("The test splits all contain a single date and immediate proceed the last training date. Good.")
-
-    # d) train_intervals = 21, test_size = 5, max_periods = 21*3, min_periods = 21 , min_cids = 3
-    # This configuration means that on each iteration, the newest information state is added to the training set 
-    # and only the next date is in the test set. 
-    print("--------------------")
-    print("--------------------")
-    print(
-        "Balanced panel: train_intervals = 1 month, test_size = 5 days, max_periods = 1 quarter, min_periods = 21, min_cids = 3"
-    )
-    print("--------------------")
-    print("--------------------\n")
-    splitter = PanelTimeSeriesSplit(train_intervals=21, test_size=5, max_periods=21*3, min_periods = 21, min_cids=3)
-    print(f"Number of splits: {splitter.get_n_splits(X,y)}")
-
-    for idx, (train_idxs, test_idxs) in enumerate(splitter.split(X, y)):
-        train_dates = np.unique(X_reset.real_date.iloc[train_idxs])
-        test_dates = np.unique(X_reset.real_date.iloc[test_idxs])
-        if idx == 0:
-            assert (train_dates == unique_dates_X[:21]).all(), "The dates in the first training set aren't equal to the first 21 dates in X"
-
-        # check that there are only five unique dates in the test set
-        assert len(test_dates) == 5, "There is a test set with unique dates different to five in it."
-
-        # check that the last training date is immediately before the test date
-        assert unique_dates_X[np.where(unique_dates_X == train_dates[-1])[0][0] + 1] == test_dates[0], "There is a split where the last training date does not immediately precede the test date."
-
-        # check that the number of unique dates in each training split does not exceed a quarter. 
-        assert len(train_dates) <= 21*3, "There exists a training split with samples from before the previous quarter."
-
-    # TODO: add cases for an unbalanced panel now."""
