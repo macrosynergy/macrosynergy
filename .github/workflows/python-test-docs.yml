@@ -20,5 +20,5 @@ jobs:
       - name: Test jupyterbook build of documentation
         run: |
           pip install -r docs/requirements.txt
-          bash docs/build.sh
+          bash docs/scripts/build.sh
 
