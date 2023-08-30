@@ -677,8 +677,6 @@ if __name__ == "__main__":
 
     import time
 
-    print("From same object:")
-    timer_start: float = time.time()
 
     cids_A: List[str] = ["AUD", "CAD", "EUR", "GBP", "USD"]
     cids_B: List[str] = ["CHF", "INR", "JPY", "NOK", "NZD", "SEK"]
@@ -714,29 +712,41 @@ if __name__ == "__main__":
         cids=all_cids,
         xcats=all_xcats,
     )
+    # remove data for USD_FXXR_NSA and CHF _EQXR_NSA and _FXXR_NSA
+    df: pd.DataFrame = df[
+        ~((df["cid"] == "USD") & (df["xcat"] == "FXXR_NSA"))
+    ].reset_index(drop=True)
+    df: pd.DataFrame = df[
+        ~((df["cid"] == "CHF") & (df["xcat"].isin(["EQXR_NSA", "FXXR_NSA"])))
+    ].reset_index(drop=True)
+    df: pd.DataFrame = df[
+        ~((df["cid"] == "NOK") & (df["xcat"] == "FXUNTRADABLE_NSA"))
+    ].reset_index(drop=True)
+    
+    timer_start: float = time.time()
 
     with FacetPlot(
         df,
     ) as fp:
-        # fp.lineplot(
-        #     cids=cids_A,
-        #     share_x=True,
-        #     xcat_grid=True,
-        #     title="Test Title with a very long title to see how it looks, \n and a new line - why not?",
-        #     # save_to_file="test_0.png",
-        #     ax_hline=75,
-        #     show=True,
-        # )
-        # fp.lineplot(
-        #     cids=cids_B,
-        #     xcats=xcats_A,
-        #     attempt_square=True,
-        #     share_y=True,
-        #     cid_grid=True,
-        #     title="Another test title",
-        #     # save_to_file="test_1.png",
-        #     show=True,
-        # )
+        fp.lineplot(
+            cids=cids_A,
+            share_x=True,
+            xcat_grid=True,
+            title="Test Title with a very long title to see how it looks, \n and a new line - why not?",
+            # save_to_file="test_0.png",
+            ax_hline=75,
+            show=True,
+        )
+        fp.lineplot(
+            cids=cids_B,
+            xcats=xcats_A,
+            attempt_square=True,
+            share_y=True,
+            cid_grid=True,
+            title="Another test title",
+            # save_to_file="test_1.png",
+            show=True,
+        )
         fp.lineplot(
             cids=cids_C,
             xcats=xcats_D,
