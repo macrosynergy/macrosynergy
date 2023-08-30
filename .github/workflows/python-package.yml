@@ -32,4 +32,4 @@ jobs:
     - name: Test with pytest
       run: |
         # Options: --ignore=tests/specific.py --ignore-glob=tests/ignore-pattern
-        pytest -rEf tests/unit/ --cov macrosynergy -p no:warnings --verbose
+        pytest ./tests/unit/
