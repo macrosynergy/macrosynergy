@@ -135,8 +135,9 @@ exclude = '''
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "-rEf -p"
-testpaths = ['tests/unit/']
+addopts = "-rEf --cov=macrosynergy --cov-report=term-missing --cov-fail-under 75"
+rootdir = "."
+testpaths = ['./tests/unit/']
 
 [tool.coverage]
 source = "macrosynergy"
