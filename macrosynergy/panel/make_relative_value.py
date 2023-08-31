@@ -9,8 +9,14 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 import warnings
 
-def _prepare_basket(df: pd.DataFrame, xcat: str, basket: List[str],
-                    cids_avl: List[str], complete_cross: bool):
+
+def _prepare_basket(
+    df: pd.DataFrame,
+    xcat: str,
+    basket: List[str],
+    cids_avl: List[str],
+    complete_cross: bool,
+):
     """
     Categories can be defined over different cross-sections. Will determine the
     respective basket given the available cross-sections for the respective category.
@@ -32,28 +38,41 @@ def _prepare_basket(df: pd.DataFrame, xcat: str, basket: List[str],
     condition = len(cids_used) < len(basket)
     if condition and complete_cross:
         cids_used = []
-        err_str: str = (f"The category, {xcat}, is missing {cids_miss} which are included "
-              f"in the basket {basket}. Therefore, the category will be excluded "
-              f"from the returned DataFrame.")
+        err_str: str = (
+            f"The category, {xcat}, is missing {cids_miss} which are included "
+            f"in the basket {basket}. Therefore, the category will be excluded "
+            f"from the returned DataFrame."
+        )
         print(err_str)
         warnings.warn(err_str, UserWarning)
 
     elif condition:
-        err_str: str = (f"The category, {xcat}, is missing {cids_miss} from the requested "
-              f"basket. The new basket will be {cids_used}.")
+        err_str: str = (
+            f"The category, {xcat}, is missing {cids_miss} from the requested "
+            f"basket. The new basket will be {cids_used}."
+        )
         print(err_str)
         warnings.warn(err_str, UserWarning)
 
     # Reduce the DataFrame to the specified basket given the available cross-sections.
-    dfb = df[df['cid'].isin(cids_used)]
+    dfb = df[df["cid"].isin(cids_used)]
 
     return dfb, cids_used
 
-def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
-                        start: str = None, end: str = None, blacklist: dict = None,
-                        basket: List[str] = None, complete_cross: bool = False,
-                        rel_meth: str = 'subtract', rel_xcats: List[str] = None,
-                        postfix: str = 'R'):
+
+def make_relative_value(
+    df: pd.DataFrame,
+    xcats: List[str],
+    cids: List[str] = None,
+    start: str = None,
+    end: str = None,
+    blacklist: dict = None,
+    basket: List[str] = None,
+    complete_cross: bool = False,
+    rel_meth: str = "subtract",
+    rel_xcats: List[str] = None,
+    postfix: str = "R",
+):
     """
     Returns panel of relative values versus an average of cross-sections.
 
@@ -104,8 +123,10 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
     assert rel_meth in ["subtract", "divide"], "rel_meth must be 'subtract' or 'divide'"
 
-    xcat_error = f"List of categories or single single category string expected. " \
-                 f"Received {type(xcats)}."
+    xcat_error = (
+        f"List of categories or single single category string expected. "
+        f"Received {type(xcats)}."
+    )
     assert isinstance(xcats, (list, str)), xcat_error
 
     if isinstance(xcats, str):
@@ -123,134 +144,156 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
 
         rel_xcats_dict = dict(zip(xcats, rel_xcats))
 
-    col_names = ['cid', 'xcat', 'real_date', 'value']
-    # Host DataFrame.
-    df_out = pd.DataFrame(columns=col_names)
+    col_names = ["cid", "xcat", "real_date", "value"]
 
     # Intersect parameter set to False. Therefore, cross-sections across the categories
     # can vary.
-    all_cids : List[str] = []
+    all_cids: List[str] = []
     for cvar in [cids, basket]:
         if cvar is not None:
             all_cids.extend(cvar)
     all_cids = list(set(all_cids))
     if len(all_cids) < 1:
         all_cids = None
-    dfx = reduce_df(
-        df, xcats, all_cids, start, end, blacklist, out_all=False
-    )
+    dfx = reduce_df(df, xcats, all_cids, start, end, blacklist, out_all=False)
 
     if cids is None:
         # All cross-sections available - union across categories.
-        cids = list(dfx['cid'].unique())
+        cids = list(dfx["cid"].unique())
 
     if basket is not None:
         # Basket must be a subset of the available cross-sections.
-        miss : Set = set(basket) - set(df['cid'])
-        error_basket = f"The basket elements {miss} are not specified or " \
-                       f"are not available."
+        miss: Set = set(basket) - set(df["cid"])
+        error_basket = (
+            f"The basket elements {miss} are not specified or " f"are not available."
+        )
         assert len(miss) == 0, error_basket
     else:
         # Default basket is all available cross-sections.
         basket = cids
 
-    available_xcats = dfx['xcat'].unique()
+    available_xcats = dfx["xcat"].unique()
 
     if len(cids) == len(basket) == 1:
-        run_error = "Computing the relative value on a single cross-section using a " \
-                    "basket consisting exclusively of the aforementioned cross-section " \
-                    "is an incorrect usage of the function."
+        run_error = (
+            "Computing the relative value on a single cross-section using a "
+            "basket consisting exclusively of the aforementioned cross-section "
+            "is an incorrect usage of the function."
+        )
         raise RuntimeError(run_error)
 
-    storage = [df_out]
+    df_list: List[pd.DataFrame] = []
     # Categories can be defined over a different set of cross-sections.
     for i, xcat in enumerate(available_xcats):
+        df_xcat = dfx[dfx["xcat"] == xcat]
+        available_cids = df_xcat["cid"].unique()
 
-        df_xcat = dfx[dfx['xcat'] == xcat]
-        available_cids = df_xcat['cid'].unique()
-
-        dfx_xcat = df_xcat[['cid', 'real_date', 'value']]
+        dfx_xcat: pd.DataFrame = df_xcat[["cid", "real_date", "value"]]
 
         dfb, basket = _prepare_basket(
-            df=dfx_xcat, xcat=xcat, basket=basket, cids_avl=available_cids,
-            complete_cross=complete_cross
+            df=dfx_xcat,
+            xcat=xcat,
+            basket=basket,
+            cids_avl=available_cids,
+            complete_cross=complete_cross,
         )
 
         if len(basket) > 1:
             # Mean of (available) cross-sections at each point in time. If all
             # cross-sections defined in the "basket" data structure are not available for
             # a specific date, compute the mean over the available subset.
-            bm = dfb.groupby(by='real_date').mean(numeric_only=True)
+            bm = dfb.groupby(by="real_date").mean(numeric_only=True)
         elif len(basket) == 1:
             # Relative value is mapped against a single cross-section.
-            bm = dfb.set_index('real_date')['value']
+            bm = dfb.set_index("real_date")["value"]
         else:
             # Category is not defined over all cross-sections in the basket and
             # 'complete_cross' equals True.
             continue
 
-        dfw = dfx_xcat.pivot(index='real_date', columns='cid', values='value')
+        dfw: pd.DataFrame = dfx_xcat.pivot(
+            index="real_date", columns="cid", values="value"
+        )
 
         # Computing the relative value is only justified if the number of cross-sections,
         # for the respective date, exceeds one. Therefore, if any rows have only a single
         # cross-section, remove the dates from the DataFrame.
         dfw = dfw[dfw.count(axis=1) > 1]
         # The time-index will be delimited by the respective category.
-        dfa = pd.merge(dfw, bm, how='left', left_index=True, right_index=True)
-
-        if rel_meth == 'subtract':
-            dfo = dfa[dfw.columns].sub(dfa.loc[:, 'value'], axis=0)
+        dfa = pd.merge(dfw, bm, how="left", left_index=True, right_index=True)
+        dfo: pd.DataFrame
+        if rel_meth == "subtract":
+            dfo = dfa[dfw.columns].sub(dfa.loc[:, "value"], axis=0)
         else:
-            dfo = dfa[dfw.columns].div(dfa.loc[:, 'value'], axis=0)
+            dfo = dfa[dfw.columns].div(dfa.loc[:, "value"], axis=0)
 
         # Re-stack.
-        df_new = dfo.stack().reset_index().rename(
-            {'level_1': 'cid', 0: 'value'}, axis=1
+        df_new = (
+            dfo.stack().reset_index().rename({"level_1": "cid", 0: "value"}, axis=1)
         )
 
         if rel_xcats is None:
-            df_new['xcat'] = xcat + postfix
+            df_new["xcat"] = xcat + postfix
         else:
-            df_new['xcat'] = rel_xcats_dict[xcat]
+            df_new["xcat"] = rel_xcats_dict[xcat]
 
-        storage.append(df_new.sort_values(['cid', 'real_date'])[col_names])
+        if (
+            df_new.sort_values(["cid", "real_date"])[col_names].isna().all().all()
+            or (len(df_new) == 0)
+            or df_new.empty
+        ):
+            continue
 
-    return pd.concat(storage).reset_index(drop=True)
+        df_list.append(df_new.sort_values(["cid", "real_date"])[col_names])
+
+    return pd.concat(df_list).reset_index(drop=True)
 
 
 if __name__ == "__main__":
-
     # Simulate DataFrame.
 
-    cids = ['AUD', 'CAD', 'GBP', 'NZD']
-    xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
-    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
-                                                'sd_mult'])
-    df_cids.loc['AUD'] = ['2000-01-01', '2020-12-31', 0.1, 1]
-    df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
-    df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
-    df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
+    cids = ["AUD", "CAD", "GBP", "NZD"]
+    xcats = ["XR", "CRY", "GROWTH", "INFL"]
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD"] = ["2000-01-01", "2020-12-31", 0.1, 1]
+    df_cids.loc["CAD"] = ["2001-01-01", "2020-11-30", 0, 1]
+    df_cids.loc["GBP"] = ["2002-01-01", "2020-11-30", 0, 2]
+    df_cids.loc["NZD"] = ["2002-01-01", "2020-09-30", -0.1, 2]
 
-    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
-                                                  'sd_mult', 'ar_coef', 'back_coef'])
-    df_xcats.loc['XR'] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
-    df_xcats.loc['CRY'] = ['2000-01-01', '2020-10-30', 1, 2, 0.95, 1]
-    df_xcats.loc['GROWTH'] = ['2001-01-01', '2020-10-30', 1, 2, 0.9, 1]
-    df_xcats.loc['INFL'] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
+    df_xcats = pd.DataFrame(
+        index=xcats,
+        columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+    )
+    df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY"] = ["2000-01-01", "2020-10-30", 1, 2, 0.95, 1]
+    df_xcats.loc["GROWTH"] = ["2001-01-01", "2020-10-30", 1, 2, 0.9, 1]
+    df_xcats.loc["INFL"] = ["2001-01-01", "2020-10-30", 1, 2, 0.8, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     # Simulate blacklist
-    black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
+    black = {"AUD": ["2000-01-01", "2003-12-31"], "GBP": ["2018-01-01", "2100-01-01"]}
 
     # Applications
     dfd_1 = make_relative_value(
-        dfd, xcats=["GROWTH", "INFL"], cids=None, blacklist=None, rel_meth='subtract',
-        rel_xcats=None, postfix='RV'
+        dfd,
+        xcats=["GROWTH", "INFL"],
+        cids=None,
+        blacklist=None,
+        rel_meth="subtract",
+        rel_xcats=None,
+        postfix="RV",
     )
 
     rel_xcats = ["GROWTH_sRV", "INFL_sRV"]
     dfd_1_black = make_relative_value(
-        dfd, xcats=["GROWTH", "INFL"], cids=None, blacklist=black, rel_meth='subtract',
-        rel_xcats=rel_xcats, postfix='RV'
+        dfd,
+        xcats=["GROWTH", "INFL"],
+        cids=None,
+        blacklist=black,
+        rel_meth="subtract",
+        rel_xcats=rel_xcats,
+        postfix="RV",
     )
