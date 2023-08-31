@@ -310,7 +310,7 @@ def process_directory(
     assert len(package_dir) == 1
     shutil.move(
         src=os.path.join(output_directory, readme),
-        dst=os.path.join(package_dir[0], readme),
+        dst=os.path.join(package_dir[0], "index.md"),
     )
 
     # first get all the subdirectories at any level
