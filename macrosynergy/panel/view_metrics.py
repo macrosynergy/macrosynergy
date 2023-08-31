@@ -188,14 +188,14 @@ if __name__ == "__main__":
     test_cids: List[str] = ["USD",]#"EUR", "GBP"]
     test_xcats: List[str] = ["FX", "IR"]
     dfE: pd.DataFrame = make_test_df(
-        cids=test_cids, xcats=test_xcats, prefer="sharp-hill"
+        cids=test_cids, xcats=test_xcats, style="sharp-hill"
     )
 
     dfM: pd.DataFrame = make_test_df(
-        cids=test_cids, xcats=test_xcats, prefer="four-bit-sine"
+        cids=test_cids, xcats=test_xcats, style="four-bit-sine"
     )
 
-    dfG: pd.DataFrame = make_test_df(cids=test_cids, xcats=test_xcats, prefer="sine")
+    dfG: pd.DataFrame = make_test_df(cids=test_cids, xcats=test_xcats, style="sine")
 
     dfE.rename(columns={"value": "eop_lag"}, inplace=True)
     dfM.rename(columns={"value": "mop_lag"}, inplace=True)
