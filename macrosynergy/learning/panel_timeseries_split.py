@@ -183,7 +183,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
             # calculating the number of splits ('self.n_splits') required to split these dates into distinct training intervals of length 'self.train_intervals' (where possible)
             # and finally splitting the mentioned dates into 'self.n_splits' splits (post the first split, determined by 'self.min_cids' and 'self.min_periods').
             unique_times_train: pd.arrays.DatetimeArray = self.unique_times[
-                np.where(self.unique_times == date_last_train)[0][0]
+                                        np.where(self.unique_times == date_last_train)[0][0]
                 + 1 : -self.test_size
             ]
             self.n_splits: int = int(
@@ -233,7 +233,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
             train_splits: List[np.array] = [
                 train_splits_basic[0]
                 if not self.max_periods
-                else train_splits_basic[0][-self.min_periods :]
+                else train_splits_basic[0][-self.max_periods :]
             ]
             for i in range(1, self.n_splits):
                 train_splits.append(
@@ -361,11 +361,22 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
         return iterator
 
-    def visualise_splits(self, X, y):
+    def visualise_splits(self, X: pd.DataFrame, y: pd.DataFrame) -> None:
+        """
+        Method to visualise the splits created according to the parameters specified in the constructor. 
+
+        :param <pd.DataFrame> X: Pandas dataframe of features/quantamental indicators,
+            multi-indexed by (cross-section, date). The dates must be in datetime format.
+            Otherwise the dataframe must be in wide format: each feature is a column.
+        :param <pd.DataFrame> y: Pandas dataframe of target variable, multi-indexed by
+            (cross-section, date). The dates must be in datetime format.
+
+        :return <None>
+        """
         plt.style.use("seaborn-whitegrid")
         Xy = pd.concat(
             [X, y], axis=1
-        ).dropna()  # remove dropna when splitter method fixed as per TODO #2
+        ).dropna()  # remove dropna when splitter method fixed as per TODO #3
         cross_sections = np.array(sorted(Xy.index.get_level_values(0).unique()))
         real_dates = np.array(sorted(Xy.index.get_level_values(1).unique()))
         splits = list(self.split(X, y))
@@ -471,7 +482,9 @@ if __name__ == "__main__":
     y2 = dfd2["XR"]
 
     # a) n_splits = 4, n_split_method = expanding
-    splitter = PanelTimeSeriesSplit(n_splits=4, n_split_method="expanding")
+    splitter = PanelTimeSeriesSplit(n_splits=5, n_split_method="expanding")
+    splitter.visualise_splits(X2, y2)
+    """splitter = PanelTimeSeriesSplit(n_splits=4, n_split_method="expanding")
     splitter.visualise_splits(X2, y2)
     # b) n_splits = 4, n_split_method = rolling
     splitter = PanelTimeSeriesSplit(n_splits=4, n_split_method="rolling")
@@ -492,8 +505,7 @@ if __name__ == "__main__":
     splitter.visualise_splits(X2, y2)
 
     """
-    TODO:
-    2. Fix max_periods bug for first split
+    """TODO:
     3. Return actual indices instead of the reset index indices
     4. Check that it works for blacklisted periods
     """
