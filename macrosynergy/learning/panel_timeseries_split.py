@@ -4,10 +4,12 @@ import logging
 import datetime
 from sklearn.model_selection import BaseCrossValidator
 from typing import Optional, List, Iterator, Tuple
+import matplotlib.pyplot as plt
+
 
 class PanelTimeSeriesSplit(BaseCrossValidator):
     """
-    Class for the production of paired training and test splits for panel data. Thus, it 
+    Class for the production of paired training and test splits for panel data. Thus, it
     can be used for sequential training, sequential validation and walk-forward validation
     over a panel.
 
@@ -62,7 +64,10 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
             test_size = None
             max_periods = None
             min_cids = None
-            assert n_split_method in ["expanding", "rolling"], "n_split_method must be either 'expanding' or 'rolling'."
+            assert n_split_method in [
+                "expanding",
+                "rolling",
+            ], "n_split_method must be either 'expanding' or 'rolling'."
 
         else:
             # Note for Ralph: the below is needed because the user could still (accidentally) set train_intervals, min_periods and min_cids to None even if n_splits is None.
@@ -109,10 +114,12 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         """
         if self.train_intervals:
             _, _, self.n_splits = self.determine_unique_time_splits(X, y)
-            
+
         return self.n_splits
 
-    def determine_unique_time_splits(self, X: pd.DataFrame, y: pd.DataFrame) -> Tuple[List[pd.arrays.DatetimeArray],pd.DataFrame,int]:
+    def determine_unique_time_splits(
+        self, X: pd.DataFrame, y: pd.DataFrame
+    ) -> Tuple[List[pd.arrays.DatetimeArray], pd.DataFrame, int]:
         """
         Helper method to determine the unique dates in each training split. This method is called by self.split().
         It further returns other variables needed for ensuing components of the split method.
@@ -122,7 +129,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         :param <pd.DataFrame> y: Pandas dataframe of target variable, multi-indexed by
             (cross-section, date). The dates must be in datetime format.
 
-        :return <Tuple[List[pd.arrays.DatetimeArray],pd.DataFrame,int]> (train_splits_basic, Xy, n_splits): 
+        :return <Tuple[List[pd.arrays.DatetimeArray],pd.DataFrame,int]> (train_splits_basic, Xy, n_splits):
             Tuple comprising the unique dates in each training split, the concatenated dataframe of X and y, and the number of splits.
         """
         self.logger.info("Sanity checks")
@@ -143,7 +150,9 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         # drops row, corresponding with a country & period, if either a feature or the target is missing. Resets index for efficiency later in the code.
         Xy = pd.concat([X, y], axis=1)
         Xy = Xy.dropna().reset_index()
-        self.unique_times: pd.arrays.DatetimeArray = Xy["real_date"].sort_values().unique()
+        self.unique_times: pd.arrays.DatetimeArray = (
+            Xy["real_date"].sort_values().unique()
+        )
         if self.min_periods is not None:
             assert self.min_periods <= len(
                 self.unique_times
@@ -169,23 +178,26 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
                 + self.min_periods
                 - 1
             ]
-            # (d) determine the unique dates in the training sets after the first. 
+            # (d) determine the unique dates in the training sets after the first.
             # This is done by collecting all dates in the panel after the last date in the first training set and before the last 'self.test_size' dates,
             # calculating the number of splits ('self.n_splits') required to split these dates into distinct training intervals of length 'self.train_intervals' (where possible)
             # and finally splitting the mentioned dates into 'self.n_splits' splits (post the first split, determined by 'self.min_cids' and 'self.min_periods').
             unique_times_train: pd.arrays.DatetimeArray = self.unique_times[
-                np.where(self.unique_times == date_last_train)[0][0] + 1 : -self.test_size
+                np.where(self.unique_times == date_last_train)[0][0]
+                + 1 : -self.test_size
             ]
             self.n_splits: int = int(
                 np.ceil(len(unique_times_train) / self.train_intervals)
             )
             train_splits_basic: List = np.array_split(unique_times_train, self.n_splits)
-            # (e) add the first training set to the list of training splits, so that the dates that constitute each training split are together. 
+            # (e) add the first training set to the list of training splits, so that the dates that constitute each training split are together.
             train_splits_basic.insert(
                 0,
                 pd.arrays.DatetimeArray(
                     np.array(
-                        sorted(Xy["real_date"][Xy["real_date"] <= date_last_train].unique()),
+                        sorted(
+                            Xy["real_date"][Xy["real_date"] <= date_last_train].unique()
+                        ),
                         dtype="datetime64[ns]",
                     )
                 ),
@@ -202,10 +214,12 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
             if self.n_split_method == "expanding":
                 del train_splits_basic[-1]
                 self.n_splits -= 1
-            
+
         return train_splits_basic, Xy, self.n_splits
-        
-    def adjust_time_splits(self, train_splits_basic: List[pd.arrays.DatetimeArray]) -> List[pd.arrays.DatetimeArray]:
+
+    def adjust_time_splits(
+        self, train_splits_basic: List[pd.arrays.DatetimeArray]
+    ) -> List[pd.arrays.DatetimeArray]:
         """
         Helper method for adjusting the training dates in each split. If aggregation is specified, through either neglecting to set max_periods or by setting n_splits_method="expanding".
         then the training dates in each split are concatenated to the previous split.
@@ -216,7 +230,11 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         :return <List[pd.arrays.DatetimeArray]> train_splits: list of numpy arrays of unique dates in each training split, adjusted for rolling or expanding windows.
         """
         if self.train_intervals:
-            train_splits: List[np.array] = [train_splits_basic[0] if not self.max_periods else train_splits_basic[0][-self.min_periods:]]
+            train_splits: List[np.array] = [
+                train_splits_basic[0]
+                if not self.max_periods
+                else train_splits_basic[0][-self.min_periods :]
+            ]
             for i in range(1, self.n_splits):
                 train_splits.append(
                     np.concatenate([train_splits[i - 1], train_splits_basic[i]])
@@ -231,18 +249,25 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
                 )
         else:
             # n_splits specified and n_split_method is rolling.
-            # This should ultimately work in the sam eway as KFold but preserving time. 
+            # This should ultimately work in the same way as KFold but preserving time.
             train_splits: List[np.array] = []
             for i in range(len(train_splits_basic)):
                 concatenated_array = np.array([], dtype=np.datetime64)
                 for j in range(len(train_splits_basic)):
                     if i != j:
-                        concatenated_array = np.concatenate((concatenated_array, train_splits_basic[j]))
+                        concatenated_array = np.concatenate(
+                            (concatenated_array, train_splits_basic[j])
+                        )
                 train_splits.append(concatenated_array)
 
         return train_splits
-    
-    def create_train_test_indices(self, train_splits: List[pd.arrays.DatetimeArray], train_splits_basic: List[pd.arrays.DatetimeArray], Xy: pd.DataFrame) -> Iterator[Tuple[int,int]]:
+
+    def create_train_test_indices(
+        self,
+        train_splits: List[pd.arrays.DatetimeArray],
+        train_splits_basic: List[pd.arrays.DatetimeArray],
+        Xy: pd.DataFrame,
+    ) -> Iterator[Tuple[int, int]]:
         """
         Helper method for creating training and test indices from the unique dates in each training split.
 
@@ -253,11 +278,18 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         """
         if self.train_intervals:
             for split in train_splits:
-                self.train_indices.append(
-                    Xy.index[Xy["real_date"].isin(split)]
-                )
+                self.train_indices.append(Xy.index[Xy["real_date"].isin(split)])
                 self.test_indices.append(
-                    Xy.index[Xy["real_date"].isin(self.unique_times[np.where(self.unique_times == np.max(split))[0][0] + 1:np.where(self.unique_times == np.max(split))[0][0] + 1 + self.test_size])]
+                    Xy.index[
+                        Xy["real_date"].isin(
+                            self.unique_times[
+                                np.where(self.unique_times == np.max(split))[0][0]
+                                + 1 : np.where(self.unique_times == np.max(split))[0][0]
+                                + 1
+                                + self.test_size
+                            ]
+                        )
+                    ]
                 )
         else:
             # then n_splits set
@@ -268,17 +300,30 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
                             Xy.index[Xy["real_date"].isin(train_splits[split_idx])]
                         )
                         self.test_indices.append(
-                            Xy.index[Xy["real_date"].isin(train_splits_basic[split_idx+1])]
+                            Xy.index[
+                                Xy["real_date"].isin(train_splits_basic[split_idx + 1])
+                            ]
                         )
                     else:
                         self.train_indices.append(
-                                Xy.index[Xy["real_date"].isin(train_splits[split_idx])]
+                            Xy.index[Xy["real_date"].isin(train_splits[split_idx])]
                         )
                         if self.n_split_method == "expanding":
                             self.test_indices.append(
-                                Xy.index[Xy["real_date"].isin(self.unique_times[np.where(self.unique_times == np.max(train_splits[split_idx]))[0][0] + 1:])])
+                                Xy.index[
+                                    Xy["real_date"].isin(
+                                        self.unique_times[
+                                            np.where(
+                                                self.unique_times
+                                                == np.max(train_splits[split_idx])
+                                            )[0][0]
+                                            + 1 :
+                                        ]
+                                    )
+                                ]
+                            )
             else:
-                # rolling 
+                # rolling
                 for split_idx in range(self.n_splits):
                     self.train_indices.append(
                         Xy.index[Xy["real_date"].isin(train_splits[split_idx])]
@@ -288,11 +333,11 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
                     )
 
         return zip(self.train_indices, self.test_indices)
-    
-    def split(self, X: pd.DataFrame, y: pd.DataFrame) -> Iterator[Tuple[int,int]]:
+
+    def split(self, X: pd.DataFrame, y: pd.DataFrame) -> Iterator[Tuple[int, int]]:
         """
         Method that determines pairs of training and test indices for a wide format Pandas (panel) dataframe, for use in
-        sequential training, validation or walk-forward validation over a panel. 
+        sequential training, validation or walk-forward validation over a panel.
 
         :param <pd.DataFrame> X: Pandas dataframe of features/quantamental indicators,
             multi-indexed by (cross-section, date). The dates must be in datetime format.
@@ -313,8 +358,88 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         # train_splits now comprises the unique dates in each training split. Thus, to return indices, we loop through each date split,
 
         iterator = self.create_train_test_indices(train_splits, train_splits_basic, Xy)
-        
+
         return iterator
+
+    def visualise_splits(self, X, y):
+        plt.style.use("seaborn-whitegrid")
+        Xy = pd.concat(
+            [X, y], axis=1
+        ).dropna()  # remove dropna when splitter method fixed as per TODO #2
+        cross_sections = np.array(sorted(Xy.index.get_level_values(0).unique()))
+        real_dates = np.array(sorted(Xy.index.get_level_values(1).unique()))
+        splits = list(self.split(X, y))
+
+        n_splits = self.n_splits if self.n_splits <= 5 else 5
+        split_idxs = (
+            [0, len(splits) // 4, len(splits) // 2, 3 * len(splits) // 4, -1]
+            if self.n_splits > 5
+            else [i for i in range(self.n_splits)]
+        )
+        split_titles = (
+            [
+                "Initial split",
+                "Quarter progress",
+                "Halfway progress",
+                "Three quarters progress",
+                "Final split",
+            ]
+            if self.n_splits > 5
+            else [f"Split {i+1}" for i in range(self.n_splits)]
+        )
+
+        fig, ax = plt.subplots(
+            nrows=len(Xy.index.get_level_values(0).unique()),
+            ncols=n_splits,
+            figsize=(20, 5),
+        )
+        for cs_idx, cs in enumerate(cross_sections):
+            for idx, split_idx in enumerate(split_idxs):
+                cs_train_dates = Xy.iloc[splits[split_idx][0]][
+                    Xy.iloc[splits[split_idx][0]].index.get_level_values(0) == cs
+                ].index.get_level_values(1)
+                cs_test_dates = Xy.iloc[splits[split_idx][1]][
+                    Xy.iloc[splits[split_idx][1]].index.get_level_values(0) == cs
+                ].index.get_level_values(1)
+                if len(cs_train_dates) > 0:
+                    ax[cs_idx, idx].broken_barh(
+                        [
+                            (
+                                cs_train_dates.min(),
+                                cs_train_dates.max() - cs_train_dates.min(),
+                            )
+                        ],
+                        (-0.4, 0.8),
+                        facecolors="royalblue",
+                        label="Train",
+                    )
+                    if cs_idx == 0:
+                        ax[cs_idx, idx].set_title(f"{split_titles[idx]}")
+                if len(cs_test_dates) > 0:
+                    ax[cs_idx, idx].broken_barh(
+                        [
+                            (
+                                cs_test_dates.min(),
+                                cs_test_dates.max() - cs_test_dates.min(),
+                            )
+                        ],
+                        (-0.4, 0.8),
+                        facecolors="lightcoral",
+                        label="Test",
+                    )
+                    if cs_idx == 0:
+                        ax[cs_idx, idx].set_title(f"{split_titles[idx]}")
+
+                ax[cs_idx, idx].set_xlim(real_dates.min(), real_dates.max())
+                ax[cs_idx, idx].set_yticks([0])
+                ax[cs_idx, idx].set_yticklabels([cs])
+
+        plt.suptitle(
+            f"Training and test set pairs, number of training sets={self.n_splits}"
+        )
+        plt.legend(frameon=True)
+        plt.tight_layout()
+        plt.show()
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate_quantamental_data import make_qdf
@@ -346,65 +471,29 @@ if __name__ == "__main__":
     y2 = dfd2["XR"]
 
     # a) n_splits = 4, n_split_method = expanding
-    print("--------------------")
-    print("--------------------")
-    print("Unbalanced panel: n_splits = 5, n_split_method = expanding")
-    print("--------------------")
-    print("--------------------\n")
-    splitter = PanelTimeSeriesSplit(n_splits=5, n_split_method="expanding")
-    for idx, (train_idxs, test_idxs) in enumerate(splitter.split(X2, y2)):
-        train_i = pd.concat([X2.iloc[train_idxs], y2.iloc[train_idxs]], axis=1)
-        test_i = pd.concat([X2.iloc[test_idxs], y2.iloc[test_idxs]], axis=1)
-        print("--------------------")
-        print(f"Split {idx+1}:")
-        print("--------------------")
-        print(f"Concatenated training set at iteration {idx+1}")
-        print(train_i)
-        print(f"Concatenated test set at iteration {idx+1}")
-        print(test_i)
-
+    splitter = PanelTimeSeriesSplit(n_splits=4, n_split_method="expanding")
+    splitter.visualise_splits(X2, y2)
     # b) n_splits = 4, n_split_method = rolling
-    print("--------------------")
-    print("--------------------")
-    print("Unbalanced panel: n_splits = 5, n_split_method = rolling")
-    print("--------------------")
-    print("--------------------\n")
-    splitter = PanelTimeSeriesSplit(n_splits=5, n_split_method="rolling")
-    for idx, (train_idxs, test_idxs) in enumerate(splitter.split(X2, y2)):
-        train_i = pd.concat([X2.iloc[train_idxs], y2.iloc[train_idxs]], axis=1)
-        test_i = pd.concat([X2.iloc[test_idxs], y2.iloc[test_idxs]], axis=1)
-        print("--------------------")
-        print(f"Split {idx+1}:")
-        print("--------------------")
-        print(f"Concatenated training set at iteration {idx+1}")
-        print(train_i)
-        print(f"Concatenated test set at iteration {idx+1}")
-        print(test_i)
-
-    # c) train_intervals = 1, test_size = 1, min_periods = 21 , min_cids = 4
-    # This configuration means that on each iteration, the newest information state is added to the training set
-    # and only the next date is in the test set.
-    print("--------------------")
-    print("--------------------")
-    print(
-        "Unbalanced panel: train_intervals = 1 day, test_size = 1 day, min_periods = 21, min_cids = 4"
+    splitter = PanelTimeSeriesSplit(n_splits=4, n_split_method="rolling")
+    splitter.visualise_splits(X2, y2)
+    # c) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4
+    splitter = PanelTimeSeriesSplit(
+        train_intervals=21 * 12, test_size=21 * 12, min_periods=21, min_cids=4
     )
-    print("--------------------")
-    print("--------------------\n")
+    splitter.visualise_splits(X2, y2)
+    # d) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4, max_periods=12*21
+    splitter = PanelTimeSeriesSplit(
+        train_intervals=21 * 12,
+        test_size=21 * 12,
+        min_periods=21,
+        min_cids=4,
+        max_periods=12 * 21,
+    )
+    splitter.visualise_splits(X2, y2)
 
-    X2_reset = X2.reset_index()
-    unique_dates_X2 = np.unique(X2_reset.real_date)
-
-    splitter = PanelTimeSeriesSplit(train_intervals=1, test_size=1, min_periods = 21, min_cids=4)
-
-    for idx, (train_idxs, test_idxs) in enumerate(splitter.split(X2, y2)):
-        train_dates = np.unique(X2_reset.real_date.iloc[train_idxs])
-        test_dates = np.unique(X2_reset.real_date.iloc[test_idxs])
-
-        # check that there is only a single date in the test set
-        assert len(test_dates) == 1, "There are multiple test dates."
-
-        # check that the last training date is immediately before the test date
-        assert unique_dates_X2[np.where(unique_dates_X2 == train_dates[-1])[0][0] + 1] == test_dates, "There is a split where the last training date does not precede the test date."
-
-    print("The test splits all contain a single date and immediate proceed the last training date. Good.")
+    """
+    TODO:
+    2. Fix max_periods bug for first split
+    3. Return actual indices instead of the reset index indices
+    4. Check that it works for blacklisted periods
+    """
