@@ -482,9 +482,7 @@ if __name__ == "__main__":
     y2 = dfd2["XR"]
 
     # a) n_splits = 4, n_split_method = expanding
-    splitter = PanelTimeSeriesSplit(n_splits=5, n_split_method="expanding")
-    splitter.visualise_splits(X2, y2)
-    """splitter = PanelTimeSeriesSplit(n_splits=4, n_split_method="expanding")
+    splitter = PanelTimeSeriesSplit(n_splits=4, n_split_method="expanding")
     splitter.visualise_splits(X2, y2)
     # b) n_splits = 4, n_split_method = rolling
     splitter = PanelTimeSeriesSplit(n_splits=4, n_split_method="rolling")
@@ -504,7 +502,6 @@ if __name__ == "__main__":
     )
     splitter.visualise_splits(X2, y2)
 
-    """
     """TODO:
     3. Return actual indices instead of the reset index indices
     4. Check that it works for blacklisted periods
