@@ -118,15 +118,18 @@ if not release:
 
 
 def setup_package():
-    from setuptools import setup
+    from setuptools import setup, find_packages
 
     # Rewrite the version file every time
     write_version_py()
     # write_version_py(filename='macrosynergy.build/version.py')
     # move ./tests to ./macrosynergy/tests
+
     EXCLUDE_FILES = []
     metadata = dict(
         version=get_version_info()[0],
+        build_with_nuitka=True,
+        packages=find_packages(),
     )
 
     setup(**metadata)
@@ -134,3 +137,4 @@ def setup_package():
 
 if __name__ == "__main__":
     setup_package()
+    #  python .\setup.py bdist_nuitka
