@@ -20,7 +20,7 @@ def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float =
         This affects non-zero means.
     :param <float> ar_coef: autoregression coefficient (between 0 and 1): default is 0.75.
 
-    return <np.array>: autocorrelated data series.
+    :return <np.array>: autocorrelated data series.
     """
 
     # Define relative parameters for creating an AR process.
@@ -31,7 +31,7 @@ def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float =
     return sd_mult * ser / np.std(ser)
 
 def dataframe_generator(df_cids: pd.DataFrame, df_xcats: pd.DataFrame,
-                        cid: str, xcat: str):
+                        cid: str, xcat: str) -> Tuple[pd.DataFrame, pd.DatetimeIndex]:
     """
     Adjacent method used to construct the quantamental DataFrame.
 
@@ -40,6 +40,8 @@ def dataframe_generator(df_cids: pd.DataFrame, df_xcats: pd.DataFrame,
     :param <str> cid: individual cross-section.
     :param <str> xcat: individual category.
 
+    :return <Tuple[pd.DataFrame, pd.DatetimeIndex]>: Tuple containing
+        the quantamental DataFrame and a DatetimeIndex of the business days.
     """
     qdf_cols = ['cid', 'xcat', 'real_date', 'value']
 

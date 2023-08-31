@@ -20,7 +20,7 @@ config:
     use_issues_button: true
     google_analytics_id: ""
     baseurl: "https://docs.macrosynergy.com/"
-
+    announcement: "<p class='heading-banner'><a href='https://macrosynergy.com/'><img src='https://macrosynergy.com/wp-content/uploads/2022/11/macrosynergy-logo-full.png'></a></p>"
   # Launch button settings
   launch_buttons:
     binderhub_url: ""
