@@ -22,8 +22,8 @@ config:
     baseurl: "https://docs.macrosynergy.com/"
     announcement:
       "<p class='heading-banner'><a href='https://macrosynergy.com/'>
-      <img src='https://raw.githubusercontent.com/macrosynergy/macrosynergy/main/docs/source/_static/MACROSYNERGY_Logo_Primary.png?raw=True' 
-      height='2%' width='auto' style='display: block; margin-left: auto; margin-right: auto;' class='bd-header-announcement-img'>
+      <img src='https://raw.githubusercontent.com/macrosynergy/macrosynergy/74b937147473e10a82d92d0c743eadd547cc26b7/docs/static/MACROSYNERGY_Logo_White.png?raw=True' 
+      width='50%' height='auto' style='display: block; margin-left: auto; margin-right: auto;' class='bd-header-announcement-img'>
       </a></p>"
   # Launch button settings
   launch_buttons:
