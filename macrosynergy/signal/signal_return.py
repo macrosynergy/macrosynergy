@@ -7,6 +7,7 @@ from scipy import stats
 from typing import List, Union, Tuple
 from datetime import timedelta
 from collections import defaultdict
+import warnings
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df, categories_df
@@ -51,19 +52,29 @@ class SignalReturnRelations:
     :param <int> fwin: forward window of return category in base periods. Default is 1.
         This conceptually corresponds to the holding period of a position in
         accordance with the signal.
+    :param <int> slip: implied slippage of feature availability for relationship with
+        the target category. This mimics the relationship between trading signals and
+        returns, which is often characterized by a delay due to the setup of of positions.
+        Technically, this is a negative lag (early arrival) of the target category
+        in working days prior to any frequency conversion. Default is 0.
+  
     """
     def __init__(self, df: pd.DataFrame, ret: str, sig: str,
                  rival_sigs: Union[str, List[str]] = None, cids: List[str] = None,
                  sig_neg: bool = False, cosp: bool = False, start: str = None,
-                 end: str = None, fwin: int = 1, blacklist: dict = None,
-                 agg_sig: str = 'last', freq: str = 'M'):
+                 end: str = None, blacklist: dict = None, freq: str = 'M',
+                  agg_sig: str = 'last', fwin: int = 1, slip: int = 0):
 
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError(f"DataFrame expected and not {type(df)}.")
+        
         df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
         self.dic_freq = {'D': 'daily', 'W': 'weekly', 'M': 'monthly',
                          'Q': 'quarterly', 'A': 'annual'}
         freq_error = f"Frequency parameter must be one of {list(self.dic_freq.keys())}."
-        assert freq in self.dic_freq.keys(), freq_error
+        if not freq in self.dic_freq.keys():
+            raise ValueError(freq_error)
 
         self.metrics = ['accuracy', 'bal_accuracy', 'pos_sigr', "pos_retr",
                         'pos_prec', 'neg_prec', 'pearson', 'pearson_pval',
@@ -105,6 +116,15 @@ class SignalReturnRelations:
 
         dfd = reduce_df(
             df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
+        )
+        
+        # Since there may be any metrics in the DF at this point, simply apply slip to all.
+        metric_cols: List[str] = list(set(dfd.columns.tolist()) 
+                                  - set(['real_date', 'xcat', 'cid']))
+        dfd: pd.DataFrame = self.apply_slip(
+            target_df=dfd, slip=slip,
+            cids=cids, xcats=xcats,
+            metrics=metric_cols
         )
 
         # Naturally, only applicable if rival signals have been passed.
@@ -154,6 +174,48 @@ class SignalReturnRelations:
             df_cs = df
 
         return df_cs
+    
+    @classmethod
+    def apply_slip(self, target_df: pd.DataFrame, slip: int,
+                    cids: List[str], xcats: List[str],
+                    metrics: List[str]) -> pd.DataFrame:
+        """
+        Applied a slip, i.e. a negative lag, to the target DataFrame 
+        for the given cross-sections and categories, on the given metrics.
+        
+        Parameters
+        :param <pd.DataFrame> target_df: DataFrame to which the slip is applied.
+        :param <int> slip: Slip to be applied.
+        :param <List[str]> cids: List of cross-sections.
+        :param <List[str]> xcats: List of categories.
+        :param <List[str]> metrics: List of metrics to which the slip is applied.
+        :return <pd.DataFrame> target_df: DataFrame with the slip applied.
+        :raises <TypeError>: If the provided parameters are not of the expected type.
+        :raises <ValueError>: If the provided parameters are semantically incorrect.
+        """
+
+        target_df = target_df.copy(deep=True)
+        if not (isinstance(slip, int) and slip >= 0):
+            raise ValueError("Slip must be a non-negative integer.")
+        
+        if cids is None:
+            cids = target_df['cid'].unique().tolist()
+        if xcats is None:
+            xcats = target_df['xcat'].unique().tolist()
+
+        sel_tickers : List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+        target_df['tickers'] = target_df['cid'] + '_' + target_df['xcat']
+
+        if not set(sel_tickers).issubset(set(target_df['tickers'].unique())):
+            warnings.warn("Tickers targetted for applying slip are not present in the DataFrame.\n"
+             f"Missing tickers: {sorted(list(set(sel_tickers) - set(target_df['tickers'].unique())))}")
+
+        slip : int = slip.__neg__()
+        
+        target_df[metrics] = target_df.groupby('tickers')[metrics].shift(slip)
+        target_df = target_df.drop(columns=['tickers'])
+        
+        return target_df
 
     def __table_stats__(self, df_segment: pd.DataFrame, df_out: pd.DataFrame,
                         segment: str, signal: str):

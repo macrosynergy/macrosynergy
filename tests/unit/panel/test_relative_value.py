@@ -2,12 +2,14 @@ import unittest
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple, Union, Set
+
 from tests.simulate import make_qdf
 from macrosynergy.panel.make_relative_value import make_relative_value, _prepare_basket
 from macrosynergy.management.shape_dfs import reduce_df
 from random import randint, choice
 import io
 import sys
+import warnings
 
 
 class TestAll(unittest.TestCase):
@@ -234,27 +236,29 @@ class TestAll(unittest.TestCase):
 
         # Pass in the filtered DataFrame, and test whether the correct print statement
         # appears in the console.
-        capturedOutput: io.StringIO = io.StringIO()
-        sys.stdout: io.TextIOWrapper = capturedOutput
-        dfd_rl: pd.DataFrame = make_relative_value(
-            df=dfdx,
-            xcats=xcats,
-            cids=cids,
-            start=start,
-            end=end,
-            blacklist=None,
-            basket=None,
-            complete_cross=False,
-            rel_meth="subtract",
-            rel_xcats=None,
-            postfix="RV",
-        )
+        with warnings.catch_warnings(record=True) as w:
+            dfd_rl: pd.DataFrame = make_relative_value(
+                df=dfdx,
+                xcats=xcats,
+                cids=cids,
+                start=start,
+                end=end,
+                blacklist=None,
+                basket=None,
+                complete_cross=False,
+                rel_meth="subtract",
+                rel_xcats=None,
+                postfix="RV",
+            )
 
-        sys.stdout: io.TextIOWrapper = sys.__stdout__
-        capturedOutput.seek(0)
-        print_statement: str = capturedOutput.read()[-23:-2]
-        test: str = "['CAD', 'GBP', 'NZD']"
-        self.assertTrue(print_statement == test)
+            # Assert a UserWarning is raised.
+            self.assertTrue(len(w) == 1)
+            self.assertTrue(issubclass(w[-1].category, UserWarning))
+            warning_message: str = str(w[-1].message)
+
+            printed_cids: str = set(eval(warning_message[-23:-1]))
+            test: str = set(["CAD", "GBP", "NZD"])
+            self.assertEqual(printed_cids, test)
 
         # If the "complete_cross" parameter is set to True, the corresponding category
         # defined over an incomplete set of cross-sections, relative to the basket, will
@@ -405,7 +409,7 @@ class TestAll(unittest.TestCase):
         function_output: np.ndarray = (dfd_3_pivot.iloc[index_val, :]).to_numpy()
 
         function_output: np.ndarray = function_output[0]
-        self.assertTrue(np.all(computed_values == function_output))
+        self.assertTrue(np.allclose(computed_values, function_output))
 
         # Test the division.
         # Computing make_relative_value() on a single category that has been chosen

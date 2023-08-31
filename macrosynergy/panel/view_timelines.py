@@ -19,6 +19,7 @@ def view_timelines(
     start: str = "2000-01-01",
     end: Optional[str] = None,
     ncol: int = 3,
+    legend_ncol: int = 1,
     same_y: bool = True,
     all_xticks: bool = False,
     xcat_grid: bool = False,
@@ -35,7 +36,6 @@ def view_timelines(
     height: float = 3.0,
     legend_fontsize: int = 12,
 ):
-
     """Displays a facet grid of time line charts of one or more categories.
 
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
@@ -51,6 +51,7 @@ def view_timelines(
     :param <str> start: earliest date in ISO format. Default is earliest date available.
     :param <str> end: latest date in ISO format. Default is latest date available.
     :param <int> ncol: number of columns in facet grid. Default is 3.
+    :param <int> legend_ncol: number of columns in legend. Default is 1.
     :param <bool> same_y: if True (default) all plots in facet grid share same y axis.
     :param <bool> all_xticks:  if True x-axis tick labels are added to all plots in grid.
         Default is False, i.e only the lowest row displays the labels.
@@ -123,7 +124,7 @@ def view_timelines(
 
     if not isinstance(single_chart, bool):
         raise TypeError("`single_chart` parameter must be a Boolean object.")
-    if (xcat_grid and single_chart):
+    if xcat_grid and single_chart:
         raise ValueError("xcat_grid and single_chart cannot both be True.")
 
     df, xcats, cids = reduce_df(
@@ -133,7 +134,6 @@ def view_timelines(
     # NOTE: casting var(cids) to list if it is a string is dependent on the reduce_df function
 
     if xcat_grid:
-
         if not len(cids) == 1:
             raise ValueError(
                 "`xcat_grid` can only be set to True if a "
@@ -176,7 +176,6 @@ def view_timelines(
 
     sns.set(rc={"figure.figsize": size})
     plt.rcParams["figure.figsize"] = size
-    legend_cols : int = 3
 
     fg: Optional[sns.FacetGrid] = None
     ax: Optional[plt.Axes] = None
@@ -203,20 +202,21 @@ def view_timelines(
             fg.map(plt.axhline, y=0, c=".5")
             fg.set_axis_labels("", "")
             fg.set_titles("{col_name}")
-            if title is not None:
-                plt.suptitle(title, y=title_adj, x=title_xadj, fontsize=title_fontsize)
 
         else:
-            ax: plt.Axes = sns.lineplot(
-                data=df, x="real_date", y=val, hue="xcat", estimator=None, #sizes=size
-            )
+            ax: plt.Axes = plt.gca()
+            for xc in xcats:
+                dfc: pd.DataFrame = df[df["xcat"] == xc]
+                ax.plot(dfc["real_date"], dfc[val], label=xc)
+
             plt.axhline(y=0, c=".5")
 
             ax.set_xlabel("")
             ax.set_ylabel("")
-            ax.legend(ncol=legend_cols, fontsize=legend_fontsize)
-            if title is not None:
-                plt.suptitle(title, y=title_adj, x=title_xadj, fontsize=title_fontsize)
+            ax.legend(
+                ncol=legend_ncol,
+                fontsize=legend_fontsize,
+            )
 
     else:
         if not single_chart:
@@ -254,12 +254,8 @@ def view_timelines(
             fg.set_axis_labels("", "")
             if cs_mean or (len(xcats) > 1):
                 fg.add_legend(
-                    loc="lower center",
-                    ncol=legend_cols,
-                    fontsize=legend_fontsize
+                    loc="lower center", ncol=legend_ncol, fontsize=legend_fontsize
                 )
-            if title is not None:
-                plt.suptitle(title, y=title_adj, x=title_xadj, fontsize=title_fontsize)
 
         else:
             ax: plt.Axes = sns.lineplot(
@@ -284,9 +280,7 @@ def view_timelines(
             plt.axhline(y=0, c=".5")
             ax.set_xlabel("")
             ax.set_ylabel("")
-            ax.legend(ncol=legend_cols, fontsize=legend_fontsize)
-            if title is not None:
-                plt.suptitle(title, y=title_adj, x=title_xadj, fontsize=title_fontsize)
+            ax.legend(ncol=legend_ncol, fontsize=legend_fontsize)
 
     if all_xticks:
         if fg is not None:
@@ -300,43 +294,46 @@ def view_timelines(
     else:
         plt.subplots_adjust(bottom=label_adj)
 
+    if title is not None:
+        if fg is not None:
+            fg.figure.suptitle(
+                title,
+                y=title_adj,
+                fontsize=title_fontsize,
+                x=title_xadj,
+                horizontalalignment="center",
+            )
+        else:
+            ax.set_title(
+                title,
+                y=title_adj,
+                fontsize=title_fontsize,
+                x=title_xadj,
+                horizontalalignment="center",
+            )
+
     plt.show()
 
 
 if __name__ == "__main__":
-
     cids = ["AUD", "CAD", "GBP", "NZD"]
     xcats = ["XR", "CRY", "INFL"]
     df_cids = pd.DataFrame(
         index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
     )
-    df_cids.loc[
-        "AUD",
-    ] = ["2010-01-01", "2020-12-31", 0.2, 0.2]
-    df_cids.loc[
-        "CAD",
-    ] = ["2011-01-01", "2020-11-30", 0, 1]
-    df_cids.loc[
-        "GBP",
-    ] = ["2012-01-01", "2020-11-30", 0, 2]
-    df_cids.loc[
-        "NZD",
-    ] = ["2012-01-01", "2020-09-30", -0.1, 3]
+    df_cids.loc["AUD",] = ["2010-01-01", "2020-12-31", 0.2, 0.2]
+    df_cids.loc["CAD",] = ["2011-01-01", "2020-11-30", 0, 1]
+    df_cids.loc["GBP",] = ["2012-01-01", "2020-11-30", 0, 2]
+    df_cids.loc["NZD",] = ["2012-01-01", "2020-09-30", -0.1, 3]
 
     df_xcats = pd.DataFrame(
         index=xcats,
         columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
     )
 
-    df_xcats.loc[
-        "XR",
-    ] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-    df_xcats.loc[
-        "INFL",
-    ] = ["2015-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-    df_xcats.loc[
-        "CRY",
-    ] = ["2013-01-01", "2020-10-30", 1, 2, 0.95, 0.5]
+    df_xcats.loc["XR",] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["INFL",] = ["2015-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY",] = ["2013-01-01", "2020-10-30", 1, 2, 0.95, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfdx = dfd[~((dfd["cid"] == "AUD") & (dfd["xcat"] == "XR"))]

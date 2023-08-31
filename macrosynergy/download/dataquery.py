@@ -13,6 +13,7 @@ import itertools
 import base64
 import uuid
 import io
+import warnings
 import requests
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Union, Tuple
@@ -40,7 +41,7 @@ OAUTH_BASE_URL: str = (
 )
 OAUTH_TOKEN_URL: str = "https://authe.jpmchase.com/as/token.oauth2"
 OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
-JPMAQS_GROUP_ID: str = "CA_QI_MACRO_SYNERGY"
+JPMAQS_GROUP_ID: str = "JPMAQS"
 API_DELAY_PARAM: float = 0.3  # 300ms delay between requests
 API_RETRY_COUNT: int = 5  # retry count for transient errors
 HL_RETRY_COUNT: int = 5  # retry count for "high-level" requests
@@ -375,7 +376,7 @@ class OAuth(object):
                 method="post",
                 proxy=self.proxy,
                 tracking_id=OAUTH_TRACKING_ID,
-                user_id=self.token_data["client_id"],
+                user_id=self._get_user_id(),
             )
             # on failure, exception will be raised by request_wrapper
 
@@ -387,13 +388,16 @@ class OAuth(object):
             }
 
         return self._stored_token["access_token"]
+    
+    def _get_user_id(self) -> str:
+        return "OAuth_ClientID - " + self.token_data["client_id"]
 
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
-        headers = {"Authorization": "Bearer " + self._get_token()}
+        headers: Dict = {"Authorization": "Bearer " + self._get_token()}
         return {
             "headers": headers,
             "cert": None,
-            "user_id": self.token_data["client_id"],
+            "user_id": self._get_user_id(),
         }
 
 
@@ -419,6 +423,7 @@ class CertAuth(object):
         password: str,
         crt: str,
         key: str,
+        proxy: Optional[dict] = None,
     ):
         for varx, namex in zip([username, password], ["username", "password"]):
             if not isinstance(varx, str):
@@ -438,13 +443,15 @@ class CertAuth(object):
         self.crt: str = crt
         self.username: str = username
         self.password: str = password
+        self.proxy: Optional[dict] = proxy
 
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
         headers = {"Authorization": f"Basic {self.auth:s}"}
+        user_id = "CertAuth_Username - " + self.username
         return {
             "headers": headers,
             "cert": (self.crt, self.key),
-            "user_id": self.username,
+            "user_id": user_id,
         }
 
 
@@ -604,8 +611,24 @@ class DataQueryInterface(object):
             )
         self.config: Config = config
         self.auth: Optional[Union[CertAuth, OAuth]] = None
+        if oauth and (config.oauth() is None):
+            warnings.warn(
+                "OAuth credentials not found. "
+                "Trying to use certificate authentication.",)
+            if config.cert() is None:
+                raise ValueError(
+                    "Certificate credentials not found. "
+                    "Check the config_object passed."
+                )
+            else:
+                oauth: bool = False
+             
         if oauth:
-            self.auth: OAuth = OAuth(**config.oauth(mask=False), token_url=token_url)
+            self.auth: OAuth = OAuth(
+                **config.oauth(mask=False),
+                token_url=token_url,
+                proxy=config.proxy(mask=False),
+            )
         else:
             if base_url == OAUTH_BASE_URL:
                 base_url: str = CERT_BASE_URL
@@ -745,7 +768,7 @@ class DataQueryInterface(object):
 
         :raises <ValueError>: if the response from the server is not valid.
         """
-        new_group_id: str = "JPMAQS"
+        old_group_id: str = "CA_QI_MACRO_SYNERGY"
         try:
             response_list: Dict = self._fetch(
                 url=self.base_url + CATALOGUE_ENDPOINT,
@@ -755,7 +778,7 @@ class DataQueryInterface(object):
         except NoContentError as e:
             response_list: Dict = self._fetch(
                 url=self.base_url + CATALOGUE_ENDPOINT,
-                params={"group-id": new_group_id},
+                params={"group-id": old_group_id},
                 tracking_id=CATALOGUE_TRACKING_ID,
             )
         except Exception as e:
