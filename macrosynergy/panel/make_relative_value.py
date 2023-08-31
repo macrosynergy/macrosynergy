@@ -121,8 +121,6 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         rel_xcats_dict = dict(zip(xcats, rel_xcats))
 
     col_names = ['cid', 'xcat', 'real_date', 'value']
-    # Host DataFrame.
-    df_out = pd.DataFrame(columns=col_names)
 
     # Intersect parameter set to False. Therefore, cross-sections across the categories
     # can vary.
@@ -159,14 +157,14 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
                     "is an incorrect usage of the function."
         raise RuntimeError(run_error)
 
-    storage = [df_out]
+    df_list: List[pd.DataFrame] = []
     # Categories can be defined over a different set of cross-sections.
     for i, xcat in enumerate(available_xcats):
 
         df_xcat = dfx[dfx['xcat'] == xcat]
         available_cids = df_xcat['cid'].unique()
 
-        dfx_xcat = df_xcat[['cid', 'real_date', 'value']]
+        dfx_xcat: pd.DataFrame = df_xcat[['cid', 'real_date', 'value']]
 
         dfb, basket = _prepare_basket(
             df=dfx_xcat, xcat=xcat, basket=basket, cids_avl=available_cids,
@@ -186,7 +184,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
             # 'complete_cross' equals True.
             continue
 
-        dfw = dfx_xcat.pivot(index='real_date', columns='cid', values='value')
+        dfw: pd.DataFrame = dfx_xcat.pivot(index='real_date', columns='cid', values='value')
 
         # Computing the relative value is only justified if the number of cross-sections,
         # for the respective date, exceeds one. Therefore, if any rows have only a single
@@ -194,7 +192,7 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
         dfw = dfw[dfw.count(axis=1) > 1]
         # The time-index will be delimited by the respective category.
         dfa = pd.merge(dfw, bm, how='left', left_index=True, right_index=True)
-
+        dfo: pd.DataFrame
         if rel_meth == 'subtract':
             dfo = dfa[dfw.columns].sub(dfa.loc[:, 'value'], axis=0)
         else:
@@ -209,10 +207,14 @@ def make_relative_value(df: pd.DataFrame, xcats: List[str], cids: List[str] = No
             df_new['xcat'] = xcat + postfix
         else:
             df_new['xcat'] = rel_xcats_dict[xcat]
+            
+        if df_new.sort_values(['cid', 'real_date'])[col_names].isna().all().all() or \
+                (len(df_new) == 0) or df_new.empty:
+            continue
 
-        storage.append(df_new.sort_values(['cid', 'real_date'])[col_names])
+        df_list.append(df_new.sort_values(['cid', 'real_date'])[col_names])
 
-    return pd.concat(storage).reset_index(drop=True)
+    return pd.concat(df_list).reset_index(drop=True)
 
 
 if __name__ == "__main__":
