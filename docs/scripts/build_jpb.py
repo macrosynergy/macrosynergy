@@ -15,6 +15,7 @@ BUILD_DIR = "./docs/build/"
 OUTPUT_DIR = "./docs/build/html/"
 
 BUILD_CONFIG = "./docs/static/jpb-config.yml"
+SITE_WIDE_CSS = "./docs/static/custom_css.css"
 
 
 def get_config() -> Dict[str, Any]:
@@ -98,6 +99,12 @@ def create_toc(destination_dir: str) -> bool:
     return bool(toc)
 
 
+def copy_css_file(destination_dir: str) -> bool:
+    static_dir: str = os.path.join(destination_dir, "_static")
+    os.makedirs(static_dir, exist_ok=True)
+    shutil.copy(SITE_WIDE_CSS, static_dir)
+
+
 if __name__ == "__main__":
     # parse arguments
     parser = argparse.ArgumentParser(
@@ -137,3 +144,5 @@ if __name__ == "__main__":
     # create_dummy_readmes(destination_dir=folder)
     # create the toc file
     create_toc(destination_dir=folder)
+    # copy the css file
+    copy_css_file(destination_dir=folder)

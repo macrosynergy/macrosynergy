@@ -20,10 +20,11 @@ config:
     use_issues_button: true
     google_analytics_id: ""
     baseurl: "https://docs.macrosynergy.com/"
-    # announcement:
-    #   "<p class='heading-banner' style='background-color: white'><a href='https://macrosynergy.com/'>
-    #   <img src='https://raw.githubusercontent.com/macrosynergy/macrosynergy/main/docs/source/_static/MACROSYNERGY_Logo_Primary.png?raw=True' height='75px'>
-    #   </a></p>"
+    announcement:
+      "<p class='heading-banner'><a href='https://macrosynergy.com/'>
+      <img src='https://raw.githubusercontent.com/macrosynergy/macrosynergy/main/docs/source/_static/MACROSYNERGY_Logo_Primary.png?raw=True' 
+      height='2%' width='auto' style='display: block; margin-left: auto; margin-right: auto;' class='bd-header-announcement-img'>
+      </a></p>"
   # Launch button settings
   launch_buttons:
     binderhub_url: ""
