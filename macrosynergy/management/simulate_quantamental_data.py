@@ -313,7 +313,7 @@ def make_test_df(
     xcats: List[str] = ["XR", "CRY"],
     start_date: str = "2010-01-01",
     end_date: str = "2020-12-31",
-    prefer: str = "any",
+    style: str = "any",
 ):
     """
     Generates a test dataframe with pre-defined values.
@@ -324,14 +324,13 @@ def make_test_df(
     and differentiate in a plot.
 
     Parameters
-    ----------
     :param <List[str]> cids: A list of strings for cids.
     :param <List[str]> xcats: A list of strings for xcats.
     :param <str> start_date: An ISO-formatted date string.
     :param <str> end_date: An ISO-formatted date string.
-    :param <str> prefer: A string that specifies the type of line to generate.
+    :param <str> style: A string that specifies the type of line to generate.
         Current choices are: 'linear', 'decreasing-linear', 'sharp-hill',
-        'four-bit-sine', 'sine', 'any'.
+        'four-bit-sine', 'sine', 'cosine', 'sawtooth', 'any'.
         See `macrosynergy.management.simulate_quantamental_data.generate_lines`.
     """
 
@@ -351,7 +350,7 @@ def make_test_df(
             df_add["cid"] = cid
             df_add["xcat"] = xcat
             df_add["real_date"] = dates
-            df_add["value"] = generate_lines(len(dates), style=prefer)
+            df_add["value"] = generate_lines(len(dates), style=style)
             df_list.append(df_add)
 
     return pd.concat(df_list).reset_index(drop=True)
