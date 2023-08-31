@@ -1,5 +1,6 @@
 [build-system]
 requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "macrosynergy"
@@ -7,7 +8,8 @@ description = "Macrosynergy Quant Research Package"
 dynamic = ["version"]
 
 authors = [{ name = "Macrosynergy", email = "info@macrosynergy.com" }]
-
+readme = { file = "README.md", content-type = "text/markdown" } # file can be a list
+license = { file = "LICENSE" }
 requires-python = ">=3.8"
 dependencies = [
   "seaborn>=0.11.2",
@@ -40,13 +42,6 @@ classifiers = [
   "Operating System :: OS Independent",
 ]
 
-[project.readme]
-file = "README.md"
-content-type = "text/markdown"
-
-[project.license]
-file = "LICENSE"
-# text = "copy paste the license text"
 
 [project.urls]
 homepage = "https://www.macrosynergy.com"
@@ -102,14 +97,14 @@ all = [
 ]
 
 [tool.setuptools]
-include-package-data = true
+platforms = ["Windows", "Linux", "Mac OS-X"]
 
 [tool.setuptools.packages.find]
+where = ["macrosynergy"]
 include = ["macrosynergy", "macrosynergy.*"]
+exclude = ["tests", "tests.*"]
 namespaces = true
 
-[tool.setuptools.exclude-package-data]
-"*" = ["*.c", "*.h"]
 
 [tool.versioneer]
 VCS = "git"
