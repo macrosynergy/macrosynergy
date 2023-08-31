@@ -56,7 +56,11 @@ class DocstringMethods:
                 if kw:
                     kw = kw[0]
                     # get the index of the first colon after the keyword
-                    colon_index: int = line.index(":", len(kw))
+                    if ":" in line[len(kw) + 1 :]:
+                        colon_index: int = line.index(":", len(kw))
+                    else:
+                        colon_index: int = len(line)
+                        line += ":"
                     # insert a '`' before the colon
                     line = "\n`" + line[:colon_index] + "`" + line[colon_index:]
                 formatted_lines.append(line)
