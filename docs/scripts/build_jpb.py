@@ -103,7 +103,8 @@ def copy_css_file(destination_dir: str) -> bool:
     static_dir: str = os.path.join(destination_dir, "_static")
     os.makedirs(static_dir, exist_ok=True)
     shutil.copy(SITE_WIDE_CSS, static_dir)
-
+    
+    return True
 
 if __name__ == "__main__":
     # parse arguments
