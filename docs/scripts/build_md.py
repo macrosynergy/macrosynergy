@@ -348,6 +348,19 @@ def process_directory(
             )
 
 
+def modify_readme(readme: str) -> bool:
+    # if the first element of the readme is an image then remove it
+    with open(readme, "r", encoding="utf8") as f:
+        lines: List[str] = f.readlines()
+        if lines[0].startswith("!"):
+            lines = lines[1:]
+        lines = "".join(lines)
+
+    with open(readme, "w", encoding="utf8") as f:
+        f.write(lines)
+    return True
+
+
 def driver(readme: str, input_directory: str, output_directory: str):
     """
     Driver function for the script.
@@ -358,6 +371,7 @@ def driver(readme: str, input_directory: str, output_directory: str):
     os.makedirs(output_directory)
 
     shutil.copy(src=readme, dst=output_directory)
+    modify_readme(readme=os.path.join(output_directory, readme))
 
     process_directory(
         input_directory=input_directory,
