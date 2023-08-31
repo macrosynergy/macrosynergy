@@ -26,8 +26,10 @@ def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float =
     ser = ser + mean - np.mean(ser)
     return sd_mult * ser / np.std(ser)
 
-def dataframe_generator(df_cids: pd.DataFrame, df_xcats: pd.DataFrame,
-                        cid: str, xcat: str):
+
+def dataframe_generator(
+    df_cids: pd.DataFrame, df_xcats: pd.DataFrame, cid: str, xcat: str
+):
     """
     Adjacent method used to construct the quantamental DataFrame.
 
@@ -37,21 +39,24 @@ def dataframe_generator(df_cids: pd.DataFrame, df_xcats: pd.DataFrame,
     :param <str> xcat: individual category.
 
     """
-    qdf_cols = ['cid', 'xcat', 'real_date', 'value']
+    qdf_cols = ["cid", "xcat", "real_date", "value"]
 
-    sdate = pd.to_datetime(max(df_cids.loc[cid, 'earliest'], df_xcats.loc[xcat,
-                                                                          'earliest']))
-    edate = pd.to_datetime(min(df_cids.loc[cid, 'latest'], df_xcats.loc[xcat,
-                                                                        'latest']))
+    sdate = pd.to_datetime(
+        max(df_cids.loc[cid, "earliest"], df_xcats.loc[xcat, "earliest"])
+    )
+    edate = pd.to_datetime(
+        min(df_cids.loc[cid, "latest"], df_xcats.loc[xcat, "latest"])
+    )
     all_days = pd.date_range(sdate, edate)
     work_days = all_days[all_days.weekday < 5]
 
     df_add = pd.DataFrame(columns=qdf_cols)
-    df_add['real_date'] = work_days
-    df_add['cid'] = cid
-    df_add['xcat'] = xcat
+    df_add["real_date"] = work_days
+    df_add["cid"] = cid
+    df_add["xcat"] = xcat
 
     return df_add, work_days
+
 
 def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
     """
@@ -82,38 +87,40 @@ def make_qdf(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, back_ar: float = 0):
     """
     df_list = []
 
-    if any(df_xcats['back_coef'] != 0):
-
-        sdate = min(min(df_cids.loc[:, 'earliest']), min(df_xcats.loc[:, 'earliest']))
-        edate = max(max(df_cids.loc[:, 'latest']), max(df_xcats.loc[:, 'latest']))
+    if any(df_xcats["back_coef"] != 0):
+        sdate = min(min(df_cids.loc[:, "earliest"]), min(df_xcats.loc[:, "earliest"]))
+        edate = max(max(df_cids.loc[:, "latest"]), max(df_xcats.loc[:, "latest"]))
         all_days = pd.date_range(sdate, edate)
         work_days = all_days[all_days.weekday < 5]
         ser = simulate_ar(len(work_days), mean=0, sd_mult=1, ar_coef=back_ar)
-        df_back = pd.DataFrame(index=work_days, columns=['value'])
-        df_back['value'] = ser
+        df_back = pd.DataFrame(index=work_days, columns=["value"])
+        df_back["value"] = ser
 
     for cid in df_cids.index:
         for xcat in df_xcats.index:
-            df_add, work_days = dataframe_generator(df_cids=df_cids, df_xcats=df_xcats,
-                                                    cid=cid, xcat=xcat)
+            df_add, work_days = dataframe_generator(
+                df_cids=df_cids, df_xcats=df_xcats, cid=cid, xcat=xcat
+            )
 
-            ser_mean = df_cids.loc[cid, 'mean_add'] + df_xcats.loc[xcat, 'mean_add']
-            ser_sd = df_cids.loc[cid, 'sd_mult'] * df_xcats.loc[xcat, 'sd_mult']
-            ser_arc = df_xcats.loc[xcat, 'ar_coef']
-            df_add['value'] = simulate_ar(len(work_days), mean=ser_mean, sd_mult=ser_sd,
-                                          ar_coef=ser_arc)
+            ser_mean = df_cids.loc[cid, "mean_add"] + df_xcats.loc[xcat, "mean_add"]
+            ser_sd = df_cids.loc[cid, "sd_mult"] * df_xcats.loc[xcat, "sd_mult"]
+            ser_arc = df_xcats.loc[xcat, "ar_coef"]
+            df_add["value"] = simulate_ar(
+                len(work_days), mean=ser_mean, sd_mult=ser_sd, ar_coef=ser_arc
+            )
 
-            back_coef = df_xcats.loc[xcat, 'back_coef']
+            back_coef = df_xcats.loc[xcat, "back_coef"]
             # Add the influence of communal background series.
             if back_coef != 0:
-                dates = df_add['real_date']
-                df_add['value'] = df_add['value'] + \
-                                  back_coef * df_back.loc[dates,
-                                                          'value'].reset_index(drop=True)
+                dates = df_add["real_date"]
+                df_add["value"] = df_add["value"] + back_coef * df_back.loc[
+                    dates, "value"
+                ].reset_index(drop=True)
 
             df_list.append(df_add)
 
     return pd.concat(df_list).reset_index(drop=True)
+
 
 def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict):
     """
@@ -163,15 +170,14 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
     # each category will experience the same blackout periods.
     for cid in df_cids.index:
         for xcat in df_xcats.index:
-
-            df_add, work_days = dataframe_generator(df_cids=df_cids, df_xcats=df_xcats,
-                                                    cid=cid, xcat=xcat)
+            df_add, work_days = dataframe_generator(
+                df_cids=df_cids, df_xcats=df_xcats, cid=cid, xcat=xcat
+            )
             arr = np.repeat(0, df_add.shape[0])
-            dates = df_add['real_date'].to_numpy()
+            dates = df_add["real_date"].to_numpy()
 
             list_tuple = dates_dict[cid]
             for tup in list_tuple:
-
                 start = tup[0]
                 end = tup[1]
 
@@ -201,48 +207,47 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
                         count += 1
                     start += datetime.timedelta(days=1)
 
-                arr[index_start:(index_start + count + 1)] = 1
+                arr[index_start : (index_start + count + 1)] = 1
 
-            df_add['value'] = arr
+            df_add["value"] = arr
 
             df_list.append(df_add)
 
     return pd.concat(df_list).reset_index(drop=True)
 
 
-def generate_lines(sig_len: int,
-                   style : str = 'linear') -> Union[np.ndarray,
-                                                    Dict[str, np.ndarray]]:
-    
+def generate_lines(
+    sig_len: int, style: str = "linear"
+) -> Union[np.ndarray, Dict[str, np.ndarray]]:
     if not isinstance(sig_len, int):
         raise TypeError("`sig_len` must be an integer.")
     elif sig_len < 1:
         raise ValueError("`sig_len` must be greater than 0.")
-    
+
     if not isinstance(style, str):
         raise TypeError("`style` must be a string.")
-    
-    style : str = '-'.join(style.strip().lower().split())
+
+    style: str = "-".join(style.strip().lower().split())
     lines: Dict[str, np.ndarray] = {
-            "linear": np.arange(1, sig_len + 1) * 100 / sig_len,
-            "decreasing-linear": np.arange(sig_len, 0, -1) * 100 / sig_len,
-            "sharp-hill": np.concatenate(
-                (
-                    np.arange(1, sig_len // 4 + 1) * 100 / sig_len,
-                    np.arange(sig_len // 4, sig_len // 4 * 3 + 1)[::-1] * 100 / sig_len,
-                    np.arange(sig_len // 4 * 3, sig_len + 1) * 100 / sig_len,
-                )
-            ),
-            "four-bit-sine": np.concatenate(
-                (
-                    np.arange(1, sig_len // 4 + 1) * 100 / sig_len,
-                    np.arange(sig_len // 4, sig_len // 4 * 3 + 1)[::-1] * 100 / sig_len,
-                    np.arange(sig_len // 4 * 3, sig_len + 1) * 100 / sig_len,
-                )
-            ),
-            # sine wave with 1==sig_len peak=50, trough=-50
-            "sine": np.sin(np.arange(1, sig_len + 1) * np.pi / (sig_len / 2)) * 50 + 50,
-        }
+        "linear": np.arange(1, sig_len + 1) * 100 / sig_len,
+        "decreasing-linear": np.arange(sig_len, 0, -1) * 100 / sig_len,
+        "sharp-hill": np.concatenate(
+            (
+                np.arange(1, sig_len // 4 + 1) * 100 / sig_len,
+                np.arange(sig_len // 4, sig_len // 4 * 3 + 1)[::-1] * 100 / sig_len,
+                np.arange(sig_len // 4 * 3, sig_len + 1) * 100 / sig_len,
+            )
+        ),
+        "four-bit-sine": np.concatenate(
+            (
+                np.arange(1, sig_len // 4 + 1) * 100 / sig_len,
+                np.arange(sig_len // 4, sig_len // 4 * 3 + 1)[::-1] * 100 / sig_len,
+                np.arange(sig_len // 4 * 3, sig_len + 1) * 100 / sig_len,
+            )
+        ),
+        # sine wave with 1==sig_len peak=50, trough=-50
+        "sine": np.sin(np.arange(1, sig_len + 1) * np.pi / (sig_len / 2)) * 50 + 50,
+    }
     for k, v in lines.items():
         lines[k] = v[:sig_len]
     if style == "any":
@@ -253,7 +258,6 @@ def generate_lines(sig_len: int,
         return lines[style]
     else:
         raise ValueError(f"Invalid style: {style}. Use one of: {list(lines.keys())}.")
-    
 
 
 def make_test_df(
@@ -261,7 +265,7 @@ def make_test_df(
     xcats: List[str] = ["XR", "CRY"],
     start_date: str = "2010-01-01",
     end_date: str = "2020-12-31",
-    prefer : str = 'any',
+    prefer: str = "any",
 ):
     """
     Generates a test dataframe with pre-defined values.
@@ -270,7 +274,7 @@ def make_test_df(
     where the value column is populated with pre-defined values.
     These values are simple lines, or waves that are easy to identify
     and differentiate in a plot.
-    
+
     Parameters
     ----------
     :param <List[str]> cids: A list of strings for cids.
@@ -288,38 +292,40 @@ def make_test_df(
     if isinstance(xcats, str):
         xcats = [xcats]
 
-    dates : pd.DatetimeIndex = pd.bdate_range(start_date, end_date)
-    
+    dates: pd.DatetimeIndex = pd.bdate_range(start_date, end_date)
+
     df_list: List[pd.DataFrame] = []
     for cid in cids:
         for xcat in xcats:
-            df_add: pd.DataFrame = pd.DataFrame(index=dates, 
-                                                columns=['real_date','cid',
-                                                         'xcat', 'value'])
-            df_add['cid'] = cid
-            df_add['xcat'] = xcat
-            df_add['real_date'] = dates
-            df_add['value'] = generate_lines(len(dates), style=prefer)
+            df_add: pd.DataFrame = pd.DataFrame(
+                index=dates, columns=["real_date", "cid", "xcat", "value"]
+            )
+            df_add["cid"] = cid
+            df_add["xcat"] = xcat
+            df_add["real_date"] = dates
+            df_add["value"] = generate_lines(len(dates), style=prefer)
             df_list.append(df_add)
 
     return pd.concat(df_list).reset_index(drop=True)
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
     ser_ar = simulate_ar(100, mean=0, sd_mult=1, ar_coef=0.75)
 
-    cids = ['AUD', 'CAD', 'GBP']
-    xcats = ['XR', 'CRY']
-    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
-                                                'sd_mult'])
-    df_cids.loc['AUD', ] = ['2010-01-01', '2020-12-31', 0.5, 2]
-    df_cids.loc['CAD', ] = ['2011-01-01', '2020-11-30', 0, 1]
-    df_cids.loc['GBP', ] = ['2011-01-01', '2020-11-30', -0.2, 0.5]
+    cids = ["AUD", "CAD", "GBP"]
+    xcats = ["XR", "CRY"]
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD",] = ["2010-01-01", "2020-12-31", 0.5, 2]
+    df_cids.loc["CAD",] = ["2011-01-01", "2020-11-30", 0, 1]
+    df_cids.loc["GBP",] = ["2011-01-01", "2020-11-30", -0.2, 0.5]
 
-    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest',
-                                                  'mean_add', 'sd_mult', 'ar_coef',
-                                                  'back_coef'])
-    df_xcats.loc['XR', ] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
-    df_xcats.loc['CRY', ] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
+    df_xcats = pd.DataFrame(
+        index=xcats,
+        columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+    )
+    df_xcats.loc["XR",] = ["2010-01-01", "2020-12-31", 0, 1, 0, 0.3]
+    df_xcats.loc["CRY",] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
