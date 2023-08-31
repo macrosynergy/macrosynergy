@@ -216,9 +216,62 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
     return pd.concat(df_list).reset_index(drop=True)
 
 
-def generate_lines(
-    sig_len: int, style: str = "linear"
-) -> Union[np.ndarray, Dict[str, np.ndarray]]:
+def generate_lines(sig_len: int, style: str = "linear") -> Union[np.ndarray, List[str]]:
+    """
+    Returns a numpy array of a line with a given length.
+
+    Parameters
+    :param <int> sig_len: The number of elements in the returned array.
+    :param <str> style: The style of the line. Default `'linear'`. Current choices are:
+        `linear`, `decreasing-linear`, `sharp-hill`, `four-bit-sine`, `sine`, `cosine`,
+        `sawtooth`. Adding `"inv"` or "inverted" to the style will return
+        the inverted version of that line. For example, `'inv-sawtooth'` or `'inverted
+        sawtooth'` will return the inverted sawtooth line. `'any'` will return a random
+        line. `'all'` will return a list of all the available styles.
+
+    :return <Union[np.ndarray, List[str]]>: A numpy array of the line. If `style` is
+        `'all'`, then a list (of strings) of all the available styles is returned.
+
+    NOTE: It is indeed request an `"inverted linear"` or `"inverted decreasing-linear"`
+    line. They're just there for completeness and readability.
+    """
+
+    def _sawtooth(sig_len: int) -> np.ndarray:
+        max_cycles = 4
+        _tmp = sig_len // max_cycles
+        up = np.tile(np.arange(-100, 100, 200 / _tmp), max_cycles * 2)
+        return np.abs(up)[:sig_len]
+
+    def _sharp_hill(sig_len: int) -> np.ndarray:
+        return np.concatenate(
+            [
+                np.arange(1, sig_len // 4 + 1) * 100 / sig_len,
+                np.arange(sig_len // 4, sig_len // 4 * 3 + 1)[::-1] * 100 / sig_len,
+                np.arange(sig_len // 4 * 3, sig_len + 1) * 100 / sig_len,
+            ]
+        )
+
+    def _four_bit_sine(sig_len: int) -> np.ndarray:
+        return np.concatenate(
+            [
+                np.arange(1, sig_len // 4 + 1) * 100 / sig_len,
+                np.arange(sig_len // 4, sig_len // 4 * 3 + 1)[::-1] * 100 / sig_len,
+                np.arange(sig_len // 4 * 3, sig_len + 1) * 100 / sig_len,
+            ]
+        )
+
+    def _sine(sig_len: int) -> np.ndarray:
+        return np.sin(np.arange(1, sig_len + 1) * np.pi / (sig_len / 2)) * 50 + 50
+
+    def _cosine(sig_len: int) -> np.ndarray:
+        return np.cos(np.arange(1, sig_len + 1) * np.pi / (sig_len / 2)) * 50 + 50
+
+    def _linear(sig_len: int) -> np.ndarray:
+        return np.arange(1, sig_len + 1) * 100 / sig_len
+
+    def _decreasing_linear(sig_len: int) -> np.ndarray:
+        return _linear(sig_len)[::-1]
+
     if not isinstance(sig_len, int):
         raise TypeError("`sig_len` must be an integer.")
     elif sig_len < 1:
@@ -228,34 +281,29 @@ def generate_lines(
         raise TypeError("`style` must be a string.")
 
     style: str = "-".join(style.strip().lower().split())
+
     lines: Dict[str, np.ndarray] = {
-        "linear": np.arange(1, sig_len + 1) * 100 / sig_len,
-        "decreasing-linear": np.arange(sig_len, 0, -1) * 100 / sig_len,
-        "sharp-hill": np.concatenate(
-            (
-                np.arange(1, sig_len // 4 + 1) * 100 / sig_len,
-                np.arange(sig_len // 4, sig_len // 4 * 3 + 1)[::-1] * 100 / sig_len,
-                np.arange(sig_len // 4 * 3, sig_len + 1) * 100 / sig_len,
-            )
-        ),
-        "four-bit-sine": np.concatenate(
-            (
-                np.arange(1, sig_len // 4 + 1) * 100 / sig_len,
-                np.arange(sig_len // 4, sig_len // 4 * 3 + 1)[::-1] * 100 / sig_len,
-                np.arange(sig_len // 4 * 3, sig_len + 1) * 100 / sig_len,
-            )
-        ),
-        # sine wave with 1==sig_len peak=50, trough=-50
-        "sine": np.sin(np.arange(1, sig_len + 1) * np.pi / (sig_len / 2)) * 50 + 50,
+        "linear": _linear(sig_len),
+        "decreasing-linear": _decreasing_linear(sig_len),
+        "sharp-hill": _sharp_hill(sig_len),
+        "four-bit-sine": _four_bit_sine(sig_len),
+        "sine": _sine(sig_len),
+        "cosine": _cosine(sig_len),
+        "sawtooth": _sawtooth(sig_len),
     }
-    for k, v in lines.items():
-        lines[k] = v[:sig_len]
-    if style == "any":
+
+    if "inv" in style:
+        style = "-".join([s for s in style.split("-") if "inv" not in s])
+
+    if style in lines:
+        return lines[style][:sig_len]
+    elif style == "any":
         return list(lines.values())[np.random.randint(0, len(lines))]
     elif style == "all":
-        return lines
-    elif style in lines:
-        return lines[style]
+        # return the list of choices
+        opns: List[str] = list(lines.keys())
+        inv_opns: List[str] = [f"inverted-{opn}" for opn in opns]
+        return opns + inv_opns
     else:
         raise ValueError(f"Invalid style: {style}. Use one of: {list(lines.keys())}.")
 
