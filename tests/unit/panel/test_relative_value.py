@@ -11,6 +11,7 @@ import io
 import sys
 import warnings
 
+
 class TestAll(unittest.TestCase):
     def dataframe_generator(self):
         self.cids: List[str] = ["AUD", "CAD", "GBP", "NZD"]
@@ -256,7 +257,7 @@ class TestAll(unittest.TestCase):
             warning_message: str = str(w[-1].message)
 
             printed_cids: str = set(eval(warning_message[-23:-1]))
-            test: str = set(['CAD', 'GBP', 'NZD'])
+            test: str = set(["CAD", "GBP", "NZD"])
             self.assertEqual(printed_cids, test)
 
         # If the "complete_cross" parameter is set to True, the corresponding category
