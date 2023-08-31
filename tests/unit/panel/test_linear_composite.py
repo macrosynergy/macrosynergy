@@ -338,7 +338,7 @@ class TestAll(unittest.TestCase):
                 xcats=_xcats,
                 start_date=start,
                 end_date=end,
-                prefer="linear",
+                style="linear",
             )
             adf: pd.DataFrame = linear_composite(
                 df=dfd,
