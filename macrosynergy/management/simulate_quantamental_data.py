@@ -283,22 +283,23 @@ def generate_lines(sig_len: int, style: str = "linear") -> Union[np.ndarray, Lis
     style: str = "-".join(style.strip().lower().split())
 
     lines: Dict[str, np.ndarray] = {
-        "linear": _linear(sig_len),
-        "decreasing-linear": _decreasing_linear(sig_len),
-        "sharp-hill": _sharp_hill(sig_len),
-        "four-bit-sine": _four_bit_sine(sig_len),
-        "sine": _sine(sig_len),
-        "cosine": _cosine(sig_len),
-        "sawtooth": _sawtooth(sig_len),
+        "linear": _linear,
+        "decreasing-linear": _decreasing_linear,
+        "sharp-hill": _sharp_hill,
+        "four-bit-sine": _four_bit_sine,
+        "sine": _sine,
+        "cosine": _cosine,
+        "sawtooth": _sawtooth,
     }
 
     if "inv" in style:
         style = "-".join([s for s in style.split("-") if "inv" not in s])
 
     if style in lines:
-        return lines[style][:sig_len]
+        return lines[style](sig_len)[:sig_len]
     elif style == "any":
-        return list(lines.values())[np.random.randint(0, len(lines))]
+        r_choice: str = np.random.choice(list(lines.keys()))
+        return lines[r_choice](sig_len)[:sig_len]
     elif style == "all":
         # return the list of choices
         opns: List[str] = list(lines.keys())
