@@ -20,8 +20,8 @@ if os.path.exists(os.path.join(OUTPUT_DIR, "_build")):
     shutil.rmtree(os.path.join(OUTPUT_DIR, "_build"))
 
 shutil.copytree(os.path.join(SOURCE_DIR, "_build"), os.path.join(OUTPUT_DIR, "_build"))
-shutil.rmtree(SOURCE_DIR)
-os.rmdir(os.path.dirname(SOURCE_DIR))
+# shutil.rmtree(SOURCE_DIR)
+# os.rmdir(os.path.dirname(SOURCE_DIR))
 
 # print the abs path of  os.path.join(OUTPUT_DIR, "_build")
 print(
