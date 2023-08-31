@@ -175,6 +175,7 @@ class FacetPlot(Plotter):
         # plot arguments
         cids: Optional[List[str]] = None,
         xcats: Optional[List[str]] = None,
+        metric: Optional[str] = None,
         # fig arguments
         figsize: Tuple[Numeric, Numeric] = (16.0, 9.0),
         ncols: int = 3,
@@ -677,7 +678,6 @@ if __name__ == "__main__":
 
     import time
 
-
     cids_A: List[str] = ["AUD", "CAD", "EUR", "GBP", "USD"]
     cids_B: List[str] = ["CHF", "INR", "JPY", "NOK", "NZD", "SEK"]
     cids_C: List[str] = ["CHF", "EUR", "INR", "JPY", "NOK", "NZD", "SEK", "USD"]
@@ -722,7 +722,7 @@ if __name__ == "__main__":
     df: pd.DataFrame = df[
         ~((df["cid"] == "NOK") & (df["xcat"] == "FXUNTRADABLE_NSA"))
     ].reset_index(drop=True)
-    
+
     timer_start: float = time.time()
 
     with FacetPlot(
