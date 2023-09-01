@@ -6,15 +6,31 @@ How to get started with the Macrosynergy package in 5-minutes.
 
 The easiest method for installing the package is to use the PyPI installation method:
 
+### Installing from PyPI
+
 ```bash
 pip install macrosynergy
 ```
+
 Alternatively, we you want to install the latest development version, you can install directly from GitHub:
+
+### Installing from GitHub/Source
 
 ```bash
 pip install git+https://github.com/macrosynergy/macrosynergy@develop
 ```
+
 This extends to any branch; not just the `develop` branch.
+
+### Building from Source
+
+If you want to build the package from source, you would need to clone the repository and run the build command:
+
+```bash
+git clone https://github.com/macrosynergy/macrosynergy
+cd macrosynergy
+python setup.py build
+```
 
 ## Usage
 
