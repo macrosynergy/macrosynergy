@@ -44,7 +44,7 @@ def create_jpb_config(destination_dir: str) -> bool:
         for folder in os.listdir(destination_dir)
         if os.path.isdir(os.path.join(destination_dir, folder))
     ][0]
-    with open(os.path.join(folder, "_config.yml"), "w") as f:
+    with open(os.path.join(destination_dir, "_config.yml"), "w") as f:
         yaml.dump(config, f)
     return True
 
@@ -103,8 +103,9 @@ def copy_css_file(destination_dir: str) -> bool:
     static_dir: str = os.path.join(destination_dir, "_static")
     os.makedirs(static_dir, exist_ok=True)
     shutil.copy(SITE_WIDE_CSS, static_dir)
-    
+
     return True
+
 
 if __name__ == "__main__":
     # parse arguments
@@ -144,6 +145,6 @@ if __name__ == "__main__":
     ][0]
     # create_dummy_readmes(destination_dir=folder)
     # create the toc file
-    create_toc(destination_dir=folder)
+    create_toc(destination_dir=args.build_dir)
     # copy the css file
-    copy_css_file(destination_dir=folder)
+    copy_css_file(destination_dir=args.build_dir)
