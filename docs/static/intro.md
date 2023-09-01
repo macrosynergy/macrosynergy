@@ -1,4 +1,4 @@
-# Landing Page
+# Introduction
 
 **Data Science** | **Tradable Economics** | **Investor Value**
 
