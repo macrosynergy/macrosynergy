@@ -1,6 +1,7 @@
 # Downloading JPMaQS Data
 
 ## Downloading data from the J.P. Morgan DataQuery API
+
 To download data from JP Morgan DataQuery, you can use the JPMaQSDownload Object together with your OAuth authentication credentials (default):
 
 ```python
@@ -11,7 +12,7 @@ with JPMaQSDownload(
         client_id="<dq_client_id>",
         client_secret="<dq_client_secret>"
 ) as downloader:
-    data = downloader.download(tickers="EUR_FXXR_NSA", 
+    data = downloader.download(tickers="EUR_FXXR_NSA",
                                 start_date="2022-01-01")
 
 assert isinstance(data, pd.DataFrame) and not data.empty
@@ -19,6 +20,7 @@ assert isinstance(data, pd.DataFrame) and not data.empty
 assert data.shape[0] > 0
 data.info()
 ```
+
 Alternatively, you can also the certificate and private key pair, to access DataQuery as:
 
 ```python
@@ -32,7 +34,7 @@ with JPMaQSDownload(
         crt="<path_to_dq_certificate>",
         key="<path_to_dq_key>"
 ) as downloader:
-    data = downloader.download(tickers="EUR_FXXR_NSA", 
+    data = downloader.download(tickers="EUR_FXXR_NSA",
                                 start_date="2022-01-01")
 
 assert isinstance(data, pd.DataFrame) and not data.empty
@@ -59,10 +61,10 @@ catalogue = jpmaqs.get_catalogue()
 
 ## Connecting via a proxy server
 
-
 Since a lot of institutions use a proxy server to connect to the internet; the JPMaQSDownload object can be configured to use a proxy server.
 
 It is also possible to use a proxy server with the Dataquery interface. Here's an example:
+
 ```python
 import pandas as pd
 from macrosynergy.download import JPMaQSDownload

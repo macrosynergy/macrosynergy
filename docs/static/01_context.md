@@ -1,7 +1,6 @@
-
 # Context
 
-## Macrosynergy 
+## Macrosynergy
 
 **Data Science** | **Tradable Economics** | **Investor Value**
 
@@ -25,11 +24,11 @@ development and operations.
 
 ### Links to Macrosynergy Website and associated pages.
 
--   Python 3 documentation: <https://docs.python.org/3/>
--   NumPy documentation: <https://numpy.org/doc/stable/reference/>
--   Systematic-Risk, Systematic Value. Quantitative Finance Research
-    Journal by Macrosynergy\'s Ralph Sueppel:
-    <https://research.macrosynergy.com/>
--   Macrosynergy\'s website: <https://www.macrosynergy.com>
--   Macrosynergy\'s Linkedin Page:
-    <https://www.linkedin.com/company/macrosynergy-partners/>
+- Python 3 documentation: <https://docs.python.org/3/>
+- NumPy documentation: <https://numpy.org/doc/stable/reference/>
+- Systematic-Risk, Systematic Value. Quantitative Finance Research
+  Journal by Macrosynergy\'s Ralph Sueppel:
+  <https://research.macrosynergy.com/>
+- Macrosynergy\'s website: <https://www.macrosynergy.com>
+- Macrosynergy\'s Linkedin Page:
+  <https://www.linkedin.com/company/macrosynergy-partners/>
