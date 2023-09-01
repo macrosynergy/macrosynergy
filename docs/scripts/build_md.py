@@ -10,6 +10,7 @@ from functools import wraps
 import fnmatch
 
 SOURCE_DIR = "macrosynergy"
+STATIC_SOURCE_DIR = "docs/static/"
 OUTPUT_DIR = "docs/build/"
 
 
@@ -354,18 +355,46 @@ def process_directory(
 
 def modify_readme(readme: str) -> bool:
     # if the first element of the readme is an image then remove it
+    lines: List[str]
     with open(readme, "r", encoding="utf8") as f:
         lines: List[str] = f.readlines()
         if lines[0].startswith("!"):
-            lines = lines[1:]
-        lines = "".join(lines)
+            lines: List[str] = lines[1:]
+
+    # look for a line containing: "# Macrosynergy Quant Research"
+    for il, line in enumerate(lines):
+        if line.strip().startswith("# Macrosynergy Quant Research"):
+            # replace the line with "# Package Documentation"
+            lines[il] = "# Package Documentation\n\n"
+            break
 
     with open(readme, "w", encoding="utf8") as f:
-        f.write(lines)
+        out_lines: str = "".join(lines)
+        f.write(out_lines)
     return True
 
 
-def driver(readme: str, input_directory: str, output_directory: str):
+def copy_static_md(source_dir: str, destination_dir: str) -> bool:
+    """
+    Copies the static markdown files from the source directory to the destination directory.
+    """
+    # get all the markdown files in the source directory recursively as absolute paths
+    md_files: List[str] = [
+        os.path.abspath(file)
+        for file in glob.glob(os.path.join(source_dir, "**/*.md"), recursive=True)
+    ]
+
+    # copy each file to the destination directory
+    for file in md_files:
+        # make sure the path exists
+        dst: str = os.path.join(destination_dir, os.path.relpath(file, source_dir))
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copy(src=file, dst=dst)
+
+    return True
+
+
+def driver(readme: str, input_directory: str, output_directory: str, static_dir: str):
     """
     Driver function for the script.
     """
@@ -388,11 +417,11 @@ def driver(readme: str, input_directory: str, output_directory: str):
         for d in os.listdir(output_directory)
         if os.path.isdir(d)
     ]
-    # if dirs_found:
-    #     # assert tjhere is only one directory
-    #     assert len(dirs_found) == 1
-    #     # move the readme into the first directory
-    #     shutil.move(os.path.join(output_directory, readme), dirs_found[0])
+    # assert there is only one package dir
+    assert len(dirs_found) == 1, "Found more than one package directory."
+
+    # copy the static markdown files
+    copy_static_md(source_dir=static_dir, destination_dir=output_directory)
 
 
 if __name__ == "__main__":
@@ -429,4 +458,9 @@ if __name__ == "__main__":
     source_dir = os.path.abspath(os.path.normpath(os.path.expanduser(args.source)))
     output_dir = os.path.abspath(os.path.normpath(os.path.expanduser(args.output)))
 
-    driver(input_directory=source_dir, output_directory=output_dir, readme=args.readme)
+    driver(
+        input_directory=source_dir,
+        output_directory=output_dir,
+        readme=args.readme,
+        static_dir=STATIC_SOURCE_DIR,
+    )
