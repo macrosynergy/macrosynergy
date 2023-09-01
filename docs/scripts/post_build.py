@@ -7,11 +7,6 @@ OUTPUT_DIR = "./docs/"
 
 # look in the source dir, there will be only one directory
 
-for dir in os.listdir(SOURCE_DIR):
-    if os.path.isdir(os.path.join(SOURCE_DIR, dir)):
-        SOURCE_DIR = os.path.join(SOURCE_DIR, dir)
-        break
-
 # in source dir there is _build/ dir, copy it to output dir
 # and remove source dir
 
