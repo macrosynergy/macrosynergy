@@ -50,7 +50,7 @@ All pull requests (PR) must be made against the `develop` branch of the reposito
 at least one review from a maintainer before they can be merged.
 The pull requests require status checks to pass before they can be merged.
 
-## Status Checks
+### Status Checks
 
 The following status checks are run on all pull requests:
 
@@ -58,7 +58,7 @@ The following status checks are run on all pull requests:
 - All integration tests must pass
 - Code coverage must be at least 50%. For community contributions, this is checked by the maintainer.
 
-## Title Conventions
+### Title Conventions
 
 Titles for pull requests should be of the form:
 
