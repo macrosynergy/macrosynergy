@@ -371,7 +371,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         :param <pd.DataFrame> y: Pandas dataframe of target variable, multi-indexed by
             (cross-section, date). The dates must be in datetime format.
 
-        :return <None>
+        :return None
         """
         plt.style.use("seaborn-whitegrid")
         Xy = pd.concat(
