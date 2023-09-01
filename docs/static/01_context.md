@@ -7,7 +7,7 @@
 Macrosynergy was created in August 2009 by Robert Enserro and Nikos
 Makris. In January 2010, Macrosynergy launched its first investment
 fund, the Macrosynergy Trading Fund, a global macro fund that grew to
-peak assets under management of \$950 million. In November 2010, Gavin
+peak assets under management of $950 million. In November 2010, Gavin
 Moule joined Macrosynergy. Nikos and Gavin co-managed the Trading Fund
 throughout its ten year history. Over the last decade, Macrosynergy
 launched and managed three other investment funds.
@@ -27,8 +27,8 @@ development and operations.
 - Python 3 documentation: <https://docs.python.org/3/>
 - NumPy documentation: <https://numpy.org/doc/stable/reference/>
 - Systematic-Risk, Systematic Value. Quantitative Finance Research
-  Journal by Macrosynergy\'s Ralph Sueppel:
+  Journal by Macrosynergy's Ralph Sueppel:
   <https://research.macrosynergy.com/>
-- Macrosynergy\'s website: <https://www.macrosynergy.com>
-- Macrosynergy\'s Linkedin Page:
+- Macrosynergy's website: <https://www.macrosynergy.com>
+- Macrosynergy's Linkedin Page:
   <https://www.linkedin.com/company/macrosynergy-partners/>
