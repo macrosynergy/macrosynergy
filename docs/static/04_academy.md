@@ -6,9 +6,9 @@ The Macro Quantamental Academy is a free educational resource designed to comple
 The Academy is designed to provide a basic introduction to the JPMaQS indicators and how they can be used in a systematic investment process.
 
 ## Links
-[Macrosynergy Quantamental Academy](https://academy.macrosynergy.com/) - https://academy.macrosynergy.com/.
+- Macrosynergy Quantamental Academy - [academy.macrosynergy.com](https://academy.macrosynergy.com/).
 
-[JPMaQS for Academia](https://academy.macrosynergy.com/academia/) - https://academy.macrosynergy.com/academia/.
+- JPMaQS for Academia - [academy.macrosynergy.com/academia](https://academy.macrosynergy.com/academia/).
 
 ## How to use the Academy without a JPMaQS licence
 
