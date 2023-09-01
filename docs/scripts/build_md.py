@@ -364,8 +364,7 @@ def modify_readme(readme: str) -> bool:
     # look for a line containing: "# Macrosynergy Quant Research"
     for il, line in enumerate(lines):
         if line.strip().startswith("# Macrosynergy Quant Research"):
-            # replace the line with "# Package Documentation"
-            lines[il] = "# Package Documentation\n\n"
+            lines[il] = "# `</>` Package Documentation\n\n"
             break
 
     with open(readme, "w", encoding="utf8") as f:
