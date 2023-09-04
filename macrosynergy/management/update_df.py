@@ -1,4 +1,6 @@
-
+"""
+Tools used to update and modify a quantamental DataFrame.
+"""
 import pandas as pd
 from itertools import product
 from macrosynergy.management.simulate_quantamental_data import make_qdf

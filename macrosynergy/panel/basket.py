@@ -1,4 +1,7 @@
-
+"""
+Basket class for calculating the returns and carries of baskets 
+of financial contracts using various weighting methods.
+"""
 import numpy as np
 import pandas as pd
 import seaborn as sns

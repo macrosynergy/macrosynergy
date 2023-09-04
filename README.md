@@ -291,7 +291,7 @@ df_eval = pnl.evaluate_pnls(
 
 ## Documentation
 
-The official documentation can be found at our documentation website: https://docs.macrosynergy.com.
+The official documentation can be found at our documentation website: [docs.macrosynergy.com](https://docs.macrosynergy.com).
 
 We use "code-as-documentation" to ensure that our documentation is always up-to-date.
 If you find any issues with the documentation, please [raise an issue](https://github.com/macrosynergy/macrosynergy/issues/new/choose) on our GitHub repository.
