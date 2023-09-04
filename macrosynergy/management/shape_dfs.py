@@ -1,3 +1,7 @@
+"""
+Utilities and common functions for the manipulating DataFrames.
+"""
+
 import numpy as np
 import pandas as pd
 from typing import List

@@ -1,4 +1,6 @@
-
+"""
+Functionality to create contract-specific target positions from signals.
+"""
 import numpy as np
 import pandas as pd
 from typing import List, Union
@@ -202,7 +204,7 @@ def date_alignment(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
     :param <pd.DataFrame> panel_df:
     :param <pd.DataFrame> basket_df:
 
-    :return <pd.DataFrame, pd.DataFrame> returns the two received dataframes defined over
+    :return <Tuple[pd.DataFrame, pd.DataFrame]>: returns the two received dataframes defined over
         the same period.
     """
 
@@ -238,7 +240,7 @@ def consolidation_help(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
     :param <pd.DataFrame> panel_df:
     :param <pd.DataFrame> basket_df:
 
-    :return <pd.DataFrame, pd.DataFrame> returns the consolidated and reduced dataframes.
+    :return <Tuple[pd.DataFrame, pd.DataFrame]>: returns the consolidated and reduced dataframes.
     """
 
     basket_cids = basket_df['cid'].unique()
@@ -276,7 +278,7 @@ def consolidate_positions(data_frames: List[pd.DataFrame], ctypes: List[str]):
     :param <List[pd.DataFrame]> data_frames: list of the target position dataframes.
     :param <List[str]> ctypes:
 
-    :return <List[pd.DataFrame]> list of dataframes having consolidated positions.
+    :return <List[pd.DataFrame]>: list of dataframes having consolidated positions.
     """
 
     no_ctypes = len(ctypes)

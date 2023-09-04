@@ -1,4 +1,7 @@
-
+"""
+Functions used to visualize correlations across categories or cross-sections of
+panels.
+"""
 import itertools
 import pandas as pd
 import numpy as np

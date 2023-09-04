@@ -1,4 +1,6 @@
-
+"""
+Module for calculating z-scores for a panel around a neutral level ("zn scores").
+"""
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Set

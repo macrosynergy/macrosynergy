@@ -25,7 +25,10 @@ logger.addHandler(debug_stream_handler)
 
 
 class JPMaQSDownload(object):
-    """JPMaQS Download Interface Object
+    """
+    JPMaQSDownload Object. This object is used to download JPMaQS data via the DataQuery API.
+    It can be extended to include the use of proxies, and even request generic DataQuery expressions.
+
     :param <bool> oauth: True if using oauth, False if using username/password with crt/key.
 
     When using oauth:
@@ -329,10 +332,10 @@ class JPMaQSDownload(object):
     ) -> pd.DataFrame:
         """
         Convert the downloaded data to a pandas DataFrame.
-        Parameters
+
         :param dicts_list <list>: List of dictionaries containing time series
             data from the DataQuery API
-        Returns
+
         :return <pd.DataFrame>: JPMaQS standard dataframe with columns:
             real_date, cid, xcat, <metric>. The <metric> column contains the
             observed data for the given cid and xcat on the given real_date.
@@ -505,7 +508,7 @@ class JPMaQSDownload(object):
     ) -> bool:
         """Validate the arguments passed to the download function.
 
-        :params -- see macrosynergy.download.jpmaqs.JPMaQSDownload.download()
+        :params:  -- see `macrosynergy.download.jpmaqs.JPMaQSDownload.download()`.
 
         :return <bool>: True if valid.
 
@@ -602,7 +605,6 @@ class JPMaQSDownload(object):
         and provides the user wuth the complete list of expressions that are in the
         catalogue.
 
-        Parameters
         :param <List[str]> tickers: list of tickers to filter.
 
         :return <List[str]>: list of tickers that are in the JPMaQS catalogue.

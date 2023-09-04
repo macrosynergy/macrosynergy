@@ -388,11 +388,15 @@ class OAuth(object):
             }
 
         return self._stored_token["access_token"]
-    
+
     def _get_user_id(self) -> str:
         return "OAuth_ClientID - " + self.token_data["client_id"]
 
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
+        """
+        Returns a dictionary with the authentication information, in the same
+        format as the `macrosynergy.download.dataquery.CertAuth.get_auth()` method.
+        """
         headers: Dict = {"Authorization": "Bearer " + self._get_token()}
         return {
             "headers": headers,
@@ -446,6 +450,10 @@ class CertAuth(object):
         self.proxy: Optional[dict] = proxy
 
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
+        """
+        Returns a dictionary with the authentication information, in the same
+        format as the `macrosynergy.download.dataquery.OAuth.get_auth()` method.
+        """
         headers = {"Authorization": f"Basic {self.auth:s}"}
         user_id = "CertAuth_Username - " + self.username
         return {
@@ -470,11 +478,11 @@ def validate_download_args(
     delay_param: float,
 ):
     """
-    Validate the arguments passed to the download_data method.
+    Validate the arguments passed to the `download_data()` method.
 
-    :params -- see download_data method.
+    :params : -- see `download_data()` method.
 
-    :returns True if all arguments are valid.
+    :return <bool>: True if all arguments are valid.
 
     :raises <TypeError>: if any of the arguments are of the wrong type.
     :raises <ValueError>: if any of the arguments are semantically incorrect.
@@ -614,7 +622,8 @@ class DataQueryInterface(object):
         if oauth and (config.oauth() is None):
             warnings.warn(
                 "OAuth credentials not found. "
-                "Trying to use certificate authentication.",)
+                "Trying to use certificate authentication.",
+            )
             if config.cert() is None:
                 raise ValueError(
                     "Certificate credentials not found. "
@@ -622,7 +631,7 @@ class DataQueryInterface(object):
                 )
             else:
                 oauth: bool = False
-             
+
         if oauth:
             self.auth: OAuth = OAuth(
                 **config.oauth(mask=False),
@@ -761,7 +770,6 @@ class DataQueryInterface(object):
         tickers in the JPMaQS group. The group ID can be changed to fetch a
         different group's catalogue.
 
-        Parameters
         :param <str> group_id: the group ID to fetch the catalogue for.
 
         :return <List[str]>: list of tickers in the JPMaQS group.
@@ -807,6 +815,11 @@ class DataQueryInterface(object):
         show_progress: bool = False,
         retry_counter: int = 0,
     ) -> List[dict]:
+        """
+        Backend method to download data from the DataQuery API.
+        Used by the `download_data()` method.
+        """
+
         if retry_counter > 0:
             print("Retrying failed downloads. Retry count:", retry_counter)
 

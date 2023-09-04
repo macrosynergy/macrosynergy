@@ -1,4 +1,7 @@
-
+"""
+Functions for calculating the hedge ratios of a panel of returns with respect to a
+single return. 
+"""
 import warnings
 import numpy as np
 import pandas as pd
@@ -151,7 +154,7 @@ def adjusted_returns(benchmark_return: pd.Series, df_hedge: pd.DataFrame,
     :param <pd.DataFrame> df_hedge: standardised dataframe with the hedge ratios.
     :param <pd.DataFrame> dfw: pivoted dataframe of the relevant returns.
 
-    :return <pd.DataFrame> standardised dataframe of adjusted returns.
+    :return <pd.DataFrame>: standardised dataframe of adjusted returns.
     """
 
     hedge_pivot = df_hedge.pivot(index='real_date', columns='cid', values='value')
