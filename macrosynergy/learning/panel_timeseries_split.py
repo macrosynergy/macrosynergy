@@ -183,7 +183,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
             # calculating the number of splits ('self.n_splits') required to split these dates into distinct training intervals of length 'self.train_intervals' (where possible)
             # and finally splitting the mentioned dates into 'self.n_splits' splits (post the first split, determined by 'self.min_cids' and 'self.min_periods').
             unique_times_train: pd.arrays.DatetimeArray = self.unique_times[
-                                        np.where(self.unique_times == date_last_train)[0][0]
+                np.where(self.unique_times == date_last_train)[0][0]
                 + 1 : -self.test_size
             ]
             self.n_splits: int = int(
@@ -363,7 +363,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
     def visualise_splits(self, X: pd.DataFrame, y: pd.DataFrame) -> None:
         """
-        Method to visualise the splits created according to the parameters specified in the constructor. 
+        Method to visualise the splits created according to the parameters specified in the constructor.
 
         :param <pd.DataFrame> X: Pandas dataframe of features/quantamental indicators,
             multi-indexed by (cross-section, date). The dates must be in datetime format.
@@ -374,20 +374,20 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         :return None
         """
         plt.style.use("seaborn-whitegrid")
-        Xy = pd.concat(
+        Xy: pd.DataFrame = pd.concat(
             [X, y], axis=1
         ).dropna()  # remove dropna when splitter method fixed as per TODO #3
-        cross_sections = np.array(sorted(Xy.index.get_level_values(0).unique()))
-        real_dates = np.array(sorted(Xy.index.get_level_values(1).unique()))
-        splits = list(self.split(X, y))
+        cross_sections: np.array[str] = np.array(sorted(Xy.index.get_level_values(0).unique()))
+        real_dates: np.array[pd.Timestamp] = np.array(sorted(Xy.index.get_level_values(1).unique()))
+        splits: List[Tuple[pd.Index,pd.Index]] = list(self.split(X, y))
 
-        n_splits = self.n_splits if self.n_splits <= 5 else 5
-        split_idxs = (
+        n_splits: int = self.n_splits if self.n_splits <= 5 else 5
+        split_idxs: List[int] = (
             [0, len(splits) // 4, len(splits) // 2, 3 * len(splits) // 4, -1]
             if self.n_splits > 5
             else [i for i in range(self.n_splits)]
         )
-        split_titles = (
+        split_titles: List[str] = (
             [
                 "Initial split",
                 "Quarter progress",
@@ -406,18 +406,31 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         )
         for cs_idx, cs in enumerate(cross_sections):
             for idx, split_idx in enumerate(split_idxs):
-                cs_train_dates = Xy.iloc[splits[split_idx][0]][
+                # Get the training and test dates for this particular split and cross-section
+                cs_train_dates: pd.DatetimeIndex = Xy.iloc[splits[split_idx][0]][
                     Xy.iloc[splits[split_idx][0]].index.get_level_values(0) == cs
                 ].index.get_level_values(1)
-                cs_test_dates = Xy.iloc[splits[split_idx][1]][
+                cs_test_dates: pd.DatetimeIndex = Xy.iloc[splits[split_idx][1]][
                     Xy.iloc[splits[split_idx][1]].index.get_level_values(0) == cs
                 ].index.get_level_values(1)
                 if len(cs_train_dates) > 0:
+                    # If there are training dates, then plot a blue bar for the training dates
+                    # The logic for the upper bound on the bar is to ensure there isn't a gap between
+                    # the blue bar and the (next) red bar. 
+                    lower_bound: pd.Timestamp = cs_train_dates.min()
+                    upper_bound: pd.Timestamp = (
+                        real_dates[
+                            np.where(real_dates == cs_train_dates.max())[0][0] + 1
+                        ]
+                        if np.where(real_dates == cs_train_dates.max())[0][0] + 1
+                        < len(real_dates)
+                        else cs_train_dates.max()
+                    )
                     ax[cs_idx, idx].broken_barh(
                         [
                             (
                                 cs_train_dates.min(),
-                                cs_train_dates.max() - cs_train_dates.min(),
+                                upper_bound - lower_bound,
                             )
                         ],
                         (-0.4, 0.8),
@@ -427,11 +440,21 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
                     if cs_idx == 0:
                         ax[cs_idx, idx].set_title(f"{split_titles[idx]}")
                 if len(cs_test_dates) > 0:
+                    # If there are test dates, then plot a red bar for the test dates
+                    lower_bound: pd.Timestamp = cs_test_dates.min()
+                    upper_bound: pd.Timestamp = (
+                        real_dates[
+                            np.where(real_dates == cs_test_dates.max())[0][0] + 1
+                        ]
+                        if np.where(real_dates == cs_test_dates.max())[0][0] + 1
+                        < len(real_dates)
+                        else cs_test_dates.max()
+                    )
                     ax[cs_idx, idx].broken_barh(
                         [
                             (
                                 cs_test_dates.min(),
-                                cs_test_dates.max() - cs_test_dates.min(),
+                                upper_bound - lower_bound,
                             )
                         ],
                         (-0.4, 0.8),
@@ -454,7 +477,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate_quantamental_data import make_qdf
-
+    
     cids = ["AUD", "CAD", "GBP", "USD"]
     xcats = ["XR", "CRY", "GROWTH", "INFL"]
     cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
@@ -489,7 +512,7 @@ if __name__ == "__main__":
     splitter.visualise_splits(X2, y2)
     # c) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4
     splitter = PanelTimeSeriesSplit(
-        train_intervals=21 * 12, test_size=21 * 12, min_periods=21, min_cids=4
+        train_intervals=21 * 12, test_size=1, min_periods=21, min_cids=4
     )
     splitter.visualise_splits(X2, y2)
     # d) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4, max_periods=12*21
