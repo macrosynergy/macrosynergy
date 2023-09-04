@@ -1,3 +1,6 @@
+"""
+Functions for visualizing data grading and blacklisted periods from a quantamental DataFrame.
+"""
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt

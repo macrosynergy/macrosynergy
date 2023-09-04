@@ -1,3 +1,7 @@
+"""
+Custom exceptions for the `macrosynergy.download` subpackage.
+"""
+
 import requests
 
 

@@ -195,34 +195,29 @@ class Test_All(unittest.TestCase):
         
         # generate_lines(sig_len : uint, style : str) -> Union[np.ndarray, Dict[str, np.ndarray]]
         test_len : int = 100
-        line_styles : Dict[str, np.ndarray] = generate_lines(sig_len=test_len, style='all')
+        line_styles : List[str] = generate_lines(sig_len=test_len, style='all')
         
         # assert that output is a dictionary and is not empty
-        self.assertTrue(isinstance(line_styles, dict))
+        self.assertTrue(isinstance(line_styles, list) and all([isinstance(ix, str) for ix in line_styles]))
         self.assertTrue(len(line_styles) > 0)
         
-        # assert that all are np.ndarrays of the correct length
-        self.assertTrue(all(isinstance(line, np.ndarray) for line in line_styles.values()))
-        self.assertTrue(all(len(line) == test_len for line in line_styles.values()))
-        
-        for key, line in line_styles.items():
-            t_o : np.ndarray = generate_lines(sig_len=test_len, style=key)
-            self.assertTrue(np.array_equal(line, t_o))
+        for l_style in line_styles:
+            t_o : np.ndarray = generate_lines(sig_len=test_len, style=l_style)
+            self.assertTrue(len(t_o) == test_len)
         
         # generate an array of random numbers in range(65, 91) of random len in range(3, 10)
         while True:
             r_str : str = ''.join([chr(i) for i in np.random.randint(65, 91, np.random.randint(3, 10))])
-            if r_str not in line_styles.keys():
+            if r_str not in line_styles:
                 break
         
-        l_styles : List[str] = list(line_styles.keys())
         self.assertRaises(ValueError, generate_lines, sig_len=test_len, style=r_str)
-        self.assertRaises(ValueError, generate_lines, sig_len=-10, style=l_styles[0])
-        self.assertRaises(ValueError, generate_lines, sig_len=0, style=l_styles[0])
+        self.assertRaises(ValueError, generate_lines, sig_len=-10, style=line_styles[0])
+        self.assertRaises(ValueError, generate_lines, sig_len=0, style=line_styles[0])
         
-        r : np.ndarray = generate_lines(sig_len=test_len, style=l_styles[0])
+        r : np.ndarray = generate_lines(sig_len=test_len, style=line_styles[0])
         l : List[bool] = []
-        for ix in range(100):
+        for _ in range(100):
             rx : np.ndarray = generate_lines(sig_len=test_len, style='any')
             l.append(np.array_equal(rx, r))
         
@@ -235,11 +230,10 @@ class Test_All(unittest.TestCase):
         start_date : str = '2010-01-01'
         end_date : str = '2020-12-31'
         date_range : pd.DatetimeIndex = pd.bdate_range(start=start_date, end=end_date)
-        line_styles : Dict[str, np.ndarray] = generate_lines(sig_len=len(date_range), style='all')
-        line_styles_names : List[str] = list(line_styles.keys())
+        line_styles : List[str] = generate_lines(sig_len=len(date_range), style='all')
         
-        for ls in list(line_styles_names):
-            df : pd.DataFrame = make_test_df(cids=cids, xcats=xcats, start_date=start_date, end_date=end_date, prefer=ls)
+        for ls in list(line_styles):
+            df : pd.DataFrame = make_test_df(cids=cids, xcats=xcats, start_date=start_date, end_date=end_date, style=ls)
             
             self.assertTrue(isinstance(df, pd.DataFrame))
             self.assertFalse(df.empty)
@@ -247,7 +241,7 @@ class Test_All(unittest.TestCase):
             
             ebdates : pd.DatetimeIndex = pd.bdate_range(start=start_date, end=end_date)
             self.assertTrue(set(ebdates) == set(df['real_date']))
-            self.assertTrue(df['real_date'].nunique() == len(line_styles[ls]))
+            self.assertTrue(df['real_date'].nunique() == len(generate_lines(sig_len=len(ebdates), style=ls)))
             self.assertTrue(df['real_date'].nunique() == len(ebdates))
 
             self.assertTrue(df['cid'].nunique() == len(cids))
@@ -261,7 +255,7 @@ class Test_All(unittest.TestCase):
                     t_df : pd.DataFrame = df[(df['cid'] == cid) & (df['xcat'] == xcat)]
                     self.assertTrue(set(ebdates) == set(t_df['real_date']))
                     # assert that the values are the same as the line style
-                    self.assertTrue(np.array_equal(t_df['value'].to_numpy(), line_styles[ls]))
+                    self.assertTrue(np.array_equal(t_df['value'].to_numpy(), generate_lines(sig_len=len(ebdates), style=ls)))
         
 
 

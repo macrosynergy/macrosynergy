@@ -1,3 +1,9 @@
+"""
+Functionalities for estimating and analysing PnLs while taking into account
+realistic constraints such as transaction costs, rebalancing lags, and volatility
+targets.
+"""
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt

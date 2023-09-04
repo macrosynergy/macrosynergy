@@ -1,3 +1,9 @@
+"""
+Module for checking the availability of data availabity from a 
+Quantamental DataFrame. Includes functions for checking start years
+and end dates of a DataFrame, as well as visualizing the results.
+"""
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -11,7 +17,7 @@ from macrosynergy.management.shape_dfs import reduce_df
 def missing_in_df(df: pd.DataFrame, xcats: List[str] = None, cids: List[str] = None):
     """
     Print missing cross-sections and categories
-
+    
     :param <pd.DataFrame> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcats', 'real_date'.
     :param <List[str]> xcats: extended categories to be checked on. Default is all
@@ -84,8 +90,7 @@ def business_day_dif(df: pd.DataFrame, maxdate: pd.Timestamp):
     df = (maxdate - df).apply(lambda x: x.dt.days)
     # set to zero if the difference is negative.
     df = df - week_df
-    df[df < 0] = 0
-    return df
+    return df.where(df >= 0, 0)
 
 
 def visual_paneldates(
