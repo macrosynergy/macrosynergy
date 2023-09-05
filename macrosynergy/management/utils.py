@@ -68,8 +68,6 @@ def get_dict_max_depth(d: dict) -> int:
 
 
 def rec_search_dict(d: dict, key: str, match_substring: bool = False, match_type=None):
-
-def rec_search_dict(d: dict, key: str, match_substring: bool = False, match_type=None):
     """
     Recursively searches a dictionary for a key and returns the value
     associated with it.
