@@ -44,7 +44,7 @@ html_theme_options = {
     "repository_branch": "main",
     "extra_footer": "",
     "home_page_in_toc": True,
-    "announcement": "<p class='heading-banner'>\n  <img src='https://github.com/macrosynergy/macrosynergy/main/docs/assets/MACROSYNERGY_Logo_White.png?raw=true'\n      width='35%' height='auto' style='display: block; margin-left: auto ; margin-right: auto ; ' class='bd-header-announcement-img'\n      onclick=\"window.location.href='https://macrosynergy.com/'\">\n</p>\n",
+    "announcement": "<p class='heading-banner'>\n  <img src='https://raw.githubusercontent.com/macrosynergy/macrosynergy/main/docs/assets/MACROSYNERGY_Logo_White.png'\n      width='35%' height='auto' style='display: block; margin-left: auto ; margin-right: auto ; ' class='bd-header-announcement-img'\n      onclick=\"window.location.href='https://macrosynergy.com/'\">\n</p>\n",
     "analytics": {"google_analytics_id": ""},
     "use_repository_button": True,
     "use_edit_page_button": False,
