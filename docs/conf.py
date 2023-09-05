@@ -41,7 +41,7 @@ html_theme_options = {
     },
     "path_to_docs": "docs/",
     "repository_url": "https://github.com/macrosynergy/macrosynergy",
-    "repository_branch": "master",
+    "repository_branch": "main",
     "extra_footer": "",
     "home_page_in_toc": True,
     "announcement": "<p class='heading-banner'>\n  <img src='https://github.com/macrosynergy/macrosynergy/main/docs/assets/MACROSYNERGY_Logo_White.png?raw=true'\n      width='35%' height='auto' style='display: block; margin-left: auto ; margin-right: auto ; ' class='bd-header-announcement-img'\n      onclick=\"window.location.href='https://macrosynergy.com/'\">\n</p>\n",
