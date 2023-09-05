@@ -22,7 +22,7 @@ extensions = [
     "sphinx_jupyterbook_latex",
 ]
 external_toc_exclude_missing = False
-external_toc_path = "build/ _toc.yml"
+external_toc_path = "build/_toc.yml"
 html_baseurl = "https://docs.macrosynergy.com/"
 html_css_files = ["custom_css.css"]
 html_favicon = "https://macrosynergy.com/wp-content/uploads/2022/10/macrosynergy-logo-favicon-300x300.png"
