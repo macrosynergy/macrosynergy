@@ -544,7 +544,3 @@ if __name__ == "__main__":
         max_periods=12 * 21,
     )
     splitter.visualise_splits(X2, y2)
-
-    """TODO:
-    4. Check that it works for blacklisted periods
-    """
