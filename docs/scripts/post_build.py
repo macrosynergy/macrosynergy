@@ -14,7 +14,10 @@ OUTPUT_DIR = "./docs/"
 if os.path.exists(os.path.join(OUTPUT_DIR, "_build")):
     shutil.rmtree(os.path.join(OUTPUT_DIR, "_build"))
 
-shutil.copytree(os.path.join(SOURCE_DIR, "_build"), os.path.join(OUTPUT_DIR, "_build"))
+# copy all files iside source dir to output dir
+shutil.copytree(SOURCE_DIR, OUTPUT_DIR, dirs_exist_ok=True)
+
+
 # shutil.rmtree(SOURCE_DIR)
 # os.rmdir(os.path.dirname(SOURCE_DIR))
 
