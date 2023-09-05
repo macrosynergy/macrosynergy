@@ -31,9 +31,9 @@ config:
   launch_buttons:
     binderhub_url: ""
 
-  sphinx:
-    extra_extensions:
-      - sphinx_multiversion
+  # sphinx:
+  #   extra_extensions:
+  #     - sphinx_multiversion
   #  config:
   #    html_extra_path: ['assets']
 
