@@ -1,3 +1,7 @@
+"""
+Implementation of `make_relative_value()` function as a module. The function is used
+to calculate values for indicators relative to a basket of cross-sections.
+"""
 import numpy as np
 import pandas as pd
 from typing import List, Set

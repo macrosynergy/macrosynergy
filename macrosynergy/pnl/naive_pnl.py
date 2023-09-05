@@ -1,3 +1,6 @@
+"""
+"Naive" PnLs with limited signal options and disregarding transaction costs.
+"""
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -969,7 +972,7 @@ class NaivePnL:
             Default is 'ALL'.
         :param <bool> cs: inclusion of cross section PnLs. Default is False.
 
-        :return custom DataFrame with PnLs
+        :return <pd.DataFrame>: custom DataFrame with PnLs
         """
         selected_pnls = pnl_names if pnl_names is not None else self.pnl_names
 

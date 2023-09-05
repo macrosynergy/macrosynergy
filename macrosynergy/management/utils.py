@@ -25,7 +25,6 @@ def generate_random_date(
     """
     Generates a random date between two dates.
 
-    Parameters
     :param <str> start: The start date, in the ISO format (YYYY-MM-DD).
     :param <str> end: The end date, in the ISO format (YYYY-MM-DD).
 
@@ -56,7 +55,6 @@ def get_dict_max_depth(d: dict) -> int:
     """
     Returns the maximum depth of a dictionary.
 
-    Parameters
     :param <dict> d: The dictionary to be searched.
 
     Returns
@@ -68,6 +66,8 @@ def get_dict_max_depth(d: dict) -> int:
         else 0
     )
 
+
+def rec_search_dict(d: dict, key: str, match_substring: bool = False, match_type=None):
 
 def rec_search_dict(d: dict, key: str, match_substring: bool = False, match_type=None):
     """
@@ -114,6 +114,79 @@ def is_valid_iso_date(date: str) -> bool:
         return True
     except ValueError:
         return False
+
+
+def convert_to_iso_format(date: Any = None) -> str:
+    raise NotImplementedError("This function is not yet implemented.")
+    """
+    Converts a datetime like object or string to an ISO date string.
+
+    Parameters
+    :param <Any> date: The date to be converted. This can be a
+        datetime object, a string, pd.Timestamp, or np.datetime64.
+
+    Returns
+    :return <str>: The ISO date string (YYYY-MM-DD).
+    """
+    if date is None:
+        ValueError("Argument `date` cannot be None.")
+
+    r: Optional[str] = None
+    if isinstance(date, str):
+        r: Optional[str] = None
+        if is_valid_iso_date(date):
+            r = date
+        else:
+            if len(date) == 8:
+                try:
+                    r = convert_dq_to_iso(date)
+                except Exception as e:
+                    if isinstance(e, (ValueError, AssertionError)):
+                        pass
+            else:
+                for sep in ["-", "/", ".", " "]:
+                    if sep in date:
+                        try:
+                            sd = date.split(sep)
+                            dx = date
+                            if len(sd) == 3:
+                                if len(sd[1]) == 3:
+                                    sd[1] = {
+                                        "JAN": "01",
+                                        "FEB": "02",
+                                        "MAR": "03",
+                                        "APR": "04",
+                                        "MAY": "05",
+                                        "JUN": "06",
+                                        "JUL": "07",
+                                        "AUG": "08",
+                                        "SEP": "09",
+                                        "OCT": "10",
+                                        "NOV": "11",
+                                        "DEC": "12",
+                                    }[sd[1].upper()]
+                                    dx = sep.join(sd)
+                                r = datetime.datetime.strptime(
+                                    dx, "%d" + sep + "%m" + sep + "%Y"
+                                ).strftime("%Y-%m-%d")
+                                break
+                        except Exception as e:
+                            if isinstance(e, ValueError):
+                                pass
+                            else:
+                                raise e
+
+        if r is None:
+            raise RuntimeError("Could not convert date to ISO format.")
+    elif isinstance(date, (datetime.datetime, pd.Timestamp, np.datetime64)):
+        r = date.strftime("%Y-%m-%d")
+    else:
+        raise TypeError(
+            "Argument `date` must be a string, datetime.datetime, pd.Timestamp or np.datetime64."
+        )
+
+    assert is_valid_iso_date(r), "Failed to convert date to ISO format."
+    return r
 
 
 def convert_iso_to_dq(date: str) -> str:
@@ -234,8 +307,9 @@ def standardise_dataframe(df: pd.DataFrame, verbose: bool = False) -> pd.DataFra
         except:
             pass
 
-    return df
-
+        non_idx_cols: list = sorted(list(set(df.columns) - set(idx_cols)))
+        return df[idx_cols + non_idx_cols]
+    
 
 def drop_nan_series(df: pd.DataFrame, raise_warning: bool = False) -> pd.DataFrame:
     """
@@ -282,7 +356,6 @@ def wide_to_long(
     """
     Converts a wide dataframe to a long dataframe.
 
-    Parameters
     :param <pd.DataFrame> df: The dataframe to be converted.
     :param <str> wide_var: The variable name of the wide variable.
         In case the columns are ... cid_1, cid_2, cid_3, ... then
@@ -320,6 +393,40 @@ def wide_to_long(
 
 
 class Config(object):
+    """
+    Class for handling the configuration of the JPMaQS API.
+
+    :param <str> client_id: The client ID for OAuth authentication.
+    :param <str> client_secret: The client secret for OAuth authentication.
+    :param <str> crt: The path to the certificate file for certificate
+        authentication.
+    :param <str> key: The path to the key file for certificate authentication.
+    :param <str> username: The username for certificate authentication.
+    :param <str> password: The password for certificate authentication.
+    :param <dict> proxy: The proxy settings for the API.
+    :param <dict> proxies: An alternative way to specify proxy settings.
+    :param <str> config_path: The path to the config file. If set to
+        None or "env", the class will attempt to load the config
+        file from the following environment variables:
+
+        For OAuth authentication:
+
+            - DQ_CLIENT_ID : your_client_id
+            - DQ_CLIENT_SECRET : your_client_secret
+
+        For certificate authentication:
+
+            - DQ_CRT : path_to_crt_file
+            - DQ_KEY : path_to_key_file
+            - DQ_USERNAME : your_username
+            - DQ_PASSWORD : your_password
+
+        For proxy settings:
+            - DQ_PROXY : proxy_json_string
+
+            (See https://requests.readthedocs.io/en/master/user/advanced/#proxies)
+    """
+
     def __init__(
         self,
         config_path: Optional[str] = None,
@@ -332,30 +439,6 @@ class Config(object):
         proxy: Optional[dict] = None,
         proxies: Optional[dict] = None,
     ):
-        """
-        Class for handling the configuration of the JPMaQS API.
-
-        Initialising Parameters
-
-        :param <str> config_path: The path to the config file. If set to
-            None or "env", the class will attempt to load the config
-            file from the following environment variables:
-            For OAuth authentication:
-                - DQ_CLIENT_ID : your_client_id
-                - DQ_CLIENT_SECRET : your_client_secret
-
-            For certificate authentication:
-                - DQ_CRT : path_to_crt_file
-                - DQ_KEY : path_to_key_file
-                - DQ_USERNAME : your_username
-                - DQ_PASSWORD : your_password
-
-            For proxy settings:
-                - DQ_PROXY : proxy_json_string
-
-                (See https://requests.readthedocs.io/en/master/user/advanced/#proxies)
-        """
-
         if not isinstance(config_path, (str, type(None))):
             raise ValueError(
                 "Config file must be a string containing the path"

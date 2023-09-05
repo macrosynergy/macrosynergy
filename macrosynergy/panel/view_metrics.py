@@ -1,3 +1,7 @@
+"""
+Function for visualising the `eop_lag`, `mop_lag` or `grading` metrics for a given
+set of cross sections and extended categories.
+"""
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt

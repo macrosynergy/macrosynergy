@@ -1,4 +1,7 @@
-
+"""
+Module for storing functions for computing expanding statistics 
+on time series data.
+"""
 
 import pandas as pd
 import numpy as np

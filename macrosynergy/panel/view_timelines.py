@@ -1,3 +1,6 @@
+"""
+Functionality to visualize time series data as line charts.
+"""
 import numpy as np
 import pandas as pd
 from typing import List, Tuple, Optional

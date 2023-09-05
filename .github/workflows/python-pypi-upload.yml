@@ -1,0 +1,74 @@
+name: Test & Upload to PyPI
+
+on:
+  release:
+    types: [published]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest # can also use windows-latest
+    strategy:
+      matrix:
+        python-version: [3.11] # For multiple: [3.7, 3.8]
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pytest sphinx pytest-cov
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Lint with flake8
+        run: |
+          # stop the build if there are Python syntax errors or undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Test with pytest
+        run: |
+          pytest -rEf tests/unit/
+      - name: Upload coverage reports to Codecov
+        run: |
+          curl -Os https://uploader.codecov.io/latest/linux/codecov
+          chmod +x codecov
+          ./codecov -t ${CODECOV_TOKEN}
+          
+        #NOTE: Codecov must be run before the integration tests
+      - name: Run integration tests with pytest
+        env:
+          DQ_CLIENT_ID: ${{ secrets.DQ_CLIENT_ID }}
+          DQ_CLIENT_SECRET: ${{ secrets.DQ_CLIENT_SECRET }}
+        run: |
+          echo 'Run Integration tests'
+          pytest tests/integration/
+          echo 'Integration test complete'
+
+      - name: Install pypa/build
+        run: python -m pip install build --user
+
+      - name: Build a binary wheel and a source tarball
+        run: python -m build --sdist --wheel --outdir dist/ .
+
+      - name: Check and Upload to PyPI
+        run: |
+          pip install twine
+          twine check dist/*
+          twine upload dist/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+# https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#release
