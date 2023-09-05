@@ -22,7 +22,7 @@ extensions = [
     "sphinx_jupyterbook_latex",
 ]
 external_toc_exclude_missing = False
-external_toc_path = "build/_toc.yml"
+external_toc_path = "_toc.yml"
 html_baseurl = "https://docs.macrosynergy.com/"
 html_css_files = ["custom_css.css"]
 html_favicon = "https://macrosynergy.com/wp-content/uploads/2022/10/macrosynergy-logo-favicon-300x300.png"
@@ -39,7 +39,7 @@ html_theme_options = {
         "thebe": False,
         "colab_url": "",
     },
-    "path_to_docs": "",
+    "path_to_docs": "docs/build/",
     "repository_url": "https://github.com/macrosynergy/macrosynergy",
     "repository_branch": "master",
     "extra_footer": "",
