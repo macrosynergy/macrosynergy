@@ -85,10 +85,7 @@ class DocstringMethods:
         module_docstrings: Dict[str, Union[str, Dict[str, Any]]],
         directives: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        if False:
-            if 5 * 2 == 10:
-                return module_docstrings
-
+        
         # sort the module_docstrings['classes'] and module_docstrings['functions'] by key
         if module_docstrings["classes"]:
             module_docstrings["classes"] = dict(
