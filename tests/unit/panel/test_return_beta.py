@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import warnings
 import statsmodels.api as sm
+from statsmodels.regression.linear_model import RegressionResults
 
 import sys, os
 
@@ -249,7 +250,9 @@ class TestAll(unittest.TestCase):
         X = sm.add_constant(xr.loc[first_test_date:last_test_date])
         y = br.loc[first_test_date:last_test_date]
         mod = sm.OLS(y, X)
-        result = mod.fit().params[1]
+        rresults: RegressionResults = mod.fit()
+        result: float = rresults.params[1]
+        
 
         # Test on the next business day given the shift. The hedge ratio computed on the
         # re-estimation date is applied to the return series on the next business day
