@@ -1,72 +1,91 @@
-
 import unittest
 import numpy as np
 import pandas as pd
 import warnings
 import statsmodels.api as sm
 
-import sys
-sys.path.append('C:/Users/PalashTyagi/OneDrive - Macrosynergy/Documents/Code/ms/macrosynergy')
+import sys, os
 
-from tests.simulate import make_qdf
-from macrosynergy.panel.return_beta import *
+sys.path.append(os.getcwd())
+
+# from tests.simulate import make_qdf
+from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.panel.return_beta import (
+    date_alignment,
+    hedge_calculator,
+    adjusted_returns,
+    return_beta,
+)
 from macrosynergy.management.shape_dfs import reduce_df
 import math
 from typing import List, Dict
 
+
 class TestAll(unittest.TestCase):
-
     def dataframe_construction(self):
-
         # Emerging Market Asian countries.
-        cids : List[str] = ['IDR', 'INR', 'KRW', 'MYR', 'PHP']
+        cids: List[str] = ["IDR", "INR", "KRW", "MYR", "PHP"]
         # Add the US - used as the hedging asset.
-        cids += ['USD']
+        cids += ["USD"]
 
-        self.cids : List[str] = cids
-        xcats : List[str] = ['FXXR_NSA', 'GROWTHXR_NSA', 'INFLXR_NSA', 'EQXR_NSA']
-        self.xcats : List[str] = xcats
+        self.cids: List[str] = cids
+        xcats: List[str] = ["FXXR_NSA", "GROWTHXR_NSA", "INFLXR_NSA", "EQXR_NSA"]
+        self.xcats: List[str] = xcats
 
-        df_cids = pd.DataFrame(index=self.cids, columns=['earliest', 'latest', 'mean_add',
-                                                         'sd_mult'])
+        df_cids = pd.DataFrame(
+            index=self.cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+        )
 
-        df_cids.loc['IDR'] = ['2010-01-01', '2020-12-31', 0.5, 2]
-        df_cids.loc['INR'] = ['2011-01-01', '2020-11-30', 0, 1]
-        df_cids.loc['KRW'] = ['2012-01-01', '2020-11-30', -0.2, 0.5]
-        df_cids.loc['MYR'] = ['2013-01-01', '2020-09-30', -0.2, 0.5]
-        df_cids.loc['PHP'] = ['2002-01-01', '2020-09-30', -0.1, 2]
-        df_cids.loc['USD'] = ['2000-01-01', '2020-03-20', 0, 1.25]
+        df_cids.loc["IDR"] = ["2010-01-01", "2020-12-31", 0.5, 2]
+        df_cids.loc["INR"] = ["2011-01-01", "2020-11-30", 0, 1]
+        df_cids.loc["KRW"] = ["2012-01-01", "2020-11-30", -0.2, 0.5]
+        df_cids.loc["MYR"] = ["2013-01-01", "2020-09-30", -0.2, 0.5]
+        df_cids.loc["PHP"] = ["2002-01-01", "2020-09-30", -0.1, 2]
+        df_cids.loc["USD"] = ["2000-01-01", "2020-03-20", 0, 1.25]
 
-        df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
-                                                      'sd_mult', 'ar_coef', 'back_coef'])
+        df_xcats = pd.DataFrame(
+            index=xcats,
+            columns=[
+                "earliest",
+                "latest",
+                "mean_add",
+                "sd_mult",
+                "ar_coef",
+                "back_coef",
+            ],
+        )
 
-        df_xcats.loc['FXXR_NSA'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
-        df_xcats.loc['GROWTHXR_NSA'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
-        df_xcats.loc['INFLXR_NSA'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
-        df_xcats.loc['EQXR_NSA'] = ['2000-01-01', '2022-03-14', 0.5, 2, 0, 0.2]
+        df_xcats.loc["FXXR_NSA"] = ["2012-01-01", "2020-10-30", 1, 2, 0.9, 1]
+        df_xcats.loc["GROWTHXR_NSA"] = ["2012-01-01", "2020-10-30", 1, 2, 0.9, 1]
+        df_xcats.loc["INFLXR_NSA"] = ["2013-01-01", "2020-10-30", 1, 2, 0.8, 0.5]
+        df_xcats.loc["EQXR_NSA"] = ["2000-01-01", "2022-03-14", 0.5, 2, 0, 0.2]
 
         # If the asset being used as the hedge experiences a blackout period, then it is
         # probably not an appropriate asset to use in the hedging strategy.
-        blacklist = {'IDR': ['2010-01-01', '2012-01-04'],
-                 'INR': ['2010-01-01', '2013-12-31'],
-                 }
-        self.blacklist : Dict[str, List[str]] = blacklist
+        blacklist = {
+            "IDR": ["2010-01-01", "2012-01-04"],
+            "INR": ["2010-01-01", "2013-12-31"],
+        }
+        self.blacklist: Dict[str, List[str]] = blacklist
 
         # Standard df for tests.
-        self.dfd : pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
+        self.dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
         # The Unit Test will be based on the hedging strategy: hedge FX returns
         # (FXXR_NSA) against US Equity, S&P 500, (USD_EQXR_NSA).
-        cid_hedge = 'USD'
-        xcat_hedge = 'EQXR_NSA'
-        self.benchmark_df : pd.DataFrame = reduce_df(self.dfd, xcats=[xcat_hedge],
-                                                  cids=cid_hedge)
+        cid_hedge = "USD"
+        xcat_hedge = "EQXR_NSA"
+        self.benchmark_df: pd.DataFrame = reduce_df(
+            self.dfd, xcats=[xcat_hedge], cids=cid_hedge
+        )
 
-        self.unhedged_df : pd.DataFrame = reduce_df(self.dfd, xcats=['FXXR_NSA'],
-                                                 cids=cids)
-        self.dfp_w = self.unhedged_df.pivot(index='real_date', columns='cid',
-                                                        values='value')
-        
+        self.unhedged_df: pd.DataFrame = reduce_df(
+            self.dfd, xcats=["FXXR_NSA"], cids=cids
+        )
+        self.dfp_w = self.unhedged_df.pivot(
+            index="real_date", columns="cid", values="value"
+        )
+
     def test_df_cols(self):
         """
         The dataframe passed to the return_beta() method needs to have the following
@@ -76,22 +95,27 @@ class TestAll(unittest.TestCase):
         """
         self.dataframe_construction()
 
-        df_test : pd.DataFrame = self.dfd.copy()
+        df_test: pd.DataFrame = self.dfd.copy()
         # DO NOT CHANGE THE ORDER OF THE FOLLOWING LIST `expc_cols`
-        expc_cols : List[str] = ['cid', 'xcat', 'real_date', 'value']
-        
+        expc_cols: List[str] = ["cid", "xcat", "real_date", "value"]
+
         for col_name in expc_cols:
             df_test.rename(columns={col_name: col_name + "_"}, inplace=True)
             with self.assertRaises(ValueError):
                 try:
-                    return_beta(df=df_test, cids=self.cids, xcat=self.xcats[0],
-                                benchmark_return=f"{self.cids[0]}_{self.xcats[0]}", 
-                                start='2010-01-01',)
+                    return_beta(
+                        df=df_test,
+                        cids=self.cids,
+                        xcat=self.xcats[0],
+                        benchmark_return=f"{self.cids[0]}_{self.xcats[0]}",
+                        start="2010-01-01",
+                    )
                 except ValueError as e:
-                    exp_err_str : str = f"`df` must contain the following columns: {expc_cols}"
+                    exp_err_str: str = (
+                        f"`df` must contain the following columns: {expc_cols}"
+                    )
                     self.assertIn(exp_err_str, str(e))
                     raise ValueError(e)
-
 
     def test_date_alignment(self):
         """
@@ -109,23 +133,23 @@ class TestAll(unittest.TestCase):
         # method.
         # Test on MYR_FXXR_NSA against the hedging asset, USD_EQXR_NSA (both are defined
         # over different time horizons).
-        c = 'MYR'
+        c = "MYR"
         xr = self.dfp_w[c]
         # Adjusts for the effect of pivoting.
         xr = xr.dropna(axis=0, how="all")
 
-        br = pd.Series(data=self.benchmark_df['value'],
-                       index=self.benchmark_df['real_date'])
+        br = pd.Series(
+            data=self.benchmark_df["value"], index=self.benchmark_df["real_date"]
+        )
 
-        start_date, end_date = date_alignment(unhedged_return=xr,
-                                              benchmark_return=br)
+        start_date, end_date = date_alignment(unhedged_return=xr, benchmark_return=br)
         # The latest start date of the two pd.Series.
-        target_start = '2013-01-01'
+        target_start = "2013-01-01"
         start_date = pd.Timestamp(start_date).strftime("%Y-%m-%d")
         self.assertTrue(start_date == target_start)
 
         end_date = pd.Timestamp(end_date).strftime("%Y-%m-%d")
-        target_end = '2020-03-20'
+        target_end = "2020-03-20"
         self.assertTrue(end_date == target_end)
 
     def test_hedge_calculator(self):
@@ -147,13 +171,15 @@ class TestAll(unittest.TestCase):
         # ensures a certain number of days have passed until a hedge ratio is calculated.
 
         # Analysis completed using a single cross-section from the panel.
-        c: str = 'KRW'
+        c: str = "KRW"
         xr: pd.Series = (self.dfp_w[c]).astype(dtype=np.float16)
         # Adjusts for the effect of pivoting.
         xr = xr.dropna(axis=0, how="all")
 
-        br: pd.Series = pd.Series(data=self.benchmark_df['value'].to_numpy(),
-                       index=self.benchmark_df['real_date']).astype(dtype=np.float16)
+        br: pd.Series = pd.Series(
+            data=self.benchmark_df["value"].to_numpy(),
+            index=self.benchmark_df["real_date"],
+        ).astype(dtype=np.float16)
 
         # Apply the .date_alignment() method to establish the start & end date of the
         # re-estimation date series. Confirms the re-estimation frequency has been
@@ -162,19 +188,29 @@ class TestAll(unittest.TestCase):
         start_date: pd.Timestamp
         end_date: pd.Timestamp
         start_date, end_date = date_alignment(unhedged_return=xr, benchmark_return=br)
-        dates_re: List[pd.Timestamp] = list(pd.date_range(start=start_date, end=end_date, freq='BM'))
+        dates_re: List[pd.Timestamp] = list(
+            pd.date_range(start=start_date, end=end_date, freq="BM")
+        )
 
         min_observation: int = 50
         # Produce daily business day date series to determine the date that corresponds
         # to the specified minimum observation.
-        test_min_obs: np.datetime64 = pd.date_range(start=start_date, end=end_date, freq='B').to_numpy()[60]
+        test_min_obs: np.datetime64 = pd.date_range(
+            start=start_date, end=end_date, freq="B"
+        ).to_numpy()[60]
 
-        df_hr: pd.DataFrame = hedge_calculator(unhedged_return=xr, benchmark_return=br,
-                                 rdates=dates_re, cross_section=c, meth='ols',
-                                 min_obs=min_observation, max_obs=100)
+        df_hr: pd.DataFrame = hedge_calculator(
+            unhedged_return=xr,
+            benchmark_return=br,
+            rdates=dates_re,
+            cross_section=c,
+            meth="ols",
+            min_obs=min_observation,
+            max_obs=100,
+        )
         # Confirm the first computed hedge ratio value falls after the minimum
         # observation date.
-        test_date: pd.Timestamp = df_hr['real_date'].iloc[0]
+        test_date: pd.Timestamp = df_hr["real_date"].iloc[0]
         self.assertTrue(test_date > test_min_obs)
 
         # In the example, the hedge ratio is computed monthly - last business day of the
@@ -192,7 +228,7 @@ class TestAll(unittest.TestCase):
         # position will change) and to all the intermediary dates up until the next
         # re-estimation date. Therefore, confirm that the first date in the DataFrame is
         # a np.nan value representing the shift mechanism.
-        first_value = df_hr['value'].iloc[0]
+        first_value = df_hr["value"].iloc[0]
         self.assertTrue(math.isnan(first_value))
 
         # The examination of the hedging mechanism will come through graphical
@@ -204,10 +240,12 @@ class TestAll(unittest.TestCase):
         s_date, e_date = date_alignment(unhedged_return=xr, benchmark_return=br)
         xr = xr.truncate(before=s_date, after=e_date)
         br = br.truncate(before=s_date, after=e_date)
-        
-        last_test_date : str = '2013-03-29'
-        first_test_date : str = pd.bdate_range(end=last_test_date, periods=100)[0].strftime("%Y-%m-%d")
-        # 100 -1, as the hedge ratio is computed using the last 100 observations. 
+
+        last_test_date: str = "2013-03-29"
+        first_test_date: str = pd.bdate_range(end=last_test_date, periods=100)[
+            0
+        ].strftime("%Y-%m-%d")
+        # 100 -1, as the hedge ratio is computed using the last 100 observations.
         X = sm.add_constant(xr.loc[first_test_date:last_test_date])
         y = br.loc[first_test_date:last_test_date]
         mod = sm.OLS(y, X)
@@ -216,7 +254,7 @@ class TestAll(unittest.TestCase):
         # Test on the next business day given the shift. The hedge ratio computed on the
         # re-estimation date is applied to the return series on the next business day
         # after re-estimation. NOTE : 30,31-Mar-2013 are weekend dates.
-        test_value = float(df_hr[df_hr['real_date'] == '2013-04-01']['value'])
+        test_value = float(df_hr[df_hr["real_date"] == "2013-04-01"]["value"])
         self.assertTrue(result == test_value)
 
     def test_adjusted_returns(self):
@@ -231,8 +269,10 @@ class TestAll(unittest.TestCase):
 
         self.dataframe_construction()
 
-        br = pd.Series(data=self.benchmark_df['value'].to_numpy(),
-                       index=self.benchmark_df['real_date'])
+        br = pd.Series(
+            data=self.benchmark_df["value"].to_numpy(),
+            index=self.benchmark_df["real_date"],
+        )
         br = br.astype(dtype=np.float16)
 
         # The method, adjusted_returns(), will compute the hedged return across the
@@ -243,13 +283,22 @@ class TestAll(unittest.TestCase):
 
         br_cat = "USD_EQXR_NSA"
         # Standardised dataframe consisting of exclusively the hedge-ratios.
-        df_hedge = return_beta(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
-                               benchmark_return=br_cat, start='2010-01-01',
-                               end='2020-10-30', blacklist=self.blacklist, meth='ols',
-                               oos=True, refreq='m', min_obs=60,
-                               hedged_returns=False)
+        df_hedge = return_beta(
+            df=self.dfd,
+            xcat="FXXR_NSA",
+            cids=self.cids,
+            benchmark_return=br_cat,
+            start="2010-01-01",
+            end="2020-10-30",
+            blacklist=self.blacklist,
+            meth="ols",
+            oos=True,
+            refreq="m",
+            min_obs=60,
+            hedged_returns=False,
+        )
 
-        dfw = self.unhedged_df.pivot(index='real_date', columns='cid', values='value')
+        dfw = self.unhedged_df.pivot(index="real_date", columns="cid", values="value")
 
         # Standardised dataframe of the adjusted returns.
         df_stack = adjusted_returns(benchmark_return=br, df_hedge=df_hedge, dfw=dfw)
@@ -260,19 +309,19 @@ class TestAll(unittest.TestCase):
         dates = list(dfw.index)
         date = dfw.index[len(dates) // 2]
 
-        test_date = df_stack[df_stack['real_date'] == date]
+        test_date = df_stack[df_stack["real_date"] == date]
         # Test on the two cross-sections: 'IDR' & 'INR'.
         # Hedge Return.
-        INR_HR = float(test_date[test_date['cid'] == 'INR']['value'])
-        IDR_HR = float(test_date[test_date['cid'] == 'IDR']['value'])
+        INR_HR = float(test_date[test_date["cid"] == "INR"]["value"])
+        IDR_HR = float(test_date[test_date["cid"] == "IDR"]["value"])
 
-        hedge_row = df_hedge[df_hedge['real_date'] == date]
-        INR_H = float(hedge_row[hedge_row['cid'] == 'INR']['value'])
-        IDR_H = float(hedge_row[hedge_row['cid'] == 'IDR']['value'])
+        hedge_row = df_hedge[df_hedge["real_date"] == date]
+        INR_H = float(hedge_row[hedge_row["cid"] == "INR"]["value"])
+        IDR_H = float(hedge_row[hedge_row["cid"] == "IDR"]["value"])
 
         return_row = dfw.loc[date]
-        INR_R = return_row['INR']
-        IDR_R = return_row['IDR']
+        INR_R = return_row["INR"]
+        IDR_R = return_row["IDR"]
 
         br_date = br.loc[date]
 
@@ -302,68 +351,99 @@ class TestAll(unittest.TestCase):
             # a benchmark of USD intuitive GDP growth will throw an error given the
             # ticker is not in the database.
             test_br = "USD_INTRGDP_NSA"
-            df_hedge = return_beta(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
-                                   benchmark_return=test_br, start='2010-01-01',
-                                   end='2020-10-30', blacklist=self.blacklist,
-                                   meth='ols',
-                                   oos=True, refreq='m', min_obs=60,
-                                   hedged_returns=False)
+            df_hedge = return_beta(
+                df=self.dfd,
+                xcat="FXXR_NSA",
+                cids=self.cids,
+                benchmark_return=test_br,
+                start="2010-01-01",
+                end="2020-10-30",
+                blacklist=self.blacklist,
+                meth="ols",
+                oos=True,
+                refreq="m",
+                min_obs=60,
+                hedged_returns=False,
+            )
 
         # Test the re-estimation frequency parameter.
         with self.assertRaises(AssertionError):
             # The re-estimation frequency can either be weekly, monthly or quarterly:
             # ['w', 'm', 'q']. Set the 'refreq' parameter to an incorrect value.
-            df_hedge = return_beta(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
-                                   benchmark_return=br_cat, start='2010-01-01',
-                                   end='2020-10-30', blacklist=self.blacklist,
-                                   meth='ols',
-                                   oos=True, refreq='b', min_obs=60,
-                                   hedged_returns=False)
+            df_hedge = return_beta(
+                df=self.dfd,
+                xcat="FXXR_NSA",
+                cids=self.cids,
+                benchmark_return=br_cat,
+                start="2010-01-01",
+                end="2020-10-30",
+                blacklist=self.blacklist,
+                meth="ols",
+                oos=True,
+                refreq="b",
+                min_obs=60,
+                hedged_returns=False,
+            )
 
         # The default number of minimum observations required to compute a hedge ratio is
         # 24. However, if the parameter is defined, the specified number must be greater
         # than 10 business days, two weeks.
         with self.assertRaises(AssertionError):
-            df_hedge = return_beta(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
-                                   benchmark_return=br_cat, start='2010-01-01',
-                                   end='2020-10-30', blacklist=self.blacklist,
-                                   meth='ols',
-                                   oos=True, refreq='w', min_obs=8,
-                                   hedged_returns=False)
+            df_hedge = return_beta(
+                df=self.dfd,
+                xcat="FXXR_NSA",
+                cids=self.cids,
+                benchmark_return=br_cat,
+                start="2010-01-01",
+                end="2020-10-30",
+                blacklist=self.blacklist,
+                meth="ols",
+                oos=True,
+                refreq="w",
+                min_obs=8,
+                hedged_returns=False,
+            )
 
         # Confirm the re-estimation frequency parameter is working correctly. Test on
         # weekly data where the final day of the week will invariably be the Friday. The
         # new re-estimation value should be applied from the next business day, the
         # following Monday.
-        df_hedge = return_beta(df=self.dfd, xcat='FXXR_NSA', cids=self.cids,
-                               benchmark_return=br_cat, start='2010-01-01',
-                               end='2020-10-30', blacklist=self.blacklist,
-                               meth='ols',
-                               oos=True, refreq='w', min_obs=24,
-                               hedged_returns=False)
+        df_hedge = return_beta(
+            df=self.dfd,
+            xcat="FXXR_NSA",
+            cids=self.cids,
+            benchmark_return=br_cat,
+            start="2010-01-01",
+            end="2020-10-30",
+            blacklist=self.blacklist,
+            meth="ols",
+            oos=True,
+            refreq="w",
+            min_obs=24,
+            hedged_returns=False,
+        )
         # Confirm on a single cross-section.
-        df_hedge_INR = df_hedge[df_hedge['cid'] == 'INR']
+        df_hedge_INR = df_hedge[df_hedge["cid"] == "INR"]
 
         # Test on a random date, 2014-02-14. The date should be a Friday.
-        date = pd.Timestamp('2014-02-14')
+        date = pd.Timestamp("2014-02-14")
         self.assertTrue(pd.Timestamp(date).dayofweek == 4)
-        df_hedge_INR_val = (df_hedge_INR[df_hedge_INR['real_date'] == date])['value']
+        df_hedge_INR_val = (df_hedge_INR[df_hedge_INR["real_date"] == date])["value"]
         df_hedge_INR_val = float(df_hedge_INR_val)
 
         # Confirm the date in the DataFrame is a Monday and the hedge ratio is
         # re-estimated on the respective date.
 
-        index = np.where(df_hedge_INR['real_date'] == date)
+        index = np.where(df_hedge_INR["real_date"] == date)
         index = next(iter(index))[0]
         next_index = index + 1
         test_row = df_hedge_INR.iloc[next_index]
-        test_date = test_row['real_date']
+        test_date = test_row["real_date"]
 
         self.assertTrue(pd.Timestamp(test_date).dayofweek == 0)
-        test_value = test_row['value']
+        test_value = test_row["value"]
         self.assertTrue(test_value != df_hedge_INR_val)
 
 
-if __name__ == '__main__':
-
+if __name__ == "__main__":
     unittest.main()
