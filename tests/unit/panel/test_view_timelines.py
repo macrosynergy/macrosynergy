@@ -34,11 +34,11 @@ class TestAll(unittest.TestCase):
 
         cids, xcats, dfd = self.dataframe_construction()
         
-        # test that all the sample cases run
-        
-        # set backend to Agg to avoid spawning a window
+        mpl_backend = matplotlib.get_backend()
         matplotlib.use('Agg')
 
+        # test that all the sample cases run
+        
         try:
             view_timelines(dfd, xcats=xcats[:2], cids=cids[0],
                         size=(10, 5), title='AUD Return and Carry')
@@ -62,6 +62,10 @@ class TestAll(unittest.TestCase):
                 dfdr = dfd.copy().set_index(c)
                 view_timelines(dfdr, xcats=[xcats[0]], cids=cids, ncol=2,
                             cumsum=True, same_y=False, aspect=2, single_chart=True)
+            
+            view_timelines(dfd, xcats=[xcats[0]], cids=cids, ncol=2,
+                            cumsum=True, same_y=False, aspect=2, single_chart=True,
+                            legend_fontsize=20)
             
             dfdr = dfd.copy().set_index('real_date')
             # rename column 'value' to 'qwerty'
@@ -122,7 +126,7 @@ class TestAll(unittest.TestCase):
                 title='AUD Return, Carry & Inflation',
                 xcat_grid=True) # df must have a column named 'cid'
 
-
+        matplotlib.use(mpl_backend)
         
 if __name__ == '__main__':
     unittest.main()

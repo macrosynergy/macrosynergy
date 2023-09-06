@@ -1,8 +1,5 @@
-seaborn
-matplotlib
-pandas
-statsmodels
-scikit-learn
-numpy
-sphinx_book_theme
-sphinx_rtd_theme
+mdformat-gfm
+mdformat-frontmatter
+mdformat-footnote
+pyyaml
+jupyter-book==0.15.1

@@ -8,6 +8,7 @@ from tests.simulate import make_qdf
 from macrosynergy.panel.category_relations import CategoryRelations
 from macrosynergy.management.shape_dfs import categories_df
 from typing import List, Tuple, Dict, Union, Optional
+import warnings
 
 
 class TestAll(unittest.TestCase):
@@ -74,7 +75,7 @@ class TestAll(unittest.TestCase):
         self.dataframe_generator()
         # Testing the various assert statements built into the Class's Constructor.
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # Test the notion that the metric of interest is present in the DataFrame. If
             # not, an assertion will be thrown.
             cr = CategoryRelations(
@@ -90,13 +91,13 @@ class TestAll(unittest.TestCase):
                 val="grading",
             )
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # Test the restrictions placed on the frequency parameter.
             cr = CategoryRelations(
                 self.dfdx,
                 xcats=["GROWTH", "INFL"],
                 cids=self.cidx,
-                freq="d",
+                freq="r",
                 xcat_aggs=["mean", "mean"],
                 lag=1,
                 start="2000-01-01",
@@ -104,7 +105,7 @@ class TestAll(unittest.TestCase):
                 blacklist=self.black,
             )
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # Test the notion that the category List can only receive two categories.
             cr = CategoryRelations(
                 self.dfdx,
@@ -175,24 +176,20 @@ class TestAll(unittest.TestCase):
 
         self.cidx = ["AUD", "CAD", "GBP", "USD", "CHF"]
 
-        # The StringIO module is an in-memory file-like Object.
-        capturedOutput = io.StringIO()
-        sys.stdout = capturedOutput
+        with warnings.catch_warnings(record=True) as w:
         # Isolate the cross-sections available for both the corresponding categories.
-        shared_cids = CategoryRelations.intersection_cids(
-            self.dfdx, ["GROWTH", "INFL"], self.cidx
-        )
-        sys.stdout = sys.__stdout__
-        capturedOutput.seek(0)
-
-        print_statements = capturedOutput.read().strip("\n").split(".")
-        print_statements = print_statements[:-1]
+            shared_cids = CategoryRelations.intersection_cids(
+                self.dfdx, ["GROWTH", "INFL"], self.cidx
+            )
+            # assert that 2 userwarnings are raised. store the warning messages as warn_statement.
+            self.assertEqual(len(w), 2)
+            warn_statement = [str(warn.message) for warn in w]
 
         # Split on the full stops, so subsequently removed from the Strings displayed in
         # the console if the conditions are satisfied.
-        self.assertTrue(print_statements[0] == "GROWTH misses: ['AUD', 'USD']")
+        self.assertTrue(warn_statement[0] == "GROWTH misses: ['AUD', 'USD'].")
         # Account for the space in the console separating both print statements.
-        self.assertTrue(print_statements[1][1:] == "INFL misses: ['USD']")
+        self.assertTrue(warn_statement[1] == "INFL misses: ['USD'].")
 
         # Aim to test the returned list of cross-sections.
         # Broaden the testcase to further test the accuracy.
@@ -485,6 +482,7 @@ class TestAll(unittest.TestCase):
         )
         test_slip: int = 5
         # apply the slip method
+        print(int(min(df["vx"])))
         out_df = CategoryRelations.apply_slip(
             target_df=df,
             slip=test_slip,
@@ -494,7 +492,7 @@ class TestAll(unittest.TestCase):
         )
 
         # NOTE: casting df.vx to int as pandas casts it to float64
-        self.assertEqual(int(min(df["vx"])), int(min(out_df["vx"]) - test_slip))
+        self.assertEqual(int(min(df["vx"])) + test_slip, int(min(out_df["vx"])))
 
         for cid in sel_cids:
             for xcat in sel_xcats:
@@ -556,8 +554,10 @@ class TestAll(unittest.TestCase):
             CategoryRelations.apply_slip(target_df=df, slip=-1,
                                                 xcats=sel_xcats, cids=["ac_dc"],
                                                 metrics=["value"])
-        
-            
+        try:
+            cat_rel: CategoryRelations = CategoryRelations(df=df, xcats=sel_xcats, cids=sel_cids, slip=100)
+        except:
+            self.fail("CategoryRelations init failed")
 
 
 

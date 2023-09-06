@@ -1,9 +1,9 @@
-![Macrosynergy](https://raw.githubusercontent.com/macrosynergy/macrosynergy/main/docs/source/_static/MACROSYNERGY_Logo_Primary.png?raw=True)
+![Macrosynergy](https://raw.githubusercontent.com/macrosynergy/macrosynergy/main/docs/assets/MACROSYNERGY_Logo_Primary.png?raw=True)
 
 # Macrosynergy Quant Research
 [![PyPI Latest Release](https://img.shields.io/pypi/v/macrosynergy.svg)](https://pypi.org/project/macrosynergy/)
 [![Package Status](https://img.shields.io/pypi/status/macrosynergy.svg)](https://pypi.org/project/macrosynergy/)
-[![License](https://img.shields.io/pypi/l/macrosynergy.svg)](https://github.com/macrosynergy/macrosynergy/blob/master/LICENSE)
+[![License](https://img.shields.io/github/license/macrosynergy/macrosynergy)](https://github.com/macrosynergy/macrosynergy/blob/master/LICENSE)
 [![Downloads](https://static.pepy.tech/personalized-badge/macrosynergy?period=month&units=international_system&left_color=black&right_color=orange&left_text=PyPI%20downloads%20per%20month)](https://pepy.tech/project/macrosynergy)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![codecov](https://codecov.io/github/macrosynergy/macrosynergy/branch/develop/graph/badge.svg?token=BX4IKVD07R)](https://codecov.io/github/macrosynergy/macrosynergy)
@@ -93,6 +93,11 @@ assert isinstance(data, pd.DataFrame) and not data.empty
 assert data.shape[0] > 0
 data.info()
 ```
+
+### Connecting via a proxy server
+
+Since a lot of institutions use a proxy server to connect to the internet; the `JPMaQSDownload` object can be configured to use a proxy server. 
+
 It is also possible to use a proxy server with the Dataquery interface. Here's an example:
 ```python
 import pandas as pd
@@ -129,20 +134,6 @@ with JPMaQSDownload(
     data = downloader.download(tickers = tickers)
 ...
 ```
-The deprecated DataQuery interface internally makes use of the JPMaQSDownload object. Using the deprecated path will raise a deprecation warning. The path and module will be removed in v0.1.0. Here's an example of the deprecated interface:
-```python
-...
-from macrosynergy.dataquery import api
-...
-with api.Interface(
-        oauth=True,
-        username="<dq_username>",
-        password="<dq_password>"
-) as dq:
-    data = dq.download(tickers=tickers, start_date="2022-01-01")
-...
-```
-
 
 ### Management 
 In order to use the rest of the package without access to the API you can [simulate](./macrosynergy/management/simulate_quantamental_data.py) quantamental data using the management sub-package. 
@@ -300,4 +291,42 @@ df_eval = pnl.evaluate_pnls(
 
 ## Documentation
 
-The official documentation can be found at our website: https://docs.macrosynergy.com
+The official documentation can be found at our documentation website: [docs.macrosynergy.com](https://docs.macrosynergy.com).
+
+We use "code-as-documentation" to ensure that our documentation is always up-to-date.
+If you find any issues with the documentation, please [raise an issue](https://github.com/macrosynergy/macrosynergy/issues/new/choose) on our GitHub repository.
+
+## FAQs and Troubleshooting
+
+### I am having trouble connecting to DataQuery using the API
+
+For the most common issues, such as incorrect credentials, invalid certificates etc, the package will raise an exception with a helpful error message.
+
+If you find that the package raises an `HTTPConnection`/`HTTPSConnectionPool` error, please check your proxy settings. In scenarios where an error is raised while running `check_connection()` (or another download), the error is raised with context to the OAuth token request (to "https://authe.jpmchase.com/as/token.oauth2").
+
+You would most likely need to pass your proxy settings to the `JPMaQSDownload` object, as shown in the [Connecting via a proxy server](#connecting-via-a-proxy-server) section.
+If you are accessing DataQuery from an institutional/enterprise network, please contact your IT department to ensure that you have the correct proxy settings.
+
+For organizations using ZScaler - you may have to manually add the ZScaler certificates (copy-pasta) to the `certifi` certificate store (typically called `cacert.pem`). You can find the location of the `certifi` certificate store by running the following in your Python environment:
+```python
+import certifi
+print(certifi.where())
+```
+
+### A function is not working as expected
+
+Please check the documentation for the function on our [documentation website](https://docs.macrosynergy.com),
+and ensure you are using the latest version of the package.
+If you are still having issues, please [raise an issue](https://github.com/macrosynergy/macrosynergy/issues/new/choose) on our GitHub repository.
+Please include a minimal reproducible example, and the output of `pip freeze` in your issue.
+
+### I have a feature request
+
+Please [raise an issue](https://github.com/macrosynergy/macrosynergy/issues/new/choose), 
+and title it "Feature Request: [your feature request]".
+
+### Contributing or creating a pull request
+
+Currently, we do not allow a pull request to be created by users outside of the Macrosynergy team.
+If you'd like to contribute, please create a fork of the repository, and create a pull request from your fork.
+

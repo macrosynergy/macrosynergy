@@ -13,6 +13,7 @@ import itertools
 import base64
 import uuid
 import io
+import warnings
 import requests
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Union, Tuple
@@ -25,6 +26,8 @@ from macrosynergy.download.exceptions import (
     DownloadError,
     InvalidResponseError,
     HeartbeatError,
+    NoContentError,
+    KNOWN_EXCEPTIONS,
 )
 from macrosynergy.management.utils import (
     is_valid_iso_date,
@@ -38,15 +41,18 @@ OAUTH_BASE_URL: str = (
 )
 OAUTH_TOKEN_URL: str = "https://authe.jpmchase.com/as/token.oauth2"
 OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
+JPMAQS_GROUP_ID: str = "JPMAQS"
 API_DELAY_PARAM: float = 0.3  # 300ms delay between requests
 API_RETRY_COUNT: int = 5  # retry count for transient errors
 HL_RETRY_COUNT: int = 5  # retry count for "high-level" requests
 MAX_CONTINUOUS_FAILURES: int = 5  # max number of continuous errors before stopping
 HEARTBEAT_ENDPOINT: str = "/services/heartbeat"
 TIMESERIES_ENDPOINT: str = "/expressions/time-series"
+CATALOGUE_ENDPOINT: str = "/group/instruments"
 HEARTBEAT_TRACKING_ID: str = "heartbeat"
 OAUTH_TRACKING_ID: str = "oauth"
 TIMESERIES_TRACKING_ID: str = "timeseries"
+CATALOGUE_TRACKING_ID: str = "catalogue"
 
 logger: logging.Logger = logging.getLogger(__name__)
 debug_stream_handler = logging.StreamHandler(io.StringIO())
@@ -61,7 +67,10 @@ logger.addHandler(debug_stream_handler)
 egress_logger: dict = {}
 
 
-def validate_response(response: requests.Response) -> dict:
+def validate_response(
+    response: requests.Response,
+    user_id: str,
+) -> dict:
     """
     Validates a response from the API. Raises an exception if the response
     is invalid (e.g. if the response is not a 200 status code).
@@ -78,6 +87,7 @@ def validate_response(response: requests.Response) -> dict:
 
     error_str: str = (
         f"Response: {response}\n"
+        f"User ID: {user_id}\n"
         f"Requested URL: {response.request.url}\n"
         f"Response status code: {response.status_code}\n"
         f"Response headers: {response.headers}\n"
@@ -85,8 +95,8 @@ def validate_response(response: requests.Response) -> dict:
         f"Timestamp (UTC): {datetime.utcnow().isoformat()}; \n"
     )
     # TODO : Use response.raise_for_status() as a better way to check for errors
-    if response.status_code != 200:
-        logger.info("Non-200 response code from DataQuery: %s", response.status_code)
+    if not response.ok:
+        logger.info("Response status is NOT OK : %s", response.status_code)
         if response.status_code == 401:
             raise AuthenticationError(error_str)
 
@@ -147,6 +157,8 @@ def request_wrapper(
     if method not in ["get", "post"]:
         raise ValueError(f"Invalid method: {method}")
 
+    user_id: str = kwargs.pop("user_id", "unknown")
+
     # insert tracking info in headers
     if headers is None:
         headers: Dict = {}
@@ -199,7 +211,7 @@ def request_wrapper(
             }
 
             if isinstance(response, requests.Response):
-                return validate_response(response)
+                return validate_response(response=response, user_id=user_id)
 
         except Exception as exc:
             # if keyboard interrupt, raise as usual
@@ -213,27 +225,16 @@ def request_wrapper(
 
             error_statement = (
                 f"Request to {log_url} failed with error {exc}. "
+                f"User ID: {user_id}. "
                 f"Retry count: {retry_count}. "
                 f"Tracking ID: {tracking_id}"
             )
             raised_exceptions.append(exc)
             error_statements.append(error_statement)
 
-            known_exceptions = [
-                requests.exceptions.ConnectionError,
-                requests.exceptions.ConnectTimeout,
-                requests.exceptions.ReadTimeout,
-                ConnectionResetError,
-                requests.exceptions.Timeout,
-                requests.exceptions.TooManyRedirects,
-                requests.exceptions.RequestException,
-                requests.exceptions.HTTPError,
-                requests.exceptions.InvalidURL,
-                requests.exceptions.InvalidSchema,
-                requests.exceptions.ChunkedEncodingError,
-                # NOTE : HeartBeat is a special case
-                HeartbeatError,
-            ]
+            known_exceptions = KNOWN_EXCEPTIONS + [HeartbeatError]
+            # NOTE : HeartBeat is a special case
+
             # NOTE: exceptions that need the code to break should be caught before this
             # all other exceptions are caught here and retried after a delay
 
@@ -375,6 +376,7 @@ class OAuth(object):
                 method="post",
                 proxy=self.proxy,
                 tracking_id=OAUTH_TRACKING_ID,
+                user_id=self._get_user_id(),
             )
             # on failure, exception will be raised by request_wrapper
 
@@ -387,9 +389,20 @@ class OAuth(object):
 
         return self._stored_token["access_token"]
 
+    def _get_user_id(self) -> str:
+        return "OAuth_ClientID - " + self.token_data["client_id"]
+
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
-        headers = {"Authorization": "Bearer " + self._get_token()}
-        return {"headers": headers, "cert": None}
+        """
+        Returns a dictionary with the authentication information, in the same
+        format as the `macrosynergy.download.dataquery.CertAuth.get_auth()` method.
+        """
+        headers: Dict = {"Authorization": "Bearer " + self._get_token()}
+        return {
+            "headers": headers,
+            "cert": None,
+            "user_id": self._get_user_id(),
+        }
 
 
 class CertAuth(object):
@@ -414,30 +427,40 @@ class CertAuth(object):
         password: str,
         crt: str,
         key: str,
+        proxy: Optional[dict] = None,
     ):
-        assert isinstance(
-            username, str
-        ), f"username must be <str> and not {type(username)}"
-
-        assert isinstance(
-            password, str
-        ), f"password must be <str> and not {type(password)}"
+        for varx, namex in zip([username, password], ["username", "password"]):
+            if not isinstance(varx, str):
+                raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
 
         self.auth: str = base64.b64encode(
             bytes(f"{username:s}:{password:s}", "utf-8")
         ).decode("ascii")
 
         # Key and Certificate check
-        for n, f in [("key", key), ("crt", crt)]:
-            assert isinstance(f, str), f"{n} must be type <str> and not {type(f)}"
-            if not os.path.isfile(f):
-                raise FileNotFoundError(f"The file '{f}' does not exist.")
+        for varx, namex in zip([crt, key], ["crt", "key"]):
+            if not isinstance(varx, str):
+                raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
+            if not os.path.isfile(varx):
+                raise FileNotFoundError(f"The file '{varx}' does not exist.")
         self.key: str = key
         self.crt: str = crt
+        self.username: str = username
+        self.password: str = password
+        self.proxy: Optional[dict] = proxy
 
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
+        """
+        Returns a dictionary with the authentication information, in the same
+        format as the `macrosynergy.download.dataquery.OAuth.get_auth()` method.
+        """
         headers = {"Authorization": f"Basic {self.auth:s}"}
-        return {"headers": headers, "cert": (self.crt, self.key)}
+        user_id = "CertAuth_Username - " + self.username
+        return {
+            "headers": headers,
+            "cert": (self.crt, self.key),
+            "user_id": user_id,
+        }
 
 
 def validate_download_args(
@@ -455,11 +478,11 @@ def validate_download_args(
     delay_param: float,
 ):
     """
-    Validate the arguments passed to the download_data method.
+    Validate the arguments passed to the `download_data()` method.
 
-    :params -- see download_data method.
+    :params : -- see `download_data()` method.
 
-    :returns True if all arguments are valid.
+    :return <bool>: True if all arguments are valid.
 
     :raises <TypeError>: if any of the arguments are of the wrong type.
     :raises <ValueError>: if any of the arguments are semantically incorrect.
@@ -515,6 +538,8 @@ def validate_download_args(
         if not isinstance(varx, str):
             raise TypeError(f"`{namex}` must be a string.")
 
+    return True
+
 
 def get_unavailable_expressions(
     expected_exprs: List[str],
@@ -544,6 +569,7 @@ class DataQueryInterface(object):
     Must be instantiated with a valid Config object.
     (see macrosynergy.management.utils.Config class for more info)
 
+    :param <Config> config: Config object.
     :param <bool> oauth: whether to use OAuth authentication. Defaults to True.
     :param <bool> debug: whether to print debug messages. Defaults to False.
     :param <bool> concurrent: whether to use concurrent requests. Defaults to True.
@@ -553,6 +579,7 @@ class DataQueryInterface(object):
         Defaults to True.
     :param <str> base_url: base URL for the DataQuery API. Defaults to OAUTH_BASE_URL
         if `oauth` is True, CERT_BASE_URL otherwise.
+    :param <str> token_url: token URL for the DataQuery API. Defaults to OAUTH_TOKEN_URL.
     :param <bool> suppress_warnings: whether to suppress warnings. Defaults to True.
 
     :return <DataQueryInterface>: DataQueryInterface object.
@@ -573,6 +600,7 @@ class DataQueryInterface(object):
         batch_size: int = 20,
         check_connection: bool = True,
         base_url: str = OAUTH_BASE_URL,
+        token_url: str = OAUTH_TOKEN_URL,
         suppress_warnings: bool = True,
     ):
         self._check_connection: bool = check_connection
@@ -589,10 +617,27 @@ class DataQueryInterface(object):
                 " Check macrosynergy.management.utils.Config "
                 "for more details."
             )
-
+        self.config: Config = config
         self.auth: Optional[Union[CertAuth, OAuth]] = None
+        if oauth and (config.oauth() is None):
+            warnings.warn(
+                "OAuth credentials not found. "
+                "Trying to use certificate authentication.",
+            )
+            if config.cert() is None:
+                raise ValueError(
+                    "Certificate credentials not found. "
+                    "Check the config_object passed."
+                )
+            else:
+                oauth: bool = False
+
         if oauth:
-            self.auth: OAuth = OAuth(**config.oauth(mask=False))
+            self.auth: OAuth = OAuth(
+                **config.oauth(mask=False),
+                token_url=token_url,
+                proxy=config.proxy(mask=False),
+            )
         else:
             if base_url == OAUTH_BASE_URL:
                 base_url: str = CERT_BASE_URL
@@ -681,8 +726,22 @@ class DataQueryInterface(object):
         )
 
         if (response is None) or ("instruments" not in response.keys()):
+            if response is not None:
+                if (
+                    ("info" in response)
+                    and ("code" in response["info"])
+                    and (int(response["info"]["code"]) == 204)
+                ):
+                    raise NoContentError(
+                        f"Content was not found for the request: {response}\n"
+                        f"User ID: {self.auth.get_auth()['user_id']}\n"
+                        f"URL: {form_full_url(url, params)}\n"
+                        f"Timestamp (UTC): {datetime.utcnow().isoformat()}"
+                    )
+
             raise InvalidResponseError(
                 f"Invalid response from DataQuery: {response}\n"
+                f"User ID: {self.auth.get_auth()['user_id']}\n"
                 f"URL: {form_full_url(url, params)}"
                 f"Timestamp (UTC): {datetime.utcnow().isoformat()}"
             )
@@ -701,21 +760,50 @@ class DataQueryInterface(object):
 
         return downloaded_data
 
-    def get_catalogue(self):
+    def get_catalogue(
+        self,
+        group_id: str = JPMAQS_GROUP_ID,
+    ) -> List[str]:
         """
         Method to get the JPMaQS catalogue.
-        Not yet implemented.
-        """
-        raise NotImplementedError("This method has not been implemented yet.")
+        Queries the DataQuery API's Groups/Search endpoint to get the list of
+        tickers in the JPMaQS group. The group ID can be changed to fetch a
+        different group's catalogue.
 
-    def filter_exprs_from_catalogue(self, expressions: List[str]) -> List[str]:
-        """
-        Method to filter a list of expressions against the JPMaQS catalogue.
-        Would avoid unnecessary calls or passing invalid expressions to the API.
+        :param <str> group_id: the group ID to fetch the catalogue for.
 
-        Not yet implemented.
+        :return <List[str]>: list of tickers in the JPMaQS group.
+
+        :raises <ValueError>: if the response from the server is not valid.
         """
-        raise NotImplementedError("This method has not been implemented yet.")
+        old_group_id: str = "CA_QI_MACRO_SYNERGY"
+        try:
+            response_list: Dict = self._fetch(
+                url=self.base_url + CATALOGUE_ENDPOINT,
+                params={"group-id": group_id},
+                tracking_id=CATALOGUE_TRACKING_ID,
+            )
+        except NoContentError as e:
+            response_list: Dict = self._fetch(
+                url=self.base_url + CATALOGUE_ENDPOINT,
+                params={"group-id": old_group_id},
+                tracking_id=CATALOGUE_TRACKING_ID,
+            )
+        except Exception as e:
+            raise e
+
+        tickers: List[str] = [d["instrument-name"] for d in response_list]
+        utkr_count: int = len(tickers)
+        tkr_idx: List[int] = sorted([d["item"] for d in response_list])
+
+        if not (
+            (min(tkr_idx) == 1)
+            and (max(tkr_idx) == utkr_count)
+            and (len(set(tkr_idx)) == utkr_count)
+        ):
+            raise ValueError("The downloaded catalogue is corrupt.")
+
+        return tickers
 
     def _download(
         self,
@@ -727,6 +815,11 @@ class DataQueryInterface(object):
         show_progress: bool = False,
         retry_counter: int = 0,
     ) -> List[dict]:
+        """
+        Backend method to download data from the DataQuery API.
+        Used by the `download_data()` method.
+        """
+
         if retry_counter > 0:
             print("Retrying failed downloads. Retry count:", retry_counter)
 
@@ -832,7 +925,6 @@ class DataQueryInterface(object):
         reference_data: str = "NO_REFERENCE_DATA",
         retry_counter: int = 0,
         delay_param: float = API_DELAY_PARAM,  # TODO do we want the user to have access to this?
-        # filter_from_catalogue: bool = True,
     ) -> List[Dict]:
         """
         Download data from the DataQuery API.
@@ -905,7 +997,8 @@ class DataQueryInterface(object):
                 raise ConnectionError(
                     HeartbeatError(
                         f"Heartbeat failed. Timestamp (UTC):"
-                        f" {datetime.utcnow().isoformat()}"
+                        f" {datetime.utcnow().isoformat()}\n"
+                        f"User ID: {self.auth.get_auth()['user_id']}\n"
                     )
                 )
             time.sleep(delay_param)
@@ -953,8 +1046,8 @@ if __name__ == "__main__":
     import os
 
     cf: Config = Config(
-        client_id=os.environ["JPMAQS_API_CLIENT_ID"],
-        client_secret=os.environ["JPMAQS_API_CLIENT_SECRET"],
+        client_id=os.getenv("DQ_CLIENT_ID"),
+        client_secret=os.getenv("DQ_CLIENT_SECRET"),
     )
 
     expressions = [

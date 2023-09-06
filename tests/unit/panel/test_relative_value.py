@@ -1,71 +1,99 @@
-
 import unittest
 import numpy as np
 import pandas as pd
+from typing import List, Dict, Tuple, Union, Set
+
 from tests.simulate import make_qdf
 from macrosynergy.panel.make_relative_value import make_relative_value, _prepare_basket
 from macrosynergy.management.shape_dfs import reduce_df
 from random import randint, choice
 import io
 import sys
+import warnings
+
 
 class TestAll(unittest.TestCase):
-
     def dataframe_generator(self):
-        self.__dict__['cids'] = ['AUD', 'CAD', 'GBP', 'NZD']
-        self.__dict__['xcats'] = ['XR', 'CRY', 'GROWTH', 'INFL']
-        df_cids = pd.DataFrame(index=self.cids,
-                               columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
+        self.cids: List[str] = ["AUD", "CAD", "GBP", "NZD"]
+        self.xcats: List[str] = ["XR", "CRY", "GROWTH", "INFL"]
 
-        df_cids.loc['AUD'] = ['2000-01-01', '2020-12-31', 0.1, 1]
-        df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
-        df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
-        df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
+        df_cids: pd.DataFrame = pd.DataFrame(
+            index=self.cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+        )
 
-        df_xcats = pd.DataFrame(index=self.xcats,
-                                columns=['earliest', 'latest', 'mean_add', 'sd_mult',
-                                         'ar_coef', 'back_coef'])
+        df_cids.loc["AUD"] = ["2000-01-01", "2020-12-31", 0.1, 1]
+        df_cids.loc["CAD"] = ["2001-01-01", "2020-11-30", 0, 1]
+        df_cids.loc["GBP"] = ["2002-01-01", "2020-11-30", 0, 2]
+        df_cids.loc["NZD"] = ["2002-01-01", "2020-09-30", -0.1, 2]
 
-        df_xcats.loc['XR'] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
-        df_xcats.loc['CRY'] = ['2000-01-01', '2020-12-31', 1, 2, 0.95, 1]
-        df_xcats.loc['GROWTH'] = ['2001-01-01', '2020-10-30', 1, 2, 0.9, 1]
-        df_xcats.loc['INFL'] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
+        df_xcats: pd.DataFrame = pd.DataFrame(
+            index=self.xcats,
+            columns=[
+                "earliest",
+                "latest",
+                "mean_add",
+                "sd_mult",
+                "ar_coef",
+                "back_coef",
+            ],
+        )
 
-        dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-        self.__dict__['dfd'] = dfd
+        df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+        df_xcats.loc["CRY"] = ["2000-01-01", "2020-12-31", 1, 2, 0.95, 1]
+        df_xcats.loc["GROWTH"] = ["2001-01-01", "2020-10-30", 1, 2, 0.9, 1]
+        df_xcats.loc["INFL"] = ["2001-01-01", "2020-10-30", 1, 2, 0.8, 0.5]
 
-        black = {'AUD': ['2000-01-01', '2003-12-31'],
-                 'GBP': ['2018-01-01', '2100-01-01']}
+        self.dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-        self.__dict__['blacklist'] = black
+        black = {
+            "AUD": ["2000-01-01", "2003-12-31"],
+            "GBP": ["2018-01-01", "2100-01-01"],
+        }
+
+        self.blacklist: Dict[str, List[str]] = black
 
     def test_relative_value_dimensionality(self):
-
         self.dataframe_generator()
-        dfd = self.dfd
+        dfd: pd.DataFrame = self.dfd.copy()
 
         with self.assertRaises(AssertionError):
             # Validate the assertion on the parameter "rel_meth".
-            dfd_1 = make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=None,
-                                        blacklist=None, rel_meth='subtraction',
-                                        rel_xcats=None, postfix='RV')
+            dfd_1: pd.DataFrame = make_relative_value(
+                df=dfd,
+                xcats=["GROWTH", "INFL"],
+                cids=None,
+                blacklist=None,
+                rel_meth="subtraction",
+                rel_xcats=None,
+                postfix="RV",
+            )
 
         with self.assertRaises(AssertionError):
             # Validate the assertion on "xcats" parameter.
-            dfd_2 = make_relative_value(dfd, xcats=('XR', 'GROWTH'), cids=None,
-                                        blacklist=None, basket=['AUD', 'CAD', 'GBP'],
-                                        rel_meth='subtract',
-                                        rel_xcats=['XRvB3', 'GROWTHvB3', 'INFLvB3'])
+            dfd_2: pd.DataFrame = make_relative_value(
+                df=dfd,
+                xcats=("XR", "GROWTH"),
+                cids=None,
+                blacklist=None,
+                basket=["AUD", "CAD", "GBP"],
+                rel_meth="subtract",
+                rel_xcats=["XRvB3", "GROWTHvB3", "INFLvB3"],
+            )
 
         with self.assertRaises(AssertionError):
             # Validate the clause constructed around the basket parameter. The
             # cross-sections included in the "basket" must either be complete, inclusive
             # of all defined cross-sections, or a valid subset dependent on the cross-
             # sections passed into the function.
-            dfd_3 = make_relative_value(dfd, xcats=['XR', 'GROWTH'], cids=['GBP'],
-                                        blacklist=None, basket=['AUD', 'CAD'],
-                                        rel_meth='divide',
-                                        rel_xcats=['XRvB3', 'GROWTHvB3', 'INFLvB3'])
+            dfd_3: pd.DataFrame = make_relative_value(
+                df=dfd,
+                xcats=["XR", "GROWTH"],
+                cids=["GBP"],
+                blacklist=None,
+                basket=["AUD", "CAD"],
+                rel_meth="divide",
+                rel_xcats=["XRvB3", "GROWTHvB3", "INFLvB3"],
+            )
 
         # The first aspect of the code to validate is if the DataFrame is reduced to a
         # single cross-section, and the basket is naturally limited to a single cross
@@ -73,24 +101,40 @@ class TestAll(unittest.TestCase):
         # Therefore, the code should throw a runtime error given it is being used
         # incorrectly.
         with self.assertRaises(RuntimeError) as context:
-            make_relative_value(dfd, xcats=['GROWTH', 'INFL'], cids=['AUD'],
-                                blacklist=None, basket=['AUD'],
-                                rel_meth='subtract', rel_xcats=None, postfix='RV')
-            run_error = "Computing the relative value on a single cross-section using a " \
-                        "basket consisting exclusively of the aforementioned " \
-                        "cross-section is an incorrect usage of the function."
+            make_relative_value(
+                df=dfd,
+                xcats=["GROWTH", "INFL"],
+                cids=["AUD"],
+                blacklist=None,
+                basket=["AUD"],
+                rel_meth="subtract",
+                rel_xcats=None,
+                postfix="RV",
+            )
+            run_error: str = (
+                "Computing the relative value on a single cross-section using a "
+                "basket consisting exclusively of the aforementioned "
+                "cross-section is an incorrect usage of the function."
+            )
 
             self.assertTrue(run_error in context.exception)
 
         # First part of the logic to validate is the stacking mechanism, and subsequent
         # dimensions of the returned DataFrame. Once the reduction is accounted for, the
         # dimensions should reflect the returned input.
-        xcats = self.xcats[:-2]
-        cids = self.cids
-        start = '2001-01-01'
-        end = '2020-11-30'
-        dfx = reduce_df(df=self.dfd, xcats=xcats, cids=cids, start=start, end=end,
-                        blacklist=None, out_all=False)
+        xcats: List[str] = self.xcats[:-2]
+        cids: List[str] = self.cids
+        start: str = "2001-01-01"
+        end: str = "2020-11-30"
+        dfx: pd.DataFrame = reduce_df(
+            df=self.dfd,
+            xcats=xcats,
+            cids=cids,
+            start=start,
+            end=end,
+            blacklist=None,
+            out_all=False,
+        )
         # To confirm the above statement, the parameter "basket" must be equated to None
         # to prevent any further reduction.
         # Further, for the dimensions of the input DataFrame to match the output
@@ -102,9 +146,18 @@ class TestAll(unittest.TestCase):
         # latest date respectively (of the defined cross-sections' realised series). Both
         # the categories are defined over the same time-period, so the cross-sections
         # will delimit the dimensions.
-        dfd_rl = make_relative_value(self.dfd, xcats=xcats, cids=cids, start=start,
-                                     end=end, blacklist=None, basket=None,
-                                     rel_meth='subtract', rel_xcats=None, postfix='RV')
+        dfd_rl: pd.DataFrame = make_relative_value(
+            df=self.dfd,
+            xcats=xcats,
+            cids=cids,
+            start=start,
+            end=end,
+            blacklist=None,
+            basket=None,
+            rel_meth="subtract",
+            rel_xcats=None,
+            postfix="RV",
+        )
         self.assertEqual(dfx.shape, dfd_rl.shape)
 
         # Test the proposal that any dates with only a single realised value will be
@@ -113,28 +166,44 @@ class TestAll(unittest.TestCase):
         # The difference between the dimensions of the input DataFrame and the returned
         # DataFrame should correspond to the number of indices with only a single value.
 
-        xcats = self.xcats[0]
-        cids = self.cids
+        xcats: List[str] = self.xcats[0]
+        cids: List[str] = self.cids
         # Ensures for a period of time only a single cross-section is defined.
-        start = '2000-01-01'
-        end = '2020-09-30'
-        dfx = reduce_df(df=self.dfd, xcats=[xcats], cids=cids, start=start,
-                        end=end, blacklist=None, out_all=False)
-        input_rows = dfx.shape[0]
-        dfw = dfx.pivot(index='real_date', columns='cid', values='value')
+        start: str = "2000-01-01"
+        end: str = "2020-09-30"
+        dfx: pd.DataFrame = reduce_df(
+            df=self.dfd,
+            xcats=[xcats],
+            cids=cids,
+            start=start,
+            end=end,
+            blacklist=None,
+            out_all=False,
+        )
+        input_rows: int = dfx.shape[0]
+        dfw: pd.DataFrame = dfx.pivot(index="real_date", columns="cid", values="value")
 
-        data = dfw.to_numpy()
+        data: np.ndarray = dfw.to_numpy()
         data = data.astype(dtype=np.float64)
-        active_cross = np.sum(~np.isnan(data), axis=1)
+        active_cross: np.ndarray = np.sum(~np.isnan(data), axis=1)
 
-        single_value = np.where(active_cross == 1)[0]
-        no_single_values = single_value.size
+        single_value: np.ndarray = np.where(active_cross == 1)[0]
+        no_single_values: int = single_value.size
 
         # Apply the function to understand if the logic above holds.
-        dfd_rl = make_relative_value(self.dfd, xcats=xcats, cids=cids, start=start,
-                                     end=end, blacklist=None, basket=None,
-                                     rel_meth='divide', rel_xcats=None, postfix='RV')
-        output_rows = dfd_rl.shape[0]
+        dfd_rl: pd.DataFrame = make_relative_value(
+            df=self.dfd,
+            xcats=xcats,
+            cids=cids,
+            start=start,
+            end=end,
+            blacklist=None,
+            basket=None,
+            rel_meth="divide",
+            rel_xcats=None,
+            postfix="RV",
+        )
+        output_rows: int = dfd_rl.shape[0]
 
         self.assertTrue(output_rows == (input_rows - no_single_values))
 
@@ -145,75 +214,104 @@ class TestAll(unittest.TestCase):
         # for the aforementioned category will be a subset of the cross-sections
         # available for the secondary category. Further, the basket will be set to the
         # union of cross-sections.
-        dfd = self.dfd
-        xcats = ['XR', 'CRY']
-        cids = self.cids
-        start = '2000-01-01'
-        end = '2020-12-31'
-        dfx = reduce_df(
-            df=dfd, xcats=xcats, cids=cids, start=start, end=end, blacklist=None,
-            out_all=False
+        dfd: pd.DataFrame = self.dfd
+        xcats = ["XR", "CRY"]
+        cids: List[str] = ["AUD", "CAD", "GBP", "NZD"]
+        start: str = "2000-01-01"
+        end: str = "2020-12-31"
+        dfx: pd.DataFrame = reduce_df(
+            df=dfd,
+            xcats=xcats,
+            cids=cids,
+            start=start,
+            end=end,
+            blacklist=None,
+            out_all=False,
         )
 
         # On the reduced DataFrame, remove a single cross-section from one of the
         # categories.
-        filt1 = ~((dfx['cid'] == 'AUD') & (dfx['xcat'] == 'XR'))
-        dfdx = dfx[filt1]
+        filt1: pd.Series = ~((dfx["cid"] == "AUD") & (dfx["xcat"] == "XR"))
+        dfdx: pd.DataFrame = dfx[filt1]
 
         # Pass in the filtered DataFrame, and test whether the correct print statement
         # appears in the console.
-        capturedOutput = io.StringIO()
-        sys.stdout = capturedOutput
-        dfd_rl = make_relative_value(
-            dfdx, xcats=xcats, cids=cids, start=start, end=end, blacklist=None,
-            basket=None, complete_cross=False, rel_meth='subtract', rel_xcats=None,
-            postfix='RV'
-        )
+        with warnings.catch_warnings(record=True) as w:
+            dfd_rl: pd.DataFrame = make_relative_value(
+                df=dfdx,
+                xcats=xcats,
+                cids=cids,
+                start=start,
+                end=end,
+                blacklist=None,
+                basket=None,
+                complete_cross=False,
+                rel_meth="subtract",
+                rel_xcats=None,
+                postfix="RV",
+            )
 
-        sys.stdout = sys.__stdout__
-        capturedOutput.seek(0)
-        print_statement = capturedOutput.read()[-23:-2]
-        test = "['CAD', 'GBP', 'NZD']"
-        self.assertTrue(print_statement == test)
+            # Assert a UserWarning is raised.
+            self.assertTrue(len(w) == 1)
+            self.assertTrue(issubclass(w[-1].category, UserWarning))
+            warning_message: str = str(w[-1].message)
+
+            printed_cids: str = set(eval(warning_message[-23:-1]))
+            test: str = set(["CAD", "GBP", "NZD"])
+            self.assertEqual(printed_cids, test)
 
         # If the "complete_cross" parameter is set to True, the corresponding category
         # defined over an incomplete set of cross-sections, relative to the basket, will
         # be removed from the output DataFrame.
-        rel_xcats = ["XR_RelValue", "CRY_RelVal"]
-        dfd_rl = make_relative_value(
-            dfdx, xcats=xcats, cids=cids, start=start, end=end, blacklist=None,
-            basket=self.cids, complete_cross=True, rel_meth='subtract',
-            rel_xcats=rel_xcats, postfix=None
+        rel_xcats: List[str] = ["XR_RelValue", "CRY_RelVal"]
+        dfd_rl: pd.DataFrame = make_relative_value(
+            df=dfdx,
+            xcats=xcats,
+            cids=cids,
+            start=start,
+            end=end,
+            blacklist=None,
+            basket=self.cids,
+            complete_cross=True,
+            rel_meth="subtract",
+            rel_xcats=rel_xcats,
+            postfix=None,
         )
 
         # Assert the DataFrame only contains a single category: the category with a
         # complete set of cross-sections relative to the basket ("CRY_RelVal").
-        rlt_value_xcats = set(dfd_rl["xcat"])
-        no_rlt_value_xcats = len(rlt_value_xcats)
+        rlt_value_xcats: Set = set(dfd_rl["xcat"])
+        no_rlt_value_xcats: int = len(rlt_value_xcats)
 
         self.assertTrue(no_rlt_value_xcats == 1)
 
-        rl_xcat = next(iter(rlt_value_xcats))
+        rl_xcat: str = next(iter(rlt_value_xcats))
         self.assertTrue(rl_xcat == "CRY_RelVal")
 
     def test_prepare_basket(self):
-
         # Explicitly test _prepare_basket() method.
         self.dataframe_generator()
-        dfd = self.dfd
+        dfd: pd.DataFrame = self.dfd
 
         # Set the cids parameter to a reduced subset (a particuliar category is missing
         # requested cross-sections).
-        cids = ["AUD", "NZD"]
-        start = "2000-01-01"
-        end = "2020-12-31"
-        dfx = reduce_df(
-            df=dfd, xcats=["XR"], cids=cids, start=start, end=end, blacklist=None,
-            out_all=False
+        cids: List[str] = ["AUD", "NZD"]
+        start: str = "2000-01-01"
+        end: str = "2020-12-31"
+        dfx: pd.DataFrame = reduce_df(
+            df=dfd,
+            xcats=["XR"],
+            cids=cids,
+            start=start,
+            end=end,
+            blacklist=None,
+            out_all=False,
         )
 
         # Set the basket to all available cross-sections. Larger request.
-        basket = self.cids
+        basket: List[str] = self.cids
+        dfb: pd.DataFrame
+        cids_used: List[str]
         dfb, cids_used = _prepare_basket(
             df=dfx, xcat="XR", basket=basket, cids_avl=cids, complete_cross=False
         )
@@ -230,9 +328,8 @@ class TestAll(unittest.TestCase):
         self.assertTrue(dfb.empty)
 
     def test_relative_value_logic(self):
-
         self.dataframe_generator()
-        dfd = self.dfd
+        dfd: pd.DataFrame = self.dfd
 
         # Aim to test the application of the actual relative_value method: subtract or
         # divide.
@@ -240,13 +337,20 @@ class TestAll(unittest.TestCase):
         # simply the realised return of the respective cross-section. Therefore, the
         # cross-section chosen will consequently have a zero value for each output if the
         # logic is correct.
-        basket_cid = ['AUD']
-        dfd_2 = make_relative_value(dfd, xcats=['INFL'], cids=self.cids,
-                                    blacklist=None, basket=basket_cid,
-                                    rel_meth='subtract', rel_xcats=None, postfix='RV')
+        basket_cid: List[str] = ["AUD"]
+        dfd_2: pd.DataFrame = make_relative_value(
+            df=dfd,
+            xcats=["INFL"],
+            cids=self.cids,
+            blacklist=None,
+            basket=basket_cid,
+            rel_meth="subtract",
+            rel_xcats=None,
+            postfix="RV",
+        )
 
-        basket_df = dfd_2[dfd_2['cid'] == basket_cid[0]]
-        values = basket_df['value'].to_numpy()
+        basket_df: pd.DataFrame = dfd_2[dfd_2["cid"] == basket_cid[0]]
+        values: np.ndarray = basket_df["value"].to_numpy()
         self.assertTrue((np.sum(values) - 0.0) < 0.00001)
 
         # Test the logic of the function if there are multiple cross-sections defined in
@@ -254,66 +358,106 @@ class TestAll(unittest.TestCase):
         # relative value using division.
 
         # Incorporate three cross-sections for the basket.
-        basket_cid = ['AUD', 'CAD', 'GBP']
-        xcats = choice(self.xcats)
-        start = '2001-01-01'
-        end = '2020-10-30'
-        dfx = reduce_df(df=self.dfd, xcats=[xcats], cids=self.cids, start=start,
-                        end=end, blacklist=None, out_all=False)
+        basket_cid: List[str] = ["AUD", "CAD", "GBP"]
+        xcats: str = choice(self.xcats)
+        start: str = "2001-01-01"
+        end: str = "2020-10-30"
+        dfx: pd.DataFrame = reduce_df(
+            df=dfd,
+            xcats=[xcats],
+            cids=self.cids,
+            start=start,
+            end=end,
+            blacklist=None,
+            out_all=False,
+        )
 
-        dfd_3 = make_relative_value(dfx, xcats=xcats, cids=self.cids,
-                                    blacklist=self.blacklist, basket=basket_cid,
-                                    rel_meth='subtract', rel_xcats=None, postfix='RV')
+        dfd_3: pd.DataFrame = make_relative_value(
+            df=dfx,
+            xcats=xcats,
+            cids=self.cids,
+            blacklist=self.blacklist,
+            basket=basket_cid,
+            rel_meth="subtract",
+            rel_xcats=None,
+            postfix="RV",
+        )
         # Isolate an arbitrarily chosen date and test the logic
-        dfw = dfx.pivot(index='real_date', columns='cid', values='value')
-        index = dfw.index
-        no_rows = index.size
-        range_ = (int(no_rows * 0.25), int(no_rows * 0.75))
+        dfw: pd.DataFrame = dfx.pivot(index="real_date", columns="cid", values="value")
+        index: pd.Index = dfw.index
+        no_rows: int = index.size
+        range_: Tuple[int, int] = (int(no_rows * 0.25), int(no_rows * 0.75))
 
-        random_index = randint(*range_)
-        random_index = 1567
-        date = index[random_index]
+        random_index: int = randint(*range_)
+        random_index: int = 1567
+        date: str = index[random_index]
         assert date in list(index)
 
-        random_row = dfw.iloc[random_index, :]
-        random_row_dict = random_row.to_dict()
-        values = [v for k, v in random_row_dict.items() if k in basket_cid]
-        manual_mean = sum(values) / len(values)
+        random_row: pd.Series = dfw.iloc[random_index, :]
+        random_row_dict: Dict[str, float] = random_row.to_dict()
+        values: List[float] = [v for k, v in random_row_dict.items() if k in basket_cid]
+        manual_mean: float = sum(values) / len(values)
 
-        computed_values = (random_row - manual_mean)
-        computed_values = computed_values.to_numpy()
+        computed_values: np.ndarray = (random_row - manual_mean).to_numpy()
 
-        dfd_3_pivot = dfd_3.pivot(index='real_date', columns='cid', values='value')
-        output_index = dfd_3_pivot.index
-        index_val = np.where(output_index == date)[0]
+        dfd_3_pivot: pd.DataFrame = dfd_3.pivot(
+            index="real_date", columns="cid", values="value"
+        )
+        output_index: pd.Index = dfd_3_pivot.index
+        index_val: np.ndarray = np.where(output_index == date)[0]
 
-        function_output = dfd_3_pivot.iloc[index_val, :]
-        function_output = function_output.to_numpy()
+        function_output: np.ndarray = (dfd_3_pivot.iloc[index_val, :]).to_numpy()
 
-        function_output = function_output[0]
-        self.assertTrue(np.all(computed_values == function_output))
+        function_output: np.ndarray = function_output[0]
+        self.assertTrue(np.allclose(computed_values, function_output))
 
         # Test the division.
         # Computing make_relative_value() on a single category that has been chosen
         # randomly.
-        dfd_4 = make_relative_value(dfx, xcats=xcats, cids=self.cids,
-                                    blacklist=self.blacklist, basket=basket_cid,
-                                    rel_meth='divide', rel_xcats=None, postfix='RV')
+        dfd_4: pd.DataFrame = make_relative_value(
+            df=dfx,
+            xcats=xcats,
+            cids=self.cids,
+            blacklist=self.blacklist,
+            basket=basket_cid,
+            rel_meth="divide",
+            rel_xcats=None,
+            postfix="RV",
+        )
 
         # Divide each cross-section's realised return by the mean of the basket.
-        computed_values = (random_row / manual_mean)
-        computed_values = computed_values.to_numpy()
+        computed_values: np.ndarray = (random_row / manual_mean).to_numpy()
 
-        dfd_4_pivot = dfd_4.pivot(index='real_date', columns='cid', values='value')
-        output_index = dfd_4_pivot.index
-        index_val = np.where(output_index == date)[0]
+        dfd_4_pivot: pd.DataFrame = dfd_4.pivot(
+            index="real_date", columns="cid", values="value"
+        )
+        output_index: pd.Series = dfd_4_pivot.index
+        index_val: np.ndarray = np.where(output_index == date)[0]
 
-        function_output = dfd_4_pivot.iloc[index_val, :]
-        function_output = function_output.to_numpy()
+        function_output: np.ndarray = (dfd_4_pivot.iloc[index_val, :]).to_numpy()
 
         self.assertTrue(np.all(computed_values == function_output[0]))
 
+        # Running where cids and basket are disjoint sets. This running without error is
+        # a test in itself.
+        dfd_5: pd.DataFrame = make_relative_value(
+            df=self.dfd,
+            xcats=self.xcats[0],
+            cids=["AUD", "CAD"],
+            blacklist=self.blacklist,
+            basket=["GBP"],
+            rel_meth="divide",
+            rel_xcats=None,
+            postfix="RV",
+        )
 
-if __name__ == '__main__':
+        # Check that the correct tickers are in the output.
+        out_basket_tickers: Set = set(dfd_5["cid"] + dfd_5["xcat"])
+        expct_basket_tickers: Set = set(
+            [f"{cd}{self.xcats[0]}RV" for cd in ["AUD", "CAD", "GBP"]]
+        )
+        self.assertEqual(out_basket_tickers, expct_basket_tickers)
 
+
+if __name__ == "__main__":
     unittest.main()

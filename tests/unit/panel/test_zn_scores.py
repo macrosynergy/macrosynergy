@@ -476,7 +476,25 @@ class TestAll(unittest.TestCase):
             dfr['xcat'] : pd.Series = dfr['xcat'].str.replace('ZN', '')
             self.assertEqual(dfr['xcat'].unique()[0], r_xcat)
             self.assertFalse(r_cid in dfr['cid'].unique())
+            
+        with self.assertRaises(ValueError):
+            try:
+                test_cids : List[str] = self.cids.copy()
+                test_cids.append('unknown_cid')
+                r_xcat : str = 'CRY'
+                dfr : pd.DataFrame = make_zn_scores(df=self.dfd, xcat=r_xcat, cids=test_cids, start="2010-01-01",)
+            except ValueError as e:
+                self.assertTrue('unknown_cid' in str(e))
+                raise ValueError(e)
         
+        with self.assertRaises(ValueError):
+            try:
+                r_xcat : str = 'unknown_xcat'
+                dfr : pd.DataFrame = make_zn_scores(df=self.dfd, xcat=r_xcat, cids=self.cids, start="2010-01-01",)
+            except ValueError as e:
+                self.assertTrue('unknown_xcat' in str(e))
+                raise ValueError(e)
+
 
         
 if __name__ == '__main__':

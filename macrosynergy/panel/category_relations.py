@@ -1,4 +1,6 @@
-
+"""
+Classes and functions for analyzing and visualizing the relations of two panel categories.
+"""
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -6,6 +8,7 @@ import seaborn as sns
 from typing import List, Union, Tuple
 from scipy import stats
 import statsmodels.api as sm
+import warnings
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import categories_df
@@ -59,55 +62,62 @@ class CategoryRelations(object):
         for the two respective categories. Observations with higher values will be
         trimmed, i.e. removed from the analysis (not winsorized!). Default is None
         for both. Trimming is applied after all other transformations.
-    :param <int> slip: lag (delay of arrival) of first (explanatory) category in days
-        prior to any frequency conversion. Default is 0. This simulates time elapsed 
-        between observing data and using them for market positioning.
-        This is different from and complementary to  the `lag` argument which delays 
-        the explanatory variable by the periods of the investigated sample, which 
-        often is downsampled. Importantly, for analyses with explanatory and dependent 
-        categories, the first category takes the role of the explanatory and a positive 
-        lag means that the explanatory values will be deferred into the future, 
-        i.e. relate to future values of the explained variable.
-
+    :param <int> slip: implied slippage of feature availability for relationship with
+        the target category. This mimics the relationship between trading signals and
+        returns, which is often characterized by a delay due to the setup of of positions.
+        Technically, this is a negative lag (early arrival) of the target category
+        in working days prior to any frequency conversion. Default is 0.
     """
     
     def __init__(self, df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
                  val: str = 'value', start: str = None, end: str = None,
-                 blacklist: dict = None, years = None, freq: str = 'M', lag: int = 0,
-                 fwin: int = 1, xcat_aggs: List[str] = ('mean', 'mean'),
+                 blacklist: dict = None, years: int = None, freq: str = 'M', lag: int = 0,
+                 fwin: int = 1, xcat_aggs: List[str] = ['mean', 'mean'],
                  xcat1_chg: str = None, n_periods: int = 1,
                  xcat_trims: List[float] = [None, None], slip: int = 0,):
         """ Initializes CategoryRelations """
 
-        self.xcats = xcats
-        self.cids = cids 
-        self.val = val 
-        self.freq = freq
-        self.lag = lag
-        self.years = years 
-        self.aggs = xcat_aggs
-        self.xcat1_chg = xcat1_chg
-        self.n_periods = n_periods
-        self.xcat_trims = xcat_trims
-        self.slip = slip
+        self.xcats: List[str] = xcats
+        self.cids: List[str] = cids 
+        self.val: str = val 
+        self.freq: str = freq.upper()
+        self.lag: int = lag
+        self.years: int  = years 
+        self.aggs: List[str] = xcat_aggs
+        self.xcat1_chg: str  = xcat1_chg
+        self.n_periods: int = n_periods
+        self.xcat_trims: List[float] = xcat_trims
+        self.slip: int = slip
 
-        assert self.freq in ['D', 'W', 'M', 'Q', 'A']
-        assert {'cid', 'xcat', 'real_date', val}.issubset(set(df.columns))
-        assert len(xcats) == 2, "Expects two fields."
-        assert isinstance(slip, int) and slip >= 0, "Slip must be a non-negative integer."
+        if not isinstance(self.freq, str):
+            raise TypeError("freq must be a string.")
+        elif  self.freq not in ['D', 'W', 'M', 'Q', 'A']:
+            raise ValueError("freq must be one of 'D', 'W', 'M', 'Q', 'A'.")
+        if not isinstance(val, str):
+            raise TypeError("val must be a string.")
+        if not {'cid', 'xcat', 'real_date', val}.issubset(set(df.columns)):
+            raise ValueError("`df` must have columns 'cid', 'xcat', 'real_date' and `val`.")
+        if not isinstance(xcats, (list, tuple)):
+            raise TypeError("`xcats` must be a list or a tuple.")
+        elif not len(xcats) == 2:
+            raise ValueError("`xcats` must have exactly two elements.")
+        if not isinstance(slip, int):
+            raise TypeError("`slip` must be a non-negative integer.")
+        elif slip < 0:
+            raise ValueError("`slip` must be a non-negative integer.")
+
+        if not isinstance(xcat_aggs, (list, tuple)):
+            raise TypeError("xcat_aggs must be a list or a tuple.")
 
         # Select the cross-sections available for both categories.
         df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
         
-        df_slips : pd.DataFrame = df.copy()
         if self.slip != 0:
-            metrics_found : List[str] = list(set(df_slips.columns) - set(['cid', 'xcat', 'real_date']))
-            df_slips = self.apply_slip(target_df=df_slips, slip=self.slip, cids=self.cids,
+            metrics_found : List[str] = list(set(df.columns) - set(['cid', 'xcat', 'real_date']))
+            df = self.apply_slip(target_df=df, slip=self.slip, cids=self.cids,
                                         xcats=self.xcats, metrics=metrics_found)
 
         shared_cids = CategoryRelations.intersection_cids(df, xcats, cids)
-
-        # TODO : df = df_slips here?
         
         # Will potentially contain NaN values if the two categories are defined over
         # time-periods.
@@ -150,7 +160,21 @@ class CategoryRelations(object):
     def apply_slip(self, target_df: pd.DataFrame, slip: int,
                     cids: List[str], xcats: List[str],
                     metrics: List[str]) -> pd.DataFrame:
+        """
+        Applied a slip, i.e. a negative lag, to the target DataFrame 
+        for the given cross-sections and categories, on the given metrics.
         
+        :param <pd.DataFrame> target_df: DataFrame to which the slip is applied.
+        :param <int> slip: Slip to be applied.
+        :param <List[str]> cids: List of cross-sections.
+        :param <List[str]> xcats: List of categories.
+        :param <List[str]> metrics: List of metrics to which the slip is applied.
+        :return <pd.DataFrame> target_df: DataFrame with the slip applied.
+        :raises <TypeError>: If the provided parameters are not of the expected type.
+        :raises <ValueError>: If the provided parameters are semantically incorrect.
+        """
+
+        target_df = target_df.copy(deep=True)
         if not (isinstance(slip, int) and slip >= 0):
             raise ValueError("Slip must be a non-negative integer.")
 
@@ -163,7 +187,6 @@ class CategoryRelations(object):
 
         slip : int = slip.__neg__()
         
-        target_df : pd.DataFrame = target_df.copy()
         target_df[metrics] = target_df.groupby('tickers')[metrics].shift(slip)
         target_df = target_df.drop(columns=['tickers'])
         
@@ -193,8 +216,10 @@ class CategoryRelations(object):
 
         if len(miss_1) > 0:
             print(f"{xcats[0]} misses: {sorted(miss_1)}.")
+            warnings.warn(f"{xcats[0]} misses: {sorted(miss_1)}.", UserWarning)
         if len(miss_2) > 0:
             print(f"{xcats[1]} misses: {sorted(miss_2)}.")
+            warnings.warn(f"{xcats[1]} misses: {sorted(miss_2)}.", UserWarning)
 
         usable = list(set_1.intersection(set_2).
                       intersection(set(cids)))
@@ -581,15 +606,23 @@ class CategoryRelations(object):
             
         plt.show()
 
-    def ols_table(self):
+    def ols_table(self, type='pool'):
         """
-        Print statsmodel OLS table of pooled regression.
+        Print statsmodels regression summaries.
+        :param <str> type: type of linear regression summary to print. Default is 'pool'.
+            Alternative is 're' for period-specific random effects.
 
         """
+        assert type in ['pool', 're'], "Type must be either 'pool' or 're'."
 
         x, y = self.df.dropna().iloc[:, 0], self.df.dropna().iloc[:, 1]
         x_fit = sm.add_constant(x)
-        fit_results = sm.OLS(y, x_fit).fit()
+        groups = self.df.reset_index().real_date
+        if type == 'pool':
+            fit_results = sm.OLS(y, x_fit).fit()
+        elif type == 're':
+            fit_results = sm.MixedLM(y, x_fit, groups).fit(reml=False)
+        
         print(fit_results.summary())
 
 
@@ -638,6 +671,18 @@ if __name__ == "__main__":
         ylab="Return", coef_box="lower left", prob_est="map",
     )
 
+    # years parameter
+
+    cr = CategoryRelations(
+        dfdx, xcats=["CRY", "XR"], freq="M", years=5, lag=0, cids=cidx, xcat_aggs=["mean", "sum"],
+        start="2001-01-01", blacklist=black
+    )
+
+    cr.reg_scatter(
+        labels=False, separator=None, title="Carry and Return, 5-year periods", xlab="Carry",
+        ylab="Return", coef_box="lower left", prob_est="map",
+    )
+
     cr = CategoryRelations(
         dfdx, xcats=["CRY", "XR"], 
         xcat1_chg="diff",
@@ -653,3 +698,6 @@ if __name__ == "__main__":
         labels=False, separator=cids, title="Carry and Return", xlab="Carry",
         ylab="Return", coef_box="lower left"
     )
+
+    cr.ols_table(type='pool')
+    cr.ols_table(type='re')
