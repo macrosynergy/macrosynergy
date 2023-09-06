@@ -5,12 +5,7 @@ import warnings
 import statsmodels.api as sm
 from statsmodels.regression.linear_model import RegressionResults
 
-import sys, os
-
-sys.path.append(os.getcwd())
-
-# from tests.simulate import make_qdf
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from tests.simulate import make_qdf
 from macrosynergy.panel.return_beta import (
     date_alignment,
     hedge_calculator,
@@ -172,8 +167,8 @@ class TestAll(unittest.TestCase):
         # ensures a certain number of days have passed until a hedge ratio is calculated.
 
         # Analysis completed using a single cross-section from the panel.
-        c: str = "KRW"
-        xr: pd.Series = (self.dfp_w[c]).astype(dtype=np.float16)
+        cross_section: str = "KRW"
+        xr: pd.Series = (self.dfp_w[cross_section]).astype(dtype=np.float16)
         # Adjusts for the effect of pivoting.
         xr = xr.dropna(axis=0, how="all")
 
@@ -194,6 +189,8 @@ class TestAll(unittest.TestCase):
         )
 
         min_observation: int = 50
+        MAX_OBS: int = 100
+
         # Produce daily business day date series to determine the date that corresponds
         # to the specified minimum observation.
         test_min_obs: np.datetime64 = pd.date_range(
@@ -204,10 +201,10 @@ class TestAll(unittest.TestCase):
             unhedged_return=xr,
             benchmark_return=br,
             rdates=dates_re,
-            cross_section=c,
+            cross_section=cross_section,
             meth="ols",
             min_obs=min_observation,
-            max_obs=100,
+            max_obs=MAX_OBS,
         )
         # Confirm the first computed hedge ratio value falls after the minimum
         # observation date.
@@ -242,22 +239,39 @@ class TestAll(unittest.TestCase):
         xr = xr.truncate(before=s_date, after=e_date)
         br = br.truncate(before=s_date, after=e_date)
 
-        last_test_date: str = "2013-03-29"
-        first_test_date: str = pd.bdate_range(end=last_test_date, periods=100)[
-            0
-        ].strftime("%Y-%m-%d")
-        # 100 -1, as the hedge ratio is computed using the last 100 observations.
-        X = sm.add_constant(xr.loc[first_test_date:last_test_date])
-        y = br.loc[first_test_date:last_test_date]
-        mod = sm.OLS(y, X)
-        rresults: RegressionResults = mod.fit()
-        result: float = rresults.params[1]
-        
+        data_column = np.empty(len(dates_re))
+        data_column[:] = np.nan
+        df_hrat = pd.DataFrame(data=data_column, index=dates_re, columns=["value"])
+
+        min_obs_date = xr.index[min_observation]
+
+        for d in dates_re:
+            if d > min_obs_date:
+                curr_start_date: pd.Timestamp = dates_re[
+                    max(0, dates_re.index(d) - MAX_OBS)
+                ]
+                xvar = xr.loc[curr_start_date:d]
+                yvar = br.loc[curr_start_date:d]
+                xvar = sm.add_constant(xvar)
+                mod: sm.OLS = sm.OLS(yvar, xvar)
+                results: RegressionResults = mod.fit()
+                results_params: pd.Series = results.params
+                df_hrat.loc[d] = results_params.loc[cross_section]
+
+        df_hrat = df_hrat.dropna(axis=0, how="all")
+        df_hrat.index.name = "real_date"
+        df_hrat = df_hrat.reset_index(level=0)
 
         # Test on the next business day given the shift. The hedge ratio computed on the
         # re-estimation date is applied to the return series on the next business day
         # after re-estimation. NOTE : 30,31-Mar-2013 are weekend dates.
-        test_value = float(df_hr[df_hr["real_date"] == "2013-04-01"]["value"])
+
+        # therefore, `last_test_date` is set hard-coded to '2013-03-29'.
+        last_test_date: str = "2013-03-29"
+        # check_date <- one business day after the re-estimation date - 2013-04-01.
+        check_date: str = "2013-04-01"
+        test_value = float(df_hr[df_hr["real_date"] == check_date]["value"])
+        result = float(df_hrat[df_hrat["real_date"] == last_test_date]["value"])
         self.assertTrue(result == test_value)
 
     def test_adjusted_returns(self):
