@@ -353,6 +353,9 @@ def return_beta(
         sunday_adjustment = lambda d: d - pd.DateOffset(2)
         dates_re = list(map(sunday_adjustment, dates_re))
 
+    if isinstance(dates_re, pd.DatetimeIndex):
+        dates_re: List[str] = dates_re.to_list()
+
     # Cross-section-wise hedge ratio estimation.
 
     aggregate = []
