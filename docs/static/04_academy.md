@@ -10,11 +10,13 @@ The Academy is designed to provide a basic introduction to the JPMaQS indicators
 
 - Macrosynergy Quantamental Academy - [academy.macrosynergy.com](https://academy.macrosynergy.com/).
 
-- JPMaQS for Academia - [academy.macrosynergy.com/academia](https://academy.macrosynergy.com/academia/).
+- Using the Macrosynergy package - [view and download Jupyter notebook](https://academy.macrosynergy.com/academy/Introductions/Introduction%20to%20Macrosynergy%20package/_build/html/Introduction%20to%20Macrosynergy%20package.php)
+
+- Quantamental research upport for Academia - [academy.macrosynergy.com/academia](https://academy.macrosynergy.com/academia/).
 
 ## How to use the Academy without a JPMaQS licence
 
-The Academy is designed to be used in conjunction with the JPMaQS Quantamental System. However, if you do not have access to JPMaQS, you can still use the Academy with simulated data from [macrosynergy.management.simulate_quantamental_data](./macrosynergy/management/simulate_quantamental_data).
+The Macrosynergy package and the Academy are designed designed to be used in conjunction with the JPMaQS Quantamental System. However, if you do not have access to JPMaQS, you can use the free data sets on Kaggle [here](https://www.kaggle.com/datasets/macrosynergy/fixed-income-returns-and-macro-trends). You can also use the Academy with simulated data from [macrosynergy.management.simulate_quantamental_data](./macrosynergy/management/simulate_quantamental_data).
 
 ---
 
