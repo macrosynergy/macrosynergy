@@ -432,10 +432,8 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
                 cs_test_dates: pd.DatetimeIndex = Xy.loc[splits[split_idx][1]][
                     Xy.loc[splits[split_idx][1]].index.get_level_values(0) == cs
                 ].index.get_level_values(1)
+
                 if len(cs_train_dates) > 0:
-                    # If there are training dates, then plot a blue bar for the training dates
-                    # The logic for the upper bound on the bar is to ensure there isn't a gap between
-                    # the blue bar and the (next) red bar.
                     lower_bound: pd.Timestamp = cs_train_dates.min()
                     upper_bound: pd.Timestamp = (
                         real_dates[
@@ -445,21 +443,59 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
                         < len(real_dates)
                         else cs_train_dates.max()
                     )
+
+                    xranges = []
+                    in_contiguous = True
+                    lower = lower_bound
+                    upper = (
+                        real_dates[np.where(real_dates == lower)[0][0] + 1]
+                        if np.where(real_dates == lower)[0][0] + 1 < len(real_dates)
+                        else cs_train_dates.max()
+                    )
+
+                    for real_date in real_dates[
+                        (real_dates >= lower_bound) & (real_dates <= upper_bound)
+                    ]:
+                        if real_date in cs_train_dates:
+                            if in_contiguous:
+                                upper = (
+                                    real_dates[
+                                        np.where(real_dates == real_date)[0][0] + 1
+                                    ]
+                                    if np.where(real_dates == real_date)[0][0] + 1
+                                    < len(real_dates)
+                                    else cs_train_dates.max()
+                                )
+                            else:
+                                in_contiguous = True
+                                lower = real_date
+                                upper = (
+                                    real_dates[
+                                        np.where(real_dates == real_date)[0][0] + 1
+                                    ]
+                                    if np.where(real_dates == real_date)[0][0] + 1
+                                    < len(real_dates)
+                                    else cs_train_dates.max()
+                                )
+                        else:
+                            # then not in training set
+                            if in_contiguous:
+                                xranges.append((lower, upper - lower))
+                                in_contiguous = False
+                                lower = real_date
+                            else:
+                                pass
+                    xranges.append((lower, upper - lower))
                     ax[cs_idx, idx].broken_barh(
-                        [
-                            (
-                                cs_train_dates.min(),
-                                upper_bound - lower_bound,
-                            )
-                        ],
+                        xranges,
                         (-0.4, 0.8),
                         facecolors="royalblue",
                         label="Train",
                     )
-                    if cs_idx == 0:
-                        ax[cs_idx, idx].set_title(f"{split_titles[idx]}")
+                    # if cs_idx == 0:
+                    #    ax[cs_idx, idx].set_title(f"{split_titles[idx]}")
+
                 if len(cs_test_dates) > 0:
-                    # If there are test dates, then plot a red bar for the test dates
                     lower_bound: pd.Timestamp = cs_test_dates.min()
                     upper_bound: pd.Timestamp = (
                         real_dates[
@@ -469,20 +505,58 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
                         < len(real_dates)
                         else cs_test_dates.max()
                     )
+
+                    xranges = []
+                    in_contiguous = True
+                    lower = lower_bound
+                    upper = (
+                        real_dates[np.where(real_dates == lower)[0][0] + 1]
+                        if np.where(real_dates == lower)[0][0] + 1 < len(real_dates)
+                        else cs_test_dates.max()
+                    )
+
+                    for real_date in real_dates[
+                        (real_dates >= lower_bound) & (real_dates <= upper_bound)
+                    ]:
+                        if real_date in cs_test_dates:
+                            if in_contiguous:
+                                upper = (
+                                    real_dates[
+                                        np.where(real_dates == real_date)[0][0] + 1
+                                    ]
+                                    if np.where(real_dates == real_date)[0][0] + 1
+                                    < len(real_dates)
+                                    else cs_test_dates.max()
+                                )
+                            else:
+                                in_contiguous = True
+                                lower = real_date
+                                upper = (
+                                    real_dates[
+                                        np.where(real_dates == real_date)[0][0] + 1
+                                    ]
+                                    if np.where(real_dates == real_date)[0][0] + 1
+                                    < len(real_dates)
+                                    else cs_test_dates.max()
+                                )
+                        else:
+                            # then not in training set
+                            if in_contiguous:
+                                xranges.append((lower, upper - lower))
+                                in_contiguous = False
+                                lower = real_date
+                            else:
+                                pass
+
+                    xranges.append((lower, upper - lower))
                     ax[cs_idx, idx].broken_barh(
-                        [
-                            (
-                                cs_test_dates.min(),
-                                upper_bound - lower_bound,
-                            )
-                        ],
+                        xranges,
                         (-0.4, 0.8),
                         facecolors="lightcoral",
                         label="Test",
                     )
                     if cs_idx == 0:
                         ax[cs_idx, idx].set_title(f"{split_titles[idx]}")
-
                 ax[cs_idx, idx].set_xlim(real_dates.min(), real_dates.max())
                 ax[cs_idx, idx].set_yticks([0])
                 ax[cs_idx, idx].set_yticklabels([cs])
@@ -497,6 +571,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate_quantamental_data import make_qdf
+    import macrosynergy.management as msm
 
     cids = ["AUD", "CAD", "GBP", "USD"]
     xcats = ["XR", "CRY", "GROWTH", "INFL"]
@@ -520,6 +595,9 @@ if __name__ == "__main__":
 
     dfd2 = make_qdf(df_cids2, df_xcats2, back_ar=0.75)
     dfd2["grading"] = np.ones(dfd2.shape[0])
+    black = {"GBP": ["2009-01-01", "2012-06-30"], "CAD": ["2018-01-01", "2100-01-01"]}
+    dfd2 = msm.reduce_df(df=dfd2, cids=cids, xcats=xcats, blacklist=black)
+
     dfd2 = dfd2.pivot(index=["cid", "real_date"], columns="xcat", values="value")
     X2 = dfd2.drop(columns=["XR"])
     y2 = dfd2["XR"]
