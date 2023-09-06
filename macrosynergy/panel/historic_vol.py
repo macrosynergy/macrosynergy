@@ -1,5 +1,7 @@
 """
 Function for calculating historic volatility of quantamental data.
+
+::docs::historic_vol::sort_first::
 """
 import numpy as np
 import pandas as pd
