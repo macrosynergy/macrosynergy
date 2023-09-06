@@ -1,5 +1,8 @@
 """
 Tools used to update and modify a quantamental DataFrame.
+
+::docs::update_df::sort_first::
+
 """
 import pandas as pd
 from itertools import product

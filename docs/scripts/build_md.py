@@ -26,6 +26,15 @@ class DocstringMethods:
         if not docstring:
             return ""
 
+        # remove any docstring directives
+        # look for lines where line.strip() starts with "::docs::" and ends with "::"
+        lines: List[str] = docstring.split("\n")
+        for il, line in enumerate(lines):
+            if line.strip().startswith("::docs::") and line.strip().endswith("::"):
+                lines[il] = "\n"
+
+        docstring = "\n".join(lines)
+
         options: Dict[str, Any] = {
             "number": True,
             "code_blocks": True,
@@ -71,12 +80,112 @@ class DocstringMethods:
 
         return DocstringMethods.markdown_format("\n".join(formatted_lines))
 
+    @staticmethod
+    def sort_docstrings(
+        module_docstrings: Dict[str, Union[str, Dict[str, Any]]],
+        directives: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        # sort the module_docstrings['classes'] and module_docstrings['functions'] by key
+        if module_docstrings["classes"]:
+            module_docstrings["classes"] = dict(
+                sorted(module_docstrings["classes"].items(), key=lambda x: x[0])
+            )
+
+        if module_docstrings["functions"]:
+            module_docstrings["functions"] = dict(
+                sorted(module_docstrings["functions"].items(), key=lambda x: x[0])
+            )
+
+        if module_docstrings["functions"]:
+            underscore_functions: Dict[str, Any] = {
+                k: v
+                for k, v in module_docstrings["functions"].items()
+                if k.startswith("_")
+            }
+            # sort the underscore_functions by key
+            underscore_functions = dict(
+                sorted(underscore_functions.items(), key=lambda x: x[0])
+            )
+            # remove the underscore_functions from module_docstrings["functions"], and add them back at the end
+            module_docstrings["functions"] = {
+                k: v
+                for k, v in module_docstrings["functions"].items()
+                if not k in underscore_functions
+            }
+            for k, v in underscore_functions.items():
+                module_docstrings["functions"][k] = v
+
+        output: Dict[str, Union[dict, str]] = {
+            "classes": {},
+            "functions": {},
+            "<module>": "",
+        }
+
+        sorted_first: Dict[str, Union[dict, str]] = output.copy()
+        sorted_last: Dict[str, Union[dict, str]] = output.copy()
+
+        for doctype in ["classes", "functions"]:
+            if doctype in module_docstrings and module_docstrings[doctype]:
+                for name, doc in module_docstrings[doctype].items():
+                    if name in directives and directives[name]:
+                        # if there is a sort_first directive then move the docstring to the top
+                        if "sort_first" in directives[name]:
+                            sorted_first[doctype][name] = doc
+                        elif "sort_last" in directives[name]:
+                            sorted_last[doctype][name] = doc
+
+            # reverse the order of the sorted_last dict
+            sorted_last[doctype]: Dict[str, Any] = {
+                k: sorted_last[doctype][k]
+                for k in list(sorted_last[doctype].keys())[::-1]
+            }
+
+            output[doctype] = {
+                **sorted_first[doctype],  # if sorted_first[doctype] else {},
+                **module_docstrings[doctype],  # if module_docstrings[doctype] else {},
+                **sorted_last[doctype],  # if sorted_last[doctype] else {},
+            }
+
+        output["<module>"] = module_docstrings["<module>"]
+
+        return output
+
+    @staticmethod
+    def get_directives(docstring: str) -> Dict[str, Dict[str, Any]]:
+        """
+        Returns the docs-directives and the docs-flags from the docstring.
+        Looks for lines where line.strip() starts with "::docs::" and ends with "::".
+        """
+        # look for lines where line.strip() starts with "::docs::" and ends with "::"
+        lines: List[str] = docstring.split("\n")
+        directives: Dict[str, Dict[str, str]] = {}
+        for line in lines:
+            if line.strip().startswith("::docs::") and line.strip().endswith("::"):
+                directive: List[str] = line.strip().replace("::docs::", "").split("::")
+                # remove any empty strings
+                directive = [d.strip() for d in directive if d.strip()]
+                if len(directive) != 2:
+                    raise ValueError(f"Invalid directive: {line}")
+
+                if directive[0] not in directives:
+                    directives[directive[0]] = {}
+
+                directives[directive[0]][directive[1]] = True
+
+        return directives
+
 
 def extract_docstrings(source: str) -> Dict[str, Union[str, Dict[str, Any]]]:
     """
     Extracts docstrings from the given Python source code and returns a structured dictionary.
     """
     tree = ast.parse(source)
+
+    directives: Optional[dict] = None
+    if tree is not None:
+        directives: Dict[str, Dict[str, Any]] = DocstringMethods.get_directives(
+            docstring=source
+        )
     structure = {"<module>": ast.get_docstring(tree), "classes": {}, "functions": {}}
 
     for node in tree.body:
@@ -99,6 +208,11 @@ def extract_docstrings(source: str) -> Dict[str, Union[str, Dict[str, Any]]]:
                 "doc": ast.get_docstring(node),
                 "parameters": node.args.args,
             }
+
+    # pass the dict to the sort_docstrings method
+    structure = DocstringMethods.sort_docstrings(
+        module_docstrings=structure, directives=directives
+    )
 
     return structure
 
