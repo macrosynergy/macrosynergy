@@ -85,7 +85,6 @@ class DocstringMethods:
         module_docstrings: Dict[str, Union[str, Dict[str, Any]]],
         directives: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        
         # sort the module_docstrings['classes'] and module_docstrings['functions'] by key
         if module_docstrings["classes"]:
             module_docstrings["classes"] = dict(
@@ -124,33 +123,30 @@ class DocstringMethods:
 
         sorted_first: Dict[str, Union[dict, str]] = output.copy()
         sorted_last: Dict[str, Union[dict, str]] = output.copy()
-        if directives:
-            for doctype in ["classes", "functions"]:
-                if doctype in module_docstrings and module_docstrings[doctype]:
-                    for name, doc in module_docstrings[doctype].items():
-                        if name in directives and directives[name]:
-                            # if there is a sort_first directive then move the docstring to the top
-                            if "sort_first" in directives[name]:
-                                sorted_first[doctype][name] = doc
-                            elif "sort_last" in directives[name]:
-                                sorted_last[doctype][name] = doc
 
-                # reverse the order of the sorted_last dict
-                sorted_last[doctype]: Dict[str, Any] = {
-                    k: sorted_last[doctype][k]
-                    for k in list(sorted_last[doctype].keys())[::-1]
-                }
+        for doctype in ["classes", "functions"]:
+            if doctype in module_docstrings and module_docstrings[doctype]:
+                for name, doc in module_docstrings[doctype].items():
+                    if name in directives and directives[name]:
+                        # if there is a sort_first directive then move the docstring to the top
+                        if "sort_first" in directives[name]:
+                            sorted_first[doctype][name] = doc
+                        elif "sort_last" in directives[name]:
+                            sorted_last[doctype][name] = doc
 
-                output[doctype] = {
-                    **sorted_first[doctype], # if sorted_first[doctype] else {},
-                    **module_docstrings[doctype], # if module_docstrings[doctype] else {},
-                    **sorted_last[doctype], # if sorted_last[doctype] else {},
-                }
+            # reverse the order of the sorted_last dict
+            sorted_last[doctype]: Dict[str, Any] = {
+                k: sorted_last[doctype][k]
+                for k in list(sorted_last[doctype].keys())[::-1]
+            }
 
-            output["<module>"] = module_docstrings["<module>"]
+            output[doctype] = {
+                **sorted_first[doctype],  # if sorted_first[doctype] else {},
+                **module_docstrings[doctype],  # if module_docstrings[doctype] else {},
+                **sorted_last[doctype],  # if sorted_last[doctype] else {},
+            }
 
-        else:
-            output = module_docstrings
+        output["<module>"] = module_docstrings["<module>"]
 
         return output
 
@@ -185,9 +181,6 @@ def extract_docstrings(source: str) -> Dict[str, Union[str, Dict[str, Any]]]:
     """
     tree = ast.parse(source)
 
-    # if "historic volatility" in source:
-    #     breakpoint()
-
     directives: Optional[dict] = None
     if tree is not None:
         directives: Dict[str, Dict[str, Any]] = DocstringMethods.get_directives(
@@ -217,10 +210,9 @@ def extract_docstrings(source: str) -> Dict[str, Union[str, Dict[str, Any]]]:
             }
 
     # pass the dict to the sort_docstrings method
-    if "historic volatility" in source:
-        structure = DocstringMethods.sort_docstrings(
-            module_docstrings=structure, directives=directives
-        )
+    structure = DocstringMethods.sort_docstrings(
+        module_docstrings=structure, directives=directives
+    )
 
     return structure
 
