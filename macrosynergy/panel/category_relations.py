@@ -1,4 +1,6 @@
-
+"""
+Classes and functions for analyzing and visualizing the relations of two panel categories.
+"""
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -162,8 +164,6 @@ class CategoryRelations(object):
         Applied a slip, i.e. a negative lag, to the target DataFrame 
         for the given cross-sections and categories, on the given metrics.
         
-        Parameters
-        ----------
         :param <pd.DataFrame> target_df: DataFrame to which the slip is applied.
         :param <int> slip: Slip to be applied.
         :param <List[str]> cids: List of cross-sections.
@@ -668,6 +668,18 @@ if __name__ == "__main__":
 
     cr.reg_scatter(
         labels=False, separator=None, title="Carry and Return", xlab="Carry",
+        ylab="Return", coef_box="lower left", prob_est="map",
+    )
+
+    # years parameter
+
+    cr = CategoryRelations(
+        dfdx, xcats=["CRY", "XR"], freq="M", years=5, lag=0, cids=cidx, xcat_aggs=["mean", "sum"],
+        start="2001-01-01", blacklist=black
+    )
+
+    cr.reg_scatter(
+        labels=False, separator=None, title="Carry and Return, 5-year periods", xlab="Carry",
         ylab="Return", coef_box="lower left", prob_est="map",
     )
 

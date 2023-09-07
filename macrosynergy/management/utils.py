@@ -26,7 +26,6 @@ def generate_random_date(
     """
     Generates a random date between two dates.
 
-    Parameters
     :param <str> start: The start date, in the ISO format (YYYY-MM-DD).
     :param <str> end: The end date, in the ISO format (YYYY-MM-DD).
 
@@ -57,7 +56,6 @@ def get_dict_max_depth(d: dict) -> int:
     """
     Returns the maximum depth of a dictionary.
 
-    Parameters
     :param <dict> d: The dictionary to be searched.
 
     Returns
@@ -69,10 +67,8 @@ def get_dict_max_depth(d: dict) -> int:
         else 0
     )
 
-def rec_search_dict(d : dict,
-                    key : str,
-                    match_substring : bool = False,
-                    match_type=None):
+
+def rec_search_dict(d: dict, key: str, match_substring: bool = False, match_type=None):
     """
     Recursively searches a dictionary for a key and returns the value
     associated with it.
@@ -124,7 +120,6 @@ def convert_to_iso_format(date: Any = None) -> str:
     """
     Converts a datetime like object or string to an ISO date string.
 
-    Parameters
     :param <Any> date: The date to be converted. This can be a
         datetime object, a string, pd.Timestamp, or np.datetime64.
 
@@ -225,6 +220,7 @@ def form_full_url(url: str, params: Dict = {}) -> str:
         safe="%/:=&?~#+!$,;'@()*[]",
     )
 
+
 def common_cids(df: pd.DataFrame, xcats: List[str]):
     """
     Returns a list of cross-sectional identifiers (cids) for which the specified categories
@@ -232,7 +228,7 @@ def common_cids(df: pd.DataFrame, xcats: List[str]):
 
     :param <pd.Dataframe> df: Standardized JPMaQS DataFrame with necessary columns:
         'cid', 'xcat', 'real_date' and 'value'.
-    :param <List[str]> xcats: A list with least two categories whose cross-sectional 
+    :param <List[str]> xcats: A list with least two categories whose cross-sectional
         identifiers are being considered.
 
     return <List[str]>: List of cross-sectional identifiers for which all categories in `xcats`
@@ -248,16 +244,16 @@ def common_cids(df: pd.DataFrame, xcats: List[str]):
         raise TypeError("Argument `xcats` must be a list of strings.")
     elif len(xcats) < 2:
         raise ValueError("Argument `xcats` must contain at least two category tickers.")
-    elif not set(xcats).issubset(set(df['xcat'].unique())): 
+    elif not set(xcats).issubset(set(df["xcat"].unique())):
         raise ValueError("All categories in `xcats` must be present in the DataFrame.")
 
-    cid_sets : List[set]= []
+    cid_sets: List[set] = []
     for xc in xcats:
-        sc : set = set(df[df["xcat"] == xc]["cid"].unique())
+        sc: set = set(df[df["xcat"] == xc]["cid"].unique())
         if sc:
             cid_sets.append(sc)
 
-    ls : List[str] = list(cid_sets[0].intersection(*cid_sets[1:]))
+    ls: List[str] = list(cid_sets[0].intersection(*cid_sets[1:]))
     return sorted(ls)
 
 
@@ -299,37 +295,44 @@ def standardise_dataframe(df: pd.DataFrame, verbose: bool = False) -> pd.DataFra
 
         non_idx_cols: list = sorted(list(set(df.columns) - set(idx_cols)))
         return df[idx_cols + non_idx_cols]
-    
+
 
 def drop_nan_series(df: pd.DataFrame, raise_warning: bool = False) -> pd.DataFrame:
     """
     Drops any series that are entirely NaNs.
     Raises a user warning if any series are dropped.
-    
+
     :param <pd.DataFrame> df: The dataframe to be cleaned.
     :param <bool> raise_warning: Whether to raise a warning if any series are dropped.
     """
     if not isinstance(df, pd.DataFrame):
         raise TypeError("Error: The input must be a pandas DataFrame.")
     elif not set(df.columns).issuperset(set(["cid", "xcat", "value"])):
-        raise ValueError("Error: The input DataFrame must have columns 'cid', 'xcat', 'value'.")
+        raise ValueError(
+            "Error: The input DataFrame must have columns 'cid', 'xcat', 'value'."
+        )
     elif not df["value"].isna().any():
         return df
 
     if not isinstance(raise_warning, bool):
         raise TypeError("Error: The raise_warning argument must be a boolean.")
-    
-    df_orig : pd.DataFrame = df.copy()
+
+    df_orig: pd.DataFrame = df.copy()
     for cd, xc in df_orig.groupby(["cid", "xcat"]).groups:
-        sel_series : pd.Series = df_orig[(df_orig["cid"] == cd) & (df_orig["xcat"] == xc)]["value"]
+        sel_series: pd.Series = df_orig[
+            (df_orig["cid"] == cd) & (df_orig["xcat"] == xc)
+        ]["value"]
         if sel_series.isna().all():
             if raise_warning:
-                warnings.warn(message=f"The series {cd}_{xc} is populated "
-                                "with NaNs only, and will be dropped.",
-                                category=UserWarning)
+                warnings.warn(
+                    message=f"The series {cd}_{xc} is populated "
+                    "with NaNs only, and will be dropped.",
+                    category=UserWarning,
+                )
             df = df[~((df["cid"] == cd) & (df["xcat"] == xc))]
 
     return df.reset_index(drop=True)
+
 
 def wide_to_long(
     df: pd.DataFrame,
@@ -339,7 +342,6 @@ def wide_to_long(
     """
     Converts a wide dataframe to a long dataframe.
 
-    Parameters
     :param <pd.DataFrame> df: The dataframe to be converted.
     :param <str> wide_var: The variable name of the wide variable.
         In case the columns are ... cid_1, cid_2, cid_3, ... then
@@ -377,6 +379,40 @@ def wide_to_long(
 
 
 class Config(object):
+    """
+    Class for handling the configuration of the JPMaQS API.
+
+    :param <str> client_id: The client ID for OAuth authentication.
+    :param <str> client_secret: The client secret for OAuth authentication.
+    :param <str> crt: The path to the certificate file for certificate
+        authentication.
+    :param <str> key: The path to the key file for certificate authentication.
+    :param <str> username: The username for certificate authentication.
+    :param <str> password: The password for certificate authentication.
+    :param <dict> proxy: The proxy settings for the API.
+    :param <dict> proxies: An alternative way to specify proxy settings.
+    :param <str> config_path: The path to the config file. If set to
+        None or "env", the class will attempt to load the config
+        file from the following environment variables:
+
+        For OAuth authentication:
+
+            - DQ_CLIENT_ID : your_client_id
+            - DQ_CLIENT_SECRET : your_client_secret
+
+        For certificate authentication:
+
+            - DQ_CRT : path_to_crt_file
+            - DQ_KEY : path_to_key_file
+            - DQ_USERNAME : your_username
+            - DQ_PASSWORD : your_password
+
+        For proxy settings:
+            - DQ_PROXY : proxy_json_string
+
+            (See https://requests.readthedocs.io/en/master/user/advanced/#proxies)
+    """
+
     def __init__(
         self,
         config_path: Optional[str] = None,
@@ -389,30 +425,6 @@ class Config(object):
         proxy: Optional[dict] = None,
         proxies: Optional[dict] = None,
     ):
-        """
-        Class for handling the configuration of the JPMaQS API.
-
-        Initialising Parameters
-
-        :param <str> config_path: The path to the config file. If set to
-            None or "env", the class will attempt to load the config
-            file from the following environment variables:
-            For OAuth authentication:
-                - DQ_CLIENT_ID : your_client_id
-                - DQ_CLIENT_SECRET : your_client_secret
-
-            For certificate authentication:
-                - DQ_CRT : path_to_crt_file
-                - DQ_KEY : path_to_key_file
-                - DQ_USERNAME : your_username
-                - DQ_PASSWORD : your_password
-
-            For proxy settings:
-                - DQ_PROXY : proxy_json_string
-
-                (See https://requests.readthedocs.io/en/master/user/advanced/#proxies)
-        """
-
         if not isinstance(config_path, (str, type(None))):
             raise ValueError(
                 "Config file must be a string containing the path"
@@ -451,14 +463,22 @@ class Config(object):
                     # make all keys lowercase
                     config_dict = {k.lower(): v for k, v in config_dict.items()}
                     for var in loaded_vars.keys():
-                        loaded_vars[var] = rec_search_dict(d=config_dict, key=var, match_type=str)
+                        loaded_vars[var] = rec_search_dict(
+                            d=config_dict, key=var, match_type=str
+                        )
 
                     for var in proxy_var_names:
-                        loaded_vars[var] = rec_search_dict(d=config_dict, key=var, match_type=dict)
+                        loaded_vars[var] = rec_search_dict(
+                            d=config_dict, key=var, match_type=dict
+                        )
 
                     if loaded_vars["crt"] is None:
-                        loaded_vars["crt"] = rec_search_dict(d=config_dict, key="cert",
-                                                             match_substring=True, match_type=str)
+                        loaded_vars["crt"] = rec_search_dict(
+                            d=config_dict,
+                            key="cert",
+                            match_substring=True,
+                            match_type=str,
+                        )
 
         all_args_present: Callable = lambda x: all([v is not None for v in x])
 
@@ -479,7 +499,7 @@ class Config(object):
         ):
             if all_args_present([loaded_vars[v] for v in vx]):
                 r_auth[varsx] = {v: loaded_vars[v] for v in vx}
-            
+
         for px, pxn in zip(proxy_vars, proxy_var_names):
             if px is not None:
                 r_auth[pxn] = px
@@ -524,7 +544,6 @@ class Config(object):
                     if r_auth["proxy"]["proxy"] is not None:
                         r_auth["proxy"].update(r_auth["proxy"]["proxy"])
                         del r_auth["proxy"]["proxy"]
-
 
         self._credentials: Dict[str, dict] = r_auth
 
@@ -658,7 +677,9 @@ class Config(object):
 
     def __repr__(self):
         try:
-            return f"JPMaQS API Config Object, methods : {list(self._credentials.keys())}"
+            return (
+                f"JPMaQS API Config Object, methods : {list(self._credentials.keys())}"
+            )
         except:
             return "JPMaQS API Config Object"
 

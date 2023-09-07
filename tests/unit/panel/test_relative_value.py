@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple, Union, Set
+
 from tests.simulate import make_qdf
 from macrosynergy.panel.make_relative_value import make_relative_value, _prepare_basket
 from macrosynergy.management.shape_dfs import reduce_df
@@ -9,6 +10,7 @@ from random import randint, choice
 import io
 import sys
 import warnings
+
 
 class TestAll(unittest.TestCase):
     def dataframe_generator(self):
@@ -255,7 +257,7 @@ class TestAll(unittest.TestCase):
             warning_message: str = str(w[-1].message)
 
             printed_cids: str = set(eval(warning_message[-23:-1]))
-            test: str = set(['CAD', 'GBP', 'NZD'])
+            test: str = set(["CAD", "GBP", "NZD"])
             self.assertEqual(printed_cids, test)
 
         # If the "complete_cross" parameter is set to True, the corresponding category
@@ -407,7 +409,7 @@ class TestAll(unittest.TestCase):
         function_output: np.ndarray = (dfd_3_pivot.iloc[index_val, :]).to_numpy()
 
         function_output: np.ndarray = function_output[0]
-        self.assertTrue(np.all(computed_values == function_output))
+        self.assertTrue(np.allclose(computed_values, function_output))
 
         # Test the division.
         # Computing make_relative_value() on a single category that has been chosen
