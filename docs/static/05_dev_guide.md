@@ -6,7 +6,6 @@ The Macrosynergy package is an open-source project. We welcome contributions of 
 from simple bug reports through to new features and documentation improvements.
 This document outlines the process for contributing to the project.
 
-
 ## Raising an Issue
 
 If you have found a bug or have a question about the package, please raise an
@@ -16,35 +15,76 @@ If you are reporting a bug, please include as much information as possible to he
 reproduce the issue. This includes environment details (e.g. operating system, Python version,
 dependency versions (`pip freeze`)) error messages, and a minimal reproducible example.
 
-## Contributing Code
-
-Contributing code to the project is done through pull requests of the nature described below.
-
-### New Features
+## Feature Requests
 
 A new feature is a substantial change to the package that adds new functionality.
 New features can be discussed in a [Feature Request issue](https://github.com/macrosynergy/macrosynergy/issues/new?assignees=&labels=&projects=&template=feature_request.md&title=)
 on the issues tracker.
 
-### Bug Fixes
+## CI/CD Pipeline
 
-A bug fix is a change to the package that fixes a bug. The reasons and details of the bug
-must be documented as a GitHub issue to provide context for the fix, and to create a record
-of the bug and its resolution.
+The package has the 3 primary branches:
+
+- `develop`: The development branch; used for development and testing of new features
+- `test`: The test branch; used for testing and release candidates
+- `main`: The main branch; used for stable releases
+
+```
+develop ← feature/<feature_name>
+        ← bugfix/<bugfix_name>
+        
+test ← develop
+
+main ← hotfix/<hotfix_name>
+     ← test  
+
+...
+develop ← version++ ← main
+```
+
+
+### New Features
+
+Adding a new feature or enhancement requires a new feature branch to be created
+from the `develop` branch. The feature branch should be named
+
+```
+develop ← feature/<feature_name>
+```
+
+Once the feature is complete, a pull request should be raised against the `develop`
+branch. See the [Pull Requests Section](#pull-requests) for more details.
+
+### Bugfixes
+
+Bugfixes also be made against the `develop` branch.
+
+```
+develop ← bugfix/<bugfix_name>
+```
 
 ### Hotfixes
 
-Hotfixes or emergency fixes are bug fixes that are required to fix a critical bug in a
-released version of the package. Currently, hotfixes are not supported for community contributions and are limited to the package maintainers.
+Hotfixes are reserved for critical bugfixes that need to be deployed immediately.
+These are typically reserved for security issues, build process bugs, or issues
+with business-critical functionality. Hotfixes should be made against the `main` branch. Once PR is merged, the `main` branch should be merged into the `develop` branch; and a new release should be created from the `main` branch.
 
-### Documentation Improvements
+**The hotfix must also contain a version increment to allow for the new release.**
+```
+main ← hotfix/<hotfix_name>
+```
 
-Documentation improvements are changes to the package documentation that improve the
-clarity or completeness of the documentation.
 
+### CI/CD
+
+For changes related to build processes, CI/CD, or other maintenance tasks:
+```
+chores/<chore_name>
+```
+Make sure to use "Chore" as the type of the pull request. (See [Pull Requests/Title Conventions](#title-conventions))
 ## Pull Requests
 
-## Pull Request Process
+### Pull Request Process
 
 All pull requests (PR) must be made against the `develop` branch of the repository. All PRs require
 at least one review from a maintainer before they can be merged.
@@ -64,25 +104,29 @@ Titles for pull requests should be of the form:
 
 **\<Type>: Clear description with `code_formatted` correctly**
 
-Where `Type` is one of:
+Where **\<Type>** is one of:
 
 - `Feature`: For new features
 - `Bugfix`: For bug fixes
 - `Hotfix`: For hotfixes
-- `Docs`: For documentation improvements
-- `Chore`: For changes to the build process, dependencies, CI, etc.
+- `Chore`: Reserved for CI/CD and other maintenance tasks
 
-### Commit Conventions
 
-Commits should be kept small and focused on a single change. The commit message should
-describe the change in a clear and concise manner.
 
 ## Community Contributions
 
+For community contributions, the pull requests are reviewed by the package maintainers.
+  
+
 The following apply to contributors outside the Macrosynergy team:
 
-- All contributions must be made under the terms of the [project license](https://github.com/macrosynergy/macrosynergy/blob/main/LICENSE) on the package repository.
-- All contributions must be made through pull requests.
-- Contributors may only contribute code that they have authored or have the rights to contribute.
-- Pull requests can only be raised from a fork of the repository.
-- All pull requests must be made against the `develop` branch of the repository.
+1. All contributions must be made under the terms of the [project license](https://github.com/macrosynergy/macrosynergy/blob/main/LICENSE) on the package repository.
+1. All contributions must be made through pull requests.
+1. Contributors may only contribute code that they have authored or have the rights to contribute.
+1. Pull requests can only be raised from a fork of the repository.
+1. Contributors may not make any modifications to the unit tests, integration tests, dependencies, or any CI/CD configuration (e.g. GitHub Actions, Codecov, etc.)
+
+1. Contributors may not modify any static files such as
+the static documentation pages, the `README.md` file, and the `LICENSE` file.
+
+
