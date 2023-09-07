@@ -3,3 +3,4 @@ mdformat-frontmatter
 mdformat-footnote
 pyyaml
 jupyter-book==0.15.1
+GitPython
