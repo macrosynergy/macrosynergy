@@ -79,7 +79,7 @@ main ← hotfix/<hotfix_name>
 
 For changes related to build processes, CI/CD, or other maintenance tasks:
 ```
-chores/<chore_name>
+chore/<chore_name>
 ```
 Make sure to use "Chore" as the type of the pull request. (See [Pull Requests/Title Conventions](#title-conventions))
 ## Pull Requests
