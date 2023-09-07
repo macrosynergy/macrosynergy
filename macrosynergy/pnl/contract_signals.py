@@ -21,7 +21,7 @@ def contract_signals(
     hratio: str = None,
     start: str = None,
     end: str = None,
-    blacklist: dict = None
+    blacklist: dict = None,
     sname = "STRAT",
 ):
     """
