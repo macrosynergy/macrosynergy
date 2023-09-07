@@ -75,7 +75,7 @@ main ← hotfix/<hotfix_name>
 ```
 
 
-### CI/CD
+### CI/CD related changes
 
 For changes related to build processes, CI/CD, or other maintenance tasks:
 ```
