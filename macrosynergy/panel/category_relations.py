@@ -117,7 +117,25 @@ class CategoryRelations(object):
             df = self.apply_slip(target_df=df, slip=self.slip, cids=self.cids,
                                         xcats=self.xcats, metrics=metrics_found)
 
-        shared_cids = CategoryRelations.intersection_cids(df, xcats, cids)
+        # capture warning from intersection_cids, in case the two categories do not
+        # share any cross-sections.
+        warnings_list = []
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            shared_cids = CategoryRelations.intersection_cids(df, xcats, cids)
+            for warning in w:
+                warnings_list.append(str(warning.message))
+
+        # if shared_cids is empty, then the analysis is not possible.
+        # The warning from intersection_cids now becomes an error.
+        if len(shared_cids) == 0:
+            error_message = "The two categories have no shared cross-sections."
+            if len(warnings_list) > 0:
+                error_message += f"\nPossible reason(s) for error: "
+                error_message += "\n".join(warnings_list)
+
+            error_message += "\nPlease check input parameters."
+            raise ValueError(error_message)
         
         # Will potentially contain NaN values if the two categories are defined over
         # time-periods.
