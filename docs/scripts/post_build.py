@@ -1,31 +1,38 @@
 import os
 import shutil
 import subprocess
+import argparse
 
 SOURCE_DIR = "./docs/build/"
-OUTPUT_DIR = "./docs/"
+RTD_OUTPUT_DIR = "./docs/"
+CLEAN_OUTPUT_DIR = "./docs/docs.build/"
 
-# look in the source dir, there will be only one directory
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Post build script for documentation")
+    parser.add_argument(
+        "--rtd", action="store_true", help="Build for Read the Docs", default=True
+    )
+    parser.add_argument(
+        "--clean", action="store_true", help="Build for clean", default=False
+    )
 
-# in source dir there is _build/ dir, copy it to output dir
-# and remove source dir
+    args = parser.parse_args()
+    rtd_mode: bool = args.rtd
+    clean_mode: bool = args.clean
+    rtd_mode = not clean_mode
 
-# if output/_build exists, remove it
-if os.path.exists(os.path.join(OUTPUT_DIR, "_build")):
-    shutil.rmtree(os.path.join(OUTPUT_DIR, "_build"))
+    outpit_dir: str = RTD_OUTPUT_DIR if rtd_mode else CLEAN_OUTPUT_DIR
 
-# copy all files iside source dir to output dir
-shutil.copytree(SOURCE_DIR, OUTPUT_DIR, dirs_exist_ok=True)
+    # if output/_build exists, remove it
+    if os.path.exists(os.path.join(outpit_dir, "_build")):
+        shutil.rmtree(os.path.join(outpit_dir, "_build"))
 
+    shutil.copytree(SOURCE_DIR, outpit_dir, dirs_exist_ok=True)
 
-# shutil.rmtree(SOURCE_DIR)
-# os.rmdir(os.path.dirname(SOURCE_DIR))
-
-# print the abs path of  os.path.join(OUTPUT_DIR, "_build")
-print(
-    "Documentation is available at: \n\n\t\t",
-    os.path.normpath(
-        (os.path.abspath(os.path.join(OUTPUT_DIR, "_build/html/index.html")))
-    ),
-    "\n\n",
-)
+    print(
+        "Documentation is available at: \n\n\t\t",
+        os.path.normpath(
+            (os.path.abspath(os.path.join(outpit_dir, "_build/html/index.html")))
+        ),
+        "\n\n",
+    )
