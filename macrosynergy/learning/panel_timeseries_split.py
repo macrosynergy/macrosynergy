@@ -466,6 +466,13 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
             ncols=n_splits,
             figsize=figsize,
         )
+
+        plt.suptitle(
+            f"Training and test set pairs, number of training sets={self.adjusted_n_splits}"
+        )
+
+        plt.tight_layout()
+
         operations = []
 
         for cs_idx, cs in enumerate(cross_sections):
@@ -492,14 +499,11 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
             ax[cs_idx, idx].set_yticks([0])
             ax[cs_idx, idx].set_yticklabels([cross_sections[cs_idx]])
 
-        if cs_idx == 0:
-            ax[cs_idx, idx].set_title(f"{split_titles[idx]}")
+            if cs_idx == 0:
+                ax[cs_idx, idx].set_title(f"{split_titles[idx]}")
 
-        plt.suptitle(
-            f"Training and test set pairs, number of training sets={self.n_splits}"
-        )
         plt.legend(frameon=True)
-        plt.tight_layout()
+        fig.subplots_adjust(top=0.88)
         plt.show()
 
 
@@ -511,7 +515,7 @@ if __name__ == "__main__":
     xcats = ["XR", "CRY", "GROWTH", "INFL"]
     cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
 
-    """ Example 1: Unbalanced panel """
+    """Example 1: Unbalanced panel """
 
     df_cids2 = pd.DataFrame(
         index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
