@@ -1,14 +1,17 @@
 """
 Implementation of linear_composite() function as a module.
+
+::docs::linear_composite::sort_first::
+
 """
 
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Union, Optional, Tuple, Any, Callable, Type
+from typing import List, Dict, Union, Optional, Tuple, Type
 import warnings
 
 from macrosynergy.management.shape_dfs import reduce_df
-from macrosynergy.management.simulate_quantamental_data import make_qdf, make_test_df
+from macrosynergy.management.simulate_quantamental_data import make_test_df
 from macrosynergy.management.utils import is_valid_iso_date
 
 listtypes: Tuple[Type, ...] = (list, np.ndarray, pd.Series, tuple)

@@ -109,8 +109,10 @@ class CategoryRelations(object):
         if not isinstance(xcat_aggs, (list, tuple)):
             raise TypeError("xcat_aggs must be a list or a tuple.")
 
+        # copy DF to avoid side-effects
+        df: pd.DataFrame = df.copy()    
         # Select the cross-sections available for both categories.
-        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+        df.loc[:, "real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
         
         if self.slip != 0:
             metrics_found : List[str] = list(set(df.columns) - set(['cid', 'xcat', 'real_date']))
@@ -247,7 +249,7 @@ class CategoryRelations(object):
 
         df_lists = []
         for c in shared_cids:
-            temp_df = df.loc[c]
+            temp_df: pd.DataFrame = df.loc[c].copy()
 
             if change == 'diff':
                 temp_df[expln_var] = temp_df[expln_var].diff(periods=n_periods)
@@ -655,9 +657,9 @@ if __name__ == "__main__":
     filt2 = (dfd['xcat'] == 'INFL') & (dfd['cid'] == 'NZD')
 
     # Reduced DataFrame.
-    dfdx = dfd[~(filt1 | filt2)]
-    dfdx['ERA'] = "before 2010"
-    dfdx.loc[dfdx.real_date.dt.year > 2007, 'ERA'] = "from 2010"
+    dfdx = dfd[~(filt1 | filt2)].copy()
+    dfdx["ERA"]: str = "before 2007"
+    dfdx.loc[dfdx["real_date"].dt.year > 2007, 'ERA'] = "from 2010"
 
     cidx = ['AUD', 'CAD', 'GBP', 'USD']
 
