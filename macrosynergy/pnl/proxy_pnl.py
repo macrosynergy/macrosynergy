@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from typing import List, Union, Tuple
+from typing import List, Union, Tuple, Optional
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
@@ -12,18 +12,16 @@ def proxy_pnl(
         df: pd.DataFrame,
         spos: str,
         contids: List[str],
-        tcost_n: str = None,
-        rcost_n: str = None,
-        size_n: str = None,
-        tcost_l: str = None,
-        rcost_l: str = None,
-        size_l: str = None,
-        roll_freqs: dict = None,
-        start: str = None,
-        end: str = None,
-        blacklist: dict = None,
-
-
+        tcost_n: Optional[str] = None,
+        rcost_n: Optional[str] = None,
+        size_n: Optional[str] = None,
+        tcost_l: Optional[str] = None,
+        rcost_l: Optional[str] = None,
+        size_l: Optional[str] = None,
+        roll_freqs: Optional[dict] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        blacklist: Optional[dict] = None,
 ):  
     """
     Calculates an approximate nominal PnL under consideration of transaction costs
@@ -54,7 +52,7 @@ def proxy_pnl(
     :param <str> size_n: Normal size in USD million This must correspond to a normal
         trade size category "<cid>_<ctype>_<size_n>" in the dataframe.
         Default is None: all costs are are applied independent of size.
-l   :param <str> tcost_l: the postfix of the trading cost category for large size.
+    :param <str> tcost_l: the postfix of the trading cost category for large size.
         Large here is defined as 90% percentile threshold of trades in the market.
         Default is None: trading costs are are applied independent of size.
     :param <str> rcost_l: the postfix of the roll cost category for large size. Values 
