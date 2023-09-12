@@ -1,3 +1,18 @@
+# Custom entries
+
+dev/
+
+docs/docs.build/
+
+data/
+
+macrosynergy/version.py
+
+.vscode/
+.vs/
+
+# Python Gitignore template
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -169,11 +184,3 @@ credentials*.json
 coverage/
 coverage.xml
 
-dev/
-
-data/
-
-macrosynergy/version.py
-
-.vscode/
-.vs/
