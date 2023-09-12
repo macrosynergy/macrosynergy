@@ -89,4 +89,24 @@ def proxy_pnl(
         series are applied.
     """
 
-    pass
+    for _varx, _namex, _typex in [
+        (df, "df", pd.DataFrame),
+        (spos, "spos", str),
+        (contids, "contids", list),
+        (tcost_n, "tcost_n", (str, type(None))),
+        (rcost_n, "rcost_n", (str, type(None))),
+        (size_n, "size_n", (str, type(None))),
+        (tcost_l, "tcost_l", (str, type(None))),
+        (rcost_l, "rcost_l", (str, type(None))),
+        (size_l, "size_l", (str, type(None))),
+        (roll_freqs, "roll_freqs", (dict, type(None))),
+        (start, "start", (str, type(None))),
+        (end, "end", (str, type(None))),
+        (blacklist, "blacklist", (dict, type(None))),
+    ]:
+        if not isinstance(_varx, _typex):
+            raise TypeError(f"{_namex} must be {_typex}")
+        
+        
+        
+    
