@@ -1,3 +1,10 @@
+"""
+Module for calculating notional positions based on contract signals, assets-under-management, 
+and other relevant parameters.
+
+::docs::notional_positions::sort_first::
+"""
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
