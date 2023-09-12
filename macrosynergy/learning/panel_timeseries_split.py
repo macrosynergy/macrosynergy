@@ -262,14 +262,14 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         train_splits: List[pd.DatetimeIndex],
         train_splits_basic: List[pd.DatetimeIndex],
         Xy: pd.DataFrame,
-    ) -> Iterator[Tuple[pd.MultiIndex, pd.MultiIndex]]:
+    ) -> List[Tuple[pd.MultiIndex, pd.MultiIndex]]:
         """
         Helper method for creating training and test indices from the unique dates in each training split.
 
         :param <List[pd.DatetimeIndex]> train_splits: list of unique dates in each training split, adjusted for rolling or expanding windows.
         :param <List[pd.DatetimeIndex]> train_splits_basic: list of unique dates in each training split, prior to adjustment.
 
-        :return <Iterator[Tuple[pd.MultiIndex,pd.MultiIndex]]> iterator: iterator of (train,test) multi-indices, giving rise to the different splits.
+        :return <List[Tuple[pd.MultiIndex,pd.MultiIndex]]>: list of (train,test) multi-indices, giving rise to the different splits.
         """
         if self.train_intervals:
             for split in train_splits:
@@ -347,7 +347,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
     def split(
         self, X: pd.DataFrame, y: pd.DataFrame
-    ) -> Iterator[Tuple[pd.MultiIndex, pd.MultiIndex]]:
+    ) -> List[Tuple[pd.MultiIndex, pd.MultiIndex]]:
         """
         Method that determines pairs of training and test indices for a wide format Pandas (panel) dataframe, for use in
         sequential training, validation or walk-forward validation over a panel.
@@ -358,7 +358,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         :param <pd.DataFrame> y: Pandas dataframe of target variable, multi-indexed by
             (cross-section, date). The dates must be in datetime format.
 
-        :return <Iterator[Tuple[pd.MultiIndex,pd.MultiIndex]]> splits: iterator of (train,test) multi-indices for walk-forward validation.
+        :return <List[Tuple[pd.MultiIndex,pd.MultiIndex]]> splits: list of (train,test) multi-indices for walk-forward validation.
         """
         self.train_indices: List[pd.MultiIndex] = []
         self.test_indices: List[pd.MultiIndex] = []
@@ -378,21 +378,30 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
         return iterator
 
-    def calculate_xranges(self,cs_dates, real_dates):
-        xranges = []
+    def calculate_xranges(self,cs_dates: pd.DatetimeIndex, real_dates: np.array):
+        """
+        Helper method to determine the ranges of contiguous dates in each training and test set, for use in visualisation.
+
+        :param <pd.DatetimeIndex> cs_dates: DatetimeIndex of dates in a set for a given cross-section.
+        :param <pd.DatetimeIndex> real_dates: DatetimeIndex of all dates in the panel.
+
+        :return <List[Tuple[pd.Timestamp,pd.Timedelta]]> xranges: list of tuples of the form (start date, length of contiguous dates).
+        """
+
+        xranges: List[Tuple[pd.Timestamp,pd.Timedelta]] = []
         if len(cs_dates) == 0:
             return xranges
         
-        lower_bound = cs_dates.min()
-        upper_bound = cs_dates.max()
+        lower_bound: pd.Timestamp = cs_dates.min()
+        upper_bound: pd.Timestamp = cs_dates.max()
 
         upper_bound_idx = np.where(real_dates == upper_bound)[0]
         if upper_bound_idx and upper_bound_idx[0] + 1 < len(real_dates):
             upper_bound = real_dates[upper_bound_idx[0] + 1]
         
-        in_contiguous = True
-        lower = lower_bound
-        upper = upper_bound
+        in_contiguous: bool = True
+        lower: pd.Timestamp = lower_bound
+        upper: pd.Timestamp = upper_bound
 
         for real_date in real_dates[(real_dates >= lower_bound) & (real_dates <= upper_bound)]:
             if real_date in cs_dates:
@@ -467,8 +476,8 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
                     Xy.loc[splits[split_idx][1]].index.get_level_values(0) == cs
                 ].index.get_level_values(1)
 
-                xranges_train = self.calculate_xranges(cs_train_dates, real_dates)
-                xranges_test = self.calculate_xranges(cs_test_dates, real_dates)
+                xranges_train: List[Tuple[pd.Timestamp,pd.Timedelta]] = self.calculate_xranges(cs_train_dates, real_dates)
+                xranges_test: List[Tuple[pd.Timestamp,pd.Timedelta]] = self.calculate_xranges(cs_test_dates, real_dates)
 
                 if xranges_train:
                     operations.append((cs_idx, idx, xranges_train, "royalblue", "Train"))
