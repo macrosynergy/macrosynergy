@@ -418,7 +418,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         xranges.append((lower, upper - lower))
         return xranges
     
-    def visualise_splits(self, X: pd.DataFrame, y: pd.DataFrame) -> None:
+    def visualise_splits(self, X: pd.DataFrame, y: pd.DataFrame, figsize: Tuple[int, int] = (20,5)) -> None:
         """
         Method to visualise the splits created according to the parameters specified in the constructor.
 
@@ -427,6 +427,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
             Otherwise the dataframe must be in wide format: each feature is a column.
         :param <pd.DataFrame> y: Pandas dataframe of target variable, multi-indexed by
             (cross-section, date). The dates must be in datetime format.
+        :param <Tuple[int,int]> figsize: tuple of integers specifying the splitter visualisation figure size.
 
         :return None
         """
@@ -463,7 +464,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         fig, ax = plt.subplots(
             nrows=len(Xy.index.get_level_values(0).unique()),
             ncols=n_splits,
-            figsize=(20, 5),
+            figsize=figsize,
         )
         operations = []
 
