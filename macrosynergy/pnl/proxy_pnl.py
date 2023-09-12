@@ -1,3 +1,8 @@
+"""
+Module for calculating an approximate nominal PnL under consideration of transaction costs.
+"""
+
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
