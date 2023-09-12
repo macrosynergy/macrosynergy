@@ -4,6 +4,8 @@ This module is not intended to be used directly, but rather through
 macrosynergy.download.jpmaqs.py. However, for a use cases independent
 of JPMaQS, this module can be used directly to download data from the
 JPMorgan DataQuery API.
+
+::docs::DataQueryInterface::sort_first::
 """
 import concurrent.futures
 import time
@@ -541,7 +543,7 @@ def validate_download_args(
     return True
 
 
-def get_unavailable_expressions(
+def _get_unavailable_expressions(
     expected_exprs: List[str],
     dicts_list: List[Dict],
 ) -> List[str]:
@@ -1029,7 +1031,7 @@ class DataQueryInterface(object):
             show_progress=show_progress,
         )
 
-        self.unavailable_expressions = get_unavailable_expressions(
+        self.unavailable_expressions = _get_unavailable_expressions(
             expected_exprs=expressions, dicts_list=final_output
         )
         logger.info(
