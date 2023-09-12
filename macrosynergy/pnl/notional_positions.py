@@ -14,15 +14,16 @@ from typing import List, Union, Tuple
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.pnl import Numeric
 
 def notional_positions(
     df: pd.DataFrame,
     sname: str,
     contids: List[str],
-    aum: Union[float, int] = 100,
-    dollar_per_signal: Union[float, int] = 1,
-    leverage: Union[float, int] = None,
-    vol_target: Union[float, int] = None,
+    aum: Numeric = 100,
+    dollar_per_signal: Numeric = 1,
+    leverage: Numeric = None,
+    vol_target: Numeric = None,
     rebal_freq: str = 'm', 
     slip: int = 1,
     lback_periods: int = 21, 
