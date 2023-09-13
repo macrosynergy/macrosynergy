@@ -9,10 +9,9 @@ import datetime
 import os
 import yaml
 import json
-from typing import Any, List, Dict, Optional, Callable, Union
+from typing import Any, List, Dict, Optional, Callable, Union, Set
 import requests, requests.compat
 import warnings
-
 
 ##############################
 #   Helpful Functions
@@ -120,6 +119,7 @@ def convert_to_iso_format(date: Any = None) -> str:
     """
     Converts a datetime like object or string to an ISO date string.
 
+    Parameters
     :param <Any> date: The date to be converted. This can be a
         datetime object, a string, pd.Timestamp, or np.datetime64.
 
@@ -263,7 +263,8 @@ def common_cids(df: pd.DataFrame, xcats: List[str]):
 
 
 def standardise_dataframe(df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
-    idx_cols: list = ["cid", "xcat", "real_date"]
+    idx_cols: List[str] = ["cid", "xcat", "real_date"]
+    commonly_used_cols: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
     if not set(df.columns).issuperset(set(idx_cols)):
         fail_str: str = (
             f"Error : Tried to standardize DataFrame but failed."
@@ -278,7 +279,8 @@ def standardise_dataframe(df: pd.DataFrame, verbose: bool = False) -> pd.DataFra
             dft: pd.DataFrame = df.reset_index()
             found_cols: list = dft.columns.tolist()
             fail_str += f"\nFound columns: {found_cols}"
-            assert set(dft.columns).issuperset(set(idx_cols)), fail_str
+            if not set(dft.columns).issuperset(set(idx_cols)):
+                raise ValueError(fail_str)
             df = dft.copy()
         except:
             raise ValueError(fail_str)
@@ -287,11 +289,21 @@ def standardise_dataframe(df: pd.DataFrame, verbose: bool = False) -> pd.DataFra
         if len(df.columns) < 4:
             raise ValueError(fail_str)
 
-        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
-        df["cid"] = df["cid"].astype(str)
-        df["xcat"] = df["xcat"].astype(str)
-        df = df.sort_values(by=["cid", "xcat", "real_date"])
-        df = df.reset_index(drop=True)
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+    df["cid"] = df["cid"].astype(str)
+    df["xcat"] = df["xcat"].astype(str)
+    df = df.sort_values(by=["real_date", "cid", "xcat"]).reset_index(drop=True)
+
+    remaining_cols: Set[str] = set(df.columns) - set(idx_cols)
+
+    df = df[idx_cols + sorted(list(remaining_cols))]
+
+    # for every remaining col, try to convert to float
+    for col in remaining_cols:
+        try:
+            df[col] = df[col].astype(float)
+        except:
+            pass
 
         non_idx_cols: list = sorted(list(set(df.columns) - set(idx_cols)))
         return df[idx_cols + non_idx_cols]

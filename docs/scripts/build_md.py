@@ -224,8 +224,15 @@ def process_file(filepath: str, output_directory: str) -> bool:
     with open(filepath, "r", encoding="utf8") as f:
         source = f.read()
 
-    structure = extract_docstrings(source=source)
-
+    try:
+        structure = extract_docstrings(source=source)
+    except Exception as exc:
+        warnings.warn(
+            f"Could not extract docstrings from {os.path.abspath(filepath)}: {exc}",
+            RuntimeWarning,
+        )
+        return False
+    
     LINE_SEPARATOR = "----------------\n\n"
 
     if structure:
