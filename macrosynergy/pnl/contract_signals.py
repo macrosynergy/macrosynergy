@@ -6,6 +6,7 @@ import seaborn as sns
 from typing import List, Union, Tuple, Optional
 
 from macrosynergy.pnl import Numeric
+from macrosynergy.management.utils import is_valid_iso_date, standardise_dataframe
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 
@@ -82,4 +83,15 @@ def contract_signals(
         (sname, "sname", str),
     ]:
         if not isinstance(varx, typex):
-            raise TypeError(f"{namex} must be {typex}")
+            raise TypeError(f"`{namex}` must be <{typex}> not <{type(varx)}>")
+
+    df: pd.DataFrame = standardise_dataframe(df.copy())
+
+    if start is None:
+        start: str = pd.Timestamp(df["real_date"].min()).strftime("%Y-%m-%d")
+    if end is None:
+        end: str = pd.Timestamp(df["real_date"].max()).strftime("%Y-%m-%d")
+
+    for dx, nx in [(start, "start"), (end, "end")]:
+        if not is_valid_iso_date(dx):
+            raise ValueError(f"`{nx}` must be a valid ISO-8601 date string")
