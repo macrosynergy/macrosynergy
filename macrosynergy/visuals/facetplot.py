@@ -24,7 +24,7 @@ import matplotlib.colors as mcolors
 
 sys.path.append(os.path.abspath("."))
 
-from macrosynergy.visuals.plotter import Plotter, Numeric
+from macrosynergy.visuals import Plotter, Numeric
 
 
 def _get_square_grid(
