@@ -66,4 +66,20 @@ def contract_signals(
         have the following format "<cid>_<ctype>_<sname>_CSIG".
     """
 
-    pass
+    for varx, namex, typex in [
+        (df, "df", pd.DataFrame),
+        (sig, "sig", str),
+        (cids, "cids", list),
+        (ctypes, "ctypes", list),
+        (cscales, "cscales", (list, type(None))),
+        (csigns, "csigns", (list, type(None))),
+        (hbasket, "hbasket", (list, type(None))),
+        (hscales, "hscales", (list, type(None))),
+        (hratio, "hratio", (str, type(None))),
+        (start, "start", (str, type(None))),
+        (end, "end", (str, type(None))),
+        (blacklist, "blacklist", dict),
+        (sname, "sname", str),
+    ]:
+        if not isinstance(varx, typex):
+            raise TypeError(f"{namex} must be {typex}")
