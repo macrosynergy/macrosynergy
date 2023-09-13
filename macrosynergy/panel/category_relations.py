@@ -109,15 +109,35 @@ class CategoryRelations(object):
         if not isinstance(xcat_aggs, (list, tuple)):
             raise TypeError("xcat_aggs must be a list or a tuple.")
 
+        # copy DF to avoid side-effects
+        df: pd.DataFrame = df.copy()    
         # Select the cross-sections available for both categories.
-        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+        df.loc[:, "real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
         
         if self.slip != 0:
             metrics_found : List[str] = list(set(df.columns) - set(['cid', 'xcat', 'real_date']))
             df = self.apply_slip(target_df=df, slip=self.slip, cids=self.cids,
                                         xcats=self.xcats, metrics=metrics_found)
 
-        shared_cids = CategoryRelations.intersection_cids(df, xcats, cids)
+        # capture warning from intersection_cids, in case the two categories do not
+        # share any cross-sections.
+        warnings_list = []
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            shared_cids = CategoryRelations.intersection_cids(df, xcats, cids)
+            for warning in w:
+                warnings_list.append(str(warning.message))
+
+        # if shared_cids is empty, then the analysis is not possible.
+        # The warning from intersection_cids now becomes an error.
+        if len(shared_cids) == 0:
+            error_message = "The two categories have no shared cross-sections."
+            if len(warnings_list) > 0:
+                error_message += f"\nPossible reason(s) for error: "
+                error_message += "\n".join(warnings_list)
+
+            error_message += "\nPlease check input parameters."
+            raise ValueError(error_message)
         
         # Will potentially contain NaN values if the two categories are defined over
         # time-periods.
@@ -247,7 +267,7 @@ class CategoryRelations(object):
 
         df_lists = []
         for c in shared_cids:
-            temp_df = df.loc[c]
+            temp_df: pd.DataFrame = df.loc[c].copy()
 
             if change == 'diff':
                 temp_df[expln_var] = temp_df[expln_var].diff(periods=n_periods)
@@ -655,9 +675,9 @@ if __name__ == "__main__":
     filt2 = (dfd['xcat'] == 'INFL') & (dfd['cid'] == 'NZD')
 
     # Reduced DataFrame.
-    dfdx = dfd[~(filt1 | filt2)]
-    dfdx['ERA'] = "before 2010"
-    dfdx.loc[dfdx.real_date.dt.year > 2007, 'ERA'] = "from 2010"
+    dfdx = dfd[~(filt1 | filt2)].copy()
+    dfdx["ERA"]: str = "before 2007"
+    dfdx.loc[dfdx["real_date"].dt.year > 2007, 'ERA'] = "from 2010"
 
     cidx = ['AUD', 'CAD', 'GBP', 'USD']
 

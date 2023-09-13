@@ -1,4 +1,7 @@
-""" JPMaQS Download Interface """
+""" JPMaQS Download Interface 
+
+::docs::JPMaQSDownload::sort_first::
+"""
 
 from typing import List, Optional, Dict, Union
 import pandas as pd

@@ -100,7 +100,6 @@ all = [
 platforms = ["Windows", "Linux", "Mac OS-X"]
 
 [tool.setuptools.packages.find]
-where = ["macrosynergy"]
 include = ["macrosynergy", "macrosynergy.*"]
 exclude = ["tests", "tests.*"]
 namespaces = true
