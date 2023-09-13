@@ -467,11 +467,6 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
             figsize=figsize,
         )
 
-        plt.suptitle(
-            f"Training and test set pairs, number of training sets={self.adjusted_n_splits}"
-        )
-
-        plt.tight_layout()
 
         operations = []
 
@@ -502,8 +497,11 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
             if cs_idx == 0:
                 ax[cs_idx, idx].set_title(f"{split_titles[idx]}")
 
+        plt.suptitle(
+            f"Training and test set pairs, number of training sets={self.adjusted_n_splits}"
+        )
         plt.legend(frameon=True)
-        fig.subplots_adjust(top=0.88)
+        plt.tight_layout()
         plt.show()
 
 
