@@ -305,8 +305,8 @@ def standardise_dataframe(df: pd.DataFrame, verbose: bool = False) -> pd.DataFra
         except:
             pass
 
-        non_idx_cols: list = sorted(list(set(df.columns) - set(idx_cols)))
-        return df[idx_cols + non_idx_cols]
+    non_idx_cols: list = sorted(list(set(df.columns) - set(idx_cols)))
+    return df[idx_cols + non_idx_cols]
 
 
 def drop_nan_series(df: pd.DataFrame, raise_warning: bool = False) -> pd.DataFrame:
