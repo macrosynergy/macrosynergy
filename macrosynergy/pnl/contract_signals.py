@@ -16,16 +16,16 @@ def contract_signals(
     sig: str,
     cids: List[str],
     ctypes: List[str],
-    cscales: Optional[List[Numeric]] = None,
+    cscales: Optional[List[Union[Numeric, str]]] = None,
     csigns: Optional[List[int]] = None,
     hbasket: Optional[List[str]] = None,
-    hscales: Optional[List[Numeric]] = None,
+    hscales: Optional[List[Union[Numeric, str]]] = None,
     hratio: Optional[str] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
     sname: str = "STRAT",
-):
+) -> pd.DataFrame:
     """
     Caclulate contract specific signals based on cross-section-specific signals
 
