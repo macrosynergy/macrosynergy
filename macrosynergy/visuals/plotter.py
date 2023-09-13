@@ -6,7 +6,6 @@ as well as `argvalidation` and `argcopy` decorators for all methods of the
 plotter classes.
 """
 import inspect
-import itertools
 import logging
 import warnings
 from functools import wraps
@@ -21,21 +20,17 @@ from typing import (
     Tuple,
     Type,
     Union,
-    SupportsFloat,
-    SupportsInt,
     get_args,
     get_origin,
 )
 
 import numpy as np
 import pandas as pd
-
+from macrosynergy.visuals import Numeric, NoneType
 from macrosynergy.management import reduce_df
 from macrosynergy.management.utils import standardise_dataframe
 
 logger = logging.getLogger(__name__)
-NoneType = type(None)
-Numeric = Union[int, float, np.int64, np.float64, SupportsInt, SupportsFloat]
 
 
 def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
