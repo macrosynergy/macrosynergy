@@ -12,10 +12,10 @@ from macrosynergy import (
 )
 ```
 
-The Macrosynergy package is a Python package that provides convenience 
-functions for the analysis and transformation of quantamental indicators
-across many countries. It also  offers some basic methods for testing 
-the trading or investment value of quantamental strategies.
+The Macrosynergy package is a Python package that provides convenience functions for the
+analysis and transformation of quantamental indicators across many countries. It also
+offers some basic methods for testing the trading or investment value of quantamental
+strategies.
 
 ### Outline
 
