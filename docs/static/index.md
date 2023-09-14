@@ -12,12 +12,10 @@ from macrosynergy import (
 )
 ```
 
-A software package designed by the [Macrosynergy Team](https://macrosynergy.com/) to accompany
-JPMaQS: a novel source of macroeconomic data pioneered by Macrosynergy &
-JP Morgan.
-
-The package and accompanying trading strategies primarily derive their
-value when utilising JPMaQS.
+The Macrosynergy package is a Python package that provides convenience 
+functions for the analysis and transformation of quantamental indicators
+across many countries. It also  offers some basic methods for testing 
+the trading or investment value of quantamental strategies.
 
 ### Outline
 
