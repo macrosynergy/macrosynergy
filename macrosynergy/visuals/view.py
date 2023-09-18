@@ -46,7 +46,7 @@ def timelines(
     title: Optional[str] = None,
     title_adj: float = 0.95,
     title_xadj: float = 0.5,
-    title_fontsize: int = 16,
+    title_fontsize: int = 22,
     cs_mean: bool = False,
     size: Tuple[float, float] = (12, 7),
     aspect: float = 1.7,
@@ -341,7 +341,7 @@ if __name__ == "__main__":
             cids=sel_cids,
             xcats=[xcatx],
             start_date="2000-01-01",
-            prefer=rstyle,
+            style=rstyle,
         )
         df: pd.DataFrame = pd.concat([df, dfB], axis=0)
 
@@ -370,20 +370,20 @@ if __name__ == "__main__":
         # single_chart=True,
     )
 
-    # timelines(
-    #     df=df,
-    #     xcats=sel_xcats[0],
-    #     cids=sel_cids,
-    #     # cs_mean=True,
-    #     # xcat_grid=False,
-    #     single_chart=True,
-    #     cs_mean=True,
-    # )
+    timelines(
+        df=df,
+        xcats=sel_xcats[0],
+        cids=sel_cids,
+        # cs_mean=True,
+        # xcat_grid=False,
+        single_chart=True,
+        cs_mean=True,
+    )
 
-    # timelines(
-    #     df=df,
-    #     same_y=False,
-    #     xcats=sel_xcats[0],
-    #     cids=sel_cids,
-    #     title="Plotting multiple cross sections for a single category \n with different y-axis!",
-    # )
+    timelines(
+        df=df,
+        same_y=False,
+        xcats=sel_xcats[0],
+        cids=sel_cids,
+        title="Plotting multiple cross sections for a single category \n with different y-axis!",
+    )

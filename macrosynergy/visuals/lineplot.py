@@ -12,7 +12,7 @@ import sys, os
 
 sys.path.append(os.path.abspath("."))
 
-from macrosynergy.visuals import Plotter, Numeric
+from macrosynergy.visuals.plotter import Plotter, Numeric
 from macrosynergy.management.simulate_quantamental_data import make_test_df
 
 

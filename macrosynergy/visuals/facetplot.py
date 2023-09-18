@@ -4,6 +4,8 @@ designed to render a facet plot containing any number of subplots.
 Given that the class allows returning a `matplotlib.pyplot.Figure`,
 one can easily add any number of subplots, even the FacetPlot itself:
 effectively allowing for a recursive facet plot.
+
+::docs::FacetPlot::sort_first::
 """
 
 import io
@@ -24,7 +26,7 @@ import matplotlib.colors as mcolors
 
 sys.path.append(os.path.abspath("."))
 
-from macrosynergy.visuals import Plotter, Numeric
+from macrosynergy.visuals.plotter import Plotter, Numeric
 
 
 def _get_square_grid(
@@ -252,7 +254,7 @@ class FacetPlot(Plotter):
         title_yadjust: Optional[Numeric] = None,
         # subplot axis arguments
         ax_grid: bool = False,
-        ax_hline: Optional[Numeric] = None,
+        ax_hline: Optional[Numeric] = 0.0,
         ax_vline: Optional[str] = None,
         x_axis_label: Optional[str] = None,
         y_axis_label: Optional[str] = None,
@@ -528,12 +530,12 @@ class FacetPlot(Plotter):
                 suptitle.get_window_extent().width,
                 suptitle.get_window_extent().height,
             )
-            title_newline_adjust: float = 0.1
+            title_newline_adjust: float = title_fontsize / 500
             if title_yadjust is not None and title_yadjust != 1.0:
                 title_newline_adjust = abs(title_yadjust - 1.0)
             # count the number of newlines in the title
 
-            title_height: float = (title.count("\n") + 0.25) * title_newline_adjust
+            title_height: float = (title.count("\n") + 1) * title_newline_adjust
 
             re_adj[3] = (
                 re_adj[3] - title_height + fig_height / fig.get_window_extent().height
@@ -732,6 +734,7 @@ if __name__ == "__main__":
             cids=cids_A,
             share_x=True,
             xcat_grid=True,
+            ncols=2,
             title="Test Title with a very long title to see how it looks, \n and a new line - why not?",
             # save_to_file="test_0.png",
             ax_hline=75,

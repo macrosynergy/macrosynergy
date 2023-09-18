@@ -22,11 +22,16 @@ from typing import (
     Union,
     get_args,
     get_origin,
+    SupportsInt,
+    SupportsFloat,
 )
 
 import numpy as np
 import pandas as pd
-from macrosynergy.visuals import Numeric, NoneType
+
+NoneType = type(None)
+Numeric = Union[int, float, np.int64, np.float64, SupportsInt, SupportsFloat]
+
 from macrosynergy.management import reduce_df
 from macrosynergy.management.utils import standardise_dataframe
 
