@@ -4,13 +4,8 @@ designed to plot time series data on a line plot.
 """
 
 import pandas as pd
-from typing import List, Dict, Union, Tuple, Optional, Union
+from typing import List, Dict, Tuple, Optional
 import matplotlib.pyplot as plt
-import logging
-
-import sys, os
-
-sys.path.append(os.path.abspath("."))
 
 from macrosynergy.visuals.plotter import Plotter, Numeric
 from macrosynergy.management.simulate_quantamental_data import make_test_df
