@@ -8,23 +8,12 @@ effectively allowing for a recursive facet plot.
 ::docs::FacetPlot::sort_first::
 """
 
-import io
-import logging
-import os
-import pickle
-import sys
-from collections.abc import Callable, Iterable
-from types import ModuleType
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
-import matplotlib.colors as mcolors
-
-sys.path.append(os.path.abspath("."))
+from matplotlib.gridspec import GridSpec
 
 from macrosynergy.visuals.plotter import Plotter, Numeric
 
