@@ -258,7 +258,7 @@ class FacetPlot(Plotter):
         # subplot arguments
         facet_size: Optional[Tuple[Numeric, Numeric]] = None,
         facet_titles: Optional[List[str]] = None,
-        facet_title_fontsize: int = 12,
+        facet_title_fontsize: int = 14,
         facet_title_xadjust: Numeric = 0.5,
         facet_title_yadjust: Numeric = 1.0,
         facet_xlabel: Optional[str] = None,
