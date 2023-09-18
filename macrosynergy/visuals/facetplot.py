@@ -211,6 +211,13 @@ class FacetPlot(Plotter):
         *args,
         **kwargs,
     ):
+        """
+        **NOT IMPLEMENTED YET**
+
+        Showing a FacetPlot composed of scatter plots from the data available in the
+        `FacetPlot` object after initialization.
+        """
+        raise NotImplementedError("Scatterplot not implemented yet.")
         if metric is None:
             metric: str = self.metrics[0]
 
