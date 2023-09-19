@@ -7,13 +7,10 @@ from macrosynergy.pnl.notional_positions import notional_positions
 from macrosynergy.pnl.proxy_pnl import proxy_pnl
 
 
-TYPES = [Numeric, NoneType]
-TYPES = [f.__name__ for f in TYPES]
+TYPES = ["Numeric", "NoneType"]
 
-CLASSES = [NaivePnL]
-CLASSES = [f.__name__ for f in CLASSES]
+CLASSES = ["NaivePnL"]
 
-FUNCTIONS = [contract_signals, notional_positions, proxy_pnl]
-FUNCTIONS = [f.__name__ for f in FUNCTIONS]
+FUNCTIONS = ["contract_signals", "notional_positions", "proxy_pnl"]
 
 __all__ = TYPES + CLASSES + FUNCTIONS
