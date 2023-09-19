@@ -264,8 +264,8 @@ def contract_signals(
         if not isinstance(varx, typex):
             raise TypeError(f"`{namex}` must be <{typex}> not <{type(varx)}>")
 
-        if typex == list and len(varx) == 0:
-            raise ValueError(f"`{namex}` must not be empty")
+        if typex in [list, str, dict] and len(varx) == 0:
+            raise ValueError(f"`{namex}` must not be an empty {str(typex)}")
 
     ## Standardise and copy the dataframe
     df: pd.DataFrame = standardise_dataframe(df.copy())
