@@ -43,14 +43,14 @@ def contract_signals(
         "FX" for FX forwards or "EQ" for equity index futures.
         N.B. Overall a contract is identified by the combination of its cross-section
         and its contract type "<cid>_<ctype>".
-    :param <List[float]> cscales: list of scaling factors for the contract signals.
+    :param <List[str|float]> cscales: list of scaling factors for the contract signals.
         These can be eigher a list of floats or a list of category tickers that serve
         as basis of translation. The former are fixed across time, the latter variable.
     :param <List[float]> csigns: list of signs for the contract signals. These must be
         either 1 for long position or -1 for short position.
     :param <List[str]> hbasket: list of contract identifiers in the format "<cid>_<ctype>"
         that serve as constituents of the hedging basket.
-    param <List[float]> cscales: list of scaling factors (weights) for the basket.
+    param <List[str|float]> hscales: list of scaling factors (weights) for the basket.
         These can be eigher a list of floats or a list of category tickers that serve
         as basis of translation. The former are fixed across time, the latter variable.
     :param <str> hratio: category names for cross-section-specific hedge ratios.
@@ -79,7 +79,7 @@ def contract_signals(
         (hratio, "hratio", (str, type(None))),
         (start, "start", (str, type(None))),
         (end, "end", (str, type(None))),
-        (blacklist, "blacklist", dict),
+        (blacklist, "blacklist", (dict, type(None))),
         (sname, "sname", str),
     ]:
         if not isinstance(varx, typex):
@@ -95,3 +95,6 @@ def contract_signals(
     for dx, nx in [(start, "start"), (end, "end")]:
         if not is_valid_iso_date(dx):
             raise ValueError(f"`{nx}` must be a valid ISO-8601 date string")
+    
+    df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
+    
