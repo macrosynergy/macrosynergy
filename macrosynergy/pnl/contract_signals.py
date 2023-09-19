@@ -11,12 +11,36 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import warnings
 
-from typing import List, Union, Tuple, Optional, Set
+from typing import List, Union, Tuple, Optional, Set, Dict
 
 from macrosynergy.pnl import Numeric
 from macrosynergy.management.utils import is_valid_iso_date, standardise_dataframe
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
+
+
+def _short_xcat(
+    ticker: Optional[str] = None,
+    xcat: Optional[str] = None,
+):
+    """
+    Get the short version of the cross-section category.
+
+    :param <str> ticker: the ticker of the contract.
+    :param <str> xcat: a extended category of the contract.
+
+    :return <str>: the category from the ticker/xcat.
+    """
+    if ticker is not None and xcat is not None:
+        raise ValueError("Either `ticker` or `xcat` must be specified, not both")
+
+    if ticker is not None:
+        cid, xcat = ticker.split("_", 1)
+        return _short_xcat(xcat=xcat)
+    elif xcat is not None:
+        return xcat.split("_")[-1]
+    else:
+        raise ValueError("Either `ticker` or `xcat` must be specified")
 
 
 def _apply_cscales(
@@ -46,21 +70,23 @@ def _apply_cscales(
     ## If the scales are floats, apply them directly
     if all([isinstance(x, Numeric) for x in cscales]):
         cscales: List[float] = [x * y for x, y in zip(cscales, csigns)]
+        _cs: Dict[str, float] = dict(zip(ctypes, cscales))
         df["value"] = df.apply(
-            lambda x: x["value"] * cscales[ctypes.index(x["xcat"])], axis=1
+            lambda x: x["value"] * _cs[_short_xcat(xcat=x["xcat"])],
+            axis=1,
         )
     ## If the scales are category tickers, apply them by matching the dates
     elif all([isinstance(x, str) for x in cscales]):
         out_dfs: List[pd.DataFrame] = []
         for _xcat, _xscale, _xsign in zip(ctypes, cscales, csigns):
-            xcat_df: pd.DataFrame = df[df["xcat"] == _xcat].copy()
+            xcat_df: pd.DataFrame = df[_short_xcat(xcat=df["xcat"]) == _xcat].copy()
             cids_list: List[str] = xcat_df["cid"].unique().tolist()
             for cidx in cids_list:
                 data_df: pd.DataFrame = xcat_df[xcat_df["cid"] == cidx].set_index(
                     "real_date"
                 )
                 w_df: pd.DataFrame = df[
-                    (df["xcat"] == _xscale) & (df["cid"] == cidx)
+                    (_short_xcat(xcat=df["xcat"]) == _xscale) & (df["cid"] == cidx)
                 ].set_index("real_date")
 
                 # match by date, and multiply the values
@@ -131,6 +157,36 @@ def _apply_hscales(
     # drop the ticker column
     df: pd.DataFrame = df.drop(columns=["ticker"])
     assert df.columns.tolist() == og_cols, "Columns have been changed"
+    return df
+
+
+def apply_hedge_ratio(
+    df: pd.DataFrame,
+    hratios: List[str],
+    cids: List[str],
+) -> pd.DataFrame:
+    """
+    Applies the hedge ratio to the dataframe.
+
+    :param <pd.DataFrame> df: dataframe with the contract signals.
+    :param <List[str]> hratios: list of hedge ratios.
+    :param <List[str]> cids: list of cross-sections.
+    """
+    assert len(hratios) == len(cids), "`hratios` and `cids` must be of the same length"
+
+    for _cid, _hratio in zip(cids, hratios):
+        _ddf: pd.DataFrame = df[df["cid"] == _cid].set_index("real_date")
+        _rdf: pd.DataFrame = _ddf[_ddf["xcat"] == _hratio].set_index("real_date")
+
+        # match by date, and multiply the values
+        for _xc in _ddf["xcat"].unique().tolist():
+            _ddf.loc[_ddf["xcat"] == _xc, "value"] = (
+                _ddf.loc[_ddf["xcat"] == _xc, "value"] * _rdf["value"]
+            )
+
+        # repopulate the dataframe
+        df.loc[df["cid"] == _cid, "value"] = _ddf["value"].values
+
     return df
 
 
@@ -275,9 +331,10 @@ def contract_signals(
                 )
 
     ## Check that all the contract types are in the dataframe as xcats
-    if not set(ctypes).issubset(set(df["xcat"].unique())):
+    _s_ctypes: List[str] = [_short_xcat(xcat=xc) for xc in df["xcat"].unique().tolist()]
+    if not set(ctypes).issubset(set(_s_ctypes)):
         e_msg: str = f"Some of the contract types in `ctypes` are not in `df`"
-        e_msg += f"\nMissing contract types: {set(ctypes) - set(df['xcat'].unique())}"
+        e_msg += f"\nMissing contract types: {set(ctypes) - set(_s_ctypes)}"
         raise ValueError(e_msg)
 
     ## Check that all the cross-sections are in the dataframe as cids
@@ -296,9 +353,11 @@ def contract_signals(
             .tolist()
         )
     ):
-        e_msg: str = f"Some of the contracts in `hbasket` are not in `df`"
+        e_msg: str = f"Some of the contracts/tickers in `hbasket` are not in `df`"
         e_msg += f"\nMissing contracts: {set(hbasket) - set(df['cid'].unique())}"
         raise ValueError(e_msg)
+
+    ## Calculate the contract signals
 
     # in order, multiple the contract signals by the contract scales
     df: pd.DataFrame = _apply_cscales(
@@ -307,3 +366,19 @@ def contract_signals(
 
     # now apply the hscales
     df: pd.DataFrame = _apply_hscales(df=df, hbasket=hbasket, hscales=hscales)
+
+    df["scat"] = df.apply(lambda x: _short_xcat(xcat=x["xcat"]), axis=1)
+
+    # group by scat and sum the values
+    df: pd.DataFrame = df.groupby(["real_date", "scat"])["value"].sum().reset_index()
+    # drop the xcat column and rename the scat column to xcat
+    df: pd.DataFrame = df.drop(columns=["xcat"]).rename(columns={"scat": "xcat"})
+
+    # add the strategy name to the xcat
+    df["xcat"] = df.apply(lambda x: f"{x['xcat']}_{sname}", axis=1)
+
+    # apply hedge ratio if specified
+    if hratio is not None:
+        df: pd.DataFrame = apply_hedge_ratio(df=df, hratios=[hratio], cids=cids)
+
+    return df
