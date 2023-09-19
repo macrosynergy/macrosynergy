@@ -19,28 +19,7 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 
 
-def _short_xcat(
-    ticker: Optional[str] = None,
-    xcat: Optional[str] = None,
-):
-    """
-    Get the short version of the cross-section category.
 
-    :param <str> ticker: the ticker of the contract.
-    :param <str> xcat: a extended category of the contract.
-
-    :return <str>: the category from the ticker/xcat.
-    """
-    if ticker is not None and xcat is not None:
-        raise ValueError("Either `ticker` or `xcat` must be specified, not both")
-
-    if ticker is not None:
-        cid, xcat = ticker.split("_", 1)
-        return _short_xcat(xcat=xcat)
-    elif xcat is not None:
-        return xcat.split("_")[-1]
-    else:
-        raise ValueError("Either `ticker` or `xcat` must be specified")
 
 
 def _apply_cscales(
