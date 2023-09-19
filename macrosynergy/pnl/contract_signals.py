@@ -248,7 +248,7 @@ def contract_signals(
     ## basic type and value checks
     for varx, namex, typex in [
         (df, "df", pd.DataFrame),
-        (sig, "sig", str),
+        # (sig, "sig", str),
         (cids, "cids", list),
         (ctypes, "ctypes", list),
         (cscales, "cscales", (list, type(None))),
