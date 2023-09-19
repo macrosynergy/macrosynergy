@@ -142,7 +142,7 @@ def historic_portfolio_vol(
         the function `historic_portfolio_vol()`.
     :param <str> rstring: a general string of the return category. This identifies
         the contract returns that are required for the volatility-targeting method, based
-        on the category identifier format <cid>_ <ctype><rstring>_<rstring> in accordance
+        on the category identifier format <cid>_<ctype><rstring>_<rstring> in accordance
         with JPMaQS conventions. Default is 'XR'.
     :param <str> start: the start date of the data. Default is None, which means that
         the start date is taken from the dataframe.
