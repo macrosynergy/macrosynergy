@@ -13,13 +13,10 @@ import warnings
 
 from typing import List, Union, Tuple, Optional, Set, Dict
 
-from macrosynergy.pnl import Numeric
+from macrosynergy.pnl import Numeric, _short_xcat
 from macrosynergy.management.utils import is_valid_iso_date, standardise_dataframe
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
-
-
-
 
 
 def _apply_cscales(
