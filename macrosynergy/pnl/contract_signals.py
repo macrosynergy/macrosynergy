@@ -1,3 +1,10 @@
+"""
+Module for calculating contract signals based on cross-section-specific signals,
+and hedging them with a basket of contracts. Main function is `contract_signals`.
+
+::docs::contract_signals::sort_first::
+"""
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -19,7 +26,7 @@ def _apply_cscales(
     csigns: List[int],
 ):
     """
-    Match the contract types with their scales and apply the scales and signs to 
+    Match the contract types with their scales and apply the scales and signs to
     the dataframe.
 
     :param <pd.DataFrame> df: dataframe with the contract signals.
@@ -143,7 +150,7 @@ def contract_signals(
     sname: str = "STRAT",
 ) -> pd.DataFrame:
     """
-    Caclulate contract specific signals based on cross-section-specific signals
+    Caclulate contract specific signals based on cross-section-specific signals.
 
     :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
