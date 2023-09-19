@@ -2,13 +2,129 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import warnings
 
-from typing import List, Union, Tuple, Optional
+from typing import List, Union, Tuple, Optional, Set
 
 from macrosynergy.pnl import Numeric
 from macrosynergy.management.utils import is_valid_iso_date, standardise_dataframe
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
+
+
+def _apply_cscales(
+    df: pd.DataFrame,
+    ctypes: List[str],
+    cscales: List[Union[Numeric, str]],
+    csigns: List[int],
+):
+    """
+    Match the contract types with their scales and apply the scales and signs to 
+    the dataframe.
+
+    :param <pd.DataFrame> df: dataframe with the contract signals.
+    :param <List[str]> ctypes: list of contract types.
+    :param <List[Union[Numeric, str]]> cscales: list of scales for the contract types.
+        These can be either floats or category tickers.
+    :param <List[int]> csigns: list of signs for the contract types. These must be
+        either 1 for long position or -1 for short position.
+    """
+    assert len(ctypes) == len(
+        cscales
+    ), "`ctypes` and `cscales` must be of the same length"
+    assert len(ctypes) == len(
+        csigns
+    ), "`ctypes` and `csigns` must be of the same length"
+
+    ## If the scales are floats, apply them directly
+    if all([isinstance(x, Numeric) for x in cscales]):
+        cscales: List[float] = [x * y for x, y in zip(cscales, csigns)]
+        df["value"] = df.apply(
+            lambda x: x["value"] * cscales[ctypes.index(x["xcat"])], axis=1
+        )
+    ## If the scales are category tickers, apply them by matching the dates
+    elif all([isinstance(x, str) for x in cscales]):
+        out_dfs: List[pd.DataFrame] = []
+        for _xcat, _xscale, _xsign in zip(ctypes, cscales, csigns):
+            xcat_df: pd.DataFrame = df[df["xcat"] == _xcat].copy()
+            cids_list: List[str] = xcat_df["cid"].unique().tolist()
+            for cidx in cids_list:
+                data_df: pd.DataFrame = xcat_df[xcat_df["cid"] == cidx].set_index(
+                    "real_date"
+                )
+                w_df: pd.DataFrame = df[
+                    (df["xcat"] == _xscale) & (df["cid"] == cidx)
+                ].set_index("real_date")
+
+                # match by date, and multiply the values
+                data_df["value"] = data_df["value"] * w_df["value"] * _xsign
+
+                # append to the output dataframes
+                out_dfs.append(data_df.reset_index())
+
+        # concatenate the output dataframes
+        df: pd.DataFrame = pd.concat(out_dfs, axis=0, ignore_index=True)
+        out_dfs = None
+    else:
+        raise ValueError("`cscales` must be a list of floats or category tickers")
+
+    return df
+
+
+def _apply_hscales(
+    df: pd.DataFrame,
+    hbasket: List[str],
+    hscales: List[Union[Numeric, str]],
+):
+    """
+    Match the hedging basket with its scales and apply the scales to the dataframe.
+
+    :param <pd.DataFrame> df: dataframe with the contract signals.
+    :param <List[str]> hbasket: list of contracts in the hedging basket.
+    :param <List[Union[Numeric, str]]> hscales: list of scales for the hedging basket.
+        These can be either floats or category tickers.
+    """
+    assert len(hbasket) == len(
+        hscales
+    ), "`hbasket` and `hscales` must be of the same length"
+
+    og_cols: List[str] = df.columns.tolist()
+    # add a column called tickers
+    df["ticker"] = df.apply(lambda x: f"{x['cid']}_{x['xcat']}", axis=1)
+
+    ## If the scales are floats, apply them directly
+    if all([isinstance(x, Numeric) for x in hscales]):
+        df["value"] = df.apply(
+            lambda x: x["value"] * hscales[hbasket.index(x["ticker"])], axis=1
+        )
+    ## If the scales are category tickers, apply them by matching the dates
+    elif all([isinstance(x, str) for x in hscales]):
+        out_dfs: List[pd.DataFrame] = []
+        for _tickerx, _hscale in zip(hbasket, hscales):
+            ticker_df: pd.DataFrame = df[df["ticker"] == _tickerx].copy()
+
+            data_df: pd.DataFrame = ticker_df.set_index("real_date")
+            w_df: pd.DataFrame = df[
+                (df["xcat"] == _hscale) & (df["ticker"] == _tickerx)
+            ].set_index("real_date")
+
+            # match by date, and multiply the values
+            data_df["value"] = data_df["value"] * w_df["value"]
+
+            # append to the output dataframes
+            out_dfs.append(data_df.reset_index())
+
+        # concatenate the output dataframes
+        df: pd.DataFrame = pd.concat(out_dfs, axis=0, ignore_index=True)
+        out_dfs = None
+
+    else:
+        raise ValueError("`hscales` must be a list of floats or category tickers")
+
+    # drop the ticker column
+    df: pd.DataFrame = df.drop(columns=["ticker"])
+    assert df.columns.tolist() == og_cols, "Columns have been changed"
+    return df
 
 
 def contract_signals(
@@ -66,7 +182,7 @@ def contract_signals(
         specified strategy. It has the standard JPMaQS DataFrame. The contract signals
         have the following format "<cid>_<ctype>_<sname>_CSIG".
     """
-
+    ## basic type and value checks
     for varx, namex, typex in [
         (df, "df", pd.DataFrame),
         (sig, "sig", str),
@@ -85,8 +201,13 @@ def contract_signals(
         if not isinstance(varx, typex):
             raise TypeError(f"`{namex}` must be <{typex}> not <{type(varx)}>")
 
+        if typex == list and len(varx) == 0:
+            raise ValueError(f"`{namex}` must not be empty")
+
+    ## Standardise and copy the dataframe
     df: pd.DataFrame = standardise_dataframe(df.copy())
 
+    ## Check the dates
     if start is None:
         start: str = pd.Timestamp(df["real_date"].min()).strftime("%Y-%m-%d")
     if end is None:
@@ -95,6 +216,87 @@ def contract_signals(
     for dx, nx in [(start, "start"), (end, "end")]:
         if not is_valid_iso_date(dx):
             raise ValueError(f"`{nx}` must be a valid ISO-8601 date string")
-    
+
+    ## Reduce the dataframe
     df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
-    
+
+    ## Add all contracts to hedging basket if none specified
+    if hbasket is None:
+        hbasket: List[str] = (
+            df[["cid", "xcat"]]
+            .drop_duplicates()
+            .apply(lambda x: f"{x['cid']}_{x['xcat']}", axis=1)
+            .unique()
+            .tolist()
+        )
+
+    ## If hedging scales are not specified, set them to 1.0
+    if hscales is None:
+        hscales: List[Union[Numeric, str]] = [1.0] * len(hbasket)
+
+    ## If contract scales are not specified, set them to 1.0
+    if cscales is None:
+        cscales: List[Union[Numeric, str]] = [1.0] * len(ctypes)
+
+    ## If contract signs are not specified, set them to 1.0
+    ## if specified, check that they are either 1 or -1
+    if csigns is None:
+        csigns: List[int] = [1] * len(ctypes)
+    else:
+        if not all(isinstance(x, Numeric) for x in csigns):
+            raise TypeError("`csigns` must be a list of integers")
+        csigns: List[int] = [int(x) for x in csigns]
+        if not all(x in [-1, 1] for x in csigns):
+            warnings.warn("`csigns` is being coerced to [-1, 1]")
+            csigns: List[int] = [int(x / abs(x)) for x in csigns]
+
+    ## Check that the scales are of the same length as the contract types
+    ## Also assert that they are either all strings or all floats
+    for _scn, _sc, _sctn, _sct in [
+        ("cscales", cscales, "ctypes", ctypes),
+        ("hscales", hscales, "hbasket", hbasket),
+    ]:
+        if _sc is not None:
+            if len(_sc) != len(_sct):
+                raise ValueError(f"`{_scn}` and `{_sctn}` must be of the same length")
+
+            is_strs: bool = all([isinstance(x, str) for x in _sc])
+            is_nums: bool = all([isinstance(x, Numeric) for x in _sc])
+            if not (is_strs or is_nums):
+                raise ValueError(
+                    f"`{_scn}` must be a list of strings or floats/numeric types"
+                )
+
+    ## Check that all the contract types are in the dataframe as xcats
+    if not set(ctypes).issubset(set(df["xcat"].unique())):
+        e_msg: str = f"Some of the contract types in `ctypes` are not in `df`"
+        e_msg += f"\nMissing contract types: {set(ctypes) - set(df['xcat'].unique())}"
+        raise ValueError(e_msg)
+
+    ## Check that all the cross-sections are in the dataframe as cids
+    if not set(cids).issubset(set(df["cid"].unique())):
+        e_msg: str = f"Some of the cross-sections in `cids` are not in `df`"
+        e_msg += f"\nMissing cross-sections: {set(cids) - set(df['cid'].unique())}"
+        raise ValueError(e_msg)
+
+    ## Check that all the contracts in the hedging basket are in the dataframe as tickers
+    if not set(hbasket).issubset(
+        set(
+            df[["cid", "xcat"]]
+            .drop_duplicates()
+            .apply(lambda x: f"{x['cid']}_{x['xcat']}", axis=1)
+            .unique()
+            .tolist()
+        )
+    ):
+        e_msg: str = f"Some of the contracts in `hbasket` are not in `df`"
+        e_msg += f"\nMissing contracts: {set(hbasket) - set(df['cid'].unique())}"
+        raise ValueError(e_msg)
+
+    # in order, multiple the contract signals by the contract scales
+    df: pd.DataFrame = _apply_cscales(
+        df=df, ctypes=ctypes, cscales=cscales, csigns=csigns
+    )
+
+    # now apply the hscales
+    df: pd.DataFrame = _apply_hscales(df=df, hbasket=hbasket, hscales=hscales)
