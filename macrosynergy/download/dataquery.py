@@ -567,19 +567,19 @@ def _get_unavailable_expressions(
 class DataQueryInterface(object):
     """
     High level interface for the DataQuery API.
-    
+
     When using OAuth authentication:
-    
+
     :param <str> client_id: client ID for the OAuth application.
     :param <str> client_secret: client secret for the OAuth application.
-    
+
     When using certificate authentication:
-    
+
     :param <str> crt: path to the certificate file.
     :param <str> key: path to the key file.
     :param <str> username: username for the DataQuery API.
     :param <str> password: password for the DataQuery API.
-    
+
     :param <bool> oauth: whether to use OAuth authentication. Defaults to True.
     :param <bool> debug: whether to print debug messages. Defaults to False.
     :param <bool> concurrent: whether to use concurrent requests. Defaults to True.
@@ -661,9 +661,7 @@ class DataQueryInterface(object):
                 proxy=proxy,
             )
 
-        assert (
-            self.auth is not None
-        ), (
+        assert self.auth is not None, (
             "Unable to instantiate authentication object. "
             "Check the parameters passed to the DataQueryInterface class."
         )
@@ -1065,10 +1063,8 @@ class DataQueryInterface(object):
 if __name__ == "__main__":
     import os
 
-
-    client_id=os.getenv("DQ_CLIENT_ID")
-    client_secret=os.getenv("DQ_CLIENT_SECRET")
-    
+    client_id = os.getenv("DQ_CLIENT_ID")
+    client_secret = os.getenv("DQ_CLIENT_SECRET")
 
     expressions = [
         "DB(JPMAQS,USD_EQXR_VT10,value)",
@@ -1078,7 +1074,7 @@ if __name__ == "__main__":
     with DataQueryInterface(
         client_id=client_id,
         client_secret=client_secret,
-                            ) as dq:
+    ) as dq:
         assert dq.check_connection(verbose=True)
 
         data = dq.download_data(
