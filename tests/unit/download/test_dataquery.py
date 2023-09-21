@@ -246,9 +246,7 @@ class TestCertAuth(unittest.TestCase):
             cfg: dict = dict(
                 username="user", password="pass", crt="path/crt.crt", key="path/key.key"
             )
-            dq_interface: DataQueryInterface = DataQueryInterface(
-                **cfg, oauth=False
-            )
+            dq_interface: DataQueryInterface = DataQueryInterface(**cfg, oauth=False)
 
             # assert that dq_interface.auth is CertAuth type
             self.assertIsInstance(dq_interface.auth, CertAuth)
@@ -623,7 +621,8 @@ class TestDataQueryInterface(unittest.TestCase):
             ):
                 with self.assertRaises(DownloadError):
                     DataQueryInterface(
-                        client_id="client_id", client_secret="client_secret",
+                        client_id="client_id",
+                        client_secret="client_secret",
                         oauth=True,
                     )._download(**bad_args)
             err_string_1: str = (
