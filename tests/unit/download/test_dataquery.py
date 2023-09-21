@@ -36,8 +36,6 @@ from macrosynergy.download.exceptions import (
     InvalidDataframeError,
     NoContentError,
 )
-from macrosynergy.management.utils import Config
-
 
 from .mock_helpers import mock_jpmaqs_value, mock_request_wrapper, random_string
 
