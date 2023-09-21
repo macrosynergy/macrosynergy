@@ -34,7 +34,6 @@ from macrosynergy.download.exceptions import (
 from macrosynergy.management.utils import (
     is_valid_iso_date,
     form_full_url,
-    Config,
 )
 
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
@@ -664,7 +663,10 @@ class DataQueryInterface(object):
 
         assert (
             self.auth is not None
-        ), "Failed to initialise access method. Check the config_object passed"
+        ), (
+            "Unable to instantiate authentication object. "
+            "Check the parameters passed to the DataQueryInterface class."
+        )
 
         self.proxy: Optional[dict] = proxy
         self.base_url: str = base_url
@@ -1063,17 +1065,20 @@ class DataQueryInterface(object):
 if __name__ == "__main__":
     import os
 
-    cf: Config = Config(
-        client_id=os.getenv("DQ_CLIENT_ID"),
-        client_secret=os.getenv("DQ_CLIENT_SECRET"),
-    )
+
+    client_id=os.getenv("DQ_CLIENT_ID")
+    client_secret=os.getenv("DQ_CLIENT_SECRET")
+    
 
     expressions = [
         "DB(JPMAQS,USD_EQXR_VT10,value)",
         "DB(JPMAQS,AUD_EXALLOPENNESS_NSA_1YMA,value)",
     ]
 
-    with DataQueryInterface(config=cf) as dq:
+    with DataQueryInterface(
+        client_id=client_id,
+        client_secret=client_secret,
+                            ) as dq:
         assert dq.check_connection(verbose=True)
 
         data = dq.download_data(
