@@ -10,7 +10,7 @@ from macrosynergy.download.exceptions import (
     AuthenticationError,
     InvalidDataframeError,
 )
-from macrosynergy.management.utils import Config
+
 
 def random_string() -> str:
     """
@@ -32,10 +32,8 @@ class TestDataQueryOAuth(unittest.TestCase):
 
         with DataQueryInterface(
             oauth=True,
-            config=Config(
-                client_id=random_string(),
-                client_secret=random_string(),
-            ),
+            client_id=random_string(),
+            client_secret=random_string(),
         ) as dq:
             with self.assertRaises(AuthenticationError):
                 dq.check_connection()
@@ -54,10 +52,8 @@ class TestDataQueryOAuth(unittest.TestCase):
 
         with DataQueryInterface(
             oauth=True,
-            config=Config(
-                client_id=os.getenv("DQ_CLIENT_ID"),
-                client_secret=os.getenv("DQ_CLIENT_SECRET"),
-            ),
+            client_id=os.getenv("DQ_CLIENT_ID"),
+            client_secret=os.getenv("DQ_CLIENT_SECRET"),
         ) as dq:
             self.assertTrue(
                 dq.check_connection(),
@@ -88,10 +84,8 @@ class TestDataQueryOAuth(unittest.TestCase):
         test_expr: str = "DB(JPMAQS,EUR_FXXR_NSA,value)"
         with DataQueryInterface(
             oauth=True,
-            config=Config(
-                client_id=os.getenv("DQ_CLIENT_ID"),
-                client_secret=os.getenv("DQ_CLIENT_SECRET"),
-            ),
+            client_id=os.getenv("DQ_CLIENT_ID"),
+            client_secret=os.getenv("DQ_CLIENT_SECRET"),
         ) as dq:
             data: List[str] = dq.download_data(
                 expressions=[test_expr],
