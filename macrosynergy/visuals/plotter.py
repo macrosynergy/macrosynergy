@@ -29,8 +29,8 @@ from typing import (
 import numpy as np
 import pandas as pd
 
-NoneType = type(None)
-Numeric = Union[int, float, np.int64, np.float64, SupportsInt, SupportsFloat]
+from macrosynergy.visuals.common import Numeric, NoneType
+
 
 from macrosynergy.management import reduce_df
 from macrosynergy.management.utils import standardise_dataframe

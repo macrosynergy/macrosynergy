@@ -18,6 +18,8 @@ sys.path.append(os.getcwd())
 
 from typing import Dict, List, Optional, Tuple, Union
 from macrosynergy.visuals import Plotter, LinePlot, FacetPlot
+from macrosynergy.visuals.common import Numeric, NoneType
+
 from macrosynergy.management.utils import standardise_dataframe
 
 import pandas as pd
@@ -48,9 +50,9 @@ def timelines(
     title_xadj: float = 0.5,
     title_fontsize: int = 22,
     cs_mean: bool = False,
-    size: Tuple[float, float] = (12, 7),
-    aspect: float = 1.7,
-    height: float = 3.0,
+    size: Tuple[Numeric, Numeric] = (12, 7),
+    aspect: Numeric = 1.7,
+    height: Numeric = 3.0,
     legend_fontsize: int = 12,
 ):
     """Displays a facet grid of time line charts of one or more categories.
@@ -89,10 +91,11 @@ def timelines(
     :param <bool> cs_mean: if True this adds a line of cross-sectional averages to
         the line charts. This is only allowed for function calls with a single
         category. Default is False.
-    :param <Tuple[float]> size: two-element tuple setting width/height of single cross
-        section plot. Default is (12, 7). This is irrelevant for facet grid.
-    :param <float> aspect: width-height ratio for plots in facet. Default is 1.7.
-    :param <float> height: height of plots in facet. Default is 3.
+    :param <Tuple[Numeric, Numeric]> size: two-element tuple setting width/height
+        of single cross section plot. Default is (12, 7). This is irrelevant for facet 
+        grid.
+    :param <Numeric> aspect: width-height ratio for plots in facet. Default is 1.7.
+    :param <Numeric> height: height of plots in facet. Default is 3.
     :param <int> legend_fontsize: font size of legend. Default is 12.
 
     """

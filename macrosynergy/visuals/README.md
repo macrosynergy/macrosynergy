@@ -17,6 +17,8 @@ The `macrosynergy.visuals` subpackage features the following functionality:
 - `view.*` functions: A set of preset methods to view data in commonly used contexts.
 
   - `timelines()`: A function for viewing time-series data as line plots. Settings include viewing grouped by `cids`, `xcats`, or both.
+
+  To be implemented:
   - `availability()`: A function for viewing data availability. Plots a heatmap of the data availability for each `cid` and `xcat`.
   - `correlation()`: A function for viewing correlation matrices.
   - `metrics()`: A function for viewing metrics. Designed to view any on a heatmap; not ideal for viewing `value`.
@@ -29,6 +31,8 @@ The `macrosynergy.visuals` subpackage features the following functionality:
 - `FacetPlot`: A class for creating facet plots of data.
 
   - `.lineplot()`: A method for creating line plots.
+
+  To be implemented:
   - `.scatterplot()`: A method for creating scatter plots.
   - `.from_subplots()`: A method for copying and arranging a list of individual subplots (of any type) into a facet plot.
 
@@ -167,7 +171,7 @@ facet_size: Tuple[Union[SupportsFloat, np.int64, np.float64], Union[SupportsFloa
 ...
 ```
 
-two generic type-aliases are defined in `macrosynergy.visuals.plotter`:
+two generic type-aliases are defined in `macrosynergy.visuals.common`:
 
 ```python
 NoneType = type(None)

@@ -15,7 +15,8 @@ import numpy as np
 import pandas as pd
 from matplotlib.gridspec import GridSpec
 
-from macrosynergy.visuals.plotter import Plotter, Numeric
+from macrosynergy.visuals.plotter import Plotter
+from macrosynergy.visuals.common import Numeric, NoneType
 
 
 def _get_square_grid(
@@ -161,70 +162,70 @@ class FacetPlot(Plotter):
 
         raise ValueError("Unable to infer grid dimensions.")
 
-    def scatterplot(
-        self,
-        # plot arguments
-        cids: Optional[List[str]] = None,
-        xcats: Optional[List[str]] = None,
-        metric: Optional[str] = None,
-        # fig arguments
-        figsize: Tuple[Numeric, Numeric] = (16.0, 9.0),
-        ncols: int = 3,
-        attempt_square: bool = False,
-        # xcats_mean: bool = False,
-        # title arguments
-        title: Optional[str] = None,
-        title_fontsize: int = 20,
-        title_xadjust: Optional[Numeric] = None,
-        title_yadjust: Optional[Numeric] = None,
-        # subplot axis arguments
-        ax_grid: bool = True,
-        ax_hline: bool = False,
-        ax_hline_val: Numeric = 0.0,
-        ax_vline: bool = False,
-        ax_vline_val: Numeric = 0.0,
-        x_axis_label: Optional[str] = None,
-        y_axis_label: Optional[str] = None,
-        axis_fontsize: int = 12,
-        # subplot arguments
-        facet_size: Optional[Tuple[Numeric, Numeric]] = None,
-        facet_titles: Optional[List[str]] = None,
-        facet_title_fontsize: int = 12,
-        facet_title_xadjust: Numeric = 0.5,
-        facet_title_yadjust: Numeric = 1.0,
-        facet_xlabel: Optional[str] = None,
-        facet_ylabel: Optional[str] = None,
-        facet_label_fontsize: int = 12,
-        # legend arguments
-        legend: bool = True,
-        legend_labels: Optional[List[str]] = None,
-        legend_loc: str = "upper center",
-        legend_ncol: int = 1,
-        legend_bbox_to_anchor: Optional[Tuple[Numeric, Numeric]] = None,  # (1.0, 0.5),
-        legend_frame: bool = True,
-        # return args
-        show: bool = True,
-        save_to_file: Optional[str] = None,
-        dpi: int = 300,
-        return_figure: bool = False,
-        plot_func_args: Dict[str, Any] = {},
-        *args,
-        **kwargs,
-    ):
-        """
-        **NOT IMPLEMENTED YET**
+    # def scatterplot(
+    #     self,
+    #     # plot arguments
+    #     cids: Optional[List[str]] = None,
+    #     xcats: Optional[List[str]] = None,
+    #     metric: Optional[str] = None,
+    #     # fig arguments
+    #     figsize: Tuple[Numeric, Numeric] = (16.0, 9.0),
+    #     ncols: int = 3,
+    #     attempt_square: bool = False,
+    #     # xcats_mean: bool = False,
+    #     # title arguments
+    #     title: Optional[str] = None,
+    #     title_fontsize: int = 20,
+    #     title_xadjust: Optional[Numeric] = None,
+    #     title_yadjust: Optional[Numeric] = None,
+    #     # subplot axis arguments
+    #     ax_grid: bool = True,
+    #     ax_hline: bool = False,
+    #     ax_hline_val: Numeric = 0.0,
+    #     ax_vline: bool = False,
+    #     ax_vline_val: Numeric = 0.0,
+    #     x_axis_label: Optional[str] = None,
+    #     y_axis_label: Optional[str] = None,
+    #     axis_fontsize: int = 12,
+    #     # subplot arguments
+    #     facet_size: Optional[Tuple[Numeric, Numeric]] = None,
+    #     facet_titles: Optional[List[str]] = None,
+    #     facet_title_fontsize: int = 12,
+    #     facet_title_xadjust: Numeric = 0.5,
+    #     facet_title_yadjust: Numeric = 1.0,
+    #     facet_xlabel: Optional[str] = None,
+    #     facet_ylabel: Optional[str] = None,
+    #     facet_label_fontsize: int = 12,
+    #     # legend arguments
+    #     legend: bool = True,
+    #     legend_labels: Optional[List[str]] = None,
+    #     legend_loc: str = "upper center",
+    #     legend_ncol: int = 1,
+    #     legend_bbox_to_anchor: Optional[Tuple[Numeric, Numeric]] = None,  # (1.0, 0.5),
+    #     legend_frame: bool = True,
+    #     # return args
+    #     show: bool = True,
+    #     save_to_file: Optional[str] = None,
+    #     dpi: int = 300,
+    #     return_figure: bool = False,
+    #     plot_func_args: Dict[str, Any] = {},
+    #     *args,
+    #     **kwargs,
+    # ):
+    #     """
+    #     **NOT IMPLEMENTED YET**
 
-        Showing a FacetPlot composed of scatter plots from the data available in the
-        `FacetPlot` object after initialization.
-        """
-        raise NotImplementedError("Scatterplot not implemented yet.")
-        if metric is None:
-            metric: str = self.metrics[0]
+    #     Showing a FacetPlot composed of scatter plots from the data available in the
+    #     `FacetPlot` object after initialization.
+    #     """
+    #     raise NotImplementedError("Scatterplot not implemented yet.")
+    #     if metric is None:
+    #         metric: str = self.metrics[0]
 
-        _cids: List[str] = self.cids if cids is None else cids
-        _xcats: List[str] = self.xcats if xcats is None else xcats
+    #     _cids: List[str] = self.cids if cids is None else cids
+    #     _xcats: List[str] = self.xcats if xcats is None else xcats
 
-        ...
+    #     ...
 
     def lineplot(
         self,
