@@ -34,7 +34,7 @@ from macrosynergy.download.exceptions import (
     InvalidResponseError,
     DownloadError,
     InvalidDataframeError,
-    NoContentError
+    NoContentError,
 )
 from macrosynergy.management.utils import Config
 
@@ -245,11 +245,11 @@ class TestCertAuth(unittest.TestCase):
 
     def test_with_dqinterface(self):
         with mock.patch("os.path.isfile", side_effect=lambda x: self.mock_isfile(x)):
-            cfg: Config = Config(
+            cfg: dict = dict(
                 username="user", password="pass", crt="path/crt.crt", key="path/key.key"
             )
             dq_interface: DataQueryInterface = DataQueryInterface(
-                config=cfg, oauth=False
+                **cfg, oauth=False
             )
 
             # assert that dq_interface.auth is CertAuth type
@@ -326,8 +326,8 @@ class TestDataQueryInterface(unittest.TestCase):
         )
 
     def test_init(self):
-        with self.assertRaises(ValueError):
-            DataQueryInterface(config=1)
+        with self.assertRaises(TypeError):
+            DataQueryInterface(client_id=1, client_secret="SECRET")
 
     @mock.patch(
         "macrosynergy.download.dataquery.OAuth._get_token",
@@ -345,7 +345,7 @@ class TestDataQueryInterface(unittest.TestCase):
         # connections.
 
         with DataQueryInterface(
-            config=Config(client_id=random_string(), client_secret=random_string())
+            client_id=random_string(), client_secret=random_string()
         ) as dq:
             self.assertTrue(dq.check_connection())
 
@@ -561,11 +561,11 @@ class TestDataQueryInterface(unittest.TestCase):
             )
 
     def test_dq_fetch(self):
-        cfg = Config(
+        cfg: dict = dict(
             client_id=random_string(),
             client_secret=random_string(),
         )
-        dq: DataQueryInterface = DataQueryInterface(oauth=True, config=cfg)
+        dq: DataQueryInterface = DataQueryInterface(oauth=True, **cfg)
 
         invl_responses: List[Any] = [
             None,
@@ -591,8 +591,10 @@ class TestDataQueryInterface(unittest.TestCase):
                         url=OAUTH_BASE_URL + TIMESERIES_ENDPOINT,
                         params={"expr": "expression1"},
                     )
-                    
-        invl_response: Dict[str, Any] = {'info':{'code': '204', 'message': 'No Content'}}
+
+        invl_response: Dict[str, Any] = {
+            "info": {"code": "204", "message": "No Content"}
+        }
         with mock.patch(
             "macrosynergy.download.dataquery.request_wrapper",
             return_value=invl_response,
@@ -623,7 +625,7 @@ class TestDataQueryInterface(unittest.TestCase):
             ):
                 with self.assertRaises(DownloadError):
                     DataQueryInterface(
-                        Config(client_id="client_id", client_secret="client_secret"),
+                        client_id="client_id", client_secret="client_secret",
                         oauth=True,
                     )._download(**bad_args)
             err_string_1: str = (
