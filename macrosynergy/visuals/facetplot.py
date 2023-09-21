@@ -435,6 +435,7 @@ class FacetPlot(Plotter):
             elif cid_xcat_grid:
                 ...
                 # cid_xcat_grid facets only make sense if they have cid_xcat as the title
+                legend: bool = False
             else:
                 facet_titles: List[str] = tickers_to_plot
 
