@@ -1,9 +1,17 @@
 """
 Common types and functions used across the modules of the `macrosynergy.pnl` subpackage.
 
-:type Numeric: Union[int, float, np.int64, np.float64, SupportsInt, SupportsFloat]
+---
 
-:type NoneType: type(None)
+## **Types** 
+
+---
+
+`:type <Union[int, float, np.int64, np.float64, SupportsInt, SupportsFloat]> Numeric`: 
+    a numeric type that supports type checks across `int`, `float`, `np.int64`, 
+    `np.float64`, `SupportsInt`, and `SupportsFloat`.
+
+`:type <NoneType> NoneType`: the type of `None`.
 
 """
 
