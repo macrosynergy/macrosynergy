@@ -21,9 +21,8 @@ from macrosynergy.management.utils import (
     form_full_url,
     generate_random_date,
     common_cids,
-    drop_nan_series
+    drop_nan_series,
 )
-
 
 
 class TestFunctions(unittest.TestCase):
@@ -43,7 +42,7 @@ class TestFunctions(unittest.TestCase):
         d: dict = {"a": 1, "b": {"c": 2, "d": {"e": 3}}}
         self.assertEqual(rec_search_dict(d, "e"), 3)
 
-        self.assertEqual(rec_search_dict('Some string', "KEY"), None)
+        self.assertEqual(rec_search_dict("Some string", "KEY"), None)
 
         dx: dict = {0: "a"}
         for i in range(1, 100):
@@ -54,9 +53,14 @@ class TestFunctions(unittest.TestCase):
         self.assertEqual(rec_search_dict(d=d, key="25", match_substring=True), 4)
         self.assertEqual(rec_search_dict(d=d, key="99", match_substring=True), None)
 
-        d = {"12": 1, "123": [2], "234": '3', "1256": 4.0, "246": {"a": 1}}
+        d = {"12": 1, "123": [2], "234": "3", "1256": 4.0, "246": {"a": 1}}
         for k in d.keys():
-            self.assertEqual(rec_search_dict(d=d, key=k, match_substring=True, match_type=type(d[k])), d[k])
+            self.assertEqual(
+                rec_search_dict(
+                    d=d, key=k, match_substring=True, match_type=type(d[k])
+                ),
+                d[k],
+            )
 
     def test_is_valid_iso_date(self):
         d1: str = "2020-01-01"
@@ -152,7 +156,7 @@ class TestFunctions(unittest.TestCase):
         # get 20 random dates
         strts: List[str] = [generate_random_date() for i in range(10)]
         ends: List[str] = [generate_random_date() for i in range(10)]
-        
+
         for st, ed in zip(strts, ends):
             stD = datetime.datetime.strptime(st, "%Y-%m-%d")
             edD = datetime.datetime.strptime(ed, "%Y-%m-%d")
@@ -163,9 +167,9 @@ class TestFunctions(unittest.TestCase):
                 rdD = datetime.datetime.strptime(rd, "%Y-%m-%d")
                 self.assertTrue(stD <= rdD <= edD)
 
-        strts = ['2020-01-01', '2023-05-02', '2021-12-31']
-        ends = ['2020-01-03', '2023-05-03', '2021-12-31']
-        endst = ['2020-01-02', '2023-05-03', '2021-12-31']
+        strts = ["2020-01-01", "2023-05-02", "2021-12-31"]
+        ends = ["2020-01-03", "2023-05-03", "2021-12-31"]
+        endst = ["2020-01-02", "2023-05-03", "2021-12-31"]
         for st, ed, edt in zip(strts, ends, endst):
             stD = datetime.datetime.strptime(st, "%Y-%m-%d")
             edD = datetime.datetime.strptime(ed, "%Y-%m-%d")
@@ -177,116 +181,138 @@ class TestFunctions(unittest.TestCase):
             rdD = datetime.datetime.strptime(rd, "%Y-%m-%d")
             self.assertTrue(stD <= rdD <= edD)
             self.assertTrue(rdD <= edtD)
-            
+
             # when generate st=ed, rd=ed
             rdD = generate_random_date(edD, edD)
             self.assertEqual(rdD, edD.strftime("%Y-%m-%d"))
 
     def test_common_cids(self):
-        cids : List[str] = ["AUD", "USD", "GBP", "EUR", "CAD"]
-        xcats : List[str] = ["FXXR", "IR", "EQXR", "CRY", "FXFW"]
-        df : pd.DataFrame = make_test_df(cids=cids, xcats=xcats)
-        
+        cids: List[str] = ["AUD", "USD", "GBP", "EUR", "CAD"]
+        xcats: List[str] = ["FXXR", "IR", "EQXR", "CRY", "FXFW"]
+        df: pd.DataFrame = make_test_df(cids=cids, xcats=xcats)
+
         # check normal case
-        com_cids : List[str] = common_cids(df=df, xcats=xcats)
+        com_cids: List[str] = common_cids(df=df, xcats=xcats)
         self.assertEqual(set(com_cids), set(cids))
-        
+
         self.assertRaises(TypeError, common_cids, df=1, xcats=xcats)
         self.assertRaises(TypeError, common_cids, df=df, xcats=1)
-        self.assertRaises(ValueError, common_cids, df=df, xcats=['xcat'])
+        self.assertRaises(ValueError, common_cids, df=df, xcats=["xcat"])
         self.assertRaises(ValueError, common_cids, df=df, xcats=["apple", "banana"])
-        self.assertRaises(TypeError, common_cids, df=df, xcats=[1,2,3])
-        
+        self.assertRaises(TypeError, common_cids, df=df, xcats=[1, 2, 3])
+
         # test A
-        dfA : pd.DataFrame = df.copy()
+        dfA: pd.DataFrame = df.copy()
         dfA = dfA[~((dfA["cid"] == "USD") & (dfA["xcat"].isin(["FXXR", "IR"])))]
         dfA = dfA[~((dfA["cid"] == "CAD") & (dfA["xcat"].isin(["FXXR", "IR"])))]
-        
-        com_cids : List[str] = common_cids(df=dfA, xcats=xcats)
+
+        com_cids: List[str] = common_cids(df=dfA, xcats=xcats)
         self.assertEqual(set(com_cids), set(["AUD", "GBP", "EUR"]))
-        
-        comm_cids : List[str] = common_cids(df=dfA, xcats=["FXXR", "IR"])
-        self.assertEqual(set(comm_cids), set(["AUD", "GBP", "EUR",]))
-        
+
+        comm_cids: List[str] = common_cids(df=dfA, xcats=["FXXR", "IR"])
+        self.assertEqual(
+            set(comm_cids),
+            set(
+                [
+                    "AUD",
+                    "GBP",
+                    "EUR",
+                ]
+            ),
+        )
+
         # test B
-        dfB : pd.DataFrame = df.copy()
+        dfB: pd.DataFrame = df.copy()
         # remove "FXXR", "IR", "EQXR" from "AUD", "USD"
         dfB = dfB[~((dfB["cid"] == "AUD") & (dfB["xcat"].isin(["FXXR", "IR", "EQXR"])))]
         dfB = dfB[~((dfB["cid"] == "USD") & (dfB["xcat"].isin(["FXXR", "IR", "EQXR"])))]
 
-        com_cids : List[str] = common_cids(df=dfB, xcats=xcats)
+        com_cids: List[str] = common_cids(df=dfB, xcats=xcats)
         self.assertEqual(set(com_cids), set(["GBP", "EUR", "CAD"]))
 
-        comm_cids : List[str] = common_cids(df=dfB, xcats=["FXFW", "CRY"])
+        comm_cids: List[str] = common_cids(df=dfB, xcats=["FXFW", "CRY"])
         self.assertEqual(set(comm_cids), set(cids))
 
-
     def test_drop_nan_series(self):
-        cids : List[str] = ["AUD", "USD", "GBP", "EUR", "CAD"]
-        xcats : List[str] = ["FXXR", "IR", "EQXR", "CRY", "FXFW"]
-        df_orig : pd.DataFrame = make_test_df(cids=cids, xcats=xcats)
+        cids: List[str] = ["AUD", "USD", "GBP", "EUR", "CAD"]
+        xcats: List[str] = ["FXXR", "IR", "EQXR", "CRY", "FXFW"]
+        df_orig: pd.DataFrame = make_test_df(cids=cids, xcats=xcats)
 
         # set warnings to error. test if a warning is raised in the obvious "clean" case
         warnings.simplefilter("error")
         for boolx in [True, False]:
             try:
-                dfx : pd.DataFrame = drop_nan_series(df=df_orig, raise_warning=boolx)
+                dfx: pd.DataFrame = drop_nan_series(df=df_orig, raise_warning=boolx)
                 self.assertTrue(dfx.equals(df_orig))
             except Warning as w:
                 self.fail("Warning raised unexpectedly")
 
-        df_test : pd.DataFrame = df_orig.copy()
-        df_test.loc[(df_test["cid"] == "AUD") & (df_test["xcat"].isin(["FXXR", "IR"])), "value"] = pd.NA
+        df_test: pd.DataFrame = df_orig.copy()
+        df_test.loc[
+            (df_test["cid"] == "AUD") & (df_test["xcat"].isin(["FXXR", "IR"])), "value"
+        ] = pd.NA
 
         warnings.simplefilter("always")
         with warnings.catch_warnings(record=True) as w:
-            dfx : pd.DataFrame = drop_nan_series(df=df_test, raise_warning=True)
+            dfx: pd.DataFrame = drop_nan_series(df=df_test, raise_warning=True)
             self.assertEqual(len(w), 2)
             for ww in w:
                 self.assertTrue(issubclass(ww.category, UserWarning))
-                
-            found_tickers : Set = set(dfx['cid'] + '_' + dfx['xcat'])
+
+            found_tickers: Set = set(dfx["cid"] + "_" + dfx["xcat"])
             if any([x in found_tickers for x in ["AUD_FXXR", "AUD_IR"]]):
                 self.fail("NaN series not dropped")
 
         with warnings.catch_warnings(record=True) as w:
-            dfx : pd.DataFrame = drop_nan_series(df=df_test, raise_warning=False)
+            dfx: pd.DataFrame = drop_nan_series(df=df_test, raise_warning=False)
             self.assertEqual(len(w), 0)
-            found_tickers : Set = set(dfx['cid'] + '_' + dfx['xcat'])
+            found_tickers: Set = set(dfx["cid"] + "_" + dfx["xcat"])
             if any([x in found_tickers for x in ["AUD_FXXR", "AUD_IR"]]):
-                self.fail("NaN series not dropped")      
-          
+                self.fail("NaN series not dropped")
+
         self.assertRaises(TypeError, drop_nan_series, df=1, raise_warning=True)
         self.assertRaises(TypeError, drop_nan_series, df=df_test, raise_warning=1)
-        
+
         df_test_q = df_test.dropna(how="any")
         with warnings.catch_warnings(record=True) as w:
-            dfx : pd.DataFrame = drop_nan_series(df=df_test_q, raise_warning=True)
-            dfu : pd.DataFrame = drop_nan_series(df=df_test_q, raise_warning=False)
+            dfx: pd.DataFrame = drop_nan_series(df=df_test_q, raise_warning=True)
+            dfu: pd.DataFrame = drop_nan_series(df=df_test_q, raise_warning=False)
             self.assertEqual(len(w), 0)
             self.assertTrue(dfx.equals(df_test_q))
             self.assertTrue(dfu.equals(df_test_q))
-            
-        df_test : pd.DataFrame = df_orig.copy()
-        bcids : List[str] = ["AUD", "USD", "GBP",]
-        bxcats : List[str] = ["FXXR", "IR", "EQXR",]
-        df_test.loc[(df_test["cid"].isin(bcids)) & (df_test["xcat"].isin(bxcats)), "value"] = pd.NA
+
+        df_test: pd.DataFrame = df_orig.copy()
+        bcids: List[str] = [
+            "AUD",
+            "USD",
+            "GBP",
+        ]
+        bxcats: List[str] = [
+            "FXXR",
+            "IR",
+            "EQXR",
+        ]
+        df_test.loc[
+            (df_test["cid"].isin(bcids)) & (df_test["xcat"].isin(bxcats)), "value"
+        ] = pd.NA
         with warnings.catch_warnings(record=True) as w:
-            dfx : pd.DataFrame = drop_nan_series(df=df_test, raise_warning=True)
+            dfx: pd.DataFrame = drop_nan_series(df=df_test, raise_warning=True)
             self.assertEqual(len(w), 9)
             for ww in w:
                 self.assertTrue(issubclass(ww.category, UserWarning))
-                
-            found_tickers : Set = set(dfx['cid'] + '_' + dfx['xcat'])
-            if any([x in found_tickers for x in [f"{cid}_{xcat}" for cid in bcids for xcat in bxcats]]):
+
+            found_tickers: Set = set(dfx["cid"] + "_" + dfx["xcat"])
+            if any(
+                [
+                    x in found_tickers
+                    for x in [f"{cid}_{xcat}" for cid in bcids for xcat in bxcats]
+                ]
+            ):
                 self.fail("NaN series not dropped")
 
-            dfu : pd.DataFrame = drop_nan_series(df=df_test, raise_warning=False)
+            dfu: pd.DataFrame = drop_nan_series(df=df_test, raise_warning=False)
             self.assertEqual(len(w), 9)
 
-
-
-        
 
 if __name__ == "__main__":
     unittest.main()
