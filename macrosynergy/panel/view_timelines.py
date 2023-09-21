@@ -5,11 +5,6 @@ import numpy as np
 import pandas as pd
 from typing import List, Tuple, Optional
 
-import sys, os
-
-sys.path.append(os.path.abspath("."))
-
-
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 import macrosynergy.visuals as msv
