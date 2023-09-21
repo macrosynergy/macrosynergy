@@ -19,7 +19,7 @@ sys.path.append(os.getcwd())
 
 from macrosynergy.download.dataquery import DataQueryInterface
 from macrosynergy.download.exceptions import *
-from macrosynergy.management.utils import is_valid_iso_date, Config
+from macrosynergy.management.utils import is_valid_iso_date
 
 logger = logging.getLogger(__name__)
 debug_stream_handler = logging.StreamHandler(io.StringIO())
