@@ -10,7 +10,12 @@ import datetime
 import logging
 import warnings
 import io
+import os
 from timeit import default_timer as timer
+
+import sys, os
+
+sys.path.append(os.getcwd())
 
 from macrosynergy.download.dataquery import DataQueryInterface
 from macrosynergy.download.exceptions import *
@@ -86,7 +91,6 @@ class JPMaQSDownload(object):
         username: Optional[str] = None,
         password: Optional[str] = None,
         check_connection: bool = True,
-        credentials_config: Optional[str] = None,
         proxy: Optional[Dict] = None,
         suppress_warning: bool = True,
         debug: bool = False,
@@ -120,12 +124,27 @@ class JPMaQSDownload(object):
         self._check_connection = check_connection
         self.dq_download_kwargs = dq_download_kwargs
 
-        if credentials_config is not None:
-            if not isinstance(credentials_config, str):
-                raise TypeError("`credentials_config` must be a string.")
+        for varx, namex in [
+            (client_id, "client_id"),
+            (client_secret, "client_secret"),
+            (crt, "crt"),
+            (key, "key"),
+            (username, "username"),
+            (password, "password"),
+        ]:
+            if varx is not None:
+                if not isinstance(varx, str):
+                    raise TypeError(f"`{namex}` must be a string.")
 
-        config_obj: Config = Config(
-            config_path=credentials_config,
+        if not (all([client_id, client_secret]) or all([crt, key, username, password])):
+            raise ValueError(
+                "Must provide either `client_id` and `client_secret` for oauth, or "
+                "`crt`, `key`, `username`, and `password` for certificate based authentication."
+            )
+
+        self.dq_interface: DataQueryInterface = DataQueryInterface(
+            oauth=oauth,
+            check_connection=check_connection,
             client_id=client_id,
             client_secret=client_secret,
             crt=crt,
@@ -133,12 +152,6 @@ class JPMaQSDownload(object):
             username=username,
             password=password,
             proxy=proxy,
-        )
-
-        self.dq_interface: DataQueryInterface = DataQueryInterface(
-            oauth=oauth,
-            check_connection=check_connection,
-            config=config_obj,
             debug=debug,
             **kwargs,
         )
@@ -148,7 +161,6 @@ class JPMaQSDownload(object):
         self.msg_warnings: List[str] = []
         self.unavailable_expressions: List[str] = []
         self.downloaded_data: Dict = {}
-        self.config_obj: Config = config_obj
 
         if self._check_connection:
             self.check_connection()
@@ -881,8 +893,12 @@ if __name__ == "__main__":
     start_date: str = "2023-01-01"
     end_date: str = "2023-03-20"
 
+    client_id = os.getenv("DQ_CLIENT_ID")
+    client_secret = os.getenv("DQ_CLIENT_SECRET")
+
     with JPMaQSDownload(
-        credentials_config="env",
+        client_id=client_id,
+        client_secret=client_secret,
         debug=True,
     ) as jpmaqs:
         data = jpmaqs.download(
