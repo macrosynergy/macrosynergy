@@ -568,10 +568,19 @@ def _get_unavailable_expressions(
 class DataQueryInterface(object):
     """
     High level interface for the DataQuery API.
-    Must be instantiated with a valid Config object.
-    (see macrosynergy.management.utils.Config class for more info)
-
-    :param <Config> config: Config object.
+    
+    When using OAuth authentication:
+    
+    :param <str> client_id: client ID for the OAuth application.
+    :param <str> client_secret: client secret for the OAuth application.
+    
+    When using certificate authentication:
+    
+    :param <str> crt: path to the certificate file.
+    :param <str> key: path to the key file.
+    :param <str> username: username for the DataQuery API.
+    :param <str> password: password for the DataQuery API.
+    
     :param <bool> oauth: whether to use OAuth authentication. Defaults to True.
     :param <bool> debug: whether to print debug messages. Defaults to False.
     :param <bool> concurrent: whether to use concurrent requests. Defaults to True.
@@ -596,7 +605,13 @@ class DataQueryInterface(object):
 
     def __init__(
         self,
-        config: Config,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
+        crt: Optional[str] = None,
+        key: Optional[str] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        proxy: Optional[dict] = None,
         oauth: bool = True,
         debug: bool = False,
         batch_size: int = 20,
@@ -613,44 +628,45 @@ class DataQueryInterface(object):
         self.suppress_warnings: bool = suppress_warnings
         self.batch_size: int = batch_size
 
-        if not isinstance(config, Config):
-            raise ValueError(
-                "config_object must be provided for DataQuery authentication."
-                " Check macrosynergy.management.utils.Config "
-                "for more details."
-            )
-        self.config: Config = config
         self.auth: Optional[Union[CertAuth, OAuth]] = None
-        if oauth and (config.oauth() is None):
+        if oauth and ((client_id is None) or (client_secret is None)):
             warnings.warn(
-                "OAuth credentials not found. "
-                "Trying to use certificate authentication.",
+                "OAuth authentication requested but client ID and/or client secret "
+                "not found. Falling back to certificate authentication.",
+                UserWarning,
             )
-            if config.cert() is None:
+            if any([varx is None for varx in [username, password, crt, key]]):
                 raise ValueError(
                     "Certificate credentials not found. "
-                    "Check the config_object passed."
+                    "Check the parameters passed to the DataQueryInterface class."
                 )
             else:
                 oauth: bool = False
 
         if oauth:
             self.auth: OAuth = OAuth(
-                **config.oauth(mask=False),
+                client_id=client_id,
+                client_secret=client_secret,
                 token_url=token_url,
-                proxy=config.proxy(mask=False),
+                proxy=proxy,
             )
         else:
             if base_url == OAUTH_BASE_URL:
                 base_url: str = CERT_BASE_URL
 
-            self.auth: CertAuth = CertAuth(**config.cert(mask=False))
+            self.auth: CertAuth = CertAuth(
+                username=username,
+                password=password,
+                crt=crt,
+                key=key,
+                proxy=proxy,
+            )
 
         assert (
             self.auth is not None
         ), "Failed to initialise access method. Check the config_object passed"
 
-        self.proxy: Optional[dict] = config.proxy(mask=False)
+        self.proxy: Optional[dict] = proxy
         self.base_url: str = base_url
         self.egress_data: dict = {}
 
