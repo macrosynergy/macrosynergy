@@ -173,14 +173,12 @@ class TestJPMaQSDownload(unittest.TestCase):
             check_connection=False,
         )
 
-        config: Config = Config(
+        config: dict = dict(
             client_id="client_id",
             client_secret="client_secret",
         )
 
-        mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(
-            config=config
-        )
+        mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(**config)
         un_avail_exprs: List[str] = [
             "DB(JPMAQS,USD_FXXR_NSA,value)",
             "DB(JPMAQS,USD_FXXR_NSA,grading)",
@@ -247,14 +245,12 @@ class TestJPMaQSDownload(unittest.TestCase):
             check_connection=False,
         )
 
-        config: Config = Config(
+        config: dict = dict(
             client_id="client_id",
             client_secret="client_secret",
         )
 
-        mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(
-            config=config
-        )
+        mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(**config)
         un_avail_exprs: List[str] = [
             "DB(JPMAQS,USD_FXXR_NSA,value)",
             "DB(JPMAQS,USD_FXXR_NSA,grading)",
@@ -295,9 +291,9 @@ class TestJPMaQSDownload(unittest.TestCase):
             client_secret="client_secret",
             check_connection=False,
         )
-        config: Config = jpmaqs.config_obj
+
         mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(
-            config=config
+            client_id="client_id", client_secret="client_secret"
         )
         un_avail_exprs: List[str] = [
             "DB(JPMAQS,USD_FXXR_NSA,value)",
