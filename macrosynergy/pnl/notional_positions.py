@@ -202,6 +202,15 @@ def historic_portfolio_vol(
     ## Reduce the dataframe
     df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
 
-    df["ticker"] = df["cid"] + "_" + df["xcat"]
+    df["scat"] = df.apply(lambda x: _short_xcat(xcat=x["xcat"]), axis=1)
+    df["contid"] = df["cid"] + "_" + df["scat"]
 
-    df["scat"] = df.apply(lambda x: _short_xcat(ticker=x["ticker"]), axis=1)
+    ## Check the contract identifiers
+    u_contids: List[str] = list(df["contid"].unique())
+    if not all([cid in u_contids for cid in contids]):
+        raise ValueError(
+            f"Contract identifiers must be in the dataframe. "
+            f"Missing: {set(contids) - set(u_contids)}"
+        )
+
+    hv_df: pd.DataFrame = df.copy()
