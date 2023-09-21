@@ -6,8 +6,6 @@ from macrosynergy.download.dataquery import (
     TIMESERIES_ENDPOINT,
     DataQueryInterface,
 )
-from macrosynergy.management.utils import Config
-
 
 def random_string() -> str:
     """
