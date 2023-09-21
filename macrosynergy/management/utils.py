@@ -6,10 +6,7 @@ Macrosynergy package and JPMaQS dataframes/data.
 import pandas as pd
 import numpy as np
 import datetime
-import os
-import yaml
-import json
-from typing import Any, List, Dict, Optional, Callable, Union, Set
+from typing import Any, List, Dict, Optional, Union, Set
 import requests, requests.compat
 import warnings
 
