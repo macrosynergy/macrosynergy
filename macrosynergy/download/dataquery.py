@@ -640,7 +640,7 @@ class DataQueryInterface(object):
                 raise TypeError(f"{namex} must be a {typex} and not {type(varx)}.")
 
         self.auth: Optional[Union[CertAuth, OAuth]] = None
-        if oauth and ((client_id is None) or (client_secret is None)):
+        if oauth and not all([client_id, client_secret]):
             warnings.warn(
                 "OAuth authentication requested but client ID and/or client secret "
                 "not found. Falling back to certificate authentication.",
