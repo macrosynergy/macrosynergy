@@ -3,7 +3,7 @@
 ::docs::JPMaQSDownload::sort_first::
 """
 
-from typing import List, Optional, Dict, Union
+from typing import List, Optional, Dict, Union, Tuple
 import pandas as pd
 import traceback as tb
 import datetime
@@ -98,19 +98,17 @@ class JPMaQSDownload(object):
         dq_download_kwargs: dict = {},
         **kwargs,
     ):
-        vars_types_zip: zip = zip(
-            [oauth, check_connection, suppress_warning, debug, print_debug_data],
-            [
-                "oauth",
-                "check_connection",
-                "suppress_warning",
-                "debug",
-                "print_debug_data",
-            ],
-        )
-        for varx, namex in vars_types_zip:
-            if not isinstance(varx, bool):
-                raise TypeError(f"`{namex}` must be a boolean.")
+        vars_types_zip: List[Tuple[str, str]] = [
+            (oauth, "oauth", bool),
+            (check_connection, "check_connection", bool),
+            (suppress_warning, "suppress_warning", bool),
+            (debug, "debug", bool),
+            (print_debug_data, "print_debug_data", bool),
+        ]
+
+        for varx, namex, typex in vars_types_zip:
+            if not isinstance(varx, typex):
+                raise TypeError(f"`{namex}` must be of type {typex}.")
 
         if not isinstance(proxy, dict) and proxy is not None:
             raise TypeError("`proxy` must be a dictionary or None.")
