@@ -626,6 +626,18 @@ class DataQueryInterface(object):
         self.debug: bool = debug
         self.suppress_warnings: bool = suppress_warnings
         self.batch_size: int = batch_size
+        
+        for varx, namex, typex in [
+            (client_id, "client_id", str),
+            (client_secret, "client_secret", str),
+            (crt, "crt", str),
+            (key, "key", str),
+            (username, "username", str),
+            (password, "password", str),
+            (proxy, "proxy", dict),
+        ]:
+            if not isinstance(varx, typex) and varx is not None:
+                raise TypeError(f"{namex} must be a {typex} and not {type(varx)}.")
 
         self.auth: Optional[Union[CertAuth, OAuth]] = None
         if oauth and ((client_id is None) or (client_secret is None)):
@@ -634,7 +646,7 @@ class DataQueryInterface(object):
                 "not found. Falling back to certificate authentication.",
                 UserWarning,
             )
-            if any([varx is None for varx in [username, password, crt, key]]):
+            if not all([username, password, crt, key]):
                 raise ValueError(
                     "Certificate credentials not found. "
                     "Check the parameters passed to the DataQueryInterface class."
