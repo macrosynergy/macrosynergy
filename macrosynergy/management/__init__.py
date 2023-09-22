@@ -6,7 +6,6 @@ from .simulate_quantamental_data import make_qdf
 from .update_df import update_df
 from .utils import (
     common_cids,
-    Config 
 )
 from . import utils
 

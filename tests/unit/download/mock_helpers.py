@@ -6,8 +6,6 @@ from macrosynergy.download.dataquery import (
     TIMESERIES_ENDPOINT,
     DataQueryInterface,
 )
-from macrosynergy.management.utils import Config
-
 
 def random_string() -> str:
     """
@@ -84,10 +82,10 @@ class MockDataQueryInterface(DataQueryInterface):
         )
 
     def __init__(self, *args, **kwargs):
-        if "config" in kwargs:
-            self.config = kwargs["config"]
-        else:
-            self.config = Config(
+        # if there is nothing in args or kwargs, use the default config
+        config: dict = {}
+        if not args and not kwargs:    
+            config: dict = dict(
                 client_id="test_clid",
                 client_secret="test_clsc",
                 crt="test_crt",
@@ -98,7 +96,7 @@ class MockDataQueryInterface(DataQueryInterface):
 
         self.mask_expressions = []
         self.duplicate_entries = []
-        super().__init__(config=self.config)
+        super().__init__(*args, **kwargs, **config)
 
     def __enter__(self):
         return self
