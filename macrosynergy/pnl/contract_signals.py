@@ -166,6 +166,36 @@ def apply_hedge_ratio(
     return df
 
 
+def _signal_to_contract(
+    df: pd.DataFrame,
+    sig: str,
+    cids: List[str],
+    ctypes: List[str],
+) -> pd.DataFrame:
+    ## Check that all the CID_SIG pairs are in the dataframe
+    _sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
+    _found_sigs: List[str] = (df["cid"] + "_" + df["xcat"]).drop_duplicates().to_list()
+    assert set(_sigs).issubset(set(_found_sigs)), (
+        "Some `cids` are missing the `sig` in the provided dataframe."
+        f"\nMissing: {set(_sigs) - set(_found_sigs)}"
+    )
+
+    ## Multiple all <cid>_<ctype> with their respective <cid>_<sig>
+    out_dfs: List[pd.DataFrame] = []
+    for _cid in cids:
+        for _ctype in ctypes:
+            _df: pd.DataFrame = df[
+                (df["cid"] == _cid) & (_short_xcat(xcat=df["xcat"]) == _ctype)
+            ].copy()
+            _df["value"] = (
+                _df["value"] * df[df["cid"] == _cid][f"{_cid}_{sig}"].values[0]
+            )
+            out_dfs.append(_df)
+
+    df: pd.DataFrame = pd.concat(out_dfs, axis=0, ignore_index=True)
+    return df
+
+
 def contract_signals(
     df: pd.DataFrame,
     sig: str,
@@ -334,6 +364,8 @@ def contract_signals(
         raise ValueError(e_msg)
 
     ## Calculate the contract signals
+
+    df: pd.DataFrame = _signal_to_contract(df=df, sig=sig, cids=cids, ctypes=ctypes)
 
     # in order, multiple the contract signals by the contract scales
     df: pd.DataFrame = _apply_cscales(
