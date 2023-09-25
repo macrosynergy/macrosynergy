@@ -220,7 +220,20 @@ def historic_portfolio_vol(
     calc_dfs: List[pd.DataFrame] = []
 
     for contx in expanded_conts:
-        ...
-        
-    
-    
+        cid, ctype = contx
+        cdf: pd.DataFrame = df.loc[(df["cid"] == cid) & (df["scat"] == ctype)].copy()
+        cdf = historic_vol(
+            df=cdf,
+            xcat=ctype,
+            est_freq=est_freq,
+            lback_periods=lback_periods,
+            lback_meth=lback_meth,
+            half_life=half_life,
+            postfix=rstring,
+        )
+
+        calc_dfs.append(cdf)
+
+    calc_df: pd.DataFrame = pd.concat(calc_dfs, axis=0)
+
+    return calc_df
