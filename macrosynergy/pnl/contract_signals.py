@@ -254,7 +254,7 @@ def contract_signals(
     ## basic type and value checks
     for varx, namex, typex in [
         (df, "df", pd.DataFrame),
-        # (sig, "sig", str),
+        (sig, "sig", str),
         (cids, "cids", list),
         (ctypes, "ctypes", list),
         (cscales, "cscales", (list, type(None))),
@@ -289,18 +289,23 @@ def contract_signals(
     ## Reduce the dataframe
     df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
 
-    ## Add all contracts to hedging basket if none specified
-    if hbasket is None:
-        hbasket: List[str] = (
-            df[["cid", "xcat"]]
-            .drop_duplicates()
-            .apply(lambda x: f"{x['cid']}_{x['xcat']}", axis=1)
-            .unique()
-            .tolist()
-        )
+    ## Check that all the contracts in the hedging basket are in the dataframe as tickers
+    if hbasket is not None:
+        if not set(hbasket).issubset(
+            set(
+                df[["cid", "xcat"]]
+                .drop_duplicates()
+                .apply(lambda x: f"{x['cid']}_{x['xcat']}", axis=1)
+                .unique()
+                .tolist()
+            )
+        ):
+            e_msg: str = f"Some of the contracts/tickers in `hbasket` are not in `df`"
+            e_msg += f"\nMissing contracts: {set(hbasket) - set(df['cid'].unique())}"
+            raise ValueError(e_msg)
 
     ## If hedging scales are not specified, set them to 1.0
-    if hscales is None:
+    if hscales is None and hbasket is not None:
         hscales: List[Union[Numeric, str]] = [1.0] * len(hbasket)
 
     ## If contract scales are not specified, set them to 1.0
@@ -325,7 +330,7 @@ def contract_signals(
         ("cscales", cscales, "ctypes", ctypes),
         ("hscales", hscales, "hbasket", hbasket),
     ]:
-        if _sc is not None:
+        if _sc is not None or _sct is not None:
             if len(_sc) != len(_sct):
                 raise ValueError(f"`{_scn}` and `{_sctn}` must be of the same length")
 
@@ -349,20 +354,6 @@ def contract_signals(
         e_msg += f"\nMissing cross-sections: {set(cids) - set(df['cid'].unique())}"
         raise ValueError(e_msg)
 
-    ## Check that all the contracts in the hedging basket are in the dataframe as tickers
-    if not set(hbasket).issubset(
-        set(
-            df[["cid", "xcat"]]
-            .drop_duplicates()
-            .apply(lambda x: f"{x['cid']}_{x['xcat']}", axis=1)
-            .unique()
-            .tolist()
-        )
-    ):
-        e_msg: str = f"Some of the contracts/tickers in `hbasket` are not in `df`"
-        e_msg += f"\nMissing contracts: {set(hbasket) - set(df['cid'].unique())}"
-        raise ValueError(e_msg)
-
     ## Calculate the contract signals
 
     df: pd.DataFrame = _signal_to_contract(df=df, sig=sig, cids=cids, ctypes=ctypes)
@@ -373,7 +364,8 @@ def contract_signals(
     )
 
     # now apply the hscales
-    df: pd.DataFrame = _apply_hscales(df=df, hbasket=hbasket, hscales=hscales)
+    if hbasket is not None:
+        df: pd.DataFrame = _apply_hscales(df=df, hbasket=hbasket, hscales=hscales)
 
     df["scat"] = df.apply(lambda x: _short_xcat(xcat=x["xcat"]), axis=1)
 
@@ -386,7 +378,7 @@ def contract_signals(
     df["xcat"] = df.apply(lambda x: f"{x['xcat']}_{sname}", axis=1)
 
     # apply hedge ratio if specified
-    if hratio is not None:
+    if hratio is not None and hbasket is not None:
         df: pd.DataFrame = apply_hedge_ratio(df=df, hratios=[hratio], cids=cids)
 
     return df
