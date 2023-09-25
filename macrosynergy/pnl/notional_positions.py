@@ -213,4 +213,14 @@ def historic_portfolio_vol(
             f"Missing: {set(contids) - set(u_contids)}"
         )
 
-    hv_df: pd.DataFrame = df.copy()
+    ## Run calcs using historic_vol()
+
+    expanded_conts: List[Tuple[str, str]] = [contx.split("_", 1) for contx in contids]
+
+    calc_dfs: List[pd.DataFrame] = []
+
+    for contx in expanded_conts:
+        ...
+        
+    
+    
