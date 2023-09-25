@@ -12,13 +12,10 @@ msv.view.timelines( df, xcats=["FXXR", "EQXR", "IR"],
 msv.FacetPlot(df).lineplot(cid_grid=True)
 ```
 """
-import os, sys
 
-sys.path.append(os.getcwd())
-
-from typing import Dict, List, Optional, Tuple, Union
-from macrosynergy.visuals import Plotter, LinePlot, FacetPlot
-from macrosynergy.visuals.common import Numeric, NoneType
+from typing import Dict, List, Optional, Tuple
+from macrosynergy.visuals import LinePlot, FacetPlot
+from macrosynergy.visuals.common import Numeric
 
 from macrosynergy.management.utils import standardise_dataframe
 
@@ -188,7 +185,7 @@ def timelines(
         else None
     )
 
-    if xcat_grid and (len(cids) == 1):
+    if xcat_grid and (len(xcats) == 1):
         xcat_grid: bool = False
         single_chart: bool = True
 
