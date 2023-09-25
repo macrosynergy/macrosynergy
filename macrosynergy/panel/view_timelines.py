@@ -99,9 +99,7 @@ def view_timelines(
         cs_mean=cs_mean,
         title_fontsize=title_fontsize,
         legend_fontsize=legend_fontsize,
-        
         # HC Params
-        
         aspect=1.618,
         title_adj=1.005,
         height=2.85,
