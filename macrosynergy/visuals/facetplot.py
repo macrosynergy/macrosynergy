@@ -454,6 +454,7 @@ class FacetPlot(Plotter):
             # flipper handles resolution between cid_grid and xcat_grid for binary variables
             flipper: bool = 1 if cid_grid else -1
             if facet_titles is None:
+                # needs to be "flipped" twice, as facet_titles need to be complementary to the legend labels
                 facet_titles: List[str] = [_cids, _xcats][::flipper][0]
             if legend_labels is None:
                 legend_labels: List[str] = [_xcats, _cids][::flipper][0]
@@ -483,6 +484,7 @@ class FacetPlot(Plotter):
                 plot_dict[i]: Dict[str, Union[str, List[str]]] = {
                     "X": "real_date",
                     "Y": tks + ([compare_series] if compare_series else []),
+                    "title": facet_titles[i],
                 }
 
         if cid_xcat_grid:
@@ -495,10 +497,20 @@ class FacetPlot(Plotter):
                     plot_dict[i * len(_xcats) + j]: Dict[str, List[str]] = {
                         "X": "real_date",
                         "Y": [tk],
+                        "title": tk,
                     }
 
         if len(plot_dict) == 0:
             raise ValueError("Unable to resolve plot settings.")
+
+        # sort by the title
+        _plot_dict: Dict[str, Dict[str, Union[str, List[str]]]] = dict(
+            sorted(plot_dict.items(), key=lambda x: x[1]["title"])
+        )
+        _plot_dict: Dict[str, Dict[str, Union[str, List[str]]]] = {
+            i: ditem for i, ditem in enumerate(_plot_dict.values())
+        }
+        plot_dict: Dict[str, Dict[str, Union[str, List[str]]]] = _plot_dict.copy()
 
         ##############################
         # Plotting
@@ -582,7 +594,7 @@ class FacetPlot(Plotter):
             if not cid_xcat_grid:
                 if facet_titles:
                     ax_i.set_title(
-                        facet_titles[i],
+                        plt_dct["title"],
                         fontsize=facet_title_fontsize,
                         x=facet_title_xadjust,
                         y=facet_title_yadjust,
