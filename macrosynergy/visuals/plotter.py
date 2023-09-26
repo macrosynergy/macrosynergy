@@ -7,20 +7,15 @@ plotter classes.
 """
 import logging
 import warnings
-import matplotlib.pyplot as plt
 from types import ModuleType
+from typing import Any, Dict, List, Optional
+
+import matplotlib.pyplot as plt
 import pandas as pd
-from typing import (
-    List,
-    Dict, 
-    Optional,
-    Any,)
-
-from macrosynergy.visuals.common import argvalidation, argcopy
-
 
 from macrosynergy.management import reduce_df
 from macrosynergy.management.utils import standardise_dataframe
+from macrosynergy.visuals.common import argcopy, argvalidation
 
 logger = logging.getLogger(__name__)
 
