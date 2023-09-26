@@ -13,13 +13,13 @@ msv.FacetPlot(df).lineplot(cid_grid=True)
 ```
 """
 
-from typing import Dict, List, Optional, Tuple
-from macrosynergy.visuals import LinePlot, FacetPlot
-from macrosynergy.visuals.common import Numeric
-
-from macrosynergy.management.utils import standardise_dataframe
+from typing import List, Optional, Tuple
 
 import pandas as pd
+
+from macrosynergy.management.utils import standardise_dataframe
+from macrosynergy.visuals import FacetPlot, LinePlot
+from macrosynergy.visuals.common import Numeric
 
 IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
 
@@ -89,13 +89,15 @@ def timelines(
         the line charts. This is only allowed for function calls with a single
         category. Default is False.
     :param <Tuple[Numeric, Numeric]> size: two-element tuple setting width/height
-        of single cross section plot. Default is (12, 7). This is irrelevant for facet 
+        of single cross section plot. Default is (12, 7). This is irrelevant for facet
         grid.
     :param <Numeric> aspect: width-height ratio for plots in facet. Default is 1.7.
     :param <Numeric> height: height of plots in facet. Default is 3.
     :param <int> legend_fontsize: font size of legend. Default is 12.
 
     """
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("`df` must be a pandas DataFrame.")
 
     df: pd.DataFrame = standardise_dataframe(df.copy())
 
@@ -288,8 +290,8 @@ def timelines(
 
 if __name__ == "__main__":
     # from macrosynergy.visuals import FacetPlot
-    from macrosynergy.management.simulate_quantamental_data import make_test_df
     from macrosynergy.dev.local import LocalCache
+    from macrosynergy.management.simulate_quantamental_data import make_test_df
 
     LOCAL_CACHE = "~/Macrosynergy/Macrosynergy - Documents/SharedData/JPMaQSTickers"
 
