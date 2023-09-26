@@ -13,13 +13,13 @@ msv.FacetPlot(df).lineplot(cid_grid=True)
 ```
 """
 
-from typing import Dict, List, Optional, Tuple
-from macrosynergy.visuals import LinePlot, FacetPlot
-from macrosynergy.visuals.common import Numeric
-
-from macrosynergy.management.utils import standardise_dataframe
+from typing import List, Optional, Tuple
 
 import pandas as pd
+
+from macrosynergy.management.utils import standardise_dataframe
+from macrosynergy.visuals import FacetPlot, LinePlot
+from macrosynergy.visuals.common import Numeric
 
 IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
 
@@ -290,8 +290,8 @@ def timelines(
 
 if __name__ == "__main__":
     # from macrosynergy.visuals import FacetPlot
-    from macrosynergy.management.simulate_quantamental_data import make_test_df
     from macrosynergy.dev.local import LocalCache
+    from macrosynergy.management.simulate_quantamental_data import make_test_df
 
     LOCAL_CACHE = "~/Macrosynergy/Macrosynergy - Documents/SharedData/JPMaQSTickers"
 
