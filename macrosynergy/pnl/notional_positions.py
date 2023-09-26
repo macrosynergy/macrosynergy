@@ -10,13 +10,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from typing import List, Union, Tuple
+from typing import List, Union, Tuple, Optional
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
 from macrosynergy.panel import historic_vol
-from macrosynergy.pnl import Numeric, _short_xcat
+from macrosynergy.pnl import Numeric, NoneType, _short_xcat
 
 
 def notional_positions(
@@ -25,17 +25,17 @@ def notional_positions(
     contids: List[str],
     aum: Numeric = 100,
     dollar_per_signal: Numeric = 1,
-    leverage: Numeric = None,
-    vol_target: Numeric = None,
+    leverage: Optional[Numeric] = None,
+    vol_target: Optional[Numeric] = None,
     rebal_freq: str = "m",
     slip: int = 1,
     lback_periods: int = 21,
     lback_meth: str = "ma",
     half_life=11,
     rstring: str = "XR",
-    start: str = None,
-    end: str = None,
-    blacklist: dict = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    blacklist: Optional[dict] = None,
     pname: str = "POS",
 ):
     """
@@ -101,8 +101,47 @@ def notional_positions(
         The contract signals have the following format "<cid>_<ctype>_<sname>_<pname>".
 
     """
+    ...
 
-    pass
+    for varx, namex, typex in [
+        (df, "df", pd.DataFrame),
+        (sname, "sname", str),
+        (contids, "contids", list),
+        (aum, "aum", Numeric),
+        (dollar_per_signal, "dollar_per_signal", Numeric),
+        (leverage, "leverage", (Numeric, NoneType)),
+        (vol_target, "vol_target", (Numeric, NoneType)),
+        (rebal_freq, "rebal_freq", str),
+        (slip, "slip", int),
+        (lback_periods, "lback_periods", int),
+        (lback_meth, "lback_meth", str),
+        (half_life, "half_life", int),
+        (rstring, "rstring", str),
+        (start, "start", (str, NoneType)),
+        (end, "end", (str, NoneType)),
+        (blacklist, "blacklist", (dict, NoneType)),
+        (pname, "pname", str),
+    ]:
+        if not isinstance(varx, typex):
+            raise ValueError(f"`{namex}` must be {typex}.")
+
+        if isinstance(varx, (str, list, dict)) and len(varx) == 0:
+            raise ValueError(f"`{namex}` must not be an empty {str(typex)}.")
+
+        df: pd.DataFrame = standardise_dataframe(df.copy())
+
+        ## Check the dates
+        if start is None:
+            start: str = pd.Timestamp(df["real_date"].min()).strftime("%Y-%m-%d")
+        if end is None:
+            end: str = pd.Timestamp(df["real_date"].max()).strftime("%Y-%m-%d")
+
+        for dx, nx in [(start, "start"), (end, "end")]:
+            if not is_valid_iso_date(dx):
+                raise ValueError(f"`{nx}` must be a valid ISO-8601 date string")
+
+        ## Reduce the dataframe
+        df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
 
 
 def historic_portfolio_vol(
