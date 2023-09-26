@@ -161,7 +161,8 @@ def apply_hedge_ratio(
             )
 
         # repopulate the dataframe
-        df.loc[df["cid"] == _cid, "value"] = _ddf["value"].values
+        for _xc in _ddf["xcat"].unique().tolist():
+            df.loc[df["cid"] == _cid, "value"] = _ddf["value"].values
 
     return df
 
@@ -205,7 +206,7 @@ def contract_signals(
     csigns: Optional[List[int]] = None,
     hbasket: Optional[List[str]] = None,
     hscales: Optional[List[Union[Numeric, str]]] = None,
-    hratio: Optional[str] = None,
+    hratios: Optional[List[str]] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
@@ -238,7 +239,7 @@ def contract_signals(
     param <List[str|float]> hscales: list of scaling factors (weights) for the basket.
         These can be eigher a list of floats or a list of category tickers that serve
         as basis of translation. The former are fixed across time, the latter variable.
-    :param <str> hratio: category names for cross-section-specific hedge ratios.
+    :param <List[str]> hratios: category names for cross-section-specific hedge ratios.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df
@@ -261,7 +262,7 @@ def contract_signals(
         (csigns, "csigns", (list, type(None))),
         (hbasket, "hbasket", (list, type(None))),
         (hscales, "hscales", (list, type(None))),
-        (hratio, "hratio", (str, type(None))),
+        (hratios, "hratios", (list, type(None))),
         (start, "start", (str, type(None))),
         (end, "end", (str, type(None))),
         (blacklist, "blacklist", (dict, type(None))),
@@ -307,6 +308,21 @@ def contract_signals(
     ## If hedging scales are not specified, set them to 1.0
     if hscales is None and hbasket is not None:
         hscales: List[Union[Numeric, str]] = [1.0] * len(hbasket)
+
+    ## If hratios are specified, check that they are in the dataframe for the cids
+    if hratios is not None and hbasket is not None:
+        if len(hratios) != len(cids):
+            raise ValueError("`hratios` and `cids` must be of the same length")
+
+        _hratios: List[str] = [f"{cx}_{hr}" for cx in cids for hr in hratios]
+        _found_hratios: List[str] = (
+            (df["cid"] + "_" + df["xcat"]).drop_duplicates().to_list()
+        )
+        if not set(_hratios).issubset(set(_found_hratios)):
+            raise ValueError(
+                "Some `cids` are missing the `hratios` in the provided dataframe."
+                f"\nMissing: {set(_hratios) - set(_found_hratios)}"
+            )
 
     ## If contract scales are not specified, set them to 1.0
     if cscales is None:
@@ -378,7 +394,7 @@ def contract_signals(
     df["xcat"] = df.apply(lambda x: f"{x['xcat']}_{sname}", axis=1)
 
     # apply hedge ratio if specified
-    if hratio is not None and hbasket is not None:
-        df: pd.DataFrame = apply_hedge_ratio(df=df, hratios=[hratio], cids=cids)
+    if hratios is not None and hbasket is not None:
+        df: pd.DataFrame = apply_hedge_ratio(df=df, hratios=hratios, cids=cids)
 
     return df
