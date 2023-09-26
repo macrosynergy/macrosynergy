@@ -1,25 +1,26 @@
 """
 Common types and functions used across the modules of the `macrosynergy.visuals` subpackage.
 """
+import inspect
+import warnings
+from functools import wraps
 from typing import (
-    List,
-    Union,
-    SupportsInt,
-    SupportsFloat,
-    Optional,
     Any,
+    Callable,
     Dict,
+    List,
+    Optional,
+    SupportsFloat,
+    SupportsInt,
     Tuple,
     Type,
-    get_origin,
+    Union,
     get_args,
-    Callable,
+    get_origin,
 )
-import inspect
-from functools import wraps
-import warnings
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 
 
 class NumericType(type):
