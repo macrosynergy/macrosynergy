@@ -89,13 +89,15 @@ def timelines(
         the line charts. This is only allowed for function calls with a single
         category. Default is False.
     :param <Tuple[Numeric, Numeric]> size: two-element tuple setting width/height
-        of single cross section plot. Default is (12, 7). This is irrelevant for facet 
+        of single cross section plot. Default is (12, 7). This is irrelevant for facet
         grid.
     :param <Numeric> aspect: width-height ratio for plots in facet. Default is 1.7.
     :param <Numeric> height: height of plots in facet. Default is 3.
     :param <int> legend_fontsize: font size of legend. Default is 12.
 
     """
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("`df` must be a pandas DataFrame.")
 
     df: pd.DataFrame = standardise_dataframe(df.copy())
 
