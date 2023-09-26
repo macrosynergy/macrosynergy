@@ -5,13 +5,10 @@ classes, and provides a shared interface for dataframe filtering operations,
 as well as `argvalidation` and `argcopy` decorators for all methods of the
 plotter classes.
 """
-import inspect
 import logging
 import warnings
-from functools import wraps
 import matplotlib.pyplot as plt
 from types import ModuleType
-import numpy as np
 import pandas as pd
 from typing import (
     List,
@@ -19,7 +16,6 @@ from typing import (
     Optional,
     Any,)
 
-from macrosynergy.visuals.common import Numeric, NoneType
 from macrosynergy.visuals.common import argvalidation, argcopy
 
 
