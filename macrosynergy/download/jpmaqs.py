@@ -3,22 +3,19 @@
 ::docs::JPMaQSDownload::sort_first::
 """
 
-from typing import List, Optional, Dict, Union, Tuple
-import pandas as pd
-import traceback as tb
 import datetime
-import logging
-import warnings
 import io
+import logging
 import os
+import traceback as tb
+import warnings
 from timeit import default_timer as timer
+from typing import Dict, List, Optional, Tuple, Union
 
-import sys, os
-
-sys.path.append(os.getcwd())
+import pandas as pd
 
 from macrosynergy.download.dataquery import DataQueryInterface
-from macrosynergy.download.exceptions import *
+from macrosynergy.download.exceptions import HeartbeatError, InvalidDataframeError
 from macrosynergy.management.utils import is_valid_iso_date
 
 logger = logging.getLogger(__name__)
