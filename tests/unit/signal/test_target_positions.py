@@ -8,6 +8,7 @@ from macrosynergy.signal.target_positions import (
     consolidate_positions,
     target_positions,
 )
+from typing import List, Dict, Tuple, Union, Optional, Any
 
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.panel.basket import Basket
@@ -22,11 +23,11 @@ class TestAll(unittest.TestCase):
     def dataframe_generator(self):
         """Create  standardised dataframe defined over the three categories"""
 
-        self.__dict__["cids"] = ["AUD", "GBP", "JPY", "NZD", "USD"]
+        self.cids: List[str] = ["AUD", "GBP", "JPY", "NZD", "USD"]
         # Two meaningful fields and a third contrived category.
-        self.__dict__["xcats"] = ["FXXR_NSA", "EQXR_NSA", "SIG_NSA"]
-        self.__dict__["ctypes"] = ["FX", "EQ"]
-        self.__dict__["xcat_sig"] = "FXXR_NSA"
+        self.xcats: List[str] = ["FXXR_NSA", "EQXR_NSA", "SIG_NSA"]
+        self.ctypes: List[str] = ["FX", "EQ"]
+        self.xcat_sig: str = "FXXR_NSA"
 
         df_cids = pd.DataFrame(
             index=self.cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
@@ -55,16 +56,12 @@ class TestAll(unittest.TestCase):
         df_xcats.loc["SIG_NSA"] = ["2010-01-01", "2020-12-31", 0, 10, 0.4, 0.2]
 
         random.seed(2)
-        dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+        self.dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-        self.__dict__["dfd"] = dfd
-
-        black = {
+        self.blacklist: Dict[str, List[str]] = {
             "AUD": ["2000-01-01", "2003-12-31"],
             "GBP": ["2018-01-01", "2100-01-01"],
         }
-
-        self.__dict__["blacklist"] = black
 
         assert "dfd" in vars(self).keys(), (
             "Instantiation of DataFrame missing from " "field dictionary."
@@ -72,7 +69,7 @@ class TestAll(unittest.TestCase):
 
         # Exclude the blacklist from the creation of the dataframe. All dates are used
         # for calculating the evolving volatility for the volatility targeting mechanism.
-        dfd_reduced = reduce_df(
+        self.dfd_reduced: pd.DataFrame = reduce_df(
             df=self.dfd,
             xcats=[self.xcat_sig],
             cids=self.cids,
@@ -80,8 +77,7 @@ class TestAll(unittest.TestCase):
             end="2020-10-30",
             blacklist=None,
         )
-        self.__dict__["dfd_reduced"] = dfd_reduced
-        self.__dict__["df_pivot"] = dfd_reduced.pivot(
+        self.df_pivot: pd.DataFrame = self.dfd_reduced.pivot(
             index="real_date", columns="cid", values="value"
         )
 
