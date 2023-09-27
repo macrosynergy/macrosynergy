@@ -101,8 +101,6 @@ def notional_positions(
         The contract signals have the following format "<cid>_<ctype>_<sname>_<pname>".
 
     """
-    ...
-
     for varx, namex, typex in [
         (df, "df", pd.DataFrame),
         (sname, "sname", str),
@@ -142,6 +140,16 @@ def notional_positions(
 
         ## Reduce the dataframe
         df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
+
+        ## Check the contract identifiers and contract signals
+
+        df["tickers"]: str = df["cid"] + "_" + df["xcat"]
+
+        # there must be atleast one contract signal with the strategy name
+        if not any(df["tickers"].str.endswith(f"_{sname}_CSIG")):
+            raise ValueError(
+                f"No contract signals for strategy `{sname}` in dataframe."
+            )
 
 
 def historic_portfolio_vol(
