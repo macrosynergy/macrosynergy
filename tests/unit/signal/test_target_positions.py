@@ -1,7 +1,16 @@
 
 
 import unittest
-from macrosynergy.signal.target_positions import *
+from macrosynergy.signal.target_positions import (
+    weight_dataframes,
+    modify_signals,
+    cs_unit_returns,
+    basket_handler,
+    consolidation_help,
+    consolidate_positions,
+    target_positions
+    )
+
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.panel.basket import Basket
 from tests.simulate import make_qdf
