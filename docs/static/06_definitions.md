@@ -6,7 +6,7 @@ used within the Macrosynergy package.
 
 ## The Quantamental Data Format (QDF)
 
-The Quantamental Data Format, alternatively a Quantamental DataFile, is a tabular schema
+The Quantamental Data Format, alternatively a Quantamental DataFrame, is a tabular schema
 for storing and organizing quantamental data. It is a simple, yet flexible format that
 allows for ease of use and extensibility. The Macrosynergy package is built around the
 QDF, and all data is stored in this format.
@@ -22,13 +22,15 @@ An example of the QDF is shown below:
 | 2023-01-02 | CAD | RIR_NSA  |     0 |       1 |       0 |       0 |
 | 2023-01-02 | CAD | EQXR_NSA |  -0.2 |       1 |       0 |       0 |
 
-To get a better understanding of the QDF, please see Ralph's Reseach posts:
+To get a better understanding of the QDF, please see Ralph's Research posts:
 
-[**How to build a quantamental system for investment management**](https://research.macrosynergy.com/how-to-build-a-quantamental-system/)
+[**How to build a quantamental system for investment management**
+](https://research.macrosynergy.com/how-to-build-a-quantamental-system/)
 
 and
 
-[**Quantitative methods for macro information efficiency**](https://research.macrosynergy.com/quantitative-methods/)
+[**Quantitative methods for macro information efficiency**
+](https://research.macrosynergy.com/quantitative-methods/)
 
 on the [Macrosynergy Research](https://research.macrosynergy.com/) website.
 
