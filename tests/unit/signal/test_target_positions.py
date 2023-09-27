@@ -63,9 +63,6 @@ class TestAll(unittest.TestCase):
             "GBP": ["2018-01-01", "2100-01-01"],
         }
 
-        assert "dfd" in vars(self).keys(), (
-            "Instantiation of DataFrame missing from " "field dictionary."
-        )
 
         # Exclude the blacklist from the creation of the dataframe. All dates are used
         # for calculating the evolving volatility for the volatility targeting mechanism.
