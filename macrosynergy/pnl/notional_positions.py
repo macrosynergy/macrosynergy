@@ -126,30 +126,28 @@ def notional_positions(
         if isinstance(varx, (str, list, dict)) and len(varx) == 0:
             raise ValueError(f"`{namex}` must not be an empty {str(typex)}.")
 
-        df: pd.DataFrame = standardise_dataframe(df.copy())
+    df: pd.DataFrame = standardise_dataframe(df.copy())
 
-        ## Check the dates
-        if start is None:
-            start: str = pd.Timestamp(df["real_date"].min()).strftime("%Y-%m-%d")
-        if end is None:
-            end: str = pd.Timestamp(df["real_date"].max()).strftime("%Y-%m-%d")
+    ## Check the dates
+    if start is None:
+        start: str = pd.Timestamp(df["real_date"].min()).strftime("%Y-%m-%d")
+    if end is None:
+        end: str = pd.Timestamp(df["real_date"].max()).strftime("%Y-%m-%d")
 
-        for dx, nx in [(start, "start"), (end, "end")]:
-            if not is_valid_iso_date(dx):
-                raise ValueError(f"`{nx}` must be a valid ISO-8601 date string")
+    for dx, nx in [(start, "start"), (end, "end")]:
+        if not is_valid_iso_date(dx):
+            raise ValueError(f"`{nx}` must be a valid ISO-8601 date string")
 
-        ## Reduce the dataframe
-        df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
+    ## Reduce the dataframe
+    df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
 
-        ## Check the contract identifiers and contract signals
+    ## Check the contract identifiers and contract signals
 
-        df["tickers"]: str = df["cid"] + "_" + df["xcat"]
+    df["tickers"]: str = df["cid"] + "_" + df["xcat"]
 
-        # there must be atleast one contract signal with the strategy name
-        if not any(df["tickers"].str.endswith(f"_{sname}_CSIG")):
-            raise ValueError(
-                f"No contract signals for strategy `{sname}` in dataframe."
-            )
+    # there must be atleast one contract signal with the strategy name
+    if not any(df["tickers"].str.endswith(f"_{sname}_CSIG")):
+        raise ValueError(f"No contract signals for strategy `{sname}` in dataframe.")
 
 
 def historic_portfolio_vol(
