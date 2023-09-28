@@ -15,10 +15,7 @@ Common types and functions used across the modules of the `macrosynergy.pnl` sub
 
 """
 
-from typing import List, Union, SupportsInt, SupportsFloat, Optional, TypeAlias
-import numpy as np
-
-from numbers import SupportsInt, SupportsFloat
+from typing import List, Union, SupportsInt, SupportsFloat, Optional, Iterable
 import numpy as np
 
 
@@ -55,8 +52,8 @@ class NoneType(type):
 
 
 def _short_xcat(
-    ticker: Optional[str] = None,
-    xcat: Optional[str] = None,
+    ticker: Optional[Union[str, Iterable]] = None,
+    xcat: Optional[Union[str, Iterable]] = None,
 ):
     """
     Get the short version of the cross-section category.
@@ -68,11 +65,15 @@ def _short_xcat(
     """
     if ticker is not None and xcat is not None:
         raise ValueError("Either `ticker` or `xcat` must be specified, not both")
+    if isinstance(ticker, Iterable):
+        return [_short_xcat(ticker=t) for t in ticker]
+    if isinstance(xcat, Iterable):
+        return [_short_xcat(xcat=x) for x in xcat]
 
     if ticker is not None:
-        cid, xcat = ticker.split("_", 1)
+        _, xcat = ticker.split("_", 1)
         return _short_xcat(xcat=xcat)
     elif xcat is not None:
-        return xcat.split("_")[-1]
+        return xcat.split("_")[0]
     else:
         raise ValueError("Either `ticker` or `xcat` must be specified")
