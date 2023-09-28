@@ -475,15 +475,15 @@ if __name__ == "__main__":
             make_test_df(
                 cids=cids,
                 xcats=xcats[:-1],
-                start_date="2000-01-01",
-                end_date="2000-02-01",
+                start="2000-01-01",
+                end="2000-02-01",
                 style="linear",
             ),
             make_test_df(
                 cids=cids,
                 xcats=["INFL"],
-                start_date="2000-01-01",
-                end_date="2000-02-01",
+                start="2000-01-01",
+                end="2000-02-01",
                 style="decreasing-linear",
             ),
         ]
