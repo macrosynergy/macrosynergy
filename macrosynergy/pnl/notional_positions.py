@@ -159,9 +159,9 @@ def historic_portfolio_vol(
     lback_meth: str = "ma",
     half_life=11,
     rstring: str = "XR",
-    start: str = None,
-    end: str = None,
-    blacklist: dict = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    blacklist: Optional[dict] = None,
 ):
     """
     Estimates the annualized standard deviations of a changing portfolio of contracts.
@@ -222,9 +222,9 @@ def historic_portfolio_vol(
         (lback_meth, "lback_meth", str),
         (half_life, "half_life", int),
         (rstring, "rstring", str),
-        (start, "start", str),
-        (end, "end", str),
-        (blacklist, "blacklist", dict),
+        (start, "start", (str, NoneType)),
+        (end, "end", (str, NoneType)),
+        (blacklist, "blacklist", (dict, NoneType)),
     ]:
         if not isinstance(varx, typex):
             raise ValueError(f"`{namex}` must be {typex}.")
