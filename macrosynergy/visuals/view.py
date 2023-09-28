@@ -335,14 +335,14 @@ if __name__ == "__main__":
     df: pd.DataFrame = make_test_df(
         cids=list(set(cids) - set(sel_cids)),
         xcats=xcats,
-        start_date="2000-01-01",
+        start="2000-01-01",
     )
 
     for rstyle, xcatx in zip(r_styles, sel_xcats):
         dfB: pd.DataFrame = make_test_df(
             cids=sel_cids,
             xcats=[xcatx],
-            start_date="2000-01-01",
+            start="2000-01-01",
             style=rstyle,
         )
         df: pd.DataFrame = pd.concat([df, dfB], axis=0)
