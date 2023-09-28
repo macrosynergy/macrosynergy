@@ -12,7 +12,7 @@ import seaborn as sns
 
 from typing import List, Union, Tuple, Optional
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate_quantamental_data import make_qdf, make_test_df
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
 from macrosynergy.panel import historic_vol
@@ -215,7 +215,7 @@ def historic_portfolio_vol(
     ## Check inputs
     for varx, namex, typex in [
         (df, "df", pd.DataFrame),
-        (sname, "sname", str),
+        # (sname, "sname", str),
         (contids, "contids", list),
         (est_freq, "est_freq", str),
         (lback_periods, "lback_periods", int),
@@ -247,6 +247,10 @@ def historic_portfolio_vol(
     ## Reduce the dataframe
     df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
 
+    ## Add ticker column and filter for snames
+    df["tickers"]: str = df["cid"] + "_" + df["xcat"]
+    df: pd.DataFrame = df.loc[df["tickers"].str.endswith(f"_{sname}_CSIG")]
+
     df["scat"] = df.apply(lambda x: _short_xcat(xcat=x["xcat"]), axis=1)
     df["contid"] = df["cid"] + "_" + df["scat"]
 
@@ -267,6 +271,10 @@ def historic_portfolio_vol(
     for contx in expanded_conts:
         cid, ctype = contx
         cdf: pd.DataFrame = df.loc[(df["cid"] == cid) & (df["scat"] == ctype)].copy()
+
+        # drop xcat, rename scat to xcat
+        cdf = cdf.drop(columns=["xcat", "contid"]).rename(columns={"scat": "xcat"})
+
         cdf = historic_vol(
             df=cdf,
             xcat=ctype,
@@ -282,3 +290,31 @@ def historic_portfolio_vol(
     calc_df: pd.DataFrame = pd.concat(calc_dfs, axis=0)
 
     return calc_df
+
+
+if __name__ == "__main__":
+    cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
+    xcats: List[str] = ["FXXR_NSA", "EQXR_NSA", "IRXR_NSA", "CDS_NSA"]
+
+    start: str = "2000-01-01"
+    end: str = "2020-12-31"
+
+    df: pd.DataFrame = make_test_df(
+        cids=cids,
+        xcats=xcats,
+        start=start,
+        end=end,
+    )
+
+    hist_vols: pd.DataFrame = historic_portfolio_vol(
+        df=df,
+        sname="TEST",
+        contids=[f"{cid}_{xcat}" for cid in cids for xcat in xcats],
+        est_freq="m",
+        lback_periods=21,
+        lback_meth="ma",
+        half_life=11,
+        rstring="XR",
+        start=start,
+        end=end,
+    )
