@@ -15,7 +15,7 @@ from typing import List, Union, Tuple, Optional, Set, Dict
 
 from macrosynergy.pnl import Numeric, _short_xcat
 from macrosynergy.management.utils import is_valid_iso_date, standardise_dataframe
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate_quantamental_data import make_qdf, make_test_df
 from macrosynergy.management.shape_dfs import reduce_df
 
 
@@ -398,3 +398,27 @@ def contract_signals(
         df: pd.DataFrame = apply_hedge_ratio(df=df, hratios=hratios, cids=cids)
 
     return df
+
+
+if __name__ == "__main__":
+    cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
+    xcats: List[str] = ["FXXR_NSA", "EQXR_NSA", "IRXR_NSA", "CDS_NSA", "TOUSD"]
+
+    start: str = "2000-01-01"
+    end: str = "2020-12-31"
+
+    df: pd.DataFrame = make_test_df(
+        cids=cids,
+        xcats=xcats,
+        start=start,
+        end=end,
+    )
+
+    df.loc[(df["cid"] == "USD") & (df["xcat"] == "TOUSD"), "value"] = 1.0
+
+    rDF: pd.DataFrame = contract_signals(
+        df=df,
+        sig="TOUSD",
+        cids=cids,
+        ctypes=["FXXR", "EQXR", "IRXR", "CDS"],
+    )
