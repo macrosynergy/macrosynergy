@@ -1,4 +1,10 @@
+"""
+Implementation of panel calculation functions for quantamental data.
+The functionality allows applying mathematical operations on time-series data.
 
+::docs::panel_calculator::sort_first::
+
+"""
 import numpy as np
 import pandas as pd
 from typing import List
@@ -21,7 +27,7 @@ def time_series_check(formula: str, index: int):
     :param <str> formula:
     :param <int> index: starting index to iterate over.
 
-    :return <int, bool>:
+    :return <Tuple[int, bool]>:
     """
 
     check = lambda a, b, c: (a.isupper() and b == "." and c.islower())
@@ -48,7 +54,7 @@ def xcat_isolator(expression: str, start_index: str, index: int):
     :param <str> start_index: starting index to search over.
     :param <int> index: defines the end of the search space over the expression.
 
-    :return <str> xcat.
+    :return <str>: xcat.
     """
 
     op_copy = expression[start_index:index + 1]
@@ -150,11 +156,17 @@ def panel_calculator(df: pd.DataFrame, calcs: List[str] = None,
     single_xcats = [x[5:] for x in singles_used]
     all_xcats_used = xcats_used + single_xcats
 
-    new_xcats = list(ops.keys())
-    old_xcats_used = set(all_xcats_used) - set(new_xcats)
-    old_xcats_used = list(old_xcats_used)
-    missing = sorted(set(old_xcats_used) - set(df['xcat'].unique()))
-    assert len(missing) == 0, f"Missing categories: {missing}."
+    new_xcats: List[str] = list(ops.keys())
+    old_xcats_used: List[str] = list(set(all_xcats_used) - set(new_xcats))
+    missing: List[str] = sorted(set(old_xcats_used) - set(df['xcat'].unique()))
+    if len(missing) > 0:
+        raise ValueError(f"Missing categories: {missing}.")
+
+    if len(singles_used) > 0:
+        if new_xcats == all_xcats_used:
+            old_xcats_used: List[str] = new_xcats
+            # to prevent reduce_df from dropping cids 
+            # when a cid-xcat pair is missing from the dataframe
 
     # D. Reduce dataframe with intersection requirement.
 

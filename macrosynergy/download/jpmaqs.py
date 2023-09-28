@@ -1,17 +1,22 @@
-""" JPMaQS Download Interface """
+""" JPMaQS Download Interface 
 
-from typing import List, Optional, Dict, Union
-import pandas as pd
-import traceback as tb
+::docs::JPMaQSDownload::sort_first::
+"""
+
 import datetime
-import logging
-import warnings
 import io
+import logging
+import os
+import traceback as tb
+import warnings
 from timeit import default_timer as timer
+from typing import Dict, List, Optional, Tuple, Union
+
+import pandas as pd
 
 from macrosynergy.download.dataquery import DataQueryInterface
-from macrosynergy.download.exceptions import *
-from macrosynergy.management.utils import is_valid_iso_date, Config
+from macrosynergy.download.exceptions import HeartbeatError, InvalidDataframeError
+from macrosynergy.management.utils import is_valid_iso_date
 
 logger = logging.getLogger(__name__)
 debug_stream_handler = logging.StreamHandler(io.StringIO())
@@ -25,7 +30,10 @@ logger.addHandler(debug_stream_handler)
 
 
 class JPMaQSDownload(object):
-    """JPMaQS Download Interface Object
+    """
+    JPMaQSDownload Object. This object is used to download JPMaQS data via the DataQuery API.
+    It can be extended to include the use of proxies, and even request generic DataQuery expressions.
+
     :param <bool> oauth: True if using oauth, False if using username/password with crt/key.
 
     When using oauth:
@@ -80,7 +88,6 @@ class JPMaQSDownload(object):
         username: Optional[str] = None,
         password: Optional[str] = None,
         check_connection: bool = True,
-        credentials_config: Optional[str] = None,
         proxy: Optional[Dict] = None,
         suppress_warning: bool = True,
         debug: bool = False,
@@ -88,19 +95,17 @@ class JPMaQSDownload(object):
         dq_download_kwargs: dict = {},
         **kwargs,
     ):
-        vars_types_zip: zip = zip(
-            [oauth, check_connection, suppress_warning, debug, print_debug_data],
-            [
-                "oauth",
-                "check_connection",
-                "suppress_warning",
-                "debug",
-                "print_debug_data",
-            ],
-        )
-        for varx, namex in vars_types_zip:
-            if not isinstance(varx, bool):
-                raise TypeError(f"`{namex}` must be a boolean.")
+        vars_types_zip: List[Tuple[str, str]] = [
+            (oauth, "oauth", bool),
+            (check_connection, "check_connection", bool),
+            (suppress_warning, "suppress_warning", bool),
+            (debug, "debug", bool),
+            (print_debug_data, "print_debug_data", bool),
+        ]
+
+        for varx, namex, typex in vars_types_zip:
+            if not isinstance(varx, typex):
+                raise TypeError(f"`{namex}` must be of type {typex}.")
 
         if not isinstance(proxy, dict) and proxy is not None:
             raise TypeError("`proxy` must be a dictionary or None.")
@@ -114,12 +119,27 @@ class JPMaQSDownload(object):
         self._check_connection = check_connection
         self.dq_download_kwargs = dq_download_kwargs
 
-        if credentials_config is not None:
-            if not isinstance(credentials_config, str):
-                raise TypeError("`credentials_config` must be a string.")
+        for varx, namex in [
+            (client_id, "client_id"),
+            (client_secret, "client_secret"),
+            (crt, "crt"),
+            (key, "key"),
+            (username, "username"),
+            (password, "password"),
+        ]:
+            if varx is not None:
+                if not isinstance(varx, str):
+                    raise TypeError(f"`{namex}` must be a string.")
 
-        config_obj: Config = Config(
-            config_path=credentials_config,
+        if not (all([client_id, client_secret]) or all([crt, key, username, password])):
+            raise ValueError(
+                "Must provide either `client_id` and `client_secret` for oauth, or "
+                "`crt`, `key`, `username`, and `password` for certificate based authentication."
+            )
+
+        self.dq_interface: DataQueryInterface = DataQueryInterface(
+            oauth=oauth,
+            check_connection=check_connection,
             client_id=client_id,
             client_secret=client_secret,
             crt=crt,
@@ -127,12 +147,6 @@ class JPMaQSDownload(object):
             username=username,
             password=password,
             proxy=proxy,
-        )
-
-        self.dq_interface: DataQueryInterface = DataQueryInterface(
-            oauth=oauth,
-            check_connection=check_connection,
-            config=config_obj,
             debug=debug,
             **kwargs,
         )
@@ -142,7 +156,6 @@ class JPMaQSDownload(object):
         self.msg_warnings: List[str] = []
         self.unavailable_expressions: List[str] = []
         self.downloaded_data: Dict = {}
-        self.config_obj: Config = config_obj
 
         if self._check_connection:
             self.check_connection()
@@ -329,10 +342,10 @@ class JPMaQSDownload(object):
     ) -> pd.DataFrame:
         """
         Convert the downloaded data to a pandas DataFrame.
-        Parameters
+
         :param dicts_list <list>: List of dictionaries containing time series
             data from the DataQuery API
-        Returns
+
         :return <pd.DataFrame>: JPMaQS standard dataframe with columns:
             real_date, cid, xcat, <metric>. The <metric> column contains the
             observed data for the given cid and xcat on the given real_date.
@@ -505,7 +518,7 @@ class JPMaQSDownload(object):
     ) -> bool:
         """Validate the arguments passed to the download function.
 
-        :params -- see macrosynergy.download.jpmaqs.JPMaQSDownload.download()
+        :params:  -- see `macrosynergy.download.jpmaqs.JPMaQSDownload.download()`.
 
         :return <bool>: True if valid.
 
@@ -602,7 +615,6 @@ class JPMaQSDownload(object):
         and provides the user wuth the complete list of expressions that are in the
         catalogue.
 
-        Parameters
         :param <List[str]> tickers: list of tickers to filter.
 
         :return <List[str]>: list of tickers that are in the JPMaQS catalogue.
@@ -876,8 +888,12 @@ if __name__ == "__main__":
     start_date: str = "2023-01-01"
     end_date: str = "2023-03-20"
 
+    client_id = os.getenv("DQ_CLIENT_ID")
+    client_secret = os.getenv("DQ_CLIENT_SECRET")
+
     with JPMaQSDownload(
-        credentials_config="env",
+        client_id=client_id,
+        client_secret=client_secret,
         debug=True,
     ) as jpmaqs:
         data = jpmaqs.download(

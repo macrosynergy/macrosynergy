@@ -1,4 +1,7 @@
-
+"""
+Module with functionality for generating mock 
+quantamental data vintages for testing purposes.
+"""
 import numpy as np
 import pandas as pd
 from typing import List, Union, Tuple

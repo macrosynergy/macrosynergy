@@ -1,3 +1,7 @@
+"""
+Module for plotting ranges of values across cross-sections for one or more categories.
+"""
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt

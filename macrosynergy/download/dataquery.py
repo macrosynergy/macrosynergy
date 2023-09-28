@@ -4,6 +4,8 @@ This module is not intended to be used directly, but rather through
 macrosynergy.download.jpmaqs.py. However, for a use cases independent
 of JPMaQS, this module can be used directly to download data from the
 JPMorgan DataQuery API.
+
+::docs::DataQueryInterface::sort_first::
 """
 import concurrent.futures
 import time
@@ -32,7 +34,6 @@ from macrosynergy.download.exceptions import (
 from macrosynergy.management.utils import (
     is_valid_iso_date,
     form_full_url,
-    Config,
 )
 
 CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
@@ -388,11 +389,15 @@ class OAuth(object):
             }
 
         return self._stored_token["access_token"]
-    
+
     def _get_user_id(self) -> str:
         return "OAuth_ClientID - " + self.token_data["client_id"]
 
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
+        """
+        Returns a dictionary with the authentication information, in the same
+        format as the `macrosynergy.download.dataquery.CertAuth.get_auth()` method.
+        """
         headers: Dict = {"Authorization": "Bearer " + self._get_token()}
         return {
             "headers": headers,
@@ -446,6 +451,10 @@ class CertAuth(object):
         self.proxy: Optional[dict] = proxy
 
     def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
+        """
+        Returns a dictionary with the authentication information, in the same
+        format as the `macrosynergy.download.dataquery.OAuth.get_auth()` method.
+        """
         headers = {"Authorization": f"Basic {self.auth:s}"}
         user_id = "CertAuth_Username - " + self.username
         return {
@@ -470,11 +479,11 @@ def validate_download_args(
     delay_param: float,
 ):
     """
-    Validate the arguments passed to the download_data method.
+    Validate the arguments passed to the `download_data()` method.
 
-    :params -- see download_data method.
+    :params : -- see `download_data()` method.
 
-    :returns True if all arguments are valid.
+    :return <bool>: True if all arguments are valid.
 
     :raises <TypeError>: if any of the arguments are of the wrong type.
     :raises <ValueError>: if any of the arguments are semantically incorrect.
@@ -533,7 +542,7 @@ def validate_download_args(
     return True
 
 
-def get_unavailable_expressions(
+def _get_unavailable_expressions(
     expected_exprs: List[str],
     dicts_list: List[Dict],
 ) -> List[str]:
@@ -558,10 +567,19 @@ def get_unavailable_expressions(
 class DataQueryInterface(object):
     """
     High level interface for the DataQuery API.
-    Must be instantiated with a valid Config object.
-    (see macrosynergy.management.utils.Config class for more info)
 
-    :param <Config> config: Config object.
+    When using OAuth authentication:
+
+    :param <str> client_id: client ID for the OAuth application.
+    :param <str> client_secret: client secret for the OAuth application.
+
+    When using certificate authentication:
+
+    :param <str> crt: path to the certificate file.
+    :param <str> key: path to the key file.
+    :param <str> username: username for the DataQuery API.
+    :param <str> password: password for the DataQuery API.
+
     :param <bool> oauth: whether to use OAuth authentication. Defaults to True.
     :param <bool> debug: whether to print debug messages. Defaults to False.
     :param <bool> concurrent: whether to use concurrent requests. Defaults to True.
@@ -586,7 +604,13 @@ class DataQueryInterface(object):
 
     def __init__(
         self,
-        config: Config,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
+        crt: Optional[str] = None,
+        key: Optional[str] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        proxy: Optional[dict] = None,
         oauth: bool = True,
         debug: bool = False,
         batch_size: int = 20,
@@ -602,44 +626,59 @@ class DataQueryInterface(object):
         self.debug: bool = debug
         self.suppress_warnings: bool = suppress_warnings
         self.batch_size: int = batch_size
+        
+        for varx, namex, typex in [
+            (client_id, "client_id", str),
+            (client_secret, "client_secret", str),
+            (crt, "crt", str),
+            (key, "key", str),
+            (username, "username", str),
+            (password, "password", str),
+            (proxy, "proxy", dict),
+        ]:
+            if not isinstance(varx, typex) and varx is not None:
+                raise TypeError(f"{namex} must be a {typex} and not {type(varx)}.")
 
-        if not isinstance(config, Config):
-            raise ValueError(
-                "config_object must be provided for DataQuery authentication."
-                " Check macrosynergy.management.utils.Config "
-                "for more details."
-            )
-        self.config: Config = config
         self.auth: Optional[Union[CertAuth, OAuth]] = None
-        if oauth and (config.oauth() is None):
+        if oauth and not all([client_id, client_secret]):
             warnings.warn(
-                "OAuth credentials not found. "
-                "Trying to use certificate authentication.",)
-            if config.cert() is None:
+                "OAuth authentication requested but client ID and/or client secret "
+                "not found. Falling back to certificate authentication.",
+                UserWarning,
+            )
+            if not all([username, password, crt, key]):
                 raise ValueError(
                     "Certificate credentials not found. "
-                    "Check the config_object passed."
+                    "Check the parameters passed to the DataQueryInterface class."
                 )
             else:
                 oauth: bool = False
-             
+
         if oauth:
             self.auth: OAuth = OAuth(
-                **config.oauth(mask=False),
+                client_id=client_id,
+                client_secret=client_secret,
                 token_url=token_url,
-                proxy=config.proxy(mask=False),
+                proxy=proxy,
             )
         else:
             if base_url == OAUTH_BASE_URL:
                 base_url: str = CERT_BASE_URL
 
-            self.auth: CertAuth = CertAuth(**config.cert(mask=False))
+            self.auth: CertAuth = CertAuth(
+                username=username,
+                password=password,
+                crt=crt,
+                key=key,
+                proxy=proxy,
+            )
 
-        assert (
-            self.auth is not None
-        ), "Failed to initialise access method. Check the config_object passed"
+        assert self.auth is not None, (
+            "Unable to instantiate authentication object. "
+            "Check the parameters passed to the DataQueryInterface class."
+        )
 
-        self.proxy: Optional[dict] = config.proxy(mask=False)
+        self.proxy: Optional[dict] = proxy
         self.base_url: str = base_url
         self.egress_data: dict = {}
 
@@ -761,7 +800,6 @@ class DataQueryInterface(object):
         tickers in the JPMaQS group. The group ID can be changed to fetch a
         different group's catalogue.
 
-        Parameters
         :param <str> group_id: the group ID to fetch the catalogue for.
 
         :return <List[str]>: list of tickers in the JPMaQS group.
@@ -807,6 +845,11 @@ class DataQueryInterface(object):
         show_progress: bool = False,
         retry_counter: int = 0,
     ) -> List[dict]:
+        """
+        Backend method to download data from the DataQuery API.
+        Used by the `download_data()` method.
+        """
+
         if retry_counter > 0:
             print("Retrying failed downloads. Retry count:", retry_counter)
 
@@ -1016,7 +1059,7 @@ class DataQueryInterface(object):
             show_progress=show_progress,
         )
 
-        self.unavailable_expressions = get_unavailable_expressions(
+        self.unavailable_expressions = _get_unavailable_expressions(
             expected_exprs=expressions, dicts_list=final_output
         )
         logger.info(
@@ -1032,17 +1075,18 @@ class DataQueryInterface(object):
 if __name__ == "__main__":
     import os
 
-    cf: Config = Config(
-        client_id=os.getenv("DQ_CLIENT_ID"),
-        client_secret=os.getenv("DQ_CLIENT_SECRET"),
-    )
+    client_id = os.getenv("DQ_CLIENT_ID")
+    client_secret = os.getenv("DQ_CLIENT_SECRET")
 
     expressions = [
         "DB(JPMAQS,USD_EQXR_VT10,value)",
         "DB(JPMAQS,AUD_EXALLOPENNESS_NSA_1YMA,value)",
     ]
 
-    with DataQueryInterface(config=cf) as dq:
+    with DataQueryInterface(
+        client_id=client_id,
+        client_secret=client_secret,
+    ) as dq:
         assert dq.check_connection(verbose=True)
 
         data = dq.download_data(

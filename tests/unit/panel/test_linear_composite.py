@@ -15,8 +15,8 @@ class TestAll(unittest.TestCase):
         dfd: pd.DataFrame = make_test_df(
             cids=self.cids,
             xcats=self.xcats,
-            start_date="2000-01-01",
-            end_date="2020-12-31",
+            start="2000-01-01",
+            end="2020-12-31",
         )
         self.dfd: pd.DataFrame = dfd
 
@@ -93,8 +93,8 @@ class TestAll(unittest.TestCase):
         _test_df: pd.DataFrame = make_test_df(
             cids=self.cids,
             xcats=self.xcats,
-            start_date="2000-01-01",
-            end_date="2000-02-01",
+            start="2000-01-01",
+            end="2000-02-01",
         )
 
         _test_df = _test_df[
@@ -121,8 +121,8 @@ class TestAll(unittest.TestCase):
         _test_df: pd.DataFrame = make_test_df(
             cids=self.cids,
             xcats=self.xcats,
-            start_date="2000-01-01",
-            end_date="2000-02-01",
+            start="2000-01-01",
+            end="2000-02-01",
         )
 
         _test_df = _test_df[
@@ -149,7 +149,7 @@ class TestAll(unittest.TestCase):
 
         ## Test Case 1a - Testing non-normalized weights
         dfd = make_test_df(
-            cids=all_cids, xcats=all_xcats, start_date=start, end_date=end
+            cids=all_cids, xcats=all_xcats, start=start, end=end
         )
         # set all values to 1
         dfd["value"] = 1
@@ -194,7 +194,7 @@ class TestAll(unittest.TestCase):
         ## Test Case 2a & b - Testing nan logic
         _end: str = "2000-02-01"
         dfd = make_test_df(
-            cids=all_cids, xcats=all_xcats, start_date=start, end_date=_end
+            cids=all_cids, xcats=all_xcats, start=start, end=_end
         )
         dfd["value"] = 1
 
@@ -222,7 +222,7 @@ class TestAll(unittest.TestCase):
         weights: List[str] = [1, 2, 4]
         _end: str = "2000-02-01"
         dfd = make_test_df(
-            cids=all_cids, xcats=all_xcats, start_date=start, end_date=_end
+            cids=all_cids, xcats=all_xcats, start=start, end=_end
         )
         dfd["value"] = 1
 
@@ -310,7 +310,7 @@ class TestAll(unittest.TestCase):
             signs: List[str] = [1, -1]
 
             dfd: pd.DataFrame = make_test_df(
-                cids=all_cids, xcats=_xcats, start_date=start, end_date=end
+                cids=all_cids, xcats=_xcats, start=start, end=end
             )
             dfd["value"] = 1
 
@@ -336,9 +336,9 @@ class TestAll(unittest.TestCase):
             dfd: pd.DataFrame = make_test_df(
                 cids=all_cids,
                 xcats=_xcats,
-                start_date=start,
-                end_date=end,
-                prefer="linear",
+                start=start,
+                end=end,
+                style="linear",
             )
             adf: pd.DataFrame = linear_composite(
                 df=dfd,
@@ -362,7 +362,7 @@ class TestAll(unittest.TestCase):
 
         # Test Case 1a - Testing basic functionality
         dfd: pd.DataFrame = make_test_df(
-            cids=all_cids, xcats=all_xcats, start_date=start, end_date=end
+            cids=all_cids, xcats=all_xcats, start=start, end=end
         )
 
         dfd["value"] = 1
@@ -429,7 +429,7 @@ class TestAll(unittest.TestCase):
         _weights: List[str] = [1, 2, 4]
 
         dfd: pd.DataFrame = make_test_df(
-            cids=all_cids, xcats=all_xcats, start_date=start, end_date=end
+            cids=all_cids, xcats=all_xcats, start=start, end=end
         )
         dfd["value"] = 1
         for n_w, r_v in zip([True, False], [1, 7]):
@@ -450,7 +450,7 @@ class TestAll(unittest.TestCase):
         _weights: List[str] = [1, 2, 4]
         _end: str = "2000-02-01"
         dfd: pd.DataFrame = make_test_df(
-            cids=all_cids, xcats=all_xcats, start_date=start, end_date=_end
+            cids=all_cids, xcats=all_xcats, start=start, end=_end
         )
         dfd["value"] = 1
         dfd.loc[
@@ -525,7 +525,7 @@ class TestAll(unittest.TestCase):
         _weights: str = "INFL"
         _end: str = "2000-02-01"
         dfd: pd.DataFrame = make_test_df(
-            cids=all_cids, xcats=all_xcats, start_date=start, end_date=_end
+            cids=all_cids, xcats=all_xcats, start=start, end=_end
         )
         dfd["value"] = 1
 
@@ -572,7 +572,7 @@ class TestAll(unittest.TestCase):
         _weights: str = "INFL"
         _end: str = "2000-02-01"
         dfd: pd.DataFrame = make_test_df(
-            cids=all_cids, xcats=all_xcats, start_date=start, end_date=_end
+            cids=all_cids, xcats=all_xcats, start=start, end=_end
         )
         dfd["value"] = 1
 
@@ -619,7 +619,7 @@ class TestAll(unittest.TestCase):
         _weights: str = "INFL"
         _end: str = "2000-02-01"
         dfd: pd.DataFrame = make_test_df(
-            cids=all_cids, xcats=all_xcats, start_date=start, end_date=_end
+            cids=all_cids, xcats=all_xcats, start=start, end=_end
         )
         # for each, mutiply the weight by the sign
         dfd["value"] = 1
