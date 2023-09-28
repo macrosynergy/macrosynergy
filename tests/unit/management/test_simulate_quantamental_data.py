@@ -233,7 +233,7 @@ class Test_All(unittest.TestCase):
         line_styles : List[str] = generate_lines(sig_len=len(date_range), style='all')
         
         for ls in list(line_styles):
-            df : pd.DataFrame = make_test_df(cids=cids, xcats=xcats, start_date=start_date, end_date=end_date, style=ls)
+            df : pd.DataFrame = make_test_df(cids=cids, xcats=xcats, start=start_date, end=end_date, style=ls)
             
             self.assertTrue(isinstance(df, pd.DataFrame))
             self.assertFalse(df.empty)
