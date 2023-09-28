@@ -71,7 +71,7 @@ def notional_positions(
         Alternatives are 'w' for business weekly, 'd' for daily, and 'q' for quarterly.
         Contract signals are taken from the end of the holding period and applied to
         positions at the beginning of the next period, subject to slippage.
-    :slip <int>: the number of days to wait before applying the signal. Default is 1.
+    :param <int> slip: the number of days to wait before applying the signal. Default is 1.
         This means that positions are taken at the very end of the first business day
         of the holding period.
     :param <int> lback_periods: the number of periods to use for the lookback period
