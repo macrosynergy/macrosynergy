@@ -24,7 +24,7 @@ def notional_positions(
     sname: str,
     contids: List[str],
     aum: Numeric = 100,
-    dollar_per_signal: Numeric = 1,
+    dollar_per_signal: Numeric = 1.0,
     leverage: Optional[Numeric] = None,
     vol_target: Optional[Numeric] = None,
     rebal_freq: str = "m",
@@ -48,7 +48,7 @@ def notional_positions(
     :param <str> sname: the name of the strategy. It must correspond to contract
         signals in the dataframe, which have the format "<cid>_<ctype>_<sname>_CSIG", and
         which are typically calculated by the function contract_signals().
-    :param <list[str]> contids: list of contract identifiers in the format
+    :param <List[str]> contids: list of contract identifiers in the format
         "<cid>_<ctype>". It must correspond to contract signals in the dataframe.
     :param <float> aum: the assets under management in USD million (for consistency).
         This is basis for all position sizes. Default is 100.
