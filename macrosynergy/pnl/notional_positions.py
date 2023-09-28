@@ -57,7 +57,7 @@ def notional_positions(
         and is merely a basis for tryouts.
     :param <float> leverage: the ratio of the sum of notional positions to AUM.
         This is the main basis for leveraged-based positioning. Since different
-        contracts have diferent eexpected volatility and correlations this method
+        contracts have different expected volatility and correlations this method
         does not control expected volatility. Default is None, i.e. the method is not
         applied.
     :param <float> vol_target: the target volatility of the portfolio in % of AUM.
