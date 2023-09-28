@@ -321,8 +321,8 @@ def generate_lines(sig_len: int, style: str = "linear") -> Union[np.ndarray, Lis
 def make_test_df(
     cids: List[str] = ["AUD", "CAD", "GBP"],
     xcats: List[str] = ["XR", "CRY"],
-    start_date: str = "2010-01-01",
-    end_date: str = "2020-12-31",
+    start: str = "2010-01-01",
+    end: str = "2020-12-31",
     style: str = "any",
 ):
     """
@@ -350,7 +350,7 @@ def make_test_df(
     if isinstance(xcats, str):
         xcats = [xcats]
 
-    dates: pd.DatetimeIndex = pd.bdate_range(start_date, end_date)
+    dates: pd.DatetimeIndex = pd.bdate_range(start, end)
 
     df_list: List[pd.DataFrame] = []
     for cid in cids:
