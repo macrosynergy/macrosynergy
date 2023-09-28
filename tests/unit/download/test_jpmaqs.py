@@ -5,7 +5,6 @@ from typing import List, Dict, Any
 from macrosynergy.download import JPMaQSDownload
 
 from macrosynergy.download.exceptions import InvalidDataframeError
-from macrosynergy.management.utils import Config
 from .mock_helpers import (
     mock_jpmaqs_value,
     mock_request_wrapper,
@@ -50,10 +49,6 @@ class TestJPMaQSDownload(unittest.TestCase):
                 bad_args = good_args.copy()
                 bad_args[argx] = -1  # 1 would evaluate to True for bools
                 JPMaQSDownload(**bad_args)
-
-        with self.assertRaises(TypeError):
-            good_args["credentials_config"] = 1
-            JPMaQSDownload(**good_args)
 
     def test_download_arg_validation(self):
         good_args: Dict[str, Any] = {
@@ -173,14 +168,12 @@ class TestJPMaQSDownload(unittest.TestCase):
             check_connection=False,
         )
 
-        config: Config = Config(
+        config: dict = dict(
             client_id="client_id",
             client_secret="client_secret",
         )
 
-        mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(
-            config=config
-        )
+        mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(**config)
         un_avail_exprs: List[str] = [
             "DB(JPMAQS,USD_FXXR_NSA,value)",
             "DB(JPMAQS,USD_FXXR_NSA,grading)",
@@ -247,14 +240,12 @@ class TestJPMaQSDownload(unittest.TestCase):
             check_connection=False,
         )
 
-        config: Config = Config(
+        config: dict = dict(
             client_id="client_id",
             client_secret="client_secret",
         )
 
-        mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(
-            config=config
-        )
+        mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(**config)
         un_avail_exprs: List[str] = [
             "DB(JPMAQS,USD_FXXR_NSA,value)",
             "DB(JPMAQS,USD_FXXR_NSA,grading)",
@@ -295,9 +286,9 @@ class TestJPMaQSDownload(unittest.TestCase):
             client_secret="client_secret",
             check_connection=False,
         )
-        config: Config = jpmaqs.config_obj
+
         mock_dq_interface: MockDataQueryInterface = MockDataQueryInterface(
-            config=config
+            client_id="client_id", client_secret="client_secret"
         )
         un_avail_exprs: List[str] = [
             "DB(JPMAQS,USD_FXXR_NSA,value)",
