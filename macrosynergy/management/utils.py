@@ -104,6 +104,9 @@ def rec_search_dict(d: dict, key: str, match_substring: bool = False, match_type
 
 
 def is_valid_iso_date(date: str) -> bool:
+    if not isinstance(date, str):
+        raise TypeError("Argument `date` must be a string.")
+
     try:
         datetime.datetime.strptime(date, "%Y-%m-%d")
         return True
