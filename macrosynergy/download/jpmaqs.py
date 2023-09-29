@@ -385,10 +385,6 @@ class JPMaQSDownload(object):
                         f"{d['attributes'][0]['expression']}"
                     )
 
-        assert set(_missing_exprs) == set(
-            self.unavailable_expressions
-        ), "Downloaded `dicts_list` has been modified before calling `time_series_to_df`"
-
         if len(dfs) == 0:
             raise InvalidDataframeError(
                 "No data was downloaded. Check logger output for"
