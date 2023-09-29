@@ -148,7 +148,6 @@ class MockDataQueryInterface(DataQueryInterface):
         msg_warnings: List[str] = None,
         catalogue: List[str] = None,
         unavailable_expressions: List[str] = None,
-        egress_data: List[Dict[str, Any]] = None,
         duplicate_entries: List[str] = None,
     ):
         self.msg_errors: List[str] = [] if msg_errors is None else msg_errors
@@ -157,14 +156,6 @@ class MockDataQueryInterface(DataQueryInterface):
             [] if unavailable_expressions is None else unavailable_expressions
         )
         self.catalogue: List[str] = [] if catalogue is None else catalogue
-        self.egress_data: List[Dict[str, Any]] = {
-            "tracking-id-123": {
-                "upload_size": 200,
-                "download_size": 2000,
-                "url": OAUTH_BASE_URL + TIMESERIES_ENDPOINT,
-                "time_taken": 10,
-            }
-        }
 
         self.mask_expressions: List[str] = (
             [] if mask_expressions is None else mask_expressions
