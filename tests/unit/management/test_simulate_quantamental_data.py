@@ -257,6 +257,14 @@ class Test_All(unittest.TestCase):
                     # assert that the values are the same as the line style
                     self.assertTrue(np.array_equal(t_df['value'].to_numpy(), generate_lines(sig_len=len(ebdates), style=ls)))
         
+    def test_mock_qdf(self):
+        cids : List[str] = ['AUD', 'CAD', 'GBP', 'USD']
+        xcats : List[str] = ['XR', 'IR']
+        start_date : str = '2010-01-01'
+        end_date : str = '2020-12-31'
+        
+        
+
 
 
 
