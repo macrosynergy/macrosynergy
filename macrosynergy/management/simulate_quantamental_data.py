@@ -36,8 +36,10 @@ def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float =
     ser = ser + mean - np.mean(ser)
     return sd_mult * ser / np.std(ser)
 
-def dataframe_generator(df_cids: pd.DataFrame, df_xcats: pd.DataFrame,
-                        cid: str, xcat: str):
+
+def dataframe_generator(
+    df_cids: pd.DataFrame, df_xcats: pd.DataFrame, cid: str, xcat: str
+):
     """
     Adjacent method used to construct the quantamental DataFrame.
 
@@ -226,52 +228,50 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
     return pd.concat(df_list).reset_index(drop=True)
 
 
-def mock_qdf(
-    cids: List[str], xcats: List[str], start: str, end: str
-):
+def mock_qdf(cids: List[str], xcats: List[str], start: str, end: str):
     """
     Generate a mock Quantamental DataFrame. The function internally calls `make_qdf()`
     to generate the DataFrame, but randomizes the `back_ar` parameter as well as the
     `mean_add` and `sd_mult` parameters for each cross-section and category.
-    
+
     :param <List[str]> cids: A list of strings for cids.
     :param <List[str]> xcats: A list of strings for xcats.
     :param <str> start_date: An ISO-formatted date string.
     :param <str> end_date: An ISO-formatted date string.
-    :return <pd.DataFrame>: A mock Quantamental DataFrame.    
+    :return <pd.DataFrame>: A mock Quantamental DataFrame.
     """
+
     def randx(low: float, high: float) -> float:
         # use system random to avoid np.random seed
         return random.SystemRandom().uniform(low, high)
-    
+
     MEAN_ADD_RANGE = (-0.5, 5)
     SD_MULT_RANGE = (0.5, 2)
-    
+
     AR_COEF_RANGE = (0.1, 1)
     BACK_COEF_RANGE = (0.1, 1)
-    
-    df_cids = pd.DataFrame(index=cids,
-                           columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
-    
+
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+
     for cidx in cids:
         df_cids.loc[cidx] = [start, end, randx(*MEAN_ADD_RANGE), randx(*SD_MULT_RANGE)]
 
-    cols = ['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef']
+    cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
     df_xcats = pd.DataFrame(index=xcats, columns=cols)
 
     for xcatx in xcats:
-        df_xcats.loc[xcatx] = [start, end, randx(*MEAN_ADD_RANGE), randx(*SD_MULT_RANGE),
-                               randx(*AR_COEF_RANGE), randx(*BACK_COEF_RANGE)]
+        df_xcats.loc[xcatx] = [
+            start,
+            end,
+            randx(*MEAN_ADD_RANGE),
+            randx(*SD_MULT_RANGE),
+            randx(*AR_COEF_RANGE),
+            randx(*BACK_COEF_RANGE),
+        ]
 
     return make_qdf(df_cids, df_xcats, back_ar=0.75)
-
-
-
-
-
-
-
-
 
 
 def generate_lines(sig_len: int, style: str = "linear") -> Union[np.ndarray, List[str]]:
