@@ -251,8 +251,8 @@ class TestAll(unittest.TestCase):
             test_df : pd.DataFrame = make_test_df(
                 cids=test_cids,
                 xcats=test_xcats,
-                start_date=self.start,
-                end_date=self.end
+                start=self.start,
+                end=self.end
             )
             
             test_df.loc[(test_df['cid'] == 'USD') , 'value'] = pd.NA

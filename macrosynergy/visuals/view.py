@@ -17,7 +17,7 @@ from typing import List, Optional, Tuple
 
 import pandas as pd
 
-from macrosynergy.management.utils import standardise_dataframe
+from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
 from macrosynergy.visuals import FacetPlot, LinePlot
 from macrosynergy.visuals.common import Numeric
 
@@ -114,6 +114,21 @@ def timelines(
                 f"Column '{val}' (passed as `metric`) does not exist, and there are "
                 "none/many other numeric columns in the DataFrame."
             )
+
+    for dx, nx in [(start, "start"), (end, "end")]:
+        if dx is not None:
+            if not is_valid_iso_date(dx):
+                raise ValueError(f"`{nx}` must be a valid ISO date string.")
+
+    if start is None:
+        start: str = pd.Timestamp(df["real_date"].min()).strftime("%Y-%m-%d")
+
+    if end is None:
+        end: str = pd.Timestamp(df["real_date"].max()).strftime("%Y-%m-%d")
+
+    df: pd.DataFrame = df.loc[
+        (df["real_date"] >= start) & (df["real_date"] <= end), :
+    ].copy()
 
     if isinstance(xcats, str):
         xcats: List[str] = [xcats]
@@ -335,14 +350,14 @@ if __name__ == "__main__":
     df: pd.DataFrame = make_test_df(
         cids=list(set(cids) - set(sel_cids)),
         xcats=xcats,
-        start_date="2000-01-01",
+        start="2000-01-01",
     )
 
     for rstyle, xcatx in zip(r_styles, sel_xcats):
         dfB: pd.DataFrame = make_test_df(
             cids=sel_cids,
             xcats=[xcatx],
-            start_date="2000-01-01",
+            start="2000-01-01",
             style=rstyle,
         )
         df: pd.DataFrame = pd.concat([df, dfB], axis=0)
