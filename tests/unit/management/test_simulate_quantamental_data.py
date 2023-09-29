@@ -4,7 +4,14 @@ import random
 import numpy as np
 import pandas as pd
 import os
-from macrosynergy.management.simulate_quantamental_data import *
+from macrosynergy.management.simulate_quantamental_data import (
+    make_qdf,
+    make_qdf_black,
+    simulate_ar,
+    generate_lines,
+    make_test_df,
+    mock_qdf,
+)
 
 
 class Test_All(unittest.TestCase):
@@ -292,13 +299,13 @@ class Test_All(unittest.TestCase):
         start_date: str = "2010-01-01"
         end_date: str = "2011-12-31"
         good_args: Dict[str, Any] = {
-            "cids": cids,
-            "xcats": xcats,
+            "cids": cids.copy(),
+            "xcats": xcats.copy(),
             "start": start_date,
             "end": end_date,
         }
 
-        for arg in good_args.keys():
+        for arg, val in good_args.items():
             # all args should raise a type error when passed an integer
             bad_args: Dict[str, Any] = good_args.copy()
             bad_args[arg] = 1
@@ -308,6 +315,10 @@ class Test_All(unittest.TestCase):
             bad_args: Dict[str, Any] = good_args.copy()
             bad_args[arg] = []
             self.assertRaises(ValueError, mock_qdf, **bad_args)
+
+            bad_args: Dict[str, Any] = good_args.copy()
+            bad_args[arg] = bad_args[arg] + [1]
+            self.assertRaises(TypeError, mock_qdf, **bad_args)
 
         # test that it would allow a single string as cid/xcat
         bad_args: Dict[str, Any] = good_args.copy()
