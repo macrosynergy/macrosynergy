@@ -290,13 +290,45 @@ class Test_All(unittest.TestCase):
         cids: List[str] = ["AUD", "CAD", "GBP", "USD"]
         xcats: List[str] = ["XR", "IR"]
         start_date: str = "2010-01-01"
-        end_date: str = "2020-12-31"
+        end_date: str = "2011-12-31"
         good_args: Dict[str, Any] = {
             "cids": cids,
             "xcats": xcats,
             "start": start_date,
             "end": end_date,
         }
+
+        for arg in good_args.keys():
+            # all args should raise a type error when passed an integer
+            bad_args: Dict[str, Any] = good_args.copy()
+            bad_args[arg] = 1
+            self.assertRaises(TypeError, mock_qdf, **bad_args)
+
+        for arg in ["cids", "xcats"]:
+            bad_args: Dict[str, Any] = good_args.copy()
+            bad_args[arg] = []
+            self.assertRaises(ValueError, mock_qdf, **bad_args)
+
+        # test that it would allow a single string as cid/xcat
+        bad_args: Dict[str, Any] = good_args.copy()
+        bad_args["cids"] = "AUD"
+        self.assertTrue(isinstance(mock_qdf(**bad_args), pd.DataFrame))
+
+        bad_args: Dict[str, Any] = good_args.copy()
+        bad_args["xcats"] = "XR"
+        self.assertTrue(isinstance(mock_qdf(**bad_args), pd.DataFrame))
+
+        # check the output is a dataframe
+        df: pd.DataFrame = mock_qdf(**good_args)
+        self.assertTrue(isinstance(df, pd.DataFrame))
+
+        # check all business days are present
+        ebdates: pd.DatetimeIndex = pd.bdate_range(start=start_date, end=end_date)
+        self.assertTrue(set(df["real_date"]) == set(ebdates))
+
+        # check that all cids and xcats are present
+        self.assertTrue(set(df["cid"]) == set(cids))
+        self.assertTrue(set(df["xcat"]) == set(xcats))
 
 
 if __name__ == "__main__":
