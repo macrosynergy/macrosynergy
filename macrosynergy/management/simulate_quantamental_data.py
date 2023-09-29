@@ -13,6 +13,7 @@ from statsmodels.tsa.arima_process import ArmaProcess
 from typing import List, Tuple, Dict, Union
 from collections import defaultdict
 import datetime
+from macrosynergy.management.utils import is_valid_iso_date
 import random
 
 
@@ -228,7 +229,12 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
     return pd.concat(df_list).reset_index(drop=True)
 
 
-def mock_qdf(cids: List[str], xcats: List[str], start: str, end: str):
+def mock_qdf(
+    cids: List[str],
+    xcats: List[str],
+    start: str,
+    end: str,
+) -> pd.DataFrame:
     """
     Generate a mock Quantamental DataFrame. The function internally calls `make_qdf()`
     to generate the DataFrame, but randomizes the `back_ar` parameter as well as the
@@ -240,6 +246,24 @@ def mock_qdf(cids: List[str], xcats: List[str], start: str, end: str):
     :param <str> end_date: An ISO-formatted date string.
     :return <pd.DataFrame>: A mock Quantamental DataFrame.
     """
+
+    if isinstance(cids, str):
+        cids = [cids]
+    if isinstance(xcats, str):
+        xcats = [xcats]
+
+    for vx, nx in [(cids, "cids"), (xcats, "xcats")]:
+        if not isinstance(vx, list):
+            raise TypeError(f"`{nx}` must be a list.")
+        elif not all(isinstance(x, str) for x in vx):
+            raise TypeError(f"All elements in `{nx}` must be strings.")
+        else:
+            if len(vx) == 0:
+                raise ValueError(f"`{nx}` cannot be empty.")
+
+    for dx, nx in [(start, "start"), (end, "end")]:
+        if not is_valid_iso_date(dx):
+            raise ValueError(f"`{nx}` must be a valid ISO date string.")
 
     def randx(low: float, high: float) -> float:
         # use system random to avoid np.random seed
