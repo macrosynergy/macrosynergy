@@ -320,6 +320,13 @@ class Test_All(unittest.TestCase):
             bad_args[arg] = bad_args[arg] + [1]
             self.assertRaises(TypeError, mock_qdf, **bad_args)
 
+        # use random string to test start/end date
+        random_str: str = "2h3rn2j"
+        for arg in ["start", "end"]:
+            bad_args: Dict[str, Any] = good_args.copy()
+            bad_args[arg] = random_str
+            self.assertRaises(ValueError, mock_qdf, **bad_args)
+
         # test that it would allow a single string as cid/xcat
         bad_args: Dict[str, Any] = good_args.copy()
         bad_args["cids"] = "AUD"
