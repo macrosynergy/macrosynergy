@@ -7,6 +7,7 @@ from macrosynergy.download.dataquery import (
     DataQueryInterface,
 )
 
+
 def random_string() -> str:
     """
     Used to generate random string for testing.
@@ -84,7 +85,7 @@ class MockDataQueryInterface(DataQueryInterface):
     def __init__(self, *args, **kwargs):
         # if there is nothing in args or kwargs, use the default config
         config: dict = {}
-        if not args and not kwargs:    
+        if not args and not kwargs:
             config: dict = dict(
                 client_id="test_clid",
                 client_secret="test_clsc",
