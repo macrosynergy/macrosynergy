@@ -228,8 +228,6 @@ class TestJPMaQSDownload(unittest.TestCase):
             bad_args["expressions"] = test_exprs
             jpmaqs.download(**bad_args)
 
-
-
         jpmaqs: JPMaQSDownload = JPMaQSDownload(
             client_id="client_id",
             client_secret="client_secret",
