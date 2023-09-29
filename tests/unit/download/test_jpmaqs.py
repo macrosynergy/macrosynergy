@@ -65,7 +65,6 @@ class TestJPMaQSDownload(unittest.TestCase):
             "show_progress": True,
             "as_dataframe": True,
             "report_time_taken": True,
-            "report_egress": True,
             "get_catalogue": True,
         }
         bad_args: Dict[str, Any] = {}
@@ -159,7 +158,6 @@ class TestJPMaQSDownload(unittest.TestCase):
             "show_progress": True,
             "as_dataframe": True,
             "report_time_taken": True,
-            "report_egress": True,
         }
 
         jpmaqs: JPMaQSDownload = JPMaQSDownload(
@@ -277,7 +275,6 @@ class TestJPMaQSDownload(unittest.TestCase):
             "show_progress": True,
             "as_dataframe": True,
             "report_time_taken": True,
-            "report_egress": True,
             "get_catalogue": False,
         }
 
