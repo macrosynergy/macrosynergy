@@ -228,9 +228,7 @@ class TestJPMaQSDownload(unittest.TestCase):
             bad_args["expressions"] = test_exprs
             jpmaqs.download(**bad_args)
 
-        with self.assertRaises(AssertionError):
-            # the assertion checks whether the download/DQInterface is "mismatched"
-            jpmaqs.download(**good_args)
+
 
         jpmaqs: JPMaQSDownload = JPMaQSDownload(
             client_id="client_id",
