@@ -232,8 +232,8 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
 def mock_qdf(
     cids: List[str],
     xcats: List[str],
-    start: str,
-    end: str,
+    start: str = "1990-01-01",
+    end: str = "2020-12-31",
 ) -> pd.DataFrame:
     """
     Generate a mock Quantamental DataFrame. The function internally calls `make_qdf()`
