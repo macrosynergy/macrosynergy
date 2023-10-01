@@ -3,7 +3,7 @@ import pandas as pd
 import warnings
 import datetime
 
-from typing import List, Tuple, Dict, Union, Set
+from typing import List, Tuple, Dict, Union, Set, Any
 from macrosynergy.management.simulate_quantamental_data import make_test_df
 from macrosynergy.management.utils import (
     get_dict_max_depth,
@@ -57,17 +57,38 @@ class TestFunctions(unittest.TestCase):
             )
 
     def test_is_valid_iso_date(self):
-        d1: str = "2020-01-01"
-        d2: str = "2020-01-01T00:00:00"
-        d3: str = "2020-01-01T00:00:00Z"
-        d5: str = "12-900-56"
-        d6: str = "foo"
-        d7: str = "bar"
-        d8: str = "Ze-ld-a"
+        good_case: str = "2020-01-01"
 
-        self.assertTrue(is_valid_iso_date(d1))
-        for d in [d2, d3, d5, d6, d7, d8]:
-            self.assertFalse(is_valid_iso_date(d))
+        bad_cases: List[str] = [
+            "2020-01-01T00:00:00",
+            "2020-01-01T00:00:00Z",
+            "12-900-56",
+            "foo",
+            "bar",
+            "Ze-ld-a",
+        ]
+
+        type_error_cases: List[Any] = [
+            1,
+            2.0,
+            {},
+            [],
+            None,
+            True,
+            False,
+            ["2020-01-01", "2020-01-02", "2020-01-03"],
+            {"a": "2020-01-01", "b": "2020-01-02", "c": "2020-01-03"},
+            pd.Timestamp("2020-01-01"),
+            pd.Timestamp("2020-01-01 00:00:00"),
+            1 + 2j,
+        ]
+
+        self.assertTrue(is_valid_iso_date(good_case))
+        for bcase in bad_cases:
+            self.assertFalse(is_valid_iso_date(bcase))
+
+        for tcase in type_error_cases:
+            self.assertRaises(TypeError, is_valid_iso_date, tcase)
 
     def test_convert_dq_to_iso(self):
         d: List[Tuple[str, str]] = [
