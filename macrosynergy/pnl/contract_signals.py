@@ -357,11 +357,13 @@ def contract_signals(
     else:
         if not all(isinstance(x, Numeric) for x in csigns):
             raise TypeError("`csigns` must be a list of integers")
-        # TODO should we have a check in terms of decimal points for csigns (floats) and warning
-        csigns: List[int] = [int(x) for x in csigns]
-        if not all(x in [-1, 1] for x in csigns):
-            warnings.warn("`csigns` is being coerced to [-1, 1]")
-            csigns: List[int] = [int(x / abs(x)) for x in csigns]
+
+        if not all(isinstance(x, int) for x in csigns):
+            warnings.warn("`csigns` is being coerced to integers")
+            csigns: List[int] = [int(x) for x in csigns]
+            if not all(x in [-1, 1] for x in csigns):
+                warnings.warn("`csigns` is being coerced to [-1, 1]")
+                csigns: List[int] = [int(x / abs(x)) for x in csigns]
 
     ## Check that the scales are of the same length as the contract types
     ## Also assert that they are either all strings or all floats
