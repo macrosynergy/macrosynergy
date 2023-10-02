@@ -7,16 +7,34 @@ and hedging them with a basket of contracts. Main function is `contract_signals`
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 import warnings
 
 from typing import List, Union, Tuple, Optional, Set, Dict
 
 from macrosynergy.pnl import Numeric, _short_xcat
 from macrosynergy.management.utils import is_valid_iso_date, standardise_dataframe
-from macrosynergy.management.simulate_quantamental_data import make_qdf, make_test_df
 from macrosynergy.management.shape_dfs import reduce_df
+
+
+def _apply_contract_scales_to_signal(
+    df_signals: pd.DataFrame,
+    df_scales: Union[pd.Series, pd.DataFrame],
+    df_signs: Union[pd.Series, pd.DataFrame],
+) -> pd.DataFrame:
+    """Apply the contract scales to the signal.
+    
+    Match the contract types with their scales and apply the scales and signs to
+    the dataframe.
+
+    :param <pd.DataFrame> df: dataframe with the contract signals.
+    :param <List[str]> ctypes: list of contract types.
+    :param <List[Union[Numeric, str]]> cscales: list of scales for the contract types.
+        These can be either floats or category tickers.
+    :param <List[int]> csigns: list of signs for the contract types. These must be
+        either 1 for long position or -1 for short position.
+    :return: dataframe with the contract signals scaled and signed.
+    """
+    return df_scales * df_signs * df_signals
 
 
 def _apply_cscales(
@@ -43,7 +61,7 @@ def _apply_cscales(
         csigns
     ), "`ctypes` and `csigns` must be of the same length"
 
-    ## If the scales are floats, apply them directly
+    # If the scales are floats, apply them directly
     if all([isinstance(x, Numeric) for x in cscales]):
         cscales: List[float] = [x * y for x, y in zip(cscales, csigns)]
         _cs: Dict[str, float] = dict(zip(ctypes, cscales))
@@ -213,7 +231,11 @@ def contract_signals(
     sname: str = "STRAT",
 ) -> pd.DataFrame:
     """
-    Caclulate contract specific signals based on cross-section-specific signals.
+    Calculate contract specific signals based on cross-section-specific signals.
+
+    # TODO rewrite:
+    inputs: `df` pivoted data-frame of (raw) signals with contracts to be traded on the columns and real dates as the index.
+
 
     :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
@@ -225,19 +247,19 @@ def contract_signals(
     :param <List[str]> cids: list of cross-sections whose signal is to be used.
     :param <List[str]> ctypes: list of identifiers for the contract types that are
         to be traded. They typically correspond to the contract type acronyms
-        that are used in JPMaQS for  generic returns, carry and volatility, such as
+        that are used in JPMaQS for generic returns, carry and volatility, such as
         "FX" for FX forwards or "EQ" for equity index futures.
         N.B. Overall a contract is identified by the combination of its cross-section
         and its contract type "<cid>_<ctype>".
     :param <List[str|float]> cscales: list of scaling factors for the contract signals.
-        These can be eigher a list of floats or a list of category tickers that serve
+        These can be either a list of floats or a list of category tickers that serve
         as basis of translation. The former are fixed across time, the latter variable.
     :param <List[float]> csigns: list of signs for the contract signals. These must be
         either 1 for long position or -1 for short position.
     :param <List[str]> hbasket: list of contract identifiers in the format "<cid>_<ctype>"
         that serve as constituents of the hedging basket.
     param <List[str|float]> hscales: list of scaling factors (weights) for the basket.
-        These can be eigher a list of floats or a list of category tickers that serve
+        These can be either a list of floats or a list of category tickers that serve
         as basis of translation. The former are fixed across time, the latter variable.
     :param <List[str]> hratios: category names for cross-section-specific hedge ratios.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
@@ -335,6 +357,7 @@ def contract_signals(
     else:
         if not all(isinstance(x, Numeric) for x in csigns):
             raise TypeError("`csigns` must be a list of integers")
+        # TODO should we have a check in terms of decimal points for csigns (floats) and warning
         csigns: List[int] = [int(x) for x in csigns]
         if not all(x in [-1, 1] for x in csigns):
             warnings.warn("`csigns` is being coerced to [-1, 1]")
@@ -383,10 +406,12 @@ def contract_signals(
     if hbasket is not None:
         df: pd.DataFrame = _apply_hscales(df=df, hbasket=hbasket, hscales=hscales)
 
+    # TODO need cids as well...
     df["scat"] = df.apply(lambda x: _short_xcat(xcat=x["xcat"]), axis=1)
+    # TODO non-position assets...
 
     # group by scat and sum the values
-    df: pd.DataFrame = df.groupby(["real_date", "scat"])["value"].sum().reset_index()
+    df: pd.DataFrame = df.groupby(["real_date", "cid", "scat"])["value"].sum().reset_index()
     # drop the xcat column and rename the scat column to xcat
     df: pd.DataFrame = df.drop(columns=["xcat"]).rename(columns={"scat": "xcat"})
 
@@ -401,6 +426,7 @@ def contract_signals(
 
 
 if __name__ == "__main__":
+    from macrosynergy.management.simulate_quantamental_data import make_qdf, make_test_df
     cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
     xcats: List[str] = ["FXXR_NSA", "EQXR_NSA", "IRXR_NSA", "CDS_NSA", "TOUSD"]
 

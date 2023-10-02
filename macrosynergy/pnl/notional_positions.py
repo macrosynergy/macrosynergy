@@ -12,7 +12,6 @@ import seaborn as sns
 
 from typing import List, Union, Tuple, Optional
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf, make_test_df
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
 from macrosynergy.panel import historic_vol
@@ -335,6 +334,7 @@ def historic_portfolio_vol(
 
 
 if __name__ == "__main__":
+    from macrosynergy.management.simulate_quantamental_data import make_qdf, make_test_df
     cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
     xcats: List[str] = ["FXXR_NSA", "EQXR_NSA", "IRXR_NSA", "CDS_NSA"]
 
