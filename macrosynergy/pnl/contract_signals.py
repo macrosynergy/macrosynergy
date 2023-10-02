@@ -387,7 +387,7 @@ def contract_signals(
                 )
 
     ## Check that all the contract types are in the dataframe as xcats
-    _s_ctypes: List[str] = [_short_xcat(xcat=xc) for xc in df["xcat"].unique().tolist()]
+    _s_ctypes: List[str] = _short_xcat(xcat=df["xcat"].unique().tolist())
     if not set(ctypes).issubset(set(_s_ctypes)):
         e_msg: str = f"Some of the contract types in `ctypes` are not in `df`"
         e_msg += f"\nMissing contract types: {set(ctypes) - set(_s_ctypes)}"
@@ -443,7 +443,6 @@ def contract_signals(
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate_quantamental_data import (
-        make_qdf,
         make_test_df,
     )
 
