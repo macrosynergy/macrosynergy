@@ -11,6 +11,10 @@ import warnings
 
 from typing import List, Union, Tuple, Optional, Set, Dict
 
+import os, sys
+
+sys.path.append(os.getcwd())
+
 from macrosynergy.pnl import Numeric, _short_xcat
 from macrosynergy.management.utils import is_valid_iso_date, standardise_dataframe
 from macrosynergy.management.shape_dfs import reduce_df
@@ -22,7 +26,7 @@ def _apply_contract_scales_to_signal(
     df_signs: Union[pd.Series, pd.DataFrame],
 ) -> pd.DataFrame:
     """Apply the contract scales to the signal.
-    
+
     Match the contract types with their scales and apply the scales and signs to
     the dataframe.
 
@@ -193,7 +197,7 @@ def _signal_to_contract(
 ) -> pd.DataFrame:
     ## Check that all the CID_SIG pairs are in the dataframe
     _sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
-    _found_sigs: List[str] = (df["cid"] + "_" + df["xcat"]).drop_duplicates().to_list()
+    _found_sigs: List[str] = (df["cid"] + "_" + df["xcat"]).drop_duplicates().tolist()
     assert set(_sigs).issubset(set(_found_sigs)), (
         "Some `cids` are missing the `sig` in the provided dataframe."
         f"\nMissing: {set(_sigs) - set(_found_sigs)}"
@@ -338,7 +342,7 @@ def contract_signals(
 
         _hratios: List[str] = [f"{cx}_{hr}" for cx in cids for hr in hratios]
         _found_hratios: List[str] = (
-            (df["cid"] + "_" + df["xcat"]).drop_duplicates().to_list()
+            (df["cid"] + "_" + df["xcat"]).drop_duplicates().tolist()
         )
         if not set(_hratios).issubset(set(_found_hratios)):
             raise ValueError(
@@ -395,6 +399,14 @@ def contract_signals(
         e_msg += f"\nMissing cross-sections: {set(cids) - set(df['cid'].unique())}"
         raise ValueError(e_msg)
 
+    ## Pivot the df on ticker
+    df["ticker"] = df.apply(lambda x: f"{x['cid']}_{x['xcat']}", axis=1)
+    # pivot such that the columns are individual tickers and the index is the real_date
+    df_wide: pd.DataFrame = df.pivot(
+        index="real_date", columns="ticker", values="value"
+    )
+    df_wide: pd.DataFrame = df_wide.reset_index()
+
     ## Calculate the contract signals
 
     df: pd.DataFrame = _signal_to_contract(df=df, sig=sig, cids=cids, ctypes=ctypes)
@@ -413,7 +425,9 @@ def contract_signals(
     # TODO non-position assets...
 
     # group by scat and sum the values
-    df: pd.DataFrame = df.groupby(["real_date", "cid", "scat"])["value"].sum().reset_index()
+    df: pd.DataFrame = (
+        df.groupby(["real_date", "cid", "scat"])["value"].sum().reset_index()
+    )
     # drop the xcat column and rename the scat column to xcat
     df: pd.DataFrame = df.drop(columns=["xcat"]).rename(columns={"scat": "xcat"})
 
@@ -428,7 +442,11 @@ def contract_signals(
 
 
 if __name__ == "__main__":
-    from macrosynergy.management.simulate_quantamental_data import make_qdf, make_test_df
+    from macrosynergy.management.simulate_quantamental_data import (
+        make_qdf,
+        make_test_df,
+    )
+
     cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
     xcats: List[str] = ["FXXR_NSA", "EQXR_NSA", "IRXR_NSA", "CDS_NSA", "TOUSD"]
 
