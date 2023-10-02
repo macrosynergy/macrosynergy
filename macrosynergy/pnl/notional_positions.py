@@ -12,7 +12,6 @@ import seaborn as sns
 
 from typing import List, Union, Tuple
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
 from macrosynergy.panel import historic_vol
@@ -214,3 +213,7 @@ def historic_portfolio_vol(
         )
 
     hv_df: pd.DataFrame = df.copy()
+
+
+if __name__ == "__main__":
+    from macrosynergy.management.simulate_quantamental_data import make_qdf
