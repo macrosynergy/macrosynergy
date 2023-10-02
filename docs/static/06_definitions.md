@@ -15,12 +15,12 @@ An example of the QDF is shown below:
 
 | real_date  | cid | xcat     | value | grading | eop_lag | mop_lag |
 | :--------- | :-- | :------- | ----: | ------: | ------: | ------: |
-| 2023-01-02 | AUD | FXXR_NSA |     0 |       1 |       0 |       0 |
-| 2023-01-02 | AUD | RIR_NSA  |     0 |       1 |       0 |       0 |
-| 2023-01-02 | AUD | EQXR_NSA |  -0.1 |       1 |       0 |       0 |
-| 2023-01-02 | CAD | FXXR_NSA |     0 |       1 |       0 |       0 |
-| 2023-01-02 | CAD | RIR_NSA  |     0 |       1 |       0 |       0 |
-| 2023-01-02 | CAD | EQXR_NSA |  -0.2 |       1 |       0 |       0 |
+| 2023-01-02 | AUD | FXXR_NSA |   3.8 |       1 |       0 |       10|
+| 2023-01-02 | AUD | RIR_NSA  |   2.0 |       1 |       0 |       10|
+| 2023-01-02 | AUD | EQXR_NSA |  -0.1 |       1 |       0 |       10|
+| 2023-01-02 | CAD | FXXR_NSA |   0.1 |       2 |       0 |       10|
+| 2023-01-02 | CAD | RIR_NSA  |   1.3 |       2 |       0 |       10|
+| 2023-01-02 | CAD | EQXR_NSA |  -0.2 |       2 |       0 |       10|
 
 To get a better understanding of the QDF, please see Ralph's Research posts:
 
@@ -59,15 +59,25 @@ Examples:
 These are often appended with an additional string to identify specific transformations,
 adjustments or other characteristics of the data series.
 
+## Grading
+
+This is an integer between 1 and 3 (inclusive) that specifies the quality of the data
+series. Grade 1 is the highest quality, and grade 3 is the lowest quality.
+
 ## End-of-Period (EOP) lags
 
-These are integers that specify the number of days between the last day in the period and
-the publish date of the corresponding data point.
+These are integers that specify the number of business days between the last day in the
+period and the publish date of the corresponding data point.
 
 For example, if the series reports monthly data, and the last day of the month would be
 the end of the period, then the EOP lag would be 0. When data is published for
 the next date in the series, the EOP lag would be 1.
 
-## Mean-of-Period (MOP) lags
+## Median-of-Period (MOP) lags
 
-...
+These are integers that specify the number of business days between the median/middle day
+in the period and the publish date of the corresponding data point.
+
+For example, if the series reports monthly data, and the middle day of the month would be
+the median of the period, and for a value published on the first of the next month - the
+MOP lag would be (10).
