@@ -190,33 +190,42 @@ def apply_hedge_ratio(
 
 
 def _signal_to_contract(
-    df: pd.DataFrame,
+    df_wide: pd.DataFrame,
     sig: str,
     cids: List[str],
     ctypes: List[str],
 ) -> pd.DataFrame:
     ## Check that all the CID_SIG pairs are in the dataframe
     _sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
-    _found_sigs: List[str] = (df["cid"] + "_" + df["xcat"]).drop_duplicates().tolist()
+    _found_sigs: List[str] = df_wide.columns.tolist()
     assert set(_sigs).issubset(set(_found_sigs)), (
         "Some `cids` are missing the `sig` in the provided dataframe."
         f"\nMissing: {set(_sigs) - set(_found_sigs)}"
     )
 
-    ## Multiple all <cid>_<ctype> with their respective <cid>_<sig>
-    out_dfs: List[pd.DataFrame] = []
-    for _cid in cids:
-        for _ctype in ctypes:
-            _df: pd.DataFrame = df[
-                (df["cid"] == _cid) & (_short_xcat(xcat=df["xcat"]) == _ctype)
-            ].copy()
-            _df["value"] = (
-                _df["value"] * df[df["cid"] == _cid][f"{_cid}_{sig}"].values[0]
-            )
-            out_dfs.append(_df)
+    # check that all cid_ctypes are in the dataframe
+    _cids_ctypes: List[str] = [f"{cx}_{ctx}" for cx in cids for ctx in ctypes]
+    found_cid_ctypes: List[str] = [
+        f"{_cid}_{_ctx}"
+        for _cid in cids
+        for _ctx in _short_xcat(ticker=df_wide.columns.tolist())
+    ]
+    assert set(_cids_ctypes).issubset(set(found_cid_ctypes)), (
+        "Some contracts are missing the `ctypes` in the provided dataframe."
+        f"\nMissing: {set(_cids_ctypes) - set(_found_sigs)}"
+    )
 
-    df: pd.DataFrame = pd.concat(out_dfs, axis=0, ignore_index=True)
-    return df
+    ## DF with signals for the cids
+    # sigs_df: pd.DataFrame = df_wide[df_wide.columns.intersection(_sigs)]
+
+    for _cidx in cids:
+        sig_series: pd.Series = df_wide[_cidx + "_" + sig]
+        col_selection: pd.Series = df_wide.columns.str.startswith(_cidx + "_")
+        df_wide.loc[:, col_selection] = df_wide.loc[:, col_selection].apply(
+            lambda x: x * sig_series
+        )
+
+    return df_wide
 
 
 def contract_signals(
@@ -405,11 +414,12 @@ def contract_signals(
     df_wide: pd.DataFrame = df.pivot(
         index="real_date", columns="ticker", values="value"
     )
-    df_wide: pd.DataFrame = df_wide.reset_index()
 
     ## Calculate the contract signals
 
-    df: pd.DataFrame = _signal_to_contract(df=df, sig=sig, cids=cids, ctypes=ctypes)
+    df: pd.DataFrame = _signal_to_contract(
+        df_wide=df_wide, sig=sig, cids=cids, ctypes=ctypes
+    )
 
     # in order, multiple the contract signals by the contract scales
     df: pd.DataFrame = _apply_cscales(
