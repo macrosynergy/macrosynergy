@@ -42,7 +42,7 @@ def _apply_contract_scales_to_signal(
 
 
 def _apply_cscales(
-    df: pd.DataFrame,
+    df_wide: pd.DataFrame,
     ctypes: List[str],
     cscales: List[Union[Numeric, str]],
     csigns: List[int],
@@ -65,39 +65,41 @@ def _apply_cscales(
         csigns
     ), "`ctypes` and `csigns` must be of the same length"
 
+    cids_found: List[str] = [x.split("_")[0] for x in df_wide.columns.tolist()]
+    short_xcats: List[str] = _short_xcat(ticker=df_wide.columns.tolist())
+
     # If the scales are floats, apply them directly
     if all([isinstance(x, Numeric) for x in cscales]):
         cscales: List[float] = [x * y for x, y in zip(cscales, csigns)]
         _cs: Dict[str, float] = dict(zip(ctypes, cscales))
-        df["value"] = df.apply(
-            lambda x: x["value"] * _cs[_short_xcat(xcat=x["xcat"])],
-            axis=1,
-        )
+        for _cidx in cids_found:
+            for _xc in short_xcats:
+                sel_bools: pd.Series = df_wide.columns.str.startswith(f"{_cidx}_{_xc}")
+                df_wide.loc[:, sel_bools] = df_wide.loc[:, sel_bools] * _cs[_xc]
+
+        return df_wide
+
     ## If the scales are category tickers, apply them by matching the dates
     elif all([isinstance(x, str) for x in cscales]):
-        out_dfs: List[pd.DataFrame] = []
-        for _xcat, _xscale, _xsign in zip(ctypes, cscales, csigns):
-            xcat_df: pd.DataFrame = df[_short_xcat(xcat=df["xcat"]) == _xcat].copy()
-            cids_list: List[str] = xcat_df["cid"].unique().tolist()
-            for cidx in cids_list:
-                data_df: pd.DataFrame = xcat_df[xcat_df["cid"] == cidx].set_index(
-                    "real_date"
+        for _cidx in cids_found:
+            sel_cids_bools: pd.Series = [
+                x.startswith(_cidx + "_") for x in df_wide.columns
+            ]
+            for _xcat, _xscale, _xsign in zip(ctypes, cscales, csigns):
+                sel_xcats_bools: pd.Series = [
+                    _short_xcat(xcat=x) == _xcat for x in df_wide.columns.tolist()
+                ]
+                # and the two together
+                sel_bools: pd.Series = sel_cids_bools & sel_xcats_bools
+
+                _scale_series: pd.Series = (
+                    df_wide.loc[:, sel_bools].set_index("real_date") * _xscale * _xsign
                 )
-                w_df: pd.DataFrame = df[
-                    (_short_xcat(xcat=df["xcat"]) == _xscale) & (df["cid"] == cidx)
-                ].set_index("real_date")
+                # multiply scale series by every column from df[selected_bools] with _scale_series
 
-                # match by date, and multiply the values
-                data_df["value"] = data_df["value"] * w_df["value"] * _xsign
-
-                # append to the output dataframes
-                out_dfs.append(data_df.reset_index())
-
-        # concatenate the output dataframes
-        df: pd.DataFrame = pd.concat(out_dfs, axis=0, ignore_index=True)
-        out_dfs = None
-    else:
-        raise ValueError("`cscales` must be a list of floats or category tickers")
+                df_wide.loc[:, sel_bools] = df_wide.loc[:, sel_bools].apply(
+                    lambda x: x * _scale_series
+                )
 
     return df
 
