@@ -100,7 +100,8 @@ class SignalsReturns:
         if ret is None:
             ret = self.rets if not isinstance(self.rets, list) else self.rets[0]
         if xcat is None:
-            xcat = self.xcats if not isinstance(self.xcats, list) else self.xcats[0]
+            xcat = self.xcats if not isinstance(self.xcats, list) else [self.xcats[0]]
+            #TODO: Doc string does not work here, to choose only the first value
         if freq is None:
             freq = self.freqs if not isinstance(self.freqs, list) else self.freqs[0]
         if agg_sigs is None:
@@ -108,7 +109,7 @@ class SignalsReturns:
 
         cids: List[str] = None
         dfd = reduce_df(
-            self.df, xcats=self.xcats, cids=cids, start=self.start, end=self.end, blacklist=self.blacklist
+            self.df, xcats=xcat, cids=cids, start=self.start, end=self.end, blacklist=self.blacklist
         )
         metric_cols: List[str] = list(
             set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
