@@ -229,7 +229,7 @@ class TestAll(unittest.TestCase):
             # Adjust the expected start dates by one day to account for the shift
             # mechanism. The computed signal is used for the following day's position.
             self.assertTrue(column.first_valid_index() ==
-                            pd.Timestamp(expected_start[c]) + pd.DateOffset(1))
+                            pd.Timestamp(expected_start[c]) + pd.offsets.BusinessDay(n=1))
 
         # Choose a quasi-random sample of dates to confirm the logic of computing the
         # PnL. Multiply each cross-section's signal by their respective return.
