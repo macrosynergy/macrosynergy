@@ -52,8 +52,8 @@ class NoneType(type):
 
 
 def _short_xcat(
-    ticker: Optional[Union[str, Iterable]] = None,
-    xcat: Optional[Union[str, Iterable]] = None,
+    ticker: Optional[Union[str, List[str]]] = None,
+    xcat: Optional[Union[str, List[str]]] = None,
 ):
     """
     Get the short version of the cross-section category.
@@ -65,10 +65,15 @@ def _short_xcat(
     """
     if ticker is not None and xcat is not None:
         raise ValueError("Either `ticker` or `xcat` must be specified, not both")
-    if isinstance(ticker, Iterable):
+
+    if isinstance(ticker, list):
         return [_short_xcat(ticker=t) for t in ticker]
-    if isinstance(xcat, Iterable):
+    if isinstance(xcat, list):
         return [_short_xcat(xcat=x) for x in xcat]
+
+    for vx, nx in [(ticker, "ticker"), (xcat, "xcat")]:
+        if vx is not None and not isinstance(vx, str):
+            raise TypeError(f"`{nx}` must be a string, not {type(vx)}")
 
     if ticker is not None:
         _, xcat = ticker.split("_", 1)
