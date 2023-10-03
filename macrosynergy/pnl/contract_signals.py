@@ -38,10 +38,11 @@ def _apply_contract_scales_to_signal(
         either 1 for long position or -1 for short position.
     :return: dataframe with the contract signals scaled and signed.
     """
-    return df_scales * df_signs * df_signals
+    return df_signs * df_scales * df_signals
 
 
 def _apply_cscales(
+    df_signals: pd.DataFrame,
     df_wide: pd.DataFrame,
     ctypes: List[str],
     cscales: List[Union[Numeric, str]],
@@ -58,6 +59,8 @@ def _apply_cscales(
     :param <List[int]> csigns: list of signs for the contract types. These must be
         either 1 for long position or -1 for short position.
     """
+
+
     assert len(ctypes) == len(
         cscales
     ), "`ctypes` and `cscales` must be of the same length"
@@ -70,17 +73,22 @@ def _apply_cscales(
 
     # If the scales are floats, apply them directly
     if all([isinstance(x, Numeric) for x in cscales]):
-        cscales: List[float] = [x * y for x, y in zip(cscales, csigns)]
-        _cs: Dict[str, float] = dict(zip(ctypes, cscales))
-        for _cidx in cids_found:
-            for _xc in short_xcats:
-                sel_bools: pd.Series = df_wide.columns.str.startswith(f"{_cidx}_{_xc}")
-                df_wide.loc[:, sel_bools] = df_wide.loc[:, sel_bools] * _cs[_xc]
-
-        return df_wide
+        df_cscales: pd.DataFrame = pd.Series(
+            data=cscales, index=ctypes, name="cscales"
+        )
 
     ## If the scales are category tickers, apply them by matching the dates
     elif all([isinstance(x, str) for x in cscales]):
+        df_cscales: pd.DataFrame = df_wide.loc[:, cscales]
+    else:
+        raise ValueError("`cscales` must be a list of floats or category tickers")
+
+    # TODO same for csigns...
+    _apply_contract_scales_to_signal(
+        df_signals: pd.DataFrame,
+        df_scales: Union[pd.Series, pd.DataFrame],
+        df_signs: Union[pd.Series, pd.DataFrame],
+    )
         for _cidx in cids_found:
             sel_cids_bools: pd.Series = [
                 x.startswith(_cidx + "_") for x in df_wide.columns
@@ -232,9 +240,9 @@ def _signal_to_contract(
 
 def contract_signals(
     df: pd.DataFrame,
-    sig: str,
-    cids: List[str],
-    ctypes: List[str],
+    sig: str,  # string
+    cids: List[str],  # cross sections
+    ctypes: List[str],  # ctypes = ["FX", "EQ"]
     cscales: Optional[List[Union[Numeric, str]]] = None,
     csigns: Optional[List[int]] = None,
     hbasket: Optional[List[str]] = None,
@@ -289,6 +297,42 @@ def contract_signals(
         specified strategy. It has the standard JPMaQS DataFrame. The contract signals
         have the following format "<cid>_<ctype>_<sname>_CSIG".
     """
+
+    # Extracting matrix of signals, single signal per cross section
+    df_signals: pd.DataFrame = df.loc[df.cid.isin(cids) & (df.xkat == sig), :].pivot(
+        index="real_date", columns="cid", values="value"
+    )
+
+    if len(ctypes) > 1:
+        df_signals = pd.concat(
+            (
+                df_signals.rename(columns={col: f"{col}_{cc}" for col in df_signals.columns})
+                for cc for ctypes
+            ),
+            axis=1,
+            ignore_index=False
+        )
+
+    # Extract matrix of returns, could be multiple asset types per cross section, apply same signal.
+    df_returns = pd.concat(
+        (
+            df.loc[
+                df.cid.isin(cids) & df.xkat.str.startswith(cc),
+                :
+            ].pivot(
+                index="real_date", columns="cid", values="value"
+            ).rename(columns={cc: f"{cid}_{cc}" for cid in cids})
+            for cc in ctypes
+        ),
+        axis=1,
+        ignore_index=False
+    )
+
+    # df_scales
+    # df_signs
+
+    # Hedging basket...
+
     ## basic type and value checks
     for varx, namex, typex in [
         (df, "df", pd.DataFrame),
