@@ -99,13 +99,11 @@ class SignalsReturns:
     def single_relation_table(self, ret=None, xcat=None, freq=None, agg_sigs=None):
         if ret is None:
             ret = self.rets if not isinstance(self.rets, list) else self.rets[0]
-        if xcat is None:
-            xcat = self.xcats if not isinstance(self.xcats, list) else [self.xcats[0]]
-            #TODO: Doc string does not work here, to choose only the first value
         if freq is None:
             freq = self.freqs if not isinstance(self.freqs, list) else self.freqs[0]
         if agg_sigs is None:
             agg_sigs = self.agg_sigs if not isinstance(self.agg_sigs, list) else self.agg_sigs[0]
+        xcat = self.xcats
 
         cids: List[str] = None
         dfd = reduce_df(
@@ -115,19 +113,19 @@ class SignalsReturns:
             set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
         )
         dfd: pd.DataFrame = self.apply_slip(
-            target_df=dfd, slip=self.slip, cids=cids, xcats=self.xcats, metrics=metric_cols
+            target_df=dfd, slip=self.slip, cids=cids, xcats=xcat, metrics=metric_cols
         )
 
         self.dfd = dfd
 
         df = categories_df(
             dfd,
-            xcats=self.xcats,
+            xcats=xcat,
             cids=cids,
             val="value",
             start=None,
             end=None,
-            freq=self.freqs,
+            freq=freq,
             blacklist=None,
             lag=1,
             xcat_aggs=[agg_sigs, "sum"],
@@ -147,7 +145,7 @@ class SignalsReturns:
             self.sigs += "_NEG"
             self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
 
-        return self.__output_table__(cs_type="cids")
+        return self.__output_table__(cs_type="cids", ret=ret)
 
         
 
@@ -198,7 +196,7 @@ class SignalsReturns:
 
         return target_df
     
-    def __output_table__(self, cs_type: str = "cids"):
+    def __output_table__(self, cs_type: str = "cids", ret = None):
         """
         Creates a DataFrame with information on the signal-return relation across
         cross-sections or years and, additionally, the panel.
@@ -208,7 +206,12 @@ class SignalsReturns:
         """
 
         # Analysis completed exclusively on the primary signal.
-        df = self.df[[self.rets, self.sigs]]
+        r = [ret]
+        if isinstance(self.sigs, list):
+            r += self.sigs
+        else:
+            r.append(self.sigs)
+        df = self.df[r]
 
         # Will remove any timestamps where both the signal & return are not realised.
         # Applicable even if communal sampling has been applied given the alignment
@@ -227,13 +230,13 @@ class SignalsReturns:
 
         df_cs = self.__slice_df__(df=df, cs="Panel", cs_type=cs_type)
         df_out = self.__table_stats__(
-                df_segment=df_cs, df_out=df_out, segment="Panel", signal=self.sigs
+                df_segment=df_cs, df_out=df_out, segment="Panel", signal=self.sigs, ret=ret
             )
         
         return df_out.astype("float")
     
     def __table_stats__(
-        self, df_segment: pd.DataFrame, df_out: pd.DataFrame, segment: str, signal: str
+        self, df_segment: pd.DataFrame, df_out: pd.DataFrame, segment: str, signal: str, ret: str
     ):
         """
         Method used to compute the evaluation metrics across segments: cross-section,
@@ -249,14 +252,14 @@ class SignalsReturns:
 
         # Account for NaN values between the single respective signal and return. Only
         # applicable for rival signals panel level calculations.
-        df_segment = df_segment.loc[:, [self.rets, signal]].dropna(axis=0, how="any")
+        df_segment = df_segment.loc[:, [ret, signal]].dropna(axis=0, how="any")
 
-        df_sgs = np.sign(df_segment.loc[:, [self.rets, signal]])
+        df_sgs = np.sign(df_segment.loc[:, [ret, signal]])
         # Exact zeroes are disqualified for sign analysis only.
         df_sgs = df_sgs[~((df_sgs.iloc[:, 0] == 0) | (df_sgs.iloc[:, 1] == 0))]
 
         sig_sign = df_sgs[signal]
-        ret_sign = df_sgs[self.rets]
+        ret_sign = df_sgs[ret]
 
         df_out.loc[segment, "accuracy"] = skm.accuracy_score(sig_sign, ret_sign)
         df_out.loc[segment, "bal_accuracy"] = skm.balanced_accuracy_score(
@@ -272,7 +275,7 @@ class SignalsReturns:
             ret_sign, sig_sign, pos_label=-1
         )
 
-        ret_vals, sig_vals = df_segment[self.rets], df_segment[signal]
+        ret_vals, sig_vals = df_segment[ret], df_segment[signal]
         df_out.loc[segment, ["kendall", "kendall_pval"]] = stats.kendalltau(
             ret_vals, sig_vals
         )
