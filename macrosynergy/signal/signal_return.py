@@ -35,6 +35,7 @@ class SignalsReturns:
         
         df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
         self.df = df
+        self.original_df = df.copy()
 
         required_columns = ["cid", "xcat", "real_date", "value"]
 
@@ -97,17 +98,25 @@ class SignalsReturns:
         self.agg_sigs = agg_sigs
 
     def single_relation_table(self, ret=None, xcat=None, freq=None, agg_sigs=None):
+        """if isinstance(self.sigs, list):
+            sig = self.sigs[0]
+        else:
+            sig = self.sigs"""
         if ret is None:
             ret = self.rets if not isinstance(self.rets, list) else self.rets[0]
         if freq is None:
             freq = self.freqs if not isinstance(self.freqs, list) else self.freqs[0]
         if agg_sigs is None:
             agg_sigs = self.agg_sigs if not isinstance(self.agg_sigs, list) else self.agg_sigs[0]
-        xcat = self.xcats
-
+        if xcat is None:
+            sig = self.sigs if not isinstance(self.sigs, list) else self.sigs[0]
+            xcat = [sig, ret]
+        else:
+            sig = xcat[0]
+        
         cids: List[str] = None
         dfd = reduce_df(
-            self.df, xcats=xcat, cids=cids, start=self.start, end=self.end, blacklist=self.blacklist
+            self.original_df, xcats=xcat, cids=cids, start=self.start, end=self.end, blacklist=self.blacklist
         )
         metric_cols: List[str] = list(
             set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
@@ -136,7 +145,6 @@ class SignalsReturns:
         if not isinstance(self.signs, list):
             self.signs = [self.signs]
 
-
         if -1 in self.signs:
             self.df.loc[:, self.signals] *= -1
             s_copy = self.signals.copy()
@@ -145,9 +153,31 @@ class SignalsReturns:
             self.sigs += "_NEG"
             self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
 
-        return self.__output_table__(cs_type="cids", ret=ret)
+        return self.__output_table__(cs_type="cids", ret=ret, sig=sig)
 
+    def multiple_relations_table(self, rets=None, xcats=None, freqs=None, agg_sigs=None):
+        if rets is None:
+            rets = self.rets
+        if freqs is None:
+            freqs = self.freqs 
+        if agg_sigs is None:
+            agg_sigs = self.agg_sigs
+        if xcats is None:
+            xcats = self.xcats
+
+        df_out = pd.DataFrame()
         
+        xcats = [x for x in xcats if x not in rets]
+
+        index = []
+        for ret in rets:
+            for xcat in xcats:
+                index.append(f"{ret}/{xcat}") 
+                print(index)
+                print(self.single_relation_table(ret=ret, xcat=[xcat, ret]))
+        
+        
+        return 1
 
     def apply_slip(
         self,
@@ -196,7 +226,7 @@ class SignalsReturns:
 
         return target_df
     
-    def __output_table__(self, cs_type: str = "cids", ret = None):
+    def __output_table__(self, cs_type: str = "cids", ret = None, sig = None):
         """
         Creates a DataFrame with information on the signal-return relation across
         cross-sections or years and, additionally, the panel.
@@ -207,10 +237,10 @@ class SignalsReturns:
 
         # Analysis completed exclusively on the primary signal.
         r = [ret]
-        if isinstance(self.sigs, list):
-            r += self.sigs
+        if isinstance(sig, list):
+            r += sig
         else:
-            r.append(self.sigs)
+            r.append(sig)
         df = self.df[r]
 
         # Will remove any timestamps where both the signal & return are not realised.
@@ -230,7 +260,7 @@ class SignalsReturns:
 
         df_cs = self.__slice_df__(df=df, cs="Panel", cs_type=cs_type)
         df_out = self.__table_stats__(
-                df_segment=df_cs, df_out=df_out, segment="Panel", signal=self.sigs, ret=ret
+                df_segment=df_cs, df_out=df_out, segment="Panel", signal=sig, ret=ret
             )
         
         return df_out.astype("float")
@@ -252,6 +282,7 @@ class SignalsReturns:
 
         # Account for NaN values between the single respective signal and return. Only
         # applicable for rival signals panel level calculations.
+        
         df_segment = df_segment.loc[:, [ret, signal]].dropna(axis=0, how="any")
 
         df_sgs = np.sign(df_segment.loc[:, [ret, signal]])
