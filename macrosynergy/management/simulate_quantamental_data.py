@@ -8,18 +8,14 @@ quantamental data for testing purposes.
 ::docs::mock_qdf::sort_first::
 
 """
-import os, sys
-
-sys.path.append(os.getcwd())
 
 import numpy as np
 import pandas as pd
 from statsmodels.tsa.arima_process import ArmaProcess
-from typing import List, Tuple, Dict, Union, Optional, Any
+from typing import List, Dict, Union, Optional
 from collections import defaultdict
 import datetime
 from macrosynergy.management.utils import is_valid_iso_date
-import random
 
 
 def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float = 0.75):
