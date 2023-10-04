@@ -258,12 +258,12 @@ def _mock_qdf_lag_gen(
             df[col_name] = np.where(df[col_name] < 0, df[col_name] + 4, df[col_name])
     elif freq in ["M", "Q", "A"]:
         # add a column called H
-        df["H"] = pd.Timestamp(df.index).day
+        df["H"] = pd.Series(df.index).apply(lambda x: pd.Timestamp(x).day)
         # set h to the last day of the month for each month for each date in the df
         trnsf: str = "median" if mode == "mop" else "max"
         df["H"] = df["H"].groupby(pd.Grouper(freq=freq)).transform(trnsf)
         # set eop to the business day diff between H and index
-        df[col_name] = df["H"] - df.index + pd.offsets.BDay(n=0)
+        df = df.apply(lambda x: x.index.day - x["H"] + pd.offsets.BDay(), axis=1)
         # convert eop to int
         df[col_name] = df[col_name].dt.days
         df = df.drop(columns=["H"])
@@ -285,9 +285,9 @@ def _mock_qdf_eop_mop(
 
     mqdf["eop_lag"] = 0
     mqdf["mop_lag"] = 0
-    start: str = pd.Timestamp(mqdf["real_date"].min()).strftime("%Y-%m-%d")
-    end: str = pd.Timestamp(mqdf["real_date"].max()).strftime("%Y-%m-%d")
-    bdrage: pd.DatetimeIndex = pd.DataTimeIndex(pd.bdate_range(start, end))
+    start: str = pd.Timestamp(mqdf.index.min()).strftime("%Y-%m-%d")
+    end: str = pd.Timestamp(mqdf.index.max()).strftime("%Y-%m-%d")
+    bdrage: pd.DatetimeIndex = pd.DatetimeIndex(pd.bdate_range(start, end))
 
     for cid in cids:
         for xcat in xcats:
