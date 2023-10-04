@@ -246,27 +246,36 @@ def _mock_qdf_lag_gen(
     df: pd.DataFrame = pd.DataFrame(columns=["real_date", col_name])
     df["real_date"] = pd.bdate_range(start, end)
     df[col_name] = 0
-    # set index
     df.set_index("real_date", inplace=True)
 
     if freq == "D":
         df[col_name] = 0
     elif freq == "W":
-        df[col_name] = pd.Timestamp(df.index).weekday()
+        df[col_name] = df.index.weekday
         if mode == "mop":
             df[col_name] = df[col_name] - 2
             df[col_name] = np.where(df[col_name] < 0, df[col_name] + 4, df[col_name])
     elif freq in ["M", "Q", "A"]:
-        # add a column called H
-        df["H"] = pd.Series(df.index).apply(lambda x: pd.Timestamp(x).day)
-        # set h to the last day of the month for each month for each date in the df
-        trnsf: str = "median" if mode == "mop" else "max"
-        df["H"] = df["H"].groupby(pd.Grouper(freq=freq)).transform(trnsf)
-        # set eop to the business day diff between H and index
-        df = df.apply(lambda x: x.index.day - x["H"] + pd.offsets.BDay(), axis=1)
-        # convert eop to int
-        df[col_name] = df[col_name].dt.days
-        df = df.drop(columns=["H"])
+        if mode == "eop":
+            for date in df.index:
+                prev_period_end = (
+                    (date - pd.DateOffset(days=1)).to_period(freq).end_time
+                )
+                df.at[date, col_name] = np.busday_count(
+                    prev_period_end.date().strftime("%Y-%m-%d"),
+                    date.date().strftime("%Y-%m-%d"),
+                )
+        elif mode == "mop":
+            for date in df.index:
+                period_start = date.to_period(freq).start_time
+                period_end = date.to_period(freq).end_time
+                median_date = period_start + pd.DateOffset(
+                    days=(period_end - period_start).days // 2
+                )
+                df.at[date, col_name] = np.busday_count(
+                    median_date.date().strftime("%Y-%m-%d"),
+                    date.date().strftime("%Y-%m-%d"),
+                )
 
     return df
 
@@ -386,8 +395,10 @@ def mock_qdf(
         if not is_valid_iso_date(dx):
             raise ValueError(f"`{nx}` must be a valid ISO date string.")
 
-    OLD_NP_SEED = np.random.get_state()
+    if not isinstance(np_seed, int):
+        raise TypeError("`np_seed` must be an integer.")
 
+    OLD_NP_SEED = np.random.get_state()
     np.random.seed(np_seed)
 
     def randx(low: float, high: float) -> float:
