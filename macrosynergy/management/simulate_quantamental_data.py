@@ -234,22 +234,41 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
     return pd.concat(df_list).reset_index(drop=True)
 
 
-def _mock_qdf_eop(
-    cid: str,
-    xcat: str,
+def _mock_qdf_lag_gen(
+    mode: str,
     start: str,
     end: str,
     freq: str,
 ) -> pd.DataFrame:
-    # create a df with a column for pd.bdate_range(start, end)
-    # create a column for the eop of each date
+    assert mode in ["eop", "mop"], "`mode` must be either 'eop' or 'mop'"
 
-    df: pd.DataFrame = pd.DataFrame(columns=["real_date", "eop_lag"])
+    col_name: str = f"{mode}_lag"
+    df: pd.DataFrame = pd.DataFrame(columns=["real_date", col_name])
     df["real_date"] = pd.bdate_range(start, end)
-    df["eop_lag"] = 0
+    df[col_name] = 0
+    # set index
+    df.set_index("real_date", inplace=True)
 
-    # eop means end-of-period
-    # for each date, the eop_lag is the number of days since the last eop, create a column for this
+    if freq == "D":
+        df[col_name] = 0
+    elif freq == "W":
+        df[col_name] = pd.Timestamp(df.index).weekday()
+        if mode == "mop":
+            df[col_name] = df[col_name] - 2
+            df[col_name] = np.where(df[col_name] < 0, df[col_name] + 4, df[col_name])
+    elif freq in ["M", "Q", "A"]:
+        # add a column called H
+        df["H"] = pd.Timestamp(df.index).day
+        # set h to the last day of the month for each month for each date in the df
+        trnsf: str = "median" if mode == "mop" else "max"
+        df["H"] = df["H"].groupby(pd.Grouper(freq=freq)).transform(trnsf)
+        # set eop to the business day diff between H and index
+        df[col_name] = df["H"] - df.index + pd.offsets.BDay(n=0)
+        # convert eop to int
+        df[col_name] = df[col_name].dt.days
+        df = df.drop(columns=["H"])
+
+    return df
 
 
 def _mock_qdf_eop_mop(
@@ -262,15 +281,27 @@ def _mock_qdf_eop_mop(
     tickers: List[str] = (mqdf["cid"] + "_" + mqdf["xcat"]).unique().tolist()
 
     freqs: Dict[str, str] = {tx: np.random.choice(FREQS_LIST) for tx in tickers}
+    mqdf.set_index("real_date", inplace=True)
 
     mqdf["eop_lag"] = 0
     mqdf["mop_lag"] = 0
+    start: str = pd.Timestamp(mqdf["real_date"].min()).strftime("%Y-%m-%d")
+    end: str = pd.Timestamp(mqdf["real_date"].max()).strftime("%Y-%m-%d")
+    bdrage: pd.DatetimeIndex = pd.DataTimeIndex(pd.bdate_range(start, end))
 
     for cid in cids:
         for xcat in xcats:
             ticker: str = cid + "_" + xcat
             freq: str = freqs[ticker]
-            ...
+            for modex in ["eop", "mop"]:
+                _mock_vals: pd.DataFrame = _mock_qdf_lag_gen(
+                    start=start, end=end, freq=freq, mode=modex
+                )
+                sel_bool: pd.Series = (mqdf["cid"] == cid) & (mqdf["xcat"] == xcat)
+                col_str: str = f"{modex}_lag"
+                mqdf.loc[sel_bool, col_str] = _mock_vals[col_str].loc[bdrage].values
+
+    mqdf.reset_index(inplace=True)
 
     return mqdf
 
