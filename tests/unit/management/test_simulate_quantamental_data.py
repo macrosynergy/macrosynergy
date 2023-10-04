@@ -348,6 +348,19 @@ class Test_All(unittest.TestCase):
         self.assertTrue(set(df["cid"]) == set(cids))
         self.assertTrue(set(df["xcat"]) == set(xcats))
 
+        # test that the columns are correct
+        expc_cols: List[str] = [
+            "cid",
+            "xcat",
+            "real_date",
+            "value",
+            "eop_lag",
+            "mop_lag",
+            "grading",
+        ]
+
+        self.assertTrue(set(df.columns) == set(expc_cols))
+
 
 if __name__ == "__main__":
     unittest.main()
