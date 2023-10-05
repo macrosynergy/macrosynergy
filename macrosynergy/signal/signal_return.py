@@ -164,20 +164,34 @@ class SignalsReturns:
             agg_sigs = self.agg_sigs
         if xcats is None:
             xcats = self.xcats
+        
+        if not isinstance(rets, list):
+            rets = [rets]
 
         df_out = pd.DataFrame()
         
-        xcats = [x for x in xcats if x not in rets]
+        xcats = [x for x in xcats if x in self.sigs]
 
         index = []
         for ret in rets:
             for xcat in xcats:
-                index.append(f"{ret}/{xcat}") 
-                print(index)
-                print(self.single_relation_table(ret=ret, xcat=[xcat, ret]))
+                index.append(f"{ret}/{xcat}")
+                df_out = pd.concat([df_out, self.single_relation_table(ret=ret, xcat=[xcat, ret])])
         
-        
-        return 1
+        df_out.index = index
+        return df_out
+    
+    def single_statistic_table(self, stat, type='panel', rows=None, columns=None, heatmap=False, title=None):
+
+        stats_values = ["accuracy", "bal_accuracy", "pos_sigr", "pos_retr", "pos_prec", "neg_prec", "pearson", "pearson_pval", "kendall", "kendall_pval"]
+        type_values = ["panel", "mean_years", "mean_cids", "pr_years", "pr_cids"]
+
+        if not stat in stats_values:
+            raise ValueError(f"Stat must be one of {stats_values}")
+        if not type in type_values:
+            raise ValueError(f"Type must be one of {type_values}")
+
+        return 0
 
     def apply_slip(
         self,
