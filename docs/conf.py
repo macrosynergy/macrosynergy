@@ -18,7 +18,6 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx_design",
     "sphinx_book_theme",
-    "sphinx_multiversion",
     "sphinx_jupyterbook_latex",
 ]
 external_toc_exclude_missing = False
