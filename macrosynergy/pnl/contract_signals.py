@@ -191,58 +191,19 @@ def apply_hedge_ratio(
     return df
 
 
-def _signal_to_contract(
-    df_wide: pd.DataFrame,
-    sig: str,
-    cids: List[str],
-    ctypes: List[str],
-) -> pd.DataFrame:
-    ## Check that all the CID_SIG pairs are in the dataframe
-    _sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
-    _found_sigs: List[str] = df_wide.columns.tolist()
-    assert set(_sigs).issubset(set(_found_sigs)), (
-        "Some `cids` are missing the `sig` in the provided dataframe."
-        f"\nMissing: {set(_sigs) - set(_found_sigs)}"
-    )
-
-    # check that all cid_ctypes are in the dataframe
-    _cids_ctypes: List[str] = [f"{cx}_{ctx}" for cx in cids for ctx in ctypes]
-    found_cid_ctypes: List[str] = [
-        f"{_cid}_{_ctx}"
-        for _cid in cids
-        for _ctx in _short_xcat(ticker=df_wide.columns.tolist())
-    ]
-    assert set(_cids_ctypes).issubset(set(found_cid_ctypes)), (
-        "Some contracts are missing the `ctypes` in the provided dataframe."
-        f"\nMissing: {set(_cids_ctypes) - set(_found_sigs)}"
-    )
-
-    ## DF with signals for the cids
-    # sigs_df: pd.DataFrame = df_wide[df_wide.columns.intersection(_sigs)]
-
-    for _cidx in cids:
-        sig_series: pd.Series = df_wide[_cidx + "_" + sig]
-        col_selection: pd.Series = df_wide.columns.str.startswith(_cidx + "_")
-        df_wide.loc[:, col_selection] = df_wide.loc[:, col_selection].apply(
-            lambda x: x * sig_series
-        )
-
-    return df_wide
-
-
-def _construct_signals(
+def _apply_sig_conversion(
     df: pd.DataFrame,
     sig: str,
     cids: List[str],
 ) -> pd.DataFrame:
     """
-    Get the wide dataframe with the signals for the cids.
+    Get the wide dataframe with all assets reported in the same currency/units.
 
-    :param <pd.DataFrame> df: dataframe with the contract signals.
+    :param <pd.DataFrame> df: QDF with the contract signals.
     :param <str> sig: the cross-section-specific signal that serves as the basis of
         contract signals.
     :param <List[str]> cids: list of cross-sections whose signal is to be used.
-    :return: dataframe with the contract signals.
+    :return <pd.DataFrame>: dataframe with the contracts in the same currency/units.
     """
     assert all(
         [
@@ -263,9 +224,22 @@ def _construct_signals(
         )
 
     # DF with signals for the cids
-    sigs_df: pd.DataFrame = df[df.columns.intersection(_sigs)]
+    sigs_df: pd.DataFrame = df[df["xcat"] == sig].pivot(
+        index="real_date", columns="cid", values="value"
+    )
 
-    return sigs_df
+    df = df.set_index("real_date")
+
+    for _cid in cids:
+        fxcats: List[str] = df[df["cid"] == _cid]["xcat"].unique().tolist()
+        fxcats: List[str] = list(set(fxcats) - set([sig]))
+        for _fxcat in fxcats:
+            sel_bools: pd.Series = (df["cid"] == _cid) & (df["xcat"] == _fxcat)
+            df.loc[sel_bools, "value"] = (
+                df.loc[sel_bools, "value"] * sigs_df.loc[:, _cid]
+            )
+
+    return df.reset_index()
 
 
 def _split_df(
