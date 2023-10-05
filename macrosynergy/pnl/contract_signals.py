@@ -19,8 +19,10 @@ from macrosynergy.pnl import Numeric
 from macrosynergy.management.utils import is_valid_iso_date, standardise_dataframe
 from macrosynergy.management.shape_dfs import reduce_df
 
+
 def _apply_cscales(
     df: pd.DataFrame,
+    cids: List[str],
     ctypes: List[str],
     cscales: List[Union[Numeric, str]],
     csigns: List[int],
@@ -29,6 +31,7 @@ def _apply_cscales(
     Apply the contract scales to the dataframe.
 
     :param <pd.DataFrame> df: QDF with the contract signals and scaling XCATs.
+    :param <List[str]> cids: list of cross-sections whose signal is to be used.
     :param <List[str]> ctypes: list of identifiers for the contract types that are
         to be traded. They typically correspond to the contract type acronyms
         that are used in JPMaQS for generic returns, carry and volatility, such as
@@ -64,7 +67,55 @@ def _apply_cscales(
             f"\nMissing: {set(_ctypes) - set(ctypes)}"
         )
 
+    # If cscales are numeric
+    if all([isinstance(x, Numeric) for x in cscales]):
+        for ix, ctx in enumerate(ctypes):
+            for _cid in cids:
+                sd: str = pd.to_datetime(df["real_date"]).min().strftime("%Y-%m-%d")
+                ed: str = pd.to_datetime(df["real_date"]).max().strftime("%Y-%m-%d")
+                new_df: pd.DataFrame = pd.DataFrame(
+                    {
+                        "real_date": pd.bdate_range(sd, ed),
+                        "cid": _cid,
+                        "xcat": ctx + "_SCALE",
+                        "value": cscales[ix],
+                    }
+                )
+                df: pd.DataFrame = pd.concat([df, new_df], axis=0)
+            cscales[ix] = ctx + "_SCALE"
+
+        # sanity check: all cscales are in the dataframe
+        assert all([isinstance(x, str) for x in cscales]), "Failed to set cscales"
+
     # DF with scales
+    df_scales: pd.DataFrame = df[
+        (df["cid"].isin(cids)) & (df["xcat"].isin(cscales))
+    ].copy()
+
+    # Apply signs
+    for ix, ctx in enumerate(ctypes):
+        df_scales.loc[df_scales["xcat"] == ctx, "value"] = (
+            df_scales.loc[df_scales["xcat"] == ctx, "value"] * csigns[ix]
+        )
+
+    df_scales["ticker"]: str = df_scales["cid"] + "_" + df_scales["xcat"]
+    df_scales_wide: pd.DataFrame = df_scales.pivot(
+        index="real_date", columns="ticker", values="value"
+    )
+
+    # Set index to real_date to allow for easy multiplication
+    df = df.set_index("real_date")
+
+    # Multiply each contract with it's scale
+    for _cid in cids:
+        for ix, _ctype in enumerate(ctypes):
+            sel_bools: pd.Series = (df["cid"] == _cid) & (df["xcat"] == _ctype)
+            df.loc[sel_bools, "value"] = (
+                df.loc[sel_bools, "value"] * df_scales_wide.loc[:, _cid + "_" + _ctype]
+            )
+
+    return df.reset_index()
+
 
 def _apply_sig_conversion(
     df: pd.DataFrame,
@@ -107,15 +158,36 @@ def _apply_sig_conversion(
     # Set index to real_date to allow for easy multiplication
     df = df.set_index("real_date")
 
+    # form a dictionary, which maps each cid_xcat to the corresponding cid_sig
+    cid_sig_dict: Dict[str, str] = {
+        (_cid + "_" + _xcat): (
+            _cid + "_" + sig
+        )  # key: <cid>_<xcat>, value: <cid>_<sig>
+        for _cid in cids
+        for _xcat in df[df["cid"] == _cid]["xcat"].unique().tolist()
+    }
+
+    df["ticker"]: str = df["cid"] + "_" + df["xcat"]
+
+    df = df.pivot(index="real_date", columns="ticker", values="value")
+
+    # Multiply the signals by the cross-section-specific signals - use the dictionary
+    # as mapping
+    for colx in df.columns:
+        df[colx] = df[colx] * sigs_df.loc[:, cid_sig_dict[colx]]
+
+    # unindex the dataframe
+    df = df.reset_index()
+
     # Multiply the signals by the cross-section-specific signals
-    for _cid in cids:
-        fxcats: List[str] = df[df["cid"] == _cid]["xcat"].unique().tolist()
-        fxcats: List[str] = list(set(fxcats) - set([sig]))
-        for _fxcat in fxcats:
-            sel_bools: pd.Series = (df["cid"] == _cid) & (df["xcat"] == _fxcat)
-            df.loc[sel_bools, "value"] = (
-                df.loc[sel_bools, "value"] * sigs_df.loc[:, _cid]
-            )
+    # for _cid in cids:
+    #     fxcats: List[str] = df[df["cid"] == _cid]["xcat"].unique().tolist()
+    #     fxcats: List[str] = list(set(fxcats) - set([sig]))
+    #     for _fxcat in fxcats:
+    #         sel_bools: pd.Series = (df["cid"] == _cid) & (df["xcat"] == _fxcat)
+    #         df.loc[sel_bools, "value"] = (
+    #             df.loc[sel_bools, "value"] * sigs_df.loc[:, _cid]
+    #         )
 
     return df.reset_index()
 
