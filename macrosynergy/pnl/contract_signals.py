@@ -253,8 +253,8 @@ def _split_df(
     :param <List[Union[Numeric, str]]> hscales: list of scales for the hedging basket.
         These can be either floats or category tickers.
 
-    :return <Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]>: `df_signals`, `df_returns`,
-        `df_scales`, `df_hedge` - a tuple of 3 wide dataframes.
+    :return <Tuple[pd.DataFrame, ...]>: `df_signals`, `df_returns`,
+        `df_scales`, `df_hedge` - a tuple of 4 wide dataframes.
     """
     LERROR: str = "`{}` and `{}` must be of the same length."
     if not len(ctypes) == len(cscales):
@@ -347,7 +347,7 @@ def contract_signals(
     csigns: Optional[List[int]] = None,
     hbasket: Optional[List[str]] = None,
     hscales: Optional[List[Union[Numeric, str]]] = None,
-    hratios: Optional[List[str]] = None,
+    hratios: Optional[str] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
@@ -384,7 +384,7 @@ def contract_signals(
     param <List[str|float]> hscales: list of scaling factors (weights) for the basket.
         These can be either a list of floats or a list of category tickers that serve
         as basis of translation. The former are fixed across time, the latter variable.
-    :param <List[str]> hratios: category names for cross-section-specific hedge ratios.
+    :param <str> hratios: category names for cross-section-specific hedge ratios.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df
