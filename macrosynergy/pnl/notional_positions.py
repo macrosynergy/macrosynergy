@@ -15,7 +15,7 @@ from typing import List, Union, Tuple, Optional
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
 from macrosynergy.panel import historic_vol
-from macrosynergy.pnl import Numeric, NoneType, _short_xcat
+from macrosynergy.pnl import Numeric, NoneType
 
 
 def _apply_slip(
@@ -292,7 +292,7 @@ def historic_portfolio_vol(
     df["tickers"]: str = df["cid"] + "_" + df["xcat"]
     df: pd.DataFrame = df.loc[df["tickers"].str.endswith(f"_{sname}_CSIG")]
 
-    df["scat"] = df.apply(lambda x: _short_xcat(xcat=x["xcat"]), axis=1)
+    df["scat"] = df["xcat"]  # TODO : Temp, just to pass linting
     df["contid"] = df["cid"] + "_" + df["scat"]
 
     ## Check the contract identifiers
@@ -334,7 +334,11 @@ def historic_portfolio_vol(
 
 
 if __name__ == "__main__":
-    from macrosynergy.management.simulate_quantamental_data import make_qdf, make_test_df
+    from macrosynergy.management.simulate_quantamental_data import (
+        make_qdf,
+        make_test_df,
+    )
+
     cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
     xcats: List[str] = ["FXXR_NSA", "EQXR_NSA", "IRXR_NSA", "CDS_NSA"]
 
