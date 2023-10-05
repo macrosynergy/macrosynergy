@@ -1,6 +1,8 @@
 """
 Functions used to visualize correlations across categories or cross-sections of
 panels.
+
+::docs::correl_matrix::sort_first::
 """
 import itertools
 import pandas as pd
@@ -13,6 +15,7 @@ from collections import defaultdict
 
 from macrosynergy.management.check_availability import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
+
 
 def lag_series(df_w: pd.DataFrame, lags: dict, xcats: List[str]):
     """
@@ -27,8 +30,10 @@ def lag_series(df_w: pd.DataFrame, lags: dict, xcats: List[str]):
     lag_type = "The lag data structure must be of type <dict>."
     assert isinstance(lags, dict), lag_type
 
-    lag_xcats = f"The categories referenced in the lagged dictionary must be " \
-                f"present in the defined DataFrame, {xcats}."
+    lag_xcats = (
+        f"The categories referenced in the lagged dictionary must be "
+        f"present in the defined DataFrame, {xcats}."
+    )
     assert set(lags.keys()).issubset(set(xcats)), lag_xcats
 
     # Modify the dictionary to adjust for single categories having multiple lags.
@@ -49,7 +54,6 @@ def lag_series(df_w: pd.DataFrame, lags: dict, xcats: List[str]):
     # Handle for multi-index DataFrame. The interior index represents the
     # timestamps.
     for xcat, shift in lag_copy.items():
-
         category = xcat[:-3]
         clause = isinstance(lags[category], list)
         first_lag = category in df_w.columns
@@ -68,12 +72,21 @@ def lag_series(df_w: pd.DataFrame, lags: dict, xcats: List[str]):
 
     return df_w, xcat_tracker
 
-def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
-                  cids: List[str] = None, start: str = '2000-01-01',
-                  end: str = None, val: str = 'value', freq: str = None,
-                  cluster: bool = False, lags: dict = None,
-                  title: str = None, size: Tuple[float] = (14, 8),
-                  max_color: float = None):
+
+def correl_matrix(
+    df: pd.DataFrame,
+    xcats: Union[str, List[str]] = None,
+    cids: List[str] = None,
+    start: str = "2000-01-01",
+    end: str = None,
+    val: str = "value",
+    freq: str = None,
+    cluster: bool = False,
+    lags: dict = None,
+    title: str = None,
+    size: Tuple[float] = (14, 8),
+    max_color: float = None,
+):
     """
     Visualize correlation across categories or cross-sections of panels.
 
@@ -113,7 +126,6 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
     N.B:. The function displays the heatmap of a correlation matrix across categories or
     cross-sections (depending on which parameter has received multiple elements).
     """
-
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
     col_names = ['cid', 'xcat', 'real_date', val]
     df = df[col_names]
@@ -130,93 +142,181 @@ def correl_matrix(df: pd.DataFrame, xcats: Union[str, List[str]] = None,
         assert isinstance(max_color, float), "Parameter max_color must be type <float>."
 
     min_color = None if max_color is None else -max_color
-
-    df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
-
-    s_date = df['real_date'].min().strftime('%Y-%m-%d')
-    e_date = df['real_date'].max().strftime('%Y-%m-%d')
-
-    if len(xcats) == 1:
-        df_w = df.pivot(index='real_date', columns='cid', values=val)
-
-        if freq is not None:
-            df_w = df_w.resample(freq).mean()
-
-        if title is None:
-            title = f'Cross-sectional correlation of {xcats[0]} from {s_date} to ' \
-                    f'{e_date}'
-
-    else:
-
-        df_w = df.pivot(index=('cid', 'real_date'), columns='xcat',
-                        values=val)
-
-        # Down-sample according to the passed frequency.
-        if freq is not None:
-            df_w = df_w.groupby([pd.Grouper(level='cid'),
-                                 pd.Grouper(level='real_date', freq=freq)]
-                                ).mean()
-
-        # Apply the lag mechanism, to the respective categories, after the down-sampling.
-        if lags is not None:
-            df_w, xcat_tracker = lag_series(df_w=df_w, lags=lags, xcats=xcats)
-
-        # Order the correlation DataFrame to reflect the order of the categories
-        # parameter. Will replace the official category name with the lag appended name.
-        if lags is not None:
-            order = [[x] if x not in xcat_tracker.keys()
-                     else xcat_tracker[x] for x in xcats]
-            order = list(itertools.chain(*order))
-        else:
-            order = xcats
-
-        df_w = df_w[order]
-
-        if title is None:
-            title = f'Cross-category correlation from {s_date} to {e_date}'
-
-    sns.set(style="ticks")
-
-    corr = df_w.corr(method='pearson')
-
-    if cluster:
-        # Pairwise distances between observations in n-dimensional space. If y is a 1-D
-        # condensed distance matrix, then y must be a nCk sized vector (k = 2, pairwise).
-        d = sch.distance.pdist(corr)
-        # Perform hierarchical / agglomerative clustering. The clustering method used is
-        # Farthest Point Algorithm.
-        L = sch.linkage(d, method='complete')
-        # Returns an (n - 1) by four matrix. The first two columns represent the "nodes"
-        # being merged. The third column is the euclidean distance between the "nodes"
-        # being merged and the fourth column equates to the number of original
-        # observations in the newly formed cluster.
-        # The second parameter is the distance threshold, t, which will determine the
-        # "number" of clusters. If the distance threshold is too small, none of the data
-        # points will form a cluster, so n different clusters are returned.
-        # If there are any clusters, the categories contained in the cluster will be
-        # adjacent.
-        ind = sch.fcluster(L, 0.5 * d.max(), 'distance')
-        columns = [corr.columns.tolist()[i] for i in list((np.argsort(ind)))]
-        corr = corr.loc[columns, columns]
-
-    # Mask for the upper triangle.
-    # Return a copy of an array with the elements below the k-th diagonal zeroed. The
-    # mask is implemented because correlation coefficients are symmetric.
-    mask = np.triu(np.ones_like(corr, dtype=bool))
+    mask = None
 
     fig, ax = plt.subplots(figsize=size)
-    sns.heatmap(corr, mask=mask, cmap='vlag_r', center=0,
-                vmin=min_color, vmax=max_color,
-                square=False, linewidths=.5,
-                cbar_kws={"shrink": .5})
+    xlabel = ""
+    ylabel = ""
 
-    ax.set(xlabel='', ylabel='')
+    if (len(xcats) == 2 and _is_list_of_lists(xcats)) or (len(cids) == 2 and _is_list_of_lists(cids)):
+
+        if (len(xcats) == 2 and _is_list_of_lists(xcats)) and (len(cids) == 2 and _is_list_of_lists(cids)):
+            xcats1 = xcats[0]
+            xcats2 = xcats[1]
+            cids1 = cids[0]
+            cids2 = cids[1]
+        elif len(xcats) == 2 and _is_list_of_lists(xcats):
+            xcats1 = xcats[0]
+            xcats2 = xcats[1]
+            cids1 = cids
+            cids2 = cids
+        else:
+            xcats1 = xcats
+            xcats2 = xcats
+            cids1 = cids[0]
+            cids2 = cids[1]
+
+        df1, xcats1, cids1 = reduce_df(df.copy(), xcats1, cids1, start, end, out_all=True)
+        df2, xcats2, cids2 = reduce_df(df.copy(), xcats2, cids2, start, end, out_all=True)
+
+        s_date = df1["real_date"].min().strftime("%Y-%m-%d")
+        e_date = df2["real_date"].max().strftime("%Y-%m-%d")
+        if len(xcats1) == 1 and len(xcats2) == 1:
+            df_w1 = _transform_df_for_cross_sectional_corr(df1, val, freq)
+            df_w2 = _transform_df_for_cross_sectional_corr(df2, val, freq)
+
+            if title is None:
+                title = (
+                    f"Cross-sectional correlation of {xcats1} and {xcats2} from {s_date} to "
+                    f"{e_date}"
+                )
+            xlabel = f"{xcats2[0]} cross-sections"
+            ylabel = f"{xcats1[0]} cross-sections"
+        else:
+            df_w1 = _transform_df_for_cross_category_corr(df1, xcats1, val, freq, lags)
+            df_w2 = _transform_df_for_cross_category_corr(df2, xcats2, val, freq, lags)
+
+            if title is None:
+                title = (
+                    f"Cross-category correlation of {xcats[0]} from {s_date} to "
+                    f"{e_date}"
+                )
+        corr = pd.concat([df_w1, df_w2], axis=1, keys=['df_w1', 'df_w2']).corr().loc['df_w2', 'df_w1']
+
+        if cluster:
+            d = sch.distance.pdist(corr)
+            L = sch.linkage(d, method="complete")
+            ind = sch.fcluster(L, 0.5 * d.max(), "distance")
+
+            indices = [corr.index.tolist()[i] for i in list((np.argsort(ind)))]
+            corr = corr.loc[indices, :]
+    else:
+        df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
+
+        s_date = df["real_date"].min().strftime("%Y-%m-%d")
+        e_date = df["real_date"].max().strftime("%Y-%m-%d")
+
+        if len(xcats) == 1:
+            df_w = _transform_df_for_cross_sectional_corr(df, val, freq)
+
+            if title is None:
+                title = (
+                    f"Cross-sectional correlation of {xcats[0]} from {s_date} to "
+                    f"{e_date}"
+                )
+
+        else:
+            df_w = _transform_df_for_cross_category_corr(df, xcats, val, freq, lags)
+
+            if title is None:
+                title = f"Cross-category correlation from {s_date} to {e_date}"
+
+        corr = df_w.corr(method="pearson")
+
+        if cluster:
+            # Pairwise distances between observations in n-dimensional space. If y is a 1-D
+            # condensed distance matrix, then y must be a nCk sized vector (k = 2, pairwise).
+            d = sch.distance.pdist(corr)
+            # Perform hierarchical / agglomerative clustering. The clustering method used is
+            # Farthest Point Algorithm.
+            L = sch.linkage(d, method="complete")
+            # Returns an (n - 1) by four matrix. The first two columns represent the "nodes"
+            # being merged. The third column is the euclidean distance between the "nodes"
+            # being merged and the fourth column equates to the number of original
+            # observations in the newly formed cluster.
+
+            # The second parameter is the distance threshold, t, which will determine the
+            # "number" of clusters. If the distance threshold is too small, none of the data
+            # points will form a cluster, so n different clusters are returned.
+            # If there are any clusters, the categories contained in the cluster will be
+            # adjacent.
+            ind = sch.fcluster(L, 0.5 * d.max(), "distance")
+
+            columns = [corr.columns.tolist()[i] for i in list((np.argsort(ind)))]
+            corr = corr.loc[columns, columns]
+
+        # Mask for the upper triangle.
+        # Return a copy of an array with the elements below the k-th diagonal zeroed. The
+        # mask is implemented because correlation coefficients are symmetric.
+        mask = np.triu(np.ones_like(corr, dtype=bool))
+
+    sns.set(style="ticks")
+    sns.heatmap(
+        corr,
+        mask=mask,
+        cmap="vlag_r",
+        center=0,
+        vmin=min_color,
+        vmax=max_color,
+        square=False,
+        linewidths=0.5,
+        cbar_kws={"shrink": 0.5},
+    )
+
+    ax.set(xlabel=xlabel, ylabel=ylabel)
     ax.set_title(title, fontsize=14)
 
     plt.show()
 
 
+def _is_list_of_lists(ls: List):
+    """
+    Check if list contains only lists as elements.
+
+    :param <List> ls: The list to be checked.
+    
+    :return <bool>: True if `ls` contains only elements of type List. False otherwise.
+    """
+    return all(map(lambda x: isinstance(x, list), ls))
+
+
+def _transform_df_for_cross_sectional_corr(df: pd.DataFrame, val: str, freq: str = None):
+    df_w = df.pivot(index="real_date", columns="cid", values=val)
+    if freq is not None:
+        df_w = df_w.resample(freq).mean()
+
+    return df_w
+
+
+def _transform_df_for_cross_category_corr(df: pd.DataFrame, xcats: List[str], val: str, freq: str = None, lags: dict = None):
+    df_w = df.pivot(index=("cid", "real_date"), columns="xcat", values=val)
+    # Down-sample according to the passed frequency.
+    if freq is not None:
+        df_w = df_w.groupby(
+            [pd.Grouper(level="cid"), pd.Grouper(level="real_date", freq=freq)]
+        ).mean()
+
+    # Apply the lag mechanism, to the respective categories, after the down-sampling.
+    if lags is not None:
+        df_w, xcat_tracker = lag_series(df_w=df_w, lags=lags, xcats=xcats)
+
+    # Order the correlation DataFrame to reflect the order of the categories
+    # parameter. Will replace the official category name with the lag appended name.
+    if lags is not None:
+        order = [
+            [x] if x not in xcat_tracker.keys() else xcat_tracker[x] for x in xcats
+        ]
+        order = list(itertools.chain(*order))
+    else:
+        order = xcats
+
+    df_w = df_w[order]
+    return df_w
+
+
 if __name__ == "__main__":
+
+    np.random.seed(0)
 
     # Un-clustered correlation matrices.
 
@@ -252,11 +352,24 @@ if __name__ == "__main__":
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    start = '2012-01-01'
-    end = '2020-09-30'
+    start = "2012-01-01"
+    end = "2020-09-30"
 
     # Clustered correlation matrices. Test hierarchical clustering.
-    correl_matrix(df=dfd, xcats='XR', cids=cids, start=start, end=end,
-                  val='value', freq=None, cluster=True,
-                  title='Correlation Matrix', size=(14, 8), max_color=None)
-
+    correl_matrix(
+        df=dfd,
+        # xcats=[["XR", "CRY"], ["XR"]],
+        xcats=[["XR"], ["CRY"]],
+        # xcats=["XR"],
+        # xcats=["CRY", "XR"],S
+        cids=[["NOK", "CHF", "SEK"], ["CHF", "NOK"]],
+        # cids=cids,
+        start=start,
+        end=end,
+        val="value",
+        freq=None,
+        cluster=False,
+        title="Correlation Matrix",
+        size=(14, 8),
+        max_color=None,
+    )
