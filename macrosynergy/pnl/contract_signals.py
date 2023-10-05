@@ -19,6 +19,52 @@ from macrosynergy.pnl import Numeric
 from macrosynergy.management.utils import is_valid_iso_date, standardise_dataframe
 from macrosynergy.management.shape_dfs import reduce_df
 
+def _apply_cscales(
+    df: pd.DataFrame,
+    ctypes: List[str],
+    cscales: List[Union[Numeric, str]],
+    csigns: List[int],
+) -> pd.DataFrame:
+    """
+    Apply the contract scales to the dataframe.
+
+    :param <pd.DataFrame> df: QDF with the contract signals and scaling XCATs.
+    :param <List[str]> ctypes: list of identifiers for the contract types that are
+        to be traded. They typically correspond to the contract type acronyms
+        that are used in JPMaQS for generic returns, carry and volatility, such as
+        "FX" for FX forwards or "EQ" for equity index futures.
+        N.B. Overall a contract is identified by the combination of its cross-section
+        and its contract type "<cid>_<ctype>".
+    :param <List[Union[Numeric, str]]> cscales: list of scaling factors for the
+        contract signals. These can be either a list of floats or a list of category
+        tickers that serve as basis of translation. The former are fixed across time,
+        the latter variable.
+
+    :return <pd.DataFrame>: dataframe with scaling applied.
+    """
+    # Type checks
+    assert all(
+        [
+            isinstance(df, pd.DataFrame),
+            isinstance(ctypes, list),
+            all([isinstance(x, str) for x in ctypes]),
+            isinstance(cscales, list),
+            all([isinstance(x, (str, Numeric)) for x in cscales]),
+            isinstance(csigns, list),
+            all([isinstance(x, int) for x in csigns]),
+            len(ctypes) == len(cscales) == len(csigns),
+        ]
+    ), "Invalid arguments passed to `_apply_cscales()`"
+
+    # Arg checks
+    _ctypes: List[str] = df[df["xcat"].isin(ctypes)]["xcat"].unique().tolist()
+    if not set(_ctypes).issubset(set(ctypes)):
+        raise ValueError(
+            "Some `ctypes` are missing the `cscales` in the provided dataframe."
+            f"\nMissing: {set(_ctypes) - set(ctypes)}"
+        )
+
+    # DF with scales
 
 def _apply_sig_conversion(
     df: pd.DataFrame,
