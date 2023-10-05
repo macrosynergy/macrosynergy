@@ -14,6 +14,234 @@ import warnings
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df, categories_df
 
+class SignalBase:
+    def __init__(
+        self, 
+        df: pd.DataFrame,
+        ret: Union[str, List[str]],
+        sig: Union[str, List[str]],
+        rival_sigs: Union[str, List[str]] = None,
+        cids: List[str] = None,
+        sig_neg: bool = False,
+        cosp: bool = False,
+        start: str = None,
+        end: str = None,
+        blacklist: dict = None,
+        freq: Union[str, List[str]] = "M",
+        agg_sig: Union[str, List[str]] = "last",
+        fwin: int = 1,
+        slip: int = 0,
+    ):
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError(f"DataFrame expected and not {type(df)}.")
+        
+        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+
+        self.dic_freq = {
+            "D": "daily",
+            "W": "weekly",
+            "M": "monthly",
+            "Q": "quarterly",
+            "A": "annual",
+        }
+
+        required_columns = ["cid", "xcat", "real_date", "value"]
+
+        if not all(col in df.columns for col in required_columns):
+            raise ValueError(
+                "Dataframe columns must be of value: 'cid', 'xcat','real_date' and 'value'"
+            )
+
+        freq_error = f"Frequency parameter must be one of {list(self.dic_freq.keys())}."
+        if not freq in self.dic_freq.keys():
+            raise ValueError(freq_error)
+        
+        self.metrics = [
+            "accuracy",
+            "bal_accuracy",
+            "pos_sigr",
+            "pos_retr",
+            "pos_prec",
+            "neg_prec",
+            "pearson",
+            "pearson_pval",
+            "kendall",
+            "kendall_pval",
+        ]
+        
+        self.ret = ret
+        self.freq = freq
+
+        assert isinstance(cosp, bool), f"<bool> object expected and not {type(cosp)}."
+        self.cosp = cosp
+        self.start = start
+        self.end = end
+        self.blacklist = blacklist
+        self.fwin = fwin
+
+        assert sig in xcats, "Primary signal must be available in the DataFrame."
+        self.sig = sig
+    
+    @staticmethod
+    def __slice_df__(df: pd.DataFrame, cs: str, cs_type: str):
+        """
+        Slice DataFrame by year, cross-section, or use full panel.
+
+        :param <pd.DataFrame> df: standardised DataFrame.
+        :param <str> cs: individual segment, cross-section or year.
+        :param <str> cs_type: segmentation type.
+        """
+
+        # Row names of cross-sections or years.
+        if cs != "Panel" and cs_type == "cids":
+            df_cs = df.loc[cs]
+        elif cs != "Panel":
+            df_cs = df[df["year"] == float(cs)]
+        else:
+            df_cs = df
+
+        return df_cs
+    
+    @classmethod
+    def apply_slip(
+        self,
+        target_df: pd.DataFrame,
+        slip: int,
+        cids: List[str],
+        xcats: List[str],
+        metrics: List[str],
+    ) -> pd.DataFrame:
+        """
+        Applied a slip, i.e. a negative lag, to the target DataFrame
+        for the given cross-sections and categories, on the given metrics.
+
+        :param <pd.DataFrame> target_df: DataFrame to which the slip is applied.
+        :param <int> slip: Slip to be applied.
+        :param <List[str]> cids: List of cross-sections.
+        :param <List[str]> xcats: List of categories.
+        :param <List[str]> metrics: List of metrics to which the slip is applied.
+        :return <pd.DataFrame> target_df: DataFrame with the slip applied.
+        :raises <TypeError>: If the provided parameters are not of the expected type.
+        :raises <ValueError>: If the provided parameters are semantically incorrect.
+        """
+
+        target_df = target_df.copy(deep=True)
+        if not (isinstance(slip, int) and slip >= 0):
+            raise ValueError("Slip must be a non-negative integer.")
+
+        if cids is None:
+            cids = target_df["cid"].unique().tolist()
+        if xcats is None:
+            xcats = target_df["xcat"].unique().tolist()
+
+        sel_tickers: List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+        target_df["tickers"] = target_df["cid"] + "_" + target_df["xcat"]
+
+        if not set(sel_tickers).issubset(set(target_df["tickers"].unique())):
+            warnings.warn(
+                "Tickers targetted for applying slip are not present in the DataFrame.\n"
+                f"Missing tickers: {sorted(list(set(sel_tickers) - set(target_df['tickers'].unique())))}"
+            )
+
+        slip: int = slip.__neg__()
+
+        target_df[metrics] = target_df.groupby("tickers")[metrics].shift(slip)
+        target_df = target_df.drop(columns=["tickers"])
+
+        return target_df
+    
+    # NOTE THAT THE ORIGINAL __table__stats does not have a ret argument, so this needs to be rectified during inheritance
+
+    def __table_stats__(
+        self, df_segment: pd.DataFrame, df_out: pd.DataFrame, segment: str, signal: str, ret: str
+    ):
+        """
+        Method used to compute the evaluation metrics across segments: cross-section,
+        yearly or category level.
+
+        :param <pd.DataFrame> df_segment: segmented DataFrame.
+        :param <pd.DataFrame> df_out: metric DataFrame where the index will be all
+            segments for the respective segmentation type.
+        :param <str> segment: segment which could either be an individual cross-section,
+            year or category. Will form the index of the returned DataFrame.
+        :param <str> signal: signal category.
+        """
+
+        # Account for NaN values between the single respective signal and return. Only
+        # applicable for rival signals panel level calculations.
+        
+        df_segment = df_segment.loc[:, [ret, signal]].dropna(axis=0, how="any")
+
+        df_sgs = np.sign(df_segment.loc[:, [ret, signal]])
+        # Exact zeroes are disqualified for sign analysis only.
+        df_sgs = df_sgs[~((df_sgs.iloc[:, 0] == 0) | (df_sgs.iloc[:, 1] == 0))]
+
+        sig_sign = df_sgs[signal]
+        ret_sign = df_sgs[ret]
+
+        df_out.loc[segment, "accuracy"] = skm.accuracy_score(sig_sign, ret_sign)
+        df_out.loc[segment, "bal_accuracy"] = skm.balanced_accuracy_score(
+            sig_sign, ret_sign
+        )
+
+        df_out.loc[segment, "pos_sigr"] = np.mean(sig_sign == 1)
+        df_out.loc[segment, "pos_retr"] = np.mean(ret_sign == 1)
+        df_out.loc[segment, "pos_prec"] = skm.precision_score(
+            ret_sign, sig_sign, pos_label=1
+        )
+        df_out.loc[segment, "neg_prec"] = skm.precision_score(
+            ret_sign, sig_sign, pos_label=-1
+        )
+
+        ret_vals, sig_vals = df_segment[ret], df_segment[signal]
+        df_out.loc[segment, ["kendall", "kendall_pval"]] = stats.kendalltau(
+            ret_vals, sig_vals
+        )
+        corr, corr_pval = stats.pearsonr(ret_vals, sig_vals)
+        df_out.loc[segment, ["pearson", "pearson_pval"]] = np.array([corr, corr_pval])
+
+        return df_out
+    
+    # NOTE THAT THE ORIGINAL __output__table__ does not have a ret or sig argument, so this needs to be rectified during inheritance
+    
+    def __output_table__(self, cs_type: str = "cids", ret = None, sig = None):
+        """
+        Creates a DataFrame with information on the signal-return relation across
+        cross-sections or years and, additionally, the panel.
+
+        :param <str> cs_type: the segmentation type.
+
+        """
+
+        # Analysis completed exclusively on the primary signal.
+        r = [ret]
+        if isinstance(sig, list):
+            r += sig
+        else:
+            r.append(sig)
+        df = self.df[r]
+
+        # Will remove any timestamps where both the signal & return are not realised.
+        # Applicable even if communal sampling has been applied given the alignment
+        # excludes the return category.
+        df = df.dropna(how="any")
+
+        if cs_type == "cids":
+            css = self.cids
+        else:
+            df["year"] = np.array(df.reset_index(level=1)["real_date"].dt.year)
+            css = [str(y) for y in list(set(df["year"]))]
+            css = sorted(css)
+
+        statms = self.metrics
+        df_out = pd.DataFrame(index=["Panel"], columns=statms)
+
+        df_cs = self.__slice_df__(df=df, cs="Panel", cs_type=cs_type)
+        df_out = self.__table_stats__(
+                df_segment=df_cs, df_out=df_out, segment="Panel", signal=sig, ret=ret
+            )
+        
+        return df_out.astype("float")
 
 class SignalsReturns:
     def __init__(
