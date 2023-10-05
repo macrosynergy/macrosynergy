@@ -230,6 +230,114 @@ def _signal_to_contract(
     return df_wide
 
 
+def _split_df(
+    df: pd.DataFrame,
+    sig: str,
+    cids: List[str],
+    ctypes: List[str],
+    cscales: List[Union[Numeric, str]],
+    hbasket: List[str],
+    hratios: List[str],
+    hscales: List[Union[Numeric, str]],
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Splits the long form QDF into 3 wide QDFs, where each column is a ticker.
+
+    :param <pd.DataFrame> df: QDF with the contract signals.
+    :param <List[str]> cids: list of cross-sections.
+    :param <List[str]> ctypes: list of contract types.
+    :param <List[Union[Numeric, str]]> cscales: list of scales for the contract types.
+        These can be either floats or category tickers.
+    :param <List[str]> hbasket: list of contracts in the hedging basket.
+    :param <List[str]> hratios: list of hedge ratios.
+    :param <List[Union[Numeric, str]]> hscales: list of scales for the hedging basket.
+        These can be either floats or category tickers.
+
+    :return <Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]>: `df_signals`, `df_returns`,
+        `df_scales`, `df_hedge` - a tuple of 3 wide dataframes.
+    """
+    LERROR: str = "`{}` and `{}` must be of the same length."
+    if not len(ctypes) == len(cscales):
+        raise ValueError(LERROR.format("`ctypes`", "`cscales`"))
+    if not len(hbasket) == len(hscales):
+        raise ValueError("`hbasket` and `hscales` must be of the same length")
+    if not len(hbasket) == len(hratios):
+        raise ValueError("`hbasket` and `hratios` must be of the same length")
+
+    # add a column called tickers
+    # df["ticker"] = df["cid"] + "_" + df["xcat"]
+
+    df_signals: pd.DataFrame = df.loc[
+        (df["cid"].isin(cids)) & (df["xcat"] == sig), :
+    ].pivot(index="real_date", columns="cid", values="value")
+
+    df_signals: pd.DataFrame = pd.concat(
+        [
+            df_signals.rename(
+                columns={cidx: f"{cidx}_{ctx}" for cidx in df_signals.columns}
+            )
+            for ctx in ctypes
+        ],
+        axis=1,
+        ignore_index=False,
+    )
+
+    df_returns: pd.DataFrame = pd.concat(
+        [
+            df.loc[df["cid"].isin(cids) & df["xcat"].str.startswith(ctx), :]
+            .pivot(index="real_date", columns="cid", values="value")
+            .rename(columns={cidx: f"{cidx}_{ctx}" for cidx in df_signals.columns})
+            for ctx in ctypes
+        ],
+        axis=1,
+        ignore_index=False,
+    )
+
+    if all([isinstance(x, Numeric) for x in cscales]):
+        start_date: str = pd.to_datetime(df["real_date"]).min().strftime("%Y-%m-%d")
+        end_date: str = pd.to_datetime(df["real_date"]).max().strftime("%Y-%m-%d")
+        for ix, ctx in enumerate(ctypes):
+            for cid in cids:
+                new_df: pd.DataFrame = pd.DataFrame(
+                    data={
+                        "real_date": pd.bdate_range(start=start_date, end=end_date),
+                        "cid": cid,
+                        "xcat": "SCALE",
+                        "value": cscales[ix],
+                    }
+                )
+                df = pd.concat([df, new_df], axis=0, ignore_index=True)
+                # update the cscales
+                cscales[ix] = f"{cid}_{ctx}"
+
+        # check that all cscales are now  strings
+        assert all(
+            [isinstance(x, str) for x in cscales]
+        ), "`cscales` is not all strings, failed to add static scales"
+
+    df_scales_list: List[pd.DataFrame] = []
+    for ix, ctx in enumerate(ctypes):
+        # multiply the sign of the same index (ix) by the scale
+        rdf: pd.DataFrame = (
+            df.loc[df["cid"].isin(cids) & df["xcat"].str.startswith(ctx), :]
+            .pivot(index="real_date", columns="cid", values="value")
+            .rename(columns={cidx: f"{cidx}_{ctx}" for cidx in df_signals.columns})
+        )
+        rdf["value"] = rdf.apply(lambda x: x["value"] * cscales[ix], axis=1)
+        df_scales_list.append(rdf)
+
+    df_scales: pd.DataFrame = pd.concat(df_scales_list, axis=1, ignore_index=False)
+    df_scales_list = None
+
+    # create the hedge dataframe
+    df["ticker"] = df["cid"] + "_" + df["xcat"]
+    df_hedge: pd.DataFrame = df.loc[(df["ticker"].isin(hbasket)), :].pivot(
+        index="real_date", columns="cid", values="value"
+    )
+
+    return (df_signals, df_returns, df_scales)
+
+
 def contract_signals(
     df: pd.DataFrame,
     sig: str,
@@ -398,11 +506,13 @@ def contract_signals(
                 )
 
     ## Check that all the contract types are in the dataframe as xcats
-    _s_ctypes: List[str] = _short_xcat(xcat=df["xcat"].unique().tolist())
-    if not set(ctypes).issubset(set(_s_ctypes)):
-        e_msg: str = f"Some of the contract types in `ctypes` are not in `df`"
-        e_msg += f"\nMissing contract types: {set(ctypes) - set(_s_ctypes)}"
-        raise ValueError(e_msg)
+    for cidx in cids:
+        for _ctx in ctypes:
+            f_xcats: List[str] = (
+                df[df["cid"] == cidx]["xcat"].drop_duplicates().tolist()
+            )
+            if not any([_ctx in x for x in f_xcats]):
+                raise ValueError(f"`{cidx}_{_ctx}` is not a contract type in `df`")
 
     ## Check that all the cross-sections are in the dataframe as cids
     if not set(cids).issubset(set(df["cid"].unique())):
@@ -410,11 +520,18 @@ def contract_signals(
         e_msg += f"\nMissing cross-sections: {set(cids) - set(df['cid'].unique())}"
         raise ValueError(e_msg)
 
-    ## Pivot the df on ticker
-    df["ticker"] = df.apply(lambda x: f"{x['cid']}_{x['xcat']}", axis=1)
-    # pivot such that the columns are individual tickers and the index is the real_date
-    df_wide: pd.DataFrame = df.pivot(
-        index="real_date", columns="ticker", values="value"
+    ## Split the dataframe into 3 wide dataframes
+    df_wide: pd.DataFrame
+    df_scales: pd.DataFrame
+    df_signs: pd.DataFrame
+    df_wide, df_scales, df_signs = _split_df(
+        df=df_wide,
+        cids=cids,
+        ctypes=ctypes,
+        cscales=cscales,
+        hbasket=hbasket if hbasket is not None else [],
+        hratios=hratios if hratios is not None else [],
+        hscales=hscales if hscales is not None else [],
     )
 
     ## Calculate the contract signals
