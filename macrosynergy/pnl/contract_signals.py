@@ -34,6 +34,7 @@ def _apply_sig_conversion(
     :param <List[str]> cids: list of cross-sections whose signal is to be used.
     :return <pd.DataFrame>: dataframe with the contracts in the same currency/units.
     """
+    # Type checks
     assert all(
         [
             isinstance(df, pd.DataFrame),
@@ -41,9 +42,9 @@ def _apply_sig_conversion(
             isinstance(cids, list),
             all([isinstance(x, str) for x in cids]),
         ]
-    ), "Invalid arguments passed to `_construct_signals`"
+    ), "Invalid arguments passed to `_apply_sig_conversion()`"
 
-    # check that all the CID_SIG pairs are in the dataframe
+    # Arg checks
     _sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
     _found_sigs: List[str] = df.columns.tolist()
     if not set(_sigs).issubset(set(_found_sigs)):
@@ -57,8 +58,10 @@ def _apply_sig_conversion(
         index="real_date", columns="cid", values="value"
     )
 
+    # Set index to real_date to allow for easy multiplication
     df = df.set_index("real_date")
 
+    # Multiply the signals by the cross-section-specific signals
     for _cid in cids:
         fxcats: List[str] = df[df["cid"] == _cid]["xcat"].unique().tolist()
         fxcats: List[str] = list(set(fxcats) - set([sig]))
@@ -88,10 +91,6 @@ def contract_signals(
 ) -> pd.DataFrame:
     """
     Calculate contract specific signals based on cross-section-specific signals.
-
-    # TODO rewrite:
-    inputs: `df` pivoted data-frame of (raw) signals with contracts to be traded on the columns and real dates as the index.
-
 
     :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
