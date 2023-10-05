@@ -230,6 +230,44 @@ def _signal_to_contract(
     return df_wide
 
 
+def _construct_signals(
+    df: pd.DataFrame,
+    sig: str,
+    cids: List[str],
+) -> pd.DataFrame:
+    """
+    Get the wide dataframe with the signals for the cids.
+
+    :param <pd.DataFrame> df: dataframe with the contract signals.
+    :param <str> sig: the cross-section-specific signal that serves as the basis of
+        contract signals.
+    :param <List[str]> cids: list of cross-sections whose signal is to be used.
+    :return: dataframe with the contract signals.
+    """
+    assert all(
+        [
+            isinstance(df, pd.DataFrame),
+            isinstance(sig, str),
+            isinstance(cids, list),
+            all([isinstance(x, str) for x in cids]),
+        ]
+    ), "Invalid arguments passed to `_construct_signals`"
+
+    # check that all the CID_SIG pairs are in the dataframe
+    _sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
+    _found_sigs: List[str] = df.columns.tolist()
+    if not set(_sigs).issubset(set(_found_sigs)):
+        raise ValueError(
+            "Some `cids` are missing the `sig` in the provided dataframe."
+            f"\nMissing: {set(_sigs) - set(_found_sigs)}"
+        )
+
+    # DF with signals for the cids
+    sigs_df: pd.DataFrame = df[df.columns.intersection(_sigs)]
+
+    return sigs_df
+
+
 def _split_df(
     df: pd.DataFrame,
     sig: str,
