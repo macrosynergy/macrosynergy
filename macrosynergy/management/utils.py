@@ -369,3 +369,28 @@ def qdf_to_ticker_df(df: pd.DataFrame) -> pd.DataFrame:
     df = df.pivot_table(index=["real_date"], columns=["ticker"], values=["value"])
 
     return df
+
+
+def ticker_df_to_qdf(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Converts a wide format DataFrame (with each column representing a ticker)
+    to a standardized JPMaQS DataFrame.
+
+    :param <pd.DataFrame> df: A wide format DataFrame.
+    :return <pd.DataFrame>: The converted DataFrame.
+    """
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Argument `df` must be a pandas DataFrame.")
+
+    # pivot to long format
+    df = df.stack(level=0).reset_index()
+    df.columns = ["real_date", "ticker", "value"]
+    # split ticker using get_cid and get_xcat
+    df["cid"] = get_cid(df["ticker"])
+    df["xcat"] = get_xcat(df["ticker"])
+    # drop ticker column
+
+    df = df.drop(columns=["ticker"])
+
+    # standardise and return
+    return standardise_dataframe(df=df)
