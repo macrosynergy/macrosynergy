@@ -83,6 +83,7 @@ def split_ticker(ticker: Union[str, Iterable[str]], mode: str) -> Union[str, Lis
     if not isinstance(ticker, str) or "_" not in ticker:
         raise ValueError(
             "Argument `ticker` must be a string" " with at least one underscore."
+            f" Received '{ticker}' instead."
         )
 
     cid, xcat = str(ticker).split("_", 1)
@@ -421,7 +422,6 @@ def ticker_df_to_qdf(df: pd.DataFrame) -> pd.DataFrame:
         .reset_index()
         .rename(columns={0: "value", "level_1": "ticker"})
     )
-    df.columns = ["real_date", "ticker", "value"]
     # split ticker using get_cid and get_xcat
     df["cid"] = get_cid(df["ticker"])
     df["xcat"] = get_xcat(df["ticker"])
