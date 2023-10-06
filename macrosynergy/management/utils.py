@@ -93,6 +93,8 @@ def split_ticker(ticker: Union[str, Iterable[str]], mode: str) -> Union[str, Lis
             " Please check the ticker."
         )
 
+    return rStr
+
 
 def get_cid(ticker: Union[str, Iterable[str]]) -> Union[str, List[str]]:
     """
