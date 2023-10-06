@@ -16,7 +16,14 @@ import os, sys
 sys.path.append(os.getcwd())
 
 from macrosynergy.pnl import Numeric
-from macrosynergy.management.utils import is_valid_iso_date, standardise_dataframe
+from macrosynergy.management.utils import (
+    is_valid_iso_date,
+    standardise_dataframe,
+    ticker_df_to_qdf,
+    qdf_to_ticker_df,
+    get_cid,
+    get_xcat,
+)
 from macrosynergy.management.shape_dfs import reduce_df
 
 
@@ -151,12 +158,9 @@ def _apply_sig_conversion(
         )
 
     # DF with signals for the cids
-    sigs_df: pd.DataFrame = df[df["xcat"] == sig].pivot(
-        index="real_date", columns="cid", values="value"
-    )
+    sigs_df: pd.DataFrame = qdf_to_ticker_df(df=df[df["xcat"] == sig].copy())
 
     # Set index to real_date to allow for easy multiplication
-    df = df.set_index("real_date")
 
     # form a dictionary, which maps each cid_xcat to the corresponding cid_sig
     cid_sig_dict: Dict[str, str] = {
@@ -167,29 +171,14 @@ def _apply_sig_conversion(
         for _xcat in df[df["cid"] == _cid]["xcat"].unique().tolist()
     }
 
-    df["ticker"]: str = df["cid"] + "_" + df["xcat"]
-
-    df = df.pivot(index="real_date", columns="ticker", values="value")
+    df: pd.DataFrame = qdf_to_ticker_df(df=df)
 
     # Multiply the signals by the cross-section-specific signals - use the dictionary
     # as mapping
     for colx in df.columns:
         df[colx] = df[colx] * sigs_df.loc[:, cid_sig_dict[colx]]
 
-    # unindex the dataframe
-    df = df.reset_index()
-
-    # Multiply the signals by the cross-section-specific signals
-    # for _cid in cids:
-    #     fxcats: List[str] = df[df["cid"] == _cid]["xcat"].unique().tolist()
-    #     fxcats: List[str] = list(set(fxcats) - set([sig]))
-    #     for _fxcat in fxcats:
-    #         sel_bools: pd.Series = (df["cid"] == _cid) & (df["xcat"] == _fxcat)
-    #         df.loc[sel_bools, "value"] = (
-    #             df.loc[sel_bools, "value"] * sigs_df.loc[:, _cid]
-    #         )
-
-    return df.reset_index()
+    return ticker_df_to_qdf(df=df)
 
 
 def contract_signals(
