@@ -113,6 +113,7 @@ def is_valid_iso_date(date: str) -> bool:
     except ValueError:
         return False
 
+
 def convert_iso_to_dq(date: str) -> str:
     if is_valid_iso_date(date):
         r = date.replace("-", "")
@@ -270,42 +271,3 @@ def drop_nan_series(df: pd.DataFrame, raise_warning: bool = False) -> pd.DataFra
             df = df[~((df["cid"] == cd) & (df["xcat"] == xc))]
 
     return df.reset_index(drop=True)
-
-
-def wide_to_long(
-    df: pd.DataFrame,
-    wide_var: str = "cid",
-    val_col: str = "value",
-) -> pd.DataFrame:
-    """
-    Converts a wide dataframe to a long dataframe.
-
-    :param <pd.DataFrame> df: The dataframe to be converted.
-    :param <str> wide_var: The variable name of the wide variable.
-        In case the columns are ... cid_1, cid_2, cid_3, ... then
-        wide_var should be "cid", else "xcat" or "real_date" must be
-        passed.
-
-    Returns
-    :return <pd.DataFrame>: The converted dataframe.
-    """
-    idx_cols: list = ["cid", "xcat", "real_date"]
-
-    if not isinstance(df, pd.DataFrame):
-        raise ValueError("Error: The input must be a pandas DataFrame.")
-
-    if wide_var not in ["cid", "xcat", "real_date"]:
-        raise ValueError(
-            "Error: The wide_var must be one of 'cid', 'xcat', 'real_date'."
-        )
-
-    """ 
-    if wide_var == "cid":
-     then the columns are real_date, xcat, cidX, cidY, cidZ, ...
-     convert to real_date, xcat, cid, value
-    """
-    # use stack and unstack to convert to long format
-    df = df.set_index(idx_cols).stack().reset_index()
-    df.columns = idx_cols + [wide_var, val_col]
-
-    return standardise_dataframe(df)
