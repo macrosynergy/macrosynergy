@@ -6,6 +6,8 @@ import datetime
 from typing import List, Tuple, Dict, Union, Set, Any
 from macrosynergy.management.simulate_quantamental_data import make_test_df
 from macrosynergy.management.utils import (
+    get_cid,
+    get_xcat,
     get_dict_max_depth,
     rec_search_dict,
     is_valid_iso_date,
@@ -15,6 +17,8 @@ from macrosynergy.management.utils import (
     generate_random_date,
     common_cids,
     drop_nan_series,
+    ticker_df_to_qdf,
+    qdf_to_ticker_df,
 )
 
 
@@ -303,6 +307,146 @@ class TestFunctions(unittest.TestCase):
 
             dfu: pd.DataFrame = drop_nan_series(df=df_test, raise_warning=False)
             self.assertEqual(len(w), 9)
+
+    def test_qdf_to_ticker_df(self):
+        cids: List[str] = ["AUD", "USD", "GBP", "EUR", "CAD"]
+        xcats: List[str] = ["FXXR", "IR", "EQXR", "CRY", "FXFW"]
+        start_date: str = "2010-01-01"
+        end_date: str = "2020-01-31"
+        bdtrange: pd.DatetimeIndex = pd.bdate_range(start_date, end_date)
+
+        tickers: List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+
+        test_df: pd.DataFrame = make_test_df(
+            cids=cids, xcats=xcats, start=start_date, end=end_date
+        )
+
+        # test case 0 - does it work?
+        rdf: pd.DataFrame = qdf_to_ticker_df(df=test_df.copy())
+
+        # test 0.1  - are all tickers present as columns?
+        self.assertEqual(set(rdf.columns), set(tickers))
+
+        # test 0.2 - is the df indexed by "real_date"?
+        self.assertTrue(rdf.index.name == "real_date")
+
+        # test 0.3 - are all dates present?
+        self.assertEqual(set(rdf.index), set(bdtrange))
+
+        # test 0.4 - are the axes unnamed - should be
+
+        self.assertTrue(rdf.columns.name is None)
+
+        # test case 1 - type error on df
+        self.assertRaises(TypeError, qdf_to_ticker_df, df=1)
+
+        # test case 2 - value error, thrown by standardise_df
+        bad_df: pd.DataFrame = test_df.copy()
+        # rename xcats to xkats
+        bad_df.rename(columns={"xcat": "xkat"}, inplace=True)
+        self.assertRaises(ValueError, qdf_to_ticker_df, df=bad_df)
+
+    def test_ticker_df_to_qdf(self):
+        cids: List[str] = ["AUD", "USD", "GBP", "EUR", "CAD"]
+        xcats: List[str] = ["FXXR", "IR", "EQXR", "CRY", "FXFW"]
+        tickers: List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+        start_date: str = "2010-01-01"
+        end_date: str = "2020-01-31"
+        bdtrange: pd.DatetimeIndex = pd.bdate_range(start_date, end_date)
+        test_df: pd.DataFrame = qdf_to_ticker_df(
+            df=make_test_df(cids=cids, xcats=xcats, start=start_date, end=end_date)
+        )
+
+        # test case 0 - does it work?
+        rdf: pd.DataFrame = ticker_df_to_qdf(df=test_df.copy())
+
+        # test 0.1  - are all tickers successfully converted to cid and xcat?
+        found_tickers: List[str] = (
+            (rdf["cid"] + "_" + rdf["xcat"]).drop_duplicates().tolist()
+        )
+        self.assertEqual(set(found_tickers), set(tickers))
+
+        # test 0.2 - is the df unindexed?
+        self.assertTrue(rdf.index.name is None)
+
+        # test 0.3 - are all dates present?
+        self.assertEqual(set(rdf["real_date"]), set(bdtrange))
+
+        # test case 1 - type error on df
+        self.assertRaises(TypeError, ticker_df_to_qdf, df=1)
+
+        # test case 2 - there should only be cid, xcat, real_date, value columns in rdf
+        self.assertEqual(set(rdf.columns), set(["cid", "xcat", "real_date", "value"]))
+
+    def test_get_cid(self):
+        good_cases: List[Tuple[str, str]] = [
+            ("AUD_FXXR", "AUD"),
+            ("USD_IR", "USD"),
+            ("GBP_EQXR_NSA", "GBP"),
+            ("EUR_CRY_ABC", "EUR"),
+            ("CAD_FXFW", "CAD"),
+        ]
+        # test good cases
+        for case in good_cases:
+            self.assertEqual(get_cid(case[0]), case[1])
+
+        # test type errors
+        for case in [1, 1.0, None, True, False]:
+            self.assertRaises(TypeError, get_cid, case)
+
+        # test value errors for empty lists
+        for case in [[], (), {}, set()]:
+            self.assertRaises(ValueError, get_cid, case)
+
+        # test overloading for iterables
+        cases: List[str] = [case[0] for case in good_cases]
+        fresults: List[str] = get_cid(cases)
+        self.assertTrue(isinstance(fresults, list))
+        self.assertEqual(fresults, [case[1] for case in good_cases])
+
+        # cast to pd.Series and test
+        cases: pd.Series = pd.Series(cases)
+        self.assertEqual(get_cid(cases), [case[1] for case in good_cases])
+
+        # test value errors for bad tickers
+        bad_cases: List[str] = ["AUD", "USD-IR-FXXR", ""]
+        for case in bad_cases:
+            self.assertRaises(ValueError, get_cid, case)
+
+    def test_get_xcat(self):
+        good_cases: List[Tuple[str, str]] = [
+            ("AUD_FXXR", "FXXR"),
+            ("USD_IR", "IR"),
+            ("GBP_EQXR_NSA", "EQXR_NSA"),
+            ("EUR_CRY_ABC", "CRY_ABC"),
+            ("CAD_FXFW", "FXFW"),
+        ]
+        # test good cases
+        for case in good_cases:
+            self.assertEqual(get_xcat(case[0]), case[1])
+
+        # test type errors
+        for case in [1, 1.0, None, True, False]:
+            self.assertRaises(TypeError, get_xcat, case)
+
+        # test value errors for empty lists
+        for case in [[], (), {}, set()]:
+            self.assertRaises(ValueError, get_xcat, case)
+
+        # test overloading for iterables
+        cases: List[str] = [case[0] for case in good_cases]
+        fresults: List[str] = get_xcat(cases)
+        self.assertTrue(isinstance(fresults, list))
+        self.assertEqual(fresults, [case[1] for case in good_cases])
+
+        # cast to pd.Series and test
+        cases: pd.Series = pd.Series(cases)
+        self.assertEqual(get_xcat(cases), [case[1] for case in good_cases])
+
+        # test value errors for bad tickers
+        bad_cases: List[str] = ["AUD", "USD-IR-FXXR", ""]
+        for case in bad_cases:
+            self.assertRaises(ValueError, get_xcat, case)
 
 
 if __name__ == "__main__":
