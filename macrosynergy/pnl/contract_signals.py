@@ -149,18 +149,16 @@ def _apply_sig_conversion(
     ), "Invalid arguments passed to `_apply_sig_conversion()`"
 
     # Arg checks
-    _sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
-    _found_sigs: List[str] = df.columns.tolist()
-    if not set(_sigs).issubset(set(_found_sigs)):
+    expected_sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
+    found_sigs: List[str] = df.columns.tolist()
+    if not set(expected_sigs).issubset(set(found_sigs)):
         raise ValueError(
             "Some `cids` are missing the `sig` in the provided dataframe."
-            f"\nMissing: {set(_sigs) - set(_found_sigs)}"
+            f"\nMissing: {set(expected_sigs) - set(found_sigs)}"
         )
 
     # DF with signals for the cids
     sigs_df: pd.DataFrame = qdf_to_ticker_df(df=df[df["xcat"] == sig].copy())
-
-    # Set index to real_date to allow for easy multiplication
 
     # form a dictionary, which maps each cid_xcat to the corresponding cid_sig
     cid_sig_dict: Dict[str, str] = {
