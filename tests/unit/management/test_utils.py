@@ -6,6 +6,8 @@ import datetime
 from typing import List, Tuple, Dict, Union, Set, Any
 from macrosynergy.management.simulate_quantamental_data import make_test_df
 from macrosynergy.management.utils import (
+    get_cid,
+    get_xcat,
     get_dict_max_depth,
     rec_search_dict,
     is_valid_iso_date,
@@ -376,6 +378,78 @@ class TestFunctions(unittest.TestCase):
 
         # test case 2 - there should only be cid, xcat, real_date, value columns in rdf
         self.assertEqual(set(rdf.columns), set(["cid", "xcat", "real_date", "value"]))
+
+    def test_get_cid(self):
+        good_cases: List[Tuple[str, str]] = [
+            ("AUD_FXXR", "AUD"),
+            ("USD_IR", "USD"),
+            ("GBP_EQXR_NSA", "GBP"),
+            ("EUR_CRY_ABC", "EUR"),
+            ("CAD_FXFW", "CAD"),
+        ]
+        # test good cases
+        for case in good_cases:
+            self.assertEqual(get_cid(case[0]), case[1])
+
+        # test type errors
+        for case in [1, 1.0, None, True, False]:
+            self.assertRaises(TypeError, get_cid, case)
+
+        # test value errors for empty lists
+        for case in [[], (), {}, set()]:
+            self.assertRaises(ValueError, get_cid, case)
+
+        # test overloading for iterables
+        cases: List[str] = [case[0] for case in good_cases]
+        fresults: List[str] = get_cid(cases)
+        self.assertTrue(isinstance(fresults, list))
+        self.assertEqual(fresults, [case[1] for case in good_cases])
+
+        # cast to pd.Series and test
+        cases: pd.Series = pd.Series(cases)
+        self.assertEqual(get_cid(cases), [case[1] for case in good_cases])
+
+        # test value errors for bad tickers
+        bad_cases: List[str] = ["AUD", "USD-IR-FXXR", ""]
+        for case in bad_cases:
+            self.assertRaises(ValueError, get_cid, case)
+
+    def test_get_xcat(self):
+        good_cases: List[Tuple[str, str]] = [
+            ("AUD_FXXR", "FXXR"),
+            ("USD_IR", "IR"),
+            ("GBP_EQXR_NSA", "EQXR_NSA"),
+            ("EUR_CRY_ABC", "CRY_ABC"),
+            ("CAD_FXFW", "FXFW"),
+        ]
+        # test good cases
+        for case in good_cases:
+            self.assertEqual(get_xcat(case[0]), case[1])
+
+        # test type errors
+        for case in [1, 1.0, None, True, False]:
+            self.assertRaises(TypeError, get_xcat, case)
+
+        # test value errors for empty lists
+        for case in [[], (), {}, set()]:
+            self.assertRaises(ValueError, get_xcat, case)
+
+        # test overloading for iterables
+        cases: List[str] = [case[0] for case in good_cases]
+        fresults: List[str] = get_xcat(cases)
+        self.assertTrue(isinstance(fresults, list))
+        self.assertEqual(fresults, [case[1] for case in good_cases])
+
+        # cast to pd.Series and test
+        cases: pd.Series = pd.Series(cases)
+        self.assertEqual(get_xcat(cases), [case[1] for case in good_cases])
+
+        # test value errors for bad tickers
+        bad_cases: List[str] = ["AUD", "USD-IR-FXXR", ""]
+        for case in bad_cases:
+            self.assertRaises(ValueError, get_xcat, case)
+            
+        
 
 
 if __name__ == "__main__":
