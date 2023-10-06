@@ -6,13 +6,90 @@ Macrosynergy package and JPMaQS dataframes/data.
 import pandas as pd
 import numpy as np
 import datetime
-from typing import Any, List, Dict, Optional, Union, Set
+from typing import Any, List, Dict, Optional, Union, Set, Iterable, overload
 import requests, requests.compat
 import warnings
+
 
 ##############################
 #   Helpful Functions
 ##############################
+@overload
+def split_ticker(ticker: str) -> str:
+    ...
+
+
+@overload
+def split_ticker(ticker: Iterable[str]) -> List[str]:
+    ...
+
+
+def spit_ticker(ticker: Union[str, Iterable[str]], mode: str) -> Union[str, List[str]]:
+    """
+    Returns either the cross-sectional identifier (cid) or the category (xcat) from a
+    ticker. The function is overloaded to accept either a single ticker or an iterable
+    (e.g. list, tuple, pd.Series, np.array) of tickers.
+
+    :param <str> ticker: The ticker to be converted.
+    :param <str> mode: The mode to be used. Must be either "cid" or "xcat".
+
+    Returns
+    :return <str>: The cross-sectional identifier or category.
+    """
+    if isinstance(ticker, Iterable):
+        return [spit_ticker(t, mode) for t in ticker]
+
+    if not isinstance(ticker, str) or "_" not in ticker:
+        raise TypeError(
+            "Argument `ticker` must be a string" " with at least one underscore."
+        )
+
+    cid, xcat = str(ticker).split("_", 1)
+    return cid if mode == "cid" else xcat
+
+
+@overload
+def get_cid(ticker: str) -> str:
+    ...
+
+
+@overload
+def get_cid(ticker: Iterable[str]) -> List[str]:
+    ...
+
+
+def get_cid(ticker: Union[str, Iterable[str]]) -> Union[str, List[str]]:
+    """
+    Returns the cross-sectional identifier (cid) from a ticker.
+
+    :param <str> ticker: The ticker to be converted.
+
+    Returns
+    :return <str>: The cross-sectional identifier.
+    """
+    return spit_ticker(ticker, mode="cid")
+
+
+@overload
+def get_xcat(ticker: str) -> str:
+    ...
+
+
+@overload
+def get_xcat(ticker: Iterable[str]) -> List[str]:
+    ...
+
+
+def get_xcat(ticker: Union[str, Iterable[str]]) -> str:
+    """
+    Returns the category (xcat) from a ticker.
+
+    :param <str> ticker: The ticker to be converted.
+
+    Returns
+    :return <str>: The category.
+    """
+    return spit_ticker(ticker, mode="xcat")
 
 
 def generate_random_date(
