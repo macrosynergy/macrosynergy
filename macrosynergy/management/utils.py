@@ -348,3 +348,24 @@ def drop_nan_series(df: pd.DataFrame, raise_warning: bool = False) -> pd.DataFra
             df = df[~((df["cid"] == cd) & (df["xcat"] == xc))]
 
     return df.reset_index(drop=True)
+
+
+def qdf_to_ticker_df(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Converts a standardized JPMaQS DataFrame to a wide format DataFrame
+    with each column representing a ticker.
+
+    :param <pd.DataFrame> df: A standardised quantamental dataframe.
+    :return <pd.DataFrame>: The converted DataFrame.
+    """
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Argument `df` must be a pandas DataFrame.")
+
+    STD_COLS: List[str] = ["cid", "xcat", "real_date", "value"]
+    if not set(df.columns).issuperset(set(STD_COLS)):
+        df: pd.DataFrame = standardise_dataframe(df)[STD_COLS]
+
+    df["ticker"] = df["cid"] + "_" + df["xcat"]
+    df = df.pivot_table(index=["real_date"], columns=["ticker"], values=["value"])
+
+    return df
