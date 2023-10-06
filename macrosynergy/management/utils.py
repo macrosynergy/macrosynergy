@@ -51,7 +51,7 @@ def split_ticker(ticker: Iterable[str]) -> List[str]:
 ##############################
 
 
-def spit_ticker(ticker: Union[str, Iterable[str]], mode: str) -> Union[str, List[str]]:
+def split_ticker(ticker: Union[str, Iterable[str]], mode: str) -> Union[str, List[str]]:
     """
     Returns either the cross-sectional identifier (cid) or the category (xcat) from a
     ticker. The function is overloaded to accept either a single ticker or an iterable
@@ -69,16 +69,19 @@ def spit_ticker(ticker: Union[str, Iterable[str]], mode: str) -> Union[str, List
     mode: str = mode.lower().strip()
     if mode not in ["cid", "xcat"]:
         raise ValueError("Argument `mode` must be either 'cid' or 'xcat'.")
+
     if not isinstance(ticker, (str)):
         if isinstance(ticker, Iterable):
-            return [spit_ticker(t, mode) for t in ticker]
+            if len(ticker) == 0:
+                raise ValueError("Argument `ticker` must not be empty.")
+            return [split_ticker(t, mode) for t in ticker]
         else:
             raise TypeError(
                 "Argument `ticker` must be a string or an iterable of strings."
             )
 
     if not isinstance(ticker, str) or "_" not in ticker:
-        raise TypeError(
+        raise ValueError(
             "Argument `ticker` must be a string" " with at least one underscore."
         )
 
@@ -95,7 +98,7 @@ def get_cid(ticker: Union[str, Iterable[str]]) -> Union[str, List[str]]:
     Returns
     :return <str>: The cross-sectional identifier.
     """
-    return spit_ticker(ticker, mode="cid")
+    return split_ticker(ticker, mode="cid")
 
 
 def get_xcat(ticker: Union[str, Iterable[str]]) -> str:
@@ -107,7 +110,7 @@ def get_xcat(ticker: Union[str, Iterable[str]]) -> str:
     Returns
     :return <str>: The category.
     """
-    return spit_ticker(ticker, mode="xcat")
+    return split_ticker(ticker, mode="xcat")
 
 
 def generate_random_date(
