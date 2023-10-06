@@ -70,7 +70,7 @@ def split_ticker(ticker: Union[str, Iterable[str]], mode: str) -> Union[str, Lis
     if mode not in ["cid", "xcat"]:
         raise ValueError("Argument `mode` must be either 'cid' or 'xcat'.")
 
-    if not isinstance(ticker, (str)):
+    if not isinstance(ticker, str):
         if isinstance(ticker, Iterable):
             if len(ticker) == 0:
                 raise ValueError("Argument `ticker` must not be empty.")
@@ -80,7 +80,7 @@ def split_ticker(ticker: Union[str, Iterable[str]], mode: str) -> Union[str, Lis
                 "Argument `ticker` must be a string or an iterable of strings."
             )
 
-    if not isinstance(ticker, str) or "_" not in ticker:
+    if "_" not in ticker:
         raise ValueError(
             "Argument `ticker` must be a string" " with at least one underscore."
             f" Received '{ticker}' instead."
