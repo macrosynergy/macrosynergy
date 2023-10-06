@@ -15,6 +15,8 @@ from macrosynergy.management.utils import (
     generate_random_date,
     common_cids,
     drop_nan_series,
+    ticker_df_to_qdf,
+    qdf_to_ticker_df,
 )
 
 
@@ -303,6 +305,77 @@ class TestFunctions(unittest.TestCase):
 
             dfu: pd.DataFrame = drop_nan_series(df=df_test, raise_warning=False)
             self.assertEqual(len(w), 9)
+
+    def test_qdf_to_ticker_df(self):
+        cids: List[str] = ["AUD", "USD", "GBP", "EUR", "CAD"]
+        xcats: List[str] = ["FXXR", "IR", "EQXR", "CRY", "FXFW"]
+        start_date: str = "2010-01-01"
+        end_date: str = "2020-01-31"
+        bdtrange: pd.DatetimeIndex = pd.bdate_range(start_date, end_date)
+
+        tickers: List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+
+        test_df: pd.DataFrame = make_test_df(
+            cids=cids, xcats=xcats, start=start_date, end=end_date
+        )
+
+        # test case 0 - does it work?
+        rdf: pd.DataFrame = ticker_df_to_qdf(df=test_df.copy())
+
+        # test 0.1  - are all tickers present as columns?
+        self.assertEqual(set(rdf.columns), set(tickers))
+
+        # test 0.2 - is the df indexed by "real_date"?
+        self.assertTrue(rdf.index.name == "real_date")
+
+        # test 0.3 - are all dates present?
+        self.assertEqual(set(rdf.index), set(bdtrange))
+
+        # test 0.4 - are the axes unnamed - should be
+
+        self.assertTrue(rdf.columns.name is None)
+        self.assertTrue(rdf.index.name is None)
+
+        # test case 1 - type error on df
+        self.assertRaises(TypeError, ticker_df_to_qdf, df=1)
+
+        # test case 2 - value error, thrown by standardise_df
+        bad_df: pd.DataFrame = test_df.copy()
+        # rename xcats to xkats
+        bad_df.rename(columns={"xcat": "xkat"}, inplace=True)
+        self.assertRaises(ValueError, ticker_df_to_qdf, df=bad_df)
+
+    def test_ticker_df_to_qdf(self):
+        cids: List[str] = ["AUD", "USD", "GBP", "EUR", "CAD"]
+        xcats: List[str] = ["FXXR", "IR", "EQXR", "CRY", "FXFW"]
+        tickers: List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+        start_date: str = "2010-01-01"
+        end_date: str = "2020-01-31"
+        bdtrange: pd.DatetimeIndex = pd.bdate_range(start_date, end_date)
+        test_df: pd.DataFrame = qdf_to_ticker_df(
+            df=make_test_df(cids=cids, xcats=xcats, start=start_date, end=end_date)
+        )
+
+        # test case 0 - does it work?
+        rdf: pd.DataFrame = ticker_df_to_qdf(df=test_df.copy())
+
+        # test 0.1  - are all tickers successfully converted to cid and xcat?
+        found_tickers: List[str] = (
+            (rdf["cid"] + "_" + rdf["xcat"]).drop_duplicates().tolist()
+        )
+        self.assertEqual(set(found_tickers), set(tickers))
+
+        # test 0.2 - is the df unindexed?
+        self.assertTrue(rdf.index.name is None)
+
+        # test 0.3 - are all dates present?
+        self.assertEqual(set(rdf["real_date"]), set(bdtrange))
+
+        # test case 1 - type error on df
+        self.assertRaises(TypeError, ticker_df_to_qdf, df=1)
+
+        # test case 2 - there should only be cid, xcat, real_date, value columns in rdf
+        self.assertEqual(set(rdf.columns), set(["cid", "xcat", "real_date", "value"]))
 
 
 if __name__ == "__main__":
