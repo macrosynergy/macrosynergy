@@ -3,7 +3,8 @@ import unittest
 import pandas as pd
 import numpy as np
 from tests.simulate import make_qdf
-from macrosynergy.panel.view_correlations import correl_matrix, lag_series
+from macrosynergy.panel.view_correlations import correl_matrix, lag_series, _transform_df_for_cross_sectional_corr, _transform_df_for_cross_category_corr
+from macrosynergy.management.check_availability import reduce_df
 
 
 class TestAll(unittest.TestCase):
@@ -160,6 +161,26 @@ class TestAll(unittest.TestCase):
             lag_dict = {'GROWTH': [0, 1, 2, 5]}
             correl_matrix(self.dfd, xcats=['XR', 'CRY'], cids=self.cids,
                           lags=lag_dict, max_color=1)
+            
+    def test_transform_df_for_cross_sectional_corr(self):
+
+        self.dataframe_construction()
+
+        df = reduce_df(self.dfd, xcats=['XR'], cids=self.cids)
+        df_w = _transform_df_for_cross_sectional_corr(df, val="value")
+        
+        self.assertEquals(df_w.columns.to_list(), self.cids)
+
+    def test_transform_df_for_cross_category_corr(self):
+
+        self.dataframe_construction()
+
+        xcats = ['XR', 'CRY']
+        df = reduce_df(self.dfd, xcats=xcats, cids=self.cids)
+        df_w = _transform_df_for_cross_category_corr(df, xcats=xcats, val="value")
+        
+        self.assertEquals(df_w.columns.to_list(), xcats)
+
 
 
 if __name__ == '__main__':
