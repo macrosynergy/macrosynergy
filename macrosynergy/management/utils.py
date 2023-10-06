@@ -86,7 +86,12 @@ def split_ticker(ticker: Union[str, Iterable[str]], mode: str) -> Union[str, Lis
         )
 
     cid, xcat = str(ticker).split("_", 1)
-    return cid if mode == "cid" else xcat
+    rStr: str = cid if mode == "cid" else xcat
+    if len(rStr.strip()) == 0:
+        raise ValueError(
+            f"Unable to extract {mode} from ticker {ticker}."
+            " Please check the ticker."
+        )
 
 
 def get_cid(ticker: Union[str, Iterable[str]]) -> Union[str, List[str]]:
