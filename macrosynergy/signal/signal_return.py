@@ -22,6 +22,7 @@ class SignalBase:
         sig: Union[str, List[str]],
         rival_sigs: Union[str, List[str]] = None,
         cids: List[str] = None,
+        signs: List[int] = 1,
         sig_neg: bool = False,
         cosp: bool = False,
         start: str = None,
@@ -79,8 +80,9 @@ class SignalBase:
         self.blacklist = blacklist
         self.fwin = fwin
 
-        assert sig in xcats, "Primary signal must be available in the DataFrame."
         self.sig = sig
+
+        self.xcats = list(df["xcat"].unique())
     
     @staticmethod
     def __slice_df__(df: pd.DataFrame, cs: str, cs_type: str):
@@ -243,83 +245,36 @@ class SignalBase:
         
         return df_out.astype("float")
 
-class SignalsReturns:
+class SignalsReturns(SignalBase):
     def __init__(
         self,
         df: pd.DataFrame,
-        rets: Union[str, List[str]],
-        sigs: Union[str, List[str]],
+        ret: Union[str, List[str]],
+        sig: Union[str, List[str]],
         signs: List[int] = 1,
         slip: int = 0,
         cosp: bool = False,
         start: str = None,
         end: str = None,
         blacklist: dict = None,
-        freqs: Union[str, List[str]] = "M",
+        freq: Union[str, List[str]] = "M",
         agg_sigs: Union[str, List[str]] = "last",
     ):
-        if not isinstance(df, pd.DataFrame):
-            raise TypeError(f"DataFrame expected and not {type(df)}.")
-        
-        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
         self.df = df
         self.original_df = df.copy()
 
-        required_columns = ["cid", "xcat", "real_date", "value"]
-
-        if not all(col in df.columns for col in required_columns):
-            raise ValueError(
-                "Dataframe columns must be of value: 'cid', 'xcat','real_date' and 'value'"
-            )
-        
-        self.dic_freq = {
-            "D": "daily",
-            "W": "weekly",
-            "M": "monthly",
-            "Q": "quarterly",
-            "A": "annual",
-        }
-        freq_error = f"Frequency parameter must be one of {list(self.dic_freq.keys())}."
-        for freq in freqs:
-            if not freq in self.dic_freq.keys():
-                raise ValueError(freq_error)
-            
-        self.rets = rets
-        self.sigs = sigs
-        self.freqs = freqs
-
-        self.metrics = [
-            "accuracy",
-            "bal_accuracy",
-            "pos_sigr",
-            "pos_retr",
-            "pos_prec",
-            "neg_prec",
-            "pearson",
-            "pearson_pval",
-            "kendall",
-            "kendall_pval",
-        ]
-
-        assert isinstance(cosp, bool), f"<bool> object expected and not {type(cosp)}."
-        self.cosp = cosp
-        self.start = start
-        self.end = end
-        self.blacklist = blacklist
-
-        self.xcats = list(df["xcat"].unique())
-        if isinstance(sigs, list):
-            for sig in sigs:
+        if isinstance(sig, list):
+            for sig in sig:
                 assert sig in self.xcats, "Primary signal must be available in the DataFrame."
-                self.signals = sigs
+                self.signals = sig
         else:
-            assert sigs in self.xcats, "Primary signal must be available in the DataFrame."
-            self.signals = [sigs]
+            assert sig in self.xcats, "Primary signal must be available in the DataFrame."
+            self.signals = [sig]
 
-        if isinstance(rets, list):
-            self.xcats = self.signals + rets
+        if isinstance(ret, list):
+            self.xcats = self.signals + ret
         else:
-            self.xcats = self.signals + [rets]
+            self.xcats = self.signals + [ret]
 
         self.signs = signs
         self.slip = slip
@@ -331,13 +286,13 @@ class SignalsReturns:
         else:
             sig = self.sigs"""
         if ret is None:
-            ret = self.rets if not isinstance(self.rets, list) else self.rets[0]
+            ret = self.ret if not isinstance(self.ret, list) else self.ret[0]
         if freq is None:
-            freq = self.freqs if not isinstance(self.freqs, list) else self.freqs[0]
+            freq = self.freq if not isinstance(self.freq, list) else self.freq[0]
         if agg_sigs is None:
             agg_sigs = self.agg_sigs if not isinstance(self.agg_sigs, list) else self.agg_sigs[0]
         if xcat is None:
-            sig = self.sigs if not isinstance(self.sigs, list) else self.sigs[0]
+            sig = self.sig if not isinstance(self.sig, list) else self.sig[0]
             xcat = [sig, ret]
         else:
             sig = xcat[0]
@@ -378,16 +333,16 @@ class SignalsReturns:
             s_copy = self.signals.copy()
 
             self.signals = [s + "_NEG" for s in self.signals]
-            self.sigs += "_NEG"
+            self.sig += "_NEG"
             self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
 
         return self.__output_table__(cs_type="cids", ret=ret, sig=sig)
 
     def multiple_relations_table(self, rets=None, xcats=None, freqs=None, agg_sigs=None):
         if rets is None:
-            rets = self.rets
+            rets = self.ret
         if freqs is None:
-            freqs = self.freqs 
+            freqs = self.freq 
         if agg_sigs is None:
             agg_sigs = self.agg_sigs
         if xcats is None:
@@ -398,7 +353,7 @@ class SignalsReturns:
 
         df_out = pd.DataFrame()
         
-        xcats = [x for x in xcats if x in self.sigs]
+        xcats = [x for x in xcats if x in self.sig]
 
         index = []
         for ret in rets:
@@ -642,47 +597,7 @@ class SignalReturnRelations:
         fwin: int = 1,
         slip: int = 0,
     ):
-        if not isinstance(df, pd.DataFrame):
-            raise TypeError(f"DataFrame expected and not {type(df)}.")
-
-        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
-
-        self.dic_freq = {
-            "D": "daily",
-            "W": "weekly",
-            "M": "monthly",
-            "Q": "quarterly",
-            "A": "annual",
-        }
-        freq_error = f"Frequency parameter must be one of {list(self.dic_freq.keys())}."
-        if not freq in self.dic_freq.keys():
-            raise ValueError(freq_error)
-
-        self.metrics = [
-            "accuracy",
-            "bal_accuracy",
-            "pos_sigr",
-            "pos_retr",
-            "pos_prec",
-            "neg_prec",
-            "pearson",
-            "pearson_pval",
-            "kendall",
-            "kendall_pval",
-        ]
-
-        self.ret = ret
-        self.freq = freq
-
-        assert isinstance(cosp, bool), f"<bool> object expected and not {type(cosp)}."
-        self.cosp = cosp
-        self.start = start
-        self.end = end
-        self.blacklist = blacklist
-        self.fwin = fwin
-
-        xcats = list(df["xcat"].unique())
-        assert sig in xcats, "Primary signal must be available in the DataFrame."
+        assert sig in self.xcats, "Primary signal must be available in the DataFrame."
         self.sig = sig
 
         signals = [self.sig]
@@ -692,22 +607,22 @@ class SignalReturnRelations:
 
             r_sigs = [rival_sigs] if isinstance(rival_sigs, str) else rival_sigs
 
-            intersection = set(xcats).intersection(r_sigs)
+            intersection = set(self.xcats).intersection(r_sigs)
             missing = set(r_sigs).difference(intersection)
 
             rival_error = (
                 f"The additional signals must be present in the defined "
                 f"DataFrame. It is currently missing, {missing}."
             )
-            assert set(r_sigs).issubset(set(xcats)), rival_error
+            assert set(r_sigs).issubset(set(self.xcats)), rival_error
             signals += r_sigs
 
         self.signals = signals
 
-        xcats = self.signals + [ret]
+        self.xcats = self.signals + [ret]
 
         dfd = reduce_df(
-            df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
+            df, xcats=self.xcats, cids=cids, start=start, end=end, blacklist=blacklist
         )
 
         # Since there may be any metrics in the DF at this point, simply apply slip to all.
@@ -715,7 +630,7 @@ class SignalReturnRelations:
             set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
         )
         dfd: pd.DataFrame = self.apply_slip(
-            target_df=dfd, slip=slip, cids=cids, xcats=xcats, metrics=metric_cols
+            target_df=dfd, slip=slip, cids=cids, xcats=self.xcats, metrics=metric_cols
         )
 
         # Naturally, only applicable if rival signals have been passed.
@@ -726,7 +641,7 @@ class SignalReturnRelations:
 
         df = categories_df(
             dfd,
-            xcats=xcats,
+            xcats=self.xcats,
             cids=cids,
             val="value",
             start=None,
