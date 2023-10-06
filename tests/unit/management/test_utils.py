@@ -11,7 +11,6 @@ from macrosynergy.management.utils import (
     is_valid_iso_date,
     convert_dq_to_iso,
     convert_iso_to_dq,
-    convert_to_iso_format,
     form_full_url,
     generate_random_date,
     common_cids,
@@ -126,29 +125,6 @@ class TestFunctions(unittest.TestCase):
         dts: List[str] = [generate_random_date() for i in range(20)]
         for dt in dts:
             self.assertEqual(convert_iso_to_dq(dt), dt.replace("-", ""))
-
-    def test_convert_to_iso_format(self):
-        """
-        dd-mm-yyyy
-        dd-mmm-yyyy
-        dd-mm-yy
-        ddmmyyyy (if len==8)
-
-        iterate separators from ["-", "/", ".", " "]
-
-        """
-        return
-
-        tests: List[Tuple[str, str]] = [
-            ("01*01*2020", "2020-01-01"),
-            ("01*MAY*2020", "2020-05-01"),
-            ("01012020", "2020-01-01"),
-        ]
-        seps: List[str] = ["-", "/", ".", " "]
-        for t, r in tests:
-            for sep in seps:
-                print(t, r, sep)
-                self.assertEqual(convert_to_iso_format(t.replace("*", sep)), r)
 
     def test_form_full_url(self):
         url: str = "https://www.google.com"
