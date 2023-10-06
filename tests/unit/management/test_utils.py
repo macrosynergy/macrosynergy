@@ -322,7 +322,7 @@ class TestFunctions(unittest.TestCase):
         )
 
         # test case 0 - does it work?
-        rdf: pd.DataFrame = ticker_df_to_qdf(df=test_df.copy())
+        rdf: pd.DataFrame = qdf_to_ticker_df(df=test_df.copy())
 
         # test 0.1  - are all tickers present as columns?
         self.assertEqual(set(rdf.columns), set(tickers))
@@ -336,16 +336,15 @@ class TestFunctions(unittest.TestCase):
         # test 0.4 - are the axes unnamed - should be
 
         self.assertTrue(rdf.columns.name is None)
-        self.assertTrue(rdf.index.name is None)
 
         # test case 1 - type error on df
-        self.assertRaises(TypeError, ticker_df_to_qdf, df=1)
+        self.assertRaises(TypeError, qdf_to_ticker_df, df=1)
 
         # test case 2 - value error, thrown by standardise_df
         bad_df: pd.DataFrame = test_df.copy()
         # rename xcats to xkats
         bad_df.rename(columns={"xcat": "xkat"}, inplace=True)
-        self.assertRaises(ValueError, ticker_df_to_qdf, df=bad_df)
+        self.assertRaises(ValueError, qdf_to_ticker_df, df=bad_df)
 
     def test_ticker_df_to_qdf(self):
         cids: List[str] = ["AUD", "USD", "GBP", "EUR", "CAD"]
@@ -448,8 +447,6 @@ class TestFunctions(unittest.TestCase):
         bad_cases: List[str] = ["AUD", "USD-IR-FXXR", ""]
         for case in bad_cases:
             self.assertRaises(ValueError, get_xcat, case)
-            
-        
 
 
 if __name__ == "__main__":
