@@ -12,8 +12,30 @@ import warnings
 
 
 ##############################
-#   Helpful Functions
+#   Overloads
 ##############################
+
+
+@overload
+def get_cid(ticker: str) -> str:
+    ...
+
+
+@overload
+def get_cid(ticker: Iterable[str]) -> List[str]:
+    ...
+
+
+@overload
+def get_xcat(ticker: str) -> str:
+    ...
+
+
+@overload
+def get_xcat(ticker: Iterable[str]) -> List[str]:
+    ...
+
+
 @overload
 def split_ticker(ticker: str) -> str:
     ...
@@ -22,6 +44,11 @@ def split_ticker(ticker: str) -> str:
 @overload
 def split_ticker(ticker: Iterable[str]) -> List[str]:
     ...
+
+
+##############################
+#   Helpful Functions
+##############################
 
 
 def spit_ticker(ticker: Union[str, Iterable[str]], mode: str) -> Union[str, List[str]]:
@@ -36,8 +63,19 @@ def spit_ticker(ticker: Union[str, Iterable[str]], mode: str) -> Union[str, List
     Returns
     :return <str>: The cross-sectional identifier or category.
     """
-    if isinstance(ticker, Iterable):
-        return [spit_ticker(t, mode) for t in ticker]
+    if not isinstance(mode, str):
+        raise TypeError("Argument `mode` must be a string.")
+
+    mode: str = mode.lower().strip()
+    if mode not in ["cid", "xcat"]:
+        raise ValueError("Argument `mode` must be either 'cid' or 'xcat'.")
+    if not isinstance(ticker, (str)):
+        if isinstance(ticker, Iterable):
+            return [spit_ticker(t, mode) for t in ticker]
+        else:
+            raise TypeError(
+                "Argument `ticker` must be a string or an iterable of strings."
+            )
 
     if not isinstance(ticker, str) or "_" not in ticker:
         raise TypeError(
@@ -46,16 +84,6 @@ def spit_ticker(ticker: Union[str, Iterable[str]], mode: str) -> Union[str, List
 
     cid, xcat = str(ticker).split("_", 1)
     return cid if mode == "cid" else xcat
-
-
-@overload
-def get_cid(ticker: str) -> str:
-    ...
-
-
-@overload
-def get_cid(ticker: Iterable[str]) -> List[str]:
-    ...
 
 
 def get_cid(ticker: Union[str, Iterable[str]]) -> Union[str, List[str]]:
@@ -68,16 +96,6 @@ def get_cid(ticker: Union[str, Iterable[str]]) -> Union[str, List[str]]:
     :return <str>: The cross-sectional identifier.
     """
     return spit_ticker(ticker, mode="cid")
-
-
-@overload
-def get_xcat(ticker: str) -> str:
-    ...
-
-
-@overload
-def get_xcat(ticker: Iterable[str]) -> List[str]:
-    ...
 
 
 def get_xcat(ticker: Union[str, Iterable[str]]) -> str:
@@ -366,7 +384,12 @@ def qdf_to_ticker_df(df: pd.DataFrame) -> pd.DataFrame:
         df: pd.DataFrame = standardise_dataframe(df)[STD_COLS]
 
     df["ticker"] = df["cid"] + "_" + df["xcat"]
-    df = df.pivot_table(index=["real_date"], columns=["ticker"], values=["value"])
+    # drop cid and xcat
+    df = (
+        df.drop(columns=["cid", "xcat"])
+        .pivot(index="real_date", columns="ticker", values="value")
+        .rename_axis(None, axis=1)
+    )
 
     return df
 
@@ -383,7 +406,11 @@ def ticker_df_to_qdf(df: pd.DataFrame) -> pd.DataFrame:
         raise TypeError("Argument `df` must be a pandas DataFrame.")
 
     # pivot to long format
-    df = df.stack(level=0).reset_index()
+    df = (
+        df.stack(level=0)
+        .reset_index()
+        .rename(columns={0: "value", "level_1": "ticker"})
+    )
     df.columns = ["real_date", "ticker", "value"]
     # split ticker using get_cid and get_xcat
     df["cid"] = get_cid(df["ticker"])
