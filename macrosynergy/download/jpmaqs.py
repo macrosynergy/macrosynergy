@@ -531,20 +531,12 @@ class JPMaQSDownload(object):
 
         """
 
-        if not isinstance(show_progress, bool):
-            raise TypeError("`show_progress` must be a boolean.")
-
-        if not isinstance(as_dataframe, bool):
-            raise TypeError("`as_dataframe` must be a boolean.")
-
-        if not isinstance(report_time_taken, bool):
-            raise TypeError("`report_time_taken` must be a boolean.")
-
-        if not isinstance(report_egress, bool):
-            raise TypeError("`report_egress` must be a boolean.")
-
-        if not isinstance(get_catalogue, bool):
-            raise TypeError("`get_catalogue` must be a boolean.")
+        for varx, namex in zip(
+            [show_progress, as_dataframe, report_time_taken, report_egress],
+            ["show_progress", "as_dataframe", "report_time_taken", "report_egress"],
+        ):
+            if not isinstance(varx, bool):
+                raise TypeError(f"`{namex}` must be a boolean.")
 
         if all([tickers is None, cids is None, xcats is None, expressions is None]):
             raise ValueError(
@@ -571,28 +563,22 @@ class JPMaQSDownload(object):
             if all([metric not in self.valid_metrics for metric in metrics]):
                 raise ValueError(f"`metrics` must be a subset of {self.valid_metrics}.")
 
-        if cids is not None:
-            if xcats is None:
-                raise ValueError(
-                    "If specifying `cids`, `xcats` must also be specified."
-                )
-        else:
-            if xcats is not None:
-                raise ValueError(
-                    "If specifying `xcats`, `cids` must also be specified."
-                )
+        if bool(cids) ^ bool(xcats):
+            raise ValueError(
+                "If specifying `xcats`, `cids` must also be specified (and vice versa)."
+            )
 
         for varx, namex in zip([start_date, end_date], ["start_date", "end_date"]):
-            if not isinstance(varx, str):
-                raise TypeError(f"`{namex}` must be a string.")
-            if not is_valid_iso_date(varx):
+            if not is_valid_iso_date(varx):  # type check covered by `is_valid_iso_date`
                 raise ValueError(
                     f"`{namex}` must be a valid date in the format YYYY-MM-DD."
                 )
             if pd.to_datetime(varx, errors="coerce") is pd.NaT:
                 raise ValueError(
                     f"`{namex}` must be a valid date > "
-                    f"{pd.Timestamp.min.strftime('%Y-%m-%d')} "
+                    f"{pd.Timestamp.min.strftime('%Y-%m-%d')}.\n"
+                    "Check pandas documentation:"
+                    " https://pandas.pydata.org/docs/user_guide/timeseries.html#timestamp-limitations`"
                 )
             if pd.to_datetime(varx) < pd.to_datetime("1950-01-01"):
                 warnings.warn(
