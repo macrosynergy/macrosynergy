@@ -12,6 +12,7 @@ import warnings
 from timeit import default_timer as timer
 from typing import Dict, List, Optional, Tuple, Union
 
+
 import pandas as pd
 
 from macrosynergy.download.dataquery import DataQueryInterface
@@ -381,7 +382,8 @@ class JPMaQSDownload(object):
                     self.unavailable_expr_messages.append(d["attributes"][0]["message"])
                 else:
                     self.unavailable_expr_messages.append(
-                        f"DataQuery did not return data or error message for expression {d['attributes'][0]['expression']}"
+                        "DataQuery did not return data or error message for"
+                        f" expression {d['attributes'][0]['expression']}"
                     )
 
         assert set(_missing_exprs) == set(
@@ -390,7 +392,8 @@ class JPMaQSDownload(object):
 
         if len(dfs) == 0:
             raise InvalidDataframeError(
-                "No data was downloaded. Check logger output for complete list of missing expressions."
+                "No data was downloaded. Check logger output "
+                "for complete list of missing expressions."
             )
 
         final_df: pd.DataFrame = pd.concat(dfs, ignore_index=True)
@@ -631,7 +634,8 @@ class JPMaQSDownload(object):
             filtered: int = len(expressions) - len(r)
             if filtered > 0:
                 print(
-                    f"Removed {filtered}/{len(expressions)} expressions that are not in the JPMaQS catalogue."
+                    f"Removed {filtered}/{len(expressions)} "
+                    "expressions that are not in the JPMaQS catalogue."
                 )
 
         return r
