@@ -531,10 +531,13 @@ class JPMaQSDownload(object):
 
         """
 
-        for varx, namex in zip(
-            [show_progress, as_dataframe, report_time_taken, report_egress],
-            ["show_progress", "as_dataframe", "report_time_taken", "report_egress"],
-        ):
+        for varx, namex in[
+            (get_catalogue, "get_catalogue"),
+            (show_progress, "show_progress"),
+            (as_dataframe, "as_dataframe"),
+            (report_time_taken, "report_time_taken"),
+            (report_egress, "report_egress"),
+        ]:
             if not isinstance(varx, bool):
                 raise TypeError(f"`{namex}` must be a boolean.")
 
