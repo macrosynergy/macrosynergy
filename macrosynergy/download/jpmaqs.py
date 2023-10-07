@@ -235,8 +235,9 @@ class JPMaQSDownload(object):
                     f"Failed to deconstruct expression `{expression}`: {e}",
                     UserWarning,
                 )
-                # fail safely, return list where all entries are =expression
-                return [expression, expression, expression]
+                # fail safely, return list where cid = xcat = expression,
+                #  and metric = 'value'
+                return [expression, expression, "value"]
 
     def validate_downloaded_df(
         self,
@@ -453,10 +454,10 @@ class JPMaQSDownload(object):
 
         final_df = final_df.sort_values(["real_date", "cid", "xcat"])
 
-        found_metrics = sorted(
-            list(set(final_df.columns) - {"real_date", "cid", "xcat"}),
-            key=lambda x: self.valid_metrics.index(x),
-        )
+        # sort all metrics in the order of self.valid_metrics, all other metrics will be at the end
+        found_metrics = [
+            metricx for metricx in self.valid_metrics if metricx in final_df.columns
+        ]
         # sort found_metrics in the order of self.valid_metrics, then re-order the columns
         final_df = final_df[["real_date", "cid", "xcat"] + found_metrics]
 
