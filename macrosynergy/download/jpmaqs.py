@@ -200,8 +200,9 @@ class JPMaQSDownload(object):
     ) -> Union[List[str], List[List[str]]]:
         """
         Deconstruct an expression into a list of cid, xcat, and metric.
-        Coupled with to JPMaQSDownload.time_series_to_df(), achieves the inverse of
-        JPMaQSDownload.construct_expressions().
+        Coupled with JPMaQSDownload.time_series_to_df(), achieves the inverse of
+        JPMaQSDownload.construct_expressions(). For non-JPMaQS expressions, the returned
+        list will be [expression, expression, 'value'].
 
         :param <str> expression: expression to deconstruct. If a list is provided,
             each element will be deconstructed and returned as a list of lists.
