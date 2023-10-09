@@ -216,7 +216,7 @@ class SignalBase:
 
     # NOTE THAT THE ORIGINAL __output__table__ does not have a ret or sig argument, so this needs to be rectified during inheritance
 
-    def __output_table__(self, cs_type: str = "cids", ret=None, sig=None):
+    def __output_table__(self, cs_type: str = "cids", ret=None, sig=None, srt=False):
         """
         Creates a DataFrame with information on the signal-return relation across
         cross-sections or years and, additionally, the panel.
@@ -246,12 +246,37 @@ class SignalBase:
             css = sorted(css)
 
         statms = self.metrics
-        df_out = pd.DataFrame(index=["Panel"], columns=statms)
+        if srt:
+            css = []
+            index = ["Panel"]
+        else:
+            index = ["Panel", "Mean", "PosRatio"] + css
 
-        df_cs = self.__slice_df__(df=df, cs="Panel", cs_type=cs_type)
-        df_out = self.__table_stats__(
-            df_segment=df_cs, df_out=df_out, segment="Panel", signal=sig, ret=ret
-        )
+        df_out = pd.DataFrame(index=index, columns=statms)
+
+        for cs in (css + ["Panel"]):
+
+            df_cs = self.__slice_df__(df=df, cs=cs, cs_type=cs_type)
+            df_out = self.__table_stats__(
+                df_segment=df_cs, df_out=df_out, segment=cs, signal=sig, ret=ret
+            )
+        if not srt:
+
+            df_out.loc["Mean", :] = df_out.loc[css, :].mean()
+
+            above50s = statms[0:6]
+            # Overview of the cross-sectional performance.
+            df_out.loc["PosRatio", above50s] = (df_out.loc[css, above50s] > 0.5).mean()
+
+            above0s = statms[6::2]
+            pos_corr_coefs = df_out.loc[css, above0s] > 0
+            df_out.loc["PosRatio", above0s] = pos_corr_coefs.mean()
+
+            below50s = statms[7::2]
+            pvals_bool = df_out.loc[css, below50s] < 0.5
+            pos_pvals = np.mean(np.array(pvals_bool) * np.array(pos_corr_coefs), axis=0)
+            # Positive correlation with error prob < 50%.
+            df_out.loc["PosRatio", below50s] = pos_pvals
 
         return df_out.astype("float")
 
@@ -370,7 +395,7 @@ class SignalsReturns(SignalBase):
             self.sig += "_NEG"
             self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
 
-        return self.__output_table__(cs_type="cids", ret=ret, sig=sig)
+        return self.__output_table__(cs_type="cids", ret=ret, sig=sig, srt=True).round(decimals=5)
 
     def multiple_relations_table(
         self, rets=None, xcats=None, freqs=None, agg_sigs=None
@@ -380,7 +405,7 @@ class SignalsReturns(SignalBase):
         if freqs is None:
             freqs = self.freq
         if agg_sigs is None:
-            agg_sigs = self.agg_sigs
+            agg_sigs = self.agg_sig
         if xcats is None:
             xcats = self.xcats
 
