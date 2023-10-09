@@ -177,9 +177,13 @@ def correl_matrix(
             df.copy(), xcats2, cids2, start, end, out_all=True
         )
 
-        s_date = min(df1["real_date"].min(), df2["real_date"].min()).strftime("%Y-%m-%d")
-        e_date = max(df1["real_date"].max(), df2["real_date"].max()).strftime("%Y-%m-%d")
-    
+        s_date = min(df1["real_date"].min(), df2["real_date"].min()).strftime(
+            "%Y-%m-%d"
+        )
+        e_date = max(df1["real_date"].max(), df2["real_date"].max()).strftime(
+            "%Y-%m-%d"
+        )
+
         if len(xcats1) == 1 and len(xcats2) == 1:
             df_w1 = _transform_df_for_cross_sectional_corr(df1, val, freq)
             df_w2 = _transform_df_for_cross_sectional_corr(df2, val, freq)
@@ -197,15 +201,23 @@ def correl_matrix(
             else:
                 lags1, lags2 = lags, lags
 
-            df_w1 = _transform_df_for_cross_category_corr(df=df1, xcats=xcats1, val=val, freq=freq, lags=lags1)
-            df_w2 = _transform_df_for_cross_category_corr(df=df2, xcats=xcats2, val=val, freq=freq, lags=lags2)
+            df_w1 = _transform_df_for_cross_category_corr(
+                df=df1, xcats=xcats1, val=val, freq=freq, lags=lags1
+            )
+            df_w2 = _transform_df_for_cross_category_corr(
+                df=df2, xcats=xcats2, val=val, freq=freq, lags=lags2
+            )
 
             if title is None:
                 title = (
                     f"Cross-category correlation of {xcats[0]} from {s_date} to "
                     f"{e_date}"
                 )
-        corr = pd.concat([df_w1, df_w2], axis=1, keys=['df_w1', 'df_w2']).corr().loc['df_w2', 'df_w1']
+        corr = (
+            pd.concat([df_w1, df_w2], axis=1, keys=["df_w1", "df_w2"])
+            .corr()
+            .loc["df_w2", "df_w1"]
+        )
 
         if cluster:
             # Since the correlation matrix is not necessarily symmetric, clustering is done in two stages.
@@ -230,7 +242,9 @@ def correl_matrix(
                 )
 
         else:
-            df_w = _transform_df_for_cross_category_corr(df=df, xcats=xcats, val=val, freq=freq, lags=lags)
+            df_w = _transform_df_for_cross_category_corr(
+                df=df, xcats=xcats, val=val, freq=freq, lags=lags
+            )
 
             if title is None:
                 title = f"Cross-category correlation from {s_date} to {e_date}"
@@ -385,28 +399,31 @@ if __name__ == "__main__":
     cids += cids_dmsc
     xcats = ["XR", "CRY"]
 
-    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest',
-                                                'mean_add', 'sd_mult'])
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
 
-    df_cids.loc['AUD'] = ['2010-01-01', '2020-12-31', 0.5, 2]
-    df_cids.loc['CAD'] = ['2011-01-01', '2020-11-30', 0, 1]
-    df_cids.loc['GBP'] = ['2012-01-01', '2020-11-30', -0.2, 0.5]
-    df_cids.loc['USD'] = ['2010-01-01', '2020-12-30', -0.2, 0.5]
-    df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
-    df_cids.loc['EUR'] = ['2002-01-01', '2020-09-30', -0.2, 2]
-    df_cids.loc['DEM'] = ['2003-01-01', '2020-09-30', -0.3, 2]
-    df_cids.loc['ESP'] = ['2003-01-01', '2020-09-30', -0.1, 2]
-    df_cids.loc['FRF'] = ['2003-01-01', '2020-09-30', -0.2, 2]
-    df_cids.loc['ITL'] = ['2004-01-01', '2020-09-30', -0.2, 0.5]
-    df_cids.loc['NLG'] = ['2003-01-01', '2020-12-30', -0.1, 0.5]
-    df_cids.loc['CHF'] = ['2003-01-01', '2020-12-30', -0.3, 2.5]
-    df_cids.loc['NOK'] = ['2010-01-01', '2020-12-30', -0.1, 0.5]
-    df_cids.loc['SEK'] = ['2010-01-01', '2020-09-30', -0.1, 0.5]
+    df_cids.loc["AUD"] = ["2010-01-01", "2020-12-31", 0.5, 2]
+    df_cids.loc["CAD"] = ["2011-01-01", "2020-11-30", 0, 1]
+    df_cids.loc["GBP"] = ["2012-01-01", "2020-11-30", -0.2, 0.5]
+    df_cids.loc["USD"] = ["2010-01-01", "2020-12-30", -0.2, 0.5]
+    df_cids.loc["NZD"] = ["2002-01-01", "2020-09-30", -0.1, 2]
+    df_cids.loc["EUR"] = ["2002-01-01", "2020-09-30", -0.2, 2]
+    df_cids.loc["DEM"] = ["2003-01-01", "2020-09-30", -0.3, 2]
+    df_cids.loc["ESP"] = ["2003-01-01", "2020-09-30", -0.1, 2]
+    df_cids.loc["FRF"] = ["2003-01-01", "2020-09-30", -0.2, 2]
+    df_cids.loc["ITL"] = ["2004-01-01", "2020-09-30", -0.2, 0.5]
+    df_cids.loc["NLG"] = ["2003-01-01", "2020-12-30", -0.1, 0.5]
+    df_cids.loc["CHF"] = ["2003-01-01", "2020-12-30", -0.3, 2.5]
+    df_cids.loc["NOK"] = ["2010-01-01", "2020-12-30", -0.1, 0.5]
+    df_cids.loc["SEK"] = ["2010-01-01", "2020-09-30", -0.1, 0.5]
 
-    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
-                                                  'sd_mult', 'ar_coef', 'back_coef'])
-    df_xcats.loc['XR', ] = ['2010-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
-    df_xcats.loc['CRY', ] = ['2010-01-01', '2020-10-30', 1, 2, 0.95, 0.5]
+    df_xcats = pd.DataFrame(
+        index=xcats,
+        columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+    )
+    df_xcats.loc["XR",] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY",] = ["2010-01-01", "2020-10-30", 1, 2, 0.95, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
@@ -418,7 +435,7 @@ if __name__ == "__main__":
     # Clustered correlation matrices. Test hierarchical clustering.
     correl_matrix(
         df=dfd,
-        xcats='XR',
+        xcats="XR",
         cids=cids,
         start=start,
         end=end,
@@ -428,5 +445,5 @@ if __name__ == "__main__":
         title="Correlation Matrix",
         size=(14, 8),
         max_color=None,
-        lags=None
+        lags=None,
     )
