@@ -10,7 +10,6 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -18,6 +17,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
@@ -33,9 +33,8 @@ jobs:
             ${{ runner.os }}-pip-
 
       - if: ${{ steps.pip-cache.outputs.cache-hit != 'true' }}
-        - name: Install dependencies
-          run: |
-            pip install .[test]
+        run: |
+          pip install .[test]
 
       - name: Run integration tests with pytest
         env:
