@@ -225,6 +225,11 @@ class SignalBase:
 
         """
 
+        if ret is None:
+            ret = self.ret
+        if sig is None:
+            sig = self.sig
+
         # Analysis completed exclusively on the primary signal.
         r = [ret]
         if isinstance(sig, list):
@@ -618,8 +623,8 @@ class SignalReturnRelations(SignalBase):
         if len(self.signals) > 1:
             self.df_sigs = self.__rival_sigs__()
 
-        self.df_cs = self.__output_table__(cs_type="cids", ret=ret, sig=sig)
-        self.df_ys = self.__output_table__(cs_type="years", ret=ret, sig=sig)
+        self.df_cs = self.__output_table__(cs_type="cids", ret=ret, sig=self.sig)
+        self.df_ys = self.__output_table__(cs_type="years", ret=ret, sig=self.sig)
 
     def __communal_sample__(self, df: pd.DataFrame):
         """
