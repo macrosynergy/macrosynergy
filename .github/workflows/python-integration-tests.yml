@@ -33,7 +33,10 @@ jobs:
 
       - name: Check if cache exists
         id: cache-check
-        run: echo "::set-output name=cache-exists::$(test -d $HOME/.cache/pip)"
+        run: echo "CACHE_EXISTS=$(test -d $HOME/.cache/pip)" >> $GITHUB_ENV
+
+      - name: Debug Cache Contents
+        run: ls -l ~/.cache/pip
 
       - name: Install dependencies
         if: steps.cache-check.outputs.cache-exists == 'false'
