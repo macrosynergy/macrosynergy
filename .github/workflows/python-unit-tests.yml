@@ -18,11 +18,12 @@ jobs:
         with:
           python-version: 3.11
 
-      - name: Cache Python packages
-        uses: actions/cache@v3
+      - name: Cache Dependencies
+        uses: actions/setup-python@v4
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
+          python-version: '3.11'
+          cache: 'pip' # caching pip dependencies
+
       - name: Install dependencies
         run: |
           pip install .[test]
