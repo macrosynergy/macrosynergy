@@ -10,14 +10,16 @@ import numpy as np
 import seaborn as sns
 import scipy.cluster.hierarchy as sch
 from matplotlib import pyplot as plt
-from typing import List, Union, Tuple
+from typing import List, Union, Tuple, Dict, Optional, Any
 from collections import defaultdict
 
 from macrosynergy.management.check_availability import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 
-def lag_series(df_w: pd.DataFrame, lags: dict, xcats: List[str]):
+def lag_series(
+    df_w: pd.DataFrame, lags: dict, xcats: List[str]
+) -> Tuple[pd.DataFrame, Dict[str, List[str]]]:
     """
     Method used to lag respective categories.
 
@@ -39,7 +41,7 @@ def lag_series(df_w: pd.DataFrame, lags: dict, xcats: List[str]):
     # Modify the dictionary to adjust for single categories having multiple lags.
     # The respective lags will be held inside a list.
     lag_copy = {}
-    xcat_tracker = defaultdict(list)
+    xcat_tracker: defaultdict = defaultdict(list)
     for xcat, shift in lags.items():
         if isinstance(shift, int):
             lag_copy[xcat + f"_L{shift}"] = shift
@@ -185,8 +187,12 @@ def correl_matrix(
         )
 
         if len(xcats1) == 1 and len(xcats2) == 1:
-            df_w1 = _transform_df_for_cross_sectional_corr(df1, val, freq)
-            df_w2 = _transform_df_for_cross_sectional_corr(df2, val, freq)
+            df_w1: pd.DataFrame = _transform_df_for_cross_sectional_corr(
+                df=df1, val=val, freq=freq
+            )
+            df_w2: pd.DataFrame = _transform_df_for_cross_sectional_corr(
+                df=df2, val=val, freq=freq
+            )
 
             if title is None:
                 title = (
@@ -201,10 +207,10 @@ def correl_matrix(
             else:
                 lags1, lags2 = lags, lags
 
-            df_w1 = _transform_df_for_cross_category_corr(
+            df_w1: pd.DataFrame = _transform_df_for_cross_category_corr(
                 df=df1, xcats=xcats1, val=val, freq=freq, lags=lags1
             )
-            df_w2 = _transform_df_for_cross_category_corr(
+            df_w2: pd.DataFrame = _transform_df_for_cross_category_corr(
                 df=df2, xcats=xcats2, val=val, freq=freq, lags=lags2
             )
 
@@ -229,8 +235,8 @@ def correl_matrix(
     else:
         df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
 
-        s_date = df["real_date"].min().strftime("%Y-%m-%d")
-        e_date = df["real_date"].max().strftime("%Y-%m-%d")
+        s_date: str = df["real_date"].min().strftime("%Y-%m-%d")
+        e_date: str = df["real_date"].max().strftime("%Y-%m-%d")
 
         if len(xcats) == 1:
             df_w = _transform_df_for_cross_sectional_corr(df=df, val=val, freq=freq)
@@ -257,7 +263,7 @@ def correl_matrix(
         # Mask for the upper triangle.
         # Return a copy of an array with the elements below the k-th diagonal zeroed. The
         # mask is implemented because correlation coefficients are symmetric.
-        mask = np.triu(np.ones_like(corr, dtype=bool))
+        mask: np.ndarray = np.triu(np.ones_like(corr, dtype=bool))
 
     fig, ax = plt.subplots(figsize=size)
     sns.set(style="ticks")
@@ -281,7 +287,7 @@ def correl_matrix(
 
 def _transform_df_for_cross_sectional_corr(
     df: pd.DataFrame, val: str = "value", freq: str = None
-):
+) -> pd.DataFrame:
     """
     Pivots dataframe and down-samples according to the specified frequency so that
     correlation can be calculated between cross-sections.
@@ -302,7 +308,7 @@ def _transform_df_for_cross_sectional_corr(
 
 def _transform_df_for_cross_category_corr(
     df: pd.DataFrame, xcats: List[str], val: str, freq: str = None, lags: dict = None
-):
+) -> pd.DataFrame:
     """
     Pivots dataframe and down-samples according to the specified frequency so that
     correlation can be calculated between extended categories.
@@ -316,7 +322,9 @@ def _transform_df_for_cross_category_corr(
 
     :return <pd.Dataframe>: The transformed dataframe.
     """
-    df_w = df.pivot(index=("cid", "real_date"), columns="xcat", values=val)
+    df_w: pd.DataFrame = df.pivot(
+        index=("cid", "real_date"), columns="xcat", values=val
+    )
     # Down-sample according to the passed frequency.
     if freq is not None:
         df_w = df_w.groupby(
@@ -341,7 +349,7 @@ def _transform_df_for_cross_category_corr(
     return df_w
 
 
-def _is_list_of_lists(ls: List):
+def _is_list_of_lists(ls: List[Any]) -> bool:
     """
     Check if list contains only lists as elements.
 
@@ -352,7 +360,9 @@ def _is_list_of_lists(ls: List):
     return all(map(lambda x: isinstance(x, list), ls))
 
 
-def _cluster_correlations(corr: pd.DataFrame, is_symmetric: bool = False):
+def _cluster_correlations(
+    corr: pd.DataFrame, is_symmetric: bool = False
+) -> pd.DataFrame:
     """
     Rearrange a correlation dataframe so that more similar values are clustered.
 
