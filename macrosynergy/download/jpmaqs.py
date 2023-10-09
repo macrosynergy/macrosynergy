@@ -527,7 +527,7 @@ class JPMaQSDownload(object):
 
         """
 
-        for varx, namex in[
+        for varx, namex in [
             (get_catalogue, "get_catalogue"),
             (show_progress, "show_progress"),
             (as_dataframe, "as_dataframe"),
