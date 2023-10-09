@@ -6,13 +6,119 @@ Macrosynergy package and JPMaQS dataframes/data.
 import pandas as pd
 import numpy as np
 import datetime
-from typing import Any, List, Dict, Optional, Union, Set
+from typing import Any, List, Dict, Optional, Union, Set, Iterable, overload
 import requests, requests.compat
 import warnings
+
+
+##############################
+#   Overloads
+##############################
+
+
+@overload
+def get_cid(ticker: str) -> str:
+    ...
+
+
+@overload
+def get_cid(ticker: Iterable[str]) -> List[str]:
+    ...
+
+
+@overload
+def get_xcat(ticker: str) -> str:
+    ...
+
+
+@overload
+def get_xcat(ticker: Iterable[str]) -> List[str]:
+    ...
+
+
+@overload
+def split_ticker(ticker: str) -> str:
+    ...
+
+
+@overload
+def split_ticker(ticker: Iterable[str]) -> List[str]:
+    ...
+
 
 ##############################
 #   Helpful Functions
 ##############################
+
+
+def split_ticker(ticker: Union[str, Iterable[str]], mode: str) -> Union[str, List[str]]:
+    """
+    Returns either the cross-sectional identifier (cid) or the category (xcat) from a
+    ticker. The function is overloaded to accept either a single ticker or an iterable
+    (e.g. list, tuple, pd.Series, np.array) of tickers.
+
+    :param <str> ticker: The ticker to be converted.
+    :param <str> mode: The mode to be used. Must be either "cid" or "xcat".
+
+    Returns
+    :return <str>: The cross-sectional identifier or category.
+    """
+    if not isinstance(mode, str):
+        raise TypeError("Argument `mode` must be a string.")
+
+    mode: str = mode.lower().strip()
+    if mode not in ["cid", "xcat"]:
+        raise ValueError("Argument `mode` must be either 'cid' or 'xcat'.")
+
+    if not isinstance(ticker, str):
+        if isinstance(ticker, Iterable):
+            if len(ticker) == 0:
+                raise ValueError("Argument `ticker` must not be empty.")
+            return [split_ticker(t, mode) for t in ticker]
+        else:
+            raise TypeError(
+                "Argument `ticker` must be a string or an iterable of strings."
+            )
+
+    if "_" not in ticker:
+        raise ValueError(
+            "Argument `ticker` must be a string" " with at least one underscore."
+            f" Received '{ticker}' instead."
+        )
+
+    cid, xcat = str(ticker).split("_", 1)
+    rStr: str = cid if mode == "cid" else xcat
+    if len(rStr.strip()) == 0:
+        raise ValueError(
+            f"Unable to extract {mode} from ticker {ticker}."
+            " Please check the ticker."
+        )
+
+    return rStr
+
+
+def get_cid(ticker: Union[str, Iterable[str]]) -> Union[str, List[str]]:
+    """
+    Returns the cross-sectional identifier (cid) from a ticker.
+
+    :param <str> ticker: The ticker to be converted.
+
+    Returns
+    :return <str>: The cross-sectional identifier.
+    """
+    return split_ticker(ticker, mode="cid")
+
+
+def get_xcat(ticker: Union[str, Iterable[str]]) -> str:
+    """
+    Returns the category (xcat) from a ticker.
+
+    :param <str> ticker: The ticker to be converted.
+
+    Returns
+    :return <str>: The category.
+    """
+    return split_ticker(ticker, mode="xcat")
 
 
 def generate_random_date(
@@ -112,6 +218,7 @@ def is_valid_iso_date(date: str) -> bool:
         return True
     except ValueError:
         return False
+
 
 def convert_iso_to_dq(date: str) -> str:
     if is_valid_iso_date(date):
@@ -272,40 +379,55 @@ def drop_nan_series(df: pd.DataFrame, raise_warning: bool = False) -> pd.DataFra
     return df.reset_index(drop=True)
 
 
-def wide_to_long(
-    df: pd.DataFrame,
-    wide_var: str = "cid",
-    val_col: str = "value",
-) -> pd.DataFrame:
+def qdf_to_ticker_df(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Converts a wide dataframe to a long dataframe.
+    Converts a standardized JPMaQS DataFrame to a wide format DataFrame
+    with each column representing a ticker.
 
-    :param <pd.DataFrame> df: The dataframe to be converted.
-    :param <str> wide_var: The variable name of the wide variable.
-        In case the columns are ... cid_1, cid_2, cid_3, ... then
-        wide_var should be "cid", else "xcat" or "real_date" must be
-        passed.
-
-    Returns
-    :return <pd.DataFrame>: The converted dataframe.
+    :param <pd.DataFrame> df: A standardised quantamental dataframe.
+    :return <pd.DataFrame>: The converted DataFrame.
     """
-    idx_cols: list = ["cid", "xcat", "real_date"]
-
     if not isinstance(df, pd.DataFrame):
-        raise ValueError("Error: The input must be a pandas DataFrame.")
+        raise TypeError("Argument `df` must be a pandas DataFrame.")
 
-    if wide_var not in ["cid", "xcat", "real_date"]:
-        raise ValueError(
-            "Error: The wide_var must be one of 'cid', 'xcat', 'real_date'."
-        )
+    STD_COLS: List[str] = ["cid", "xcat", "real_date", "value"]
+    if not set(df.columns).issuperset(set(STD_COLS)):
+        df: pd.DataFrame = standardise_dataframe(df)[STD_COLS]
 
-    """ 
-    if wide_var == "cid":
-     then the columns are real_date, xcat, cidX, cidY, cidZ, ...
-     convert to real_date, xcat, cid, value
+    df["ticker"] = df["cid"] + "_" + df["xcat"]
+    # drop cid and xcat
+    df = (
+        df.drop(columns=["cid", "xcat"])
+        .pivot(index="real_date", columns="ticker", values="value")
+        .rename_axis(None, axis=1)
+    )
+
+    return df
+
+
+def ticker_df_to_qdf(df: pd.DataFrame) -> pd.DataFrame:
     """
-    # use stack and unstack to convert to long format
-    df = df.set_index(idx_cols).stack().reset_index()
-    df.columns = idx_cols + [wide_var, val_col]
+    Converts a wide format DataFrame (with each column representing a ticker)
+    to a standardized JPMaQS DataFrame.
 
-    return standardise_dataframe(df)
+    :param <pd.DataFrame> df: A wide format DataFrame.
+    :return <pd.DataFrame>: The converted DataFrame.
+    """
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Argument `df` must be a pandas DataFrame.")
+
+    # pivot to long format
+    df = (
+        df.stack(level=0)
+        .reset_index()
+        .rename(columns={0: "value", "level_1": "ticker"})
+    )
+    # split ticker using get_cid and get_xcat
+    df["cid"] = get_cid(df["ticker"])
+    df["xcat"] = get_xcat(df["ticker"])
+    # drop ticker column
+
+    df = df.drop(columns=["ticker"])
+
+    # standardise and return
+    return standardise_dataframe(df=df)
