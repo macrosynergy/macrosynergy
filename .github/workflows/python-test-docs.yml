@@ -16,11 +16,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Install Dependencies
+      - name: Cache Dependencies
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-          cache: 'pip'
+          cache: 'pip' # caching pip dependencies
+
+      - name: Install Dependencies
         run: |
           pip install flake8
           pip install -r docs/requirements.txt
