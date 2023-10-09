@@ -254,14 +254,12 @@ class SignalBase:
 
         df_out = pd.DataFrame(index=index, columns=statms)
 
-        for cs in (css + ["Panel"]):
-
+        for cs in css + ["Panel"]:
             df_cs = self.__slice_df__(df=df, cs=cs, cs_type=cs_type)
             df_out = self.__table_stats__(
                 df_segment=df_cs, df_out=df_out, segment=cs, signal=sig, ret=ret
             )
         if not srt:
-
             df_out.loc["Mean", :] = df_out.loc[css, :].mean()
 
             above50s = statms[0:6]
@@ -308,7 +306,7 @@ class SignalsReturns(SignalBase):
             freq=freqs,
             agg_sig=agg_sigs,
         )
-        self.df =df
+        self.df = df
         self.original_df = df.copy()
 
         if isinstance(self.sig, list):
@@ -341,9 +339,7 @@ class SignalsReturns(SignalBase):
             freq = self.freq if not isinstance(self.freq, list) else self.freq[0]
         if agg_sigs is None:
             agg_sigs = (
-                self.agg_sig
-                if not isinstance(self.agg_sig, list)
-                else self.agg_sig[0]
+                self.agg_sig if not isinstance(self.agg_sig, list) else self.agg_sig[0]
             )
         if xcat is None:
             sig = self.sig if not isinstance(self.sig, list) else self.sig[0]
@@ -395,7 +391,9 @@ class SignalsReturns(SignalBase):
             self.sig += "_NEG"
             self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
 
-        return self.__output_table__(cs_type="cids", ret=ret, sig=sig, srt=True).round(decimals=5)
+        return self.__output_table__(cs_type="cids", ret=ret, sig=sig, srt=True).round(
+            decimals=5
+        )
 
     def multiple_relations_table(
         self, rets=None, xcats=None, freqs=None, agg_sigs=None
@@ -428,7 +426,11 @@ class SignalsReturns(SignalBase):
         return df_out
 
     def single_statistic_table(
-        self, stat, type="panel", rows=None, columns=None, heatmap=False, title=None
+        self,
+        stat: str,
+        type: str = "panel",
+        rows: List[str] = ["xcat", "agg_sigs"],
+        columns: List[str] = ["ret", "freq"],
     ):
         stats_values = [
             "accuracy",
@@ -443,12 +445,20 @@ class SignalsReturns(SignalBase):
             "kendall_pval",
         ]
         type_values = ["panel", "mean_years", "mean_cids", "pr_years", "pr_cids"]
+        rows_values = ["xcat", "ret", "freq", "agg_sigs"]
 
         if not stat in stats_values:
             raise ValueError(f"Stat must be one of {stats_values}")
         if not type in type_values:
             raise ValueError(f"Type must be one of {type_values}")
-
+        for row in rows:
+            if not row in rows_values:
+                raise ValueError(f"Rows must only contain {rows_values}")
+        for column in columns:
+            if not column in rows_values:
+                raise ValueError(f"Columns must only contain {rows_values}")
+            
+        
         return 0
 
 
