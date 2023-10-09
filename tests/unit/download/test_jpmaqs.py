@@ -65,7 +65,6 @@ class TestJPMaQSDownload(unittest.TestCase):
             "show_progress": True,
             "as_dataframe": True,
             "report_time_taken": True,
-            "report_egress": True,
             "get_catalogue": True,
         }
         bad_args: Dict[str, Any] = {}
@@ -159,7 +158,6 @@ class TestJPMaQSDownload(unittest.TestCase):
             "show_progress": True,
             "as_dataframe": True,
             "report_time_taken": True,
-            "report_egress": True,
         }
 
         jpmaqs: JPMaQSDownload = JPMaQSDownload(
@@ -230,10 +228,6 @@ class TestJPMaQSDownload(unittest.TestCase):
             bad_args["expressions"] = test_exprs
             jpmaqs.download(**bad_args)
 
-        with self.assertRaises(AssertionError):
-            # the assertion checks whether the download/DQInterface is "mismatched"
-            jpmaqs.download(**good_args)
-
         jpmaqs: JPMaQSDownload = JPMaQSDownload(
             client_id="client_id",
             client_secret="client_secret",
@@ -277,7 +271,6 @@ class TestJPMaQSDownload(unittest.TestCase):
             "show_progress": True,
             "as_dataframe": True,
             "report_time_taken": True,
-            "report_egress": True,
             "get_catalogue": False,
         }
 

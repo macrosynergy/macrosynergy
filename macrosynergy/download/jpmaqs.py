@@ -381,16 +381,14 @@ class JPMaQSDownload(object):
                     self.unavailable_expr_messages.append(d["attributes"][0]["message"])
                 else:
                     self.unavailable_expr_messages.append(
-                        f"DataQuery did not return data or error message for expression {d['attributes'][0]['expression']}"
+                        "DataQuery did not return data or error message for expression "
+                        f"{d['attributes'][0]['expression']}"
                     )
-
-        assert set(_missing_exprs) == set(
-            self.unavailable_expressions
-        ), "Downloaded `dicts_list` has been modified before calling `time_series_to_df`"
 
         if len(dfs) == 0:
             raise InvalidDataframeError(
-                "No data was downloaded. Check logger output for complete list of missing expressions."
+                "No data was downloaded. Check logger output for"
+                " complete list of missing expressions."
             )
 
         final_df: pd.DataFrame = pd.concat(dfs, ignore_index=True)
@@ -514,7 +512,6 @@ class JPMaQSDownload(object):
         show_progress: bool,
         as_dataframe: bool,
         report_time_taken: bool,
-        report_egress: bool,
     ) -> bool:
         """Validate the arguments passed to the download function.
 
@@ -535,9 +532,6 @@ class JPMaQSDownload(object):
 
         if not isinstance(report_time_taken, bool):
             raise TypeError("`report_time_taken` must be a boolean.")
-
-        if not isinstance(report_egress, bool):
-            raise TypeError("`report_egress` must be a boolean.")
 
         if not isinstance(get_catalogue, bool):
             raise TypeError("`get_catalogue` must be a boolean.")
@@ -631,7 +625,8 @@ class JPMaQSDownload(object):
             filtered: int = len(expressions) - len(r)
             if filtered > 0:
                 print(
-                    f"Removed {filtered}/{len(expressions)} expressions that are not in the JPMaQS catalogue."
+                    f"Removed {filtered}/{len(expressions)} expressions "
+                    "that are not in the JPMaQS catalogue."
                 )
 
         return r
@@ -651,7 +646,8 @@ class JPMaQSDownload(object):
         suppress_warning: bool = False,
         as_dataframe: bool = True,
         report_time_taken: bool = False,
-        report_egress: bool = False,
+        *args,
+        **kwargs,
     ) -> Union[pd.DataFrame, List[Dict]]:
         """Driver function to download data from JPMaQS via the DataQuery API.
         Timeseries data can be requested using `tickers` with `metrics`, or
@@ -684,8 +680,6 @@ class JPMaQSDownload(object):
             a list of dictionaries if False.
         :param <bool> report_time_taken: If True, the time taken to download
             and apply data transformations is reported.
-        :param <bool> report_egress: If True, the number of bytes downloaded
-            is reported along with the transmission speed in kilobits/second.
 
         :return <pd.DataFrame|list[Dict]>: dataframe of data if
             `as_dataframe` is True, list of dictionaries if False.
@@ -732,7 +726,6 @@ class JPMaQSDownload(object):
             show_progress=show_progress,
             as_dataframe=as_dataframe,
             report_time_taken=report_time_taken,
-            report_egress=report_egress,
         ):
             raise ValueError("Invalid arguments passed to download().")
         if pd.to_datetime(start_date) > pd.to_datetime(end_date):
@@ -762,7 +755,6 @@ class JPMaQSDownload(object):
 
         # Download data.
         data: List[Dict] = []
-        egress_data: Dict = {}
         download_time_taken: float = timer()
         with self.dq_interface as dq:
             print(
@@ -790,9 +782,6 @@ class JPMaQSDownload(object):
                     self.dq_interface.unavailable_expressions
                 )
 
-            if report_egress:
-                egress_data = self.dq_interface.egress_data
-
         download_time_taken: float = timer() - download_time_taken
         dfs_time_taken: float = timer()
         if as_dataframe:
@@ -812,42 +801,9 @@ class JPMaQSDownload(object):
             print(f"Time taken to download data: \t{download_time_taken:.2f} seconds.")
             if as_dataframe:
                 print(
-                    f"Time taken to convert to dataframe: \t{dfs_time_taken:.2f} seconds."
+                    "Time taken to convert to dataframe: "
+                    f"\t{dfs_time_taken:.2f} seconds."
                 )
-
-        if report_egress:
-            # create averages for egress_data like
-            #  egress_data[tracking_id] = {
-            #     "url": log_url,
-            #     "upload_size": upload_size,
-            #     "download_size": download_size,
-            #     "time_taken": time_taken,
-            #   }
-
-            total_upload: int = 0
-            total_download: int = 0
-            total_time_taken: float = 0
-            longest_time_taken: float = 0
-            longest_time_taken_url: str = ""
-            for tracking_id in egress_data:
-                total_upload += egress_data[tracking_id]["upload_size"]
-                total_download += egress_data[tracking_id]["download_size"]
-                total_time_taken += egress_data[tracking_id]["time_taken"]
-                if egress_data[tracking_id]["time_taken"] > longest_time_taken:
-                    longest_time_taken = egress_data[tracking_id]["time_taken"]
-                    longest_time_taken_url = egress_data[tracking_id]["url"]
-
-            avg_upload_size_kb: float = total_upload / (1024)
-            avg_download_size_kb: float = total_download / (1024)
-            avg_time_taken: float = total_time_taken / len(egress_data)
-            avg_transfer_rate_kbit: float = (
-                (avg_download_size_kb + avg_upload_size_kb) * 8 / avg_time_taken
-            )
-            print(f"Average upload size: \t{avg_upload_size_kb:.2f} KB")
-            print(f"Average download size: \t{avg_download_size_kb:.2f} KB")
-            print(f"Average time taken: \t{avg_time_taken:.2f} seconds")
-            print(f"Longest time taken: \t{longest_time_taken:.2f} seconds")
-            print(f"Average transfer rate : \t{avg_transfer_rate_kbit:.2f} Kbps")
 
         if len(self.msg_errors) > 0:
             if not self.suppress_warning:
@@ -906,7 +862,6 @@ if __name__ == "__main__":
             show_progress=True,
             suppress_warning=False,
             report_time_taken=True,
-            report_egress=True,
         )
 
         print(data.head())
