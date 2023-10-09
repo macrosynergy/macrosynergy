@@ -1,9 +1,16 @@
 
 import unittest
 import pandas as pd
-import numpy as np
+from pandas.testing import assert_frame_equal
 from tests.simulate import make_qdf
-from macrosynergy.panel.view_correlations import correl_matrix, lag_series, _transform_df_for_cross_sectional_corr, _transform_df_for_cross_category_corr
+from macrosynergy.panel.view_correlations import (
+    correl_matrix,
+    lag_series,
+    _transform_df_for_cross_sectional_corr,
+    _transform_df_for_cross_category_corr,
+    _is_list_of_lists,
+    _cluster_correlations
+)
 from macrosynergy.management.check_availability import reduce_df
 
 
@@ -161,15 +168,16 @@ class TestAll(unittest.TestCase):
             lag_dict = {'GROWTH': [0, 1, 2, 5]}
             correl_matrix(self.dfd, xcats=['XR', 'CRY'], cids=self.cids,
                           lags=lag_dict, max_color=1)
-            
+       
     def test_transform_df_for_cross_sectional_corr(self):
 
         self.dataframe_construction()
 
         df = reduce_df(self.dfd, xcats=['XR'], cids=self.cids)
         df_w = _transform_df_for_cross_sectional_corr(df, val="value")
-        
-        self.assertEquals(df_w.columns.to_list(), self.cids)
+
+        # Test that columns are now the cids.
+        self.assertEqual(df_w.columns.to_list(), self.cids)
 
     def test_transform_df_for_cross_category_corr(self):
 
@@ -178,9 +186,36 @@ class TestAll(unittest.TestCase):
         xcats = ['XR', 'CRY']
         df = reduce_df(self.dfd, xcats=xcats, cids=self.cids)
         df_w = _transform_df_for_cross_category_corr(df, xcats=xcats, val="value")
-        
-        self.assertEquals(df_w.columns.to_list(), xcats)
 
+        # Test that columns are now the xcats.
+        self.assertEqual(df_w.columns.to_list(), xcats)
+
+    def test_is_lists_of_lists(self):
+
+        self.assertTrue(_is_list_of_lists([[]]))
+        self.assertTrue(_is_list_of_lists([[], []]))
+        self.assertTrue(_is_list_of_lists([['test'], ['test']]))
+
+        self.assertFalse(_is_list_of_lists(['test']))
+        self.assertFalse(_is_list_of_lists(['test', []]))
+
+    def test_cluster_correlations(self):
+
+        self.dataframe_construction()
+
+        df = reduce_df(self.dfd, xcats=['XR'], cids=self.cids)
+        df_w = _transform_df_for_cross_sectional_corr(df, val="value")
+
+        corr1 = df_w.corr(method="pearson")
+        corr2 = corr1.copy()
+
+        # Clustering rows and columns separately should provide the same outcome
+        # for a symmetric dataframe.
+        corr1 = _cluster_correlations(corr1, is_symmetric=True)
+        corr2 = _cluster_correlations(corr2, is_symmetric=False)
+        corr2 = _cluster_correlations(corr2.T, is_symmetric=False).T
+
+        assert_frame_equal(corr1, corr2)
 
 
 if __name__ == '__main__':

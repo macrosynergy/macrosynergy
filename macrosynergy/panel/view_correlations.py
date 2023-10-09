@@ -82,7 +82,7 @@ def correl_matrix(
     val: str = "value",
     freq: str = None,
     cluster: bool = False,
-    lags: dict = None,
+    lags: Union[dict, List[dict]] = None,
     title: str = None,
     size: Tuple[float] = (14, 8),
     max_color: float = None,
@@ -96,11 +96,12 @@ def correl_matrix(
         DataFrame. If xcats contains only one category the correlation coefficients
         across cross sections are displayed. If xcats contains more than one category,
         the correlation coefficients across categories are displayed. Additionally, the
-        order of the xcats received will be mirrored in the correlation matrix. If xcats is
-        a list containing two lists of xcats, correlations will be calculated between these two sets.
+        order of the xcats received will be mirrored in the correlation matrix. If xcats
+        is a list containing two lists of xcats, correlations will be calculated
+        between these two sets.
     :param <List[str]> cids: cross sections to be correlated. Default is all in the
-        DataFrame. If cids is a list containing two lists of cids, correlations will be calculated
-        and visualized between these two sets.
+        DataFrame. If cids is a list containing two lists of cids, correlations will be
+        calculated and visualized between these two sets.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df
@@ -116,7 +117,9 @@ def correl_matrix(
     :param <dict> lags: optional dictionary of lags applied to respective categories.
         The key will be the category and the value is the lag or lags. If a
         category has multiple lags applied, pass in a list of lag values. The lag factor
-        will be appended to the category name in the correlation matrix.
+        will be appended to the category name in the correlation matrix. If xcats is
+        passed as two sets of categories, lags may be a list of two dictionaries
+        specifying lags for each set.
         N.B.: Lags can include a 0 if the original should also be correlated.
     :param <str> title: chart heading. If none is given, a default title is used.
     :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default
@@ -189,8 +192,13 @@ def correl_matrix(
             xlabel = f"{xcats1[0]} cross-sections"
             ylabel = f"{xcats2[0]} cross-sections"
         else:
-            df_w1 = _transform_df_for_cross_category_corr(df=df1, xcats=xcats1, val=val, freq=freq, lags=lags)
-            df_w2 = _transform_df_for_cross_category_corr(df=df2, xcats=xcats2, val=val, freq=freq, lags=lags)
+            if isinstance(lags, list) and len(lags) == 2:
+                lags1, lags2 = lags
+            else:
+                lags1, lags2 = lags, lags
+
+            df_w1 = _transform_df_for_cross_category_corr(df=df1, xcats=xcats1, val=val, freq=freq, lags=lags1)
+            df_w2 = _transform_df_for_cross_category_corr(df=df2, xcats=xcats2, val=val, freq=freq, lags=lags2)
 
             if title is None:
                 title = (
@@ -335,7 +343,7 @@ def _cluster_correlations(corr: pd.DataFrame, is_symmetric: bool = False):
     Rearrange a correlation dataframe so that more similar values are clustered.
 
     :param <pd.Dataframe> corr: dataframe representing a correlation matrix.
-    :param <bool> is_symmetric: if True, rows and columns can be rearranged identically.
+    :param <bool> is_symmetric: if True, rows and columns are rearranged identically.
                                 If False, only rows are reordered.
 
     :return <pd.Dataframe>: The sorted correlation dataframe.
@@ -405,21 +413,20 @@ if __name__ == "__main__":
     start = "2012-01-01"
     end = "2020-09-30"
 
+    lag_dict = {"XR": [0, 2, 5]}
+
     # Clustered correlation matrices. Test hierarchical clustering.
     correl_matrix(
         df=dfd,
-        # xcats=[["XR", "CRY"], ["XR"]],
-        xcats=[["XR"], ["CRY"]],
-        # xcats=["XR"],
-        # xcats=["CRY", "XR"],
-        # cids=[["CHF", "NOK", "SEK"], ["CHF"]],
+        xcats='XR',
         cids=cids,
         start=start,
         end=end,
         val="value",
         freq=None,
         cluster=True,
-        # title="Correlation Matrix",
+        title="Correlation Matrix",
         size=(14, 8),
         max_color=None,
+        lags=None
     )
