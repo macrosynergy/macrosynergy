@@ -145,6 +145,21 @@ class TestAll(unittest.TestCase):
         # Mainly test assertions given the function is used for visualisation. The
         # function can easily be tested through the graph returned.
 
+        try:
+            correl_matrix(self.dfd, xcats=['XR'], cids=self.cids, max_color=.1)
+        except Exception as e:
+            self.fail(f"correl_matrix raised {e} unexpectedly")
+
+        try:
+            correl_matrix(self.dfd, xcats=[['XR'], ['CRY']], cids=self.cids, max_color=.1)
+        except Exception as e:
+            self.fail(f"correl_matrix raised {e} unexpectedly")
+
+        try:
+            correl_matrix(self.dfd, xcats=[['XR'], ['CRY']], cids=[['AUD'], ['GBP']], max_color=.1)
+        except Exception as e:
+            self.fail(f"correl_matrix raised {e} unexpectedly")
+
         lag_dict = {'INFL': [0, 1, 2, 5]}
         with self.assertRaises(AssertionError):
             # Test the frequency options: either ['W', 'M', 'Q'].
