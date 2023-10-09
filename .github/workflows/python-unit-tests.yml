@@ -17,17 +17,7 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: 3.11
-
-      - name: Cache Python packages
-        uses: actions/cache@v2
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-      - name: Install dependencies
-        run: |
-          pip install .[test]
+          cache: 'pip'
 
       - name: Lint with flake8
         run: |
