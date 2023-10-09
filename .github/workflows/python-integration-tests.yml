@@ -9,13 +9,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  clear-cache:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Clear Cache
-        run: |
-          echo "::set-output name=cache::false"
   build:
+
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -23,22 +18,20 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Cache Python packages
-        id: pip-cache
         uses: actions/cache@v3
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-pip-
-
-      - if: ${{ steps.pip-cache.outputs.cache-hit != 'true' }}
+            
+      - name: Install dependencies
         run: |
           pip install .[test]
 
