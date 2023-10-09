@@ -202,7 +202,9 @@ class JPMaQSDownload(object):
         Deconstruct an expression into a list of cid, xcat, and metric.
         Coupled with JPMaQSDownload.time_series_to_df(), achieves the inverse of
         JPMaQSDownload.construct_expressions(). For non-JPMaQS expressions, the returned
-        list will be [expression, expression, 'value'].
+        list will be [expression, expression, 'value']. The metric is set to 'value' to 
+        ensure the reported metric is consistent with the standard JPMaQS metrics 
+        (JPMaQSDownload.valid_metrics).
 
         :param <str> expression: expression to deconstruct. If a list is provided,
             each element will be deconstructed and returned as a list of lists.
