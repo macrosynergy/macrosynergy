@@ -676,10 +676,15 @@ class SignalReturnRelations(SignalBase):
         df_out = pd.DataFrame(index=self.signals, columns=self.metrics)
         df = self.df
 
+        if isinstance(self.ret, list):
+            ret = self.ret[0]
+        else:
+            ret = self.ret
+
         for s in self.signals:
             # Entire panel will be passed in.
             df_out = self.__table_stats__(
-                df_segment=df, df_out=df_out, segment=s, signal=s
+                df_segment=df, df_out=df_out, segment=s, signal=s, ret=ret
             )
 
         return df_out
