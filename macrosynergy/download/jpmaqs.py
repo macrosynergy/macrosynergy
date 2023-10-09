@@ -202,8 +202,8 @@ class JPMaQSDownload(object):
         Deconstruct an expression into a list of cid, xcat, and metric.
         Coupled with JPMaQSDownload.time_series_to_df(), achieves the inverse of
         JPMaQSDownload.construct_expressions(). For non-JPMaQS expressions, the returned
-        list will be [expression, expression, 'value']. The metric is set to 'value' to 
-        ensure the reported metric is consistent with the standard JPMaQS metrics 
+        list will be [expression, expression, 'value']. The metric is set to 'value' to
+        ensure the reported metric is consistent with the standard JPMaQS metrics
         (JPMaQSDownload.valid_metrics).
 
         :param <str> expression: expression to deconstruct. If a list is provided,
@@ -529,33 +529,35 @@ class JPMaQSDownload(object):
 
         """
 
-        for varx, namex in [
+        for var, name in [
             (get_catalogue, "get_catalogue"),
             (show_progress, "show_progress"),
             (as_dataframe, "as_dataframe"),
             (report_time_taken, "report_time_taken"),
         ]:
-            if not isinstance(varx, bool):
-                raise TypeError(f"`{namex}` must be a boolean.")
+            if not isinstance(var, bool):
+                raise TypeError(f"`{name}` must be a boolean.")
 
         if all([tickers is None, cids is None, xcats is None, expressions is None]):
             raise ValueError(
                 "Must provide at least one of `tickers`, "
                 "`expressions`, or `cids` & `xcats` together."
             )
-        vars_types_zip: zip = zip(
-            [tickers, cids, xcats, expressions],
-            ["tickers", "cids", "xcats", "expressions"],
-        )
-        for varx, namex in vars_types_zip:
-            if not isinstance(varx, list) and varx is not None:
-                raise TypeError(f"`{namex}` must be a list of strings.")
-            if varx is not None:
-                if len(varx) > 0:
-                    if not all([isinstance(ticker, str) for ticker in varx]):
-                        raise TypeError(f"`{namex}` must be a list of strings.")
+
+        for var, name in [
+            (tickers, "tickers"),
+            (cids, "cids"),
+            (xcats, "xcats"),
+            (expressions, "expressions"),
+        ]:
+            if not isinstance(var, list) and var is not None:
+                raise TypeError(f"`{name}` must be a list of strings.")
+            if var is not None:
+                if len(var) > 0:
+                    if not all([isinstance(ticker, str) for ticker in var]):
+                        raise TypeError(f"`{name}` must be a list of strings.")
                 else:
-                    raise ValueError(f"`{namex}` must be a non-empty list of strings.")
+                    raise ValueError(f"`{name}` must be a non-empty list of strings.")
 
         if metrics is None:
             raise ValueError("`metrics` must be a non-empty list of strings.")
@@ -568,22 +570,25 @@ class JPMaQSDownload(object):
                 "If specifying `xcats`, `cids` must also be specified (and vice versa)."
             )
 
-        for varx, namex in zip([start_date, end_date], ["start_date", "end_date"]):
-            if not is_valid_iso_date(varx):  # type check covered by `is_valid_iso_date`
+        for var, name in [
+            (start_date, "start_date"),
+            (end_date, "end_date"),
+        ]:
+            if not is_valid_iso_date(var):  # type check covered by `is_valid_iso_date`
                 raise ValueError(
-                    f"`{namex}` must be a valid date in the format YYYY-MM-DD."
+                    f"`{name}` must be a valid date in the format YYYY-MM-DD."
                 )
-            if pd.to_datetime(varx, errors="coerce") is pd.NaT:
+            if pd.to_datetime(var, errors="coerce") is pd.NaT:
                 raise ValueError(
-                    f"`{namex}` must be a valid date > "
+                    f"`{name}` must be a valid date > "
                     f"{pd.Timestamp.min.strftime('%Y-%m-%d')}.\n"
                     "Check pandas documentation:"
                     " https://pandas.pydata.org/docs/user_guide/timeseries.html#timestamp-limitations`"
                 )
-            if pd.to_datetime(varx) < pd.to_datetime("1950-01-01"):
+            if pd.to_datetime(var) < pd.to_datetime("1950-01-01"):
                 warnings.warn(
                     message=(
-                        f"`{namex}` is set before 1950-01-01."
+                        f"`{name}` is set before 1950-01-01."
                         "Data before 1950-01-01 may not be available,"
                         " and will cause errors/missing data."
                     ),
