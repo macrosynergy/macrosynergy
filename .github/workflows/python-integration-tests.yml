@@ -9,6 +9,12 @@ on:
   workflow_dispatch:
 
 jobs:
+  clear-cache:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clear Cache
+        run: |
+          echo "::set-output name=cache::false"
   build:
     runs-on: ubuntu-latest
     strategy:
