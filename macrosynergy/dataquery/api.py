@@ -5,7 +5,7 @@ from ..download.jpmaqs import JPMaQSDownload
 class Interface(JPMaQSDownload):
     """
     Extends `macrosynergy.download.jpmaqs.JPMaQSDownload` to provide backwards 
-    compatibility with the deprecated `macrosynergy.dataquery.api.Interface` class.
+    compatibility with the deprecated `macrosynergy.dataquery.api.Interface` class asd.
     """
 
     def __init__(self, *args, **kwargs):
