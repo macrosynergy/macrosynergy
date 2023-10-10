@@ -1,11 +1,8 @@
-# This test is for develop←branch , and test←develop or test←branch pull requests.
-# It runs on Ubuntu, and tests Python 3.11. For testing for production, see /.github/workflows/python-package-release.yml
-
 name: Test Python package on Ubuntu
 
 on:
   pull_request:
-    branches: [test, develop]
+    branches: [main, test, develop, feature/cachingOnBuild]
   workflow_dispatch:
 
 jobs:
