@@ -1,5 +1,3 @@
-
-
 import unittest
 from macrosynergy.signal.signal_return import SignalReturnRelations
 
@@ -121,7 +119,7 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(AssertionError):
             # GDP is not a defined category.
             srr = SignalReturnRelations(self.dfd, ret='XR', sig='CRY',
-                                        rival_sigs=set(['GROWTH', 'INFL', 'GDP']),
+                                        rival_sigs=['GROWTH', 'INFL', 'GDP'],
                                         freq='D', blacklist=self.blacklist)
 
         primary_signal = 'CRY'
