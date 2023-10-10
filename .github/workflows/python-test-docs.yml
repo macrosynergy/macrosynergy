@@ -19,7 +19,7 @@ jobs:
       - name: Restore caches
         uses: ./.github/actions/restore-pip-cache
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: 3.11
 
       - name: Run Flake8
         run: |
