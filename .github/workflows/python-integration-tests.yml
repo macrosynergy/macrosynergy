@@ -22,21 +22,26 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
+
+      - name: Cache Dependencies
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
           cache: 'pip' # caching pip dependencies
             
       - name: Install dependencies
         run: |
           pip install .[test]
-        
+
       - name: Run integration tests with pytest
         env:
           DQ_CLIENT_ID: ${{ secrets.DQ_CLIENT_ID }}
           DQ_CLIENT_SECRET: ${{ secrets.DQ_CLIENT_SECRET }}
         run: |
           echo 'Run Integration tests'
-          pytest -n 1 tests/integration/
-          # echo "Integration test temporarily disabled."
+          pytest tests/integration/
           echo 'Integration test complete'
+
       - name: Test build settings
         run: |
           pip install .[all] 

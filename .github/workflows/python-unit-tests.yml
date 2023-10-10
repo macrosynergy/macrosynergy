@@ -11,68 +11,39 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: 
+          - '3.11'
     steps:
       - uses: actions/checkout@v3
-
-      # Add this step to download the virtual environment artifact
-      - name: Download virtual environment artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: my_env
-
       - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
-          python-version: 3.11
+          python-version: ${{ matrix.python-version }}
 
-      - name: Check if virtual environment exists
-        run: |
-          if [ -d my_env ]; then
-            export VIRTUALENV_EXISTS=true
-          else
-            export VIRTUALENV_EXISTS=false
-          fi
-          echo "VIRTUALENV_EXISTS=$VIRTUALENV_EXISTS" >> $GITHUB_ENV
-
-      - name: Create virtual environment
-        run: |
-          if [ "$VIRTUALENV_EXISTS" == "false" ]; then
-            python -m venv my_env
-          fi
+      - name: Cache Dependencies
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip' # caching pip dependencies
 
       - name: Install dependencies
         run: |
-          if [ "$VIRTUALENV_EXISTS" == "false" ]; then
-            source my_env/bin/activate
-            pip install .[test]
-          fi
+          pip install .[test]
 
-      #- name: Lint with flake8
-      #  run: |
-      #    source my_env/bin/activate
-      #    # stop the build if there are Python syntax errors or undefined names
-      #    flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-      #    # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-      #    flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-
+      - name: Lint with flake8
+        run: |
+          # stop the build if there are Python syntax errors or undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
       - name: Test with pytest
         run: |
-          source my_env/bin/activate
+          # Options: --ignore=tests/specific.py --ignore-glob=tests/ignore-pattern
           pytest ./tests/unit/
-
       - name: Upload coverage reports to Codecov
         run: |
           curl -Os https://uploader.codecov.io/latest/linux/codecov
           chmod +x codecov
           ./codecov -t ${CODECOV_TOKEN}
-
-      - name: Compress virtual environment
-        run: |
-          tar -czvf my_env.tar.gz my_env
-          mv my_env.tar.gz my_env
-
-      - name: Upload virtual environment as artifact
-        uses: actions/upload-artifact@v2
-        with:
-          name: my_env
-          path: my_env/my_env.tar.gz
