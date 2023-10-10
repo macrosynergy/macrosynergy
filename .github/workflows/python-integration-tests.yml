@@ -26,7 +26,7 @@ jobs:
             
       - name: Install dependencies
         run: |
-          pip install .[test]
+          pip install pytest>=7.0.1 pytest-cov>3.0.0 coverage>=6.0.0 pytest-xdist>=3.3.1 flake8>=4.0.1
 
       - name: Run integration tests with pytest
         env:
