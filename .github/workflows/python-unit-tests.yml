@@ -11,22 +11,18 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: 
-          - '3.11'
     steps:
       - uses: actions/checkout@v3
       - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python-version }}
-          cache: 'pip'
-
+          python-version: 3.11
+      - name: Create virtual environment
+        run: python -m venv my_env
       - name: Install dependencies
         run: |
+          source my_env/bin/activate
           pip install .[test]
-
       - name: Lint with flake8
         run: |
           # stop the build if there are Python syntax errors or undefined names
@@ -42,3 +38,8 @@ jobs:
           curl -Os https://uploader.codecov.io/latest/linux/codecov
           chmod +x codecov
           ./codecov -t ${CODECOV_TOKEN}
+      - name: Archive virtual environment
+        uses: actions/upload-artifact@v2
+        with:
+          name: my_env
+          path: my_env
