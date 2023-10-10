@@ -1,15 +1,9 @@
 # Use Debian as base image
 FROM ubuntu:latest
 
-# Set working directory
-WORKDIR /app
-
-# Copy your project files into the container
-COPY . .
-
 RUN apt-get update
 
-RUN apt-get install -y python3 python3-pip && \
+RUN apt-get install -y python3 python3-pip dos2unix && \
     rm -rf /var/lib/apt/lists/*
 
 # Set python3 as the default python interpreter
@@ -18,6 +12,14 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 # Cache Dependencies
 RUN pip3 install flake8
 RUN pip3 install -r docs/requirements.txt
+
+# Set working directory
+WORKDIR /app
+
+# Copy your project files into the container
+COPY . .
+
+RUN find . -type f -print0 | xargs -0 dos2unix
 
 # Run Flake8
 RUN flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
