@@ -13,7 +13,12 @@ jobs:
         python-version:
           - "3.11"
     steps:
-      - uses: actions/checkout@v3
+      # - uses: actions/checkout@v3
+      # checkout branch feature/cachingOnBuild
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          ref: feature/cachingOnBuild
       - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
