@@ -1,9 +1,11 @@
 # Use Debian as base image
 FROM ubuntu:22.04
 
-RUN apt-get update
-
-RUN apt-get install -y python3 python3-pip dos2unix && \
+RUN apt-get update && \
+    apt-get install -y \
+    python3 \
+    python3-pip \
+    dos2unix && \
     rm -rf /var/lib/apt/lists/*
 
 # Set python3 as the default python interpreter
