@@ -49,6 +49,7 @@ Examples:
 ## Category Codes
 
 These are strings identifying the category of a data series.
+In the package, these are commonly referred to as `xcat` or `xcats`.
 
 Examples:
 
