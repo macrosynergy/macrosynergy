@@ -40,8 +40,12 @@ jobs:
           curl -Os https://uploader.codecov.io/latest/linux/codecov
           chmod +x codecov
           ./codecov -t ${CODECOV_TOKEN}
-      - name: Archive virtual environment
+      - name: Compress virtual environment
+        run: |
+          tar -czvf my_env.tar.gz my_env
+          mv my_env.tar.gz my_env
+      - name: Upload virtual environment as artifact
         uses: actions/upload-artifact@v2
         with:
           name: my_env
-          path: my_env
+          path: my_env/my_env.tar.gz
