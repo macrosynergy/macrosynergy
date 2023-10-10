@@ -29,5 +29,5 @@ runs:
       if: steps.cache.outputs.cache-hit != 'true'
       run: |
         pip install .[all]
-        pip uninstall -y macrosynergy
+        pip uninstall -y macrosynergy 
         # No explicit caching step is needed as the cache action takes care of this
