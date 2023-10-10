@@ -13,7 +13,7 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 RUN pip3 install flake8
 COPY ./docs/requirements.txt .
 
-RUN pip3 install -r docs/requirements.txt
+RUN pip3 install -r requirements.txt
 
 # Set working directory
 WORKDIR /app
