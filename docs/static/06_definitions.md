@@ -1,6 +1,6 @@
 # Common Definitions
 
-Like any niche field, the world of quantamental data and it's analysis has it's own
+Like any niche field, the world of quantamental data and its analysis has its own
 terminology and definitions. This section will cover the most common terms and definitions
 used within the Macrosynergy package.
 
