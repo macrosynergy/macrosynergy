@@ -11,6 +11,8 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # Cache Dependencies
 RUN pip3 install flake8
+COPY ./docs/requirements.txt .
+
 RUN pip3 install -r docs/requirements.txt
 
 # Set working directory
