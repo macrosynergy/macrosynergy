@@ -1,5 +1,5 @@
 # Use Debian as base image
-FROM ubuntu:latest
+FROM debian:stable-slim
 
 RUN apt-get update
 
