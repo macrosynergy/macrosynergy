@@ -1,5 +1,5 @@
 # Use Debian as base image
-FROM debian:stable-slim
+FROM ubuntu:22.04
 
 RUN apt-get update
 
@@ -10,8 +10,8 @@ RUN apt-get install -y python3 python3-pip dos2unix && \
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # Cache Dependencies
-RUN pip install flake8
-RUN pip install -r docs/requirements.txt
+RUN pip3 install flake8
+RUN pip3 install -r docs/requirements.txt
 
 # Set working directory
 WORKDIR /app
@@ -19,7 +19,7 @@ WORKDIR /app
 # Copy your project files into the container
 COPY . .
 
-RUN find . -type f -print0 | xargs -0 dos2unix
+#RUN find . -type f -print0 | xargs -0 dos2unix
 
 # Run Flake8
 RUN flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
