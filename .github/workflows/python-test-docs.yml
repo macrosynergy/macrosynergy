@@ -16,6 +16,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.docker
+          key: ${{ runner.os }}-docker-${{ hashFiles('**/Dockerfile') }}
+          restore-keys: |
+            ${{ runner.os }}-docker-
+
       - name: Build Docker Image
         run: docker build -t test_docs .
 
