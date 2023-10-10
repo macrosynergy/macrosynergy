@@ -18,7 +18,8 @@ runs:
       id: cache
       uses: actions/cache@v3
       with:
-        path: ~/.cache/pip
+        # path: ~/.cache/pip - use python -m pip cache dir to find the location
+        path: ${{ env.HOME }}/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
         restore-keys: |
           ${{ runner.os }}-pip-
