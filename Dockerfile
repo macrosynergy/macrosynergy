@@ -14,8 +14,8 @@ RUN apt-get update && apt-get install -y \
 COPY . .
 
 # Cache Dependencies
-RUN pip install flake8
-RUN pip install -r docs/requirements.txt
+RUN pip3 install flake8
+RUN pip3 install -r docs/requirements.txt
 
 # Run Flake8
 RUN flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
