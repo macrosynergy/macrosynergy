@@ -4,8 +4,7 @@ FROM ubuntu:22.04
 RUN apt-get update && \
     apt-get install -y \
     python3 \
-    python3-pip \
-    dos2unix && 
+    python3-pip
 
 # Set python3 as the default python interpreter
 RUN ln -s /usr/bin/python3 /usr/bin/python
