@@ -10,8 +10,8 @@ RUN apt-get install -y python3 python3-pip dos2unix && \
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # Cache Dependencies
-RUN pip3 install flake8
-RUN pip3 install -r docs/requirements.txt
+RUN pip install flake8
+RUN pip install -r docs/requirements.txt
 
 # Set working directory
 WORKDIR /app
