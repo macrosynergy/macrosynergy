@@ -1,53 +1,37 @@
 name: Package documentation - check build
 
 on:
+  # Runs on pushes targeting the default branch
   pull_request:
     branches: [main, test, develop]
+
+  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 jobs:
+  # Single deploy job since we're just deploying
   deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v2
+      - name: Cache Dependencies
+        uses: actions/setup-python@v4
         with:
-          python-version: 3.8
-
-      - name: Cache dependencies
-        id: cache-deps
-        uses: actions/cache@v2
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          python-version: '3.11'
+          cache: 'pip' # caching pip dependencies
 
       - name: Install Dependencies
-        if: steps.cache-deps.outputs.cache-hit != 'true'
         run: |
           pip install flake8
           pip install -r docs/requirements.txt
 
-      - name: Zip Package
+      - name: Run Flake8
         run: |
-          zip -r package.zip . -x ".git/*"
-
-      - name: Cache Package
-        uses: actions/cache@v2
-        with:
-          path: package.zip
-          key: ${{ runner.os }}-package-${{ hashFiles('**/pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-package-
-      
-      - name: Unzip Package
-        run: unzip package.zip -d extracted_package
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
       - name: Build docs
         run: |
           bash docs/scripts/build.sh
-
