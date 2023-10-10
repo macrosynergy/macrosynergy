@@ -33,10 +33,10 @@ jobs:
           DQ_CLIENT_SECRET: ${{ secrets.DQ_CLIENT_SECRET }}
         run: |
           echo 'Run Integration tests'
-          pytest tests/integration/
+          python -m pytest tests/integration/
           echo 'Integration test complete'
 
       - name: Test build settings
         run: |
-          pip install .[all] 
+          python -m pip install .[all] 
           python -c "import macrosynergy; print(macrosynergy.__version__)"
