@@ -67,14 +67,27 @@ class Heatmap(Plotter):
 
     def plot(
         self,
-        freq: str = "M",
-        agg: str = "mean",
-        metric: str = "eop_lag",
-        xcat: str = "USD",
-        title: Optional[str] = None,
+        xcat: str,
+        metric: str,
+        # plot args
         figsize: Tuple[Numeric, Numeric] = (12, 8),
+        grid: bool = False,
+        x_axis_label: Optional[str] = None,
+        y_axis_label: Optional[str] = None,
+        axis_fontsize: int = 12,
+        vmin=None,
+        vmax=None,
+        # title args
+        title: Optional[str] = None,
+        title_fontsize: int = 16,
+        title_xadjust: Numeric = 0.5,
+        title_yadjust: Numeric = 1.05,
+        # return args
+        show: bool = True,
+        save_to_file: Optional[str] = None,
+        dpi: int = 300,
+        return_figure: bool = False,
         on_axis: Optional[plt.Axes] = None,
-        # args, kwargs
         *args,
         **kwargs,
     ):
@@ -86,60 +99,54 @@ class Heatmap(Plotter):
             ax: plt.Axes
             fig, ax = plt.subplots(figsize=figsize, layout="constrained")
 
-        filtered_df: pd.DataFrame = reduce_df(
-            df=self.df, cids=self.cids, xcats=self.xcats, start=self.start, end=self.end
-        )
-
-        # group by cid, then set the index to real_date, then resample to the required freq and agg
-        filtered_df: pd.DataFrame = (
-            filtered_df.groupby(["cid", "xcat"])
-            .apply(
-                lambda x: x.set_index("real_date")
-                .resample(freq)
-                .agg(agg, numeric_only=True)
-            )
-            .reset_index()
-        )
-
-        filtered_df["real_date"]: pd.Series = filtered_df["real_date"].dt.strftime(
-            "%Y-%m-%d"
-        )
-
-        pivoted_df: pd.DataFrame = filtered_df.pivot_table(
-            index="cid", columns="real_date", values=metric
-        )
-
-        max_mes: float = max(1, filtered_df[metric].max())
-        min_mes: float = min(0, filtered_df[metric].min())
-
-        print(pivoted_df.loc["USD"])
-        im = ax.imshow(
-            pivoted_df.to_numpy(),
+        ax.imshow(
+            self.df.to_numpy(),
             cmap="Reds",
-            vmin=min_mes,
-            vmax=max_mes,
+            vmin=vmin,
+            vmax=vmax,
             aspect="auto",
-            **kwargs
+            **kwargs,
         )
 
-        real_dates = pivoted_df.columns.to_list()
+        real_dates = self.df.columns.to_list()
 
         ax.set_xticks(np.arange(len(real_dates)), labels=real_dates)
         ax.set_yticks(np.arange(len([1])), labels=[xcat])
-        
-        ax.xaxis.set_major_locator(plt.MaxNLocator(3))
-        ax.tick_params(which='major', length=4, width=1, direction='out')
+
+        ax.xaxis.set_major_locator(plt.MaxNLocator(min(len(real_dates), 25)))
+        ax.tick_params(which="major", length=4, width=1, direction="out")
         plt.xticks(rotation=90)
         plt.grid(False)
 
+        ax.set_title(
+            title,
+            fontsize=title_fontsize,
+            x=title_xadjust,
+            y=title_yadjust,
+        )
+        if grid:
+            plt.grid(True)
+            ax.grid(axis="both", linestyle="--", alpha=0.5)
 
-        if title is None:
-            title = f"Visualising {metric} for {xcat} from {self.start} to {self.end}"
-            ax.set_title(title)
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Cross Sections")
+        if x_axis_label:
+            ax.set_xlabel(x_axis_label, fontsize=axis_fontsize)
 
-        plt.show()
+        if y_axis_label:
+            ax.set_ylabel(y_axis_label, fontsize=axis_fontsize)
+
+        if save_to_file:
+            plt.savefig(
+                save_to_file,
+                dpi=dpi,
+                bbox_inches="tight",
+            )
+
+        if show:
+            plt.show()
+            return
+
+        if return_figure:
+            return fig
 
 
 if __name__ == "__main__":
@@ -179,6 +186,4 @@ if __name__ == "__main__":
     # )
 
     heatmap = Heatmap(df=dfx, xcats=["FX"])
-    heatmap.plot(metric="eop_lag")
-
-
+    heatmap.plot(xcat="FX", metric="eop_lag")
