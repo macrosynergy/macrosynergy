@@ -1,14 +1,8 @@
 # Use Debian as base image
-FROM debian:latest
+FROM python:3
 
 # Set working directory
 WORKDIR /app
-
-# Install necessary packages
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    && rm -rf /var/lib/apt/lists/*
 
 # Copy your project files into the container
 COPY . .
