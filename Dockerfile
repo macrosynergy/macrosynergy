@@ -5,8 +5,7 @@ RUN apt-get update && \
     apt-get install -y \
     python3 \
     python3-pip \
-    dos2unix && \
-    rm -rf /var/lib/apt/lists/*
+    dos2unix && 
 
 # Set python3 as the default python interpreter
 RUN ln -s /usr/bin/python3 /usr/bin/python
