@@ -20,4 +20,4 @@ jobs:
         run: docker build -t test_docs .
 
       - name: Run Docker Container
-        run: docker run -it test_docs
+        run: docker run test_docs
