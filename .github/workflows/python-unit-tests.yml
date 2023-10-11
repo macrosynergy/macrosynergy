@@ -1,8 +1,9 @@
+# Unit tests for the package, running on PRs to `test` and `develop` branches
 name: Test Python package on Ubuntu
 
 on:
   pull_request:
-    branches: [main, test, develop]
+    branches: [test, develop]
   workflow_dispatch:
 
 jobs:
