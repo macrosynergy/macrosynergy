@@ -79,15 +79,15 @@ def correl_matrix(
     df: pd.DataFrame,
     xcats: Union[str, List[str]] = None,
     cids: List[str] = None,
-    xcats2: Optional[Union[str, List[str]]] = None,
-    cids2: Optional[List[str]] = None,
+    xcats_secondary: Optional[Union[str, List[str]]] = None,
+    cids_secondary: Optional[List[str]] = None,
     start: str = "2000-01-01",
     end: str = None,
     val: str = "value",
     freq: str = None,
     cluster: bool = False,
     lags: dict = None,
-    lags2: Optional[dict] = None,
+    lags_secondary: Optional[dict] = None,
     title: str = None,
     size: Tuple[float] = (14, 8),
     max_color: float = None,
@@ -103,13 +103,14 @@ def correl_matrix(
         across cross sections are displayed. If xcats contains more than one category,
         the correlation coefficients across categories are displayed. Additionally, the
         order of the xcats received will be mirrored in the correlation matrix.
-    :param <List[str]> xcats2: an optional second set of extended categories.
-        If xcats2 is provided, correlations will be calculated between the categories
-        in xcats and xcats2.
     :param <List[str]> cids: cross sections to be correlated. Default is all in the
         DataFrame.
-    :param <List[str]> cids2: an optional second list of cross sections. If cids2
-        is provided correlations will be calculated and visualized between these two sets.
+    :param <List[str]> xcats_secondary: an optional second set of extended categories.
+        If xcats_secondary is provided, correlations will be calculated between the
+        categories in xcats and xcats_secondary.
+    :param <List[str]> cids_secondary: an optional second list of cross sections. If
+        cids_secondary is provided correlations will be calculated and visualized between
+        these two sets.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df
@@ -127,8 +128,8 @@ def correl_matrix(
         category has multiple lags applied, pass in a list of lag values. The lag factor
         will be appended to the category name in the correlation matrix.
         N.B.: Lags can include a 0 if the original should also be correlated.
-    :param <dict> lags2: optional dictionary of lags applied to the second set of
-        categories if xcats2 is provided.
+    :param <dict> lags_secondary: optional dictionary of lags applied to the second set of
+        categories if xcats_secondary is provided.
     :param <str> title: chart heading. If none is given, a default title is used.
     :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default
         is (14, 8).
@@ -163,18 +164,18 @@ def correl_matrix(
     ylabel = ""
 
     # If more than one set of xcats or cids have been supplied.
-    if xcats2 or cids2:
-        if xcats2:
-            xcats2 = xcats2 if isinstance(xcats2, list) else [xcats2]
+    if xcats_secondary or cids_secondary:
+        if xcats_secondary:
+            xcats_secondary = xcats_secondary if isinstance(xcats_secondary, list) else [xcats_secondary]
         else:
-            xcats2 = xcats
+            xcats_secondary = xcats
 
-        if not cids2:
-            cids2 = cids
+        if not cids_secondary:
+            cids_secondary = cids
 
         df1, xcats, cids = reduce_df(df.copy(), xcats, cids, start, end, out_all=True)
-        df2, xcats2, cids2 = reduce_df(
-            df.copy(), xcats2, cids2, start, end, out_all=True
+        df2, xcats_secondary, cids_secondary = reduce_df(
+            df.copy(), xcats_secondary, cids_secondary, start, end, out_all=True
         )
 
         s_date = min(df1["real_date"].min(), df2["real_date"].min()).strftime(
@@ -185,7 +186,7 @@ def correl_matrix(
         )
 
         # If only one xcat, we will compute cross sectional correlation.
-        if len(xcats) == 1 and len(xcats2) == 1:
+        if len(xcats) == 1 and len(xcats_secondary) == 1:
             df_w1: pd.DataFrame = _transform_df_for_cross_sectional_corr(
                 df=df1, val=val, freq=freq
             )
@@ -195,23 +196,23 @@ def correl_matrix(
 
             if title is None:
                 title = (
-                    f"Cross-sectional correlation of {xcats[0]} and {xcats2[0]} from {s_date} to "
+                    f"Cross-sectional correlation of {xcats[0]} and {xcats_secondary[0]} from {s_date} to "
                     f"{e_date}"
                 )
             xlabel = f"{xcats[0]} cross-sections"
-            ylabel = f"{xcats2[0]} cross-sections"
+            ylabel = f"{xcats_secondary[0]} cross-sections"
 
         # If more than one xcat in at least one set, we will compute cross category
         # correlation.
         else:
-            if not lags2:
-                lags2 = lags
+            if not lags_secondary:
+                lags_secondary = lags
 
             df_w1: pd.DataFrame = _transform_df_for_cross_category_corr(
                 df=df1, xcats=xcats, val=val, freq=freq, lags=lags
             )
             df_w2: pd.DataFrame = _transform_df_for_cross_category_corr(
-                df=df2, xcats=xcats2, val=val, freq=freq, lags=lags2
+                df=df2, xcats=xcats_secondary, val=val, freq=freq, lags=lags_secondary
             )
 
             if title is None:
@@ -437,9 +438,9 @@ if __name__ == "__main__":
     correl_matrix(
         df=dfd,
         xcats=["XR"],
-        xcats2=None,
+        xcats_secondary=None,
         cids=cids,
-        cids2=["AUD"],
+        cids_secondary=None,
         start=start,
         end=end,
         val="value",
@@ -449,5 +450,5 @@ if __name__ == "__main__":
         size=(14, 8),
         max_color=None,
         lags=None,
-        lags2=None,
+        lags_secondary=None,
     )

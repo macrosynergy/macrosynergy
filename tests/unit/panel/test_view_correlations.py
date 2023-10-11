@@ -160,7 +160,7 @@ class TestAll(unittest.TestCase):
             correl_matrix(
                 self.dfd,
                 xcats=["XR"],
-                xcats2=["CRY"],
+                xcats_secondary=["CRY"],
                 cids=self.cids,
                 max_color=0.1,
                 show=False,
@@ -172,9 +172,9 @@ class TestAll(unittest.TestCase):
             correl_matrix(
                 self.dfd,
                 xcats=["XR"],
-                xcats2=["CRY"],
+                xcats_secondary=["CRY"],
                 cids=["AUD"],
-                cids2=["GBP"],
+                cids_secondary=["GBP"],
                 max_color=0.1,
                 show=False,
             )
@@ -186,7 +186,7 @@ class TestAll(unittest.TestCase):
                 self.dfd,
                 xcats=["XR"],
                 cids=["AUD"],
-                cids2=["GBP"],
+                cids_secondary=["GBP"],
                 max_color=0.1,
                 show=False,
             )
