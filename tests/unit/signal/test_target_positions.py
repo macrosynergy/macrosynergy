@@ -438,7 +438,10 @@ class TestAll(unittest.TestCase):
 
         split = lambda b: b.split("_")[0]
         df_mods_w_basket = df_mods_w[list(map(split, apc_contracts))]
+        print(df_mods_w_basket)
 
+        df_mods_w_basket_1 = df_mods_w[[split(b) for b in apc_contracts]]
+        print(df_mods_w_basket_1)
         # Confirm alignment of contracts.
         dfw_wgs = dfw_wgs.reindex(sorted(dfw_wgs.columns), axis=1)
         df_mods_w_basket = df_mods_w_basket.multiply(dfw_wgs.to_numpy())
