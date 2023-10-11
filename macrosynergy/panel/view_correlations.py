@@ -162,6 +162,7 @@ def correl_matrix(
     xlabel = ""
     ylabel = ""
 
+    # If more than one set of xcats or cids have been supplied.
     if xcats2 or cids2:
         if xcats2:
             xcats2 = xcats2 if isinstance(xcats2, list) else [xcats2]
@@ -183,6 +184,7 @@ def correl_matrix(
             "%Y-%m-%d"
         )
 
+        # If only one xcat, we will compute cross sectional correlation.
         if len(xcats) == 1 and len(xcats2) == 1:
             df_w1: pd.DataFrame = _transform_df_for_cross_sectional_corr(
                 df=df1, val=val, freq=freq
@@ -198,6 +200,9 @@ def correl_matrix(
                 )
             xlabel = f"{xcats[0]} cross-sections"
             ylabel = f"{xcats2[0]} cross-sections"
+
+        # If more than one xcat in at least one set, we will compute cross category
+        # correlation.
         else:
             if not lags2:
                 lags2 = lags
@@ -227,6 +232,8 @@ def correl_matrix(
 
             if corr.shape[1] > 1:
                 corr = _cluster_correlations(corr=corr.T, is_symmetric=False).T
+
+    # If there is only one set of xcats and cids.
     else:
         df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
 

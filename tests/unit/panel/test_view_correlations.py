@@ -14,8 +14,8 @@ from macrosynergy.management.check_availability import reduce_df
 
 class TestAll(unittest.TestCase):
     def dataframe_construction(self):
-        self.__dict__["cids"] = ["AUD", "CAD", "GBP"]
-        self.__dict__["xcats"] = ["XR", "CRY", "GROWTH", "INFL"]
+        self.cids = ["AUD", "CAD", "GBP"]
+        self.xcats = ["XR", "CRY", "GROWTH", "INFL"]
 
         df_cids = pd.DataFrame(
             index=self.cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
@@ -42,7 +42,7 @@ class TestAll(unittest.TestCase):
 
         # Standard df for tests.
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-        self.__dict__["dfd"] = dfd
+        self.dfd = dfd
 
     def test_lag_series(self):
         """
