@@ -1,6 +1,5 @@
 """
-Module housing the `PanelTimeSeriesSplit` class, which is used to produce 
-paired training and test splits for panel data.
+Class to produce and visualise panel walk-forward validation splits.
 """
 
 import numpy as np
