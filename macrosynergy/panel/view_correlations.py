@@ -77,17 +77,21 @@ def lag_series(
 
 def correl_matrix(
     df: pd.DataFrame,
-    xcats: Union[str, List[str], List[List[str]]] = None,
-    cids: Union[List[str], List[List[str]]] = None,
+    xcats: Union[str, List[str]] = None,
+    cids: List[str] = None,
+    xcats2: Optional[Union[str, List[str]]] = None,
+    cids2: Optional[List[str]] = None,
     start: str = "2000-01-01",
     end: str = None,
     val: str = "value",
     freq: str = None,
     cluster: bool = False,
-    lags: Union[dict, List[dict]] = None,
+    lags: dict = None,
+    lags2: Optional[dict] = None,
     title: str = None,
     size: Tuple[float] = (14, 8),
     max_color: float = None,
+    show: bool = True,
 ):
     """
     Visualize correlation across categories or cross-sections of panels.
@@ -98,12 +102,14 @@ def correl_matrix(
         DataFrame. If xcats contains only one category the correlation coefficients
         across cross sections are displayed. If xcats contains more than one category,
         the correlation coefficients across categories are displayed. Additionally, the
-        order of the xcats received will be mirrored in the correlation matrix. If xcats
-        is a list containing two lists of xcats, correlations will be calculated
-        between these two sets.
+        order of the xcats received will be mirrored in the correlation matrix.
+    :param <List[str]> xcats2: an optional second set of extended categories.
+        If xcats2 is provided, correlations will be calculated between the categories
+        in xcats and xcats2.
     :param <List[str]> cids: cross sections to be correlated. Default is all in the
-        DataFrame. If cids is a list containing two lists of cids, correlations will be
-        calculated and visualized between these two sets.
+        DataFrame.
+    :param <List[str]> cids2: an optional second list of cross sections. If cids2
+        is provided correlations will be calculated and visualized between these two sets.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df
@@ -119,16 +125,17 @@ def correl_matrix(
     :param <dict> lags: optional dictionary of lags applied to respective categories.
         The key will be the category and the value is the lag or lags. If a
         category has multiple lags applied, pass in a list of lag values. The lag factor
-        will be appended to the category name in the correlation matrix. If xcats is
-        passed as two sets of categories, lags may be a list of two dictionaries
-        specifying lags for each set.
+        will be appended to the category name in the correlation matrix.
         N.B.: Lags can include a 0 if the original should also be correlated.
+    :param <dict> lags2: optional dictionary of lags applied to the second set of
+        categories if xcats2 is provided.
     :param <str> title: chart heading. If none is given, a default title is used.
     :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default
         is (14, 8).
     :param <float> max_color: maximum values of positive/negative correlation
         coefficients for color scale. Default is none. If a value is given it applies
         symmetrically to positive and negative values.
+    :param <bool> show: if True the figure will be displayed. Default is True.
 
     N.B:. The function displays the heatmap of a correlation matrix across categories or
     cross-sections (depending on which parameter has received multiple elements).
@@ -155,26 +162,16 @@ def correl_matrix(
     xlabel = ""
     ylabel = ""
 
-    if (len(xcats) == 2 and _is_list_of_lists(xcats)) or (
-        len(cids) == 2 and _is_list_of_lists(cids)
-    ):
-        if (len(xcats) == 2 and _is_list_of_lists(xcats)) and (
-            len(cids) == 2 and _is_list_of_lists(cids)
-        ):
-            xcats1, xcats2 = xcats
-            cids1, cids2 = cids
-        elif len(xcats) == 2 and _is_list_of_lists(xcats):
-            xcats1, xcats2 = xcats
-            cids1 = cids
-            cids2 = cids
+    if xcats2 or cids2:
+        if xcats2:
+            xcats2 = xcats2 if isinstance(xcats2, list) else [xcats2]
         else:
-            xcats1 = xcats
             xcats2 = xcats
-            cids1, cids2 = cids
 
-        df1, xcats1, cids1 = reduce_df(
-            df.copy(), xcats1, cids1, start, end, out_all=True
-        )
+        if not cids2:
+            cids2 = cids
+
+        df1, xcats, cids = reduce_df(df.copy(), xcats, cids, start, end, out_all=True)
         df2, xcats2, cids2 = reduce_df(
             df.copy(), xcats2, cids2, start, end, out_all=True
         )
@@ -186,7 +183,7 @@ def correl_matrix(
             "%Y-%m-%d"
         )
 
-        if len(xcats1) == 1 and len(xcats2) == 1:
+        if len(xcats) == 1 and len(xcats2) == 1:
             df_w1: pd.DataFrame = _transform_df_for_cross_sectional_corr(
                 df=df1, val=val, freq=freq
             )
@@ -196,19 +193,17 @@ def correl_matrix(
 
             if title is None:
                 title = (
-                    f"Cross-sectional correlation of {xcats1[0]} and {xcats2[0]} from {s_date} to "
+                    f"Cross-sectional correlation of {xcats[0]} and {xcats2[0]} from {s_date} to "
                     f"{e_date}"
                 )
-            xlabel = f"{xcats1[0]} cross-sections"
+            xlabel = f"{xcats[0]} cross-sections"
             ylabel = f"{xcats2[0]} cross-sections"
         else:
-            if isinstance(lags, list) and len(lags) == 2:
-                lags1, lags2 = lags
-            else:
-                lags1, lags2 = lags, lags
+            if not lags2:
+                lags2 = lags
 
             df_w1: pd.DataFrame = _transform_df_for_cross_category_corr(
-                df=df1, xcats=xcats1, val=val, freq=freq, lags=lags1
+                df=df1, xcats=xcats, val=val, freq=freq, lags=lags
             )
             df_w2: pd.DataFrame = _transform_df_for_cross_category_corr(
                 df=df2, xcats=xcats2, val=val, freq=freq, lags=lags2
@@ -282,7 +277,8 @@ def correl_matrix(
     ax.set(xlabel=xlabel, ylabel=ylabel)
     ax.set_title(title, fontsize=14)
 
-    plt.show()
+    if show:
+        plt.show()
 
 
 def _transform_df_for_cross_sectional_corr(
@@ -349,17 +345,6 @@ def _transform_df_for_cross_category_corr(
     return df_w
 
 
-def _is_list_of_lists(ls: List[Any]) -> bool:
-    """
-    Check if list contains only lists as elements.
-
-    :param <List> ls: the list to be checked.
-
-    :return <bool>: True if `ls` contains only elements of type List. False otherwise.
-    """
-    return all(map(lambda x: isinstance(x, list), ls))
-
-
 def _cluster_correlations(
     corr: pd.DataFrame, is_symmetric: bool = False
 ) -> pd.DataFrame:
@@ -372,7 +357,6 @@ def _cluster_correlations(
 
     :return <pd.Dataframe>: The sorted correlation dataframe.
     """
-
     # Get pairwise distances of the dataframe's rows.
     d = sch.distance.pdist(corr)
 
@@ -445,8 +429,10 @@ if __name__ == "__main__":
     # Clustered correlation matrices. Test hierarchical clustering.
     correl_matrix(
         df=dfd,
-        xcats="XR",
+        xcats=["XR"],
+        xcats2=None,
         cids=cids,
+        cids2=["AUD"],
         start=start,
         end=end,
         val="value",
@@ -456,4 +442,5 @@ if __name__ == "__main__":
         size=(14, 8),
         max_color=None,
         lags=None,
+        lags2=None,
     )
