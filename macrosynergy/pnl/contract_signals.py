@@ -74,54 +74,42 @@ def _apply_cscales(
             f"\nMissing: {set(_ctypes) - set(ctypes)}"
         )
 
+    # Convert the dataframe to ticker format
+    dfW: pd.DataFrame = qdf_to_ticker_df(df=df)
+
+    # SCALE_XCAT - an xcat to be used as a scale when numerics are used
+    SCALE_XCAT: str = "SCALE_XCAT"
     # If cscales are numeric
     if all([isinstance(x, Numeric) for x in cscales]):
         for ix, ctx in enumerate(ctypes):
-            for _cid in cids:
-                sd: str = pd.to_datetime(df["real_date"]).min().strftime("%Y-%m-%d")
-                ed: str = pd.to_datetime(df["real_date"]).max().strftime("%Y-%m-%d")
-                new_df: pd.DataFrame = pd.DataFrame(
-                    {
-                        "real_date": pd.bdate_range(sd, ed),
-                        "cid": _cid,
-                        "xcat": ctx + "_SCALE",
-                        "value": cscales[ix],
-                    }
-                )
-                df: pd.DataFrame = pd.concat([df, new_df], axis=0)
-            cscales[ix] = ctx + "_SCALE"
+            ctype_scale: str = ctx + "_" + SCALE_XCAT
+            for _cid in get_cid(df.columns):
+                scale_col: str = _cid + "_" + ctype_scale
+                dfW[scale_col] = cscales[ix]
 
-        # sanity check: all cscales are in the dataframe
+            # replace the numeric scale with the SCALE_XCAT
+            cscales[ix] = ctype_scale
+
+        # sanity check: all cscales are in the dataframe and are strings
         assert all([isinstance(x, str) for x in cscales]), "Failed to set cscales"
+        assert all([x in dfW.columns for x in cscales]), "Failed to set cscales"
 
-    # DF with scales
-    df_scales: pd.DataFrame = df[
-        (df["cid"].isin(cids)) & (df["xcat"].isin(cscales))
-    ].copy()
-
-    # Apply signs
+    # Apply signs to the scales
     for ix, ctx in enumerate(ctypes):
-        df_scales.loc[df_scales["xcat"] == ctx, "value"] = (
-            df_scales.loc[df_scales["xcat"] == ctx, "value"] * csigns[ix]
-        )
+        scale_xcat: str = cscales[ix]
+        for _cid in get_cid(df.columns):
+            scale_col: str = _cid + "_" + scale_xcat
+            dfW[scale_col] = csigns[ix] * dfW[scale_col]
 
-    df_scales["ticker"]: str = df_scales["cid"] + "_" + df_scales["xcat"]
-    df_scales_wide: pd.DataFrame = df_scales.pivot(
-        index="real_date", columns="ticker", values="value"
-    )
+    # Multiply each cid_ctype by the corresponding scale
+    for _cid in get_cid(df.columns):
+        for ix, ctx in enumerate(ctypes):
+            scale_xcat: str = cscales[ix]
+            scale_col: str = _cid + "_" + scale_xcat
+            ctype_col: str = _cid + "_" + ctx
+            dfW[ctype_col] = dfW[ctype_col] * dfW[scale_col]
 
-    # Set index to real_date to allow for easy multiplication
-    df = df.set_index("real_date")
-
-    # Multiply each contract with it's scale
-    for _cid in cids:
-        for ix, _ctype in enumerate(ctypes):
-            sel_bools: pd.Series = (df["cid"] == _cid) & (df["xcat"] == _ctype)
-            df.loc[sel_bools, "value"] = (
-                df.loc[sel_bools, "value"] * df_scales_wide.loc[:, _cid + "_" + _ctype]
-            )
-
-    return df.reset_index()
+    return ticker_df_to_qdf(df=dfW)
 
 
 def _apply_sig_conversion(
@@ -358,10 +346,17 @@ def contract_signals(
         raise ValueError(e_msg)
 
     ## Apply the cross-section-specific signal to the dataframe
-
-    df: pd.DataFrame = _apply_sig_conversion(df=df, sig=sig, cids=cids)
+    if False:
+        df: pd.DataFrame = _apply_sig_conversion(df=df, sig=sig, cids=cids)
 
     # TODO: Apply contract scales
+    df: pd.DataFrame = _apply_cscales(
+        df=df,
+        cids=cids,
+        ctypes=ctypes,
+        cscales=cscales,
+        csigns=csigns,
+    )
 
     # TODO: Apply hscales if specified
 
