@@ -15,7 +15,6 @@ runs:
         python-version: ${{ inputs.python-version }}
 
     - name: Restore pip cache
-      id: cache
       uses: actions/cache@v3
       with:
         # path: ~/.cache/pip - use python -m pip cache dir to find the location
