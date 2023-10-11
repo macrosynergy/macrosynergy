@@ -1,39 +1,31 @@
-# .github/actions/restore-caches/action.yml
+name: Package documentation - check build
 
-name: "Restore Caches"
-description: "Restore pip and apt caches"
-inputs:
-  python-version:
-    description: "Python version to setup"
-    required: true
-    default: "3.9"
-runs:
-  using: "composite"
-  steps:
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ inputs.python-version }}
+on:
+  # Runs on pushes targeting the default branch
+  pull_request:
+    branches: [main, test, develop]
 
-    - name: Get Week Number
-      shell: bash
-      id: week
-      run: echo ::set-output name=week::$(date +%V)
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
 
-    - name: Restore pip cache
-      id: cache
-      uses: actions/cache@v3
-      with:
-        # using OS-name + "pip" + hash of TOML + week number as key
-        path: ${{ env.pythonLocation }}
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}-${{ steps.week.outputs.week }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
+jobs:
+  # Single deploy job since we're just deploying
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
 
-    - name: Install dependencies if cache was not found
-      shell: bash
-      if: steps.cache.outputs.cache-hit != 'true'
-      run: |
-        pip install .[all]
-        pip uninstall -y macrosynergy 
-        # No explicit caching step is needed as the cache action takes care of this
+      - name: Restore caches
+        uses: ./.github/actions/restore-pip-cache
+        with:
+          python-version: 3.11
+
+      - name: Run Flake8
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Build docs
+        run: |
+          bash docs/scripts/build.sh
