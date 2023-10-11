@@ -5,7 +5,7 @@ name: Python Integration tests
 
 on:
   pull_request:
-    branches: [main, test, develop, feature/cachingOnBuild]
+    branches: [main, test, develop]
   workflow_dispatch:
 
 jobs:
