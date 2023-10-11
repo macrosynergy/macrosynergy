@@ -437,7 +437,49 @@ class SignalsReturns(SignalBase):
         rows: List[str] = ["xcat", "agg_sigs"],
         columns: List[str] = ["ret", "freq"],
     ):
-        stats_values = [
+        type_values = ["panel", "mean_years", "mean_cids", "pr_years", "pr_cids"]
+        rows_values = ["xcat", "ret", "freq", "agg_sigs"]
+
+        for row in rows:
+            if not row in rows_values:
+                raise ValueError(f"Rows must only contain {rows_values}")
+        for column in columns:
+            if not column in rows_values:
+                raise ValueError(f"Columns must only contain {rows_values}")
+
+        if type == "panel":
+            x = 1
+            """
+            For each xcat 
+                For each agg_sigs
+                    For each ret
+                        For each freq
+                            calculate statistic like in single relation table
+            """
+        elif type == "mean_years":
+            x = 1
+            """
+            For each xcat 
+                For each agg_sigs
+                    For each ret
+                        For each freq
+                            calculate statistic like in 2nd row of summary table
+            """
+        elif type == "mean_cids":
+            x = 1
+        elif type == "pr_years":
+            x = 1
+        elif type == "pr_cids":
+            x = 1
+        else:
+            raise ValueError(f"Type must be one of {type_values}")
+
+        x += 1
+
+        return 0
+    
+    def calculate_statistic(self, stat):
+        stat_values = [
             "accuracy",
             "bal_accuracy",
             "pos_sigr",
@@ -449,22 +491,8 @@ class SignalsReturns(SignalBase):
             "kendall",
             "kendall_pval",
         ]
-        type_values = ["panel", "mean_years", "mean_cids", "pr_years", "pr_cids"]
-        rows_values = ["xcat", "ret", "freq", "agg_sigs"]
-
-        if not stat in stats_values:
-            raise ValueError(f"Stat must be one of {stats_values}")
-        if not type in type_values:
-            raise ValueError(f"Type must be one of {type_values}")
-        for row in rows:
-            if not row in rows_values:
-                raise ValueError(f"Rows must only contain {rows_values}")
-        for column in columns:
-            if not column in rows_values:
-                raise ValueError(f"Columns must only contain {rows_values}")
-            
-        
-        return 0
+        if not stat in stat_values:
+            raise ValueError(f"Stat must be one of {stat_values}")
 
 
 class SignalReturnRelations(SignalBase):
