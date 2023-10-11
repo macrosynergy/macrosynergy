@@ -25,7 +25,7 @@ runs:
       with:
         # using OS-name + "pip" + hash of TOML + week number as key
         path: ${{ env.pythonLocation }}
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}-"${{ weekNumber }}"
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}-$weekNumber
         restore-keys: |
           ${{ runner.os }}-pip-
 
