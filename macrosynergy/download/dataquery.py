@@ -65,9 +65,6 @@ debug_stream_handler.setFormatter(
 )
 logger.addHandler(debug_stream_handler)
 
-egress_logger: dict = {}
-
-
 def validate_response(
     response: requests.Response,
     user_id: str,
@@ -180,36 +177,17 @@ def request_wrapper(
     error_statement: str = ""
     retry_count: int = 0
     response: Optional[requests.Response] = None
-    upload_size: int = 0
-    download_size: int = 0
-    time_taken: float = 0
-    start_time: float = timer()
     while retry_count < API_RETRY_COUNT:
         try:
             prepared_request: requests.PreparedRequest = requests.Request(
                 method, url, headers=headers, params=params, **kwargs
             ).prepare()
 
-            upload_size = prepared_request.headers.get("Content-Length", 0)
-
             response: requests.Response = requests.Session().send(
                 prepared_request,
                 proxies=proxy,
                 cert=cert,
             )
-
-            # track the download size
-            if isinstance(response, requests.Response):
-                download_size = response.content.__sizeof__()
-
-            time_taken: float = timer() - start_time
-
-            egress_logger[tracking_id] = {
-                "url": log_url,
-                "upload_size": int(upload_size),
-                "download_size": int(download_size),
-                "time_taken": time_taken,
-            }
 
             if isinstance(response, requests.Response):
                 return validate_response(response=response, user_id=user_id)
@@ -240,27 +218,11 @@ def request_wrapper(
             # all other exceptions are caught here and retried after a delay
 
             if any([isinstance(exc, e) for e in known_exceptions]):
-                egress_logger[tracking_id] = {
-                    "url": log_url,
-                    "upload_size": upload_size,
-                    "download_size": download_size,
-                    "time_taken": time_taken,
-                    "error": f"{exc}",
-                }
                 logger.warning(error_statement)
                 retry_count += 1
                 time.sleep(API_DELAY_PARAM)
             else:
                 raise exc
-
-        time_taken = timer() - start_time
-
-        egress_logger[tracking_id] = {
-            "url": log_url,
-            "upload_size": upload_size,
-            "download_size": download_size,
-            "time_taken": time_taken,
-        }
 
     if isinstance(raised_exceptions[-1], HeartbeatError):
         raise HeartbeatError(error_statement)
@@ -626,7 +588,7 @@ class DataQueryInterface(object):
         self.debug: bool = debug
         self.suppress_warnings: bool = suppress_warnings
         self.batch_size: int = batch_size
-        
+
         for varx, namex, typex in [
             (client_id, "client_id", str),
             (client_secret, "client_secret", str),
@@ -680,7 +642,6 @@ class DataQueryInterface(object):
 
         self.proxy: Optional[dict] = proxy
         self.base_url: str = base_url
-        self.egress_data: dict = {}
 
     def __enter__(self):
         return self
@@ -1068,7 +1029,6 @@ class DataQueryInterface(object):
             len(self.unavailable_expressions),
         )
 
-        self.egress_data = egress_logger
         return final_output
 
 
