@@ -14,13 +14,18 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
+    - name: Get Week Number
+      shell: bash
+      id: week
+      run: echo ::set-output name=week::$(date +%V)
+
     - name: Restore pip cache
       id: cache
       uses: actions/cache@v3
       with:
-        # path: ~/.cache/pip - use python -m pip cache dir to find the location
+        # using OS-name + "pip" + hash of TOML + week number as key
         path: ${{ env.pythonLocation }}
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}-${{ steps.week.outputs.week }}
         restore-keys: |
           ${{ runner.os }}-pip-
 
@@ -31,4 +36,3 @@ runs:
         pip install .[all]
         pip uninstall -y macrosynergy 
         # No explicit caching step is needed as the cache action takes care of this
-
