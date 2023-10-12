@@ -224,6 +224,7 @@ def _calculate_contract_signals(
     df: pd.DataFrame,
     cids: List[str],
     ctypes: List[str],
+    sname: str = "STRAT",
 ) -> pd.DataFrame:
     # Type checks
     assert all(
@@ -250,6 +251,9 @@ def _calculate_contract_signals(
     for _cont in cid_ctypes:
         sel_cols: List[str] = [x for x in dfW.columns if x.startswith(_cont)]
         out_df[_cont] = dfW[sel_cols].sum(axis=1)
+
+    # rename all columns to include the strategy name
+    out_df.columns = [f"{cx}_{sname}_CSIG" for cx in out_df.columns]
 
     return ticker_df_to_qdf(df=out_df)
 
@@ -442,7 +446,9 @@ def contract_signals(
 
     ## Calculate the contract signals
 
-    df: pd.DataFrame = _calculate_contract_signals(df=df, cids=cids, ctypes=ctypes)
+    df: pd.DataFrame = _calculate_contract_signals(
+        df=df, cids=cids, ctypes=ctypes, sname=sname
+    )
 
     return df
 
