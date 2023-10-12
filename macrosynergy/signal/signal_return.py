@@ -470,8 +470,8 @@ class SignalsReturns(SignalBase):
         row_names = [self.sig[0] + "/" + agg_sig for agg_sig in agg_sigs]
 
         df_result = pd.DataFrame(columns=column_names, index=row_names)
+        
         i = 0
-
         for freq in freqs:
             j = 0
             for agg_sig in agg_sigs:
