@@ -1,0 +1,38 @@
+# .github/actions/restore-caches/action.yml
+name: "Restore Caches"
+description: "Restore pip and apt caches"
+inputs:
+  python-version:
+    description: "Python version to setup"
+    required: true
+    default: "3.11"
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Get Week Number
+      shell: bash
+      id: week
+      run: echo ::set-output name=week::$(date +%V)
+
+    - name: Restore pip cache
+      id: cache
+      uses: actions/cache@v3
+      with:
+        # using OS-name + "pip" + hash of TOML + week number as key
+        path: ${{ env.pythonLocation }}
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}-${{ steps.week.outputs.week }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies if cache was not found
+      shell: bash
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: |
+        pip install .[all]
+        pip uninstall -y macrosynergy 
+        # No explicit caching step is needed as the cache action takes care of this
