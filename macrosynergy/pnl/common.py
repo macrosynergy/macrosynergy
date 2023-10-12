@@ -15,33 +15,37 @@ Common types and functions used across the modules of the `macrosynergy.pnl` sub
 
 """
 
-from typing import List, Union, SupportsInt, SupportsFloat, Optional
+from typing import List, Union, SupportsInt, SupportsFloat, Optional, Iterable
 import numpy as np
 
-NoneType = type(None)
-Numeric = Union[int, float, np.int64, np.float64, SupportsInt, SupportsFloat]
 
-
-def _short_xcat(
-    ticker: Optional[str] = None,
-    xcat: Optional[str] = None,
-):
+class NumericType(type):
     """
-    Get the short version of the cross-section category.
-
-    :param <str> ticker: the ticker of the contract.
-    :param <str> xcat: a extended category of the contract.
-
-    :return <str>: the category from the ticker/xcat.
+    MetaClass to support type checks across `int`, `float`, `np.int64`, `np.float64`,
+    `SupportsInt`, and `SupportsFloat`.
     """
-    if ticker is not None and xcat is not None:
-        raise ValueError("Either `ticker` or `xcat` must be specified, not both")
 
-    if ticker is not None:
-        cid, xcat = ticker.split("_", 1)
-        return _short_xcat(xcat=xcat)
-    elif xcat is not None:
-        return xcat.split("_")[-1]
-    else:
-        raise ValueError("Either `ticker` or `xcat` must be specified")
+    # A tuple of the desired types
+    _numeric_types = (int, float, np.int64, np.float64, SupportsInt, SupportsFloat)
 
+    def __instancecheck__(cls, instance):
+        return isinstance(instance, cls._numeric_types)
+
+
+class Numeric(metaclass=NumericType):
+    """
+    Custom class definition for a numeric type that supports type checks across `int`,
+    `float`, `np.int64`, `np.float64`, `SupportsInt`, and `SupportsFloat`.
+    """
+
+    # Alternatively, use `numbers.Number` directly
+    pass
+
+
+class NoneType(type):
+    """
+    MetaClass to support type checks for `None`.
+    """
+
+    def __instancecheck__(cls, instance):
+        return instance is None

@@ -318,7 +318,7 @@ def standardise_dataframe(df: pd.DataFrame, verbose: bool = False) -> pd.DataFra
         except:
             raise ValueError(fail_str)
 
-        # check if there is atleast one more column
+        # check if there is at least one more column
         if len(df.columns) < 4:
             raise ValueError(fail_str)
 
