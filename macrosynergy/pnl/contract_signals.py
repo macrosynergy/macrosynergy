@@ -27,6 +27,53 @@ from macrosynergy.management.utils import (
 from macrosynergy.management.shape_dfs import reduce_df
 
 
+def _check_arg_types(
+    df: Optional[pd.DataFrame] = None,
+    sig: Optional[str] = None,
+    cids: Optional[List[str]] = None,
+    ctypes: Optional[List[str]] = None,
+    cscales: Optional[List[Union[Numeric, str]]] = None,
+    csigns: Optional[List[int]] = None,
+    hbasket: Optional[List[str]] = None,
+    hscales: Optional[List[Union[Numeric, str]]] = None,
+    hratios: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    blacklist: Optional[dict] = None,
+    sname: Optional[str] = None,
+) -> bool:
+    correct_types: bool = all(
+        [
+            isinstance(df, (pd.DataFrame, NoneType)),
+            isinstance(sig, (str, NoneType)),
+            isinstance(cids, (list, NoneType)),
+            isinstance(ctypes, (list, NoneType)),
+            isinstance(cscales, (list, NoneType)),
+            isinstance(csigns, (list, NoneType)),
+            isinstance(hbasket, (list, NoneType)),
+            isinstance(hscales, (list, NoneType)),
+            isinstance(hratios, (str, NoneType)),
+            isinstance(start, (str, NoneType)),
+            isinstance(end, (str, NoneType)),
+            isinstance(blacklist, (dict, NoneType)),
+            isinstance(sname, (str, NoneType)),
+        ]
+    )
+
+    correct_nested_types: bool = correct_types and all(
+        [
+            cids is None or all([isinstance(x, str) for x in cids]),
+            ctypes is None or all([isinstance(x, str) for x in ctypes]),
+            cscales is None or all([isinstance(x, (str, Numeric)) for x in cscales]),
+            csigns is None or all([isinstance(x, int) for x in csigns]),
+            hbasket is None or all([isinstance(x, str) for x in hbasket]),
+            hscales is None or all([isinstance(x, (str, Numeric)) for x in hscales]),
+        ]
+    )
+
+    return correct_nested_types
+
+
 def _apply_cscales(
     df: pd.DataFrame,
     cids: List[str],
@@ -53,26 +100,14 @@ def _apply_cscales(
     :return <pd.DataFrame>: dataframe with scaling applied.
     """
     # Type checks
-    assert all(
-        [
-            isinstance(df, pd.DataFrame),
-            isinstance(ctypes, list),
-            all([isinstance(x, str) for x in ctypes]),
-            isinstance(cscales, list),
-            (
-                all([isinstance(x, str) for x in cscales])
-                ^ all([isinstance(x, Numeric) for x in cscales])
-            ),  # must be Numeric XOR str, not both or neither
-            isinstance(csigns, list),
-            all([isinstance(x, int) for x in csigns]),
-            len(ctypes) == len(cscales) == len(csigns),
-        ]
-    ), "Invalid arguments passed to `_apply_cscales()`"
-
-    # TODO: ?
-    # assert _arg_validation(
-    #     raise_errors=True, df=df, ctypes=ctypes, cscales=cscales, csigns=csigns
-    # )
+    if not _check_arg_types(
+        df=df,
+        cids=cids,
+        ctypes=ctypes,
+        cscales=cscales,
+        csigns=csigns,
+    ):
+        raise TypeError("Invalid arguments passed to `_apply_cscales()`")
 
     # Arg checks
     _ctypes: List[str] = df[df["xcat"].isin(ctypes)]["xcat"].unique().tolist()
@@ -124,21 +159,13 @@ def _apply_hscales(
     :return <pd.DataFrame>: dataframe with the contracts in the same currency/units.
     """
     # Type checks
-    assert all(
-        [
-            isinstance(df, pd.DataFrame),
-            isinstance(hbasket, list),
-            all([isinstance(x, str) for x in hbasket]),
-            isinstance(hscales, list),
-            (
-                all([isinstance(x, Numeric) for x in hscales])
-                ^ all([isinstance(x, str) for x in hscales])
-            ),  # must be Numeric XOR str, not both or neither
-            isinstance(hratios, (str, NoneType)),
-            # hbasket and hscales must be of the same length
-            len(hbasket) == len(hscales),
-        ]
-    ), "Invalid arguments passed to `_apply_hscales()`"
+    if not _check_arg_types(
+        df=df,
+        hbasket=hbasket,
+        hscales=hscales,
+        hratios=hratios,
+    ):
+        raise TypeError("Invalid arguments passed to `_apply_hscales()`")
 
     # Pivot the DF to ticker format
     dfW: pd.DataFrame = qdf_to_ticker_df(df=df)
@@ -193,14 +220,12 @@ def _apply_sig_conversion(
     :return <pd.DataFrame>: dataframe with the contracts in the same currency/units.
     """
     # Type checks
-    assert all(
-        [
-            isinstance(df, pd.DataFrame),
-            isinstance(sig, str),
-            isinstance(cids, list),
-            all([isinstance(x, str) for x in cids]),
-        ]
-    ), "Invalid arguments passed to `_apply_sig_conversion()`"
+    if not _check_arg_types(
+        df=df,
+        sig=sig,
+        cids=cids,
+    ):
+        raise TypeError("Invalid arguments passed to `_apply_sig_conversion()`")
 
     # Arg checks
     cid_sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
@@ -230,15 +255,13 @@ def _calculate_contract_signals(
     sname: str = "STRAT",
 ) -> pd.DataFrame:
     # Type checks
-    assert all(
-        [
-            isinstance(df, pd.DataFrame),
-            isinstance(cids, list),
-            all([isinstance(x, str) for x in cids]),
-            isinstance(ctypes, list),
-            all([isinstance(x, str) for x in ctypes]),
-        ]
-    ), "Invalid arguments passed to `_calculate_contract_signals()`"
+    if not _check_arg_types(
+        df=df,
+        cids=cids,
+        ctypes=ctypes,
+        sname=sname,
+    ):
+        raise TypeError("Invalid arguments passed to `_calculate_contract_signals()`")
 
     # Create a new DF with cols for each contract type, and dates from `df` as index
 
@@ -478,8 +501,5 @@ if __name__ == "__main__":
     df.loc[(df["cid"] == "USD") & (df["xcat"] == "TOUSD"), "value"] = 1.0
 
     rDF: pd.DataFrame = contract_signals(
-        df=df,
-        sig="TOUSD",
-        cids=cids,
-        ctypes=["FX", "EQ", "IRS", "CDS"]
+        df=df, sig="TOUSD", cids=cids, ctypes=["FX", "EQ", "IRS", "CDS"]
     )
