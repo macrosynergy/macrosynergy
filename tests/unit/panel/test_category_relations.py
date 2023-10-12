@@ -483,7 +483,7 @@ class TestAll(unittest.TestCase):
             xcats=sel_xcats,
             cids=sel_cids,
             metrics=["value", "vx"],
-            signal=False,
+            raise_error=False,
         )
 
         # NOTE: casting df.vx to int as pandas casts it to float64
@@ -516,7 +516,7 @@ class TestAll(unittest.TestCase):
             xcats=sel_xcats,
             cids=sel_cids,
             metrics=["value", "vx"],
-            signal=False,
+            raise_error=False,
         )
 
         self.assertTrue(out_df["vx"].isna().all())
@@ -528,7 +528,7 @@ class TestAll(unittest.TestCase):
             xcats=sel_xcats,
             cids=sel_cids,
             metrics=["value"],
-            signal=False,
+            raise_error=False,
         )
 
         self.assertTrue((df["vx"] == out_df["vx"]).all())
@@ -544,7 +544,7 @@ class TestAll(unittest.TestCase):
                 xcats=sel_xcats,
                 cids=sel_cids,
                 metrics=["value"],
-                signal=False,
+                raise_error=False,
             )
 
         # check that a value error is raised when cids and xcats are not in the dataframe
@@ -556,7 +556,7 @@ class TestAll(unittest.TestCase):
                 xcats=["metallica"],
                 cids=["ac_dc"],
                 metrics=["value"],
-                signal=False,
+                raise_error=False,
             )
 
         with self.assertRaises(ValueError):
@@ -566,7 +566,7 @@ class TestAll(unittest.TestCase):
                 xcats=["metallica"],
                 cids=sel_cids,
                 metrics=["value"],
-                signal=False,
+                raise_error=False,
             )
 
         with self.assertRaises(ValueError):
@@ -576,7 +576,7 @@ class TestAll(unittest.TestCase):
                 xcats=sel_xcats,
                 cids=["ac_dc"],
                 metrics=["value"],
-                signal=False,
+                raise_error=False,
             )
         try:
             cat_rel: CategoryRelations = CategoryRelations(

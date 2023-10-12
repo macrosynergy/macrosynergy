@@ -434,7 +434,7 @@ def ticker_df_to_qdf(df: pd.DataFrame) -> pd.DataFrame:
 
 def apply_slip(target_df: pd.DataFrame, slip: int,
                     cids: List[str], xcats: List[str],
-                    metrics: List[str], signal: bool) -> pd.DataFrame:
+                    metrics: List[str], raise_error: bool) -> pd.DataFrame:
         """
         Applied a slip, i.e. a negative lag, to the target DataFrame 
         for the given cross-sections and categories, on the given metrics.
@@ -462,7 +462,7 @@ def apply_slip(target_df: pd.DataFrame, slip: int,
         target_df['tickers'] = target_df['cid'] + '_' + target_df['xcat']
 
         if not set(sel_tickers).issubset(set(target_df['tickers'].unique())):
-            if signal:
+            if raise_error:
                 warnings.warn("Tickers targetted for applying slip are not present in the DataFrame.\n"
                 f"Missing tickers: {sorted(list(set(sel_tickers) - set(target_df['tickers'].unique())))}")
             else:

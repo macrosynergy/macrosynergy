@@ -561,7 +561,7 @@ class TestAll(unittest.TestCase):
             xcats=sel_xcats,
             cids=sel_cids,
             metrics=["value", "vx"],
-            signal=True
+            raise_error=True
         )
 
         # NOTE: casting df.vx to int as pandas casts it to float64
@@ -594,7 +594,7 @@ class TestAll(unittest.TestCase):
             xcats=sel_xcats,
             cids=sel_cids,
             metrics=["value", "vx"],
-            signal=True
+            raise_error=True
         )
 
         self.assertTrue(out_df["vx"].isna().all())
@@ -606,7 +606,7 @@ class TestAll(unittest.TestCase):
             xcats=sel_xcats,
             cids=sel_cids,
             metrics=["value"],
-            signal=True
+            raise_error=True
         )
 
         self.assertTrue((df["vx"] == out_df["vx"]).all())
@@ -617,7 +617,7 @@ class TestAll(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             apply_slip(
-                target_df=df, slip=-1, xcats=sel_xcats, cids=sel_cids, metrics=["value"], signal=True
+                target_df=df, slip=-1, xcats=sel_xcats, cids=sel_cids, metrics=["value"], raise_error=True
             )
 
         with self.assertRaises(ValueError):
@@ -627,7 +627,7 @@ class TestAll(unittest.TestCase):
                 xcats=sel_xcats,
                 cids=["ac_dc"],
                 metrics=["value"],
-                signal=True
+                raise_error=True
             )
 
         # check that a value error is raised when cids and xcats are not in the dataframe
@@ -638,7 +638,7 @@ class TestAll(unittest.TestCase):
                 xcats=["metallica"],
                 cids=["ac_dc"],
                 metrics=["value"],
-                signal=True
+                raise_error=True
             )
 
         with self.assertWarns(UserWarning):
@@ -648,7 +648,7 @@ class TestAll(unittest.TestCase):
                 xcats=["metallica"],
                 cids=sel_cids,
                 metrics=["value"],
-                signal=True
+                raise_error=True
             )
 
         try:

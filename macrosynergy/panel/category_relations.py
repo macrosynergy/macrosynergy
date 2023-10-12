@@ -140,7 +140,7 @@ class CategoryRelations(object):
                 cids=self.cids,
                 xcats=self.xcats,
                 metrics=metrics_found,
-                signal=False,
+                raise_error=False,
             )
 
         # capture warning from intersection_cids, in case the two categories do not

@@ -158,7 +158,7 @@ class SignalReturnRelations:
             cids=cids,
             xcats=xcats,
             metrics=metric_cols,
-            signal=True,
+            raise_error=True,
         )
 
         # Naturally, only applicable if rival signals have been passed.
