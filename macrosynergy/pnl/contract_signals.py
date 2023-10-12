@@ -118,6 +118,92 @@ def _apply_cscales(
     return ticker_df_to_qdf(df=dfW)
 
 
+def _apply_hscales(
+    df: pd.DataFrame,
+    hbasket: List[str],
+    hscales: List[Union[Numeric, str]],
+    hratios: Optional[str] = None,
+) -> pd.DataFrame:
+    """
+    Apply hedging logic to the basket of contracts.
+
+    :param <pd.DataFrame> df: QDF with the contract signals and scaling XCATs.
+    :param <List[str]> hbasket: list of contract identifiers in the format "<cid>_<ctype>"
+        that serve as constituents of the hedging basket.
+    param <List[str|float]> hscales: list of scaling factors (weights) for the basket.
+        These can be either a list of floats or a list of category tickers that serve
+        as basis of translation. The former are fixed across time, the latter variable.
+    :param <str> hratios: category names for cross-section-specific hedge ratios.
+    :return <pd.DataFrame>: dataframe with the contracts in the same currency/units.
+    """
+    # Type checks
+    assert all(
+        [
+            isinstance(df, pd.DataFrame),
+            isinstance(hbasket, list),
+            all([isinstance(x, str) for x in hbasket]),
+            isinstance(hscales, list),
+            (
+                all([isinstance(x, Numeric) for x in hscales])
+                ^ all([isinstance(x, str) for x in hscales])
+            ),  # must be Numeric XOR str, not both or neither
+            isinstance(hratios, (str, type(None))),
+            # hbasket and hscales must be of the same length
+            len(hbasket) == len(hscales),
+        ]
+    ), "Invalid arguments passed to `_apply_hscales()`"
+
+    # Pivot the DF to ticker format
+    dfW: pd.DataFrame = qdf_to_ticker_df(df=df)
+
+    # Check that all tickers in hbasket are in the dataframe
+    if not set(hbasket).issubset(set(dfW.columns)):
+        raise ValueError(
+            "Some `hbasket` are missing in the provided dataframe."
+            f"\nMissing: {set(hbasket) - set(dfW.columns)}"
+        )
+
+    if hratios is not None:
+        expected_hratios: List[str] = [f"{cx}_{hratios}" for cx in get_cid(hbasket)]
+        if not set(expected_hratios).issubset(set(dfW.columns)):
+            raise ValueError(
+                "Some `hratios` are missing in the provided dataframe."
+                f"\nMissing: {set(expected_hratios) - set(dfW.columns)}"
+            )
+
+    # If hscales are numeric
+    HSCALE_XCAT: str = "HSCALE_XCAT"
+    if all([isinstance(x, Numeric) for x in hscales]):
+        for ix, hbx in enumerate(hbasket):
+            scale_col: str = get_cid(hbx) + "_" + HSCALE_XCAT
+            dfW[scale_col] = hscales[ix]
+
+            # replace the numeric scale with the HSCALE_XCAT
+            hscales[ix] = HSCALE_XCAT
+
+        # sanity check: all hscales are in the dataframe and are strings
+        assert all([isinstance(x, str) for x in hscales]), "Failed to set hscales"
+        assert all([x in dfW.columns for x in hscales]), "Failed to create hscales cols"
+
+    # Calculations
+
+    # Apply the hedge ratios if specified
+    if hratios is not None:
+        for ix, tickerx in enumerate(hbasket):
+            hratio_col: str = get_cid(tickerx) + "_" + hratios
+            dfW[tickerx] = dfW[tickerx] * dfW[hratio_col]
+
+    # Multiply each ticker in the basket by the corresponding scale
+    for ix, tickerx in enumerate(hbasket):
+        scale_col: str = get_cid(tickerx) + "_" + hscales[ix]
+        dfW[tickerx] = dfW[tickerx] * dfW[scale_col]
+
+    # drop where the col_name ends with HSCALE_XCAT
+    dfW: pd.DataFrame = dfW.loc[:, ~dfW.columns.str.endswith(HSCALE_XCAT)]
+
+    return ticker_df_to_qdf(df=dfW)
+
+
 def _apply_sig_conversion(
     df: pd.DataFrame,
     sig: str,
