@@ -88,6 +88,7 @@ class SignalBase:
 
         self.xcats = list(df["xcat"].unique())
         self.df = df
+        self.original_df = df.copy()
 
     @staticmethod
     def __slice_df__(df: pd.DataFrame, cs: str, cs_type: str):
@@ -226,7 +227,7 @@ class SignalBase:
         """
 
         if ret is None:
-            ret = self.ret
+            ret = self.ret if not isinstance(self.ret, list) else self.ret[0]
         if sig is None:
             sig = self.sig
 
@@ -312,7 +313,6 @@ class SignalsReturns(SignalBase):
             agg_sig=agg_sigs,
         )
         self.df = df
-        self.original_df = df.copy()
 
         if isinstance(self.sig, list):
             for sig in self.sig:
@@ -338,6 +338,7 @@ class SignalsReturns(SignalBase):
             sig = self.sigs[0]
         else:
             sig = self.sigs"""
+
         if ret is None:
             ret = self.ret if not isinstance(self.ret, list) else self.ret[0]
         if freq is None:
@@ -396,9 +397,13 @@ class SignalsReturns(SignalBase):
             self.sig += "_NEG"
             self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
 
-        return self.__output_table__(cs_type="cids", ret=ret, sig=sig, srt=True).round(
+        df_result = self.__output_table__(cs_type="cids", ret=ret, sig=sig, srt=True).round(
             decimals=5
         )
+
+        self.df = self.original_df
+
+        return df_result
 
     def multiple_relations_table(
         self, rets=None, xcats=None, freqs=None, agg_sigs=None
@@ -437,6 +442,10 @@ class SignalsReturns(SignalBase):
         rows: List[str] = ["xcat", "agg_sigs"],
         columns: List[str] = ["ret", "freq"],
     ):
+        self.df = self.original_df
+        def is_list_of_strings(variable):
+            return isinstance(variable, list) and all(isinstance(item, str) for item in variable)
+        
         type_values = ["panel", "mean_years", "mean_cids", "pr_years", "pr_cids"]
         rows_values = ["xcat", "ret", "freq", "agg_sigs"]
 
@@ -446,54 +455,93 @@ class SignalsReturns(SignalBase):
         for column in columns:
             if not column in rows_values:
                 raise ValueError(f"Columns must only contain {rows_values}")
-
-        if type == "panel":
-            x = 1
-            """
-            For each xcat 
-                For each agg_sigs
-                    For each ret
-                        For each freq
-                            calculate statistic like in single relation table
-            """
-        elif type == "mean_years":
-            x = 1
-            """
-            For each xcat 
-                For each agg_sigs
-                    For each ret
-                        For each freq
-                            calculate statistic like in 2nd row of summary table
-            """
-        elif type == "mean_cids":
-            x = 1
-        elif type == "pr_years":
-            x = 1
-        elif type == "pr_cids":
-            x = 1
+            
+        if isinstance(self.freq, list):
+            freqs = self.freq
         else:
-            raise ValueError(f"Type must be one of {type_values}")
+            freqs = [self.freq]
+        if is_list_of_strings(self.agg_sig):
+            agg_sigs = self.agg_sig
+        else:
+            agg_sigs = [self.agg_sig]
 
-        x += 1
+        column_names = [self.ret[0] + "/" + freq for freq in freqs]
+        row_names = [self.sig[0] + "/" + agg_sig for agg_sig in agg_sigs]
 
-        return 0
-    
-    def calculate_statistic(self, stat):
-        stat_values = [
-            "accuracy",
-            "bal_accuracy",
-            "pos_sigr",
-            "pos_retr",
-            "pos_prec",
-            "neg_prec",
-            "pearson",
-            "pearson_pval",
-            "kendall",
-            "kendall_pval",
-        ]
-        if not stat in stat_values:
-            raise ValueError(f"Stat must be one of {stat_values}")
+        df_result = pd.DataFrame(columns=column_names, index=row_names)
+        i = 0
 
+        for freq in freqs:
+            j = 0
+            for agg_sig in agg_sigs:
+                ret = self.ret if not isinstance(self.ret, list) else self.ret[0]
+                sig = self.sig if not isinstance(self.sig, list) else self.sig[0]
+                xcat = [sig, ret]
+
+                cids = None
+                dfd = reduce_df(
+                    self.df,
+                    xcats=xcat,
+                    cids=cids,
+                    start=self.start,
+                    end=self.end,
+                    blacklist=self.blacklist,
+                )
+                metric_cols: List[str] = list(
+                    set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
+                )
+                dfd: pd.DataFrame = self.apply_slip(
+                    target_df=dfd, slip=self.slip, cids=cids, xcats=xcat, metrics=metric_cols
+                )
+
+                df = categories_df(
+                    dfd,
+                    xcats=xcat,
+                    cids=cids,
+                    val="value",
+                    start=None,
+                    end=None,
+                    freq=freq,
+                    blacklist=None,
+                    lag=1,
+                    xcat_aggs=[agg_sig, "sum"],
+                )
+                self.df = df
+                self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
+
+                if not isinstance(self.signs, list):
+                    self.signs = [self.signs]
+
+                if -1 in self.signs:
+                    self.df.loc[:, self.signals] *= -1
+                    s_copy = self.signals.copy()
+
+                    self.signals = [s + "_NEG" for s in self.signals]
+                    self.sig += "_NEG"
+                    self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
+
+        #################################################################################################
+        #################################################################################################
+        #################################################################################################
+                if type == "mean_years" or type == "pr_years":
+                    cs_type = 'years'
+                else:
+                    cs_type = 'cids'
+                if type == "panel":
+                    type_index = 0
+                elif type == "mean_years" or type == "mean_cids":
+                    type_index = 1
+                elif type == "pr_years" or "pr_cids":
+                    type_index = 2
+                
+                df_out = self.__output_table__(cs_type=cs_type, ret=ret, sig=sig)
+
+                df_result.iloc[j, i] = df_out.iloc[type_index][stat]
+                self.df = self.original_df
+                j += 1
+            i += 1
+
+        return df_result
 
 class SignalReturnRelations(SignalBase):
 
