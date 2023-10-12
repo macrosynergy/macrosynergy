@@ -15,7 +15,7 @@ import os, sys
 
 sys.path.append(os.getcwd())
 
-from macrosynergy.pnl import Numeric
+from macrosynergy.pnl import Numeric, NoneType
 from macrosynergy.management.utils import (
     is_valid_iso_date,
     standardise_dataframe,
@@ -68,6 +68,11 @@ def _apply_cscales(
             len(ctypes) == len(cscales) == len(csigns),
         ]
     ), "Invalid arguments passed to `_apply_cscales()`"
+
+    # TODO: ?
+    # assert _arg_validation(
+    #     raise_errors=True, df=df, ctypes=ctypes, cscales=cscales, csigns=csigns
+    # )
 
     # Arg checks
     _ctypes: List[str] = df[df["xcat"].isin(ctypes)]["xcat"].unique().tolist()
@@ -126,7 +131,7 @@ def _apply_hscales(
                 all([isinstance(x, Numeric) for x in hscales])
                 ^ all([isinstance(x, str) for x in hscales])
             ),  # must be Numeric XOR str, not both or neither
-            isinstance(hratios, (str, type(None))),
+            isinstance(hratios, (str, NoneType)),
             # hbasket and hscales must be of the same length
             len(hbasket) == len(hscales),
         ]
@@ -215,6 +220,40 @@ def _apply_sig_conversion(
     return ticker_df_to_qdf(df=dfW)
 
 
+def _calculate_contract_signals(
+    df: pd.DataFrame,
+    cids: List[str],
+    ctypes: List[str],
+) -> pd.DataFrame:
+    # Type checks
+    assert all(
+        [
+            isinstance(df, pd.DataFrame),
+            isinstance(cids, list),
+            all([isinstance(x, str) for x in cids]),
+            isinstance(ctypes, list),
+            all([isinstance(x, str) for x in ctypes]),
+        ]
+    ), "Invalid arguments passed to `_calculate_contract_signals()`"
+
+    # Create a new DF with cols for each contract type, and dates from `df` as index
+
+    cid_ctypes: List[str] = [f"{cx}_{ctx}" for cx in cids for ctx in ctypes]
+    out_df: pd.DataFrame = pd.DataFrame(index=df["real_date"].unique().tolist())
+    for _ctx in cid_ctypes:
+        out_df[_ctx] = 0.0
+
+    # Pivot the DF to ticker format
+    dfW: pd.DataFrame = qdf_to_ticker_df(df=df)
+
+    # Sum up the contract signals for each contract type
+    for _cont in cid_ctypes:
+        sel_cols: List[str] = [x for x in dfW.columns if x.startswith(_cont)]
+        out_df[_cont] = dfW[sel_cols].sum(axis=1)
+
+    return ticker_df_to_qdf(df=out_df)
+
+
 def contract_signals(
     df: pd.DataFrame,
     sig: str,
@@ -276,14 +315,14 @@ def contract_signals(
         (sig, "sig", str),
         (cids, "cids", list),
         (ctypes, "ctypes", list),
-        (cscales, "cscales", (list, type(None))),
-        (csigns, "csigns", (list, type(None))),
-        (hbasket, "hbasket", (list, type(None))),
-        (hscales, "hscales", (list, type(None))),
-        (hratios, "hratios", (list, type(None))),
-        (start, "start", (str, type(None))),
-        (end, "end", (str, type(None))),
-        (blacklist, "blacklist", (dict, type(None))),
+        (cscales, "cscales", (list, NoneType)),
+        (csigns, "csigns", (list, NoneType)),
+        (hbasket, "hbasket", (list, NoneType)),
+        (hscales, "hscales", (list, NoneType)),
+        (hratios, "hratios", (list, NoneType)),
+        (start, "start", (str, NoneType)),
+        (end, "end", (str, NoneType)),
+        (blacklist, "blacklist", (dict, NoneType)),
         (sname, "sname", str),
     ]:
         if not isinstance(varx, typex):
@@ -309,38 +348,29 @@ def contract_signals(
     df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
 
     ## Check that all the contracts in the hedging basket are in the dataframe as tickers
+    _found_tickers: List[str] = (df["cid"] + "_" + df["xcat"]).unique().tolist()
     if hbasket is not None:
-        if not set(hbasket).issubset(
-            set(
-                df[["cid", "xcat"]]
-                .drop_duplicates()
-                .apply(lambda x: f"{x['cid']}_{x['xcat']}", axis=1)
-                .unique()
-                .tolist()
+        if not set(hbasket).issubset(set(_found_tickers)):
+            e_msg: str = (
+                f"Some of the contracts/tickers in `hbasket` are not in `df`."
+                f"\nMissing contracts: {set(hbasket) - set(df['cid'].unique())}"
             )
-        ):
-            e_msg: str = f"Some of the contracts/tickers in `hbasket` are not in `df`"
-            e_msg += f"\nMissing contracts: {set(hbasket) - set(df['cid'].unique())}"
             raise ValueError(e_msg)
+        if hscales is None:
+            hscales: List[Numeric] = [1] * len(hbasket)
+        else:
+            if len(hbasket) != len(hscales):
+                raise ValueError("`hbasket` and `hscales` must be of the same length.")
 
-    ## If hedging scales are not specified, set them to 1.0
-    if hscales is None and hbasket is not None:
-        hscales: List[Union[Numeric, str]] = [1.0] * len(hbasket)
-
-    ## If hratios are specified, check that they are in the dataframe for the cids
-    if hratios is not None and hbasket is not None:
-        if len(hratios) != len(cids):
-            raise ValueError("`hratios` and `cids` must be of the same length")
-
-        _hratios: List[str] = [f"{cx}_{hr}" for cx in cids for hr in hratios]
-        _found_hratios: List[str] = (
-            (df["cid"] + "_" + df["xcat"]).drop_duplicates().tolist()
-        )
-        if not set(_hratios).issubset(set(_found_hratios)):
-            raise ValueError(
-                "Some `cids` are missing the `hratios` in the provided dataframe."
-                f"\nMissing: {set(_hratios) - set(_found_hratios)}"
-            )
+        if hratios is not None:
+            if not set([f"{cx}_{hratios}" for cx in get_cid(hbasket)]).issubset(
+                set(_found_tickers)
+            ):
+                e_msg: str = (
+                    f"Some of the contracts/tickers in `hratios` are not in `df`."
+                    f"\nMissing contracts: {set(hratios) - set(df['cid'].unique())}"
+                )
+                raise ValueError(e_msg)
 
     ## If contract scales are not specified, set them to 1.0
     if cscales is None:
@@ -371,12 +401,8 @@ def contract_signals(
             if len(_sc) != len(_sct):
                 raise ValueError(f"`{_scn}` and `{_sctn}` must be of the same length")
 
-            is_strs: bool = all([isinstance(x, str) for x in _sc])
-            is_nums: bool = all([isinstance(x, Numeric) for x in _sc])
-            if not (is_strs or is_nums):
-                raise ValueError(
-                    f"`{_scn}` must be a list of strings or floats/numeric types"
-                )
+            if not all([isinstance(x, (str, Numeric)) for x in _sc]):
+                raise TypeError(f"`{_scn}` must be a list of strings or floats")
 
     ## Check that all the contract types are in the dataframe as xcats
     for cidx in cids:
@@ -405,7 +431,18 @@ def contract_signals(
         csigns=csigns,
     )
 
-    ## Apply hscales if specified
+    ## Apply hedging logic
+    if hbasket is not None:
+        df: pd.DataFrame = _apply_hscales(
+            df=df,
+            hbasket=hbasket,
+            hscales=hscales,
+            hratios=hratios,
+        )
+
+    ## Calculate the contract signals
+
+    df: pd.DataFrame = _calculate_contract_signals(df=df, cids=cids, ctypes=ctypes)
 
     return df
 
