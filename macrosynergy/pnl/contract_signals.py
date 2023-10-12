@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import warnings
 
-from typing import List, Union, Tuple, Optional, Set, Dict
+from typing import List, Union, Tuple, Optional, Set
 
 import os, sys
 
@@ -42,6 +42,14 @@ def _check_arg_types(
     blacklist: Optional[dict] = None,
     sname: Optional[str] = None,
 ) -> bool:
+    """
+    Auxiliary function to check the types of the arguments passed to the main function.
+    Accepts all arguments from `contract_signals()` as optional keyword arguments, and
+    checks that they are of the correct type.
+
+    :params: see `contract_signals()`
+    :return <bool>: True if all arguments are of the correct type, False otherwise.
+    """
     correct_types: bool = all(
         [
             isinstance(df, (pd.DataFrame, NoneType)),
@@ -320,77 +328,52 @@ def contract_signals(
     ## Reduce the dataframe
     df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
 
-    ## Check that all the contracts in the hedging basket are in the dataframe as tickers
-    _found_tickers: List[str] = (df["cid"] + "_" + df["xcat"]).unique().tolist()
-    if hbasket is not None:
-        if not set(hbasket).issubset(set(_found_tickers)):
-            e_msg: str = (
-                f"Some of the contracts/tickers in `hbasket` are not in `df`."
-                f"\nMissing contracts: {set(hbasket) - set(df['cid'].unique())}"
-            )
-            raise ValueError(e_msg)
-        if hscales is None:
-            hscales: List[Numeric] = [1] * len(hbasket)
-        else:
-            if len(hbasket) != len(hscales):
-                raise ValueError("`hbasket` and `hscales` must be of the same length.")
+    ## Check that all cid_ctype are in the dataframe
+    expected_base_signals: List[str] = [f"{cx}_{sig}" for cx in cids]
+    found_base_signals: Set[str] = set(df["cid"] + "_" + df["xcat"])
+    if not set(expected_base_signals).issubset(found_base_signals):
+        raise ValueError(
+            "Some `cids` are missing the `sig` in the provided dataframe."
+            f"\nMissing: {set(expected_base_signals) - found_base_signals}"
+        )
 
-        if hratios is not None:
-            if not set([f"{cx}_{hratios}" for cx in get_cid(hbasket)]).issubset(
-                set(_found_tickers)
-            ):
-                e_msg: str = (
-                    f"Some of the contracts/tickers in `hratios` are not in `df`."
-                    f"\nMissing contracts: {set(hratios) - set(df['cid'].unique())}"
-                )
-                raise ValueError(e_msg)
-
-    ## If contract scales are not specified, set them to 1.0
-    if cscales is None:
-        cscales: List[Union[Numeric, str]] = [1.0] * len(ctypes)
-
-    ## If contract signs are not specified, set them to 1.0
-    ## if specified, check that they are either 1 or -1
-    if csigns is None:
-        csigns: List[int] = [1] * len(ctypes)
+    ## Check cscales and csigns
+    if cscales is not None:
+        # check that the number of scales is the same as the number of ctypes
+        if len(cscales) != len(ctypes):
+            raise ValueError("`cscales` must be of the same length as `ctypes`")
+        if not all([isinstance(x, (str, Numeric)) for x in cscales]):
+            raise TypeError("`cscales` must be a List of strings or numerical values")
     else:
-        if not all(isinstance(x, Numeric) for x in csigns):
-            raise TypeError("`csigns` must be a list of integers")
+        cscales: List[Numeric] = [1.0] * len(ctypes)
 
-        if not all(isinstance(x, int) for x in csigns):
-            warnings.warn("`csigns` is being coerced to integers")
-            csigns: List[int] = [int(x) for x in csigns]
-            if not all(x in [-1, 1] for x in csigns):
-                warnings.warn("`csigns` is being coerced to [-1, 1]")
-                csigns: List[int] = [int(x / abs(x)) for x in csigns]
-
-    ## Check that the scales are of the same length as the contract types
-    ## Also assert that they are either all strings or all floats
-    for _scn, _sc, _sctn, _sct in [
-        ("cscales", cscales, "ctypes", ctypes),
-        ("hscales", hscales, "hbasket", hbasket),
-    ]:
-        if _sc is not None or _sct is not None:
-            if len(_sc) != len(_sct):
-                raise ValueError(f"`{_scn}` and `{_sctn}` must be of the same length")
-
-            if not all([isinstance(x, (str, Numeric)) for x in _sc]):
-                raise TypeError(f"`{_scn}` must be a list of strings or floats")
-
-    ## Check that all the contract types are in the dataframe as xcats
-    for cidx in cids:
-        for _ctx in ctypes:
-            f_xcats: List[str] = (
-                df[df["cid"] == cidx]["xcat"].drop_duplicates().tolist()
+    if csigns is not None:
+        # check that the number of signs is the same as the number of ctypes
+        if len(csigns) != len(ctypes):
+            raise ValueError("`csigns` must be of the same length as `ctypes`")
+        if not all([isinstance(x, int) for x in csigns]):
+            raise TypeError("`csigns` must be a List of integers")
+        if not all([x in [-1, 1] for x in csigns]):
+            warnings.warn(
+                "`csigns` must be a List of -1 or 1, coercing to -1 or 1",
+                UserWarning,
             )
-            if not any([_ctx in x for x in f_xcats]):
-                raise ValueError(f"`{cidx}_{_ctx}` is not a contract type in `df`")
+            csigns: List[int] = [x / abs(x) for x in csigns]
+    else:
+        csigns: List[int] = [1] * len(ctypes)
 
-    ## Check that all the cross-sections are in the dataframe as cids
-    if not set(cids).issubset(set(df["cid"].unique())):
-        e_msg: str = f"Some of the cross-sections in `cids` are not in `df`"
-        e_msg += f"\nMissing cross-sections: {set(cids) - set(df['cid'].unique())}"
-        raise ValueError(e_msg)
+    ## Check hbasket and hscales
+    if hbasket is not None:
+        if hscales is None:
+            hscales: List[Numeric] = [1.0] * len(hbasket)
+        else:
+            # check that the number of scales is the same as the number of hbasket
+            if len(hscales) != len(hbasket):
+                raise ValueError("`hscales` must be of the same length as `hbasket`")
+            if not all([isinstance(x, (str, Numeric)) for x in hscales]):
+                raise TypeError(
+                    "`hscales` must be a List of strings or numerical values"
+                )
 
     ## Apply the cross-section-specific signal to the dataframe
     # df: pd.DataFrame = _apply_sig_conversion(df=df, sig=sig, cids=cids)
