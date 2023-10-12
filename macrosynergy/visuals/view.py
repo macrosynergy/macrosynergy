@@ -16,10 +16,13 @@ msv.FacetPlot(df).lineplot(cid_grid=True)
 from typing import List, Optional, Tuple
 
 import pandas as pd
+from pandas.testing import assert_frame_equal
 
 from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
 from macrosynergy.visuals import FacetPlot, LinePlot, Heatmap
 from macrosynergy.visuals.common import Numeric
+import time
+import timeit
 
 IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
 
@@ -371,7 +374,7 @@ def view_metrics(
             raise ValueError(
                 "`agg` must be one of 'mean', 'median', 'min', 'max', 'first' or 'last'"
             )
-        
+
     if title is None:
         title = f"Visualising {metric} for {xcat} from {heatmap.start} to {heatmap.end}"
 
@@ -383,22 +386,12 @@ def view_metrics(
         raise ValueError("First element of `figsize` must be a float")
 
     if figsize[1] is None:
-        figsize = (figsize[0], len(heatmap.cids) + 1) # +1 to adjust for labels
+        figsize = (figsize[0], len(heatmap.cids) + 1)  # +1 to adjust for labels
 
     if not isinstance(figsize[1], (int, float)):
         raise ValueError("Second element of `figsize` must be a float")
 
-
-    # group by cid, then set the index to real_date, then resample to the required freq and agg
-    heatmap.df: pd.DataFrame = (
-        heatmap.df.groupby(["cid", "xcat"])
-        .apply(
-            lambda x: x.set_index("real_date")
-            .resample(freq)
-            .agg(agg, numeric_only=True)
-        )
-        .reset_index()
-    )
+    heatmap.df: pd.DataFrame = _downsample_df(df=heatmap.df, freq=freq, agg=agg)
 
     max_mes: float = max(1, heatmap.df[metric].max())
     min_mes: float = min(0, heatmap.df[metric].min())
@@ -408,15 +401,34 @@ def view_metrics(
     heatmap.df = heatmap.df.pivot_table(index="cid", columns="real_date", values=metric)
 
     heatmap.plot(
-        xcat=xcat,
-        metric=metric,
         title=title,
         figsize=figsize,
         vmin=min_mes,
         vmax=max_mes,
         x_axis_label="Date",
         y_axis_label="Cross Sections",
-        grid=False
+        grid=False,
+    )
+
+
+def _downsample_df(df: pd.DataFrame, freq: str = None, agg: str = "mean"):
+    """
+    Downsample JPMaQS DataFrame.
+
+    :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
+        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+    :param <str> freq: frequency option. Per default the correlations are calculated
+        based on the native frequency of the datetimes in 'real_date', which is business
+        daily. Downsampling options include weekly ('W'), monthly ('M'), or quarterly
+        ('Q') mean.
+    :param <str> agg: aggregation method. Must be one of "mean" (default), "median",
+        "min", "max", "first" or "last".
+    """
+    return (
+        df.groupby(["cid", "xcat"])
+        .resample(freq, on="real_date")
+        .agg(agg, numeric_only=True)
+        .reset_index()
     )
 
 
@@ -524,9 +536,7 @@ if __name__ == "__main__":
 
     from macrosynergy.management.simulate_quantamental_data import make_test_df
 
-    test_cids: List[str] = [
-        "USD",
-    ]  # "EUR", "GBP"]
+    test_cids: List[str] = ["USD"]  #,  "EUR", "GBP"]
     test_xcats: List[str] = ["FX", "IR"]
     dfE: pd.DataFrame = make_test_df(
         cids=test_cids, xcats=test_xcats, style="sharp-hill"
