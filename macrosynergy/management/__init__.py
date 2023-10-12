@@ -7,8 +7,8 @@ from .update_df import update_df
 from .utils import (
     common_cids,
 )
-from . import utils
+from . import utils, types
 
 __all__ = ['check_availability', 'visual_paneldates', 'check_enddates', 'check_startyears',
            'reduce_df', 'reduce_df_by_ticker', 'missing_in_df', 'VintageData', 'make_qdf',
-            'update_df', 'business_day_dif', 'categories_df', 'common_cids', 'Config', 'utils']
+            'update_df', 'business_day_dif', 'categories_df', 'common_cids', 'Config', 'utils', 'types']
