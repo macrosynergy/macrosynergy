@@ -553,7 +553,7 @@ class TestDataQueryInterface(unittest.TestCase):
         with self.assertWarns(UserWarning):
             self.assertEqual(
                 jpmaqs_download.deconstruct_expression(expression="bad_expression"),
-                ["bad_expression", "bad_expression", "bad_expression"],
+                ["bad_expression", "bad_expression", "value"],
             )
 
     def test_dq_fetch(self):

@@ -1,9 +1,14 @@
+"""
+Module housing the `PanelTimeSeriesSplit` class, which is used to produce 
+paired training and test splits for panel data.
+"""
+
 import numpy as np
 import pandas as pd
 import logging
 import datetime
 from sklearn.model_selection import BaseCrossValidator
-from typing import Optional, List, Iterator, Tuple
+from typing import Optional, List, Tuple
 import matplotlib.pyplot as plt
 
 
