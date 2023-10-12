@@ -59,18 +59,21 @@ class QuantamentalDataFrameMeta(type):
         IDX_COLS = ["cid", "xcat", "real_date"]
         result: bool = False
         try:
-            result: bool = all(
-                [
-                    isinstance(instance, pd.DataFrame),
-                    instance.index.name is None,
-                    not isinstance(instance.columns, pd.MultiIndex),
-                    all([col in instance.columns for col in IDX_COLS]),
-                    len(instance.columns) > len(IDX_COLS),
-                    # check that the real_date is obj'datetime64[ns]'
-                    instance["real_date"].dtype == "datetime64[ns]"
-                    or isinstance(instance["real_date"].dtype, pd.DatetimeTZDtype),
-                ]
+            # the try except offers a safety net in case the instance is not a pd.DataFrame
+            # and one of the checks raises an error
+            result = result and isinstance(instance, pd.DataFrame)
+            result = result and instance.index.name is None
+            result = result and not isinstance(instance.columns, pd.MultiIndex)
+            result = result and all([col in instance.columns for col in IDX_COLS])
+            result = result and len(instance.columns) > len(IDX_COLS)
+
+            correct_date_type: bool = instance[
+                "real_date"
+            ].dtype == "datetime64[ns]" or isinstance(
+                instance["real_date"].dtype, pd.DatetimeTZDtype
             )
+            result = result and correct_date_type
+
             # # check if the cid col is all str
             # # check if the xcat col is all str
         except:
