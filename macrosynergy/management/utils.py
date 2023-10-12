@@ -434,7 +434,7 @@ def ticker_df_to_qdf(df: pd.DataFrame) -> pd.DataFrame:
 
 def apply_slip(target_df: pd.DataFrame, slip: int,
                     cids: List[str], xcats: List[str],
-                    metrics: List[str], raise_error: bool) -> pd.DataFrame:
+                    metrics: List[str], raise_error: bool = True) -> pd.DataFrame:
         """
         Applied a slip, i.e. a negative lag, to the target DataFrame 
         for the given cross-sections and categories, on the given metrics.
