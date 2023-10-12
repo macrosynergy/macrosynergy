@@ -42,10 +42,18 @@ class Numeric(metaclass=NumericType):
     pass
 
 
-class NoneType(type):
+class NoneTypeMeta(type):
     """
     MetaClass to support type checks for `None`.
     """
 
     def __instancecheck__(cls, instance):
         return instance is None
+    
+class NoneType(metaclass=NoneTypeMeta):
+    """
+    Custom class definition for `None` that supports type checks for `None`.
+    """
+
+    # Alternatively, use `type(None)` directly
+    pass
