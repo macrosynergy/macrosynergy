@@ -230,33 +230,25 @@ def _apply_sig_conversion(
 
     # Arg checks
     expected_sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
-    found_sigs: List[str] = df.columns.tolist()
-    if not set(expected_sigs).issubset(set(found_sigs)):
+
+    if not set(expected_sigs).issubset(set(df.columns)):
         raise ValueError(
             "Some `cids` are missing the `sig` in the provided dataframe."
-            f"\nMissing: {set(expected_sigs) - set(found_sigs)}"
+            f"\nMissing: {set(expected_sigs) - set(df.columns)}"
         )
 
-    # DF with signals for the cids
-    sigs_df: pd.DataFrame = qdf_to_ticker_df(df=df[df["xcat"] == sig].copy())
+    # Pivot the DF to ticker format
+    dfW: pd.DataFrame = qdf_to_ticker_df(df=df)
 
-    # form a dictionary, which maps each cid_xcat to the corresponding cid_sig
-    cid_sig_dict: Dict[str, str] = {
-        (_cid + "_" + _xcat): (
-            _cid + "_" + sig
-        )  # key: <cid>_<xcat>, value: <cid>_<sig>
-        for _cid in cids
-        for _xcat in df[df["cid"] == _cid]["xcat"].unique().tolist()
-    }
+    # Multiply each ticker by the corresponding scale
+    for ix, tickerx in enumerate(expected_sigs):
+        if get_xcat(tickerx) == sig:
+            pass
 
-    df: pd.DataFrame = qdf_to_ticker_df(df=df)
+        sig_col: str = get_cid(tickerx) + "_" + sig
+        dfW[tickerx] = dfW[tickerx] * dfW[sig_col]
 
-    # Multiply the signals by the cross-section-specific signals - use the dictionary
-    # as mapping
-    for colx in df.columns:
-        df[colx] = df[colx] * sigs_df.loc[:, cid_sig_dict[colx]]
-
-    return ticker_df_to_qdf(df=df)
+    return ticker_df_to_qdf(df=dfW)
 
 
 def contract_signals(
