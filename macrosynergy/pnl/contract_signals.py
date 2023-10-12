@@ -150,37 +150,24 @@ def _apply_hscales(
                 f"\nMissing: {set(expected_hratios) - set(dfW.columns)}"
             )
 
-    # If hscales are numeric
-    HSCALE_XCAT: str = "HSCALE_XCAT"
-    if all([isinstance(x, Numeric) for x in hscales]):
-        for ix, hbx in enumerate(hbasket):
-            scale_col: str = get_cid(hbx) + "_" + HSCALE_XCAT
-            dfW[scale_col] = hscales[ix]
-
-            # replace the numeric scale with the HSCALE_XCAT
-            hscales[ix] = HSCALE_XCAT
-
-        # sanity check: all hscales are in the dataframe and are strings
-        assert all([isinstance(x, str) for x in hscales]), "Failed to set hscales"
-        assert all([x in dfW.columns for x in hscales]), "Failed to create hscales cols"
-
     # Calculations
 
-    # Apply the hedge ratios if specified
-    if hratios is not None:
-        for ix, tickerx in enumerate(hbasket):
-            hratio_col: str = get_cid(tickerx) + "_" + hratios
-            dfW[tickerx] = dfW[tickerx] * dfW[hratio_col]
-
-    # Multiply each ticker in the basket by the corresponding scale
     for ix, tickerx in enumerate(hbasket):
-        scale_col: str = get_cid(tickerx) + "_" + hscales[ix]
-        dfW[tickerx] = dfW[tickerx] * dfW[scale_col]
+        scale_var: Union[Numeric, pd.Series]
+        # If string uses the series from DF, else uses the numeric value
+        if isinstance(hscales[ix], str):
+            scale_var: pd.Series = dfW[tickerx + "_" + hscales[ix]]
+        else:
+            scale_var: Numeric = hscales[ix]
 
-    # drop where the col_name ends with HSCALE_XCAT
-    dfW: pd.DataFrame = dfW.loc[:, ~dfW.columns.str.endswith(HSCALE_XCAT)]
+        # If hratios is not None, use the series from DF, else use 1.0
+        ratio_var: Union[Numeric, pd.Series]
+        if hratios is not None:
+            ratio_var: pd.Series = dfW[tickerx + "_" + hratios[ix]]
+        else:
+            ratio_var: int = 1
 
-    return ticker_df_to_qdf(df=dfW)
+        dfW[tickerx] = dfW[tickerx] * scale_var * ratio_var
 
 
 def _apply_sig_conversion(
