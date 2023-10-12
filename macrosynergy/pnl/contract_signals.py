@@ -60,32 +60,57 @@ def _check_arg_types(
         ]
     )
 
-    correct_nested_types: bool = correct_types and all(
+    non_empty_iterables: bool = all(
         [
-            cids is None or all([isinstance(x, str) for x in cids]),
-            ctypes is None or all([isinstance(x, str) for x in ctypes]),
-            cscales is None or all([isinstance(x, (str, Numeric)) for x in cscales]),
-            csigns is None or all([isinstance(x, int) for x in csigns]),
-            hbasket is None or all([isinstance(x, str) for x in hbasket]),
-            hscales is None or all([isinstance(x, (str, Numeric)) for x in hscales]),
+            df is None or len(df) > 0,
+            cids is None or len(cids) > 0,
+            ctypes is None or len(ctypes) > 0,
+            cscales is None or len(cscales) > 0,
+            csigns is None or len(csigns) > 0,
+            hbasket is None or len(hbasket) > 0,
+            hscales is None or len(hscales) > 0,
         ]
+    )
+
+    correct_nested_types: bool = (
+        correct_types
+        and non_empty_iterables
+        and all(
+            [
+                cids is None or all([isinstance(x, str) for x in cids]),
+                ctypes is None or all([isinstance(x, str) for x in ctypes]),
+                cscales is None
+                or all([isinstance(x, (str, Numeric)) for x in cscales]),
+                csigns is None or all([isinstance(x, int) for x in csigns]),
+                hbasket is None or all([isinstance(x, str) for x in hbasket]),
+                hscales is None
+                or all([isinstance(x, (str, Numeric)) for x in hscales]),
+            ]
+        )
     )
 
     return correct_nested_types
 
 
-def _apply_cscales(
+def _gen_contract_signals(
     df: pd.DataFrame,
     cids: List[str],
+    sig: str,
     ctypes: List[str],
     cscales: List[Union[Numeric, str]],
     csigns: List[int],
+    sname: str,
 ) -> pd.DataFrame:
     """
-    Apply the contract scales to the dataframe.
+    Generate the contract tickers for the dataframe, by applying the contract scales
+    to the signals.
+    Effectively, generating the contract signal using the cross-section-specific signal
+    and the contract scales.
 
     :param <pd.DataFrame> df: QDF with the contract signals and scaling XCATs.
     :param <List[str]> cids: list of cross-sections whose signal is to be used.
+    :param <str> sig: the cross-section-specific signal that serves as the basis of
+        contract signals.
     :param <List[str]> ctypes: list of identifiers for the contract types that are
         to be traded. They typically correspond to the contract type acronyms
         that are used in JPMaQS for generic returns, carry and volatility, such as
@@ -96,192 +121,107 @@ def _apply_cscales(
         contract signals. These can be either a list of floats or a list of category
         tickers that serve as basis of translation. The former are fixed across time,
         the latter variable.
-
+    :param <List[int]> csigns: list of signs for the contract signals. These must be
+        either 1 for long position or -1 for short position.
+    :param <str> sname: name of the strategy. Default is "STRAT".
     :return <pd.DataFrame>: dataframe with scaling applied.
     """
     # Type checks
     if not _check_arg_types(
         df=df,
         cids=cids,
+        sig=sig,
         ctypes=ctypes,
         cscales=cscales,
         csigns=csigns,
+        sname=sname,
     ):
-        raise TypeError("Invalid arguments passed to `_apply_cscales()`")
+        raise TypeError("Invalid arguments passed to `_gen_contract_tickers()`")
 
-    # Arg checks
-    _ctypes: List[str] = df[df["xcat"].isin(ctypes)]["xcat"].unique().tolist()
-    if not set(_ctypes).issubset(set(ctypes)):
+    expected_contract_signals: List[str] = [f"{cx}_{sig}" for cx in cids]
+
+    # Pivot the DF to ticker format
+    df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
+
+    # Check that all the contract signals are in the dataframe
+    if not set(expected_contract_signals).issubset(set(df_wide.columns)):
         raise ValueError(
-            "Some `ctypes` are missing the `cscales` in the provided dataframe."
-            f"\nMissing: {set(_ctypes) - set(ctypes)}"
+            "Some `cids` are missing the `sig` in the provided dataframe."
+            f"\nMissing: {set(expected_contract_signals) - set(df_wide.columns)}"
         )
 
-    # Convert the dataframe to ticker format
-    dfW: pd.DataFrame = qdf_to_ticker_df(df=df)
-
-    # Multiply each cid_ctype by the corresponding scale and sign
+    # Multiply each cid_ctype by the corresponding scale and sign to produce the contract signal
     for _cid in cids:
         for ix, ctx in enumerate(ctypes):
-            ctype_col: str = _cid + "_" + ctx
+            sig_col: str = _cid + "_" + sig
             scale_var: Union[Numeric, pd.Series]
             # If the scale is a string, it must be a category ticker
             # Otherwise it is a fixed numeric value
             if isinstance(cscales[ix], str):
-                scale_var: pd.Series = dfW[_cid + "_" + cscales[ix]]
+                scale_var: pd.Series = df_wide[_cid + "_" + cscales[ix]]
             else:
                 scale_var: Numeric = cscales[ix]
 
-            # get the of tickers that start with ctype_col
-            ctype_cols: List[str] = [x for x in dfW.columns if x.startswith(ctype_col)]
-            for _col in ctype_cols:
-                dfW[_col] = dfW[_col] * csigns[ix] * scale_var
+            new_cont_name: str = _cid + "_" + ctx + "_" + sname + "_CSIG"
+            df_wide[new_cont_name] = df_wide[sig_col] * csigns[ix] * scale_var
 
-    return ticker_df_to_qdf(df=dfW)
+    return ticker_df_to_qdf(df=df_wide)
 
 
-def _apply_hscales(
+def _apply_hedge_ratios(
     df: pd.DataFrame,
     hbasket: List[str],
     hscales: List[Union[Numeric, str]],
     hratios: Optional[str] = None,
+    sname: str = "STRAT",
 ) -> pd.DataFrame:
-    """
-    Apply hedging logic to the basket of contracts.
-
-    :param <pd.DataFrame> df: QDF with the contract signals and scaling XCATs.
-    :param <List[str]> hbasket: list of contract identifiers in the format "<cid>_<ctype>"
-        that serve as constituents of the hedging basket.
-    param <List[str|float]> hscales: list of scaling factors (weights) for the basket.
-        These can be either a list of floats or a list of category tickers that serve
-        as basis of translation. The former are fixed across time, the latter variable.
-    :param <str> hratios: category names for cross-section-specific hedge ratios.
-    :return <pd.DataFrame>: dataframe with the contracts in the same currency/units.
-    """
     # Type checks
     if not _check_arg_types(
         df=df,
         hbasket=hbasket,
         hscales=hscales,
         hratios=hratios,
+        sname=sname,
     ):
-        raise TypeError("Invalid arguments passed to `_apply_hscales()`")
+        raise TypeError("Invalid arguments passed to `apply_hedge_ratios()`")
 
     # Pivot the DF to ticker format
-    dfW: pd.DataFrame = qdf_to_ticker_df(df=df)
-
-    # Check that all tickers in hbasket are in the dataframe
-    if not set(hbasket).issubset(set(dfW.columns)):
+    df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
+    # check if the hedge basket is in the dataframe
+    if not set(hbasket).issubset(set(df_wide.columns)):
         raise ValueError(
             "Some `hbasket` are missing in the provided dataframe."
-            f"\nMissing: {set(hbasket) - set(dfW.columns)}"
+            f"\nMissing: {set(hbasket) - set(df_wide.columns)}"
         )
 
+    # If specified, check if the hedge ratios are in the dataframe
     if hratios is not None:
         expected_hratios: List[str] = [f"{cx}_{hratios}" for cx in get_cid(hbasket)]
-        if not set(expected_hratios).issubset(set(dfW.columns)):
+        if not set(expected_hratios).issubset(set(df_wide.columns)):
             raise ValueError(
                 "Some `hratios` are missing in the provided dataframe."
-                f"\nMissing: {set(expected_hratios) - set(dfW.columns)}"
+                f"\nMissing: {set(expected_hratios) - set(df_wide.columns)}"
             )
 
-    # Calculations
-
-    for ix, tickerx in enumerate(hbasket):
+    # multiply each ticker by the corresponding scale and ratio
+    for ix, contractx in enumerate(hbasket):
         scale_var: Union[Numeric, pd.Series]
         # If string uses the series from DF, else uses the numeric value
         if isinstance(hscales[ix], str):
-            scale_var: pd.Series = dfW[tickerx + "_" + hscales[ix]]
+            scale_var: pd.Series = df_wide[contractx + "_" + hscales[ix]]
         else:
             scale_var: Numeric = hscales[ix]
 
         # If hratios is not None, use the series from DF, else use 1.0
         ratio_var: Union[Numeric, pd.Series]
         if hratios is not None:
-            ratio_var: pd.Series = dfW[tickerx + "_" + hratios[ix]]
+            ratio_var: pd.Series = df_wide[contractx + "_" + hratios[ix]]
         else:
             ratio_var: int = 1
 
-        dfW[tickerx] = dfW[tickerx] * scale_var * ratio_var
+        df_wide[contractx] = df_wide[contractx] * scale_var * ratio_var
 
-
-def _apply_sig_conversion(
-    df: pd.DataFrame,
-    sig: str,
-    cids: List[str],
-) -> pd.DataFrame:
-    """
-    Get the wide dataframe with all assets reported in the same currency/units.
-
-    :param <pd.DataFrame> df: QDF with the contract signals.
-    :param <str> sig: the cross-section-specific signal that serves as the basis of
-        contract signals.
-    :param <List[str]> cids: list of cross-sections whose signal is to be used.
-    :return <pd.DataFrame>: dataframe with the contracts in the same currency/units.
-    """
-    # Type checks
-    if not _check_arg_types(
-        df=df,
-        sig=sig,
-        cids=cids,
-    ):
-        raise TypeError("Invalid arguments passed to `_apply_sig_conversion()`")
-
-    # Arg checks
-    cid_sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
-
-    if not set(cid_sigs).issubset(set(df["cid"] + "_" + df["xcat"])):
-        raise ValueError(
-            "Some `cids` are missing the `sig` in the provided dataframe."
-            f"\nMissing: {set(cid_sigs) - set(df.columns)}"
-        )
-
-    # Pivot the DF to ticker format
-    dfW: pd.DataFrame = qdf_to_ticker_df(df=df)
-
-    # Multiply each ticker by the corresponding scale
-    for ix, contracts in enumerate(dfW.columns):
-        if get_xcat(contracts) != sig:
-            sig_col: str = get_cid(contracts) + "_" + sig
-            dfW[contracts] = dfW[contracts] * dfW[sig_col]
-
-    return ticker_df_to_qdf(df=dfW)
-
-
-def _calculate_contract_signals(
-    df: pd.DataFrame,
-    cids: List[str],
-    ctypes: List[str],
-    sname: str = "STRAT",
-) -> pd.DataFrame:
-    # Type checks
-    if not _check_arg_types(
-        df=df,
-        cids=cids,
-        ctypes=ctypes,
-        sname=sname,
-    ):
-        raise TypeError("Invalid arguments passed to `_calculate_contract_signals()`")
-
-    # Create a new DF with cols for each contract type, and dates from `df` as index
-
-    cid_ctypes: List[str] = [f"{cx}_{ctx}" for cx in cids for ctx in ctypes]
-    out_df: pd.DataFrame = pd.DataFrame(index=df["real_date"].unique().tolist())
-    for _ctx in cid_ctypes:
-        out_df[_ctx] = 0.0
-
-    # Pivot the DF to ticker format
-    dfW: pd.DataFrame = qdf_to_ticker_df(df=df)
-
-    # Sum up the contract signals for each contract type
-    for _cont in cid_ctypes:
-        sel_cols: List[str] = [x for x in dfW.columns if x.startswith(_cont)]
-        out_df[_cont] = dfW[sel_cols].sum(axis=1)
-
-    # rename all columns to include the strategy name
-    out_df.columns = [f"{cx}_{sname}_CSIG" for cx in out_df.columns]
-
-    return ticker_df_to_qdf(df=out_df)
+    return ticker_df_to_qdf(df=df_wide)
 
 
 def contract_signals(
@@ -453,31 +393,27 @@ def contract_signals(
         raise ValueError(e_msg)
 
     ## Apply the cross-section-specific signal to the dataframe
-    df: pd.DataFrame = _apply_sig_conversion(df=df, sig=sig, cids=cids)
+    # df: pd.DataFrame = _apply_sig_conversion(df=df, sig=sig, cids=cids)
 
-    ## Apply contract scales
-    df: pd.DataFrame = _apply_cscales(
+    ## Generate the contract signals
+    df: pd.DataFrame = _gen_contract_signals(
         df=df,
         cids=cids,
+        sig=sig,
         ctypes=ctypes,
         cscales=cscales,
         csigns=csigns,
+        sname=sname,
     )
 
     ## Apply hedging logic
     if hbasket is not None:
-        df: pd.DataFrame = _apply_hscales(
+        df: pd.DataFrame = _apply_hedge_ratios(
             df=df,
             hbasket=hbasket,
             hscales=hscales,
             hratios=hratios,
         )
-
-    ## Calculate the contract signals
-
-    df: pd.DataFrame = _calculate_contract_signals(
-        df=df, cids=cids, ctypes=ctypes, sname=sname
-    )
 
     return df
 
