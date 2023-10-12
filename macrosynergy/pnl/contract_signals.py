@@ -80,17 +80,17 @@ def _apply_cscales(
     # Convert the dataframe to ticker format
     dfW: pd.DataFrame = qdf_to_ticker_df(df=df)
 
-    # Multiply each cid_ctype by the corresponding scale
+    # Multiply each cid_ctype by the corresponding scale and sign
     for _cid in cids:
         for ix, ctx in enumerate(ctypes):
             ctype_col: str = _cid + "_" + ctx
             scale_var: Union[Numeric, pd.Series]
-
-            scale_var = (
-                dfW[_cid + "_" + cscales[ix]]
-                if isinstance(cscales[ix], str)
-                else cscales[ix]
-            )
+            # If the scale is a string, it must be a category ticker
+            # Otherwise it is a fixed numeric value
+            if isinstance(cscales[ix], str):
+                scale_var: pd.Series = dfW[_cid + "_" + cscales[ix]]
+            else:
+                scale_var: Numeric = cscales[ix]
 
             dfW[ctype_col] = dfW[ctype_col] * csigns[ix] * scale_var
 
@@ -407,10 +407,9 @@ def contract_signals(
         raise ValueError(e_msg)
 
     ## Apply the cross-section-specific signal to the dataframe
-    if False:
-        df: pd.DataFrame = _apply_sig_conversion(df=df, sig=sig, cids=cids)
+    df: pd.DataFrame = _apply_sig_conversion(df=df, sig=sig, cids=cids)
 
-    # TODO: Apply contract scales
+    ## Apply contract scales
     df: pd.DataFrame = _apply_cscales(
         df=df,
         cids=cids,
@@ -419,7 +418,7 @@ def contract_signals(
         csigns=csigns,
     )
 
-    # TODO: Apply hscales if specified
+    ## Apply hscales if specified
 
     return df
 
