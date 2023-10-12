@@ -448,7 +448,8 @@ class SignalsReturns(SignalBase):
         
         type_values = ["panel", "mean_years", "mean_cids", "pr_years", "pr_cids"]
         rows_values = ["xcat", "ret", "freq", "agg_sigs"]
-
+        if not type in type_values:
+             raise ValueError(f"Type must be one of {type_values}")
         for row in rows:
             if not row in rows_values:
                 raise ValueError(f"Rows must only contain {rows_values}")
