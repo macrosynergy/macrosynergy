@@ -285,6 +285,41 @@ class SignalBase:
 
 
 class SignalsReturns(SignalBase):
+    """
+    Class for analysing and visualizing signal and a return series.
+
+    :param <pd.Dataframe> df: standardized DataFrame with the following necessary
+        columns: 'cid', 'xcat', 'real_date' and 'value.
+    :param <str, List[str]> rets: one or several target return categories.
+    :param <str, List[str]> sigs: list of signal categories to be considered
+    :param <int, List[int[> signs: list of signs (direction of impact) to be applied, 
+        corresponding to signs.
+        Default is 1. i.e. impact is supposed to be positive.
+        When -1 is chosen for one or all list elements the signal category
+        hat category is taken in negative terms.
+    :param <int> slip: slippage of signal application in days. This effectively lags
+    the signal series, i.e. values are recorded on a future date, simulating
+    time it takes to trade on the signal
+    :param <bool> cosp: If True the comparative statistics are calculated only for the
+        "communal sample periods", i.e. periods and cross-sections that have values
+        for all compared signals. Default is False.
+    :param <str> start: earliest date in ISO format. Default is None in which case the
+        earliest date available will be used.
+    :param <str> end: latest date in ISO format. Default is None in which case the
+        latest date in the df will be used.
+    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
+        the data frame. If one cross-section has several blacklist periods append numbers
+        to the cross-section code.
+    :param <str, List[str]> freqs: letters denoting frequency at which the series are to 
+        be sampled.
+        This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
+        The return series will always be summed over the sample period.
+        The signal series will be aggregated according to the values of `agg_sigs`.
+    :param <int, List[int[> agg_sigs: aggregation method applied to the signal values in 
+        down-sampling. The default is "last". Alternatives are "mean", "median" and "sum".
+        If a single aggregation type is chosen for multiple signal categories it is 
+        applied to all of them.
+    """
     def __init__(
         self,
         df: pd.DataFrame,
@@ -505,12 +540,12 @@ class SignalReturnRelations(SignalBase):
     :param <str> ret: return category.
     :param <str> sig: primary signal category for which detailed relational statistics
         can be calculated.
-    :param <str, List[str]> rival_sigs: "rival signals" for which basic relational
+    :param <str, List[str]> rival_sigs: "rival signals" categoies whose basic relational
         statistics can be calculated for comparison with the primary signal category. The
         table, if rival signals are defined, will be generated upon instantiation of the
         object.
-        N.B.: parameters set for sig, such as sig_neg, freq, and agg_sig are equally
-        applied to all rival signals.
+        N.B.: parameters that are applied for sig (e.g. sig_neg, freq, and agg_sig) are 
+        equally applied to all rival signals.
     :param <bool> sig_neg: if set to True puts the signal in negative terms for all
         analysis. Default is False.
     :param <bool> cosp: If True the comparative statistics are calculated only for the
@@ -1001,6 +1036,7 @@ class SignalReturnRelations(SignalBase):
 
 
 if __name__ == "__main__":
+
     cids = ["AUD", "CAD", "GBP", "NZD"]
     xcats = ["XR", "CRY", "GROWTH", "INFL"]
     df_cids = pd.DataFrame(
@@ -1023,6 +1059,20 @@ if __name__ == "__main__":
     black = {"AUD": ["2006-01-01", "2015-12-31"], "GBP": ["2012-01-01", "2100-01-01"]}
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+
+    sr = SignalsReturns(
+        dfd,
+        rets=["XR"],
+        sigs=["CRY", "GROWTH"],
+        signs=[1, 1],
+        cosp=True,
+        freqs=["M", "Q"],
+        agg_sigs=["last", "mean"],
+    )
+
+    df_single = sr.single_relation_table()
+    df_mult = sr.multiple_relations_table()
+    df_sst = sr.single_statistic_table("bal_accuracy")
 
     # Additional signals.
     srn = SignalReturnRelations(
