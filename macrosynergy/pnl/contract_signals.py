@@ -80,40 +80,19 @@ def _apply_cscales(
     # Convert the dataframe to ticker format
     dfW: pd.DataFrame = qdf_to_ticker_df(df=df)
 
-    # SCALE_XCAT - an xcat to be used as a scale when numerics are used
-    CSCALE_XCAT: str = "CSCALE_XCAT"
-    # If cscales are numeric
-    if all([isinstance(x, Numeric) for x in cscales]):
-        for ix, ctx in enumerate(ctypes):
-            ctype_scale: str = ctx + "_" + CSCALE_XCAT
-            for _cid in get_cid(df.columns):
-                scale_col: str = _cid + "_" + ctype_scale
-                dfW[scale_col] = cscales[ix]
-
-            # replace the numeric scale with the CSCALE_XCAT
-            cscales[ix] = ctype_scale
-
-        # sanity check: all cscales are in the dataframe and are strings
-        assert all([isinstance(x, str) for x in cscales]), "Failed to set cscales"
-        assert all([x in dfW.columns for x in cscales]), "Failed to create cscales cols"
-
-    # Apply signs to the scales
-    for ix, ctx in enumerate(ctypes):
-        Cscale_xcat: str = cscales[ix]
-        for _cid in get_cid(df.columns):
-            scale_col: str = _cid + "_" + Cscale_xcat
-            dfW[scale_col] = csigns[ix] * dfW[scale_col]
-
     # Multiply each cid_ctype by the corresponding scale
-    for _cid in get_cid(df.columns):
+    for _cid in cids:
         for ix, ctx in enumerate(ctypes):
-            Cscale_xcat: str = cscales[ix]
-            scale_col: str = _cid + "_" + Cscale_xcat
             ctype_col: str = _cid + "_" + ctx
-            dfW[ctype_col] = dfW[ctype_col] * dfW[scale_col]
+            scale_var: Union[Numeric, pd.Series]
 
-    # drop where col_name ends with CSCALE_XCAT
-    dfW: pd.DataFrame = dfW.loc[:, ~dfW.columns.str.endswith(CSCALE_XCAT)]
+            scale_var = (
+                dfW[_cid + "_" + cscales[ix]]
+                if isinstance(cscales[ix], str)
+                else cscales[ix]
+            )
+
+            dfW[ctype_col] = dfW[ctype_col] * csigns[ix] * scale_var
 
     return ticker_df_to_qdf(df=dfW)
 
@@ -242,11 +221,9 @@ def _apply_sig_conversion(
 
     # Multiply each ticker by the corresponding scale
     for ix, tickerx in enumerate(expected_sigs):
-        if get_xcat(tickerx) == sig:
-            pass
-
-        sig_col: str = get_cid(tickerx) + "_" + sig
-        dfW[tickerx] = dfW[tickerx] * dfW[sig_col]
+        if get_xcat(tickerx) != sig:
+            sig_col: str = get_cid(tickerx) + "_" + sig
+            dfW[tickerx] = dfW[tickerx] * dfW[sig_col]
 
     return ticker_df_to_qdf(df=dfW)
 
