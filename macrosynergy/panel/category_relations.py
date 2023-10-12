@@ -12,7 +12,7 @@ import warnings
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import categories_df
-from macrosynergy.management.utils import apply_slip
+from macrosynergy.management.utils import apply_slip as apply_slip_util
 
 
 class CategoryRelations(object):
@@ -134,13 +134,12 @@ class CategoryRelations(object):
             metrics_found: List[str] = list(
                 set(df.columns) - set(["cid", "xcat", "real_date"])
             )
-            df = apply_slip(
-                target_df=df,
+            df = self.apply_slip(
+                df=df,
                 slip=self.slip,
                 cids=self.cids,
                 xcats=self.xcats,
                 metrics=metrics_found,
-                raise_error=False,
             )
 
         # capture warning from intersection_cids, in case the two categories do not
@@ -244,6 +243,17 @@ class CategoryRelations(object):
         usable = list(set_1.intersection(set_2).intersection(set(cids)))
 
         return usable
+
+    def apply_slip(
+        df: pd.DataFrame,
+        slip: int,
+        cids: List[str],
+        xcats: List[str],
+        metrics: List[str],
+    ) -> pd.DataFrame:
+        return apply_slip_util(
+            df=df, slip=slip, cids=cids, xcats=xcats, metrics=metrics, raise_error=True
+        )
 
     @classmethod
     def time_series(

@@ -1,6 +1,5 @@
 import unittest
 from macrosynergy.signal.signal_return import SignalReturnRelations
-from macrosynergy.management.utils import apply_slip
 
 from tests.simulate import make_qdf
 from sklearn.metrics import accuracy_score, precision_score
@@ -555,13 +554,12 @@ class TestAll(unittest.TestCase):
         test_slip: int = 5
         # apply the slip method
         print(int(min(df["vx"])))
-        out_df = apply_slip(
-            target_df=df,
+        out_df = SignalReturnRelations.apply_slip(
+            df=df,
             slip=test_slip,
             xcats=sel_xcats,
             cids=sel_cids,
-            metrics=["value", "vx"],
-            raise_error=True
+            metrics=["value", "vx"]
         )
 
         # NOTE: casting df.vx to int as pandas casts it to float64
@@ -588,25 +586,23 @@ class TestAll(unittest.TestCase):
 
         test_slip = int(max(df["vx"])) + 1
 
-        out_df = apply_slip(
-            target_df=df,
+        out_df = SignalReturnRelations.apply_slip(
+            df=df,
             slip=test_slip,
             xcats=sel_xcats,
             cids=sel_cids,
             metrics=["value", "vx"],
-            raise_error=True
         )
 
         self.assertTrue(out_df["vx"].isna().all())
         self.assertTrue(out_df["value"].isna().all())
 
-        out_df = apply_slip(
-            target_df=df,
+        out_df = SignalReturnRelations.apply_slip(
+            df=df,
             slip=test_slip,
             xcats=sel_xcats,
             cids=sel_cids,
             metrics=["value"],
-            raise_error=True
         )
 
         self.assertTrue((df["vx"] == out_df["vx"]).all())
@@ -616,39 +612,36 @@ class TestAll(unittest.TestCase):
         df: pd.DataFrame = test_df.copy()
 
         with self.assertRaises(ValueError):
-            apply_slip(
-                target_df=df, slip=-1, xcats=sel_xcats, cids=sel_cids, metrics=["value"], raise_error=True
+            SignalReturnRelations.apply_slip(
+                df=df, slip=-1, xcats=sel_xcats, cids=sel_cids, metrics=["value"],
             )
 
         with self.assertRaises(ValueError):
-            apply_slip(
-                target_df=df,
+            SignalReturnRelations.apply_slip(
+                df=df,
                 slip=-1,
                 xcats=sel_xcats,
                 cids=["ac_dc"],
                 metrics=["value"],
-                raise_error=True
             )
 
         # check that a value error is raised when cids and xcats are not in the dataframe
         with self.assertWarns(UserWarning):
-            apply_slip(
-                target_df=df,
+            SignalReturnRelations.apply_slip(
+                df=df,
                 slip=2,
                 xcats=["metallica"],
                 cids=["ac_dc"],
                 metrics=["value"],
-                raise_error=True
             )
 
         with self.assertWarns(UserWarning):
-            apply_slip(
-                target_df=df,
+            SignalReturnRelations.apply_slip(
+                df=df,
                 slip=2,
                 xcats=["metallica"],
                 cids=sel_cids,
                 metrics=["value"],
-                raise_error=True
             )
 
         try:

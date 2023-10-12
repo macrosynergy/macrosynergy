@@ -7,7 +7,6 @@ from random import randint
 from tests.simulate import make_qdf
 from macrosynergy.panel.category_relations import CategoryRelations
 from macrosynergy.management.shape_dfs import categories_df
-from macrosynergy.management.utils import apply_slip
 from typing import List, Tuple, Dict, Union, Optional
 import warnings
 
@@ -477,13 +476,12 @@ class TestAll(unittest.TestCase):
         test_slip: int = 5
         # apply the slip method
         print(int(min(df["vx"])))
-        out_df = apply_slip(
-            target_df=df,
+        out_df = CategoryRelations.apply_slip(
+            df=df,
             slip=test_slip,
             xcats=sel_xcats,
             cids=sel_cids,
             metrics=["value", "vx"],
-            raise_error=False,
         )
 
         # NOTE: casting df.vx to int as pandas casts it to float64
@@ -510,25 +508,23 @@ class TestAll(unittest.TestCase):
 
         test_slip = int(max(df["vx"])) + 1
 
-        out_df = apply_slip(
-            target_df=df,
+        out_df = CategoryRelations.apply_slip(
+            df=df,
             slip=test_slip,
             xcats=sel_xcats,
             cids=sel_cids,
             metrics=["value", "vx"],
-            raise_error=False,
         )
 
         self.assertTrue(out_df["vx"].isna().all())
         self.assertTrue(out_df["value"].isna().all())
 
-        out_df = apply_slip(
-            target_df=df,
+        out_df = CategoryRelations.apply_slip(
+            df=df,
             slip=test_slip,
             xcats=sel_xcats,
             cids=sel_cids,
             metrics=["value"],
-            raise_error=False,
         )
 
         self.assertTrue((df["vx"] == out_df["vx"]).all())
@@ -538,45 +534,41 @@ class TestAll(unittest.TestCase):
         df: pd.DataFrame = test_df.copy()
 
         with self.assertRaises(ValueError):
-            apply_slip(
-                target_df=df,
+            CategoryRelations.apply_slip(
+                df=df,
                 slip=-1,
                 xcats=sel_xcats,
                 cids=sel_cids,
                 metrics=["value"],
-                raise_error=False,
             )
 
         # check that a value error is raised when cids and xcats are not in the dataframe
         print(df)
         with self.assertRaises(ValueError):
-            apply_slip(
-                target_df=df,
+            CategoryRelations.apply_slip(
+                df=df,
                 slip=2,
                 xcats=["metallica"],
                 cids=["ac_dc"],
                 metrics=["value"],
-                raise_error=False,
             )
 
         with self.assertRaises(ValueError):
-            apply_slip(
-                target_df=df,
+            CategoryRelations.apply_slip(
+                df=df,
                 slip=2,
                 xcats=["metallica"],
                 cids=sel_cids,
                 metrics=["value"],
-                raise_error=False,
             )
 
         with self.assertRaises(ValueError):
-            apply_slip(
-                target_df=df,
+            CategoryRelations.apply_slip(
+                df=df,
                 slip=-1,
                 xcats=sel_xcats,
                 cids=["ac_dc"],
                 metrics=["value"],
-                raise_error=False,
             )
         try:
             cat_rel: CategoryRelations = CategoryRelations(

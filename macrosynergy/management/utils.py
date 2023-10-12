@@ -432,7 +432,7 @@ def ticker_df_to_qdf(df: pd.DataFrame) -> pd.DataFrame:
     # standardise and return
     return standardise_dataframe(df=df)
 
-def apply_slip(target_df: pd.DataFrame, slip: int,
+def apply_slip(df: pd.DataFrame, slip: int,
                     cids: List[str], xcats: List[str],
                     metrics: List[str], raise_error: bool = True) -> pd.DataFrame:
         """
@@ -449,29 +449,29 @@ def apply_slip(target_df: pd.DataFrame, slip: int,
         :raises <ValueError>: If the provided parameters are semantically incorrect.
         """
 
-        target_df = target_df.copy(deep=True)
+        df = df.copy()
         if not (isinstance(slip, int) and slip >= 0):
             raise ValueError("Slip must be a non-negative integer.")
         
         if cids is None:
-            cids = target_df['cid'].unique().tolist()
+            cids = df['cid'].unique().tolist()
         if xcats is None:
-            xcats = target_df['xcat'].unique().tolist()
+            xcats = df['xcat'].unique().tolist()
 
         sel_tickers : List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
-        target_df['tickers'] = target_df['cid'] + '_' + target_df['xcat']
+        df['tickers'] = df['cid'] + '_' + df['xcat']
 
-        if not set(sel_tickers).issubset(set(target_df['tickers'].unique())):
+        if not set(sel_tickers).issubset(set(df['tickers'].unique())):
             if raise_error:
-                warnings.warn("Tickers targetted for applying slip are not present in the DataFrame.\n"
-                f"Missing tickers: {sorted(list(set(sel_tickers) - set(target_df['tickers'].unique())))}")
-            else:
                 raise ValueError("Tickers targetted for applying slip are not present in the DataFrame.\n"
-                f"Missing tickers: {sorted(list(set(sel_tickers) - set(target_df['tickers'].unique())))}")
+                f"Missing tickers: {sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}")
+            else:
+                warnings.warn("Tickers targetted for applying slip are not present in the DataFrame.\n"
+                f"Missing tickers: {sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}")
 
         slip : int = slip.__neg__()
         
-        target_df[metrics] = target_df.groupby('tickers')[metrics].shift(slip)
-        target_df = target_df.drop(columns=['tickers'])
+        df[metrics] = df.groupby('tickers')[metrics].shift(slip)
+        df = df.drop(columns=['tickers'])
         
-        return target_df
+        return df

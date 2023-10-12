@@ -13,7 +13,7 @@ import warnings
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df, categories_df
-from macrosynergy.management.utils import apply_slip
+from macrosynergy.management.utils import apply_slip as apply_slip_util
 
 
 class SignalReturnRelations:
@@ -152,13 +152,12 @@ class SignalReturnRelations:
         metric_cols: List[str] = list(
             set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
         )
-        dfd: pd.DataFrame = apply_slip(
-            target_df=dfd,
+        dfd: pd.DataFrame = self.apply_slip(
+            df=dfd,
             slip=slip,
             cids=cids,
             xcats=xcats,
             metrics=metric_cols,
-            raise_error=True,
         )
 
         # Naturally, only applicable if rival signals have been passed.
@@ -440,6 +439,17 @@ class SignalReturnRelations:
         y_input = 0.45 if y_axis(min_value) else min_value
 
         return y_input
+
+    def apply_slip(
+        df: pd.DataFrame,
+        slip: int,
+        cids: List[str],
+        xcats: List[str],
+        metrics: List[str],
+    ) -> pd.DataFrame:
+        return apply_slip_util(
+            df=df, slip=slip, cids=cids, xcats=xcats, metrics=metrics, raise_error=False
+        )
 
     def accuracy_bars(
         self,
