@@ -59,7 +59,10 @@ def _apply_cscales(
             isinstance(ctypes, list),
             all([isinstance(x, str) for x in ctypes]),
             isinstance(cscales, list),
-            all([isinstance(x, (str, Numeric)) for x in cscales]),
+            (
+                all([isinstance(x, str) for x in cscales])
+                ^ all([isinstance(x, Numeric) for x in cscales])
+            ),  # must be Numeric XOR str, not both or neither
             isinstance(csigns, list),
             all([isinstance(x, int) for x in csigns]),
             len(ctypes) == len(cscales) == len(csigns),
@@ -78,36 +81,39 @@ def _apply_cscales(
     dfW: pd.DataFrame = qdf_to_ticker_df(df=df)
 
     # SCALE_XCAT - an xcat to be used as a scale when numerics are used
-    SCALE_XCAT: str = "SCALE_XCAT"
+    CSCALE_XCAT: str = "CSCALE_XCAT"
     # If cscales are numeric
     if all([isinstance(x, Numeric) for x in cscales]):
         for ix, ctx in enumerate(ctypes):
-            ctype_scale: str = ctx + "_" + SCALE_XCAT
+            ctype_scale: str = ctx + "_" + CSCALE_XCAT
             for _cid in get_cid(df.columns):
                 scale_col: str = _cid + "_" + ctype_scale
                 dfW[scale_col] = cscales[ix]
 
-            # replace the numeric scale with the SCALE_XCAT
+            # replace the numeric scale with the CSCALE_XCAT
             cscales[ix] = ctype_scale
 
         # sanity check: all cscales are in the dataframe and are strings
         assert all([isinstance(x, str) for x in cscales]), "Failed to set cscales"
-        assert all([x in dfW.columns for x in cscales]), "Failed to set cscales"
+        assert all([x in dfW.columns for x in cscales]), "Failed to create cscales cols"
 
     # Apply signs to the scales
     for ix, ctx in enumerate(ctypes):
-        scale_xcat: str = cscales[ix]
+        Cscale_xcat: str = cscales[ix]
         for _cid in get_cid(df.columns):
-            scale_col: str = _cid + "_" + scale_xcat
+            scale_col: str = _cid + "_" + Cscale_xcat
             dfW[scale_col] = csigns[ix] * dfW[scale_col]
 
     # Multiply each cid_ctype by the corresponding scale
     for _cid in get_cid(df.columns):
         for ix, ctx in enumerate(ctypes):
-            scale_xcat: str = cscales[ix]
-            scale_col: str = _cid + "_" + scale_xcat
+            Cscale_xcat: str = cscales[ix]
+            scale_col: str = _cid + "_" + Cscale_xcat
             ctype_col: str = _cid + "_" + ctx
             dfW[ctype_col] = dfW[ctype_col] * dfW[scale_col]
+
+    # drop where col_name ends with CSCALE_XCAT
+    dfW: pd.DataFrame = dfW.loc[:, ~dfW.columns.str.endswith(CSCALE_XCAT)]
 
     return ticker_df_to_qdf(df=dfW)
 
