@@ -203,22 +203,22 @@ def _apply_sig_conversion(
     ), "Invalid arguments passed to `_apply_sig_conversion()`"
 
     # Arg checks
-    expected_sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
+    cid_sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
 
-    if not set(expected_sigs).issubset(set(df["cid"] + "_" + df["xcat"])):
+    if not set(cid_sigs).issubset(set(df["cid"] + "_" + df["xcat"])):
         raise ValueError(
             "Some `cids` are missing the `sig` in the provided dataframe."
-            f"\nMissing: {set(expected_sigs) - set(df.columns)}"
+            f"\nMissing: {set(cid_sigs) - set(df.columns)}"
         )
 
     # Pivot the DF to ticker format
     dfW: pd.DataFrame = qdf_to_ticker_df(df=df)
 
     # Multiply each ticker by the corresponding scale
-    for ix, tickerx in enumerate(expected_sigs):
-        if get_xcat(tickerx) != sig:
-            sig_col: str = get_cid(tickerx) + "_" + sig
-            dfW[tickerx] = dfW[tickerx] * dfW[sig_col]
+    for ix, contracts in enumerate(dfW.columns):
+        if get_xcat(contracts) != sig:
+            sig_col: str = get_cid(contracts) + "_" + sig
+            dfW[contracts] = dfW[contracts] * dfW[sig_col]
 
     return ticker_df_to_qdf(df=dfW)
 
@@ -282,8 +282,8 @@ def contract_signals(
     :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
         This dataframe must contain the cross-section-specific signals and possibly
-        categories for variable scale factors of the main contracts and the contracts
-        in the hedging basket, as well as cross-section specific hedge ratios
+        [1] categories for variable scale factors of the main contracts, [2] contracts
+        of a hedging basket, and [3] cross-section specific hedge ratios
     :param <str> sig: the cross-section-specific signal that serves as the basis of
         contract signals.
     :param <List[str]> cids: list of cross-sections whose signal is to be used.
@@ -291,13 +291,16 @@ def contract_signals(
         to be traded. They typically correspond to the contract type acronyms
         that are used in JPMaQS for generic returns, carry and volatility, such as
         "FX" for FX forwards or "EQ" for equity index futures.
+        If n contracts are traded per cross sections `ctypes` must contain n arguments.
         N.B. Overall a contract is identified by the combination of its cross-section
         and its contract type "<cid>_<ctype>".
     :param <List[str|float]> cscales: list of scaling factors for the contract signals.
         These can be either a list of floats or a list of category tickers that serve
         as basis of translation. The former are fixed across time, the latter variable.
+        The list `cscales` must be of the same length as `ctypes`.
     :param <List[float]> csigns: list of signs for the contract signals. These must be
         either 1 for long position or -1 for short position.
+        The list `csigns` must be of the same length as `ctypes` and `cscales`.
     :param <List[str]> hbasket: list of contract identifiers in the format "<cid>_<ctype>"
         that serve as constituents of the hedging basket.
     param <List[str|float]> hscales: list of scaling factors (weights) for the basket.
@@ -309,7 +312,7 @@ def contract_signals(
     :param <str> end: latest date in ISO format. Default is None and latest date in df
         is used.
     :param <dict> blacklist: cross-sections with date ranges that should be excluded
-        from the dataframe.
+        from the calculation of contract signals.
     :param <str> sname: name of the strategy. Default is "STRAT".
 
     :return <pd.DataFrame>: with the contract signals for all traded contracts and the
@@ -460,7 +463,7 @@ if __name__ == "__main__":
     from macrosynergy.management.simulate_quantamental_data import make_test_df
 
     cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
-    xcats: List[str] = ["FXXR_NSA", "EQXR_NSA", "IRXR_NSA", "CDS_NSA", "TOUSD"]
+    xcats: List[str] = ["TOUSD"]
 
     start: str = "2000-01-01"
     end: str = "2020-12-31"
@@ -478,5 +481,5 @@ if __name__ == "__main__":
         df=df,
         sig="TOUSD",
         cids=cids,
-        ctypes=["FXXR", "EQXR", "IRXR", "CDS"],
+        ctypes=["FX", "EQ", "IRS", "CDS"]
     )
