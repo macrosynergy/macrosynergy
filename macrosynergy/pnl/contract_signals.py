@@ -97,7 +97,10 @@ def _apply_cscales(
             else:
                 scale_var: Numeric = cscales[ix]
 
-            dfW[ctype_col] = dfW[ctype_col] * csigns[ix] * scale_var
+            # get the of tickers that start with ctype_col
+            ctype_cols: List[str] = [x for x in dfW.columns if x.startswith(ctype_col)]
+            for _col in ctype_cols:
+                dfW[_col] = dfW[_col] * csigns[ix] * scale_var
 
     return ticker_df_to_qdf(df=dfW)
 
@@ -202,7 +205,7 @@ def _apply_sig_conversion(
     # Arg checks
     expected_sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
 
-    if not set(expected_sigs).issubset(set(df.columns)):
+    if not set(expected_sigs).issubset(set(df["cid"] + "_" + df["xcat"])):
         raise ValueError(
             "Some `cids` are missing the `sig` in the provided dataframe."
             f"\nMissing: {set(expected_sigs) - set(df.columns)}"
