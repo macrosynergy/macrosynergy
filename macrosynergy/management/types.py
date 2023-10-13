@@ -84,8 +84,11 @@ class QuantamentalDataFrameMeta(type):
 
 class QuantamentalDataFrame(metaclass=QuantamentalDataFrameMeta):
     """
-    Custom class definition for a QuantamentalDataFrame that supports type checks for
+    Class definition for a QuantamentalDataFrame that supports type checks for
     `QuantamentalDataFrame`.
+    Returns True if the instance is a `pd.DataFrame` with the standard Quantamental
+    DataFrame columns ("cid", "xcat", "real_date") and at least one additional column.
+    It also checks if the "real_date" column is a datetime type.
 
     Usage:
     >>> df: pd.DataFrame = make_test_df()
