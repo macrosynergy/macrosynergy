@@ -4,7 +4,7 @@ Tools to produce, visualise and use walk-forward validation splits across panels
 
 import logging
 import datetime
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
