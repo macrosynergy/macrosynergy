@@ -536,6 +536,7 @@ def panel_cv_scores(
     estimators: dict,
     scoring: dict,
     verbose: Optional[int] = 0,
+    show_std: Optional[bool] = True,
 ):
     """
     Returns a dataframe cross-validation scores
@@ -553,6 +554,8 @@ def panel_cv_scores(
         names and the values are callables
     :param <int> verbose: integer specifying verbosity of the cross-validation process.
         Default is 0.
+    :param <bool> show_std: boolean specifying whether or not to show the standard
+        deviation of the cross-validation scores. Default is False.
 
     :return <pd.DataFrame> metrics_df: dataframe comprising means & standard deviations of
         cross-validation metrics for each sklearn estimator, over the walk-forward history.
@@ -599,6 +602,8 @@ def panel_cv_scores(
     metrics_df = pd.DataFrame(
         columns=estimator_names,
         index=pd.MultiIndex.from_product([metric_names, ["mean", "std"]]),
+    ) if show_std else pd.DataFrame(
+        columns=estimator_names, index=pd.MultiIndex.from_product([metric_names, ["mean"]])
     )
 
     for estimator_name, estimator in estimators.items():
@@ -611,9 +616,10 @@ def panel_cv_scores(
             metrics_df.loc[(metric_name, "mean"), estimator_name] = np.mean(
                 cv_results[f"test_{metric_name}"]
             )
-            metrics_df.loc[(metric_name, "std"), estimator_name] = np.std(
-                cv_results[f"test_{metric_name}"]
-            )
+            if show_std:
+                metrics_df.loc[(metric_name, "std"), estimator_name] = np.std(
+                    cv_results[f"test_{metric_name}"]
+                )
 
     return metrics_df
 
