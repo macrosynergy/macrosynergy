@@ -237,6 +237,9 @@ def main(
     repo_path: str, source_branch: str, base_branch: str, output_path: str
 ) -> None:
     repo: git.Repo = git.Repo(repo_path)
+    # fetch origin and all branch names and tags
+    repo.remotes.origin.fetch()
+
     if source_branch == "":
         # check if the repo is in a detached head state
         if repo.head.is_detached:
@@ -256,18 +259,29 @@ def main(
         (source_branch, "source_branch"),
         (base_branch, "base_branch"),
     ]:
+        # if there is no origin/ prefix, add it and warn
         if branch not in branch_tag_commits:
-            raise ValueError(f"{name} {branch} is not a valid branch or tag")
+            if not str(branch).startswith("origin/"):
+                branch = f"origin/{branch}"
+                print(f"Warning: {name} {branch} has no origin/ prefix. Adding it.")
+                if branch not in branch_tag_commits:
+                    raise ValueError(f"{name} {branch} is not a valid branch or tag")
 
-    result = get_diff_prs_and_authors(repo_path, source_branch, base_branch)
+    result = get_diff_prs_and_authors(
+        repo_path=repo_path, source_branch=source_branch, base_branch=base_branch
+    )
 
     name: str = f"Changes: {source_branch} → {base_branch}"
 
     md: str = json_to_md(result, title=name)
 
-    save_path = output_path
-    with open(save_path, "w", encoding="utf8") as f:
+    # create the dirs to output_path if they don't exist
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w", encoding="utf8") as f:
         f.write(md)
+
+    # print where the file was saved
+    print(f"Release notes saved to {os.path.abspath(output_path)}")
 
 
 if __name__ == "__main__":
@@ -292,7 +306,7 @@ if __name__ == "__main__":
         "--output_path",
         "-o",
         type=str,
-        default="release_notes.md",
+        default="docs/build/release_notes.md",
         help="output file path",
     )
 
