@@ -600,8 +600,8 @@ def panel_cv_scores(
     # construct the dataframe to return
 
     if show_longbias:
-        estimator["Long proportion"] = make_scorer(lambda y_true, y_pred: np.sum(y_true > 0)/len(y_true))
-        
+        estimators["Long proportion"] = make_scorer(lambda y_true, y_pred: np.sum(y_true > 0)/len(y_true))
+
     estimator_names = list(estimators.keys())
     metric_names = list(scoring.keys())
 
