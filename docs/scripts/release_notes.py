@@ -166,15 +166,15 @@ def get_pr_info(pr_number: int, owner: str = REPO_OWNER, repo: str = REPO_NAME) 
 
 
 def get_diff_prs_and_authors(
-    repo_path: str, ref_branch: str, head_branch: str
+    repo_path: str, source_branch: str, base_branch: str
 ) -> Dict[str, List[str]]:
     """
     Get the names (numbers) of pull requests and their authors that are different between
         the input and output branches.
 
     :param <str> repo_path: Path to the local git repository.
-    :param <str> ref_branch: The name of the first branch.
-    :param <str> head_branch: The name of the second branch.
+    :param <str> source_branch: The name of the first branch.
+    :param <str> base_branch: The name of the second branch.
     :return <Dict[str, List[str]]>: A dictionary with the PR numbers as keys and the
         authors as values.
     """
@@ -182,7 +182,7 @@ def get_diff_prs_and_authors(
 
     # Get the commits that are different between the two branches
     diff_commits: List[git.Commit] = list(
-        repo.iter_commits(f"{ref_branch}..{head_branch}")
+        repo.iter_commits(f"{base_branch}..{source_branch}")
     )
 
     pr_infos: Dict[str, Any] = {}
@@ -207,8 +207,8 @@ def json_to_md(json_dict: Dict[str, Any], title: str = "Release Notes") -> str:
     """
     # order items by PR number
     json_dict = dict(sorted(json_dict.items(), key=lambda item: int(item[0])))
-    apply_md_user_links = lambda x: f"[{x}](https://github.com/{x})"
-    users_links = lambda x: map(apply_md_user_links, x)
+    user_md_link = lambda x: f"[{x}](https://github.com/{x})"
+    users_md_links = lambda x: map(user_md_link, x)
     # review states and icons
     review_states = {
         "APPROVED": "✅",
@@ -225,39 +225,77 @@ def json_to_md(json_dict: Dict[str, Any], title: str = "Release Notes") -> str:
         contributors: List[str] = pr_info["contributors"]
         reviews: Dict[str, List[str]] = pr_info["reviews"]
 
-        md += f"- [**#{pr_number}** {title}]({url}) by {apply_md_user_links(author)}\n"
-        md += f"  - Contributors: {', '.join(users_links(contributors))}\n"
+        md += f"- [**#{pr_number}** {title}]({url}) by {user_md_link(author)}\n"
+        md += f"  - Contributors: {', '.join(users_md_links(contributors))}\n"
         for state, reviewers in reviews.items():
-            md += f"  - {review_states[state]} {state}: {', '.join(users_links(reviewers))}\n"
+            md += f"  - {review_states[state]} {state}: {', '.join(users_md_links(reviewers))}\n"
 
     return md
 
 
-if __name__ == "__main__":
-    repo_path = "."  # Assuming script is run from within the repo
-    repo = git.Repo(repo_path)
+def main(
+    repo_path: str, source_branch: str, base_branch: str, output_path: str
+) -> None:
+    repo: git.Repo = git.Repo(repo_path)
+    if source_branch == "":
+        source_branch: str = repo.active_branch.name
 
-    # Default input branch to current branch
-    ref_branch = repo.active_branch.name
+    branches_and_tags: List[str] = [b.name for b in repo.branches] + [
+        t.name for t in repo.tags
+    ]
 
-    tags = sorted(repo.tags, key=lambda t: t.commit.committed_datetime)
-    head_branch = tags[-1].name if tags else ""
-    ref_branch = tags[-2].name if len(tags) > 1 else ref_branch
+    # check if the branches exist
+    for branch, b_name in [
+        (source_branch, "source_branch"),
+        (base_branch, "base_branch"),
+    ]:
+        if branch not in branches_and_tags:
+            raise ValueError(f"'{b_name}' does not exist in the repo")
 
-    ref_branch = (
-        input(f"Enter the input branch (default: {ref_branch}): ") or ref_branch
-    )
-    head_branch = (
-        input(f"Enter the output branch (default: {head_branch}): ")
-        or head_branch
-    )
+    result = get_diff_prs_and_authors(repo_path, source_branch, base_branch)
 
-    result = get_diff_prs_and_authors(repo_path, ref_branch, head_branch)
+    name: str = f"Changes: {source_branch} → {base_branch}"
 
-    name: str = f"{ref_branch} → {head_branch}"
+    md: str = json_to_md(result, title=name)
 
-    md = json_to_md(result, title=name)
-
-    save_path = f"./release.md"
+    save_path = output_path
     with open(save_path, "w", encoding="utf8") as f:
         f.write(md)
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Generate release notes from PRs")
+    parser.add_argument(
+        "--repo_path", "-p", type=str, default=".", help="path to the repo"
+    )
+    parser.add_argument(
+        "--source_branch", "-s", type=str, default="", help="source branch (feature)"
+    )
+    parser.add_argument(
+        "--base_branch",
+        "-t",
+        type=str,
+        default="main",
+        help="base branch (main/master))",
+    )
+
+    parser.add_argument(
+        "--output_path",
+        "-o",
+        type=str,
+        default="release_notes.md",
+        help="output file path",
+    )
+
+    args = parser.parse_args()
+
+    main(
+        repo_path=args.repo_path,
+        source_branch="v0.0.42",
+        base_branch=args.base_branch,
+        output_path=args.output_path,
+    )
+
+    # python docs/scripts/release_notes.py --repo_path . --source_branch "" --target_branch main --output_path release_notes.md
