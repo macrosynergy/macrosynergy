@@ -293,7 +293,7 @@ if __name__ == "__main__":
 
     main(
         repo_path=args.repo_path,
-        source_branch="v0.0.42",
+        source_branch=args.source_branch,
         base_branch=args.base_branch,
         output_path=args.output_path,
     )
