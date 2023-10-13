@@ -26,23 +26,27 @@ jobs:
       - name: Generate PR Comment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OUTPUT_FILE: docs/build/release_notes.md
         run: |
-          python docs/scripts/release_notes.py -o docs/release_notes.md
+          python docs/scripts/release_notes.py -o $OUTPUT_FILE
 
       - name: Edit PR Comment
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_NOTES: docs/build/release_notes.md
         run: |
-          COMMENT_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          -H "Accept: application/vnd.github.v3+json" \
-          "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/${{ github.event.pull_request.number }}/comments" \
-          | jq '.[] | select(.user.login == "github-actions[bot]") | .id')
+          # Fetch the current PR body
+          CURRENT_PR_BODY=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/${{ github.event.pull_request.number }}" \
+            | jq -r .body)
 
-          UPDATED_COMMENT=$(cat docs/release_notes.md)
+          # Append the new release notes to the current PR body
+          NEW_RELEASE_NOTES=$(cat $RELEASE_NOTES)
+          UPDATED_PR_BODY="$CURRENT_PR_BODY\n\n$NEW_RELEASE_NOTES"
 
-          if [ "$COMMENT_ID" != "" ]; then
-            curl -s -X PATCH -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID" \
-              -d '{"body": "'"$UPDATED_COMMENT"'"}'
-          else
-            echo "Comment not found or not created by github-actions bot"
-          fi
+          # Update the PR body with the concatenated content
+          curl -s -X PATCH -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls/${{ github.event.pull_request.number }}" \
+            -d '{"body": "'"$UPDATED_PR_BODY"'"}'
