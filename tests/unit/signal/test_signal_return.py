@@ -220,9 +220,7 @@ class TestAll(unittest.TestCase):
 
         for s in signals:
             test_value = float(dfd_filt[dfd_filt["xcat"] == s]["value"])
-            test_value = round(test_value, 5)
-            condition = abs(test_value - round(test_row[s], 5)) < 0.00001
-            self.assertTrue(condition)
+            self.assertTrue(np.isclose(test_value, test_row[s]))
 
         # Confirm the dimensions of the return column remains unchanged - alignment
         # occurs exclusively on the signals. To test, confirm the columns are the same
