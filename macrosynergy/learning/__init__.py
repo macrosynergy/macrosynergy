@@ -1,3 +1,3 @@
-from .panel_timeseries_split import PanelTimeSeriesSplit
+from .panel_timeseries_split import PanelTimeSeriesSplit, panel_cv_scores
 
-__all__ = ['PanelTimeSeriesSplit']
+__all__ = ['PanelTimeSeriesSplit', 'panel_cv_scores']
