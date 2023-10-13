@@ -1,0 +1,46 @@
+# Edit PR comment workflow
+
+on:
+  # Runs on pushes targeting the default branch
+  pull_request:
+    branches: [main]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  edit-comment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Restore caches - Python 3.11
+        uses: ./.github/actions/restore-pip-cache
+        with:
+          python-version: 3.11
+
+      - name: Generate PR Comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python docs/scripts/release_notes.py -o docs/release_notes.md
+
+      - name: Edit PR Comment
+        run: |
+          COMMENT_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/${{ github.event.pull_request.number }}/comments" \
+          | jq '.[] | select(.user.login == "github-actions[bot]") | .id')
+
+          # updated_comment = cat docs/release_notes.md
+          UPDATED_COMMENT=$(cat docs/release_notes.md)
+
+          if [ "$COMMENT_ID" != "" ]; then
+            curl -s -X PATCH -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID" \
+              -d '{"body": "'"$UPDATED_COMMENT"'"}'
+          else
+            echo "Comment not found or not created by github-actions bot"
+          fi
