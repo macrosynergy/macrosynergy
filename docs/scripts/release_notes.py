@@ -238,19 +238,26 @@ def main(
 ) -> None:
     repo: git.Repo = git.Repo(repo_path)
     if source_branch == "":
-        source_branch: str = repo.active_branch.name
+        # check if the repo is in a detached head state
+        if repo.head.is_detached:
+            source_branch = (
+                repo.head.log()[-1]
+                .message.replace("checkout: moving from", "")
+                .split()[0]
+            )
+        else:
+            source_branch: str = repo.active_branch.name
 
-    branches_and_tags: List[str] = [b.name for b in repo.branches] + [
-        t.name for t in repo.tags
+    branch_tag_commits: List[str] = [tagx.name for tagx in repo.tags] + [
+        branchx.name for branchx in repo.branches
     ]
 
-    # check if the branches exist
-    for branch, b_name in [
+    for branch, name in [
         (source_branch, "source_branch"),
         (base_branch, "base_branch"),
     ]:
-        if branch not in branches_and_tags:
-            raise ValueError(f"'{b_name}' does not exist in the repo")
+        if branch not in branch_tag_commits:
+            raise ValueError(f"{name} {branch} is not a valid branch or tag")
 
     result = get_diff_prs_and_authors(repo_path, source_branch, base_branch)
 
