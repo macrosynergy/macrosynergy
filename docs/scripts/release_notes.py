@@ -238,7 +238,8 @@ def main(
 ) -> None:
     repo: git.Repo = git.Repo(repo_path)
     # fetch origin and all branch names and tags
-    repo.remotes.origin.fetch()
+    for remote in repo.remotes:
+        remote.fetch()
 
     if source_branch == "":
         # check if the repo is in a detached head state
