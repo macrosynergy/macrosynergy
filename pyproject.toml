@@ -73,6 +73,7 @@ docs = [
   "mdformat-footnote>=0.1.1",
   "PyYAML>=6.0",
   "jupyter-book==0.15.1",
+  "GitPython==3.1.31",
 ]
 
 all = [
@@ -89,6 +90,7 @@ all = [
   "mdformat-footnote>=0.1.1",
   "PyYAML>=6.0",
   "jupyter-book==0.15.1",
+  "GitPython==3.1.31",
   "pytest>=7.0.0",
   "pytest-cov>3.0.0",
   "coverage>=6.0.0",
