@@ -130,7 +130,6 @@ class TestAll(unittest.TestCase):
             self.fail(f"view.metrics raised {e} unexpectedly")
 
     def test_view_metrics_invalid_figsize(self):
-        # test if the figsize is a tuple
         invalid_args = self.valid_args.copy()
         invalid_cases: List[Any] = [
             ["apple", 10],
@@ -142,12 +141,10 @@ class TestAll(unittest.TestCase):
             with self.assertRaises(ValueError):
                 view.metrics(**invalid_args)
 
-        # pass a list of 3 ints as figsize. should raise a type error
         invalid_args["figsize"] = [10, 10, 10]
         with self.assertRaises(TypeError):
             view.metrics(**invalid_args)
 
-        # give it one where the first one is int, second one is none. should work
         invalid_args["figsize"] = [10, None]
         try:
             view.metrics(**invalid_args)
