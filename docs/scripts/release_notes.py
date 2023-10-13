@@ -166,15 +166,15 @@ def get_pr_info(pr_number: int, owner: str = REPO_OWNER, repo: str = REPO_NAME) 
 
 
 def get_diff_prs_and_authors(
-    repo_path: str, input_branch: str, output_branch: str
+    repo_path: str, ref_branch: str, head_branch: str
 ) -> Dict[str, List[str]]:
     """
     Get the names (numbers) of pull requests and their authors that are different between
         the input and output branches.
 
     :param <str> repo_path: Path to the local git repository.
-    :param <str> input_branch: The name of the first branch.
-    :param <str> output_branch: The name of the second branch.
+    :param <str> ref_branch: The name of the first branch.
+    :param <str> head_branch: The name of the second branch.
     :return <Dict[str, List[str]]>: A dictionary with the PR numbers as keys and the
         authors as values.
     """
@@ -182,7 +182,7 @@ def get_diff_prs_and_authors(
 
     # Get the commits that are different between the two branches
     diff_commits: List[git.Commit] = list(
-        repo.iter_commits(f"{input_branch}..{output_branch}")
+        repo.iter_commits(f"{ref_branch}..{head_branch}")
     )
 
     pr_infos: Dict[str, Any] = {}
@@ -238,23 +238,23 @@ if __name__ == "__main__":
     repo = git.Repo(repo_path)
 
     # Default input branch to current branch
-    default_input = repo.active_branch.name
+    ref_branch = repo.active_branch.name
 
     tags = sorted(repo.tags, key=lambda t: t.commit.committed_datetime)
-    default_output = tags[-1].name if tags else ""
-    default_input = tags[-2].name if len(tags) > 1 else default_input
+    head_branch = tags[-1].name if tags else ""
+    ref_branch = tags[-2].name if len(tags) > 1 else ref_branch
 
-    input_branch = (
-        input(f"Enter the input branch (default: {default_input}): ") or default_input
+    ref_branch = (
+        input(f"Enter the input branch (default: {ref_branch}): ") or ref_branch
     )
-    output_branch = (
-        input(f"Enter the output branch (default: {default_output}): ")
-        or default_output
+    head_branch = (
+        input(f"Enter the output branch (default: {head_branch}): ")
+        or head_branch
     )
 
-    result = get_diff_prs_and_authors(repo_path, input_branch, output_branch)
+    result = get_diff_prs_and_authors(repo_path, ref_branch, head_branch)
 
-    name: str = f"{input_branch} → {output_branch}"
+    name: str = f"{ref_branch} → {head_branch}"
 
     md = json_to_md(result, title=name)
 
