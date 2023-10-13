@@ -49,11 +49,11 @@ class TestAll(unittest.TestCase):
         lr = LinearRegression()
         knn = KNeighborsRegressor(n_neighbors=1)
         splitter = PanelTimeSeriesSplit(train_intervals=1,min_cids=2,min_periods=21*12,test_size=1)
-        lrsplits = cross_val_score(lr, self.X, self.y, scoring="neg_root_mean_squared_error",cv = splitter,n_jobs=-1)
-        knnsplits = cross_val_score(knn, self.X, self.y, scoring="neg_root_mean_squared_error",cv = splitter,n_jobs=-1)
+        lrsplits = cross_val_score(lr, self.X, self.y, scoring="neg_root_mean_squared_error", cv = splitter, n_jobs=-1)
+        knnsplits = cross_val_score(knn, self.X, self.y, scoring="neg_root_mean_squared_error", cv = splitter, n_jobs=-1)
 
         self.assertLess(np.mean(-lrsplits),np.mean(-knnsplits))
-        
+
 if __name__ == '__main__':
 
     unittest.main()

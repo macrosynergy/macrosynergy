@@ -1,5 +1,5 @@
 """
-Class to produce and visualise walk-forward validation splits for panels.
+Tools to produce, visualise and use walk-forward validation splits across panels.
 """
 
 import logging
@@ -508,6 +508,62 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         plt.tight_layout()
         plt.show()
 
+def panel_cv_scores(X: pd.DataFrame, y: pd.DataFrame, splitter: PanelTimeSeriesSplit, estimators: dict, scoring: dict, verbose: Optional[int] = 0):
+    """
+    Method to return a dataframe of cross-validation metrics, given both a features & target dataframe, a splitter object inheriting from PanelTimeSeriesSplit, a dictionary of estimators and a dictionary of scoring metrics.
+    The performance metrics dataframe returned is multi-indexed with the outer index representing a metric and the inner index representing the mean & standard deviation of the metric over the walk-forward validation splits.
+    The columns are the estimators.
+
+    :param <pd.DataFrame> X: Pandas dataframe of features
+        multi-indexed by (cross-section, date). The dates must be in datetime format.
+        The dataframe must be in wide format: each feature is a column.
+    :param <pd.DataFrame> y: Pandas dataframe of the target variable, multi-indexed by
+        (cross-section, date). The dates must be in datetime format.
+    :param <PanelTimeSeriesSplit> splitter: splitter object instantiated from PanelTimeSeriesSplit.
+    :param <dict> estimators: dictionary of estimators, where the keys are the estimator names and the values are the sklearn estimator objects.
+    :param <dict> scoring: dictionary of scoring metrics, where the keys are the metric names and the values are callables 
+    :param <int> verbose: integer specifying verbosity of the cross-validation process. Default is 0.
+    
+    :return <pd.DataFrame> metrics_df: dataframe comprising means & standard deviations of cross-validation metrics for each sklearn estimator, over the walk-forward history.
+    """
+    # check input types
+    assert isinstance(X, pd.DataFrame), "X must be a Pandas dataframe."
+    assert isinstance(y, pd.DataFrame), "y must be a Pandas dataframe."
+    assert isinstance(X.index, pd.MultiIndex), "X must be multi-indexed."
+    assert isinstance(y.index, pd.MultiIndex), "y must be multi-indexed."
+    assert isinstance(splitter, PanelTimeSeriesSplit), "splitter must be an instance of PanelTimeSeriesSplit."
+    assert isinstance(estimators, dict), "estimators must be a dictionary."
+    assert isinstance(scoring, dict), "scoring must be a dictionary."
+    assert isinstance(verbose, int), "verbose must be an integer."
+    # check the dataframes are in the right format
+    assert isinstance(
+        X.index.get_level_values(1)[0], datetime.date
+    ), "The inner index of X must be datetime.date."
+    assert isinstance(
+        y.index.get_level_values(1)[0], datetime.date
+    ), "The inner index of y must be datetime.date."
+    assert X.index.equals(
+        y.index
+    ), "The indices of the input dataframe X and the output dataframe y don't match."
+    # check that there is at least one estimator and at least one scoring metric
+    assert len(estimators) > 0, "There must be at least one estimator provided."
+    assert len(scoring) > 0, "There must be at least one scoring metric provided."
+    assert verbose >= 0, "verbose must be a non-negative integer."
+
+    estimator_names = list(estimators.keys())
+    metric_names = list(scoring.keys())
+
+    metrics_df = pd.DataFrame(columns=estimator_names, index=pd.MultiIndex.from_product([metric_names, ["mean", "std"]]))
+
+    for estimator_name, estimator in estimators.items():
+        if verbose != 0:
+            print(f"Calculating walk-forward validation metrics for {estimator_name}.")
+        cv_results = cross_validate(estimator, X, y, cv=splitter, scoring=scoring, verbose=verbose)
+        for metric_name in metric_names:
+            metrics_df.loc[(metric_name, "mean"), estimator_name] = np.mean(cv_results[f"test_{metric_name}"])
+            metrics_df.loc[(metric_name, "std"), estimator_name] = np.std(cv_results[f"test_{metric_name}"])
+
+    return metrics_df
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate_quantamental_data import make_qdf
