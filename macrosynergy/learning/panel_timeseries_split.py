@@ -536,10 +536,11 @@ def panel_cv_scores(
     estimators: dict,
     scoring: dict,
     verbose: Optional[int] = 0,
-    show_std: Optional[bool] = True,
+    show_longbias: Optional[bool] = True,
+    show_std: Optional[bool] = False,
 ):
     """
-    Returns a dataframe cross-validation scores
+    Returns a dataframe of cross-validation scores
 
     :param <pd.DataFrame> X: Dataframe of features multi-indexed by (cross-section, date).
         The dataframe must be in wide format: each feature is a column.  The dates must
@@ -554,9 +555,11 @@ def panel_cv_scores(
         names and the values are callables
     :param <int> verbose: integer specifying verbosity of the cross-validation process.
         Default is 0.
+    :param <bool> show_longbias: boolean specifying whether or not to display the
+        proportion of positive returns. Default is True.
     :param <bool> show_std: boolean specifying whether or not to show the standard
         deviation of the cross-validation scores. Default is False.
-
+        
     :return <pd.DataFrame> metrics_df: dataframe comprising means & standard deviations of
         cross-validation metrics for each sklearn estimator, over the walk-forward history.
 
@@ -596,6 +599,9 @@ def panel_cv_scores(
 
     # construct the dataframe to return
 
+    if show_longbias:
+        estimator["Long proportion"] = make_scorer(lambda y_true, y_pred: np.sum(y_true > 0)/len(y_true))
+        
     estimator_names = list(estimators.keys())
     metric_names = list(scoring.keys())
 
