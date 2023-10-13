@@ -57,7 +57,7 @@ class QuantamentalDataFrameMeta(type):
 
     def __instancecheck__(cls, instance):
         IDX_COLS = ["cid", "xcat", "real_date"]
-        result: bool = False
+        result: bool = True
         try:
             # the try except offers a safety net in case the instance is not a pd.DataFrame
             # and one of the checks raises an error
