@@ -265,7 +265,10 @@ def main(
                 branch = f"origin/{branch}"
                 print(f"Warning: {name} {branch} has no origin/ prefix. Adding it.")
                 if branch not in branch_tag_commits:
-                    raise ValueError(f"{name} {branch} is not a valid branch or tag")
+                    raise ValueError(
+                        f"{name} {branch} is not a valid branch or tag",
+                        f"Valid branches and tags are: {branch_tag_commits}",
+                    )
 
     result = get_diff_prs_and_authors(
         repo_path=repo_path, source_branch=source_branch, base_branch=base_branch
