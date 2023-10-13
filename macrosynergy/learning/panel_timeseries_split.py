@@ -528,7 +528,7 @@ def panel_cv_scores(X: pd.DataFrame, y: pd.DataFrame, splitter: PanelTimeSeriesS
     """
     # check input types
     assert isinstance(X, pd.DataFrame), "X must be a Pandas dataframe."
-    assert isinstance(y, pd.DataFrame), "y must be a Pandas dataframe."
+    #assert isinstance(y, pd.DataFrame), "y must be a Pandas dataframe."
     assert isinstance(X.index, pd.MultiIndex), "X must be multi-indexed."
     assert isinstance(y.index, pd.MultiIndex), "y must be multi-indexed."
     assert isinstance(splitter, PanelTimeSeriesSplit), "splitter must be an instance of PanelTimeSeriesSplit."
