@@ -252,6 +252,12 @@ def main(
         else:
             source_branch: str = repo.active_branch.name
 
+    tags = sorted(repo.tags, key=lambda t: t.commit.committed_datetime)
+    # if the base_branch is not specified, use the latest tag
+    if base_branch == "":
+        base_branch = tags[-1].name
+        print(f"Warning: base_branch not specified. Using latest tag: {base_branch}")
+
     branch_tag_commits: List[str] = [tagx.name for tagx in repo.tags] + [
         branchx.name for branchx in repo.branches
     ]
@@ -302,7 +308,7 @@ if __name__ == "__main__":
         "--base_branch",
         "-t",
         type=str,
-        default="main",
+        default="",
         help="base branch (main/master))",
     )
 
