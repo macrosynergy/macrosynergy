@@ -1,12 +1,13 @@
 """
-Common functions for visualizing data.
-These functions make use of the classes in the `macrosynergy.visuals` module.
-Convinient when used as:
+Function for visualising a facet grid of time line charts of one or more categories
 ```python
 import macrosynergy.visuals as msv
 ...
-msv.view.timelines( df, xcats=["FXXR", "EQXR", "IR"], 
-                    cids=["USD", "EUR", "GBP"])
+msv.view.timelines(
+    df,
+    xcats=["FXXR", "EQXR", "IR"],
+    cids=["USD", "EUR", "GBP"]
+)
 ...
 
 msv.FacetPlot(df).lineplot(cid_grid=True)
@@ -16,13 +17,13 @@ msv.FacetPlot(df).lineplot(cid_grid=True)
 from typing import List, Optional, Tuple
 
 import pandas as pd
-from pandas.testing import assert_frame_equal
 
-from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
-from macrosynergy.visuals import FacetPlot, LinePlot, Heatmap
+from macrosynergy.management.utils import (
+    standardise_dataframe,
+    is_valid_iso_date
+)
+from macrosynergy.visuals import FacetPlot, LinePlot
 from macrosynergy.visuals.common import Numeric
-import time
-import timeit
 
 IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
 
@@ -306,265 +307,104 @@ def timelines(
             )
 
 
-def view_metrics(
-    df: pd.DataFrame,
-    xcat: str,
-    cids: Optional[List[str]] = None,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
-    freq: str = "M",
-    agg: str = "mean",
-    metric: str = "eop_lag",
-    title: Optional[str] = None,
-    figsize: Optional[Tuple[float]] = (14, None),
-) -> None:
-    """
-    A function to visualise the `eop_lag`, `mop_lag` or `grading` metrics for a given
-    JPMaQS dataset. It generates a heatmap, where the x-axis is the observation
-    date, the y-axis is the ticker, and the colour is the lag value.
-
-    :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
-        'cid', 'xcat', 'real_date' and 'grading', 'eop_lag' or 'mop_lag'.
-    :param str xcat: extended category whose lags are to be visualized.
-    :param <List[str]> cids: cross sections to visualize. Default is all in DataFrame.
-    :param <str> start: earliest date in ISO format. Default is earliest available.
-    :param <str> end: latest date in ISO format. Default is latest available.
-    :param <str> metric: name of metric to be visualized. Must be "eop_lag" (default)
-        "mop_lag" or "grading".
-    :param <str> freq: frequency of data. Must be one of "D", "W", "M", "Q", "A".
-        Default is "M".
-    :param <str> agg: aggregation method. Must be one of "mean" (default), "median",
-        "min", "max", "first" or "last".
-    :param <str> title: string of chart title; if none given default title is printed.
-    :param <Tuple[float]> figsize: Tuple (w, h) of width and height of graph.
-        Default is None, meaning it is set in accordance with df.
-
-    :return: None
-
-    :raises TypeError: if any of the inputs are of the wrong type.
-    :raises ValueError: if any of the inputs are semantically incorrect.
-    """
-
-    heatmap = Heatmap(
-        df=df,
-        cids=cids,
-        xcats=[xcat],
-        metrics=[metric],
-        start=start,
-        end=end,
-    )
-
-    # Validation checks not covered by Plotter.
-
-    if metric not in ["eop_lag", "mop_lag", "grading"]:
-        raise ValueError("`metric` must be either 'eop_lag', 'mop_lag' or 'grading'")
-
-    if not isinstance(freq, str):
-        raise TypeError("`freq` must be a string")
-    else:
-        freq: str = freq.upper()
-        if freq not in ["D", "W", "M", "Q", "A"]:
-            raise ValueError("`freq` must be one of 'D', 'W', 'M', 'Q' or 'A'")
-
-    if not isinstance(agg, str):
-        raise TypeError("`agg` must be a string")
-    else:
-        agg: str = agg.lower()
-        if agg not in ["mean", "median", "min", "max", "first", "last"]:
-            raise ValueError(
-                "`agg` must be one of 'mean', 'median', 'min', 'max', 'first' or 'last'"
-            )
-
-    if title is None:
-        title = f"Visualising {metric} for {xcat} from {heatmap.start} to {heatmap.end}"
-
-    if not isinstance(figsize, tuple):
-        if not isinstance(figsize, list) or len(figsize) != 2:
-            raise TypeError("`figsize` must be a tuple or list of length 2")
-
-    if not isinstance(figsize[0], (int, float)):
-        raise ValueError("First element of `figsize` must be a float")
-
-    if figsize[1] is None:
-        figsize = (figsize[0], len(heatmap.cids) + 1)  # +1 to adjust for labels
-
-    if not isinstance(figsize[1], (int, float)):
-        raise ValueError("Second element of `figsize` must be a float")
-
-    heatmap.df: pd.DataFrame = _downsample_df(df=heatmap.df, freq=freq, agg=agg)
-
-    max_mes: float = max(1, heatmap.df[metric].max())
-    min_mes: float = min(0, heatmap.df[metric].min())
-
-    heatmap.df["real_date"]: pd.Series = heatmap.df["real_date"].dt.strftime("%Y-%m-%d")
-
-    heatmap.df = heatmap.df.pivot_table(index="cid", columns="real_date", values=metric)
-
-    heatmap.plot(
-        title=title,
-        figsize=figsize,
-        vmin=min_mes,
-        vmax=max_mes,
-        x_axis_label="Date",
-        y_axis_label="Cross Sections",
-        grid=False,
-    )
-
-
-def _downsample_df(df: pd.DataFrame, freq: str = None, agg: str = "mean"):
-    """
-    Downsample JPMaQS DataFrame.
-
-    :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
-        'cid', 'xcats', 'real_date' and at least one column with values of interest.
-    :param <str> freq: frequency option. Per default the correlations are calculated
-        based on the native frequency of the datetimes in 'real_date', which is business
-        daily. Downsampling options include weekly ('W'), monthly ('M'), or quarterly
-        ('Q') mean.
-    :param <str> agg: aggregation method. Must be one of "mean" (default), "median",
-        "min", "max", "first" or "last".
-    """
-    return (
-        df.groupby(["cid", "xcat"])
-        .resample(freq, on="real_date")
-        .agg(agg, numeric_only=True)
-        .reset_index()
-    )
-
 
 if __name__ == "__main__":
-    # from macrosynergy.visuals import FacetPlot
-    # from macrosynergy.dev.local import LocalCache
-    # from macrosynergy.management.simulate_quantamental_data import make_test_df
-
-    # LOCAL_CACHE = "~/Macrosynergy/Macrosynergy - Documents/SharedData/JPMaQSTickers"
-
-    # cids: List[str] = [
-    #     "USD",
-    #     "EUR",
-    #     "GBP",
-    #     "AUD",
-    #     "CAD",
-    #     "JPY",
-    #     "CHF",
-    #     "NZD",
-    #     "SEK",
-    #     "NOK",
-    #     "DKK",
-    #     "INR",
-    # ]
-    # xcats: List[str] = [
-    #     "FXXR",
-    #     "EQXR",
-    #     "RIR",
-    #     "IR",
-    #     "REER",
-    #     "CPI",
-    #     "PPI",
-    #     "M2",
-    #     "M1",
-    #     "M0",
-    #     "FXVOL",
-    #     "FX",
-    # ]
-    # sel_cids: List[str] = ["USD", "EUR", "GBP"]
-    # sel_xcats: List[str] = ["FXXR", "EQXR", "RIR", "IR"]
-    # r_styles: List[str] = [
-    #     "linear",
-    #     "decreasing-linear",
-    #     "sharp-hill",
-    #     "sine",
-    #     "four-bit-sine",
-    # ]
-    # df: pd.DataFrame = make_test_df(
-    #     cids=list(set(cids) - set(sel_cids)),
-    #     xcats=xcats,
-    #     start="2000-01-01",
-    # )
-
-    # for rstyle, xcatx in zip(r_styles, sel_xcats):
-    #     dfB: pd.DataFrame = make_test_df(
-    #         cids=sel_cids,
-    #         xcats=[xcatx],
-    #         start="2000-01-01",
-    #         style=rstyle,
-    #     )
-    #     df: pd.DataFrame = pd.concat([df, dfB], axis=0)
-
-    # for ix, cidx in enumerate(sel_cids):
-    #     df.loc[df["cid"] == cidx, "value"] = (
-    #         ((df[df["cid"] == cidx]["value"]) * (ix + 1)).reset_index(drop=True).copy()
-    #     )
-
-    # for ix, xcatx in enumerate(sel_xcats):
-    #     df.loc[df["xcat"] == xcatx, "value"] = (
-    #         ((df[df["xcat"] == xcatx]["value"]) * (ix * 10 + 1))
-    #         .reset_index(drop=True)
-    #         .copy()
-    #     )
-
-    # import time
-
-    # # timer_start: float = time.time()
-    # timelines(
-    #     df=df,
-    #     xcats=sel_xcats,
-    #     xcat_grid=True,
-    #     xcat_labels=["ForEx", "Equity", "Real Interest Rates", "Interest Rates"],
-    #     square_grid=True,
-    #     cids=sel_cids[1],
-    #     # single_chart=True,
-    # )
-
-    # timelines(
-    #     df=df,
-    #     xcats=sel_xcats[0],
-    #     cids=sel_cids,
-    #     # cs_mean=True,
-    #     # xcat_grid=False,
-    #     single_chart=True,
-    #     cs_mean=True,
-    # )
-
-    # timelines(
-    #     df=df,
-    #     same_y=False,
-    #     xcats=sel_xcats[0],
-    #     cids=sel_cids,
-    #     title="Plotting multiple cross sections for a single category \n with different y-axis!",
-    # )
-
+    from macrosynergy.visuals import FacetPlot
     from macrosynergy.management.simulate_quantamental_data import make_test_df
 
-    test_cids: List[str] = ["USD"]  #,  "EUR", "GBP"]
-    test_xcats: List[str] = ["FX", "IR"]
-    dfE: pd.DataFrame = make_test_df(
-        cids=test_cids, xcats=test_xcats, style="sharp-hill"
+    cids: List[str] = [
+        "USD",
+        "EUR",
+        "GBP",
+        "AUD",
+        "CAD",
+        "JPY",
+        "CHF",
+        "NZD",
+        "SEK",
+        "NOK",
+        "DKK",
+        "INR",
+    ]
+    xcats: List[str] = [
+        "FXXR",
+        "EQXR",
+        "RIR",
+        "IR",
+        "REER",
+        "CPI",
+        "PPI",
+        "M2",
+        "M1",
+        "M0",
+        "FXVOL",
+        "FX",
+    ]
+    sel_cids: List[str] = ["USD", "EUR", "GBP"]
+    sel_xcats: List[str] = ["FXXR", "EQXR", "RIR", "IR"]
+    r_styles: List[str] = [
+        "linear",
+        "decreasing-linear",
+        "sharp-hill",
+        "sine",
+        "four-bit-sine",
+    ]
+    df: pd.DataFrame = make_test_df(
+        cids=list(set(cids) - set(sel_cids)),
+        xcats=xcats,
+        start="2000-01-01",
     )
 
-    dfM: pd.DataFrame = make_test_df(
-        cids=test_cids, xcats=test_xcats, style="four-bit-sine"
+    for rstyle, xcatx in zip(r_styles, sel_xcats):
+        dfB: pd.DataFrame = make_test_df(
+            cids=sel_cids,
+            xcats=[xcatx],
+            start="2000-01-01",
+            style=rstyle,
+        )
+        df: pd.DataFrame = pd.concat([df, dfB], axis=0)
+
+    for ix, cidx in enumerate(sel_cids):
+        df.loc[df["cid"] == cidx, "value"] = (
+            ((df[df["cid"] == cidx]["value"]) * (ix + 1)).reset_index(drop=True).copy()
+        )
+
+    for ix, xcatx in enumerate(sel_xcats):
+        df.loc[df["xcat"] == xcatx, "value"] = (
+            ((df[df["xcat"] == xcatx]["value"]) * (ix * 10 + 1))
+            .reset_index(drop=True)
+            .copy()
+        )
+
+    import time
+
+    # timer_start: float = time.time()
+    timelines(
+        df=df,
+        xcats=sel_xcats,
+        xcat_grid=True,
+        xcat_labels=["ForEx", "Equity", "Real Interest Rates", "Interest Rates"],
+        square_grid=True,
+        cids=sel_cids[1],
+        # single_chart=True,
     )
 
-    dfG: pd.DataFrame = make_test_df(cids=test_cids, xcats=test_xcats, style="sine")
+    timelines(
+        df=df,
+        xcats=sel_xcats[0],
+        cids=sel_cids,
+        # cs_mean=True,
+        # xcat_grid=False,
+        single_chart=True,
+        cs_mean=True,
+    )
 
-    dfE.rename(columns={"value": "eop_lag"}, inplace=True)
-    dfM.rename(columns={"value": "mop_lag"}, inplace=True)
-    dfG.rename(columns={"value": "grading"}, inplace=True)
-    mergeon = ["cid", "xcat", "real_date"]
-    dfx: pd.DataFrame = pd.merge(pd.merge(dfE, dfM, on=mergeon), dfG, on=mergeon)
+    timelines(
+        df=df,
+        same_y=False,
+        xcats=sel_xcats[0],
+        cids=sel_cids,
+        title="Plotting multiple cross sections for a single category \n with different y-axis!",
+    )
 
-    view_metrics(
-        df=dfx,
-        xcat="FX",
-    )
-    view_metrics(
-        df=dfx,
-        xcat="IR",
-        metric="mop_lag",
-    )
-    view_metrics(
-        df=dfx,
-        xcat="IR",
-        metric="grading",
-    )
+    

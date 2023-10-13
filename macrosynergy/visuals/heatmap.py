@@ -63,16 +63,15 @@ class Heatmap(Plotter):
     def plot(
         self,
         figsize: Tuple[Numeric, Numeric] = (12, 8),
-        grid: bool = False,
         x_axis_label: Optional[str] = None,
         y_axis_label: Optional[str] = None,
         axis_fontsize: int = 12,
-        vmin=None,
-        vmax=None,
         title: Optional[str] = None,
         title_fontsize: int = 16,
         title_xadjust: Numeric = 0.5,
         title_yadjust: Numeric = 1.0,
+        vmin: Optional[Numeric] = None,
+        vmax: Optional[Numeric] = None,
         show: bool = True,
         save_to_file: Optional[str] = None,
         dpi: int = 300,
@@ -81,10 +80,31 @@ class Heatmap(Plotter):
         max_xticks: int = 50,
         *args,
         **kwargs,
-    ):
+    ) -> Optional[plt.Figure]:
         """
         Plots a DataFrame as a heatmap with the columns along the x-axis and
         rows along the y-axis.
+
+        Parameters
+        :param <Tuple> figsize: tuple specifying the size of the figure. Default is (12, 8).
+        :param <str> x_axis_label: label for x-axis.
+        :param <str> y_axis_label: label for y-axis.
+        :param <int> axis_fontsize: the font size for the axis labels.
+        :param <str> title: the figure's title.
+        :param <int> title_fontsize: the font size for the title.
+        :param <float> title_xadjust: sets the x position of the title text.
+        :param <float> title_yadjust: sets the y position of the title text.
+        :param <float> vmin: optional minimum value for heatmap scale.
+        :param <float> vmax: optional maximum value for heatmap scale.
+        :param <bool> show: if True, the image is displayed.
+        :param <str> save_to_file: the path at which to save the heatmap as an image.
+            If not specified, the plot will not be saved.
+        :param <int> dpi: the resolution in dots per inch used if saving the figure.
+        :param <bool> return_figure: if True, the function will return the figure.
+        :param <plt.Axes> on_axis: optional `plt.Axes` object to be used instead of
+            creating a new one.
+        :param <int> max_xticks: the maximum number of ticks to be displayed
+            along the x axis. Default is 50.
         """
         if on_axis:
             fig: plt.Figure = on_axis.get_figure()
@@ -94,9 +114,9 @@ class Heatmap(Plotter):
             ax: plt.Axes
             fig, ax = plt.subplots(figsize=figsize, layout="constrained")
 
-        ax.imshow(
+        im = ax.imshow(
             self.df.to_numpy(),
-            cmap="Reds",
+            cmap=sns.color_palette("light:red", as_cmap=True),
             vmin=vmin,
             vmax=vmax,
             aspect="auto",
@@ -120,15 +140,14 @@ class Heatmap(Plotter):
             x=title_xadjust,
             y=title_yadjust,
         )
-        if grid:
-            plt.grid(True)
-            ax.grid(axis="both", linestyle="--", alpha=0.5)
 
         if x_axis_label:
             ax.set_xlabel(x_axis_label, fontsize=axis_fontsize)
 
         if y_axis_label:
             ax.set_ylabel(y_axis_label, fontsize=axis_fontsize)
+
+        ax.figure.colorbar(im, ax=ax)
 
         if save_to_file:
             plt.savefig(
