@@ -344,7 +344,7 @@ class TestFunctions(unittest.TestCase):
         bad_df: pd.DataFrame = test_df.copy()
         # rename xcats to xkats
         bad_df.rename(columns={"xcat": "xkat"}, inplace=True)
-        self.assertRaises(ValueError, qdf_to_ticker_df, df=bad_df)
+        self.assertRaises(TypeError, qdf_to_ticker_df, df=bad_df)
 
     def test_ticker_df_to_qdf(self):
         cids: List[str] = ["AUD", "USD", "GBP", "EUR", "CAD"]
