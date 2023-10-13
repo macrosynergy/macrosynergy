@@ -4,18 +4,42 @@ Tools to produce, visualise and use walk-forward validation splits across panels
 
 import logging
 import datetime
-from typing import Optional, List, Tuple, Union
+from typing import Optional, List, Tuple, Union, Dict, Any
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from macrosynergy.management.decorators import argvalidation
 
 from sklearn.model_selection import BaseCrossValidator, cross_validate, GridSearchCV
 from sklearn.linear_model import Lasso, LinearRegression
 from sklearn.metrics import make_scorer, mean_squared_error, r2_score
 
 
-class PanelTimeSeriesSplit(BaseCrossValidator):
+class PanelTimeSeriesSplit_MetaClass(type):
+    """
+    Metaclass for the PanelTimeSeriesSplit class. The purpose of this metaclass is to
+    wrap all methods of the PanelTimeSeriesSplit class with the `argvalidation` method,
+    so type-validation is automatically performed on all methods of the class.
+    Meant to be used as a metaclass, i.e. use as follows:
+    ```python
+    ...
+    class MyCustomClass(metaclass=PanelTimeSeriesSplit_MetaClass):
+        def __init__(self, ...):
+        ...
+    ```
+    """
+
+    def __init__(cls, name, bases, dct: Dict[str, Any]):
+        super().__init__(name, bases, dct)
+        for attr_name, attr_value in dct.items():
+            if callable(attr_value):
+                setattr(cls, attr_name, argvalidation(attr_value))
+
+
+class PanelTimeSeriesSplit(
+    BaseCrossValidator, metaclass=PanelTimeSeriesSplit_MetaClass
+):
     """
     Class for the production of paired training and test splits for panel data.
 
@@ -565,7 +589,9 @@ def panel_cv_scores(
 
     assert isinstance(X, pd.DataFrame), "X must be a pandas dataframe."
 
-    assert isinstance(y, (pd.DataFrame, pd.Series)), "y must be a pandas dataframe or series."
+    assert isinstance(
+        y, (pd.DataFrame, pd.Series)
+    ), "y must be a pandas dataframe or series."
     assert isinstance(X.index, pd.MultiIndex), "X must be multi-indexed."
     assert isinstance(y.index, pd.MultiIndex), "y must be multi-indexed."
     assert isinstance(
