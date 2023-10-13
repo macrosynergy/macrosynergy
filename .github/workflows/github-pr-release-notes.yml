@@ -1,5 +1,6 @@
 # Edit PR comment workflow
 
+name: Create release notes on PR
 on:
   # Runs on pushes targeting the default branch
   pull_request:
@@ -14,6 +15,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Restore caches - Python 3.11
         uses: ./.github/actions/restore-pip-cache
@@ -33,7 +36,6 @@ jobs:
           "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/${{ github.event.pull_request.number }}/comments" \
           | jq '.[] | select(.user.login == "github-actions[bot]") | .id')
 
-          # updated_comment = cat docs/release_notes.md
           UPDATED_COMMENT=$(cat docs/release_notes.md)
 
           if [ "$COMMENT_ID" != "" ]; then
