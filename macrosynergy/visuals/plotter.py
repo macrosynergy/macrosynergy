@@ -15,7 +15,7 @@ import pandas as pd
 
 from macrosynergy.management import reduce_df
 from macrosynergy.management.utils import standardise_dataframe
-from macrosynergy.visuals.common import argcopy, argvalidation
+from macrosynergy.management.decorators import argcopy, argvalidation
 
 logger = logging.getLogger(__name__)
 
