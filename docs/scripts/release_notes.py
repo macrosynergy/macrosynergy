@@ -17,6 +17,7 @@ REPO_URL: str = f"github.com/{REPO_OWNER}/{REPO_NAME}"
 OAUTH_TOKEN: Optional[str] = os.getenv("GH_TOKEN", None)
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from build_md import DocstringMethods
 
 
 def api_request(
@@ -190,7 +191,9 @@ def get_diff_prs_and_authors(
     # Regex pattern to extract PR number from commit message
     pr_pattern: re.Pattern = re.compile(r"Merge pull request #(\d+)")
 
-    for commit in tqdm(diff_commits):
+    tqdm_comment: str = f"Generating release notes [{source_branch} ← {base_branch}]"
+
+    for commit in tqdm(diff_commits, desc=tqdm_comment):
         match: Optional[re.Match] = pr_pattern.search(commit.message)
         if match:
             pr_number = match.group(1)
@@ -201,15 +204,20 @@ def get_diff_prs_and_authors(
     return pr_infos
 
 
-def json_to_md(json_dict: Dict[str, Any], title: str = "Release Notes") -> str:
+def markdown_from_pr_attributes(
+    pr_attrs: Dict[str, Any],
+    dev=False,
+) -> str:
     """
-    Converts release info from dict to markdown
+    Converts release info from dict to markdown.
+    :param pr_attrs: A dictionary with the PR attributes.
+    :return: A markdown string.
     """
-    # order items by PR number
-    json_dict = dict(sorted(json_dict.items(), key=lambda item: int(item[0])))
+    assert isinstance(pr_attrs, dict), "pr_attrs must be a dictionary"
+    ATTRS: List[str] = ["title", "author", "url", "contributors", "reviews"]
     user_md_link = lambda x: f"[{x}](https://github.com/{x})"
     users_md_links = lambda x: map(user_md_link, x)
-    # review states and icons
+
     review_states = {
         "APPROVED": "✅",
         "CHANGES_REQUESTED": "❌",
@@ -217,25 +225,55 @@ def json_to_md(json_dict: Dict[str, Any], title: str = "Release Notes") -> str:
         "DISMISSED": "👋",
     }
 
-    md = f"# {title}\n\n"
-    for pr_number, pr_info in json_dict.items():
-        title: str = pr_info["title"]
-        author: str = pr_info["author"]
-        url: str = pr_info["url"]
-        contributors: List[str] = pr_info["contributors"]
-        reviews: Dict[str, List[str]] = pr_info["reviews"]
+    pr_number: int = pr_attrs["number"]
+    title: str = pr_attrs["title"]
+    url: str = pr_attrs["url"]
+    author: str = pr_attrs["author"]
+    contributors: List[str] = pr_attrs["contributors"]
+    reviews: Dict[str, List[str]] = pr_attrs["reviews"]
 
-        md += f"- [**#{pr_number}** {title}]({url}) by {user_md_link(author)}\n"
-        md += f"  - Contributors: {', '.join(users_md_links(contributors))}\n"
+    if not dev:
+        # if the title starts with "Chore:", return ""
+        if title.strip().split(":")[0].lower() == "chore":
+            return ""
+
+    md: str = f"- [**#{pr_number}** {title}]({url}) by {user_md_link(author)}\n"
+    md += f"  - Contributors: {', '.join(users_md_links(contributors))}\n"
+    if dev:
         for state, reviewers in reviews.items():
-            md += f"  - {review_states[state]} {state}: {', '.join(users_md_links(reviewers))}\n"
+            md += (
+                f"  - {review_states[state]} {state}: "
+                f"{', '.join(users_md_links(reviewers))}\n"
+            )
 
     return md
 
 
-def main(
-    repo_path: str, source_branch: str, base_branch: str, output_path: str
-) -> None:
+def json_to_md(
+    json_dict: Dict[str, Any], title: str = "Release Notes", dev: bool = False
+) -> str:
+    """
+    Converts release info from dict to markdown
+    """
+    # order items by PR number
+    json_dict = dict(sorted(json_dict.items(), key=lambda item: int(item[0])))
+    # insert pr number as a key as well
+    for pr_number, pr_info in json_dict.items():
+        pr_info["number"]: int = int(pr_number)
+
+    md = f"# {title}\n\n"
+    for pr_number, pr_info in json_dict.items():
+        md += markdown_from_pr_attributes(pr_attrs=pr_info, dev=dev)
+
+    return md
+
+
+def generate_notes(
+    repo_path: str,
+    source_branch: str,
+    base_branch: str,
+    dev: bool = False,
+) -> str:
     repo: git.Repo = git.Repo(repo_path)
     # fetch origin and all branch names and tags
     for remote in repo.remotes:
@@ -281,9 +319,51 @@ def main(
         repo_path=repo_path, source_branch=source_branch, base_branch=base_branch
     )
 
-    name: str = f"Changes: {source_branch} → {base_branch}"
+    name: str = f"Changes: {source_branch} ← {base_branch}"
 
-    md: str = json_to_md(result, title=name)
+    md: str = json_to_md(json_dict=result, title=name, dev=dev)
+    md += "---\n\n"
+
+    md = DocstringMethods.markdown_format(md)
+
+    return md
+
+
+def main(
+    repo_path: str,
+    source_branch: str,
+    base_branch: str,
+    output_path: str,
+    dev: bool = False,
+    all_versions: bool = False,
+) -> None:
+    md: str = generate_notes(
+        repo_path=repo_path,
+        source_branch=source_branch,
+        base_branch=base_branch,
+        dev=dev,
+    )
+
+    # if all_versions is True, generate release notes for all versions
+    if all_versions:
+        repo: git.Repo = git.Repo(repo_path)
+        tags = sorted(repo.tags, key=lambda t: t.commit.committed_datetime)
+        md_list: List[str] = []
+        for tag in tags[:-30]:
+            # add notes for each tag→tag+1
+            tagT: str = tags[tags.index(tag) + 1].name
+            md_list += generate_notes(
+                repo_path=repo_path,
+                source_branch=tagT,
+                base_branch=tag.name,
+                dev=dev,
+            )
+        # reverse the list so that the latest version is first
+        md_list += md
+        md_list.reverse()
+        md = "\n\n".join(md_list)
+
+    md = DocstringMethods.markdown_format(md)
 
     # create the dirs to output_path if they don't exist
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -320,6 +400,20 @@ if __name__ == "__main__":
         help="output file path",
     )
 
+    parser.add_argument(
+        "--dev",
+        "-d",
+        action="store_true",
+        help="include dev info (reviews, etc)",
+    )
+
+    parser.add_argument(
+        "--all",
+        "-a",
+        action="store_true",
+        help="Generate release notes for all releases",
+    )
+
     args = parser.parse_args()
 
     main(
@@ -327,6 +421,9 @@ if __name__ == "__main__":
         source_branch=args.source_branch,
         base_branch=args.base_branch,
         output_path=args.output_path,
+        dev=args.dev,
+        # all_versions=args.all,
+        all_versions=True,
     )
 
     # python docs/scripts/release_notes.py --repo_path . --source_branch "" --target_branch main --output_path release_notes.md
