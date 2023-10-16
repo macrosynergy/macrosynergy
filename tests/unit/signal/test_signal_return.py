@@ -1,5 +1,3 @@
-
-
 import unittest
 from macrosynergy.signal.signal_return import SignalReturnRelations
 
@@ -121,7 +119,7 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(AssertionError):
             # GDP is not a defined category.
             srr = SignalReturnRelations(self.dfd, ret='XR', sig='CRY',
-                                        rival_sigs=set(['GROWTH', 'INFL', 'GDP']),
+                                        rival_sigs=['GROWTH', 'INFL', 'GDP'],
                                         freq='D', blacklist=self.blacklist)
 
         primary_signal = 'CRY'
@@ -222,9 +220,7 @@ class TestAll(unittest.TestCase):
 
         for s in signals:
             test_value = float(dfd_filt[dfd_filt["xcat"] == s]["value"])
-            test_value = round(test_value, 5)
-            condition = abs(test_value - round(test_row[s], 5)) < 0.00001
-            self.assertTrue(condition)
+            self.assertTrue(np.isclose(test_value, test_row[s]))
 
         # Confirm the dimensions of the return column remains unchanged - alignment
         # occurs exclusively on the signals. To test, confirm the columns are the same

@@ -6,13 +6,119 @@ Macrosynergy package and JPMaQS dataframes/data.
 import pandas as pd
 import numpy as np
 import datetime
-from typing import Any, List, Dict, Optional, Union, Set
+from typing import Any, List, Dict, Optional, Union, Set, Iterable, overload
 import requests, requests.compat
 import warnings
+
+
+##############################
+#   Overloads
+##############################
+
+
+@overload
+def get_cid(ticker: str) -> str:
+    ...
+
+
+@overload
+def get_cid(ticker: Iterable[str]) -> List[str]:
+    ...
+
+
+@overload
+def get_xcat(ticker: str) -> str:
+    ...
+
+
+@overload
+def get_xcat(ticker: Iterable[str]) -> List[str]:
+    ...
+
+
+@overload
+def split_ticker(ticker: str) -> str:
+    ...
+
+
+@overload
+def split_ticker(ticker: Iterable[str]) -> List[str]:
+    ...
+
 
 ##############################
 #   Helpful Functions
 ##############################
+
+
+def split_ticker(ticker: Union[str, Iterable[str]], mode: str) -> Union[str, List[str]]:
+    """
+    Returns either the cross-sectional identifier (cid) or the category (xcat) from a
+    ticker. The function is overloaded to accept either a single ticker or an iterable
+    (e.g. list, tuple, pd.Series, np.array) of tickers.
+
+    :param <str> ticker: The ticker to be converted.
+    :param <str> mode: The mode to be used. Must be either "cid" or "xcat".
+
+    Returns
+    :return <str>: The cross-sectional identifier or category.
+    """
+    if not isinstance(mode, str):
+        raise TypeError("Argument `mode` must be a string.")
+
+    mode: str = mode.lower().strip()
+    if mode not in ["cid", "xcat"]:
+        raise ValueError("Argument `mode` must be either 'cid' or 'xcat'.")
+
+    if not isinstance(ticker, str):
+        if isinstance(ticker, Iterable):
+            if len(ticker) == 0:
+                raise ValueError("Argument `ticker` must not be empty.")
+            return [split_ticker(t, mode) for t in ticker]
+        else:
+            raise TypeError(
+                "Argument `ticker` must be a string or an iterable of strings."
+            )
+
+    if "_" not in ticker:
+        raise ValueError(
+            "Argument `ticker` must be a string" " with at least one underscore."
+            f" Received '{ticker}' instead."
+        )
+
+    cid, xcat = str(ticker).split("_", 1)
+    rStr: str = cid if mode == "cid" else xcat
+    if len(rStr.strip()) == 0:
+        raise ValueError(
+            f"Unable to extract {mode} from ticker {ticker}."
+            " Please check the ticker."
+        )
+
+    return rStr
+
+
+def get_cid(ticker: Union[str, Iterable[str]]) -> Union[str, List[str]]:
+    """
+    Returns the cross-sectional identifier (cid) from a ticker.
+
+    :param <str> ticker: The ticker to be converted.
+
+    Returns
+    :return <str>: The cross-sectional identifier.
+    """
+    return split_ticker(ticker, mode="cid")
+
+
+def get_xcat(ticker: Union[str, Iterable[str]]) -> str:
+    """
+    Returns the category (xcat) from a ticker.
+
+    :param <str> ticker: The ticker to be converted.
+
+    Returns
+    :return <str>: The category.
+    """
+    return split_ticker(ticker, mode="xcat")
 
 
 def generate_random_date(
@@ -104,84 +210,14 @@ def rec_search_dict(d: dict, key: str, match_substring: bool = False, match_type
 
 
 def is_valid_iso_date(date: str) -> bool:
+    if not isinstance(date, str):
+        raise TypeError("Argument `date` must be a string.")
+
     try:
         datetime.datetime.strptime(date, "%Y-%m-%d")
         return True
     except ValueError:
         return False
-
-
-def convert_to_iso_format(date: Any = None) -> str:
-    raise NotImplementedError("This function is not yet implemented.")
-    """
-    Converts a datetime like object or string to an ISO date string.
-
-    Parameters
-    :param <Any> date: The date to be converted. This can be a
-        datetime object, a string, pd.Timestamp, or np.datetime64.
-
-    Returns
-    :return <str>: The ISO date string (YYYY-MM-DD).
-    """
-    if date is None:
-        ValueError("Argument `date` cannot be None.")
-
-    r: Optional[str] = None
-    if isinstance(date, str):
-        r: Optional[str] = None
-        if is_valid_iso_date(date):
-            r = date
-        else:
-            if len(date) == 8:
-                try:
-                    r = convert_dq_to_iso(date)
-                except Exception as e:
-                    if isinstance(e, (ValueError, AssertionError)):
-                        pass
-            else:
-                for sep in ["-", "/", ".", " "]:
-                    if sep in date:
-                        try:
-                            sd = date.split(sep)
-                            dx = date
-                            if len(sd) == 3:
-                                if len(sd[1]) == 3:
-                                    sd[1] = {
-                                        "JAN": "01",
-                                        "FEB": "02",
-                                        "MAR": "03",
-                                        "APR": "04",
-                                        "MAY": "05",
-                                        "JUN": "06",
-                                        "JUL": "07",
-                                        "AUG": "08",
-                                        "SEP": "09",
-                                        "OCT": "10",
-                                        "NOV": "11",
-                                        "DEC": "12",
-                                    }[sd[1].upper()]
-                                    dx = sep.join(sd)
-                                r = datetime.datetime.strptime(
-                                    dx, "%d" + sep + "%m" + sep + "%Y"
-                                ).strftime("%Y-%m-%d")
-                                break
-                        except Exception as e:
-                            if isinstance(e, ValueError):
-                                pass
-                            else:
-                                raise e
-
-        if r is None:
-            raise RuntimeError("Could not convert date to ISO format.")
-    elif isinstance(date, (datetime.datetime, pd.Timestamp, np.datetime64)):
-        r = date.strftime("%Y-%m-%d")
-    else:
-        raise TypeError(
-            "Argument `date` must be a string, datetime.datetime, pd.Timestamp or np.datetime64."
-        )
-
-    assert is_valid_iso_date(r), "Failed to convert date to ISO format."
-    return r
 
 
 def convert_iso_to_dq(date: str) -> str:
@@ -343,40 +379,107 @@ def drop_nan_series(df: pd.DataFrame, raise_warning: bool = False) -> pd.DataFra
     return df.reset_index(drop=True)
 
 
-def wide_to_long(
-    df: pd.DataFrame,
-    wide_var: str = "cid",
-    val_col: str = "value",
-) -> pd.DataFrame:
+def qdf_to_ticker_df(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Converts a wide dataframe to a long dataframe.
+    Converts a standardized JPMaQS DataFrame to a wide format DataFrame
+    with each column representing a ticker.
 
-    :param <pd.DataFrame> df: The dataframe to be converted.
-    :param <str> wide_var: The variable name of the wide variable.
-        In case the columns are ... cid_1, cid_2, cid_3, ... then
-        wide_var should be "cid", else "xcat" or "real_date" must be
-        passed.
-
-    Returns
-    :return <pd.DataFrame>: The converted dataframe.
+    :param <pd.DataFrame> df: A standardised quantamental dataframe.
+    :return <pd.DataFrame>: The converted DataFrame.
     """
-    idx_cols: list = ["cid", "xcat", "real_date"]
-
     if not isinstance(df, pd.DataFrame):
-        raise ValueError("Error: The input must be a pandas DataFrame.")
+        raise TypeError("Argument `df` must be a pandas DataFrame.")
 
-    if wide_var not in ["cid", "xcat", "real_date"]:
+    STD_COLS: List[str] = ["cid", "xcat", "real_date", "value"]
+    if not set(df.columns).issuperset(set(STD_COLS)):
+        df: pd.DataFrame = standardise_dataframe(df)[STD_COLS]
+
+    df["ticker"] = df["cid"] + "_" + df["xcat"]
+    # drop cid and xcat
+    df = (
+        df.drop(columns=["cid", "xcat"])
+        .pivot(index="real_date", columns="ticker", values="value")
+        .rename_axis(None, axis=1)
+    )
+
+    return df
+
+
+def ticker_df_to_qdf(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Converts a wide format DataFrame (with each column representing a ticker)
+    to a standardized JPMaQS DataFrame.
+
+    :param <pd.DataFrame> df: A wide format DataFrame.
+    :return <pd.DataFrame>: The converted DataFrame.
+    """
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("Argument `df` must be a pandas DataFrame.")
+
+    # pivot to long format
+    df = (
+        df.stack(level=0)
+        .reset_index()
+        .rename(columns={0: "value", "level_1": "ticker"})
+    )
+    # split ticker using get_cid and get_xcat
+    df["cid"] = get_cid(df["ticker"])
+    df["xcat"] = get_xcat(df["ticker"])
+    # drop ticker column
+
+    df = df.drop(columns=["ticker"])
+
+    # standardise and return
+    return standardise_dataframe(df=df)
+
+
+def downsample_df_on_real_date(
+    df: pd.DataFrame,
+    groupby_columns: List[str] = [],
+    freq: str = "M",
+    agg: str = "mean",
+):
+    """
+    Downsample JPMaQS DataFrame.
+
+    :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
+        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+    :param <List> groupby_columns: a list of columns used to group the DataFrame.
+    :param <str> freq: frequency option. Per default the correlations are calculated
+        based on the native frequency of the datetimes in 'real_date', which is business
+        daily. Downsampling options include weekly ('W'), monthly ('M'), or quarterly
+        ('Q') mean.
+    :param <str> agg: aggregation method. Must be one of "mean" (default), "median",
+        "min", "max", "first" or "last".
+
+    :return <pd.DataFrame>: the downsampled DataFrame.
+    """
+
+    if not set(groupby_columns).issubset(df.columns):
         raise ValueError(
-            "Error: The wide_var must be one of 'cid', 'xcat', 'real_date'."
+            "The columns specified in 'groupby_columns' were not found in the DataFrame."
         )
 
-    """ 
-    if wide_var == "cid":
-     then the columns are real_date, xcat, cidX, cidY, cidZ, ...
-     convert to real_date, xcat, cid, value
-    """
-    # use stack and unstack to convert to long format
-    df = df.set_index(idx_cols).stack().reset_index()
-    df.columns = idx_cols + [wide_var, val_col]
+    if not isinstance(freq, str):
+        raise TypeError("`freq` must be a string")
+    else:
+        freq: str = freq.upper()
+        if freq not in ["D", "W", "M", "Q", "A"]:
+            raise ValueError("`freq` must be one of 'D', 'W', 'M', 'Q' or 'A'")
 
-    return standardise_dataframe(df)
+    if not isinstance(agg, str):
+        raise TypeError("`agg` must be a string")
+    else:
+        agg: str = agg.lower()
+        if agg not in ["mean", "median", "min", "max", "first", "last"]:
+            raise ValueError(
+                "`agg` must be one of 'mean', 'median', 'min', 'max', 'first', 'last'"
+            )
+
+    return (
+        df.set_index("real_date")
+        .groupby(groupby_columns)
+        .resample(freq)
+        .agg(agg, numeric_only=True)
+        .reset_index()
+    )

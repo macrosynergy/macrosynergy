@@ -1,12 +1,13 @@
 """
-Common functions for visualizing data.
-These functions make use of the classes in the `macrosynergy.visuals` module.
-Convinient when used as:
+Function for visualising a facet grid of time line charts of one or more categories
 ```python
 import macrosynergy.visuals as msv
 ...
-msv.view.timelines( df, xcats=["FXXR", "EQXR", "IR"], 
-                    cids=["USD", "EUR", "GBP"])
+msv.view.timelines(
+    df,
+    xcats=["FXXR", "EQXR", "IR"],
+    cids=["USD", "EUR", "GBP"]
+)
 ...
 
 msv.FacetPlot(df).lineplot(cid_grid=True)
@@ -17,7 +18,10 @@ from typing import List, Optional, Tuple
 
 import pandas as pd
 
-from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
+from macrosynergy.management.utils import (
+    standardise_dataframe,
+    is_valid_iso_date
+)
 from macrosynergy.visuals import FacetPlot, LinePlot
 from macrosynergy.visuals.common import Numeric
 
@@ -303,12 +307,10 @@ def timelines(
             )
 
 
-if __name__ == "__main__":
-    # from macrosynergy.visuals import FacetPlot
-    from macrosynergy.dev.local import LocalCache
-    from macrosynergy.management.simulate_quantamental_data import make_test_df
 
-    LOCAL_CACHE = "~/Macrosynergy/Macrosynergy - Documents/SharedData/JPMaQSTickers"
+if __name__ == "__main__":
+    from macrosynergy.visuals import FacetPlot
+    from macrosynergy.management.simulate_quantamental_data import make_test_df
 
     cids: List[str] = [
         "USD",
@@ -404,3 +406,5 @@ if __name__ == "__main__":
         cids=sel_cids,
         title="Plotting multiple cross sections for a single category \n with different y-axis!",
     )
+
+    
