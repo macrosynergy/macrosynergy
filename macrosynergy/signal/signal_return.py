@@ -15,606 +15,8 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df, categories_df
 from macrosynergy.management.utils import apply_slip as apply_slip_util
 
-class SignalBase:
-    def __init__(
-        self,
-        df: pd.DataFrame,
-        ret: Union[str, List[str]],
-        sig: Union[str, List[str]],
-        cosp: bool = False,
-        start: str = None,
-        end: str = None,
-        blacklist: dict = None,
-        freq: Union[str, List[str]] = "M",
-        agg_sig: Union[str, List[str]] = "last",
-        fwin: int = 1,
-        slip: int = 0,
-    ):
-        if not isinstance(df, pd.DataFrame):
-            raise TypeError(f"DataFrame expected and not {type(df)}.")
 
-        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
-
-        self.dic_freq = {
-            "D": "daily",
-            "W": "weekly",
-            "M": "monthly",
-            "Q": "quarterly",
-            "A": "annual",
-        }
-
-        required_columns = ["cid", "xcat", "real_date", "value"]
-
-        if not all(col in df.columns for col in required_columns):
-            raise ValueError(
-                "Dataframe columns must be of value: 'cid', 'xcat','real_date' and 'value'"
-            )
-
-        freq_error = f"Frequency parameter must be one of {list(self.dic_freq.keys())}."
-        if isinstance(freq, list):
-            for f in freq:
-                if not f in self.dic_freq.keys():
-                    raise ValueError(freq_error)
-        else:
-            if not freq in self.dic_freq.keys():
-                raise ValueError(freq_error)
-
-        self.metrics = [
-            "accuracy",
-            "bal_accuracy",
-            "pos_sigr",
-            "pos_retr",
-            "pos_prec",
-            "neg_prec",
-            "pearson",
-            "pearson_pval",
-            "kendall",
-            "kendall_pval",
-        ]
-
-        self.ret = ret
-        self.freq = freq
-
-        assert isinstance(cosp, bool), f"<bool> object expected and not {type(cosp)}."
-        self.cosp = cosp
-        self.start = start
-        self.end = end
-        self.blacklist = blacklist
-        self.fwin = fwin
-
-        xcats = list(df["xcat"].unique())
-        assert sig in xcats, "Primary signal must be available in the DataFrame."
-
-        self.xcats = list(df["xcat"].unique())
-        self.df = df
-        self.original_df = df.copy()
-
-    @staticmethod
-    def __slice_df__(df: pd.DataFrame, cs: str, cs_type: str):
-        """
-        Slice DataFrame by year, cross-section, or use full panel.
-
-        :param <pd.DataFrame> df: standardised DataFrame.
-        :param <str> cs: individual segment, cross-section or year.
-        :param <str> cs_type: segmentation type.
-        """
-
-        # Row names of cross-sections or years.
-        if cs != "Panel" and cs_type == "cids":
-            df_cs = df.loc[cs]
-        elif cs != "Panel":
-            df_cs = df[df["year"] == float(cs)]
-        else:
-            df_cs = df
-
-        return df_cs
-    
-    @staticmethod
-    def is_list_of_strings(variable):
-            return isinstance(variable, list) and all(
-                isinstance(item, str) for item in variable
-            )
-
-    @classmethod
-    def apply_slip(
-        self,
-        target_df: pd.DataFrame,
-        slip: int,
-        cids: List[str],
-        xcats: List[str],
-        metrics: List[str],
-    ) -> pd.DataFrame:
-        """
-        Applied a slip, i.e. a negative lag, to the target DataFrame
-        for the given cross-sections and categories, on the given metrics.
-
-        :param <pd.DataFrame> target_df: DataFrame to which the slip is applied.
-        :param <int> slip: Slip to be applied.
-        :param <List[str]> cids: List of cross-sections.
-        :param <List[str]> xcats: List of categories.
-        :param <List[str]> metrics: List of metrics to which the slip is applied.
-        :return <pd.DataFrame> target_df: DataFrame with the slip applied.
-        :raises <TypeError>: If the provided parameters are not of the expected type.
-        :raises <ValueError>: If the provided parameters are semantically incorrect.
-        """
-
-        target_df = target_df.copy(deep=True)
-        if not (isinstance(slip, int) and slip >= 0):
-            raise ValueError("Slip must be a non-negative integer.")
-
-        if cids is None:
-            cids = target_df["cid"].unique().tolist()
-        if xcats is None:
-            xcats = target_df["xcat"].unique().tolist()
-
-        sel_tickers: List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
-        target_df["tickers"] = target_df["cid"] + "_" + target_df["xcat"]
-
-        if not set(sel_tickers).issubset(set(target_df["tickers"].unique())):
-            warnings.warn(
-                "Tickers targetted for applying slip are not present in the DataFrame.\n"
-                f"Missing tickers: {sorted(list(set(sel_tickers) - set(target_df['tickers'].unique())))}"
-            )
-
-        slip: int = slip.__neg__()
-
-        target_df[metrics] = target_df.groupby("tickers")[metrics].shift(slip)
-        target_df = target_df.drop(columns=["tickers"])
-
-        return target_df
-
-    # NOTE THAT THE ORIGINAL __table__stats does not have a ret argument, so this needs to be rectified during inheritance
-
-    def __table_stats__(
-        self,
-        df_segment: pd.DataFrame,
-        df_out: pd.DataFrame,
-        segment: str,
-        signal: str,
-        ret: str,
-    ):
-        """
-        Method used to compute the evaluation metrics across segments: cross-section,
-        yearly or category level.
-
-        :param <pd.DataFrame> df_segment: segmented DataFrame.
-        :param <pd.DataFrame> df_out: metric DataFrame where the index will be all
-            segments for the respective segmentation type.
-        :param <str> segment: segment which could either be an individual cross-section,
-            year or category. Will form the index of the returned DataFrame.
-        :param <str> signal: signal category.
-        """
-
-        # Account for NaN values between the single respective signal and return. Only
-        # applicable for rival signals panel level calculations.
-
-        df_segment = df_segment.loc[:, [ret, signal]].dropna(axis=0, how="any")
-
-        df_sgs = np.sign(df_segment.loc[:, [ret, signal]])
-        # Exact zeroes are disqualified for sign analysis only.
-        df_sgs = df_sgs[~((df_sgs.iloc[:, 0] == 0) | (df_sgs.iloc[:, 1] == 0))]
-
-        sig_sign = df_sgs[signal]
-        ret_sign = df_sgs[ret]
-
-        df_out.loc[segment, "accuracy"] = skm.accuracy_score(sig_sign, ret_sign)
-        df_out.loc[segment, "bal_accuracy"] = skm.balanced_accuracy_score(
-            sig_sign, ret_sign
-        )
-
-        df_out.loc[segment, "pos_sigr"] = np.mean(sig_sign == 1)
-        df_out.loc[segment, "pos_retr"] = np.mean(ret_sign == 1)
-        df_out.loc[segment, "pos_prec"] = skm.precision_score(
-            ret_sign, sig_sign, pos_label=1
-        )
-        df_out.loc[segment, "neg_prec"] = skm.precision_score(
-            ret_sign, sig_sign, pos_label=-1
-        )
-
-        ret_vals, sig_vals = df_segment[ret], df_segment[signal]
-
-        df_out.loc[segment, ["kendall", "kendall_pval"]] = stats.kendalltau(
-            ret_vals, sig_vals
-        )
-        corr, corr_pval = stats.pearsonr(ret_vals, sig_vals)
-        df_out.loc[segment, ["pearson", "pearson_pval"]] = np.array([corr, corr_pval])
-
-        return df_out
-
-    # NOTE THAT THE ORIGINAL __output__table__ does not have a ret or sig argument, so this needs to be rectified during inheritance
-
-    def __output_table__(self, cs_type: str = "cids", ret=None, sig=None, srt=False):
-        """
-        Creates a DataFrame with information on the signal-return relation across
-        cross-sections or years and, additionally, the panel.
-
-        :param <str> cs_type: the segmentation type.
-
-        """
-
-        if ret is None:
-            ret = self.ret if not isinstance(self.ret, list) else self.ret[0]
-        if sig is None:
-            sig = self.sig
-
-        # Analysis completed exclusively on the primary signal.
-        r = [ret]
-        if isinstance(sig, list):
-            r += sig
-        else:
-            r.append(sig)
-        df = self.df[r]
-
-        # Will remove any timestamps where both the signal & return are not realised.
-        # Applicable even if communal sampling has been applied given the alignment
-        # excludes the return category.
-        df = df.dropna(how="any")
-
-        if cs_type == "cids":
-            css = self.cids
-        else:
-            df["year"] = np.array(df.reset_index(level=1)["real_date"].dt.year)
-            css = [str(y) for y in list(set(df["year"]))]
-            css = sorted(css)
-
-        statms = self.metrics
-        if srt:
-            css = []
-            index = ["Panel"]
-        else:
-            index = ["Panel", "Mean", "PosRatio"] + css
-
-        df_out = pd.DataFrame(index=index, columns=statms)
-
-        for cs in css + ["Panel"]:
-            df_cs = self.__slice_df__(df=df, cs=cs, cs_type=cs_type)
-            df_out = self.__table_stats__(
-                df_segment=df_cs, df_out=df_out, segment=cs, signal=sig, ret=ret
-            )
-        if not srt:
-            df_out.loc["Mean", :] = df_out.loc[css, :].mean()
-
-            above50s = statms[0:6]
-            # Overview of the cross-sectional performance.
-            df_out.loc["PosRatio", above50s] = (df_out.loc[css, above50s] > 0.5).mean()
-
-            above0s = statms[6::2]
-            pos_corr_coefs = df_out.loc[css, above0s] > 0
-            df_out.loc["PosRatio", above0s] = pos_corr_coefs.mean()
-
-            below50s = statms[7::2]
-            pvals_bool = df_out.loc[css, below50s] < 0.5
-            pos_pvals = np.mean(np.array(pvals_bool) * np.array(pos_corr_coefs), axis=0)
-            # Positive correlation with error prob < 50%.
-            df_out.loc["PosRatio", below50s] = pos_pvals
-
-        return df_out.astype("float")
-
-
-class SignalsReturns(SignalBase):
-    """
-    Class for analysing and visualizing signal and a return series.
-    :param <pd.Dataframe> df: standardized DataFrame with the following necessary
-        columns: 'cid', 'xcat', 'real_date' and 'value.
-    :param <str, List[str]> rets: one or several target return categories.
-    :param <str, List[str]> sigs: list of signal categories to be considered
-    :param <int, List[int[> signs: list of signs (direction of impact) to be applied,
-        corresponding to signs.
-        Default is 1. i.e. impact is supposed to be positive.
-        When -1 is chosen for one or all list elements the signal category
-        hat category is taken in negative terms.
-    :param <int> slip: slippage of signal application in days. This effectively lags
-    the signal series, i.e. values are recorded on a future date, simulating
-    time it takes to trade on the signal
-    :param <bool> cosp: If True the comparative statistics are calculated only for the
-        "communal sample periods", i.e. periods and cross-sections that have values
-        for all compared signals. Default is False.
-    :param <str> start: earliest date in ISO format. Default is None in which case the
-        earliest date available will be used.
-    :param <str> end: latest date in ISO format. Default is None in which case the
-        latest date in the df will be used.
-    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
-        the data frame. If one cross-section has several blacklist periods append numbers
-        to the cross-section code.
-    :param <str, List[str]> freqs: letters denoting frequency at which the series are to
-        be sampled.
-        This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
-        The return series will always be summed over the sample period.
-        The signal series will be aggregated according to the values of `agg_sigs`.
-    :param <str, List[str]> agg_sigs: aggregation method applied to the signal values in
-        down-sampling. The default is "last". Alternatives are "mean", "median" and "sum".
-        If a single aggregation type is chosen for multiple signal categories it is
-        applied to all of them.
-    """
-
-    def __init__(
-        self,
-        df: pd.DataFrame,
-        rets: Union[str, List[str]],
-        sigs: Union[str, List[str]],
-        signs: Union[int, List[int]] = 1,
-        slip: int = 0,
-        cosp: bool = False,
-        start: str = None,
-        end: str = None,
-        blacklist: dict = None,
-        freqs: Union[str, List[str]] = "M",
-        agg_sigs: Union[int, List[int]] = "last",
-    ):
-        super().__init__(
-            df=df,
-            ret=rets,
-            sig=sigs,
-            slip=slip,
-            cosp=cosp,
-            start=start,
-            end=end,
-            blacklist=blacklist,
-            freq=freqs,
-            agg_sig=agg_sigs,
-        )
-        self.df = df
-
-        if not self.is_list_of_strings(rets):
-            self.ret = [rets]
-
-        if not self.is_list_of_strings(sigs):
-            self.sig = [sigs]
-
-        if isinstance(self.sig, list):
-            for sig in self.sig:
-                assert (
-                    sig in self.xcats
-                ), "Primary signal must be available in the DataFrame."
-                self.signals = sig
-
-        self.xcats = self.sig + self.ret
-
-        self.signs = signs
-
-    def single_relation_table(self, ret=None, xcat=None, freq=None, agg_sigs=None):
-        """
-        Computes the statistics for a specific panel specified by the arguments
-
-        :param <str> ret: target return category
-        :param <str> xcat: signal category to be considered
-        :param <str> freq: letter denoting frequency at which the series are to be sampled.
-        This must be one of 'D', 'W', 'M', 'Q', 'A'. If not specified uses the freq stored in the class.
-        :param <str> agg_sigs: aggregation method applied to the signal values in down-sampling.
-        """
-        if ret is None:
-            ret = self.ret if not isinstance(self.ret, list) else self.ret[0]
-        if freq is None:
-            freq = self.freq if not isinstance(self.freq, list) else self.freq[0]
-        if agg_sigs is None:
-            agg_sigs = (
-                self.agg_sig if not isinstance(self.agg_sig, list) else self.agg_sig[0]
-            )
-        if xcat is None:
-            sig = self.sig if not isinstance(self.sig, list) else self.sig[0]
-            xcat = [sig, ret]
-        else:
-            sig = xcat[0]
-
-        cids: List[str] = None
-        dfd = reduce_df(
-            self.original_df,
-            xcats=xcat,
-            cids=cids,
-            start=self.start,
-            end=self.end,
-            blacklist=self.blacklist,
-        )
-        metric_cols: List[str] = list(
-            set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
-        )
-        dfd: pd.DataFrame = self.apply_slip(
-            target_df=dfd, slip=self.slip, cids=cids, xcats=xcat, metrics=metric_cols
-        )
-
-        self.dfd = dfd
-
-        df = categories_df(
-            dfd,
-            xcats=xcat,
-            cids=cids,
-            val="value",
-            start=None,
-            end=None,
-            freq=freq,
-            blacklist=None,
-            lag=1,
-            xcat_aggs=[agg_sigs, "sum"],
-        )
-        self.df = df
-        self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
-
-        if not isinstance(self.signs, list):
-            self.signs = [self.signs]
-
-        if -1 in self.signs:
-            self.df.loc[:, self.signals] *= -1
-            s_copy = self.signals.copy()
-
-            self.signals = [s + "_NEG" for s in self.signals]
-            self.sig += "_NEG"
-            self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
-
-        df_result = self.__output_table__(
-            cs_type="cids", ret=ret, sig=sig, srt=True
-        ).round(decimals=5)
-
-        self.df = self.original_df
-
-        return df_result
-
-    def multiple_relations_table(
-        self, rets=None, xcats=None, freqs=None, agg_sigs=None
-    ):
-        """
-        Calculates statistics for each return and signal category specified with each frequency and aggregation method
-
-        :param <str, List[str]> rets: target return category
-        :param <str, List[str]> xcats: signal categories to be considered
-        :param <str, List[str]> freqs: letters denoting frequency at which the series are to be sampled
-        This must be one of 'D', 'W', 'M', 'Q', 'A'. If not specified uses the freq stored in the class
-        :param <str, List[str]> agg_sigs: aggregation methods applied to the signal values in down-sampling
-        """
-        if rets is None:
-            rets = self.ret
-        if freqs is None:
-            freqs = self.freq
-        if agg_sigs is None:
-            agg_sigs = self.agg_sig
-        if xcats is None:
-            xcats = self.xcats
-
-        if not isinstance(rets, list):
-            rets = [rets]
-
-        df_out = pd.DataFrame()
-
-        xcats = [x for x in xcats if x in self.sig]
-
-        index = []
-        for freq in freqs:
-            for agg_sig in agg_sigs:
-                for ret in rets:
-                    for xcat in xcats:
-                        index.append(f"{ret}/{xcat}/{agg_sig}/{freq}")
-                        df_out = pd.concat(
-                            [
-                                df_out,
-                                self.single_relation_table(
-                                    ret=ret,
-                                    xcat=[xcat, ret],
-                                    freq=freq,
-                                    agg_sigs=agg_sig,
-                                ),
-                            ]
-                        )
-
-        df_out.index = index
-        return df_out
-
-    def single_statistic_table(
-        self,
-        stat: str,
-        type: str = "panel",
-        rows: List[str] = ["xcat", "agg_sigs"],
-        columns: List[str] = ["ret", "freq"],
-    ):
-        """
-        
-        """
-        self.df = self.original_df
-
-        type_values = ["panel", "mean_years", "mean_cids", "pr_years", "pr_cids"]
-        rows_values = ["xcat", "ret", "freq", "agg_sigs"]
-        if not type in type_values:
-            raise ValueError(f"Type must be one of {type_values}")
-        for row in rows:
-            if not row in rows_values:
-                raise ValueError(f"Rows must only contain {rows_values}")
-        for column in columns:
-            if not column in rows_values:
-                raise ValueError(f"Columns must only contain {rows_values}")
-
-        if isinstance(self.freq, list):
-            freqs = self.freq
-        else:
-            freqs = [self.freq]
-        if self.is_list_of_strings(self.agg_sig):
-            agg_sigs = self.agg_sig
-        else:
-            agg_sigs = [self.agg_sig]
-
-        column_names = [self.ret[0] + "/" + freq for freq in freqs]
-        row_names = [self.sig[0] + "/" + agg_sig for agg_sig in agg_sigs]
-
-        df_result = pd.DataFrame(columns=column_names, index=row_names)
-
-        i = 0
-        for freq in freqs:
-            j = 0
-            for agg_sig in agg_sigs:
-                ret = self.ret if not isinstance(self.ret, list) else self.ret[0]
-                sig = self.sig if not isinstance(self.sig, list) else self.sig[0]
-                xcat = [sig, ret]
-
-                cids = None
-                dfd = reduce_df(
-                    self.df,
-                    xcats=xcat,
-                    cids=cids,
-                    start=self.start,
-                    end=self.end,
-                    blacklist=self.blacklist,
-                )
-                metric_cols: List[str] = list(
-                    set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
-                )
-                dfd: pd.DataFrame = self.apply_slip(
-                    target_df=dfd,
-                    slip=self.slip,
-                    cids=cids,
-                    xcats=xcat,
-                    metrics=metric_cols,
-                )
-
-                df = categories_df(
-                    dfd,
-                    xcats=xcat,
-                    cids=cids,
-                    val="value",
-                    start=None,
-                    end=None,
-                    freq=freq,
-                    blacklist=None,
-                    lag=1,
-                    xcat_aggs=[agg_sig, "sum"],
-                )
-                self.df = df
-                self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
-
-                if not isinstance(self.signs, list):
-                    self.signs = [self.signs]
-
-                if -1 in self.signs:
-                    self.df.loc[:, self.signals] *= -1
-                    s_copy = self.signals.copy()
-
-                    self.signals = [s + "_NEG" for s in self.signals]
-                    self.sig += "_NEG"
-                    self.df.rename(
-                        columns=dict(zip(s_copy, self.signals)), inplace=True
-                    )
-
-                #################################################################################################
-                #################################################################################################
-                #################################################################################################
-                if type == "mean_years" or type == "pr_years":
-                    cs_type = "years"
-                else:
-                    cs_type = "cids"
-                if type == "panel":
-                    type_index = 0
-                elif type == "mean_years" or type == "mean_cids":
-                    type_index = 1
-                elif type == "pr_years" or "pr_cids":
-                    type_index = 2
-
-                df_out = self.__output_table__(cs_type=cs_type, ret=ret, sig=sig)
-
-                df_result.iloc[j, i] = df_out.iloc[type_index][stat]
-                self.df = self.original_df
-                j += 1
-            i += 1
-
-        return df_result
-
-
-class SignalReturnRelations(SignalBase):
+class SignalReturnRelations:
 
     """
     Class for analysing and visualizing signal and a return series.
@@ -678,22 +80,48 @@ class SignalReturnRelations(SignalBase):
         fwin: int = 1,
         slip: int = 0,
     ):
-        super().__init__(
-            df=df,
-            ret=ret,
-            sig=sig,
-            slip=slip,
-            cosp=cosp,
-            start=start,
-            end=end,
-            blacklist=blacklist,
-            freq=freq,
-            agg_sig=agg_sig,
-            fwin=fwin,
-        )
-        assert (
-            self.sig in self.xcats
-        ), "Primary signal must be available in the DataFrame."
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError(f"DataFrame expected and not {type(df)}.")
+
+        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+
+        self.dic_freq = {
+            "D": "daily",
+            "W": "weekly",
+            "M": "monthly",
+            "Q": "quarterly",
+            "A": "annual",
+        }
+        freq_error = f"Frequency parameter must be one of {list(self.dic_freq.keys())}."
+        if not freq in self.dic_freq.keys():
+            raise ValueError(freq_error)
+
+        self.metrics = [
+            "accuracy",
+            "bal_accuracy",
+            "pos_sigr",
+            "pos_retr",
+            "pos_prec",
+            "neg_prec",
+            "pearson",
+            "pearson_pval",
+            "kendall",
+            "kendall_pval",
+        ]
+
+        self.ret = ret
+        self.freq = freq
+
+        assert isinstance(cosp, bool), f"<bool> object expected and not {type(cosp)}."
+        self.cosp = cosp
+        self.start = start
+        self.end = end
+        self.blacklist = blacklist
+        self.fwin = fwin
+
+        xcats = list(df["xcat"].unique())
+        assert sig in xcats, "Primary signal must be available in the DataFrame."
+        self.sig = sig
 
         signals = [self.sig]
         if rival_sigs is not None:
@@ -702,27 +130,22 @@ class SignalReturnRelations(SignalBase):
 
             r_sigs = [rival_sigs] if isinstance(rival_sigs, str) else rival_sigs
 
-            intersection = set(self.xcats).intersection(r_sigs)
+            intersection = set(xcats).intersection(r_sigs)
             missing = set(r_sigs).difference(intersection)
 
             rival_error = (
                 f"The additional signals must be present in the defined "
                 f"DataFrame. It is currently missing, {missing}."
             )
-            assert set(r_sigs).issubset(set(self.xcats)), rival_error
+            assert set(r_sigs).issubset(set(xcats)), rival_error
             signals += r_sigs
 
         self.signals = signals
 
-        self.xcats = self.signals + [self.ret]
+        xcats = self.signals + [ret]
 
         dfd = reduce_df(
-            df=df,
-            xcats=self.xcats,
-            cids=cids,
-            start=self.start,
-            end=self.end,
-            blacklist=self.blacklist,
+            df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
         )
 
         # Since there may be any metrics in the DF at this point, simply apply slip to all.
@@ -730,10 +153,10 @@ class SignalReturnRelations(SignalBase):
             set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
         )
         dfd: pd.DataFrame = self.apply_slip(
-            target_df=dfd,
-            slip=self.slip,
+            df=dfd,
+            slip=slip,
             cids=cids,
-            xcats=self.xcats,
+            xcats=xcats,
             metrics=metric_cols,
         )
 
@@ -745,16 +168,16 @@ class SignalReturnRelations(SignalBase):
 
         df = categories_df(
             dfd,
-            xcats=self.xcats,
+            xcats=xcats,
             cids=cids,
             val="value",
             start=None,
             end=None,
-            freq=self.freq,
+            freq=freq,
             blacklist=None,
             lag=1,
-            fwin=self.fwin,
-            xcat_aggs=[self.agg_sig, "sum"],
+            fwin=fwin,
+            xcat_aggs=[agg_sig, "sum"],
         )
         self.df = df
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
@@ -770,8 +193,77 @@ class SignalReturnRelations(SignalBase):
         if len(self.signals) > 1:
             self.df_sigs = self.__rival_sigs__()
 
-        self.df_cs = self.__output_table__(cs_type="cids", ret=ret, sig=self.sig)
-        self.df_ys = self.__output_table__(cs_type="years", ret=ret, sig=self.sig)
+        self.df_cs = self.__output_table__(cs_type="cids")
+        self.df_ys = self.__output_table__(cs_type="years")
+
+    @staticmethod
+    def __slice_df__(df: pd.DataFrame, cs: str, cs_type: str):
+        """
+        Slice DataFrame by year, cross-section, or use full panel.
+
+        :param <pd.DataFrame> df: standardised DataFrame.
+        :param <str> cs: individual segment, cross-section or year.
+        :param <str> cs_type: segmentation type.
+        """
+
+        # Row names of cross-sections or years.
+        if cs != "Panel" and cs_type == "cids":
+            df_cs = df.loc[cs]
+        elif cs != "Panel":
+            df_cs = df[df["year"] == float(cs)]
+        else:
+            df_cs = df
+
+        return df_cs
+
+    def __table_stats__(
+        self, df_segment: pd.DataFrame, df_out: pd.DataFrame, segment: str, signal: str
+    ):
+        """
+        Method used to compute the evaluation metrics across segments: cross-section,
+        yearly or category level.
+
+        :param <pd.DataFrame> df_segment: segmented DataFrame.
+        :param <pd.DataFrame> df_out: metric DataFrame where the index will be all
+            segments for the respective segmentation type.
+        :param <str> segment: segment which could either be an individual cross-section,
+            year or category. Will form the index of the returned DataFrame.
+        :param <str> signal: signal category.
+        """
+
+        # Account for NaN values between the single respective signal and return. Only
+        # applicable for rival signals panel level calculations.
+        df_segment = df_segment.loc[:, [self.ret, signal]].dropna(axis=0, how="any")
+
+        df_sgs = np.sign(df_segment.loc[:, [self.ret, signal]])
+        # Exact zeroes are disqualified for sign analysis only.
+        df_sgs = df_sgs[~((df_sgs.iloc[:, 0] == 0) | (df_sgs.iloc[:, 1] == 0))]
+
+        sig_sign = df_sgs[signal]
+        ret_sign = df_sgs[self.ret]
+
+        df_out.loc[segment, "accuracy"] = skm.accuracy_score(sig_sign, ret_sign)
+        df_out.loc[segment, "bal_accuracy"] = skm.balanced_accuracy_score(
+            sig_sign, ret_sign
+        )
+
+        df_out.loc[segment, "pos_sigr"] = np.mean(sig_sign == 1)
+        df_out.loc[segment, "pos_retr"] = np.mean(ret_sign == 1)
+        df_out.loc[segment, "pos_prec"] = skm.precision_score(
+            ret_sign, sig_sign, pos_label=1
+        )
+        df_out.loc[segment, "neg_prec"] = skm.precision_score(
+            ret_sign, sig_sign, pos_label=-1
+        )
+
+        ret_vals, sig_vals = df_segment[self.ret], df_segment[signal]
+        df_out.loc[segment, ["kendall", "kendall_pval"]] = stats.kendalltau(
+            ret_vals, sig_vals
+        )
+        corr, corr_pval = stats.pearsonr(ret_vals, sig_vals)
+        df_out.loc[segment, ["pearson", "pearson_pval"]] = np.array([corr, corr_pval])
+
+        return df_out
 
     def __communal_sample__(self, df: pd.DataFrame):
         """
@@ -820,6 +312,57 @@ class SignalReturnRelations(SignalBase):
 
         return df[["cid", "xcat", "real_date", "value"]]
 
+    def __output_table__(self, cs_type: str = "cids"):
+        """
+        Creates a DataFrame with information on the signal-return relation across
+        cross-sections or years and, additionally, the panel.
+
+        :param <str> cs_type: the segmentation type.
+
+        """
+
+        # Analysis completed exclusively on the primary signal.
+        df = self.df[[self.ret, self.sig]]
+
+        # Will remove any timestamps where both the signal & return are not realised.
+        # Applicable even if communal sampling has been applied given the alignment
+        # excludes the return category.
+        df = df.dropna(how="any")
+
+        if cs_type == "cids":
+            css = self.cids
+        else:
+            df["year"] = np.array(df.reset_index(level=1)["real_date"].dt.year)
+            css = [str(y) for y in list(set(df["year"]))]
+            css = sorted(css)
+
+        statms = self.metrics
+        df_out = pd.DataFrame(index=["Panel", "Mean", "PosRatio"] + css, columns=statms)
+
+        for cs in css + ["Panel"]:
+            df_cs = self.__slice_df__(df=df, cs=cs, cs_type=cs_type)
+            df_out = self.__table_stats__(
+                df_segment=df_cs, df_out=df_out, segment=cs, signal=self.sig
+            )
+
+        df_out.loc["Mean", :] = df_out.loc[css, :].mean()
+
+        above50s = statms[0:6]
+        # Overview of the cross-sectional performance.
+        df_out.loc["PosRatio", above50s] = (df_out.loc[css, above50s] > 0.5).mean()
+
+        above0s = statms[6::2]
+        pos_corr_coefs = df_out.loc[css, above0s] > 0
+        df_out.loc["PosRatio", above0s] = pos_corr_coefs.mean()
+
+        below50s = statms[7::2]
+        pvals_bool = df_out.loc[css, below50s] < 0.5
+        pos_pvals = np.mean(np.array(pvals_bool) * np.array(pos_corr_coefs), axis=0)
+        # Positive correlation with error prob < 50%.
+        df_out.loc["PosRatio", below50s] = pos_pvals
+
+        return df_out.astype("float")
+
     def __rival_sigs__(self):
         """
         Produces the panel-level table for the additional signals.
@@ -828,15 +371,10 @@ class SignalReturnRelations(SignalBase):
         df_out = pd.DataFrame(index=self.signals, columns=self.metrics)
         df = self.df
 
-        if isinstance(self.ret, list):
-            ret = self.ret[0]
-        else:
-            ret = self.ret
-
         for s in self.signals:
             # Entire panel will be passed in.
             df_out = self.__table_stats__(
-                df_segment=df, df_out=df_out, segment=s, signal=s, ret=ret
+                df_segment=df, df_out=df_out, segment=s, signal=s
             )
 
         return df_out
