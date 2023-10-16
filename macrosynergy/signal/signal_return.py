@@ -109,6 +109,12 @@ class SignalBase:
             df_cs = df
 
         return df_cs
+    
+    @staticmethod
+    def is_list_of_strings(variable):
+            return isinstance(variable, list) and all(
+                isinstance(item, str) for item in variable
+            )
 
     @classmethod
     def apply_slip(
@@ -286,6 +292,41 @@ class SignalBase:
 
 
 class SignalsReturns(SignalBase):
+    """
+    Class for analysing and visualizing signal and a return series.
+    :param <pd.Dataframe> df: standardized DataFrame with the following necessary
+        columns: 'cid', 'xcat', 'real_date' and 'value.
+    :param <str, List[str]> rets: one or several target return categories.
+    :param <str, List[str]> sigs: list of signal categories to be considered
+    :param <int, List[int[> signs: list of signs (direction of impact) to be applied,
+        corresponding to signs.
+        Default is 1. i.e. impact is supposed to be positive.
+        When -1 is chosen for one or all list elements the signal category
+        hat category is taken in negative terms.
+    :param <int> slip: slippage of signal application in days. This effectively lags
+    the signal series, i.e. values are recorded on a future date, simulating
+    time it takes to trade on the signal
+    :param <bool> cosp: If True the comparative statistics are calculated only for the
+        "communal sample periods", i.e. periods and cross-sections that have values
+        for all compared signals. Default is False.
+    :param <str> start: earliest date in ISO format. Default is None in which case the
+        earliest date available will be used.
+    :param <str> end: latest date in ISO format. Default is None in which case the
+        latest date in the df will be used.
+    :param <dict> blacklist: cross-sections with date ranges that should be excluded from
+        the data frame. If one cross-section has several blacklist periods append numbers
+        to the cross-section code.
+    :param <str, List[str]> freqs: letters denoting frequency at which the series are to
+        be sampled.
+        This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
+        The return series will always be summed over the sample period.
+        The signal series will be aggregated according to the values of `agg_sigs`.
+    :param <str, List[str]> agg_sigs: aggregation method applied to the signal values in
+        down-sampling. The default is "last". Alternatives are "mean", "median" and "sum".
+        If a single aggregation type is chosen for multiple signal categories it is
+        applied to all of them.
+    """
+
     def __init__(
         self,
         df: pd.DataFrame,
@@ -314,31 +355,33 @@ class SignalsReturns(SignalBase):
         )
         self.df = df
 
+        if not self.is_list_of_strings(rets):
+            self.ret = [rets]
+
+        if not self.is_list_of_strings(sigs):
+            self.sig = [sigs]
+
         if isinstance(self.sig, list):
             for sig in self.sig:
                 assert (
                     sig in self.xcats
                 ), "Primary signal must be available in the DataFrame."
                 self.signals = sig
-        else:
-            assert (
-                self.sig in self.xcats
-            ), "Primary signal must be available in the DataFrame."
-            self.signals = [self.sig]
 
-        if isinstance(self.ret, list):
-            self.xcats = self.sig + self.ret
-        else:
-            self.xcats = self.signals + [self.ret]
+        self.xcats = self.sig + self.ret
 
         self.signs = signs
 
     def single_relation_table(self, ret=None, xcat=None, freq=None, agg_sigs=None):
-        """if isinstance(self.sigs, list):
-            sig = self.sigs[0]
-        else:
-            sig = self.sigs"""
+        """
+        Computes the statistics for a specific panel specified by the arguments
 
+        :param <str> ret: target return category
+        :param <str> xcat: signal category to be considered
+        :param <str> freq: letter denoting frequency at which the series are to be sampled.
+        This must be one of 'D', 'W', 'M', 'Q', 'A'. If not specified uses the freq stored in the class.
+        :param <str> agg_sigs: aggregation method applied to the signal values in down-sampling.
+        """
         if ret is None:
             ret = self.ret if not isinstance(self.ret, list) else self.ret[0]
         if freq is None:
@@ -397,9 +440,9 @@ class SignalsReturns(SignalBase):
             self.sig += "_NEG"
             self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
 
-        df_result = self.__output_table__(cs_type="cids", ret=ret, sig=sig, srt=True).round(
-            decimals=5
-        )
+        df_result = self.__output_table__(
+            cs_type="cids", ret=ret, sig=sig, srt=True
+        ).round(decimals=5)
 
         self.df = self.original_df
 
@@ -408,6 +451,15 @@ class SignalsReturns(SignalBase):
     def multiple_relations_table(
         self, rets=None, xcats=None, freqs=None, agg_sigs=None
     ):
+        """
+        Calculates statistics for each return and signal category specified with each frequency and aggregation method
+
+        :param <str, List[str]> rets: target return category
+        :param <str, List[str]> xcats: signal categories to be considered
+        :param <str, List[str]> freqs: letters denoting frequency at which the series are to be sampled
+        This must be one of 'D', 'W', 'M', 'Q', 'A'. If not specified uses the freq stored in the class
+        :param <str, List[str]> agg_sigs: aggregation methods applied to the signal values in down-sampling
+        """
         if rets is None:
             rets = self.ret
         if freqs is None:
@@ -425,12 +477,22 @@ class SignalsReturns(SignalBase):
         xcats = [x for x in xcats if x in self.sig]
 
         index = []
-        for ret in rets:
-            for xcat in xcats:
-                index.append(f"{ret}/{xcat}")
-                df_out = pd.concat(
-                    [df_out, self.single_relation_table(ret=ret, xcat=[xcat, ret])]
-                )
+        for freq in freqs:
+            for agg_sig in agg_sigs:
+                for ret in rets:
+                    for xcat in xcats:
+                        index.append(f"{ret}/{xcat}/{agg_sig}/{freq}")
+                        df_out = pd.concat(
+                            [
+                                df_out,
+                                self.single_relation_table(
+                                    ret=ret,
+                                    xcat=[xcat, ret],
+                                    freq=freq,
+                                    agg_sigs=agg_sig,
+                                ),
+                            ]
+                        )
 
         df_out.index = index
         return df_out
@@ -442,26 +504,27 @@ class SignalsReturns(SignalBase):
         rows: List[str] = ["xcat", "agg_sigs"],
         columns: List[str] = ["ret", "freq"],
     ):
-        self.df = self.original_df
-        def is_list_of_strings(variable):
-            return isinstance(variable, list) and all(isinstance(item, str) for item in variable)
+        """
         
+        """
+        self.df = self.original_df
+
         type_values = ["panel", "mean_years", "mean_cids", "pr_years", "pr_cids"]
         rows_values = ["xcat", "ret", "freq", "agg_sigs"]
         if not type in type_values:
-             raise ValueError(f"Type must be one of {type_values}")
+            raise ValueError(f"Type must be one of {type_values}")
         for row in rows:
             if not row in rows_values:
                 raise ValueError(f"Rows must only contain {rows_values}")
         for column in columns:
             if not column in rows_values:
                 raise ValueError(f"Columns must only contain {rows_values}")
-            
+
         if isinstance(self.freq, list):
             freqs = self.freq
         else:
             freqs = [self.freq]
-        if is_list_of_strings(self.agg_sig):
+        if self.is_list_of_strings(self.agg_sig):
             agg_sigs = self.agg_sig
         else:
             agg_sigs = [self.agg_sig]
@@ -470,7 +533,7 @@ class SignalsReturns(SignalBase):
         row_names = [self.sig[0] + "/" + agg_sig for agg_sig in agg_sigs]
 
         df_result = pd.DataFrame(columns=column_names, index=row_names)
-        
+
         i = 0
         for freq in freqs:
             j = 0
@@ -492,7 +555,11 @@ class SignalsReturns(SignalBase):
                     set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
                 )
                 dfd: pd.DataFrame = self.apply_slip(
-                    target_df=dfd, slip=self.slip, cids=cids, xcats=xcat, metrics=metric_cols
+                    target_df=dfd,
+                    slip=self.slip,
+                    cids=cids,
+                    xcats=xcat,
+                    metrics=metric_cols,
                 )
 
                 df = categories_df(
@@ -519,22 +586,24 @@ class SignalsReturns(SignalBase):
 
                     self.signals = [s + "_NEG" for s in self.signals]
                     self.sig += "_NEG"
-                    self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
+                    self.df.rename(
+                        columns=dict(zip(s_copy, self.signals)), inplace=True
+                    )
 
-        #################################################################################################
-        #################################################################################################
-        #################################################################################################
+                #################################################################################################
+                #################################################################################################
+                #################################################################################################
                 if type == "mean_years" or type == "pr_years":
-                    cs_type = 'years'
+                    cs_type = "years"
                 else:
-                    cs_type = 'cids'
+                    cs_type = "cids"
                 if type == "panel":
                     type_index = 0
                 elif type == "mean_years" or type == "mean_cids":
                     type_index = 1
                 elif type == "pr_years" or "pr_cids":
                     type_index = 2
-                
+
                 df_out = self.__output_table__(cs_type=cs_type, ret=ret, sig=sig)
 
                 df_result.iloc[j, i] = df_out.iloc[type_index][stat]
@@ -543,6 +612,7 @@ class SignalsReturns(SignalBase):
             i += 1
 
         return df_result
+
 
 class SignalReturnRelations(SignalBase):
 
