@@ -60,7 +60,7 @@ def api_request(
     sys.exit(1)
 
 
-def title_check(
+def check_title(
     title: str,
 ) -> bool:
     title_check: bool = False
@@ -80,7 +80,7 @@ def title_check(
     return title_check
 
 
-def test_pr_number(
+def check_pr_directives(
     body: str,
     state: str,
 ) -> bool:
@@ -116,10 +116,10 @@ def test_pr_info(
 ) -> bool:
     assert set(["number", "title", "state", "body"]).issubset(pr_info.keys())
 
-    if not title_check(title=pr_info["title"]):
+    if not check_title(title=pr_info["title"]):
         raise ValueError("PR title does not match any of the accepted patterns.")
 
-    if not test_pr_number(body=pr_info["body"], state=pr_info["state"]):
+    if not check_pr_directives(body=pr_info["body"], state=pr_info["state"]):
         raise ValueError(
             "PR number is not mergable due to merge restrictions"
             " specified in the PR body."
