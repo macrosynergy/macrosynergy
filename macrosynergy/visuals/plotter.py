@@ -11,6 +11,7 @@ from types import ModuleType
 from typing import Any, Dict, List, Optional
 
 import matplotlib.pyplot as plt
+import seaborn as sns
 import pandas as pd
 
 from macrosynergy.management import reduce_df
@@ -197,7 +198,18 @@ class Plotter(metaclass=PlotterMetaClass):
         self.backend: ModuleType
         if backend.startswith("m"):
             self.backend = plt
-            self.backend.style.use("seaborn-v0_8-darkgrid")
+            try:
+                self.backend.style.use("seaborn-v0_8-darkgrid")
+            except:
+                try:
+                    sns.set_style("darkgrid")
+                except:
+                    warnings.warn(
+                        "Unable to set the default style to Seaborne's darkgrid. \n"
+                        "Please make sure Seaborn and Matplotlib are installed, "
+                        " and updated to their latest versions.",
+                        RuntimeWarning,
+                    )
         elif ...:
             ...
         else:
