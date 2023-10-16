@@ -1108,6 +1108,20 @@ if __name__ == "__main__":
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
+    sr = SignalsReturns(
+        dfd,
+        rets=["XR"],
+        sigs=["CRY", "GROWTH"],
+        signs=[1, 1],
+        cosp=True,
+        freqs=["M", "Q"],
+        agg_sigs=["last", "mean"],
+    )
+
+    df_single = sr.single_relation_table()
+    df_mult = sr.multiple_relations_table()
+    df_sst = sr.single_statistic_table("bal_accuracy")
+
     # Additional signals.
     srn = SignalReturnRelations(
         dfd,
