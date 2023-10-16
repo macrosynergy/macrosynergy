@@ -374,7 +374,7 @@ class SignalsReturns(SignalBase):
             set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
         )
         dfd: pd.DataFrame = self.apply_slip(
-            df=dfd, slip=self.slip, cids=self.cids, xcats=xcat, metrics=metric_cols
+            df=dfd, slip=self.slip, cids=cids, xcats=xcat, metrics=metric_cols
         )
 
         self.dfd = dfd
@@ -522,7 +522,7 @@ class SignalsReturns(SignalBase):
                 dfd: pd.DataFrame = self.apply_slip(
                     df=dfd,
                     slip=self.slip,
-                    cids=self.cids,
+                    cids=cids,
                     xcats=xcat,
                     metrics=metric_cols,
                 )
