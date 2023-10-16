@@ -326,13 +326,6 @@ class SignalsReturns(SignalBase):
         if not self.is_list_of_strings(sigs):
             self.sig = [sigs]
 
-        if isinstance(self.sig, list):
-            for sig in self.sig:
-                assert (
-                    sig in self.xcats
-                ), "Primary signal must be available in the DataFrame."
-                self.signals = sig
-
         self.xcats = self.sig + self.ret
 
         self.signs = signs
@@ -397,12 +390,14 @@ class SignalsReturns(SignalBase):
         if not isinstance(self.signs, list):
             self.signs = [self.signs]
 
+        self.signals = [sig]
+
         if -1 in self.signs:
             self.df.loc[:, self.signals] *= -1
             s_copy = self.signals.copy()
 
             self.signals = [s + "_NEG" for s in self.signals]
-            self.sig += "_NEG"
+            sig += "_NEG"
             self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
 
         df_result = self.__output_table__(
@@ -431,6 +426,8 @@ class SignalsReturns(SignalBase):
             freqs = self.freq
         if agg_sigs is None:
             agg_sigs = self.agg_sig
+        if not isinstance(agg_sigs, list):
+            agg_sigs = [agg_sigs]
         if xcats is None:
             xcats = self.xcats
 
@@ -470,6 +467,8 @@ class SignalsReturns(SignalBase):
         columns: List[str] = ["ret", "freq"],
     ):
         """
+        Creates a table which shows the specified statistic for each row and column specified
+
         
         """
         self.df = self.original_df
@@ -544,13 +543,15 @@ class SignalsReturns(SignalBase):
 
                 if not isinstance(self.signs, list):
                     self.signs = [self.signs]
+                
+                self.signals = [sig]
 
                 if -1 in self.signs:
                     self.df.loc[:, self.signals] *= -1
                     s_copy = self.signals.copy()
 
                     self.signals = [s + "_NEG" for s in self.signals]
-                    self.sig += "_NEG"
+                    sig += "_NEG"
                     self.df.rename(
                         columns=dict(zip(s_copy, self.signals)), inplace=True
                     )
