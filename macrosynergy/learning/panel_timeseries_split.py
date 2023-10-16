@@ -600,7 +600,7 @@ def panel_cv_scores(
     # construct the dataframe to return
 
     if show_longbias:
-        estimators["Long proportion"] = make_scorer(lambda y_true, y_pred: np.sum(y_true > 0)/len(y_true))
+        scoring["Long proportion"] = make_scorer(lambda y_true, y_pred: np.sum(y_true > 0)/len(y_true))
 
     estimator_names = list(estimators.keys())
     metric_names = list(scoring.keys())
@@ -672,6 +672,7 @@ if __name__ == "__main__":
         splitter=splitex,
         estimators={"OLS": LinearRegression(), "Lasso": Lasso()},
         scoring={"rmse": make_scorer(mean_squared_error)},
+        show_longbias=True
     )
 
     # 1) Demonstration of basic functionality
