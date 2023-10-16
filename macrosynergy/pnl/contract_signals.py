@@ -110,15 +110,14 @@ def _gen_contract_signals(
     sname: str,
 ) -> pd.DataFrame:
     """
-    Generate the contract tickers for the dataframe, by applying the contract scales
-    to the signals.
-    Effectively, generating the contract signal using the cross-section-specific signal
-    and the contract scales.
+    Generate contract signals from cross-section-specific signals.
 
-    :param <pd.DataFrame> df: QDF with the contract signals and scaling XCATs.
-    :param <List[str]> cids: list of cross-sections whose signal is to be used.
-    :param <str> sig: the cross-section-specific signal that serves as the basis of
-        contract signals.
+    :param <pd.DataFrame> df: dataframe in quantamental format with the contract signals
+        and potentially categories required for translation into contract signals.
+    :param <List[str]> cids: list of cross-sections whose signals are to be translated
+        into contract signals.
+    :param <str> sig: the category ticker of the cross-section-specific signal that
+        is translated into contract signals.
     :param <List[str]> ctypes: list of identifiers for the contract types that are
         to be traded. They typically correspond to the contract type acronyms
         that are used in JPMaQS for generic returns, carry and volatility, such as
@@ -132,6 +131,7 @@ def _gen_contract_signals(
     :param <List[int]> csigns: list of signs for the contract signals. These must be
         either 1 for long position or -1 for short position.
     :param <str> sname: name of the strategy. Default is "STRAT".
+
     :return <pd.DataFrame>: dataframe with scaling applied.
     """
     # Type checks
@@ -148,7 +148,7 @@ def _gen_contract_signals(
 
     expected_contract_signals: List[str] = [f"{cx}_{sig}" for cx in cids]
 
-    # Pivot the DF to ticker format
+    # Pivot from quantamental to wide format
     df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
 
     # Check that all the contract signals are in the dataframe
@@ -170,7 +170,7 @@ def _gen_contract_signals(
             else:
                 scale_var: Numeric = cscales[ix]
 
-            new_cont_name: str = _cid + "_" + ctx + "_" + sname + "_CSIG"
+            new_cont_name: str = _cid + "_" + ctx + "_CSIG" + "_" + sname
             df_wide[new_cont_name] = df_wide[sig_col] * csigns[ix] * scale_var
 
     return ticker_df_to_qdf(df=df_wide)
@@ -193,7 +193,7 @@ def _apply_hedge_ratios(
     ):
         raise TypeError("Invalid arguments passed to `apply_hedge_ratios()`")
 
-    # Pivot the DF to ticker format
+    # Pivot the DF to wide ticker format
     df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
     # check if the hedge basket is in the dataframe
     if not set(hbasket).issubset(set(df_wide.columns)):
@@ -252,9 +252,11 @@ def contract_signals(
 
     :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
-        This dataframe must contain the cross-section-specific signals and possibly
-        [1] categories for variable scale factors of the main contracts, [2] contracts
-        of a hedging basket, and [3] cross-section specific hedge ratios
+        This dataframe must contain
+        [1] the cross-section-specific signals and possibly
+        [2] categories for variable scale factors of the main contracts,
+        [3] contracts of a hedging basket, and
+        [4] cross-section specific hedge ratios
     :param <str> sig: the cross-section-specific signal that serves as the basis of
         contract signals.
     :param <List[str]> cids: list of cross-sections whose signal is to be used.
@@ -277,7 +279,7 @@ def contract_signals(
     param <List[str|float]> hscales: list of scaling factors (weights) for the basket.
         These can be either a list of floats or a list of category tickers that serve
         as basis of translation. The former are fixed across time, the latter variable.
-    :param <str> hratios: category names for cross-section-specific hedge ratios.
+    :param <str> hratios: category name for cross-section-specific hedge ratios.
     :param <str> start: earliest date in ISO format. Default is None and earliest date
         in df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df
@@ -300,7 +302,7 @@ def contract_signals(
         (csigns, "csigns", (list, NoneType)),
         (hbasket, "hbasket", (list, NoneType)),
         (hscales, "hscales", (list, NoneType)),
-        (hratios, "hratios", (list, NoneType)),
+        (hratios, "hratios", (str, NoneType)),
         (start, "start", (str, NoneType)),
         (end, "end", (str, NoneType)),
         (blacklist, "blacklist", (dict, NoneType)),
@@ -378,8 +380,8 @@ def contract_signals(
     ## Apply the cross-section-specific signal to the dataframe
     # df: pd.DataFrame = _apply_sig_conversion(df=df, sig=sig, cids=cids)
 
-    ## Generate the contract signals
-    df: pd.DataFrame = _gen_contract_signals(
+    ## Generate contract signals
+    df_cs: pd.DataFrame = _gen_contract_signals(
         df=df,
         cids=cids,
         sig=sig,
@@ -389,23 +391,25 @@ def contract_signals(
         sname=sname,
     )
 
-    ## Apply hedging logic
+    ## Generate hedge contract signals
     if hbasket is not None:
-        df: pd.DataFrame = _apply_hedge_ratios(
+        df_hs: pd.DataFrame = _apply_hedge_ratios(
             df=df,
             hbasket=hbasket,
             hscales=hscales,
             hratios=hratios,
         )
 
-    return df
+    # df_out = _consolidate_signals(...)
+
+    return df_out
 
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate_quantamental_data import make_test_df
 
     cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
-    xcats: List[str] = ["TOUSD"]
+    xcats: List[str] = ["SIG", "HR"]
 
     start: str = "2000-01-01"
     end: str = "2020-12-31"
@@ -417,8 +421,23 @@ if __name__ == "__main__":
         end=end,
     )
 
-    df.loc[(df["cid"] == "USD") & (df["xcat"] == "TOUSD"), "value"] = 1.0
+    df.loc[(df["cid"] == "USD") & (df["xcat"] == "SIG"), "value"] = 1.0
+    ctypes = ["FX", "EQ", "IRS", "CDS"]
+    cscales = [1.0, 2.0, 0.5, 0.1]
+    csigns = [1, -1, 1, 1]
+
+    hbasket = ["USD_EQ", "EUR_EQ"]
+    hscales = [0.7, 0.3]
+    
 
     rDF: pd.DataFrame = contract_signals(
-        df=df, sig="TOUSD", cids=cids, ctypes=["FX", "EQ", "IRS", "CDS"]
+        df=df,
+        sig="SIG",
+        cids=cids,
+        ctypes=ctypes,
+        cscales=cscales,
+        csigns=csigns,
+        hbasket=hbasket,
+        hscales=hscales,
+        hratios="HR",
     )
