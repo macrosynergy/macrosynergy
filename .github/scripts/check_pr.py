@@ -1,14 +1,9 @@
-from typing import List, Optional, Tuple, Dict, Any
-
-import git
 import os
-from tqdm import tqdm
-import re
 import sys
-
-from datetime import datetime
-import requests
 from time import sleep
+from typing import Any, Dict, List, Optional
+
+import requests
 
 REPO_OWNER: str = "macrosynergy"
 REPO_NAME: str = "macrosynergy"
