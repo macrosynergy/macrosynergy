@@ -8,7 +8,9 @@ from typing import List, Dict, Tuple, Optional
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+from seaborn.utils import relative_luminance
 import matplotlib as mpl
+from typing import Union
 
 from macrosynergy.visuals.plotter import Plotter
 from macrosynergy.management.types import Numeric, NoneType
@@ -65,9 +67,9 @@ class Heatmap(Plotter):
         figsize: Tuple[Numeric, Numeric] = (12, 8),
         x_axis_label: Optional[str] = None,
         y_axis_label: Optional[str] = None,
-        axis_fontsize: int = 12,
+        axis_fontsize: int = 14,
         title: Optional[str] = None,
-        title_fontsize: int = 16,
+        title_fontsize: int = 30,
         title_xadjust: Numeric = 0.5,
         title_yadjust: Numeric = 1.0,
         vmin: Optional[Numeric] = None,
@@ -78,6 +80,15 @@ class Heatmap(Plotter):
         return_figure: bool = False,
         on_axis: Optional[plt.Axes] = None,
         max_xticks: int = 50,
+        cmap: Optional[Union[str, mpl.colors.Colormap]] = None,
+        rotate_xticks: Optional[Numeric] = 0,
+        rotate_yticks: Optional[Numeric] = 0,
+        show_tick_lines: Optional[bool] = True,
+        show_colorbar: Optional[bool] = True,
+        show_annotations: Optional[bool] = False,
+        show_boundaries: Optional[bool] = False,
+        annotation_fontsize: int = 14,
+        tick_fontsize: int = 13,
         *args,
         **kwargs,
     ) -> Optional[plt.Figure]:
@@ -105,6 +116,21 @@ class Heatmap(Plotter):
             creating a new one.
         :param <int> max_xticks: the maximum number of ticks to be displayed
             along the x axis. Default is 50.
+        :param <mpl.colors.Colormap> cmap: string or matplotlib Colormap object
+            specifying the colormap of the plot.
+        :param <int> rotate_xticks: number of degrees to rotate the tick labels on
+            the x-axis. Default is zero.
+        :param <int> rotate_yticks: number of degrees to rotate the tick labels on
+            the y-axis. Default is zero.
+        :param <bool> show_tick_lines: if True, lines are shown for ticks.
+            Default is True.
+        :param <bool> show_colorbar: if True, the colorbar is shown. Default is True.
+        :param <bool> show_annotations: if True, annotations display the value of
+            each cell. Default is False.
+        :param <bool> show_boundaries: if True, cells are divided by a grid.
+            Default is False.
+        :param <int> annotation_fontsize: sets the font size of the annotations.
+        :param <int> tick_fontsize: sets the font size of tick labels.
         """
         if on_axis:
             fig: plt.Figure = on_axis.get_figure()
@@ -114,9 +140,11 @@ class Heatmap(Plotter):
             ax: plt.Axes
             fig, ax = plt.subplots(figsize=figsize, layout="constrained")
 
+        data = self.df.to_numpy()
+
         im = ax.imshow(
-            self.df.to_numpy(),
-            cmap=sns.color_palette("light:red", as_cmap=True),
+            data,
+            cmap=cmap,
             vmin=vmin,
             vmax=vmax,
             aspect="auto",
@@ -129,10 +157,36 @@ class Heatmap(Plotter):
         ax.set_xticks(np.arange(len(xtick_labels)), labels=xtick_labels)
         ax.set_yticks(np.arange(len(ytick_labels)), labels=ytick_labels)
 
-        ax.xaxis.set_major_locator(plt.MaxNLocator(nbins=max_xticks-1))
-        ax.tick_params(which="major", length=4, width=1, direction="out")
-        plt.xticks(rotation=90)
+        ax.set_xticklabels(
+            xtick_labels,
+            rotation=rotate_xticks,
+            ha="center",
+            minor=False,
+        )
+        ax.set_yticklabels(
+            ytick_labels,
+            rotation=rotate_yticks,
+            ha="right",
+            minor=False,
+            rotation_mode="anchor",
+        )
+        
+        ax.tick_params(axis='both', which='major', labelsize=tick_fontsize)
+
+        if show_tick_lines:
+            ax.tick_params(which="major", length=4, width=1, direction="out")
+
         plt.grid(False)
+
+        if show_boundaries:
+            ax.spines[:].set_visible(False)
+            ax.set_xticks(np.arange(len(xtick_labels) + 1) - 0.5, minor=True)
+            ax.set_yticks(np.arange(len(ytick_labels) + 1) - 0.5, minor=True)
+            ax.grid(which="minor", color="w", linestyle="-", linewidth=3)
+            ax.tick_params(which="minor", bottom=False, left=False)
+        else:
+            # Limits the number of ticks shown on the x-axis.
+            ax.xaxis.set_major_locator(plt.MaxNLocator(nbins=max_xticks - 1))
 
         ax.set_title(
             title,
@@ -147,7 +201,26 @@ class Heatmap(Plotter):
         if y_axis_label:
             ax.set_ylabel(y_axis_label, fontsize=axis_fontsize)
 
-        ax.figure.colorbar(im, ax=ax)
+        if show_colorbar:
+            ax.figure.colorbar(im, ax=ax)
+
+        if show_annotations:
+            data = np.around(data, decimals=1)
+            for i in range(data.shape[0]):
+                for j in range(data.shape[1]):
+                    color = im.cmap(im.norm(im.get_array()))[i, j]
+                    lum = relative_luminance(color)
+                    text_color = ".15" if lum > 0.408 else "w"
+                    text_kwargs = dict(
+                        color=text_color,
+                        ha="center",
+                        va="center",
+                        size=annotation_fontsize,
+                    )
+                    if not np.isnan(data[i, j]):
+                        ax.text(j, i, data[i, j], **text_kwargs)
+
+        ax.tick_params(axis="y", which="major", pad=8)
 
         if save_to_file:
             plt.savefig(
@@ -188,6 +261,8 @@ if __name__ == "__main__":
     heatmap = Heatmap(df=dfx, xcats=["FX"])
 
     heatmap.df["real_date"]: pd.Series = heatmap.df["real_date"].dt.strftime("%Y-%m-%d")
-    heatmap.df = heatmap.df.pivot_table(index="cid", columns="real_date", values="grading")
+    heatmap.df = heatmap.df.pivot_table(
+        index="cid", columns="real_date", values="grading"
+    )
 
-    heatmap.plot(title='abc')
+    heatmap.plot(title="abc", rotate_xticks=90)

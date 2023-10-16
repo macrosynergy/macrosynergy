@@ -56,6 +56,13 @@ class TestAll(unittest.TestCase):
             "return_figure": False,
             "on_axis": None,
             "max_xticks": 50,
+            "cmap": "vlag",
+            "rotate_xticks": 0,
+            "rotate_yticks": 0,
+            "show_tick_lines": True,
+            "show_colorbar": True,
+            "show_annotations": False,
+            "show_boundaries": False,
         }
 
     def test_instantiate_heatmap_no_error(self):
@@ -94,3 +101,4 @@ class TestAll(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

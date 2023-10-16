@@ -11,14 +11,12 @@ msv.view.metrics(
     metric='eop_lag'
 )
 ...
-
-msv.FacetPlot(df).lineplot(cid_grid=True)
 ```
 """
 
 from typing import List, Optional, Tuple
-
 import pandas as pd
+import seaborn as sns
 
 from macrosynergy.management.utils import downsample_df_on_real_date
 
@@ -121,6 +119,8 @@ def metrics(
         vmax=max_mes,
         x_axis_label="Date",
         y_axis_label="Cross Sections",
+        cmap=sns.color_palette("light:red", as_cmap=True),
+        rotate_xticks=90
     )
 
 
