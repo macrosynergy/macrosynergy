@@ -571,6 +571,7 @@ if __name__ == "__main__":
         LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
     )
     splitter.visualise_splits(X2, y2)
+    
     # b) n_splits = 4, n_split_method = rolling
     splitter = PanelTimeSeriesSplit(n_splits=4, n_split_method="rolling")
     splitter.split(X2, y2)
@@ -578,6 +579,7 @@ if __name__ == "__main__":
         LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
     )
     splitter.visualise_splits(X2, y2)
+
     # c) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4
     splitter = PanelTimeSeriesSplit(
         train_intervals=21 * 12, test_size=1, min_periods=21, min_cids=4
@@ -587,6 +589,7 @@ if __name__ == "__main__":
         LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
     )
     splitter.visualise_splits(X2, y2)
+
     # d) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4, max_periods=12*21
     splitter = PanelTimeSeriesSplit(
         train_intervals=21 * 12,

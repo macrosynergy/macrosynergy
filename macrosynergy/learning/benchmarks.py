@@ -55,8 +55,10 @@ class BenchmarkEstimator(BaseEstimator, RegressorMixin):
         Basic estimator to use the determined signal from BenchmarkTransformer as the predictions.
         """
         pass
+    
     def fit(self, X, y=None):
         return self
+    
     def predict(self, X):
         return X
 

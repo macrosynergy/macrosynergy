@@ -45,8 +45,8 @@ def panel_cv_scores(
     representing a metric and the inner index representing the mean & standard deviation
     of the metric over the walk-forward validation splits. The columns are the estimators.
     """
-    # check input types
 
+    # check input types
     assert isinstance(X, pd.DataFrame), "X must be a pandas dataframe."
 
     assert isinstance(y, (pd.DataFrame, pd.Series)), "y must be a pandas dataframe or series."
@@ -76,7 +76,6 @@ def panel_cv_scores(
     assert verbose >= 0, "verbose must be a non-negative integer."
 
     # construct the dataframe to return
-
     if show_longbias:
         scoring["Positive prediction ratio"] = make_scorer(lambda y_true, y_pred: np.sum(y_pred > 0)/len(y_pred))
         scoring["Positive test-target ratio"] = make_scorer(lambda y_true, y_pred: np.sum(y_true > 0)/len(y_true))
