@@ -13,7 +13,7 @@ import warnings
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df, categories_df
-
+from macrosynergy.management.utils import apply_slip as apply_slip_util
 
 class SignalBase:
     def __init__(
@@ -82,9 +82,8 @@ class SignalBase:
         self.blacklist = blacklist
         self.fwin = fwin
 
-        self.sig = sig
-        self.slip = slip
-        self.agg_sig = agg_sig
+        xcats = list(df["xcat"].unique())
+        assert sig in xcats, "Primary signal must be available in the DataFrame."
 
         self.xcats = list(df["xcat"].unique())
         self.df = df
@@ -213,6 +212,7 @@ class SignalBase:
         )
 
         ret_vals, sig_vals = df_segment[ret], df_segment[signal]
+
         df_out.loc[segment, ["kendall", "kendall_pval"]] = stats.kendalltau(
             ret_vals, sig_vals
         )
@@ -901,6 +901,18 @@ class SignalReturnRelations(SignalBase):
         y_input = 0.45 if y_axis(min_value) else min_value
 
         return y_input
+    
+    @staticmethod
+    def apply_slip(
+        df: pd.DataFrame,
+        slip: int,
+        cids: List[str],
+        xcats: List[str],
+        metrics: List[str],
+    ) -> pd.DataFrame:
+        return apply_slip_util(
+            df=df, slip=slip, cids=cids, xcats=xcats, metrics=metrics, raise_error=False
+        )
 
     def accuracy_bars(
         self,
