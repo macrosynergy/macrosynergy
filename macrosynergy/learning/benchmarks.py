@@ -101,7 +101,6 @@ if __name__ == "__main__":
     y2 = dfd2["XR"]
 
     # Demonstration of BenchmarkTransformer
-    benchmark_transformer = BenchmarkTransformer()
     pipe = Pipeline([("signal", BenchmarkTransformer()),("identity", BenchmarkEstimator())])
     splitter = PanelTimeSeriesSplit(n_splits=4, n_split_method="expanding")
     # Convert the regression problem into a classification problem
