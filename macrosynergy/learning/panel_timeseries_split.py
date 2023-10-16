@@ -600,7 +600,8 @@ def panel_cv_scores(
     # construct the dataframe to return
 
     if show_longbias:
-        scoring["Long proportion"] = make_scorer(lambda y_true, y_pred: np.sum(y_true > 0)/len(y_true))
+        scoring["Positive prediction ratio"] = make_scorer(lambda y_true, y_pred: np.sum(y_pred > 0)/len(y_pred))
+        scoring["Positive test-target ratio"] = make_scorer(lambda y_true, y_pred: np.sum(y_true > 0)/len(y_true))
 
     estimator_names = list(estimators.keys())
     metric_names = list(scoring.keys())
@@ -609,8 +610,7 @@ def panel_cv_scores(
         columns=estimator_names,
         index=pd.MultiIndex.from_product([metric_names, ["mean", "std"]]),
     ) if show_std else pd.DataFrame(
-        columns=estimator_names, index=pd.MultiIndex.from_product([metric_names, ["mean"]])
-    )
+        columns=estimator_names, index=metric_names)
 
     for estimator_name, estimator in estimators.items():
         if verbose != 0:
@@ -619,11 +619,15 @@ def panel_cv_scores(
             estimator, X, y, cv=splitter, scoring=scoring, verbose=verbose
         )
         for metric_name in metric_names:
-            metrics_df.loc[(metric_name, "mean"), estimator_name] = np.mean(
-                cv_results[f"test_{metric_name}"]
-            )
             if show_std:
+                metrics_df.loc[(metric_name, "mean"), estimator_name] = np.mean(
+                    cv_results[f"test_{metric_name}"]
+                )
                 metrics_df.loc[(metric_name, "std"), estimator_name] = np.std(
+                    cv_results[f"test_{metric_name}"]
+                )
+            else:
+                metrics_df.loc[metric_name, estimator_name] = np.mean(
                     cv_results[f"test_{metric_name}"]
                 )
 
@@ -672,7 +676,8 @@ if __name__ == "__main__":
         splitter=splitex,
         estimators={"OLS": LinearRegression(), "Lasso": Lasso()},
         scoring={"rmse": make_scorer(mean_squared_error)},
-        show_longbias=True
+        show_longbias=True,
+        show_std=True
     )
 
     # 1) Demonstration of basic functionality
