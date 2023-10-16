@@ -29,7 +29,7 @@ from macrosynergy.download.exceptions import (
     DownloadError,
     InvalidDataframeError,
 )
-from macrosynergy.management.utils import Config, form_full_url
+from macrosynergy.management.utils import form_full_url
 
 logger = logging.getLogger(__name__)
 cache = lru_cache(maxsize=None)
@@ -259,17 +259,17 @@ class LocalCache(JPMaQSDownload):
             local_path = os.path.expanduser(local_path)
         self.local_path = os.path.abspath(local_path)
         self.store_format = fmt
-        config: Config = Config(
+        config: Dict[str, str] = dict(
             client_id="<local>", client_secret=f"<{self.local_path}>"
         )
         super().__init__(
-            **config.oauth(mask=False),
             check_connection=False,
+            **config,
         )
         self.dq_interface = LocalDataQueryInterface(
             local_path=self.local_path,
             fmt=self.store_format,
-            config=config,
+            **config,
         )
 
     def time_series_to_df(
@@ -383,9 +383,9 @@ class DownloadTimeseries(DataQueryInterface):
         # get client id and secret from kwargs. remove them from kwargs
         client_id: str = kwargs.pop("client_id", None)
         client_secret: str = kwargs.pop("client_secret", None)
-        cfg: Config = Config(client_id=client_id, client_secret=client_secret)
+        cfg: Dict[str, str] = dict(client_id=client_id, client_secret=client_secret)
 
-        super().__init__(config=cfg, *args, **kwargs)
+        super().__init__(*args, **kwargs, **cfg)
 
     def _extract_timeseries(
         self,
