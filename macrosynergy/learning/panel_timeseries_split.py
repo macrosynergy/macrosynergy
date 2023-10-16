@@ -612,13 +612,13 @@ def panel_cv_scores(
     ) if show_std else pd.DataFrame(
         columns=estimator_names, index=metric_names)
 
-    for est_idx, (estimator_name, estimator) in enumerate(estimators.items()):
+    for estimator_name, estimator in estimators.items():
         if verbose != 0:
             print(f"Calculating walk-forward validation metrics for {estimator_name}.")
         cv_results = cross_validate(
             estimator, X, y, cv=splitter, scoring=scoring, verbose=verbose
         )
-        for metric_idx, metric_name in enumerate(metric_names):
+        for metric_name in metric_names:
             if show_std:
                 metrics_df.loc[(metric_name, "mean"), estimator_name] = np.mean(
                     cv_results[f"test_{metric_name}"]
