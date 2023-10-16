@@ -439,7 +439,8 @@ class SignalReturnRelations:
         y_input = 0.45 if y_axis(min_value) else min_value
 
         return y_input
-
+    
+    @staticmethod
     def apply_slip(
         df: pd.DataFrame,
         slip: int,

@@ -244,6 +244,7 @@ class CategoryRelations(object):
 
         return usable
 
+    @staticmethod
     def apply_slip(
         df: pd.DataFrame,
         slip: int,
