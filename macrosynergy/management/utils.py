@@ -475,3 +475,54 @@ def apply_slip(df: pd.DataFrame, slip: int,
         df = df.drop(columns=['tickers'])
         
         return df
+
+def downsample_df_on_real_date(
+    df: pd.DataFrame,
+    groupby_columns: List[str] = [],
+    freq: str = "M",
+    agg: str = "mean",
+):
+    """
+    Downsample JPMaQS DataFrame.
+
+    :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
+        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+    :param <List> groupby_columns: a list of columns used to group the DataFrame.
+    :param <str> freq: frequency option. Per default the correlations are calculated
+        based on the native frequency of the datetimes in 'real_date', which is business
+        daily. Downsampling options include weekly ('W'), monthly ('M'), or quarterly
+        ('Q') mean.
+    :param <str> agg: aggregation method. Must be one of "mean" (default), "median",
+        "min", "max", "first" or "last".
+
+    :return <pd.DataFrame>: the downsampled DataFrame.
+    """
+
+    if not set(groupby_columns).issubset(df.columns):
+        raise ValueError(
+            "The columns specified in 'groupby_columns' were not found in the DataFrame."
+        )
+
+    if not isinstance(freq, str):
+        raise TypeError("`freq` must be a string")
+    else:
+        freq: str = freq.upper()
+        if freq not in ["D", "W", "M", "Q", "A"]:
+            raise ValueError("`freq` must be one of 'D', 'W', 'M', 'Q' or 'A'")
+
+    if not isinstance(agg, str):
+        raise TypeError("`agg` must be a string")
+    else:
+        agg: str = agg.lower()
+        if agg not in ["mean", "median", "min", "max", "first", "last"]:
+            raise ValueError(
+                "`agg` must be one of 'mean', 'median', 'min', 'max', 'first', 'last'"
+            )
+
+    return (
+        df.set_index("real_date")
+        .groupby(groupby_columns)
+        .resample(freq)
+        .agg(agg, numeric_only=True)
+        .reset_index()
+    )
