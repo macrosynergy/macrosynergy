@@ -111,6 +111,40 @@ Where **\<Type>** is one of:
 - `Hotfix`: For hotfixes
 - `Chore`: Reserved for CI/CD and other maintenance tasks
 
+**NOTE: This is now a requirement for all pull requests**
+
+### Merge Queueing
+
+Currently, we do not make use of the merge-queueing feature of GitHub.
+However, some of its functionality is replicated by the use of directives/comments in the
+pull request description.
+
+Currently functional directives are:
+
+- `MERGE-AFTER-#<PR_NUMBER>` - Only allows the PR to be merged after the PR with number `<PR_NUMBER>` has been merged.
+- `DO-NOT-MERGE` - Prevents the PR from being merged until the directive is removed.
+
+These also work with the dashes replaced by spaces and is case-insensitive.
+
+
+Example:
+```
+Feature: Some new feature
+
+This is a new feature that does some stuff.
+
+Merge After #123
+```
+
+or 
+
+```
+Bugfix: Solving something
+
+This fixes a bug that does some stuff.
+
+Do not merge
+```
 
 
 ## Community Contributions
