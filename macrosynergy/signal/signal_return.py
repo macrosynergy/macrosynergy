@@ -280,7 +280,28 @@ class SignalsReturns(SignalBase):
     def __init__(
         self,
         df: pd.DataFrame,
-	@@ -314,31 +355,33 @@ def __init__(
+        rets: Union[str, List[str]],
+        sigs: Union[str, List[str]],
+        signs: Union[int, List[int]] = 1,
+        slip: int = 0,
+        cosp: bool = False,
+        start: str = None,
+        end: str = None,
+        blacklist: dict = None,
+        freqs: Union[str, List[str]] = "M",
+        agg_sigs: Union[int, List[int]] = "last",
+    ):
+        super().__init__(
+            df=df,
+            ret=rets,
+            sig=sigs,
+            slip=slip,
+            cosp=cosp,
+            start=start,
+            end=end,
+            blacklist=blacklist,
+            freq=freqs,
+            agg_sig=agg_sigs,
         )
         self.df = df
 
@@ -302,33 +323,86 @@ class SignalsReturns(SignalBase):
         self.signs = signs
 
     def single_relation_table(self, ret=None, xcat=None, freq=None, agg_sigs=None):
-        """
-        Computes the statistics for a specific panel specified by the arguments
-        :param <str> ret: target return category
-        :param <str> xcat: signal category to be considered
-        :param <str> freq: letter denoting frequency at which the series are to be sampled.
-        This must be one of 'D', 'W', 'M', 'Q', 'A'. If not specified uses the freq stored in the class.
-        :param <str> agg_sigs: aggregation method applied to the signal values in down-sampling.
-        """
-        if ret is None:
-            ret = self.ret if not isinstance(self.ret, list) else self.ret[0]
-        if freq is None:
-	@@ -397,9 +440,9 @@ def single_relation_table(self, ret=None, xcat=None, freq=None, agg_sigs=None):
-            self.sig += "_NEG"
-            self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
+            """
+            Computes the statistics for a specific panel specified by the arguments
 
-        df_result = self.__output_table__(
-            cs_type="cids", ret=ret, sig=sig, srt=True
-        ).round(decimals=5)
+            :param <str> ret: target return category
+            :param <str> xcat: signal category to be considered
+            :param <str> freq: letter denoting frequency at which the series are to be sampled.
+            This must be one of 'D', 'W', 'M', 'Q', 'A'. If not specified uses the freq stored in the class.
+            :param <str> agg_sigs: aggregation method applied to the signal values in down-sampling.
+            """
+            if ret is None:
+                ret = self.ret if not isinstance(self.ret, list) else self.ret[0]
+            if freq is None:
+                freq = self.freq if not isinstance(self.freq, list) else self.freq[0]
+            if agg_sigs is None:
+                agg_sigs = (
+                    self.agg_sig if not isinstance(self.agg_sig, list) else self.agg_sig[0]
+                )
+            if xcat is None:
+                sig = self.sig if not isinstance(self.sig, list) else self.sig[0]
+                xcat = [sig, ret]
+            else:
+                sig = xcat[0]
 
-        self.df = self.original_df
+            cids: List[str] = None
+            dfd = reduce_df(
+                self.original_df,
+                xcats=xcat,
+                cids=cids,
+                start=self.start,
+                end=self.end,
+                blacklist=self.blacklist,
+            )
+            metric_cols: List[str] = list(
+                set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
+            )
+            dfd: pd.DataFrame = self.apply_slip(
+                target_df=dfd, slip=self.slip, cids=cids, xcats=xcat, metrics=metric_cols
+            )
 
-	@@ -408,6 +451,15 @@ def single_relation_table(self, ret=None, xcat=None, freq=None, agg_sigs=None):
+            self.dfd = dfd
+
+            df = categories_df(
+                dfd,
+                xcats=xcat,
+                cids=cids,
+                val="value",
+                start=None,
+                end=None,
+                freq=freq,
+                blacklist=None,
+                lag=1,
+                xcat_aggs=[agg_sigs, "sum"],
+            )
+            self.df = df
+            self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
+
+            if not isinstance(self.signs, list):
+                self.signs = [self.signs]
+
+            if -1 in self.signs:
+                self.df.loc[:, self.signals] *= -1
+                s_copy = self.signals.copy()
+
+                self.signals = [s + "_NEG" for s in self.signals]
+                self.sig += "_NEG"
+                self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
+
+            df_result = self.__output_table__(
+                cs_type="cids", ret=ret, sig=sig, srt=True
+            ).round(decimals=5)
+
+            self.df = self.original_df
+
+            return df_result
     def multiple_relations_table(
         self, rets=None, xcats=None, freqs=None, agg_sigs=None
     ):
         """
         Calculates statistics for each return and signal category specified with each frequency and aggregation method
+
         :param <str, List[str]> rets: target return category
         :param <str, List[str]> xcats: signal categories to be considered
         :param <str, List[str]> freqs: letters denoting frequency at which the series are to be sampled
@@ -338,7 +412,17 @@ class SignalsReturns(SignalBase):
         if rets is None:
             rets = self.ret
         if freqs is None:
-	@@ -425,12 +477,22 @@ def multiple_relations_table(
+            freqs = self.freq
+        if agg_sigs is None:
+            agg_sigs = self.agg_sig
+        if xcats is None:
+            xcats = self.xcats
+
+        if not isinstance(rets, list):
+            rets = [rets]
+
+        df_out = pd.DataFrame()
+
         xcats = [x for x in xcats if x in self.sig]
 
         index = []
@@ -361,7 +445,11 @@ class SignalsReturns(SignalBase):
 
         df_out.index = index
         return df_out
-	@@ -442,26 +504,27 @@ def single_statistic_table(
+        
+    def single_statistic_table(
+        self,
+        stat: str,
+        type: str = "panel",
         rows: List[str] = ["xcat", "agg_sigs"],
         columns: List[str] = ["ret", "freq"],
     ):
@@ -389,6 +477,7 @@ class SignalsReturns(SignalBase):
             agg_sigs = self.agg_sig
         else:
             agg_sigs = [self.agg_sig]
+
         column_names = [self.ret[0] + "/" + freq for freq in freqs]
         row_names = [self.sig[0] + "/" + agg_sig for agg_sig in agg_sigs]
 
@@ -401,6 +490,7 @@ class SignalsReturns(SignalBase):
                 ret = self.ret if not isinstance(self.ret, list) else self.ret[0]
                 sig = self.sig if not isinstance(self.sig, list) else self.sig[0]
                 xcat = [sig, ret]
+
                 cids = None
                 dfd = reduce_df(
                     self.df,
@@ -435,8 +525,10 @@ class SignalsReturns(SignalBase):
                 )
                 self.df = df
                 self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
+
                 if not isinstance(self.signs, list):
                     self.signs = [self.signs]
+
                 if -1 in self.signs:
                     self.df.loc[:, self.signals] *= -1
                     s_copy = self.signals.copy()
@@ -559,27 +651,22 @@ class SignalReturnRelations(SignalBase):
                 f"The additional signals must be present in the defined "
                 f"DataFrame. It is currently missing, {missing}."
             )
-            assert set(r_sigs).issubset(set(self.xcats)), rival_error
+            assert set(r_sigs).issubset(set(xcats)), rival_error
             signals += r_sigs
         self.signals = signals
         self.xcats = self.signals + [self.ret]
         dfd = reduce_df(
-            df=df,
-            xcats=self.xcats,
-            cids=cids,
-            start=self.start,
-            end=self.end,
-            blacklist=self.blacklist,
+            df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
         )
         # Since there may be any metrics in the DF at this point, simply apply slip to all.
         metric_cols: List[str] = list(
             set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
         )
         dfd: pd.DataFrame = self.apply_slip(
-            target_df=dfd,
-            slip=self.slip,
+            df=dfd,
+            slip=slip,
             cids=cids,
-            xcats=self.xcats,
+            xcats=xcats,
             metrics=metric_cols,
         )
         # Naturally, only applicable if rival signals have been passed.
@@ -588,16 +675,16 @@ class SignalReturnRelations(SignalBase):
         self.dfd = dfd
         df = categories_df(
             dfd,
-            xcats=self.xcats,
+            xcats=xcats,
             cids=cids,
             val="value",
             start=None,
             end=None,
-            freq=self.freq,
+            freq=freq,
             blacklist=None,
             lag=1,
-            fwin=self.fwin,
-            xcat_aggs=[self.agg_sig, "sum"],
+            fwin=fwin,
+            xcat_aggs=[agg_sig, "sum"],
         )
         self.df = df
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
@@ -660,7 +747,7 @@ class SignalReturnRelations(SignalBase):
         for s in self.signals:
             # Entire panel will be passed in.
             df_out = self.__table_stats__(
-                df_segment=df, df_out=df_out, segment=s, signal=s, ret=ret
+                df_segment=df, df_out=df_out, segment=s, signal=s
             )
         return df_out
     def signals_table(self, sigs: List[str] = None):
@@ -710,6 +797,7 @@ class SignalReturnRelations(SignalBase):
         # adjusted scale.
         y_input = 0.45 if y_axis(min_value) else min_value
         return y_input
+
     def accuracy_bars(
         self,
         type: str = "cross_section",
