@@ -11,10 +11,11 @@ from types import ModuleType
 from typing import Any, Dict, List, Optional
 
 import matplotlib.pyplot as plt
+import seaborn as sns
 import pandas as pd
 
 from macrosynergy.management import reduce_df
-from macrosynergy.management.utils import standardise_dataframe
+from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
 from macrosynergy.visuals.common import argcopy, argvalidation
 
 logger = logging.getLogger(__name__)
@@ -128,6 +129,9 @@ class Plotter(metaclass=PlotterMetaClass):
             start: str = pd.Timestamp(sdf["real_date"].min()).strftime("%Y-%m-%d")
         if end is None:
             end: str = pd.Timestamp(sdf["real_date"].max()).strftime("%Y-%m-%d")
+        for var, name in [(start, "start"), (end, "end")]:
+            if not is_valid_iso_date(var):
+                raise ValueError(f"`{name}` must be a valid ISO date string")
 
         ticker_df: pd.DataFrame = pd.DataFrame()
         if tickers is not None:
@@ -194,7 +198,18 @@ class Plotter(metaclass=PlotterMetaClass):
         self.backend: ModuleType
         if backend.startswith("m"):
             self.backend = plt
-            self.backend.style.use("seaborn-v0_8-darkgrid")
+            try:
+                self.backend.style.use("seaborn-v0_8-darkgrid")
+            except:
+                try:
+                    sns.set_style("darkgrid")
+                except:
+                    warnings.warn(
+                        "Unable to set the default style to Seaborne's darkgrid. \n"
+                        "Please make sure Seaborn and Matplotlib are installed, "
+                        " and updated to their latest versions.",
+                        RuntimeWarning,
+                    )
         elif ...:
             ...
         else:
