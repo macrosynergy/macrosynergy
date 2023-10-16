@@ -13,51 +13,41 @@ import seaborn as sns
 from typing import List, Union, Tuple, Optional
 
 from macrosynergy.management.shape_dfs import reduce_df
-from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
+from macrosynergy.management.utils import (
+    standardise_dataframe,
+    is_valid_iso_date,
+    apply_slip,
+)
 from macrosynergy.panel import historic_vol
 from macrosynergy.pnl import Numeric, NoneType
 
 
 def _apply_slip(
-    target_df: pd.DataFrame,
+    df: pd.DataFrame,
     slip: int,
     cids: List[str],
     xcats: List[str],
     metrics: List[str],
 ) -> pd.DataFrame:
     """
-    Applied a slip, i.e. a negative lag, to the target DataFrame
-    for the given cross-sections and categories, on the given metrics.
+    Applies a slip using the function `apply_slip()` to a dataframe with contract
+    signals and returns.
 
-    :param <pd.DataFrame> target_df: DataFrame to which the slip is applied.
-    :param <int> slip: Slip to be applied.
-    :param <List[str]> cids: List of cross-sections.
-    :param <List[str]> xcats: List of categories.
-    :param <List[str]> metrics: List of metrics to which the slip is applied.
-    :return <pd.DataFrame> target_df: DataFrame with the slip applied.
-    :raises <TypeError>: If the provided parameters are not of the expected type.
-    :raises <ValueError>: If the provided parameters are semantically incorrect.
+    :param <pd.DataFrame> df: Quantamental dataframe with contract signals and returns.
+    :param <int> slip: the number of days to wait before applying the signal.
+    :param <List[str]> cids: list of contract identifiers.
+    :param <List[str]> xcats: list of contract categories.
+    :param <List[str]> metrics: list of metrics to apply the slip to.
     """
 
-    target_df = target_df.copy()
-    if not (isinstance(slip, int) and slip >= 0):
-        raise ValueError("Slip must be a non-negative integer.")
-
-    sel_tickers: List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
-    target_df["tickers"] = target_df["cid"] + "_" + target_df["xcat"]
-
-    if not set(sel_tickers).issubset(set(target_df["tickers"].unique())):
-        raise ValueError(
-            "Tickers targetted for applying slip are not present in the DataFrame.\n"
-            f"Missing tickers: {set(sel_tickers) - set(target_df['tickers'].unique())}"
-        )
-
-    slip: int = slip.__neg__()
-
-    target_df[metrics] = target_df.groupby("tickers")[metrics].shift(slip)
-    target_df = target_df.drop(columns=["tickers"])
-
-    return target_df
+    return apply_slip(
+        df=df,
+        slip=slip,
+        cids=cids,
+        xcats=xcats,
+        metrics=metrics,
+        raise_error=False,
+    )
 
 
 def notional_positions(
