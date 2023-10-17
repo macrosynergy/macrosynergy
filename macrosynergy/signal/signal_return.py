@@ -369,6 +369,9 @@ class SignalsReturns(SignalBase):
 
         self.signs = signs
 
+        if len(self.signs) > len(self.sig):
+            ValueError("Signs must have a length less than or equal to signals")
+
     def single_relation_table(self, ret=None, xcat=None, freq=None, agg_sigs=None):
         """
         Computes all the statistics for a specific panel specified by the arguments:
@@ -431,7 +434,7 @@ class SignalsReturns(SignalBase):
 
         self.signals = [sig]
 
-        if -1 in self.signs:
+        if -1 in self.signs and self.signs[self.sig.index(sig)] == -1:
             self.df.loc[:, self.signals] *= -1
             s_copy = self.signals.copy()
 
@@ -484,7 +487,11 @@ class SignalsReturns(SignalBase):
             for agg_sig in agg_sigs:
                 for ret in rets:
                     for xcat in xcats:
-                        index.append(f"{ret}/{xcat}/{agg_sig}/{freq}")
+                        if self.signs[self.sig.index(xcat)] == -1:
+                            xcat_label = xcat + '_NEG'
+                        else:
+                            xcat_label = xcat
+                        index.append(f"{ret}/{xcat_label}/{agg_sig}/{freq}")
                         df_out = pd.concat(
                             [
                                 df_out,
@@ -608,7 +615,8 @@ class SignalsReturns(SignalBase):
 
                         self.signals = [sig]
 
-                        if -1 in self.signs:
+                        if -1 in self.signs and self.signs[self.sig.index(sig)] == -1:
+                            original_name = sig + '/' + agg_sig
                             self.df.loc[:, self.signals] *= -1
                             s_copy = self.signals.copy()
 
@@ -616,6 +624,10 @@ class SignalsReturns(SignalBase):
                             sig += "_NEG"
                             self.df.rename(
                                 columns=dict(zip(s_copy, self.signals)), inplace=True
+                            )
+                            new_name = sig + '/' + agg_sig
+                            df_result.rename(
+                                index={original_name: new_name}, inplace=True
                             )
                             
                         if type == "mean_years" or type == "pr_years":
