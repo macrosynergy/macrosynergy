@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple, Dict, Any
+from typing import List, Optional, Tuple, Dict, Any, Callable
 
 import git
 import os
@@ -9,15 +9,37 @@ import sys
 from datetime import datetime
 import requests
 from time import sleep
+from functools import lru_cache
 
 REPO_OWNER: str = "macrosynergy"
 REPO_NAME: str = "macrosynergy"
 REPO_URL: str = f"github.com/{REPO_OWNER}/{REPO_NAME}"
 
+
 OAUTH_TOKEN: Optional[str] = os.getenv("GH_TOKEN", None)
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from build_md import DocstringMethods
+
+
+@lru_cache(maxsize=None)
+def git_repo(repo_path: str = ".", fetch: bool = True) -> git.Repo:
+    """
+    Returns a git.Repo object from a path to a local git repository.
+    Mainly purpose is to cache the repo object.
+
+    :param <str> repo_path: Path to the local git repository.
+    :param <bool> fetch: Whether to fetch the remote branches.
+    :return <git.Repo>: A git.Repo object.
+    """
+    repo: git.Repo = git.Repo(repo_path)
+    # fetch origin and all branch names and tags
+    if fetch:
+        for remote in repo.remotes:
+            remote.fetch()
+            remote.pull()
+
+    return repo
 
 
 def api_request(
@@ -79,7 +101,7 @@ def get_pr_reviews(
     return results
 
 
-def get_pr_title_and_author(
+def get_pr_general_info(
     pr_number: int, owner: str = REPO_OWNER, repo: str = REPO_NAME
 ) -> str:
     """
@@ -97,28 +119,33 @@ def get_pr_title_and_author(
     return {
         "title": data["title"],
         "author": data["user"]["login"],
+        "head": data["head"],
+        # head ref contains ref, sha, user, repo
     }
 
 
-def get_pr_commit_authors(
-    pr_number: int, owner: str = REPO_OWNER, repo: str = REPO_NAME
-) -> List[str]:
+def get_pr_commit_authors(branch: str, repo_path: str = ".") -> List[str]:
     """
     Get the list of authors who made commits to the pull request.
 
-    :param pr_number: Pull request number.
-    :param owner: GitHub repository owner.
-    :param repo: GitHub repository name.
-    :return: List of commit authors' usernames.
+    :param <str> branch: The name of the branch.
+    :param <str> repo_dir: The path to the local git repository.
     """
-    url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/commits"
-    data = api_request(url)
+    repo: git.Repo = git_repo(repo_path)
 
-    # Extract the list of unique commit authors
-    authors = list(
-        set([commit["author"]["login"] for commit in data if commit["author"]])
-    )
+    branches: List[str] = [branchx.name for branchx in repo.branches]
+    branch_index: int = branches.index(branch)
 
+    # Iterate through the commits in the branch
+    pr_commits = [
+        commit.hexsha for commit in repo.heads[branch_index].commit.iter_items()
+    ]
+
+    authors: List[str] = [
+        commit.author.name for commit in pr_commits if commit.author.name != "GitHub"
+    ]
+
+    authors = list(set(authors))
     return authors
 
 
@@ -136,25 +163,20 @@ def get_pr_info(pr_number: int, owner: str = REPO_OWNER, repo: str = REPO_NAME) 
 
     url: str = f"https://{REPO_URL}/pull/{pr_number}"
 
-    jobs_dict: Dict[str, Any] = {
-        "title_and_author": get_pr_title_and_author,
-        "reviews": get_pr_reviews,
-        "contributors": get_pr_commit_authors,
-    }
+    results: Dict[str, Any] = {}
+    for name, func in [
+        ("title_and_author", get_pr_general_info),
+        ("reviews", get_pr_reviews),
+    ]:
+        try:
+            results[name] = func(**args_dict)
+        except Exception as exc:
+            print(f"Exception in {name}: {exc}")
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        # use such that the name of the job is returned as well - tuple of (name, future)
-        jobs = {
-            executor.submit(func, **args_dict): name for name, func in jobs_dict.items()
-        }
+    results["contributors"]: List[str] = get_pr_commit_authors(
+        branch=results["title_and_author"]["head"]["ref"]
+    )
 
-        results = {}
-        for future in as_completed(jobs):
-            name = jobs[future]
-            try:
-                results[name] = future.result()
-            except Exception as exc:
-                print(f"Exception in {name}: {exc}")
     result = dict(
         title=results["title_and_author"]["title"],
         author=results["title_and_author"]["author"],
@@ -166,8 +188,11 @@ def get_pr_info(pr_number: int, owner: str = REPO_OWNER, repo: str = REPO_NAME) 
     return result
 
 
-def get_diff_prs_and_authors(
-    repo_path: str, source_branch: str, base_branch: str
+def get_diff_info(
+    repo_path: str,
+    source_branch: str,
+    base_branch: str,
+    show_progress: bool = True,
 ) -> Dict[str, List[str]]:
     """
     Get the names (numbers) of pull requests and their authors that are different between
@@ -179,7 +204,7 @@ def get_diff_prs_and_authors(
     :return <Dict[str, List[str]]>: A dictionary with the PR numbers as keys and the
         authors as values.
     """
-    repo: git.Repo = git.Repo(repo_path)
+    repo: git.Repo = git_repo(repo_path)
 
     # Get the commits that are different between the two branches
     diff_commits: List[git.Commit] = list(
@@ -193,13 +218,39 @@ def get_diff_prs_and_authors(
 
     tqdm_comment: str = f"Generating release notes [{source_branch} ← {base_branch}]"
 
-    for commit in tqdm(diff_commits, desc=tqdm_comment):
+    def _getprinfo(commit: git.Commit) -> Dict[str, Any]:
         match: Optional[re.Match] = pr_pattern.search(commit.message)
         if match:
             pr_number = match.group(1)
-            pr_infos[pr_number]: Dict[str, Dict[str, str]] = get_pr_info(
-                pr_number=int(pr_number)
-            )
+            return get_pr_info(pr_number=int(pr_number))
+        else:
+            return {}
+
+    for commit in tqdm(
+        diff_commits,
+        desc=tqdm_comment,
+        total=len(diff_commits),
+        disable=not show_progress,
+    ):
+        pr_info: Dict[str, Any] = _getprinfo(commit)
+        if pr_info:
+            pr_number: str = str(pr_info["number"])
+            pr_infos[pr_number] = pr_info
+
+    # # use a thread pool to get the PR info
+    # with ThreadPoolExecutor(max_workers=10) as executor:
+    #     futures: List[Future] = [
+    #         executor.submit(_getprinfo, commit) for commit in diff_commits
+    #     ]
+    #     for future in tqdm(
+    #         as_completed(futures),
+    #         desc=tqdm_comment,
+    #         total=len(diff_commits),
+    #         disable=not show_progress,
+    #     ):
+    #         pr_info: Dict[str, Any] = future.result()
+    #         pr_number: str = str(pr_info["number"])
+    #         pr_infos[pr_number] = pr_info
 
     return pr_infos
 
@@ -249,7 +300,7 @@ def markdown_from_pr_attributes(
     return md
 
 
-def json_to_md(
+def generate_markdown(
     json_dict: Dict[str, Any], title: str = "Release Notes", dev: bool = False
 ) -> str:
     """
@@ -274,7 +325,7 @@ def generate_notes(
     base_branch: str,
     dev: bool = False,
 ) -> str:
-    repo: git.Repo = git.Repo(repo_path)
+    repo: git.Repo = git_repo(repo_path)
     # fetch origin and all branch names and tags
     for remote in repo.remotes:
         remote.fetch()
@@ -315,13 +366,13 @@ def generate_notes(
                         f"Valid branches and tags are: {branch_tag_commits}",
                     )
 
-    result = get_diff_prs_and_authors(
+    result = get_diff_info(
         repo_path=repo_path, source_branch=source_branch, base_branch=base_branch
     )
 
     name: str = f"Changes: {source_branch} ← {base_branch}"
 
-    md: str = json_to_md(json_dict=result, title=name, dev=dev)
+    md: str = generate_markdown(json_dict=result, title=name, dev=dev)
     md += "---\n\n"
 
     md = DocstringMethods.markdown_format(md)
@@ -346,7 +397,7 @@ def main(
 
     # if all_versions is True, generate release notes for all versions
     if all_versions:
-        repo: git.Repo = git.Repo(repo_path)
+        repo: git.Repo = git_repo(repo_path)
         tags = sorted(repo.tags, key=lambda t: t.commit.committed_datetime)
         md_list: List[str] = []
         for tag in tags[:-30]:
