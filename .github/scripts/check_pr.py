@@ -84,29 +84,30 @@ def check_pr_directives(
     body: str,
     state: str,
 ) -> bool:
-    # strip, replace spaces with hyphens, and uppercase
-    _body: str = body.strip().replace(" ", "-").upper()
+    if not body is None:
+        # strip, replace spaces with hyphens, and uppercase
+        _body: str = body.strip().replace(" ", "-").upper()
 
-    if "DO-NOT-MERGE" in _body:
-        return False
+        if "DO-NOT-MERGE" in _body:
+            return False
 
-    # check if MERGE-AFTER-# is in the body
-    if "MERGE-AFTER-#" in _body:
-        fidx: int = _body.find("MERGE-AFTER-#")
-        sidx: int = _body.find(" ", fidx)
-        # get all the chars between fidx and sidx
-        merge_after_pr: str = _body[fidx + len("MERGE-AFTER-#") : sidx].strip()
-        try:
-            merge_after_pr = int(merge_after_pr)
-        except ValueError:
-            eMsg: str = f"PR number '{merge_after_pr}' is not an integer."
-            raise ValueError(eMsg)
+        # check if MERGE-AFTER-# is in the body
+        if "MERGE-AFTER-#" in _body:
+            fidx: int = _body.find("MERGE-AFTER-#")
+            sidx: int = _body.find(" ", fidx)
+            # get all the chars between fidx and sidx
+            merge_after_pr: str = _body[fidx + len("MERGE-AFTER-#") : sidx].strip()
+            try:
+                merge_after_pr = int(merge_after_pr)
+            except ValueError:
+                eMsg: str = f"PR number '{merge_after_pr}' is not an integer."
+                raise ValueError(eMsg)
 
-        # get the PR details
-        pr_info: Dict[str, Any] = get_pr_details(pr_number=merge_after_pr)
-        # if closed return true
-        mergable: bool = pr_info["state"] == "closed"
-        return mergable
+            # get the PR details
+            pr_info: Dict[str, Any] = get_pr_details(pr_number=merge_after_pr)
+            # if closed return true
+            mergable: bool = pr_info["state"] == "closed"
+            return mergable
 
     return True
 
