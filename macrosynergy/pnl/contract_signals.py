@@ -207,32 +207,37 @@ def _apply_hedge_ratios(
             f"\nMissing: {set(hbasket) - set(df_wide.columns)}"
         )
 
-    # If specified, check if the hedge ratios are in the dataframe
-    if hratios is not None:
-        expected_hratios: List[str] = [f"{cx}_{hratios}" for cx in get_cid(hbasket)]
-        if not set(expected_hratios).issubset(set(df_wide.columns)):
-            raise ValueError(
-                "Some `hratios` are missing in the provided dataframe."
-                f"\nMissing: {set(expected_hratios) - set(df_wide.columns)}"
-            )
+    expected_hratios: List[str] = [f"{cx}_{hratios}" for cx in get_cid(hbasket)]
+    found_contract_types = lambda x: any([ct.startswith(x) for ct in df_wide.columns])
+    if not all([found_contract_types(x) for x in expected_hratios]):
+        missing_hratios: List[str] = [
+            x for x in expected_hratios if not found_contract_types(x)
+        ]
+
+        warnings.warn(
+            "Some `hbasket` are missing the `hratios` in the provided dataframe."
+            f"\nMissing: {missing_hratios}",
+            UserWarning,
+        )
+
+        df_wide[missing_hratios] = pd.NA
 
     # multiply each ticker by the corresponding scale and ratio
     for ix, contractx in enumerate(hbasket):
         scale_var: Union[Numeric, pd.Series]
-        # If string uses the series from DF, else uses the numeric value
+        # If the scale is a string, it must be a category ticker, else
+        # the scale is a fixed numeric value
         if isinstance(hscales[ix], str):
             scale_var: pd.Series = df_wide[contractx + "_" + hscales[ix]]
         else:
             scale_var: Numeric = hscales[ix]
 
-        # If hratios is not None, use the series from DF, else use 1.0
-        ratio_var: Union[Numeric, pd.Series]
-        if hratios is not None:
-            ratio_var: pd.Series = df_wide[contractx + "_" + hratios[ix]]
-        else:
-            ratio_var: int = 1
+        ratio_str: pd.Series = contractx + "_" + hratios[ix]
 
-        df_wide[contractx] = df_wide[contractx] * scale_var * ratio_var
+        df_wide[contractx] = df_wide[contractx] * df_wide[ratio_str] * scale_var
+
+    # Only return the hedge basket
+    df_wide = df_wide[hbasket]
 
     return ticker_df_to_qdf(df=df_wide)
 
