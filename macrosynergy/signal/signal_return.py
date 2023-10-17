@@ -16,6 +16,7 @@ from macrosynergy.management.shape_dfs import reduce_df, categories_df
 from macrosynergy.management.utils import apply_slip as apply_slip_util
 from macrosynergy.signal.signal_base import SignalBase
 
+
 class SignalsReturns(SignalBase):
     """
     Class for analysing and visualizing signal and a return series.
@@ -99,9 +100,12 @@ class SignalsReturns(SignalBase):
 
         :param <str> ret: target return category
         :param <str> xcat: signal category to be considered
-        :param <str> freq: letter denoting frequency at which the series are to be sampled.
-        This must be one of 'D', 'W', 'M', 'Q', 'A'. If not specified uses the freq stored in the class.
-        :param <str> agg_sigs: aggregation method applied to the signal values in down-sampling.
+        :param <str> freq: letter denoting frequency at which the series are to
+        be sampled.
+        This must be one of 'D', 'W', 'M', 'Q', 'A'.
+        If not specified uses the freq stored in the class.
+        :param <str> agg_sigs: aggregation method applied to the signal values in
+        down-sampling.
         """
         if ret is None:
             ret = self.ret if not isinstance(self.ret, list) else self.ret[0]
@@ -175,15 +179,20 @@ class SignalsReturns(SignalBase):
         self, rets=None, xcats=None, freqs=None, agg_sigs=None
     ):
         """
-        Calculates all the statistics for each return and signal category specified with each frequency and aggregation
-        method, note that if none are defined it does this for all categories, frequencies and aggregation methods that
+        Calculates all the statistics for each return and signal category specified with
+        each frequency and aggregation
+        method, note that if none are defined it does this for all categories,
+        frequencies and aggregation methods that
         were stored in the class.
 
         :param <str, List[str]> rets: target return category
         :param <str, List[str]> xcats: signal categories to be considered
-        :param <str, List[str]> freqs: letters denoting frequency at which the series are to be sampled
-        This must be one of 'D', 'W', 'M', 'Q', 'A'. If not specified uses the freq stored in the class
-        :param <str, List[str]> agg_sigs: aggregation methods applied to the signal values in down-sampling
+        :param <str, List[str]> freqs: letters denoting frequency at which the series
+        are to be sampled
+        This must be one of 'D', 'W', 'M', 'Q', 'A'. If not specified uses the freq
+        stored in the class
+        :param <str, List[str]> agg_sigs: aggregation methods applied to the signal
+        values in down-sampling
         """
         if rets is None:
             rets = self.ret
@@ -219,7 +228,7 @@ class SignalsReturns(SignalBase):
                 for ret in rets
                 for xcat in xcats
             ],
-            axis=0, 
+            axis=0,
         )
         df_out.index = index
 
@@ -233,19 +242,26 @@ class SignalsReturns(SignalBase):
         columns: List[str] = ["ret", "freq"],
     ):
         """
-        Creates a table which shows the specified statistic for each row and column specified as arguments:
+        Creates a table which shows the specified statistic for each row and
+        column specified as arguments:
 
-        :param stat: type of statistic to be displayed. (this can be any of the column names of summary_table)
-        :param type: type of the statistic displayed. This can be based on the overall panel ("panel", default), an
-        average of annual panels (mean_years), an average of cross-sectional relations ("mean_cids"),
-        the positive ratio across years("pr_years"), positive ratio across sections ("pr_cids").
-        :param <List[str]> rows: row indices, which can be return categories, feature categories, frequencies and/or
-        aggregations. The choice is made through a list of one or more of "xcat", "ret", "freq" and "agg_sigs". The
-        default is ["xcat", "agg_sigs"] resulting in index strings (<agg_signs>) or if only one aggregation is
-        available.
-        :param <List[str]> columns: column indices, which can be return categories, feature categories,
-        frequencies and/or aggregations. The choice is made through a list of one or more of "xcat", "ret", "freq" and
-        "agg_sigs". The default is ["ret", "freq] resulting in index strings () or if only one frequency is available.
+        :param stat: type of statistic to be displayed. (this can be any of
+        the column names of summary_table)
+        :param type: type of the statistic displayed. This can be based on
+        the overall panel ("panel", default), an
+        average of annual panels (mean_years), an average of cross-sectional
+        relations ("mean_cids"), the positive ratio across years("pr_years"),
+        positive ratio across sections ("pr_cids").
+        :param <List[str]> rows: row indices, which can be return categories,
+        feature categories, frequencies and/or aggregations. The choice is
+        made through a list of one or more of "xcat", "ret", "freq" and
+        "agg_sigs". The default is ["xcat", "agg_sigs"] resulting in index
+        strings (<agg_signs>) or if only one aggregation is available.
+        :param <List[str]> columns: column indices, which can be return
+        categories, feature categories, frequencies and/or aggregations. The
+        choice is made through a list of one or more of "xcat", "ret", "freq"
+        and "agg_sigs". The default is ["ret", "freq] resulting in index
+        strings () or if only one frequency is available.
         """
         self.df = self.original_df
 

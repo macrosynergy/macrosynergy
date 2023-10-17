@@ -31,7 +31,8 @@ class SignalBase:
         slip: int = 0,
     ):
         """
-        Signal base is used as a parent class for both SignalReturns and SignalReturnRelations to inherit variables and methods from.
+        Signal base is used as a parent class for both SignalReturns and 
+        SignalReturnRelations to inherit variables and methods from.
 
         :param <pd.Dataframe> df: standardized DataFrame with the following necessary
             columns: 'cid', 'xcat', 'real_date' and 'value.
@@ -163,7 +164,8 @@ class SignalBase:
     @staticmethod
     def is_list_of_strings(variable):
         """
-        Function used to test whether a variable is a list of strings, to avoid the compiler saying a string is a list of characters
+        Function used to test whether a variable is a list of strings, to avoid the compiler saying a 
+        string is a list of characters
         """
         return isinstance(variable, list) and all(
             isinstance(item, str) for item in variable
@@ -223,8 +225,6 @@ class SignalBase:
         df_out.loc[segment, ["pearson", "pearson_pval"]] = np.array([corr, corr_pval])
 
         return df_out
-
-    # NOTE THAT THE ORIGINAL __output__table__ does not have a ret or sig argument, so this needs to be rectified during inheritance
 
     def __output_table__(self, cs_type: str = "cids", ret=None, sig=None, srt=False):
         """
