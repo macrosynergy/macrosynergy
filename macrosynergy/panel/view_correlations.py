@@ -342,9 +342,8 @@ def _transform_df_for_cross_category_corr(
     if lags is not None:
         df_w, xcat_tracker = lag_series(df_w=df_w, lags=lags, xcats=xcats)
 
-    # Order the correlation DataFrame to reflect the order of the categories
-    # parameter. Will replace the official category name with the lag appended name.
-    if lags is not None:
+        # Order the correlation DataFrame to reflect the order of the categories
+        # parameter. Will replace the official category name with the lag appended name.
         order = [
             [x] if x not in xcat_tracker.keys() else xcat_tracker[x] for x in xcats
         ]
