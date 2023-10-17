@@ -393,7 +393,7 @@ def contract_signals(
     # df: pd.DataFrame = _apply_sig_conversion(df=df, sig=sig, cids=cids)
 
     ## Generate contract signals
-    df_cs: pd.DataFrame = _gen_contract_signals(
+    df_contract_signals: pd.DataFrame = _gen_contract_signals(
         df=df,
         cids=cids,
         sig=sig,
@@ -404,15 +404,21 @@ def contract_signals(
     )
 
     ## Generate hedge contract signals
+
+    df_hedge_signals: Optional[pd.DataFrame] = None
     if hbasket is not None:
-        df_hs: pd.DataFrame = _apply_hedge_ratios(
+        df_hedge_signals: pd.DataFrame = _apply_hedge_ratios(
             df=df,
             hbasket=hbasket,
             hscales=hscales,
             hratios=hratios,
         )
 
-    # df_out = _consolidate_signals(...)
+    ## Consolidate contract signals and hedge signals
+    df_out: pd.DataFrame = _consolidate_contract_signals(
+        df_contract_signals=df_contract_signals,
+        df_hedge_signals=df_hedge_signals,
+    )
 
     return df_out
 
@@ -440,7 +446,6 @@ if __name__ == "__main__":
 
     hbasket = ["USD_EQ", "EUR_EQ"]
     hscales = [0.7, 0.3]
-    
 
     rDF: pd.DataFrame = contract_signals(
         df=df,
