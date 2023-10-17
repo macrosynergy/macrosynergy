@@ -159,6 +159,7 @@ def _gen_contract_signals(
         )
 
     # Multiply each cid_ctype by the corresponding scale and sign to produce the contract signal
+    new_conts: List[str] = []
     for _cid in cids:
         for ix, ctx in enumerate(ctypes):
             sig_col: str = _cid + "_" + sig
@@ -172,6 +173,10 @@ def _gen_contract_signals(
 
             new_cont_name: str = _cid + "_" + ctx + "_CSIG" + "_" + sname
             df_wide[new_cont_name] = df_wide[sig_col] * csigns[ix] * scale_var
+            new_conts.append(new_cont_name)
+
+    # Only return the new contract signals
+    df_wide = df_wide[new_conts]
 
     return ticker_df_to_qdf(df=df_wide)
 
