@@ -351,7 +351,7 @@ class TestAll(unittest.TestCase):
 
         basket_df: pd.DataFrame = dfd_2[dfd_2["cid"] == basket_cid[0]]
         values: np.ndarray = basket_df["value"].to_numpy()
-        self.assertTrue((np.sum(values) - 0.0) < 0.00001)
+        self.assertTrue(np.isclose(np.sum(values), 0.0, rtol=0.001))
 
         # Test the logic of the function if there are multiple cross-sections defined in
         # basket. First, test the relative value using subtraction and secondly test
