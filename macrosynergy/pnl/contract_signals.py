@@ -376,8 +376,10 @@ def contract_signals(
 
     ## Check hbasket and hscales
     if hbasket is not None:
-        if hscales is None:
-            hscales: List[Numeric] = [1.0] * len(hbasket)
+        if not (bool(hratios) and bool(hscales)):
+            raise ValueError(
+                "`hratios` and `hscales` must be provided if `hbasket` is provided"
+            )
         else:
             # check that the number of scales is the same as the number of hbasket
             if len(hscales) != len(hbasket):
