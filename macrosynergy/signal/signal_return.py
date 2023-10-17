@@ -572,7 +572,7 @@ class SignalsReturns(SignalBase):
                 j = 0
                 for sig in sigs:
                     for agg_sig in agg_sigs:
-                        
+                        sig_original = sig
                         xcat = [sig, ret]
 
                         cids = None
@@ -645,6 +645,7 @@ class SignalsReturns(SignalBase):
 
                         df_result.iloc[j, i] = df_out.iloc[type_index][stat]
                         self.df = self.original_df
+                        sig = sig_original
                         j += 1
                 i += 1
 
