@@ -92,11 +92,14 @@ def check_pr_directives(
             return False
 
         # check if MERGE-AFTER-# is in the body
-        if "MERGE-AFTER-#" in _body:
-            fidx: int = _body.find("MERGE-AFTER-#")
+        MA_STR: str = "MERGE-AFTER-#"
+        if MA_STR in _body:
+            fidx: int = _body.find(MA_STR)
             sidx: int = _body.find(" ", fidx)
+            if sidx == -1:
+                sidx = len(_body)
             # get all the chars between fidx and sidx
-            merge_after_pr: str = _body[fidx + len("MERGE-AFTER-#") : sidx].strip()
+            merge_after_pr: str = _body[fidx + len(MA_STR) : sidx].strip()
             try:
                 merge_after_pr = int(merge_after_pr)
             except ValueError:
