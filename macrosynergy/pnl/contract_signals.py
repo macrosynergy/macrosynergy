@@ -242,6 +242,28 @@ def _apply_hedge_ratios(
     return ticker_df_to_qdf(df=df_wide)
 
 
+def _consolidate_contract_signals(
+    df_contract_signals: pd.DataFrame,
+    df_hedge_signals: Optional[pd.DataFrame] = None,
+) -> pd.DataFrame:
+    """
+    Consolidate contract signals and hedge signals into a single dataframe.
+    :param <pd.DataFrame> df_contract_signals: dataframe with contract signals.
+    :param <pd.DataFrame> df_hedge_signals: dataframe with hedge signals.
+    """
+
+    if df_hedge_signals is None:
+        return df_contract_signals
+
+    df_cs_wide: pd.DataFrame = qdf_to_ticker_df(df=df_contract_signals)
+    df_hedge_wide: pd.DataFrame = qdf_to_ticker_df(df=df_hedge_signals)
+
+    # add the columns where the name is the same
+    df_cs_wide = df_cs_wide.add(df_hedge_wide, fill_value=0)
+
+    return ticker_df_to_qdf(df=df_cs_wide)
+
+
 def contract_signals(
     df: pd.DataFrame,
     sig: str,
