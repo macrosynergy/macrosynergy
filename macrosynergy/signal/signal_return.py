@@ -521,21 +521,13 @@ class SignalsReturns(SignalBase):
         :param <List[str]> columns: column indices, which can be return categories, feature categories, 
         frequencies and/or aggregations. The choice is made through a list of one or more of "xcat", "ret", "freq" and 
         "agg_sigs". The default is ["ret", "freq] resulting in index strings () or if only one frequency is available.
-
-
         """
         self.df = self.original_df
 
-        type_values = ["panel", "mean_years", "mean_cids", "pr_years", "pr_cids"]
-        rows_values = ["xcat", "ret", "freq", "agg_sigs"]
-        if not type in type_values:
-            raise ValueError(f"Type must be one of {type_values}")
-        for row in rows:
-            if not row in rows_values:
-                raise ValueError(f"Rows must only contain {rows_values}")
-        for column in columns:
-            if not column in rows_values:
-                raise ValueError(f"Columns must only contain {rows_values}")
+        if not "agg_sigs" in rows and not "agg_sigs" in columns:
+            agg_sigs = ["last"]
+        if not "freqs" in rows and not "freqs" in columns:
+            freqs = ["Q"]
 
         if isinstance(self.freq, list):
             freqs = self.freq
@@ -546,86 +538,103 @@ class SignalsReturns(SignalBase):
         else:
             agg_sigs = [self.agg_sig]
 
-        column_names = [self.ret[0] + "/" + freq for freq in freqs]
-        row_names = [self.sig[0] + "/" + agg_sig for agg_sig in agg_sigs]
+        type_values = ["panel", "mean_years", "mean_cids", "pr_years", "pr_cids"]
+        rows_values = ["xcat", "ret", "freq", "agg_sigs"]
+        if not type in type_values:
+            raise ValueError(f"Type must be one of {type_values}")
+        for row in rows:
+            if not row in rows_values:
+                raise ValueError(f"Rows must only contain {rows_values}")
+        for column in columns:
+            if not column in rows_values: # Rows values is the same as columns values
+                raise ValueError(f"Columns must only contain {rows_values}")
+
+        column_names = [ret + "/" + freq for ret in self.ret for freq in freqs]
+        row_names = [sig + "/" + agg_sig for sig in self.sig for agg_sig in agg_sigs]
+
 
         df_result = pd.DataFrame(columns=column_names, index=row_names)
 
+        rets = self.ret if isinstance(self.ret, list) else [self.ret]
+        sigs = self.sig if isinstance(self.sig, list) else [self.sig]
+
         i = 0
-        for freq in freqs:
-            j = 0
-            for agg_sig in agg_sigs:
-                ret = self.ret if not isinstance(self.ret, list) else self.ret[0]
-                sig = self.sig if not isinstance(self.sig, list) else self.sig[0]
-                xcat = [sig, ret]
+        
+        for ret in rets:
+            for freq in freqs:
+                j = 0
+                for sig in sigs:
+                    for agg_sig in agg_sigs:
+                        
+                        xcat = [sig, ret]
 
-                cids = None
-                dfd = reduce_df(
-                    self.df,
-                    xcats=xcat,
-                    cids=cids,
-                    start=self.start,
-                    end=self.end,
-                    blacklist=self.blacklist,
-                )
-                metric_cols: List[str] = list(
-                    set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
-                )
-                dfd: pd.DataFrame = self.apply_slip(
-                    df=dfd,
-                    slip=self.slip,
-                    cids=cids,
-                    xcats=xcat,
-                    metrics=metric_cols,
-                )
+                        cids = None
+                        dfd = reduce_df(
+                            self.df,
+                            xcats=xcat,
+                            cids=cids,
+                            start=self.start,
+                            end=self.end,
+                            blacklist=self.blacklist,
+                        )
+                        metric_cols: List[str] = list(
+                            set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
+                        )
+                        dfd: pd.DataFrame = self.apply_slip(
+                            df=dfd,
+                            slip=self.slip,
+                            cids=cids,
+                            xcats=xcat,
+                            metrics=metric_cols,
+                        )
 
-                df = categories_df(
-                    dfd,
-                    xcats=xcat,
-                    cids=cids,
-                    val="value",
-                    start=None,
-                    end=None,
-                    freq=freq,
-                    blacklist=None,
-                    lag=1,
-                    xcat_aggs=[agg_sig, "sum"],
-                )
-                self.df = df
-                self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
+                        df = categories_df(
+                            dfd,
+                            xcats=xcat,
+                            cids=cids,
+                            val="value",
+                            start=None,
+                            end=None,
+                            freq=freq,
+                            blacklist=None,
+                            lag=1,
+                            xcat_aggs=[agg_sig, "sum"],
+                        )
+                        self.df = df
+                        self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
 
-                if not isinstance(self.signs, list):
-                    self.signs = [self.signs]
+                        if not isinstance(self.signs, list):
+                            self.signs = [self.signs]
 
-                self.signals = [sig]
+                        self.signals = [sig]
 
-                if -1 in self.signs:
-                    self.df.loc[:, self.signals] *= -1
-                    s_copy = self.signals.copy()
+                        if -1 in self.signs:
+                            self.df.loc[:, self.signals] *= -1
+                            s_copy = self.signals.copy()
 
-                    self.signals = [s + "_NEG" for s in self.signals]
-                    sig += "_NEG"
-                    self.df.rename(
-                        columns=dict(zip(s_copy, self.signals)), inplace=True
-                    )
-                    
-                if type == "mean_years" or type == "pr_years":
-                    cs_type = "years"
-                else:
-                    cs_type = "cids"
-                if type == "panel":
-                    type_index = 0
-                elif type == "mean_years" or type == "mean_cids":
-                    type_index = 1
-                elif type == "pr_years" or "pr_cids":
-                    type_index = 2
+                            self.signals = [s + "_NEG" for s in self.signals]
+                            sig += "_NEG"
+                            self.df.rename(
+                                columns=dict(zip(s_copy, self.signals)), inplace=True
+                            )
+                            
+                        if type == "mean_years" or type == "pr_years":
+                            cs_type = "years"
+                        else:
+                            cs_type = "cids"
+                        if type == "panel":
+                            type_index = 0
+                        elif type == "mean_years" or type == "mean_cids":
+                            type_index = 1
+                        elif type == "pr_years" or "pr_cids":
+                            type_index = 2
 
-                df_out = self.__output_table__(cs_type=cs_type, ret=ret, sig=sig)
+                        df_out = self.__output_table__(cs_type=cs_type, ret=ret, sig=sig)
 
-                df_result.iloc[j, i] = df_out.iloc[type_index][stat]
-                self.df = self.original_df
-                j += 1
-            i += 1
+                        df_result.iloc[j, i] = df_out.iloc[type_index][stat]
+                        self.df = self.original_df
+                        j += 1
+                i += 1
 
         return df_result
 
