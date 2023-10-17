@@ -454,8 +454,8 @@ class SignalsReturns(SignalBase):
         self, rets=None, xcats=None, freqs=None, agg_sigs=None
     ):
         """
-        Calculates all the statistics for each return and signal category specified with each frequency and aggregation 
-        method, note that if none are defined it does this for all categories, frequencies and aggregation methods that 
+        Calculates all the statistics for each return and signal category specified with each frequency and aggregation
+        method, note that if none are defined it does this for all categories, frequencies and aggregation methods that
         were stored in the class.
 
         :param <str, List[str]> rets: target return category
@@ -478,33 +478,30 @@ class SignalsReturns(SignalBase):
         if not isinstance(rets, list):
             rets = [rets]
 
-        df_out = pd.DataFrame()
-
         xcats = [x for x in xcats if x in self.sig]
 
-        index = []
-        for freq in freqs:
-            for agg_sig in agg_sigs:
-                for ret in rets:
-                    for xcat in xcats:
-                        if self.signs[self.sig.index(xcat)] == -1:
-                            xcat_label = xcat + '_NEG'
-                        else:
-                            xcat_label = xcat
-                        index.append(f"{ret}/{xcat_label}/{agg_sig}/{freq}")
-                        df_out = pd.concat(
-                            [
-                                df_out,
-                                self.single_relation_table(
-                                    ret=ret,
-                                    xcat=[xcat, ret],
-                                    freq=freq,
-                                    agg_sigs=agg_sig,
-                                ),
-                            ]
-                        )
+        index = [
+            f"{ret}/{xcat}/{agg_sig}/{freq}"
+            for freq in freqs
+            for agg_sig in agg_sigs
+            for ret in rets
+            for xcat in xcats
+        ]
 
+        df_out = pd.concat(
+            [
+                self.single_relation_table(
+                    ret=ret, xcat=[xcat, ret], freq=freq, agg_sigs=agg_sig
+                )
+                for freq in freqs
+                for agg_sig in agg_sigs
+                for ret in rets
+                for xcat in xcats
+            ],
+            axis=0, 
+        )
         df_out.index = index
+
         return df_out
 
     def single_statistic_table(
@@ -518,15 +515,15 @@ class SignalsReturns(SignalBase):
         Creates a table which shows the specified statistic for each row and column specified as arguments:
 
         :param stat: type of statistic to be displayed. (this can be any of the column names of summary_table)
-        :param type: type of the statistic displayed. This can be based on the overall panel ("panel", default), an 
-        average of annual panels (mean_years), an average of cross-sectional relations ("mean_cids"), 
+        :param type: type of the statistic displayed. This can be based on the overall panel ("panel", default), an
+        average of annual panels (mean_years), an average of cross-sectional relations ("mean_cids"),
         the positive ratio across years("pr_years"), positive ratio across sections ("pr_cids").
-        :param <List[str]> rows: row indices, which can be return categories, feature categories, frequencies and/or 
-        aggregations. The choice is made through a list of one or more of "xcat", "ret", "freq" and "agg_sigs". The 
-        default is ["xcat", "agg_sigs"] resulting in index strings (<agg_signs>) or if only one aggregation is 
+        :param <List[str]> rows: row indices, which can be return categories, feature categories, frequencies and/or
+        aggregations. The choice is made through a list of one or more of "xcat", "ret", "freq" and "agg_sigs". The
+        default is ["xcat", "agg_sigs"] resulting in index strings (<agg_signs>) or if only one aggregation is
         available.
-        :param <List[str]> columns: column indices, which can be return categories, feature categories, 
-        frequencies and/or aggregations. The choice is made through a list of one or more of "xcat", "ret", "freq" and 
+        :param <List[str]> columns: column indices, which can be return categories, feature categories,
+        frequencies and/or aggregations. The choice is made through a list of one or more of "xcat", "ret", "freq" and
         "agg_sigs". The default is ["ret", "freq] resulting in index strings () or if only one frequency is available.
         """
         self.df = self.original_df
@@ -553,12 +550,11 @@ class SignalsReturns(SignalBase):
             if not row in rows_values:
                 raise ValueError(f"Rows must only contain {rows_values}")
         for column in columns:
-            if not column in rows_values: # Rows values is the same as columns values
+            if not column in rows_values:  # Rows values is the same as columns values
                 raise ValueError(f"Columns must only contain {rows_values}")
 
         column_names = [ret + "/" + freq for ret in self.ret for freq in freqs]
         row_names = [sig + "/" + agg_sig for sig in self.sig for agg_sig in agg_sigs]
-
 
         df_result = pd.DataFrame(columns=column_names, index=row_names)
 
@@ -566,7 +562,7 @@ class SignalsReturns(SignalBase):
         sigs = self.sig if isinstance(self.sig, list) else [self.sig]
 
         i = 0
-        
+
         for ret in rets:
             for freq in freqs:
                 j = 0
@@ -585,7 +581,8 @@ class SignalsReturns(SignalBase):
                             blacklist=self.blacklist,
                         )
                         metric_cols: List[str] = list(
-                            set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
+                            set(dfd.columns.tolist())
+                            - set(["real_date", "xcat", "cid"])
                         )
                         dfd: pd.DataFrame = self.apply_slip(
                             df=dfd,
@@ -608,7 +605,9 @@ class SignalsReturns(SignalBase):
                             xcat_aggs=[agg_sig, "sum"],
                         )
                         self.df = df
-                        self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
+                        self.cids = list(
+                            np.sort(self.df.index.get_level_values(0).unique())
+                        )
 
                         if not isinstance(self.signs, list):
                             self.signs = [self.signs]
@@ -616,7 +615,7 @@ class SignalsReturns(SignalBase):
                         self.signals = [sig]
 
                         if -1 in self.signs and self.signs[self.sig.index(sig)] == -1:
-                            original_name = sig + '/' + agg_sig
+                            original_name = sig + "/" + agg_sig
                             self.df.loc[:, self.signals] *= -1
                             s_copy = self.signals.copy()
 
@@ -625,11 +624,11 @@ class SignalsReturns(SignalBase):
                             self.df.rename(
                                 columns=dict(zip(s_copy, self.signals)), inplace=True
                             )
-                            new_name = sig + '/' + agg_sig
+                            new_name = sig + "/" + agg_sig
                             df_result.rename(
                                 index={original_name: new_name}, inplace=True
                             )
-                            
+
                         if type == "mean_years" or type == "pr_years":
                             cs_type = "years"
                         else:
@@ -641,7 +640,9 @@ class SignalsReturns(SignalBase):
                         elif type == "pr_years" or "pr_cids":
                             type_index = 2
 
-                        df_out = self.__output_table__(cs_type=cs_type, ret=ret, sig=sig)
+                        df_out = self.__output_table__(
+                            cs_type=cs_type, ret=ret, sig=sig
+                        )
 
                         df_result.iloc[j, i] = df_out.iloc[type_index][stat]
                         self.df = self.original_df
