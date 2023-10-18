@@ -1,7 +1,7 @@
 import os
 import sys
 from time import sleep
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Callable, Tuple
 
 import requests
 from packaging import version
@@ -66,6 +66,13 @@ def api_request(
 def check_title(
     title: str,
 ) -> bool:
+    """
+    Checks if the PR title matches any of the accepted patterns.
+
+    :param <str> title: The PR title to check.
+    :return <bool>: True if the title matches any of the accepted patterns.
+    :raises <ValueError>: If the title does not match any of the accepted patterns.
+    """
     title_check: bool = False
     for pattern in ACCEPTED_TITLE_PATTERNS:
         tx: str = title.strip()
@@ -83,45 +90,84 @@ def check_title(
     return title_check
 
 
+def _get_pattern_idx(
+    body: str,
+    pattern: str,
+) -> Tuple[int, int]:
+    """
+    Get the start and end index of a pattern in a string.
+    :param <str> body: The string to search.
+    :param <str> pattern: The pattern to search for.
+    :return <Tuple[int, int]>: The start and end index of the pattern.
+    :raises <AssertionError>: If the body or pattern is empty.
+    """
+    assert bool(body)
+    assert bool(pattern)
+    assert pattern in body
+    fidx: int = body.find(pattern)
+    sidx: int = body.find(" ", fidx)
+    if sidx == -1:
+        sidx = len(body)
+    return (fidx, sidx)
+
+
+def _tvp(vx: str) -> version.Version:
+    """
+    Try-Version-Parse
+    :param <str> vx: The version string to parse.
+    :return <version.Version>: The parsed version.
+    :raises <ValueError>: If the version string is not valid.
+    """
+    try:
+        return version.parse(vx)
+    except ValueError:
+        eMsg: str = f"'{vx}' is not a valid version number."
+        raise ValueError(eMsg)
+
+
 def _check_merge_w_version(
     body: str,
 ) -> bool:
+    """
+    Checks if the PR body contains a merge directive and if so, whether
+    the merge directive is valid.
+    :param <str> body: The PR body to check.
+    :return <bool>: True if the PR body does not contain a merge directive
+        or if the merge directive is valid.
+    :raises <ValueError>: If the PR body contains a merge directive that is
+        not valid.
+    """
     assert bool(body)
-    MIV_STR: str = "MERGE-IN-VERSION-v"
-    MAV_STR: str = "MERGE-AFTER-VERSION-v"
+    MIV_STR: str = "MERGE-IN-VERSION-V"  # "IN" this version
+    MAV_STR: str = "MERGE-AFTER-VERSION-V"  # "AFTER" this version
+
+    if not any([MIV_STR in body, MAV_STR in body]):
+        return True
 
     try:
         from setup import VERSION
+
+        _tvp(VERSION)
     except ImportError:
         eMsg: str = "Could not import VERSION from setup.py."
-        # print cwd and os.listdir()
-        print(f"cwd: {os.getcwd()}")
-        print(f"ls: {os.listdir()}")
         raise ImportError(eMsg)
 
     results: List[bool] = [True, True]
 
-    for pattern in [MIV_STR, MAV_STR]:
-        if pattern in body:
-            fidx: int = body.find(pattern)
-            sidx: int = body.find(" ", fidx)
-            if sidx == -1:
-                sidx = len(body)
-            # get all the chars between fidx and sidx
-            mversion: str = body[fidx + len(pattern) : sidx].strip()
-            try:
-                version.parse(mversion)
-            except ValueError:
-                eMsg: str = f"'{mversion}' is not a valid version number."
-                raise ValueError(eMsg)
+    p_methods: Dict[str, Callable] = {
+        MIV_STR: lambda x: _tvp(x) == _tvp(VERSION),
+        MAV_STR: lambda x: _tvp(x) <= _tvp(VERSION),
+    }
 
-            if pattern == MIV_STR:
-                results[0] = version.parse(mversion) == version.parse(VERSION)
-            else:
-                results[1] = version.parse(mversion) <= version.parse(VERSION)
+    for px, pattern in enumerate(p_methods):
+        if pattern not in body:
+            continue
+        fidx, sidx = _get_pattern_idx(body=body, pattern=pattern)
+        mversion: str = body[fidx + len(pattern) : sidx].strip()
+        results[px] = p_methods[pattern](mversion)
 
-            if not all(results):
-                break
+        if not results[px]:
+            break
 
     return all(results)
 
@@ -130,7 +176,7 @@ def _check_do_not_merge(
     body: str,
 ) -> bool:
     assert bool(body)
-    result: bool = "DO-NOT-MERGE" in body
+    result: bool = not ("DO-NOT-MERGE" in body)
     return result
 
 
@@ -143,10 +189,7 @@ def _check_merge_after(
     if MA_STR not in body:
         return True
 
-    fidx: int = body.find(MA_STR)
-    sidx: int = body.find(" ", fidx)
-    if sidx == -1:
-        sidx = len(body)
+    fidx, sidx = _get_pattern_idx(body=body, pattern=MA_STR)
     # get all the chars between fidx and sidx
     merge_after_pr: str = body[fidx + len(MA_STR) : sidx].strip()
     try:
@@ -171,13 +214,11 @@ def check_pr_directives(
 
     body = body.strip().replace(" ", "-").upper()
 
-    do_not_merge: bool = _check_do_not_merge(body=body)
-
-    merge_after: bool = _check_merge_after(body=body)
-
-    merge_w_version: bool = _check_merge_w_version(body=body)
-
-    results: List[bool] = [do_not_merge, merge_after, merge_w_version]
+    results: List[bool] = [
+        _check_do_not_merge(body=body),
+        _check_merge_after(body=body),
+        _check_merge_w_version(body=body),
+    ]
 
     return all(results)
 
@@ -229,5 +270,5 @@ def main(pr_number: int):
 
 
 if __name__ == "__main__":
-    pr_number: int = int(sys.argv[1])
-    main(pr_number=pr_number)
+    # pr_number: int = int(sys.argv[1])
+    main(pr_number=1093)
