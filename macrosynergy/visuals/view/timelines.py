@@ -18,9 +18,19 @@ from typing import List, Optional, Tuple
 
 import pandas as pd
 
+<<<<<<< HEAD
 from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
 from macrosynergy.visuals import FacetPlot, LinePlot
 from macrosynergy.management.types import Numeric
+=======
+from macrosynergy.management.utils import (
+    standardise_dataframe,
+    is_valid_iso_date
+)
+from macrosynergy.visuals.plots import FacetPlot, LinePlot
+# from macrosynergy.visuals.facetplot import FacetPlot#, LinePlot
+from macrosynergy.visuals.common import Numeric
+>>>>>>> 1dbaa356 (refactor visuals)
 
 IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
 
@@ -302,7 +312,7 @@ def timelines(
 
 
 if __name__ == "__main__":
-    from macrosynergy.visuals import FacetPlot
+    from macrosynergy.visuals.plots import FacetPlot
     from macrosynergy.management.simulate_quantamental_data import make_test_df
 
     cids: List[str] = [

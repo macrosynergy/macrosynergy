@@ -3,10 +3,13 @@ Functions for visualizing data grading and blacklisted periods from a quantament
 """
 import numpy as np
 import pandas as pd
-from typing import List, Tuple
+import matplotlib.pyplot as plt
+import seaborn as sns
+from typing import List, Union, Tuple
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
-import macrosynergy.visuals as msv
+from macrosynergy.management.check_availability import reduce_df
+from macrosynergy.visuals import view
 
 
 def heatmap_grades(df: pd.DataFrame, xcats:  List[str],  cids: List[str] = None,
@@ -27,22 +30,36 @@ def heatmap_grades(df: pd.DataFrame, xcats:  List[str],  cids: List[str] = None,
         Default is None, meaning it is set in accordance with df.
 
     """
-    msv.view.grades(
-        df=df,
-        xcats=xcats,
-        cids=cids,
-        start=start,
-        end=end,
-        grade=grade,
-        title=title,
-        figsize=size
-    )
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+
+    df_cols = list(df.columns)
+    grade_error = "Column that contains the grade values must be present in the " \
+                  f"DataFrame: {df_cols}."
+    assert grade in df.columns, grade_error
+
+    df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
+    df = df[['xcat', 'cid', 'real_date', grade]]
+    df[grade] = df[grade].astype(float).round(2)
+
+    df_ags = df.groupby(['xcat', 'cid']).mean().reset_index().\
+        pivot(index='xcat', columns='cid', values=grade)
+
+    if size is None:
+        size = (max(df_ags.shape[0] / 2, 15), max(1, df_ags.shape[1] / 2))
+    if title is None:
+        sdate = df['real_date'].min().strftime('%Y-%m-%d')
+        title = f'Average grade of vintages since {sdate}'
+    sns.set(rc={'figure.figsize': size})
+    sns.heatmap(df_ags, cmap='YlOrBr', vmin=1, vmax=3, annot=True, fmt='.1f',
+                linewidth=1, cbar=False)
+    plt.xlabel('')
+    plt.ylabel('')
+    plt.title(title, fontsize=18)
+    plt.show()
 
 
 if __name__ == "__main__":
 
-    np.random.seed(0)
-    
     cids = ['NZD', 'AUD', 'CAD', 'GBP']
     xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
     df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest',

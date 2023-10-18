@@ -69,7 +69,7 @@ class Heatmap(Plotter):
         y_axis_label: Optional[str] = None,
         axis_fontsize: int = 14,
         title: Optional[str] = None,
-        title_fontsize: int = 30,
+        title_fontsize: int = 22,
         title_xadjust: Numeric = 0.5,
         title_yadjust: Numeric = 1.0,
         vmin: Optional[Numeric] = None,

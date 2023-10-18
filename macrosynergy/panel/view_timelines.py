@@ -7,7 +7,7 @@ from typing import List, Tuple, Optional
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
-import macrosynergy.visuals as msv
+from macrosynergy.visuals import view
 
 
 def view_timelines(
@@ -79,7 +79,7 @@ def view_timelines(
     :param <int> legend_fontsize: font size of legend. Default is 12.
 
     """
-    msv.view.timelines(
+    view.timelines(
         df=df,
         xcats=xcats,
         cids=cids,

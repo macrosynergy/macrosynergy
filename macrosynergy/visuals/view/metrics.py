@@ -20,7 +20,7 @@ import seaborn as sns
 
 from macrosynergy.management.utils import downsample_df_on_real_date
 
-from macrosynergy.visuals import Heatmap
+from macrosynergy.visuals.plots import Heatmap
 
 
 def metrics(
