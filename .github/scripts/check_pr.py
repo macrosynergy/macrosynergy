@@ -167,7 +167,9 @@ def check_pr_directives(
 
     merge_after: bool = _check_merge_after(body=body)
 
-    results: List[bool] = [do_not_merge, merge_after]
+    merge_w_version: bool = _check_merge_w_version(body=body)
+
+    results: List[bool] = [do_not_merge, merge_after, merge_w_version]
 
     return all(results)
 
