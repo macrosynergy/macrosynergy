@@ -198,18 +198,8 @@ class Plotter(metaclass=PlotterMetaClass):
         self.backend: ModuleType
         if backend.startswith("m"):
             self.backend = plt
-            try:
-                self.backend.style.use("seaborn-v0_8-darkgrid")
-            except:
-                try:
-                    sns.set_style("darkgrid")
-                except:
-                    warnings.warn(
-                        "Unable to set the default style to Seaborne's darkgrid. \n"
-                        "Please make sure Seaborn and Matplotlib are installed, "
-                        " and updated to their latest versions.",
-                        RuntimeWarning,
-                    )
+            sns.set_style("darkgrid")
+
         elif ...:
             ...
         else:
