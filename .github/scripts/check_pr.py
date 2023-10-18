@@ -89,7 +89,7 @@ def _check_merge_w_version(
     MAV_STR: str = "MERGE-AFTER-VERSION-v"
 
     try:
-        from setup import VERSION
+        from .setup import VERSION
     except ImportError:
         eMsg: str = "Could not import VERSION from setup.py."
         # print cwd and os.listdir()
@@ -115,12 +115,11 @@ def _check_merge_w_version(
 
             if pattern == MIV_STR:
                 results[0] = version.parse(mversion) == version.parse(VERSION)
-                if not results[0]:
-                    return False
             else:
                 results[1] = version.parse(mversion) <= version.parse(VERSION)
-                if not results[1]:
-                    return False
+
+            if not all(results):
+                break
 
     return all(results)
 
