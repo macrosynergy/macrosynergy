@@ -92,6 +92,9 @@ def _check_merge_w_version(
         from setup import VERSION
     except ImportError:
         eMsg: str = "Could not import VERSION from setup.py."
+        # print cwd and os.listdir()
+        print(f"cwd: {os.getcwd()}")
+        print(f"ls: {os.listdir()}")
         raise ImportError(eMsg)
 
     results: List[bool] = [True, True]
