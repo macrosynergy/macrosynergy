@@ -108,15 +108,19 @@ def _check_merge_w_version(
             # get all the chars between fidx and sidx
             mversion: str = body[fidx + len(pattern) : sidx].strip()
             try:
-                mversion = version.parse(mversion)
+                version.parse(mversion)
             except ValueError:
                 eMsg: str = f"'{mversion}' is not a valid version number."
                 raise ValueError(eMsg)
 
             if pattern == MIV_STR:
-                results[0] = mversion <= version.parse(VERSION)
+                results[0] = version.parse(mversion) == version.parse(VERSION)
+                if not results[0]:
+                    return False
             else:
-                results[1] = mversion <= version.parse(VERSION)
+                results[1] = version.parse(mversion) <= version.parse(VERSION)
+                if not results[1]:
+                    return False
 
     return all(results)
 
