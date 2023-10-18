@@ -10,6 +10,8 @@ REPO_OWNER: str = "macrosynergy"
 REPO_NAME: str = "macrosynergy"
 REPO_URL: str = f"github.com/{REPO_OWNER}/{REPO_NAME}"
 
+sys.path.append(os.getcwd())
+
 OAUTH_TOKEN: Optional[str] = os.getenv("GH_TOKEN", None)
 
 
@@ -89,7 +91,7 @@ def _check_merge_w_version(
     MAV_STR: str = "MERGE-AFTER-VERSION-v"
 
     try:
-        from .setup import VERSION
+        from setup import VERSION
     except ImportError:
         eMsg: str = "Could not import VERSION from setup.py."
         # print cwd and os.listdir()
