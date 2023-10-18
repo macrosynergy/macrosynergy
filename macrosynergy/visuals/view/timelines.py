@@ -18,10 +18,7 @@ from typing import List, Optional, Tuple
 
 import pandas as pd
 
-from macrosynergy.management.utils import (
-    standardise_dataframe,
-    is_valid_iso_date
-)
+from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
 from macrosynergy.visuals import FacetPlot, LinePlot
 from macrosynergy.management.types import Numeric
 
@@ -190,15 +187,12 @@ def timelines(
         df_mean: pd.DataFrame = pd.DataFrame()
 
     if xcat_labels:
-        if (len(xcat_labels) != len(xcats)) or (
-            cs_mean and (len(xcat_labels) != len(xcats) - 1)
-        ):
+        # when `cs_mean` is True, `xcat_labels` may have one extra label
+        if len(xcat_labels) != len(xcats) + int(cs_mean):
             raise ValueError(
                 "`xcat_labels` must have same length as `xcats` "
                 "(or one extra label if `cs_mean` is True)."
             )
-        df["xcat"] = df["xcat"].map(dict(zip(xcats, xcat_labels)))
-        xcats: List[str] = xcat_labels.copy()
 
     facet_size: Optional[Tuple[float, float]] = (
         (aspect * height, height)
@@ -281,6 +275,7 @@ def timelines(
             end=end,
         ) as fp:
             show_legend: bool = True if cross_mean_series else False
+            show_legend = show_legend or (len(xcats) > 1)
             if ncol > len(cids):
                 ncol: int = len(cids)
 
@@ -293,19 +288,17 @@ def timelines(
                 cid_grid=True,
                 title_yadjust=title_adj,
                 title_xadjust=title_xadj,
-                # compare_series=cross_mean_series if cs_mean else None,
+                compare_series=cross_mean_series if cs_mean else None,
                 facet_size=facet_size,
                 title_fontsize=title_fontsize,
                 # title_fontsize=24,
                 ncols=ncol,
                 attempt_square=square_grid,
-                # legend=show_legend,
-                legend=(len(xcats) > 1),
+                legend=show_legend,
                 legend_ncol=legend_ncol,
                 legend_labels=xcat_labels or None,
                 legend_fontsize=legend_fontsize,
             )
-
 
 
 if __name__ == "__main__":
@@ -406,5 +399,3 @@ if __name__ == "__main__":
         cids=sel_cids,
         title="Plotting multiple cross sections for a single category \n with different y-axis!",
     )
-
-    
