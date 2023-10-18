@@ -80,39 +80,58 @@ def check_title(
     return title_check
 
 
+def _check_do_not_merge(
+    body: str,
+) -> bool:
+    assert bool(body)
+    result: bool = "DO-NOT-MERGE" in body
+    return result
+
+
+def _check_merge_after(
+    body: str,
+) -> bool:
+    assert bool(body)
+    MA_STR: str = "MERGE-AFTER-#"
+
+    if MA_STR not in body:
+        return True
+
+    fidx: int = body.find(MA_STR)
+    sidx: int = body.find(" ", fidx)
+    if sidx == -1:
+        sidx = len(body)
+    # get all the chars between fidx and sidx
+    merge_after_pr: str = body[fidx + len(MA_STR) : sidx].strip()
+    try:
+        merge_after_pr = int(merge_after_pr)
+    except ValueError:
+        eMsg: str = f"PR number '{merge_after_pr}' is not an integer."
+        raise ValueError(eMsg)
+
+    # get the PR details
+    pr_info: Dict[str, Any] = get_pr_details(pr_number=merge_after_pr)
+    # if closed return true
+    mergable: bool = pr_info["state"] == "closed"
+    return mergable
+
+
 def check_pr_directives(
     body: str,
     state: str,
 ) -> bool:
-    if not body is None:
-        # strip, replace spaces with hyphens, and uppercase
-        _body: str = body.strip().replace(" ", "-").upper()
+    if body is None:
+        return True
 
-        if "DO-NOT-MERGE" in _body:
-            return False
+    body = body.strip().replace(" ", "-").upper()
 
-        # check if MERGE-AFTER-# is in the body
-        MA_STR: str = "MERGE-AFTER-#"
-        if MA_STR in _body:
-            fidx: int = _body.find(MA_STR)
-            sidx: int = _body.find(" ", fidx)
-            if sidx == -1:
-                sidx = len(_body)
-            # get all the chars between fidx and sidx
-            merge_after_pr: str = _body[fidx + len(MA_STR) : sidx].strip()
-            try:
-                merge_after_pr = int(merge_after_pr)
-            except ValueError:
-                eMsg: str = f"PR number '{merge_after_pr}' is not an integer."
-                raise ValueError(eMsg)
+    do_not_merge: bool = _check_do_not_merge(body=body)
 
-            # get the PR details
-            pr_info: Dict[str, Any] = get_pr_details(pr_number=merge_after_pr)
-            # if closed return true
-            mergable: bool = pr_info["state"] == "closed"
-            return mergable
+    merge_after: bool = _check_merge_after(body=body)
 
-    return True
+    results: List[bool] = [do_not_merge, merge_after]
+
+    return all(results)
 
 
 def test_pr_info(
