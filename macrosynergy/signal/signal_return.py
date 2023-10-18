@@ -4,6 +4,7 @@ Module for analysing and visualizing signal and a return series.
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn import metrics as skm
 from scipy import stats
 from typing import List, Union, Tuple
@@ -439,7 +440,7 @@ class SignalReturnRelations:
         y_input = 0.45 if y_axis(min_value) else min_value
 
         return y_input
-    
+
     @staticmethod
     def apply_slip(
         df: pd.DataFrame,
@@ -492,7 +493,7 @@ class SignalReturnRelations:
         if size is None:
             size = (np.max([dfx.shape[0] / 2, 8]), 6)
 
-        plt.style.use("seaborn")
+        sns.set_style("darkgrid")
         plt.figure(figsize=size)
         x_indexes = np.arange(dfx.shape[0])
 
@@ -581,7 +582,7 @@ class SignalReturnRelations:
         if size is None:
             size = (np.max([dfx.shape[0] / 2, 8]), 6)
 
-        plt.style.use("seaborn")
+        sns.set_style("seaborn")
         plt.figure(figsize=size)
         x_indexes = np.arange(len(dfx.index))
         w = 0.4
