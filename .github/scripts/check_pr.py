@@ -4,6 +4,7 @@ from time import sleep
 from typing import Any, Dict, List, Optional
 
 import requests
+from packaging import version
 
 REPO_OWNER: str = "macrosynergy"
 REPO_NAME: str = "macrosynergy"
@@ -78,6 +79,43 @@ def check_title(
         raise ValueError(eMsg)
 
     return title_check
+
+
+def _check_merge_w_version(
+    body: str,
+) -> bool:
+    assert bool(body)
+    MIV_STR: str = "MERGE-IN-VERSION-v"
+    MAV_STR: str = "MERGE-AFTER-VERSION-v"
+
+    try:
+        from setup import VERSION
+    except ImportError:
+        eMsg: str = "Could not import VERSION from setup.py."
+        raise ImportError(eMsg)
+
+    results: List[bool] = [True, True]
+
+    for pattern in [MIV_STR, MAV_STR]:
+        if pattern in body:
+            fidx: int = body.find(pattern)
+            sidx: int = body.find(" ", fidx)
+            if sidx == -1:
+                sidx = len(body)
+            # get all the chars between fidx and sidx
+            mversion: str = body[fidx + len(pattern) : sidx].strip()
+            try:
+                mversion = version.parse(mversion)
+            except ValueError:
+                eMsg: str = f"'{mversion}' is not a valid version number."
+                raise ValueError(eMsg)
+
+            if pattern == MIV_STR:
+                results[0] = mversion <= version.parse(VERSION)
+            else:
+                results[1] = mversion <= version.parse(VERSION)
+
+    return all(results)
 
 
 def _check_do_not_merge(
