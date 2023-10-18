@@ -582,7 +582,7 @@ class SignalReturnRelations:
         if size is None:
             size = (np.max([dfx.shape[0] / 2, 8]), 6)
 
-        sns.set_style("seaborn")
+        sns.set_style("darkgrid")
         plt.figure(figsize=size)
         x_indexes = np.arange(len(dfx.index))
         w = 0.4
