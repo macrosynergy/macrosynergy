@@ -119,7 +119,7 @@ def _get_pattern_idx(
             if char not in NUM_CHARS:
                 break
         # set sidx to the first non-numeric char after the pattern
-        sidx = fidx + idx + 1
+        sidx = fidx + idx
 
     return (fidx, sidx)
 
@@ -226,6 +226,7 @@ def check_pr_directives(
         return True
 
     body = body.strip().replace(" ", "-").upper()
+    body = f" {body} "
 
     results: List[bool] = [
         _check_do_not_merge(body=body),
@@ -240,15 +241,18 @@ def test_pr_info(
     pr_info: Dict[str, Any],
 ) -> bool:
     assert set(["number", "title", "state", "body"]).issubset(pr_info.keys())
-
+    err_msg: str = ""
     if not check_title(title=pr_info["title"]):
-        raise ValueError("PR title does not match any of the accepted patterns.")
+        err_msg += f"PR #{pr_info['number']} is not mergable due to invalid title.\n"
 
     if not check_pr_directives(body=pr_info["body"], state=pr_info["state"]):
-        raise ValueError(
+        err_msg += (
             f"PR #{pr_info['number']} is not mergable due to merge restrictions"
             " specified in the PR body."
         )
+
+    if err_msg:
+        raise ValueError(err_msg.strip())
 
     return True
 
