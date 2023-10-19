@@ -32,16 +32,15 @@ The package has the 3 primary branches:
 ```
 develop ← feature/<feature_name>
         ← bugfix/<bugfix_name>
-        
+
 test ← develop
 
 main ← hotfix/<hotfix_name>
-     ← test  
+     ← test
 
 ...
 develop ← version++ ← main
 ```
-
 
 ### New Features
 
@@ -70,18 +69,21 @@ These are typically reserved for security issues, build process bugs, or issues
 with business-critical functionality. Hotfixes should be made against the `main` branch. Once PR is merged, the `main` branch should be merged into the `develop` branch; and a new release should be created from the `main` branch.
 
 **The hotfix must also contain a version increment to allow for the new release.**
+
 ```
 main ← hotfix/<hotfix_name>
 ```
 
-
 ### CI/CD related changes
 
 For changes related to build processes, CI/CD, or other maintenance tasks:
+
 ```
 chore/<chore_name>
 ```
+
 Make sure to use "Chore" as the type of the pull request. (See [Pull Requests/Title Conventions](#title-conventions))
+
 ## Pull Requests
 
 ### Pull Request Process
@@ -121,13 +123,20 @@ pull request description.
 
 Currently functional directives are:
 
-- `MERGE-AFTER-#<PR_NUMBER>` - Only allows the PR to be merged after the PR with number `<PR_NUMBER>` has been merged.
+- `MERGE-AFTER-#<PR_NUMBER>` - Only allows the PR to be merged after the PR with number
+  `<PR_NUMBER>` has been merged.
 - `DO-NOT-MERGE` - Prevents the PR from being merged until the directive is removed.
+- `MERGE-IN-VERSION-<VERSION>` - Only allows the PR to be merged after the version has
+  been incremented to `<VERSION>`. Mostly used for queueing features later in the development cycle.
+- `MERGE-AFTER-VERSION-<VERSION>` - Similar to `MERGE-IN-VERSION-<VERSION>`, but allows
+  the PR to be merged in any version after `<VERSION>`.
+
+**NOTE: `PR_NUMBER` but be an integer, and `VERSION` must be a valid version string (vX.Y.Z)**
 
 These also work with the dashes replaced by spaces and is case-insensitive.
 
-
 Example:
+
 ```
 Feature: Some new feature
 
@@ -136,7 +145,7 @@ This is a new feature that does some stuff.
 Merge After #123
 ```
 
-or 
+or
 
 ```
 Bugfix: Solving something
@@ -146,11 +155,17 @@ This fixes a bug that does some stuff.
 Do not merge
 ```
 
+or 
+
+```
+(Merge in version v0.20.5)
+...
+```
+
 
 ## Community Contributions
 
 For community contributions, the pull requests are reviewed by the package maintainers.
-  
 
 The following apply to contributors outside the Macrosynergy team:
 
@@ -161,6 +176,4 @@ The following apply to contributors outside the Macrosynergy team:
 1. Contributors may not make any modifications to the unit tests, integration tests, dependencies, or any CI/CD configuration (e.g. GitHub Actions, Codecov, etc.)
 
 1. Contributors may not modify any static files such as
-the static documentation pages, the `README.md` file, and the `LICENSE` file.
-
-
+   the static documentation pages, the `README.md` file, and the `LICENSE` file.
