@@ -1,15 +1,20 @@
-
+"""
+Module for analysing and visualizing signal and a return series.
+"""
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn import metrics as skm
 from scipy import stats
 from typing import List, Union, Tuple
 from datetime import timedelta
 from collections import defaultdict
+import warnings
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df, categories_df
+from macrosynergy.management.utils import apply_slip as apply_slip_util
 
 
 class SignalReturnRelations:
@@ -51,23 +56,59 @@ class SignalReturnRelations:
     :param <int> fwin: forward window of return category in base periods. Default is 1.
         This conceptually corresponds to the holding period of a position in
         accordance with the signal.
+    :param <int> slip: implied slippage of feature availability for relationship with
+        the target category. This mimics the relationship between trading signals and
+        returns, which is often characterized by a delay due to the setup of of positions.
+        Technically, this is a negative lag (early arrival) of the target category
+        in working days prior to any frequency conversion. Default is 0.
+
     """
-    def __init__(self, df: pd.DataFrame, ret: str, sig: str,
-                 rival_sigs: Union[str, List[str]] = None, cids: List[str] = None,
-                 sig_neg: bool = False, cosp: bool = False, start: str = None,
-                 end: str = None, fwin: int = 1, blacklist: dict = None,
-                 agg_sig: str = 'last', freq: str = 'M'):
+
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        ret: str,
+        sig: str,
+        rival_sigs: Union[str, List[str]] = None,
+        cids: List[str] = None,
+        sig_neg: bool = False,
+        cosp: bool = False,
+        start: str = None,
+        end: str = None,
+        blacklist: dict = None,
+        freq: str = "M",
+        agg_sig: str = "last",
+        fwin: int = 1,
+        slip: int = 0,
+    ):
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError(f"DataFrame expected and not {type(df)}.")
 
         df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
-        self.dic_freq = {'D': 'daily', 'W': 'weekly', 'M': 'monthly',
-                         'Q': 'quarterly', 'A': 'annual'}
+        self.dic_freq = {
+            "D": "daily",
+            "W": "weekly",
+            "M": "monthly",
+            "Q": "quarterly",
+            "A": "annual",
+        }
         freq_error = f"Frequency parameter must be one of {list(self.dic_freq.keys())}."
-        assert freq in self.dic_freq.keys(), freq_error
+        if not freq in self.dic_freq.keys():
+            raise ValueError(freq_error)
 
-        self.metrics = ['accuracy', 'bal_accuracy', 'pos_sigr', "pos_retr",
-                        'pos_prec', 'neg_prec', 'pearson', 'pearson_pval',
-                        'kendall', 'kendall_pval']
+        self.metrics = [
+            "accuracy",
+            "bal_accuracy",
+            "pos_sigr",
+            "pos_retr",
+            "pos_prec",
+            "neg_prec",
+            "pearson",
+            "pearson_pval",
+            "kendall",
+            "kendall_pval",
+        ]
 
         self.ret = ret
         self.freq = freq
@@ -79,13 +120,12 @@ class SignalReturnRelations:
         self.blacklist = blacklist
         self.fwin = fwin
 
-        xcats = list(df['xcat'].unique())
+        xcats = list(df["xcat"].unique())
         assert sig in xcats, "Primary signal must be available in the DataFrame."
         self.sig = sig
 
         signals = [self.sig]
         if rival_sigs is not None:
-
             r_sigs_error = "Signal or list of signals expected."
             assert isinstance(rival_sigs, (str, list)), r_sigs_error
 
@@ -94,8 +134,10 @@ class SignalReturnRelations:
             intersection = set(xcats).intersection(r_sigs)
             missing = set(r_sigs).difference(intersection)
 
-            rival_error = f"The additional signals must be present in the defined " \
-                          f"DataFrame. It is currently missing, {missing}."
+            rival_error = (
+                f"The additional signals must be present in the defined "
+                f"DataFrame. It is currently missing, {missing}."
+            )
             assert set(r_sigs).issubset(set(xcats)), rival_error
             signals += r_sigs
 
@@ -107,6 +149,18 @@ class SignalReturnRelations:
             df, xcats=xcats, cids=cids, start=start, end=end, blacklist=blacklist
         )
 
+        # Since there may be any metrics in the DF at this point, simply apply slip to all.
+        metric_cols: List[str] = list(
+            set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
+        )
+        dfd: pd.DataFrame = self.apply_slip(
+            df=dfd,
+            slip=slip,
+            cids=cids,
+            xcats=xcats,
+            metrics=metric_cols,
+        )
+
         # Naturally, only applicable if rival signals have been passed.
         if self.cosp and len(signals) > 1:
             dfd = self.__communal_sample__(df=dfd)
@@ -114,8 +168,17 @@ class SignalReturnRelations:
         self.dfd = dfd
 
         df = categories_df(
-            dfd, xcats=xcats, cids=cids, val='value', start=None, end=None,
-            freq=freq, blacklist=None, lag=1, fwin=fwin, xcat_aggs=[agg_sig, 'sum']
+            dfd,
+            xcats=xcats,
+            cids=cids,
+            val="value",
+            start=None,
+            end=None,
+            freq=freq,
+            blacklist=None,
+            lag=1,
+            fwin=fwin,
+            xcat_aggs=[agg_sig, "sum"],
         )
         self.df = df
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
@@ -129,11 +192,10 @@ class SignalReturnRelations:
             self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
 
         if len(self.signals) > 1:
-
             self.df_sigs = self.__rival_sigs__()
 
-        self.df_cs = self.__output_table__(cs_type='cids')
-        self.df_ys = self.__output_table__(cs_type='years')
+        self.df_cs = self.__output_table__(cs_type="cids")
+        self.df_ys = self.__output_table__(cs_type="years")
 
     @staticmethod
     def __slice_df__(df: pd.DataFrame, cs: str, cs_type: str):
@@ -146,17 +208,18 @@ class SignalReturnRelations:
         """
 
         # Row names of cross-sections or years.
-        if cs != 'Panel' and cs_type == 'cids':
+        if cs != "Panel" and cs_type == "cids":
             df_cs = df.loc[cs]
-        elif cs != 'Panel':
-            df_cs = df[df['year'] == float(cs)]
+        elif cs != "Panel":
+            df_cs = df[df["year"] == float(cs)]
         else:
             df_cs = df
 
         return df_cs
 
-    def __table_stats__(self, df_segment: pd.DataFrame, df_out: pd.DataFrame,
-                        segment: str, signal: str):
+    def __table_stats__(
+        self, df_segment: pd.DataFrame, df_out: pd.DataFrame, segment: str, signal: str
+    ):
         """
         Method used to compute the evaluation metrics across segments: cross-section,
         yearly or category level.
@@ -195,8 +258,9 @@ class SignalReturnRelations:
         )
 
         ret_vals, sig_vals = df_segment[self.ret], df_segment[signal]
-        df_out.loc[segment, ["kendall", "kendall_pval"]] = stats.kendalltau(ret_vals,
-                                                                            sig_vals)
+        df_out.loc[segment, ["kendall", "kendall_pval"]] = stats.kendalltau(
+            ret_vals, sig_vals
+        )
         corr, corr_pval = stats.pearsonr(ret_vals, sig_vals)
         df_out.loc[segment, ["pearson", "pearson_pval"]] = np.array([corr, corr_pval])
 
@@ -216,15 +280,16 @@ class SignalReturnRelations:
         maximum amount of signal data available (required because of the applied lag).
         """
 
-        df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values="value")
+        df_w = df.pivot(index=("cid", "real_date"), columns="xcat", values="value")
 
         storage = []
         for c, cid_df in df_w.groupby(level=0):
             cid_df = cid_df[self.signals + [self.ret]]
 
             final_df = pd.DataFrame(
-                data=np.empty(shape=cid_df.shape), columns=cid_df.columns,
-                index=cid_df.index
+                data=np.empty(shape=cid_df.shape),
+                columns=cid_df.columns,
+                index=cid_df.index,
             )
             final_df.loc[:, :] = np.NaN
 
@@ -237,7 +302,9 @@ class SignalReturnRelations:
             s_date = intersection_df.index[0]
             e_date = intersection_df.index[-1]
 
-            final_df.loc[(c, s_date): (c, e_date), self.signals] = intersection_df.to_numpy()
+            final_df.loc[
+                (c, s_date):(c, e_date), self.signals
+            ] = intersection_df.to_numpy()
             storage.append(final_df)
 
         df = pd.concat(storage)
@@ -246,7 +313,7 @@ class SignalReturnRelations:
 
         return df[["cid", "xcat", "real_date", "value"]]
 
-    def __output_table__(self, cs_type: str = 'cids'):
+    def __output_table__(self, cs_type: str = "cids"):
         """
         Creates a DataFrame with information on the signal-return relation across
         cross-sections or years and, additionally, the panel.
@@ -273,11 +340,11 @@ class SignalReturnRelations:
         statms = self.metrics
         df_out = pd.DataFrame(index=["Panel", "Mean", "PosRatio"] + css, columns=statms)
 
-        for cs in (css + ["Panel"]):
-
+        for cs in css + ["Panel"]:
             df_cs = self.__slice_df__(df=df, cs=cs, cs_type=cs_type)
-            df_out = self.__table_stats__(df_segment=df_cs, df_out=df_out, segment=cs,
-                                          signal=self.sig)
+            df_out = self.__table_stats__(
+                df_segment=df_cs, df_out=df_out, segment=cs, signal=self.sig
+            )
 
         df_out.loc["Mean", :] = df_out.loc[css, :].mean()
 
@@ -340,19 +407,21 @@ class SignalReturnRelations:
 
             assert isinstance(sigs, list), "List of signals expected."
 
-            sigs_error = f"The requested signals must be a subset of the primary plus " \
-                         f"additional signals received, {self.signals}."
+            sigs_error = (
+                f"The requested signals must be a subset of the primary plus "
+                f"additional signals received, {self.signals}."
+            )
             assert set(sigs).issubset(set(self.signals)), sigs_error
 
             return df_sigs.loc[sigs, :]
 
     def cross_section_table(self):
-        """ Output table on relations across sections and the panel. """
+        """Output table on relations across sections and the panel."""
 
         return self.df_cs.round(decimals=3)
 
     def yearly_table(self):
-        """ Output table on relations across sections and the panel. """
+        """Output table on relations across sections and the panel."""
         return self.df_ys.round(decimals=3)
 
     @staticmethod
@@ -372,9 +441,25 @@ class SignalReturnRelations:
 
         return y_input
 
-    def accuracy_bars(self, type: str = "cross_section", title: str = None,
-                      size: Tuple[float] = None,
-                      legend_pos: str = "best"):
+    @staticmethod
+    def apply_slip(
+        df: pd.DataFrame,
+        slip: int,
+        cids: List[str],
+        xcats: List[str],
+        metrics: List[str],
+    ) -> pd.DataFrame:
+        return apply_slip_util(
+            df=df, slip=slip, cids=cids, xcats=xcats, metrics=metrics, raise_error=False
+        )
+
+    def accuracy_bars(
+        self,
+        type: str = "cross_section",
+        title: str = None,
+        size: Tuple[float] = None,
+        legend_pos: str = "best",
+    ):
         """
         Plot bar chart for the overall and balanced accuracy metrics.
 
@@ -397,34 +482,42 @@ class SignalReturnRelations:
         else:
             df_xs = self.df_sigs
 
-        dfx = df_xs[~df_xs.index.isin(['PosRatio'])]
+        dfx = df_xs[~df_xs.index.isin(["PosRatio"])]
 
         if title is None:
             refsig = "various signals" if type == "signals" else self.sig
-            title = f"Accuracy for sign prediction of {self.ret} based on {refsig} " \
-                    f"at {self.dic_freq[self.freq]} frequency."
+            title = (
+                f"Accuracy for sign prediction of {self.ret} based on {refsig} "
+                f"at {self.dic_freq[self.freq]} frequency."
+            )
         if size is None:
             size = (np.max([dfx.shape[0] / 2, 8]), 6)
 
-        plt.style.use("seaborn")
+        sns.set_style("darkgrid")
         plt.figure(figsize=size)
         x_indexes = np.arange(dfx.shape[0])
 
         w = 0.4
         plt.bar(
-            x_indexes - w / 2, dfx['accuracy'], label='Accuracy', width=w,
-            color='lightblue'
+            x_indexes - w / 2,
+            dfx["accuracy"],
+            label="Accuracy",
+            width=w,
+            color="lightblue",
         )
         plt.bar(
-            x_indexes + w / 2, dfx['bal_accuracy'], label='Balanced Accuracy', width=w,
-            color='steelblue'
+            x_indexes + w / 2,
+            dfx["bal_accuracy"],
+            label="Balanced Accuracy",
+            width=w,
+            color="steelblue",
         )
 
         plt.xticks(ticks=x_indexes, labels=dfx.index, rotation=0)
-        plt.axhline(y=0.5, color='black', linestyle='-', linewidth=0.5)
+        plt.axhline(y=0.5, color="black", linestyle="-", linewidth=0.5)
 
         y_input = self.__yaxis_lim__(
-            accuracy_df=dfx.loc[:, ['accuracy', 'bal_accuracy']]
+            accuracy_df=dfx.loc[:, ["accuracy", "bal_accuracy"]]
         )
 
         plt.ylim(round(y_input, 2))
@@ -433,9 +526,13 @@ class SignalReturnRelations:
         plt.legend(loc=legend_pos)
         plt.show()
 
-    def correlation_bars(self, type: str = "cross_section", title: str = None,
-                         size: Tuple[float] = None,
-                         legend_pos: str = "best"):
+    def correlation_bars(
+        self,
+        type: str = "cross_section",
+        title: str = None,
+        size: Tuple[float] = None,
+        legend_pos: str = "best",
+    ):
         """
         Plot correlation coefficients and significance.
 
@@ -458,41 +555,50 @@ class SignalReturnRelations:
             df_xs = self.df_sigs
 
         # Panel plus the cs_types.
-        dfx = df_xs[~df_xs.index.isin(['PosRatio', 'Mean'])]
+        dfx = df_xs[~df_xs.index.isin(["PosRatio", "Mean"])]
 
         pprobs = np.array(
-            [(1 - pv) * (np.sign(cc) + 1) / 2 for pv, cc in zip(dfx["pearson_pval"],
-                                                                dfx["pearson"])]
+            [
+                (1 - pv) * (np.sign(cc) + 1) / 2
+                for pv, cc in zip(dfx["pearson_pval"], dfx["pearson"])
+            ]
         )
         pprobs[pprobs == 0] = 0.01
         kprobs = np.array(
-            [(1 - pv) * (np.sign(cc) + 1) / 2 for pv, cc in zip(dfx["kendall_pval"],
-                                                                dfx["kendall"])]
+            [
+                (1 - pv) * (np.sign(cc) + 1) / 2
+                for pv, cc in zip(dfx["kendall_pval"], dfx["kendall"])
+            ]
         )
 
         kprobs[kprobs == 0] = 0.01
 
         if title is None:
             refsig = "various signals" if type == "signals" else self.sig
-            title = f"Positive correlation probability of {self.ret} " \
-                    f"and lagged {refsig} at {self.dic_freq[self.freq]} frequency."
+            title = (
+                f"Positive correlation probability of {self.ret} "
+                f"and lagged {refsig} at {self.dic_freq[self.freq]} frequency."
+            )
         if size is None:
-            size = (np.max([dfx.shape[0]/2, 8]), 6)
+            size = (np.max([dfx.shape[0] / 2, 8]), 6)
 
-        plt.style.use('seaborn')
+        sns.set_style("darkgrid")
         plt.figure(figsize=size)
         x_indexes = np.arange(len(dfx.index))
         w = 0.4
-        plt.bar(x_indexes - w / 2, pprobs, label='Pearson', width=w, color='lightblue')
-        plt.bar(x_indexes + w / 2, kprobs, label='Kendall', width=w, color='steelblue')
+        plt.bar(x_indexes - w / 2, pprobs, label="Pearson", width=w, color="lightblue")
+        plt.bar(x_indexes + w / 2, kprobs, label="Kendall", width=w, color="steelblue")
         plt.xticks(ticks=x_indexes, labels=dfx.index, rotation=0)
 
         plt.axhline(
-            y=0.95, color='orange', linestyle='--', linewidth=0.5,
-            label='95% probability'
+            y=0.95,
+            color="orange",
+            linestyle="--",
+            linewidth=0.5,
+            label="95% probability",
         )
         plt.axhline(
-            y=0.99, color='red', linestyle='--', linewidth=0.5, label='99% probability'
+            y=0.99, color="red", linestyle="--", linewidth=0.5, label="99% probability"
         )
 
         plt.title(title)
@@ -551,51 +657,76 @@ class SignalReturnRelations:
 
         dfys = self.df_ys.round(decimals=5)
         dfcs = self.df_cs.round(decimals=5)
-        dfsum = pd.concat([dfys.iloc[:3, ], dfcs.iloc[1:3, ]], axis=0)
+        dfsum = pd.concat([dfys.iloc[:3,], dfcs.iloc[1:3,]], axis=0)
 
-        dfsum.index = ["Panel", "Mean years", "Positive ratio",
-                       "Mean cids", "Positive ratio"]
+        dfsum.index = [
+            "Panel",
+            "Mean years",
+            "Positive ratio",
+            "Mean cids",
+            "Positive ratio",
+        ]
 
         return dfsum
 
 
 if __name__ == "__main__":
+    cids = ["AUD", "CAD", "GBP", "NZD"]
+    xcats = ["XR", "CRY", "GROWTH", "INFL"]
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD"] = ["2000-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["CAD"] = ["2001-01-01", "2020-11-30", 0, 1]
+    df_cids.loc["GBP"] = ["2002-01-01", "2020-11-30", 0, 2]
+    df_cids.loc["NZD"] = ["2007-01-01", "2020-09-30", 0.0, 2]
 
-    cids = ['AUD', 'CAD', 'GBP', 'NZD']
-    xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
-    df_cids = pd.DataFrame(index=cids,
-                           columns=['earliest', 'latest', 'mean_add', 'sd_mult'])
-    df_cids.loc['AUD'] = ['2000-01-01', '2020-12-31', 0, 1]
-    df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
-    df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
-    df_cids.loc['NZD'] = ['2007-01-01', '2020-09-30', 0., 2]
+    df_xcats = pd.DataFrame(
+        index=xcats,
+        columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+    )
+    df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY"] = ["2000-01-01", "2020-10-30", 0, 2, 0.95, 1]
+    df_xcats.loc["GROWTH"] = ["2001-01-01", "2020-10-30", 0, 2, 0.9, 1]
+    df_xcats.loc["INFL"] = ["2001-01-01", "2020-10-30", 0, 2, 0.8, 0.5]
 
-    df_xcats = pd.DataFrame(index=xcats,
-                            columns=['earliest', 'latest', 'mean_add', 'sd_mult',
-                                     'ar_coef', 'back_coef'])
-    df_xcats.loc['XR'] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
-    df_xcats.loc['CRY'] = ['2000-01-01', '2020-10-30', 0, 2, 0.95, 1]
-    df_xcats.loc['GROWTH'] = ['2001-01-01', '2020-10-30', 0, 2, 0.9, 1]
-    df_xcats.loc['INFL'] = ['2001-01-01', '2020-10-30', 0, 2, 0.8, 0.5]
-
-    black = {'AUD': ['2006-01-01', '2015-12-31'], 'GBP': ['2012-01-01', '2100-01-01']}
+    black = {"AUD": ["2006-01-01", "2015-12-31"], "GBP": ["2012-01-01", "2100-01-01"]}
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     # Additional signals.
-    srn = SignalReturnRelations(dfd, ret="XR", sig="CRY", rival_sigs=None,
-                                sig_neg=True, cosp=True, freq="M", start="2002-01-01")
+    srn = SignalReturnRelations(
+        dfd,
+        ret="XR",
+        sig="CRY",
+        rival_sigs=None,
+        sig_neg=True,
+        cosp=True,
+        freq="M",
+        start="2002-01-01",
+    )
 
     dfsum = srn.summary_table()
 
     r_sigs = ["INFL", "GROWTH"]
-    srn = SignalReturnRelations(dfd, ret="XR", sig="CRY", rival_sigs=r_sigs,
-                                sig_neg=True, cosp=True, freq="M", start="2002-01-01")
+    srn = SignalReturnRelations(
+        dfd,
+        ret="XR",
+        sig="CRY",
+        rival_sigs=r_sigs,
+        sig_neg=True,
+        cosp=True,
+        freq="M",
+        start="2002-01-01",
+    )
     dfsum = srn.summary_table()
 
-    df_sigs = srn.signals_table(sigs=['CRY_NEG', 'INFL_NEG'])
+    df_sigs = srn.signals_table(sigs=["CRY_NEG", "INFL_NEG"])
     df_sigs_all = srn.signals_table()
 
-    srn.accuracy_bars(type="signals", title="Accuracy measure between target return, XR,"
-                                            " and the respective signals, ['CRY', 'INFL'"
-                                            ", 'GROWTH'].")
+    srn.accuracy_bars(
+        type="signals",
+        title="Accuracy measure between target return, XR,"
+        " and the respective signals, ['CRY', 'INFL'"
+        ", 'GROWTH'].",
+    )

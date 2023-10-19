@@ -1,17 +1,23 @@
-""" JPMaQS Download Interface """
+""" JPMaQS Download Interface 
 
-from typing import List, Optional, Dict, Union
-import pandas as pd
-import traceback as tb
+::docs::JPMaQSDownload::sort_first::
+"""
+
 import datetime
-import logging
-import warnings
 import io
+import logging
+import os
+import traceback as tb
+import warnings
 from timeit import default_timer as timer
+from typing import Dict, List, Optional, Tuple, Union
+
+
+import pandas as pd
 
 from macrosynergy.download.dataquery import DataQueryInterface
-from macrosynergy.download.exceptions import *
-from macrosynergy.management.utils import is_valid_iso_date, Config
+from macrosynergy.download.exceptions import HeartbeatError, InvalidDataframeError
+from macrosynergy.management.utils import is_valid_iso_date
 
 logger = logging.getLogger(__name__)
 debug_stream_handler = logging.StreamHandler(io.StringIO())
@@ -25,7 +31,10 @@ logger.addHandler(debug_stream_handler)
 
 
 class JPMaQSDownload(object):
-    """JPMaQS Download Interface Object
+    """
+    JPMaQSDownload Object. This object is used to download JPMaQS data via the DataQuery API.
+    It can be extended to include the use of proxies, and even request generic DataQuery expressions.
+
     :param <bool> oauth: True if using oauth, False if using username/password with crt/key.
 
     When using oauth:
@@ -80,7 +89,6 @@ class JPMaQSDownload(object):
         username: Optional[str] = None,
         password: Optional[str] = None,
         check_connection: bool = True,
-        credentials_config: Optional[str] = None,
         proxy: Optional[Dict] = None,
         suppress_warning: bool = True,
         debug: bool = False,
@@ -88,19 +96,17 @@ class JPMaQSDownload(object):
         dq_download_kwargs: dict = {},
         **kwargs,
     ):
-        vars_types_zip: zip = zip(
-            [oauth, check_connection, suppress_warning, debug, print_debug_data],
-            [
-                "oauth",
-                "check_connection",
-                "suppress_warning",
-                "debug",
-                "print_debug_data",
-            ],
-        )
-        for varx, namex in vars_types_zip:
-            if not isinstance(varx, bool):
-                raise TypeError(f"`{namex}` must be a boolean.")
+        vars_types_zip: List[Tuple[str, str]] = [
+            (oauth, "oauth", bool),
+            (check_connection, "check_connection", bool),
+            (suppress_warning, "suppress_warning", bool),
+            (debug, "debug", bool),
+            (print_debug_data, "print_debug_data", bool),
+        ]
+
+        for varx, namex, typex in vars_types_zip:
+            if not isinstance(varx, typex):
+                raise TypeError(f"`{namex}` must be of type {typex}.")
 
         if not isinstance(proxy, dict) and proxy is not None:
             raise TypeError("`proxy` must be a dictionary or None.")
@@ -114,12 +120,27 @@ class JPMaQSDownload(object):
         self._check_connection = check_connection
         self.dq_download_kwargs = dq_download_kwargs
 
-        if credentials_config is not None:
-            if not isinstance(credentials_config, str):
-                raise TypeError("`credentials_config` must be a string.")
+        for varx, namex in [
+            (client_id, "client_id"),
+            (client_secret, "client_secret"),
+            (crt, "crt"),
+            (key, "key"),
+            (username, "username"),
+            (password, "password"),
+        ]:
+            if varx is not None:
+                if not isinstance(varx, str):
+                    raise TypeError(f"`{namex}` must be a string.")
 
-        config_obj: Config = Config(
-            config_path=credentials_config,
+        if not (all([client_id, client_secret]) or all([crt, key, username, password])):
+            raise ValueError(
+                "Must provide either `client_id` and `client_secret` for oauth, or "
+                "`crt`, `key`, `username`, and `password` for certificate based authentication."
+            )
+
+        self.dq_interface: DataQueryInterface = DataQueryInterface(
+            oauth=oauth,
+            check_connection=check_connection,
             client_id=client_id,
             client_secret=client_secret,
             crt=crt,
@@ -127,12 +148,6 @@ class JPMaQSDownload(object):
             username=username,
             password=password,
             proxy=proxy,
-        )
-
-        self.dq_interface: DataQueryInterface = DataQueryInterface(
-            oauth=oauth,
-            check_connection=check_connection,
-            config=config_obj,
             debug=debug,
             **kwargs,
         )
@@ -142,7 +157,6 @@ class JPMaQSDownload(object):
         self.msg_warnings: List[str] = []
         self.unavailable_expressions: List[str] = []
         self.downloaded_data: Dict = {}
-        self.config_obj: Config = config_obj
 
         if self._check_connection:
             self.check_connection()
@@ -186,8 +200,11 @@ class JPMaQSDownload(object):
     ) -> Union[List[str], List[List[str]]]:
         """
         Deconstruct an expression into a list of cid, xcat, and metric.
-        Coupled with to JPMaQSDownload.time_series_to_df(), achieves the inverse of
-        JPMaQSDownload.construct_expressions().
+        Coupled with JPMaQSDownload.time_series_to_df(), achieves the inverse of
+        JPMaQSDownload.construct_expressions(). For non-JPMaQS expressions, the returned
+        list will be [expression, expression, 'value']. The metric is set to 'value' to
+        ensure the reported metric is consistent with the standard JPMaQS metrics
+        (JPMaQSDownload.valid_metrics).
 
         :param <str> expression: expression to deconstruct. If a list is provided,
             each element will be deconstructed and returned as a list of lists.
@@ -221,8 +238,9 @@ class JPMaQSDownload(object):
                     f"Failed to deconstruct expression `{expression}`: {e}",
                     UserWarning,
                 )
-                # fail safely, return list where all entries are =expression
-                return [expression, expression, expression]
+                # fail safely, return list where cid = xcat = expression,
+                #  and metric = 'value'
+                return [expression, expression, "value"]
 
     def validate_downloaded_df(
         self,
@@ -329,10 +347,10 @@ class JPMaQSDownload(object):
     ) -> pd.DataFrame:
         """
         Convert the downloaded data to a pandas DataFrame.
-        Parameters
+
         :param dicts_list <list>: List of dictionaries containing time series
             data from the DataQuery API
-        Returns
+
         :return <pd.DataFrame>: JPMaQS standard dataframe with columns:
             real_date, cid, xcat, <metric>. The <metric> column contains the
             observed data for the given cid and xcat on the given real_date.
@@ -368,16 +386,14 @@ class JPMaQSDownload(object):
                     self.unavailable_expr_messages.append(d["attributes"][0]["message"])
                 else:
                     self.unavailable_expr_messages.append(
-                        f"DataQuery did not return data or error message for expression {d['attributes'][0]['expression']}"
+                        "DataQuery did not return data or error message for expression "
+                        f"{d['attributes'][0]['expression']}"
                     )
-
-        assert set(_missing_exprs) == set(
-            self.unavailable_expressions
-        ), "Downloaded `dicts_list` has been modified before calling `time_series_to_df`"
 
         if len(dfs) == 0:
             raise InvalidDataframeError(
-                "No data was downloaded. Check logger output for complete list of missing expressions."
+                "No data was downloaded. Check logger output for"
+                " complete list of missing expressions."
             )
 
         final_df: pd.DataFrame = pd.concat(dfs, ignore_index=True)
@@ -437,10 +453,10 @@ class JPMaQSDownload(object):
 
         final_df = final_df.sort_values(["real_date", "cid", "xcat"])
 
-        found_metrics = sorted(
-            list(set(final_df.columns) - {"real_date", "cid", "xcat"}),
-            key=lambda x: self.valid_metrics.index(x),
-        )
+        # sort all metrics in the order of self.valid_metrics, all other metrics will be at the end
+        found_metrics = [
+            metricx for metricx in self.valid_metrics if metricx in final_df.columns
+        ]
         # sort found_metrics in the order of self.valid_metrics, then re-order the columns
         final_df = final_df[["real_date", "cid", "xcat"] + found_metrics]
 
@@ -501,11 +517,10 @@ class JPMaQSDownload(object):
         show_progress: bool,
         as_dataframe: bool,
         report_time_taken: bool,
-        report_egress: bool,
     ) -> bool:
         """Validate the arguments passed to the download function.
 
-        :params -- see macrosynergy.download.jpmaqs.JPMaQSDownload.download()
+        :params:  -- see `macrosynergy.download.jpmaqs.JPMaQSDownload.download()`.
 
         :return <bool>: True if valid.
 
@@ -514,39 +529,35 @@ class JPMaQSDownload(object):
 
         """
 
-        if not isinstance(show_progress, bool):
-            raise TypeError("`show_progress` must be a boolean.")
-
-        if not isinstance(as_dataframe, bool):
-            raise TypeError("`as_dataframe` must be a boolean.")
-
-        if not isinstance(report_time_taken, bool):
-            raise TypeError("`report_time_taken` must be a boolean.")
-
-        if not isinstance(report_egress, bool):
-            raise TypeError("`report_egress` must be a boolean.")
-
-        if not isinstance(get_catalogue, bool):
-            raise TypeError("`get_catalogue` must be a boolean.")
+        for var, name in [
+            (get_catalogue, "get_catalogue"),
+            (show_progress, "show_progress"),
+            (as_dataframe, "as_dataframe"),
+            (report_time_taken, "report_time_taken"),
+        ]:
+            if not isinstance(var, bool):
+                raise TypeError(f"`{name}` must be a boolean.")
 
         if all([tickers is None, cids is None, xcats is None, expressions is None]):
             raise ValueError(
                 "Must provide at least one of `tickers`, "
                 "`expressions`, or `cids` & `xcats` together."
             )
-        vars_types_zip: zip = zip(
-            [tickers, cids, xcats, expressions],
-            ["tickers", "cids", "xcats", "expressions"],
-        )
-        for varx, namex in vars_types_zip:
-            if not isinstance(varx, list) and varx is not None:
-                raise TypeError(f"`{namex}` must be a list of strings.")
-            if varx is not None:
-                if len(varx) > 0:
-                    if not all([isinstance(ticker, str) for ticker in varx]):
-                        raise TypeError(f"`{namex}` must be a list of strings.")
+
+        for var, name in [
+            (tickers, "tickers"),
+            (cids, "cids"),
+            (xcats, "xcats"),
+            (expressions, "expressions"),
+        ]:
+            if not isinstance(var, list) and var is not None:
+                raise TypeError(f"`{name}` must be a list of strings.")
+            if var is not None:
+                if len(var) > 0:
+                    if not all([isinstance(ticker, str) for ticker in var]):
+                        raise TypeError(f"`{name}` must be a list of strings.")
                 else:
-                    raise ValueError(f"`{namex}` must be a non-empty list of strings.")
+                    raise ValueError(f"`{name}` must be a non-empty list of strings.")
 
         if metrics is None:
             raise ValueError("`metrics` must be a non-empty list of strings.")
@@ -554,33 +565,30 @@ class JPMaQSDownload(object):
             if all([metric not in self.valid_metrics for metric in metrics]):
                 raise ValueError(f"`metrics` must be a subset of {self.valid_metrics}.")
 
-        if cids is not None:
-            if xcats is None:
-                raise ValueError(
-                    "If specifying `cids`, `xcats` must also be specified."
-                )
-        else:
-            if xcats is not None:
-                raise ValueError(
-                    "If specifying `xcats`, `cids` must also be specified."
-                )
+        if bool(cids) ^ bool(xcats):
+            raise ValueError(
+                "If specifying `xcats`, `cids` must also be specified (and vice versa)."
+            )
 
-        for varx, namex in zip([start_date, end_date], ["start_date", "end_date"]):
-            if not isinstance(varx, str):
-                raise TypeError(f"`{namex}` must be a string.")
-            if not is_valid_iso_date(varx):
+        for var, name in [
+            (start_date, "start_date"),
+            (end_date, "end_date"),
+        ]:
+            if not is_valid_iso_date(var):  # type check covered by `is_valid_iso_date`
                 raise ValueError(
-                    f"`{namex}` must be a valid date in the format YYYY-MM-DD."
+                    f"`{name}` must be a valid date in the format YYYY-MM-DD."
                 )
-            if pd.to_datetime(varx, errors="coerce") is pd.NaT:
+            if pd.to_datetime(var, errors="coerce") is pd.NaT:
                 raise ValueError(
-                    f"`{namex}` must be a valid date > "
-                    f"{pd.Timestamp.min.strftime('%Y-%m-%d')} "
+                    f"`{name}` must be a valid date > "
+                    f"{pd.Timestamp.min.strftime('%Y-%m-%d')}.\n"
+                    "Check pandas documentation:"
+                    " https://pandas.pydata.org/docs/user_guide/timeseries.html#timestamp-limitations`"
                 )
-            if pd.to_datetime(varx) < pd.to_datetime("1950-01-01"):
+            if pd.to_datetime(var) < pd.to_datetime("1950-01-01"):
                 warnings.warn(
                     message=(
-                        f"`{namex}` is set before 1950-01-01."
+                        f"`{name}` is set before 1950-01-01."
                         "Data before 1950-01-01 may not be available,"
                         " and will cause errors/missing data."
                     ),
@@ -602,7 +610,6 @@ class JPMaQSDownload(object):
         and provides the user wuth the complete list of expressions that are in the
         catalogue.
 
-        Parameters
         :param <List[str]> tickers: list of tickers to filter.
 
         :return <List[str]>: list of tickers that are in the JPMaQS catalogue.
@@ -619,7 +626,8 @@ class JPMaQSDownload(object):
             filtered: int = len(expressions) - len(r)
             if filtered > 0:
                 print(
-                    f"Removed {filtered}/{len(expressions)} expressions that are not in the JPMaQS catalogue."
+                    f"Removed {filtered}/{len(expressions)} expressions "
+                    "that are not in the JPMaQS catalogue."
                 )
 
         return r
@@ -639,7 +647,8 @@ class JPMaQSDownload(object):
         suppress_warning: bool = False,
         as_dataframe: bool = True,
         report_time_taken: bool = False,
-        report_egress: bool = False,
+        *args,
+        **kwargs,
     ) -> Union[pd.DataFrame, List[Dict]]:
         """Driver function to download data from JPMaQS via the DataQuery API.
         Timeseries data can be requested using `tickers` with `metrics`, or
@@ -672,8 +681,6 @@ class JPMaQSDownload(object):
             a list of dictionaries if False.
         :param <bool> report_time_taken: If True, the time taken to download
             and apply data transformations is reported.
-        :param <bool> report_egress: If True, the number of bytes downloaded
-            is reported along with the transmission speed in kilobits/second.
 
         :return <pd.DataFrame|list[Dict]>: dataframe of data if
             `as_dataframe` is True, list of dictionaries if False.
@@ -720,7 +727,6 @@ class JPMaQSDownload(object):
             show_progress=show_progress,
             as_dataframe=as_dataframe,
             report_time_taken=report_time_taken,
-            report_egress=report_egress,
         ):
             raise ValueError("Invalid arguments passed to download().")
         if pd.to_datetime(start_date) > pd.to_datetime(end_date):
@@ -750,7 +756,6 @@ class JPMaQSDownload(object):
 
         # Download data.
         data: List[Dict] = []
-        egress_data: Dict = {}
         download_time_taken: float = timer()
         with self.dq_interface as dq:
             print(
@@ -778,9 +783,6 @@ class JPMaQSDownload(object):
                     self.dq_interface.unavailable_expressions
                 )
 
-            if report_egress:
-                egress_data = self.dq_interface.egress_data
-
         download_time_taken: float = timer() - download_time_taken
         dfs_time_taken: float = timer()
         if as_dataframe:
@@ -800,42 +802,9 @@ class JPMaQSDownload(object):
             print(f"Time taken to download data: \t{download_time_taken:.2f} seconds.")
             if as_dataframe:
                 print(
-                    f"Time taken to convert to dataframe: \t{dfs_time_taken:.2f} seconds."
+                    "Time taken to convert to dataframe: "
+                    f"\t{dfs_time_taken:.2f} seconds."
                 )
-
-        if report_egress:
-            # create averages for egress_data like
-            #  egress_data[tracking_id] = {
-            #     "url": log_url,
-            #     "upload_size": upload_size,
-            #     "download_size": download_size,
-            #     "time_taken": time_taken,
-            #   }
-
-            total_upload: int = 0
-            total_download: int = 0
-            total_time_taken: float = 0
-            longest_time_taken: float = 0
-            longest_time_taken_url: str = ""
-            for tracking_id in egress_data:
-                total_upload += egress_data[tracking_id]["upload_size"]
-                total_download += egress_data[tracking_id]["download_size"]
-                total_time_taken += egress_data[tracking_id]["time_taken"]
-                if egress_data[tracking_id]["time_taken"] > longest_time_taken:
-                    longest_time_taken = egress_data[tracking_id]["time_taken"]
-                    longest_time_taken_url = egress_data[tracking_id]["url"]
-
-            avg_upload_size_kb: float = total_upload / (1024)
-            avg_download_size_kb: float = total_download / (1024)
-            avg_time_taken: float = total_time_taken / len(egress_data)
-            avg_transfer_rate_kbit: float = (
-                (avg_download_size_kb + avg_upload_size_kb) * 8 / avg_time_taken
-            )
-            print(f"Average upload size: \t{avg_upload_size_kb:.2f} KB")
-            print(f"Average download size: \t{avg_download_size_kb:.2f} KB")
-            print(f"Average time taken: \t{avg_time_taken:.2f} seconds")
-            print(f"Longest time taken: \t{longest_time_taken:.2f} seconds")
-            print(f"Average transfer rate : \t{avg_transfer_rate_kbit:.2f} Kbps")
 
         if len(self.msg_errors) > 0:
             if not self.suppress_warning:
@@ -876,8 +845,12 @@ if __name__ == "__main__":
     start_date: str = "2023-01-01"
     end_date: str = "2023-03-20"
 
+    client_id = os.getenv("DQ_CLIENT_ID")
+    client_secret = os.getenv("DQ_CLIENT_SECRET")
+
     with JPMaQSDownload(
-        credentials_config="env",
+        client_id=client_id,
+        client_secret=client_secret,
         debug=True,
     ) as jpmaqs:
         data = jpmaqs.download(
@@ -890,7 +863,6 @@ if __name__ == "__main__":
             show_progress=True,
             suppress_warning=False,
             report_time_taken=True,
-            report_egress=True,
         )
 
         print(data.head())

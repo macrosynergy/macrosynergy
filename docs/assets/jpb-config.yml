@@ -1,0 +1,58 @@
+config:
+  # Book settings
+  title: Macrosynergy Package Documentation
+  author: "Macrosynergy Ltd."
+  copyright: "2023"
+
+  # Execution settings
+  # Whether to execute notebooks at build time. Must be one of ("auto", "force", "cache", "off")
+  execute:
+    execute_notebooks: "off"
+  repository:
+    url: https://github.com/macrosynergy/macrosynergy
+
+  # HTML-specific settings
+  html:
+    favicon: "https://macrosynergy.com/wp-content/uploads/2022/10/macrosynergy-logo-favicon-300x300.png"
+    home_page_in_navbar: true # Whether to include your home page in the left Navigation Bar
+    use_repository_button: true
+    use_edit_page_button: false
+    use_issues_button: true
+    google_analytics_id: ""
+    baseurl: "https://docs.macrosynergy.com/"
+    announcement: |
+      <p class='heading-banner'>
+        <img src='https://github.com/macrosynergy/macrosynergy/blob/main/docs/assets/MACROSYNERGY_Logo_White.png?raw=true'
+            width='35%' height='auto' style='display: block; margin-left: auto ; margin-right: auto ; ' class='bd-header-announcement-img'
+            onclick="window.location.href='https://macrosynergy.com/'">
+      </p>
+  #
+  # Launch button settings
+  launch_buttons:
+    binderhub_url: ""
+
+  # sphinx:
+  #  config:
+  #    html_extra_path: ['assets']
+
+  parse:
+    myst_enable_extensions:
+      - "amsmath"
+      - "dollarmath"
+      - "attrs_inline"
+      - "colon_fence"
+      - "deflist"
+      - "fieldlist"
+      - "html_admonition"
+      - "html_image"
+      - "linkify"
+      - "replacements"
+      - "smartquotes"
+      - "strikethrough"
+      - "substitution"
+      - "tasklist"
+
+toc:
+  title: Macrosynergy Package Documentation
+  format: "jb-book"
+  root: macrosynergy/README.md

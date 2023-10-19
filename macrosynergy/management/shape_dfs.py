@@ -1,3 +1,7 @@
+"""
+Utilities and common functions for the manipulating DataFrames.
+"""
+
 import numpy as np
 import pandas as pd
 from typing import List
@@ -34,15 +38,26 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
         (for out_all True) DataFrame and available and selected xcats and cids.
     """
 
-    dfx = df[df['real_date'] >= pd.to_datetime(start)] if start is not None else df
-    dfx = dfx[dfx['real_date'] <= pd.to_datetime(end)] if end is not None else dfx
+    dfx = df.copy()
+
+    if start is not None:
+        dfx = dfx[dfx['real_date'] >= pd.to_datetime(start)]
+
+    if end is not None:
+        dfx = dfx[dfx['real_date'] <= pd.to_datetime(end)]
 
     if blacklist is not None:
+        masks = []
         for key, value in blacklist.items():
             filt1 = dfx['cid'] == key[:3]
             filt2 = dfx['real_date'] >= pd.to_datetime(value[0])
             filt3 = dfx['real_date'] <= pd.to_datetime(value[1])
-            dfx = dfx[~(filt1 & filt2 & filt3)]
+            combined_mask = filt1 & filt2 & filt3
+            masks.append(combined_mask)
+            
+        if masks:
+            combined_mask = pd.concat(masks, axis=1).any(axis=1)
+            dfx = dfx[~combined_mask]
 
     xcats_in_df = dfx['xcat'].unique()
     if xcats is None:
@@ -92,16 +107,26 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
     """
 
     dfx = df.copy()
-    dfx = dfx[dfx["real_date"] >= pd.to_datetime(start)] if start is not None else dfx
-    dfx = dfx[dfx["real_date"] <= pd.to_datetime(end)] if end is not None else dfx
+
+    if start is not None:
+        dfx = dfx[dfx["real_date"] >= pd.to_datetime(start)]
+
+    if end is not None:
+        dfx = dfx[dfx["real_date"] <= pd.to_datetime(end)]
 
     # Blacklisting by cross-section.
     if blacklist is not None:
+        masks = []
         for key, value in blacklist.items():
             filt1 = dfx["cid"] == key[:3]
             filt2 = dfx["real_date"] >= pd.to_datetime(value[0])
             filt3 = dfx["real_date"] <= pd.to_datetime(value[1])
-            dfx = dfx[~(filt1 & filt2 & filt3)]
+            combined_mask = filt1 & filt2 & filt3
+            masks.append(combined_mask)
+
+        if masks:
+            combined_mask = pd.concat(masks, axis=1).any(axis=1)
+            dfx = dfx[~combined_mask]
 
     dfx["ticker"] = dfx["cid"] + '_' + dfx["xcat"]
     ticks_in_df = dfx["ticker"].unique()
@@ -113,7 +138,6 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
     dfx = dfx[dfx["ticker"].isin(ticks)]
 
     return dfx.drop_duplicates()
-
 
 def aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
     """
@@ -128,7 +152,7 @@ def aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
     """
 
     dfx = dfx.groupby(['xcat', 'cid', 'custom_date'])
-    dfx = dfx.agg(xcat_agg).reset_index()
+    dfx = dfx.aggregate(xcat_agg, numeric_only=True).reset_index()
 
     if 'real_date' in dfx.columns:
         dfx = dfx.drop(['real_date'], axis=1)

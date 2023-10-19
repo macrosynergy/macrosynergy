@@ -1,4 +1,8 @@
+"""
+Function for calculating historic volatility of quantamental data.
 
+::docs::historic_vol::sort_first::
+"""
 import numpy as np
 import pandas as pd
 from typing import List, Union, Tuple, Optional
@@ -103,14 +107,18 @@ def get_cycles(dates_df: pd.DataFrame, freq: str = "m",) -> pd.Series:
     freq = freq.lower()
     dfc = dates_df.copy()
     start_date = dfc['real_date'].min()
-    funcs = {   'q': quarters_btwn_dates,
-                'm': months_btwn_dates,
-                'w': weeks_btwn_dates,
-                'd': lambda x, y: len(pd.bdate_range(x, y)) - 1}
+    if freq == 'm':
+        func = months_btwn_dates
+    elif freq == 'w':
+        func = weeks_btwn_dates
+    elif freq == 'q':
+        func = quarters_btwn_dates
+    elif freq == 'd':
+        func = lambda x, y: len(pd.bdate_range(x, y)) - 1
+    else:
+        raise ValueError("Frequency parameter must be one of m, w, d or q")
     
-    group_func = funcs[freq]
-    dfc['cycleCount'] = dfc['real_date'].apply(
-                            lambda x: group_func(start_date, x))
+    dfc['cycleCount'] = dfc['real_date'].apply(func, args=(start_date, ))
 
     triggers = dfc['cycleCount'].shift(-1) != dfc['cycleCount']
     # triggers is now a boolean mask which is True where the calculation is triggered
@@ -194,7 +202,7 @@ def historic_vol(df: pd.DataFrame, xcat: str = None, cids: List[str] = None,
 
     trigger_indices = dfw.index[get_cycles(pd.DataFrame({'real_date': dfw.index}), 
                                            freq=est_freq,)]
-    
+        
     def single_calc(row, dfw : pd.DataFrame, lback_periods : int, 
                     nan_tolerance : float, roll_func : callable,
                     remove_zeros : bool, weights : Optional[np.ndarray] = None):

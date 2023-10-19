@@ -1,18 +1,25 @@
+"""
+Module for plotting ranges of values across cross-sections for one or more categories.
+"""
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import List, Tuple
+from typing import List, Tuple, Callable, Optional
+from packaging import version
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.check_availability import reduce_df
 
 
-def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
-                start: str = '2000-01-01', end: str = None, val: str = 'value',
-                kind: str = 'bar', sort_cids_by: str = None, title: str = None,
-                ylab: str = None, size: Tuple[float] = (16, 8),
-                xcat_labels: List[str] = None):
+def view_ranges(df: pd.DataFrame, xcats: List[str], cids: Optional[List[str]] = None,
+                start: str = '2000-01-01', end: Optional[str] = None,
+                val: str = 'value', kind: str = 'bar', 
+                sort_cids_by: Optional[str] = None, 
+                title: Optional[str] = None, ylab: Optional[str] = None, 
+                size: Tuple[float] = (16, 8),
+                xcat_labels: Optional[List[str]] = None):
 
     """Plots averages and various ranges across sections for one or more categories.
 
@@ -43,21 +50,26 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
     missing_xcats = set(xcats).difference(possible_xcats)
     error_xcats = "The categories passed in to view_ranges() must be present in the " \
                   f"DataFrame: missing {missing_xcats}."
-    assert set(xcats).issubset(possible_xcats), error_xcats
+    if not set(xcats).issubset(possible_xcats):
+        raise ValueError(error_xcats)
 
+    sort_cids_func: Callable = None
     if sort_cids_by is not None:
-        assert isinstance(sort_cids_by, str)
+        if not isinstance(sort_cids_by, str):
+            raise TypeError("`sort_cids_by` must be a string.")
         sort_error = "Sorting parameter must either be 'mean' or 'std'."
-        assert sort_cids_by in ['mean', 'std'], sort_error
+        if not sort_cids_by in ['mean', 'std']:
+            raise ValueError(sort_error)
         if sort_cids_by == "mean":
-            sort_cids_by = np.mean
+            sort_cids_func = np.mean
         else:
-            sort_cids_by = np.std
+            sort_cids_func = np.std
 
     error_message = "The number of custom labels must match the defined number of " \
                     "categories in pnl_cats."
     if xcat_labels is not None:
-        assert (len(xcat_labels) == len(xcats)), error_message
+        if (len(xcat_labels) != len(xcats)):
+            raise ValueError(error_message)
 
     # Unique cross-sections across the union of categories passed - not the intersection.
     # Order of categories will be preserved.
@@ -82,13 +94,13 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
     # First category is not defined over all cross-sections.
     order_condition = list(set(cids)) == list(first_xcat_cids)
 
-    if order_condition and sort_cids_by is not None:
+    if order_condition and sort_cids_func is not None:
         # Sort exclusively on the first category.
-        dfx = df[filt_1].groupby(['cid'])[val].apply(sort_cids_by)
+        dfx = df[filt_1].groupby(['cid'])[val].apply(sort_cids_func)
         order = dfx.sort_values(ascending=False).index
-    elif not order_condition and sort_cids_by is not None:
+    elif not order_condition and sort_cids_func is not None:
         # Sort across all categories on the available cross-sections.
-        dfx = df.groupby(['cid'])[val].apply(sort_cids_by)
+        dfx = df.groupby(['cid'])[val].apply(sort_cids_func)
         order = dfx.sort_values(ascending=False).index
     else:
         order = None
@@ -97,10 +109,14 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
     fig, ax = plt.subplots(figsize=size)
 
     if kind == 'bar':
-        ax = sns.barplot(
-            x='cid', y=val, hue='xcat', hue_order=xcats,
-            palette='Paired', data=df, errorbar='sd', order=order
-        )
+        if version.parse(sns.__version__) >= version.parse('0.12.0'):        
+            ax = sns.barplot(
+                x='cid', y=val, hue='xcat', hue_order=xcats,
+                palette='Paired', data=df, errorbar='sd', order=order
+                )
+        else:
+            ax = sns.barplot(x='cid', y=val, hue='xcat', hue_order=xcats,
+                            palette='Paired', data=df, ci='sd', order=order)
     elif kind == 'box':
         ax = sns.boxplot(x='cid', y=val, hue='xcat', hue_order=xcats,
                          palette='Paired', data=df,  order=order)
@@ -116,10 +132,14 @@ def view_ranges(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = No
     if xcat_labels is not None:
         error_message = "The number of custom labels must match the defined number of " \
                         "categories in pnl_cats."
-        assert (len(xcat_labels) == len(xcats)), error_message
+        if (len(xcat_labels) != len(xcats)):
+            raise ValueError(error_message)
         labels = xcat_labels
 
-    ax.legend(handles=handles[0:], labels=labels[0:])
+    if (len(xcats) == 1) and (xcat_labels is None):
+        ax.get_legend().remove()
+    else:
+        ax.legend(handles=handles[0:], labels=labels[0:])
     plt.show()
 
 
@@ -141,7 +161,7 @@ if __name__ == "__main__":
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    view_ranges(dfd, xcats=['XR'], cids=cids, kind='box', start='2012-01-01',
+    view_ranges(dfd, xcats=['XR'], kind='box', start='2012-01-01',
                 end='2018-01-01', sort_cids_by='std')
 
     filter_1 = (dfd['xcat'] == 'XR') & (dfd['cid'] == 'AUD')

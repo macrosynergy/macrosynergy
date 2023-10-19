@@ -1,3 +1,7 @@
+"""
+Custom exceptions for the `macrosynergy.download` subpackage.
+"""
+
 import requests
 
 
@@ -34,7 +38,8 @@ class InvalidDataframeError(ExceptionAdapter):
 
 class MissingDataError(ExceptionAdapter):
     """Raised when data is missing from a requested dataframe."""
-    
+
+
 class NoContentError(ExceptionAdapter):
     """Raised when no data is returned from a request."""
 

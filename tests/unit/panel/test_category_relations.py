@@ -12,10 +12,8 @@ import warnings
 
 
 class TestAll(unittest.TestCase):
-
     # Method used to construct the respective DataFrame.
     def dataframe_generator(self):
-
         self.cids: List[str] = ["AUD", "CAD", "GBP", "NZD", "JPY", "CHF"]
         self.xcats: List[str] = ["XR", "CRY", "GROWTH", "INFL"]
 
@@ -71,7 +69,6 @@ class TestAll(unittest.TestCase):
         self.cidx: List[str] = ["AUD", "CAD", "GBP"]
 
     def test_constructor(self):
-
         self.dataframe_generator()
         # Testing the various assert statements built into the Class's Constructor.
 
@@ -171,13 +168,12 @@ class TestAll(unittest.TestCase):
             )
 
     def test_intersection_cids(self):
-
         self.dataframe_generator()
 
         self.cidx = ["AUD", "CAD", "GBP", "USD", "CHF"]
 
         with warnings.catch_warnings(record=True) as w:
-        # Isolate the cross-sections available for both the corresponding categories.
+            # Isolate the cross-sections available for both the corresponding categories.
             shared_cids = CategoryRelations.intersection_cids(
                 self.dfdx, ["GROWTH", "INFL"], self.cidx
             )
@@ -220,7 +216,6 @@ class TestAll(unittest.TestCase):
     # Test the conversion method from raw value to either n-period differencing or
     # percentage change.
     def test_time_series(self):
-
         self.dataframe_generator()
 
         # Generate the DataFrame passed into the time_series() method: the procedure
@@ -384,7 +379,6 @@ class TestAll(unittest.TestCase):
         # packages.
 
     def test_outlier_trim(self):
-
         self.dataframe_generator()
 
         # Generate the dataframe passed into the outlier_trim() method: the procedure
@@ -453,7 +447,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(df_outlier.shape == df_time_series.shape)
 
     def test_apply_slip(self):
-
         self.dataframe_generator()
 
         # pick 3 random cids
@@ -484,7 +477,7 @@ class TestAll(unittest.TestCase):
         # apply the slip method
         print(int(min(df["vx"])))
         out_df = CategoryRelations.apply_slip(
-            target_df=df,
+            df=df,
             slip=test_slip,
             xcats=sel_xcats,
             cids=sel_cids,
@@ -507,60 +500,83 @@ class TestAll(unittest.TestCase):
                 assert inan_count == onan_count - test_slip
 
         # Test Case 2 - slip is greater than the number of unique dates for a cid, xcat pair
-        
-        df : pd.DataFrame = test_df.copy()
+
+        df: pd.DataFrame = test_df.copy()
         df["vx"] = (
             df.groupby(["cid", "xcat"])["real_date"].rank(method="dense").astype(int)
         )
-        
+
         test_slip = int(max(df["vx"])) + 1
-        
-        out_df = CategoryRelations.apply_slip(target_df=df, slip=test_slip,
-                                                xcats=sel_xcats, cids=sel_cids,
-                                                metrics=["value", "vx"])
+
+        out_df = CategoryRelations.apply_slip(
+            df=df,
+            slip=test_slip,
+            xcats=sel_xcats,
+            cids=sel_cids,
+            metrics=["value", "vx"],
+        )
 
         self.assertTrue(out_df["vx"].isna().all())
         self.assertTrue(out_df["value"].isna().all())
-        
-        out_df = CategoryRelations.apply_slip(target_df=df, slip=test_slip,
-                                                xcats=sel_xcats, cids=sel_cids,
-                                                metrics=["value"])
-        
+
+        out_df = CategoryRelations.apply_slip(
+            df=df,
+            slip=test_slip,
+            xcats=sel_xcats,
+            cids=sel_cids,
+            metrics=["value"],
+        )
+
         self.assertTrue((df["vx"] == out_df["vx"]).all())
         self.assertTrue(out_df["value"].isna().all())
-        
-        
+
         # case 3 - slip is negative
-        df : pd.DataFrame = test_df.copy()
-        
+        df: pd.DataFrame = test_df.copy()
+
         with self.assertRaises(ValueError):
-            CategoryRelations.apply_slip(target_df=df, slip=-1,
-                                                xcats=sel_xcats, cids=sel_cids,
-                                                metrics=["value"])
-        
-        
+            CategoryRelations.apply_slip(
+                df=df,
+                slip=-1,
+                xcats=sel_xcats,
+                cids=sel_cids,
+                metrics=["value"],
+            )
+
         # check that a value error is raised when cids and xcats are not in the dataframe
+        print(df)
         with self.assertRaises(ValueError):
-            CategoryRelations.apply_slip(target_df=df, slip=2,
-                                                xcats=["metallica"], cids=["ac_dc"],
-                                                metrics=["value"])
-            
+            CategoryRelations.apply_slip(
+                df=df,
+                slip=2,
+                xcats=["metallica"],
+                cids=["ac_dc"],
+                metrics=["value"],
+            )
+
         with self.assertRaises(ValueError):
-            CategoryRelations.apply_slip(target_df=df, slip=2,
-                                                xcats=["metallica"], cids=sel_cids,
-                                                metrics=["value"])
-            
+            CategoryRelations.apply_slip(
+                df=df,
+                slip=2,
+                xcats=["metallica"],
+                cids=sel_cids,
+                metrics=["value"],
+            )
+
         with self.assertRaises(ValueError):
-            CategoryRelations.apply_slip(target_df=df, slip=-1,
-                                                xcats=sel_xcats, cids=["ac_dc"],
-                                                metrics=["value"])
+            CategoryRelations.apply_slip(
+                df=df,
+                slip=-1,
+                xcats=sel_xcats,
+                cids=["ac_dc"],
+                metrics=["value"],
+            )
         try:
-            cat_rel: CategoryRelations = CategoryRelations(df=df, xcats=sel_xcats, cids=sel_cids, slip=100)
+            cat_rel: CategoryRelations = CategoryRelations(
+                df=df, xcats=sel_xcats, cids=sel_cids, slip=100
+            )
         except:
             self.fail("CategoryRelations init failed")
 
 
-
 if __name__ == "__main__":
-
     unittest.main()
