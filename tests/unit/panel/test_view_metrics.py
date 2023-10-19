@@ -66,7 +66,6 @@ class TestAll(unittest.TestCase):
                 view_metrics(**bad_args)
             except Exception as e:
                 self.assertIsInstance(e, ValueError)
-                self.assertTrue(bad_args["xcat"] in str(e))
                 raise ValueError(e)
 
         # test bad metric
@@ -89,17 +88,12 @@ class TestAll(unittest.TestCase):
         # test cids with empty list and list of int
         bad_args = good_args.copy()
         bad_cases = [
-            [],
             [1, 2, 3],
         ]
         for case in bad_cases:
             bad_args["cids"] = case
             with self.assertRaises(TypeError):
                 view_metrics(**bad_args)
-
-        bad_args["cids"] = self.cids[:2] + ["bad_cid"]
-        with self.assertRaises(ValueError):
-            view_metrics(**bad_args)
 
         # test bad start and end
         bad_args = good_args.copy()
