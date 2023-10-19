@@ -3,13 +3,15 @@ Generic dataframe and type conversion functions specific to the
 Macrosynergy package and JPMaQS dataframes/data.
 """
 
-import pandas as pd
-import numpy as np
 import datetime
-from typing import Any, List, Dict, Optional, Union, Set, Iterable, overload
-import requests, requests.compat
+import itertools
 import warnings
+from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload
 
+import numpy as np
+import pandas as pd
+import requests
+import requests.compat
 
 ##############################
 #   Overloads
@@ -82,7 +84,8 @@ def split_ticker(ticker: Union[str, Iterable[str]], mode: str) -> Union[str, Lis
 
     if "_" not in ticker:
         raise ValueError(
-            "Argument `ticker` must be a string" " with at least one underscore."
+            "Argument `ticker` must be a string"
+            " with at least one underscore."
             f" Received '{ticker}' instead."
         )
 
@@ -432,49 +435,60 @@ def ticker_df_to_qdf(df: pd.DataFrame) -> pd.DataFrame:
     # standardise and return
     return standardise_dataframe(df=df)
 
-def apply_slip(df: pd.DataFrame, slip: int,
-                    cids: List[str], xcats: List[str],
-                    metrics: List[str], raise_error: bool = True) -> pd.DataFrame:
-        """
-        Applied a slip, i.e. a negative lag, to the target DataFrame 
-        for the given cross-sections and categories, on the given metrics.
-        
-        :param <pd.DataFrame> target_df: DataFrame to which the slip is applied.
-        :param <int> slip: Slip to be applied.
-        :param <List[str]> cids: List of cross-sections.
-        :param <List[str]> xcats: List of categories.
-        :param <List[str]> metrics: List of metrics to which the slip is applied.
-        :return <pd.DataFrame> target_df: DataFrame with the slip applied.
-        :raises <TypeError>: If the provided parameters are not of the expected type.
-        :raises <ValueError>: If the provided parameters are semantically incorrect.
-        """
 
-        df = df.copy()
-        if not (isinstance(slip, int) and slip >= 0):
-            raise ValueError("Slip must be a non-negative integer.")
-        
-        if cids is None:
-            cids = df['cid'].unique().tolist()
-        if xcats is None:
-            xcats = df['xcat'].unique().tolist()
+def apply_slip(
+    df: pd.DataFrame,
+    slip: int,
+    cids: List[str],
+    xcats: List[str],
+    metrics: List[str],
+    raise_error: bool = True,
+) -> pd.DataFrame:
+    """
+    Applied a slip, i.e. a negative lag, to the target DataFrame
+    for the given cross-sections and categories, on the given metrics.
 
-        sel_tickers : List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
-        df['tickers'] = df['cid'] + '_' + df['xcat']
+    :param <pd.DataFrame> target_df: DataFrame to which the slip is applied.
+    :param <int> slip: Slip to be applied.
+    :param <List[str]> cids: List of cross-sections.
+    :param <List[str]> xcats: List of categories.
+    :param <List[str]> metrics: List of metrics to which the slip is applied.
+    :return <pd.DataFrame> target_df: DataFrame with the slip applied.
+    :raises <TypeError>: If the provided parameters are not of the expected type.
+    :raises <ValueError>: If the provided parameters are semantically incorrect.
+    """
 
-        if not set(sel_tickers).issubset(set(df['tickers'].unique())):
-            if raise_error:
-                raise ValueError("Tickers targetted for applying slip are not present in the DataFrame.\n"
-                f"Missing tickers: {sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}")
-            else:
-                warnings.warn("Tickers targetted for applying slip are not present in the DataFrame.\n"
-                f"Missing tickers: {sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}")
+    df = df.copy()
+    if not (isinstance(slip, int) and slip >= 0):
+        raise ValueError("Slip must be a non-negative integer.")
 
-        slip : int = slip.__neg__()
-        
-        df[metrics] = df.groupby('tickers')[metrics].shift(slip)
-        df = df.drop(columns=['tickers'])
-        
-        return df
+    if cids is None:
+        cids = df["cid"].unique().tolist()
+    if xcats is None:
+        xcats = df["xcat"].unique().tolist()
+
+    sel_tickers: List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+    df["tickers"] = df["cid"] + "_" + df["xcat"]
+
+    if not set(sel_tickers).issubset(set(df["tickers"].unique())):
+        if raise_error:
+            raise ValueError(
+                "Tickers targetted for applying slip are not present in the DataFrame.\n"
+                f"Missing tickers: {sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
+            )
+        else:
+            warnings.warn(
+                "Tickers targetted for applying slip are not present in the DataFrame.\n"
+                f"Missing tickers: {sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
+            )
+
+    slip: int = slip.__neg__()
+
+    df[metrics] = df.groupby("tickers")[metrics].shift(slip)
+    df = df.drop(columns=["tickers"])
+
+    return df
+
 
 def downsample_df_on_real_date(
     df: pd.DataFrame,
@@ -526,3 +540,116 @@ def downsample_df_on_real_date(
         .agg(agg, numeric_only=True)
         .reset_index()
     )
+
+
+def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False):
+    """
+    Append a standard DataFrame to a standard base DataFrame with ticker replacement on
+    the intersection.
+
+    :param <pd.DataFrame> df: standardised base JPMaQS DataFrame with the following
+        necessary columns: 'cid', 'xcats', 'real_date' and 'value'.
+    :param <pd.DataFrame> df_add: another standardised JPMaQS DataFrame, with the latest
+        values, to be added with the necessary columns: 'cid', 'xcats', 'real_date', and
+        'value'. Columns that are present in the base DataFrame but not in the appended
+        DataFrame will be populated with NaN values.
+    :param <bool> xcat_replace: all series belonging to the categories in the added
+        DataFrame will be replaced, rather than just the added tickers.
+        N.B.: tickers are combinations of cross-sections and categories.
+
+    :return <pd.DataFrame>: standardised DataFrame with the latest values of the modified
+        or newly defined tickers added.
+    """
+
+    cols = ["cid", "xcat", "real_date", "value"]
+    # Consider the other possible metrics that the DataFrame could be defined over
+
+    df_cols = set(df.columns)
+    df_add_cols = set(df_add.columns)
+
+    error_message = f"The base DataFrame must include the necessary columns: {cols}."
+    assert set(cols).issubset(df_cols), error_message
+
+    error_message = f"The added DataFrame must include the necessary columns: {cols}."
+    assert set(cols).issubset(df_add_cols), error_message
+
+    additional_columns = filter(lambda c: c in df.columns, list(df_add.columns))
+    df_error = (
+        f"The appended DataFrame must be defined over a subset of the columns "
+        f"in the returned DataFrame. The undefined column(s): "
+        f"{additional_columns}."
+    )
+    assert df_add_cols.issubset(df_cols), df_error
+
+    if not xcat_replace:
+        df = update_tickers(df, df_add)
+
+    else:
+        df = update_categories(df, df_add)
+
+    return df.reset_index(drop=True)
+
+
+def df_tickers(df: pd.DataFrame):
+    """
+    Helper function used to delimit the tickers defined in a received DataFrame.
+
+    :param <pd.DataFrame> df: standardised DataFrame.
+    """
+    cids_append = list(map(lambda c: c + "_", set(df["cid"])))
+    tickers = list(itertools.product(cids_append, set(df["xcat"])))
+    tickers = [c[0] + c[1] for c in tickers]
+
+    return tickers
+
+
+def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
+    """
+    Method used to update aggregate DataFrame on a ticker level.
+
+    :param <pd.DataFrame> df: aggregate DataFrame used to store all tickers.
+    :param <pd.DataFrame> df_add: DataFrame with the latest values.
+
+    """
+    agg_df_tick = set(df_tickers(df))
+    add_df_tick = set(df_tickers(df_add))
+
+    df["ticker"] = df["cid"] + "_" + df["xcat"]
+
+    # If the ticker is already defined in the DataFrame, replace with the new series
+    # otherwise append the series to the aggregate DataFrame.
+    df = df[~df["ticker"].isin(list(agg_df_tick.intersection(add_df_tick)))]
+
+    df = pd.concat([df, df_add], axis=0, ignore_index=True)
+
+    df = df.drop(["ticker"], axis=1)
+
+    return df.sort_values(["xcat", "cid", "real_date"])
+
+
+def update_categories(df: pd.DataFrame, df_add):
+    """
+    Method used to update the DataFrame on the category level.
+
+    :param <pd.DataFrame> df: base DataFrame.
+    :param <pd.DataFrame> df_add: appended DataFrame.
+
+    """
+
+    incumbent_categories = list(df["xcat"].unique())
+    new_categories = list(df_add["xcat"].unique())
+
+    # Union of both category columns from the two DataFrames.
+    append_condition = set(incumbent_categories) | set(new_categories)
+    intersect = list(set(incumbent_categories).intersection(set(new_categories)))
+
+    if len(append_condition) == len(incumbent_categories + new_categories):
+        df = pd.concat([df, df_add], axis=0, ignore_index=True)
+
+    # Shared categories plus any additional categories previously not defined in the base
+    # DataFrame.
+    else:
+        df = df[~df["xcat"].isin(intersect)]
+        df = pd.concat([df, df_add], axis=0, ignore_index=True)
+
+    return df
