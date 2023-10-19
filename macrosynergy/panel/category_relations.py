@@ -1,3 +1,6 @@
+"""
+Classes and functions for analyzing and visualizing the relations of two panel categories.
+"""
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -9,6 +12,7 @@ import warnings
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import categories_df
+from macrosynergy.management.utils import apply_slip as apply_slip_util
 
 
 class CategoryRelations(object):
@@ -121,22 +125,42 @@ class CategoryRelations(object):
         if not isinstance(xcat_aggs, (list, tuple)):
             raise TypeError("xcat_aggs must be a list or a tuple.")
 
+        # copy DF to avoid side-effects
+        df: pd.DataFrame = df.copy()
         # Select the cross-sections available for both categories.
-        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+        df.loc[:, "real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
         if self.slip != 0:
             metrics_found: List[str] = list(
                 set(df.columns) - set(["cid", "xcat", "real_date"])
             )
             df = self.apply_slip(
-                target_df=df,
+                df=df,
                 slip=self.slip,
                 cids=self.cids,
                 xcats=self.xcats,
                 metrics=metrics_found,
             )
 
-        shared_cids = CategoryRelations.intersection_cids(df, xcats, cids)
+        # capture warning from intersection_cids, in case the two categories do not
+        # share any cross-sections.
+        warnings_list = []
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            shared_cids = CategoryRelations.intersection_cids(df, xcats, cids)
+            for warning in w:
+                warnings_list.append(str(warning.message))
+
+        # if shared_cids is empty, then the analysis is not possible.
+        # The warning from intersection_cids now becomes an error.
+        if len(shared_cids) == 0:
+            error_message = "The two categories have no shared cross-sections."
+            if len(warnings_list) > 0:
+                error_message += f"\nPossible reason(s) for error: "
+                error_message += "\n".join(warnings_list)
+
+            error_message += "\nPlease check input parameters."
+            raise ValueError(error_message)
 
         # Will potentially contain NaN values if the two categories are defined over
         # time-periods.
@@ -190,51 +214,6 @@ class CategoryRelations(object):
         self.df = df.dropna(axis=0, how="any")
 
     @classmethod
-    def apply_slip(
-        self,
-        target_df: pd.DataFrame,
-        slip: int,
-        cids: List[str],
-        xcats: List[str],
-        metrics: List[str],
-    ) -> pd.DataFrame:
-        """
-        Applied a slip, i.e. a negative lag, to the target DataFrame
-        for the given cross-sections and categories, on the given metrics.
-
-        Parameters
-        ----------
-        :param <pd.DataFrame> target_df: DataFrame to which the slip is applied.
-        :param <int> slip: Slip to be applied.
-        :param <List[str]> cids: List of cross-sections.
-        :param <List[str]> xcats: List of categories.
-        :param <List[str]> metrics: List of metrics to which the slip is applied.
-        :return <pd.DataFrame> target_df: DataFrame with the slip applied.
-        :raises <TypeError>: If the provided parameters are not of the expected type.
-        :raises <ValueError>: If the provided parameters are semantically incorrect.
-        """
-
-        target_df = target_df.copy(deep=True)
-        if not (isinstance(slip, int) and slip >= 0):
-            raise ValueError("Slip must be a non-negative integer.")
-
-        sel_tickers: List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
-        target_df["tickers"] = target_df["cid"] + "_" + target_df["xcat"]
-
-        if not set(sel_tickers).issubset(set(target_df["tickers"].unique())):
-            raise ValueError(
-                "Tickers targetted for applying slip are not present in the DataFrame.\n"
-                f"Missing tickers: {set(sel_tickers) - set(target_df['tickers'].unique())}"
-            )
-
-        slip: int = slip.__neg__()
-
-        target_df[metrics] = target_df.groupby("tickers")[metrics].shift(slip)
-        target_df = target_df.drop(columns=["tickers"])
-
-        return target_df
-
-    @classmethod
     def intersection_cids(cls, df, xcats, cids):
         """Returns common cross-sections across both categories and specified
         parameter.
@@ -265,6 +244,18 @@ class CategoryRelations(object):
 
         return usable
 
+    @staticmethod
+    def apply_slip(
+        df: pd.DataFrame,
+        slip: int,
+        cids: List[str],
+        xcats: List[str],
+        metrics: List[str],
+    ) -> pd.DataFrame:
+        return apply_slip_util(
+            df=df, slip=slip, cids=cids, xcats=xcats, metrics=metrics, raise_error=True
+        )
+
     @classmethod
     def time_series(
         cls,
@@ -292,7 +283,7 @@ class CategoryRelations(object):
 
         df_lists = []
         for c in shared_cids:
-            temp_df = df.loc[c]
+            temp_df: pd.DataFrame = df.loc[c].copy()
 
             if change == "diff":
                 temp_df[expln_var] = temp_df[expln_var].diff(periods=n_periods)
@@ -794,9 +785,9 @@ if __name__ == "__main__":
     filt2 = (dfd["xcat"] == "INFL") & (dfd["cid"] == "NZD")
 
     # Reduced DataFrame.
-    dfdx = dfd[~(filt1 | filt2)]
-    dfdx["ERA"] = "before 2010"
-    dfdx.loc[dfdx.real_date.dt.year > 2007, "ERA"] = "from 2010"
+    dfdx = dfd[~(filt1 | filt2)].copy()
+    dfdx["ERA"]: str = "before 2007"
+    dfdx.loc[dfdx["real_date"].dt.year > 2007, "ERA"] = "from 2010"
 
     cidx = ["AUD", "CAD", "GBP", "USD"]
 
@@ -820,7 +811,30 @@ if __name__ == "__main__":
         ylab="Return",
         coef_box="lower left",
         prob_est="map",
-        time_color=True,
+    )
+
+    # years parameter
+
+    cr = CategoryRelations(
+        dfdx,
+        xcats=["CRY", "XR"],
+        freq="M",
+        years=5,
+        lag=0,
+        cids=cidx,
+        xcat_aggs=["mean", "sum"],
+        start="2001-01-01",
+        blacklist=black,
+    )
+
+    cr.reg_scatter(
+        labels=False,
+        separator=None,
+        title="Carry and Return, 5-year periods",
+        xlab="Carry",
+        ylab="Return",
+        coef_box="lower left",
+        prob_est="map",
     )
 
     cr = CategoryRelations(
