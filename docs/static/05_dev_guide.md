@@ -131,9 +131,9 @@ Currently functional directives are:
 - `MERGE-AFTER-VERSION-<VERSION>` - Similar to `MERGE-IN-VERSION-<VERSION>`, but allows
   the PR to be merged in any version after `<VERSION>`.
 
-**NOTE: `PR_NUMBER` but be an integer, and `VERSION` must be a valid version string (vX.Y.Z)**
+**NOTE: `PR_NUMBER` must be an integer, and `VERSION` must be a valid version string (vX.Y.Z)**
 
-These also work with the dashes replaced by spaces and is case-insensitive.
+These also work with the dashes replaced by spaces and are case-insensitive.
 
 Example:
 
