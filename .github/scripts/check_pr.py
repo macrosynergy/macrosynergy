@@ -287,5 +287,5 @@ def main(pr_number: int):
 
 
 if __name__ == "__main__":
-    # pr_number: int = int(sys.argv[1])
-    main(pr_number=1074)
+    pr_number: int = int(sys.argv[1])
+    main(pr_number=pr_number)
