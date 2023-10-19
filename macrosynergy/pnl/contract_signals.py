@@ -201,11 +201,6 @@ def _apply_hedge_ratios(
     # Pivot the DF to wide ticker format
     df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
     # check if the hedge basket is in the dataframe
-    if not set(hbasket).issubset(set(df_wide.columns)):
-        raise ValueError(
-            "Some `hbasket` are missing in the provided dataframe."
-            f"\nMissing: {set(hbasket) - set(df_wide.columns)}"
-        )
 
     expected_hratios: List[str] = [f"{cx}_{hratios}" for cx in get_cid(hbasket)]
     found_contract_types = lambda x: any([ct.startswith(x) for ct in df_wide.columns])
@@ -410,9 +405,6 @@ def contract_signals(
                 raise TypeError(
                     "`hscales` must be a List of strings or numerical values"
                 )
-
-    ## Apply the cross-section-specific signal to the dataframe
-    # df: pd.DataFrame = _apply_sig_conversion(df=df, sig=sig, cids=cids)
 
     ## Generate contract signals
     df_contract_signals: pd.DataFrame = _gen_contract_signals(
