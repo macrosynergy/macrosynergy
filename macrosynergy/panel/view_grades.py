@@ -9,7 +9,6 @@ from typing import List, Union, Tuple
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.check_availability import reduce_df
-from macrosynergy.visuals import view
 
 
 def heatmap_grades(df: pd.DataFrame, xcats:  List[str],  cids: List[str] = None,

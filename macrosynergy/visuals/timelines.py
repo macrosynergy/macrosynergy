@@ -18,19 +18,9 @@ from typing import List, Optional, Tuple
 
 import pandas as pd
 
-<<<<<<< HEAD
 from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
 from macrosynergy.visuals import FacetPlot, LinePlot
 from macrosynergy.management.types import Numeric
-=======
-from macrosynergy.management.utils import (
-    standardise_dataframe,
-    is_valid_iso_date
-)
-from macrosynergy.visuals.plots import FacetPlot, LinePlot
-# from macrosynergy.visuals.facetplot import FacetPlot#, LinePlot
-from macrosynergy.visuals.common import Numeric
->>>>>>> 1dbaa356 (refactor visuals)
 
 IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
 

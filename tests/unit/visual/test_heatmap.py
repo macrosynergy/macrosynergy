@@ -77,7 +77,7 @@ class TestAll(unittest.TestCase):
             index="cid", columns="real_date", values=self.metric
         )
         try:
-            heatmap.plot(**self.plot_args)
+            heatmap._plot(heatmap.df, **self.plot_args)
         except Exception as e:
             self.fail(f"Heatmap.plot raised {e} unexpectedly")
 
@@ -92,7 +92,7 @@ class TestAll(unittest.TestCase):
         self.plot_args["return_figure"] = True
 
         try:
-            fig = heatmap.plot(**self.plot_args)
+            fig = heatmap._plot(heatmap.df, **self.plot_args)
         except Exception as e:
             self.fail(f"Heatmap.plot raised {e} unexpectedly")
 

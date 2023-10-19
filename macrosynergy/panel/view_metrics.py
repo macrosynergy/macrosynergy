@@ -7,7 +7,8 @@ import pandas as pd
 from typing import List, Tuple, Optional
 from macrosynergy.management.simulate_quantamental_data import make_test_df
 
-from macrosynergy.visuals import view
+import macrosynergy.visuals as msv
+
 
 
 def view_metrics(
@@ -48,7 +49,7 @@ def view_metrics(
     :raises TypeError: if any of the inputs are of the wrong type.
     :raises ValueError: if any of the inputs are semantically incorrect.
     """
-    view.metrics(
+    msv.view_metrics(
         df=df,
         xcat=xcat,
         cids=cids,

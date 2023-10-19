@@ -7,16 +7,15 @@ import pandas as pd
 from typing import List, Dict, Tuple, Optional
 import matplotlib.pyplot as plt
 import numpy as np
-import seaborn as sns
 from seaborn.utils import relative_luminance
 import matplotlib as mpl
 from typing import Union
+from macrosynergy.management.utils import downsample_df_on_real_date
 
 from macrosynergy.visuals.plotter import Plotter
 from macrosynergy.management.types import Numeric, NoneType
 
 from macrosynergy.management.simulate_quantamental_data import make_test_df
-from macrosynergy.management.shape_dfs import reduce_df
 
 
 class Heatmap(Plotter):
@@ -62,8 +61,9 @@ class Heatmap(Plotter):
             **kwargs,
         )
 
-    def plot(
+    def _plot(
         self,
+        df: pd.DataFrame,
         figsize: Tuple[Numeric, Numeric] = (12, 8),
         x_axis_label: Optional[str] = None,
         y_axis_label: Optional[str] = None,
@@ -140,7 +140,7 @@ class Heatmap(Plotter):
             ax: plt.Axes
             fig, ax = plt.subplots(figsize=figsize, layout="constrained")
 
-        data = self.df.to_numpy()
+        data = df.to_numpy()
 
         im = ax.imshow(
             data,
@@ -151,8 +151,8 @@ class Heatmap(Plotter):
             **kwargs,
         )
 
-        xtick_labels = self.df.columns.to_list()
-        ytick_labels = self.df.index.to_list()
+        xtick_labels = df.columns.to_list()
+        ytick_labels = df.index.to_list()
 
         ax.set_xticks(np.arange(len(xtick_labels)), labels=xtick_labels)
         ax.set_yticks(np.arange(len(ytick_labels)), labels=ytick_labels)
@@ -170,8 +170,8 @@ class Heatmap(Plotter):
             minor=False,
             rotation_mode="anchor",
         )
-        
-        ax.tick_params(axis='both', which='major', labelsize=tick_fontsize)
+
+        ax.tick_params(axis="both", which="major", labelsize=tick_fontsize)
 
         if show_tick_lines:
             ax.tick_params(which="major", length=4, width=1, direction="out")
@@ -236,6 +236,124 @@ class Heatmap(Plotter):
         if return_figure:
             return fig
 
+    def plot_metric(
+        self,
+        x_axis_column,
+        y_axis_column,
+        metric,
+        xcats=None,
+        cids=None,
+        start=None,
+        end=None,
+        freq=None,
+        agg="mean",
+        figsize: Optional[Tuple[Numeric, Numeric]] = (12, 8),
+        x_axis_label: Optional[str] = None,
+        y_axis_label: Optional[str] = None,
+        axis_fontsize: int = 14,
+        title: Optional[str] = None,
+        title_fontsize: int = 22,
+        title_xadjust: Numeric = 0.5,
+        title_yadjust: Numeric = 1.0,
+        vmin: Optional[Numeric] = None,
+        vmax: Optional[Numeric] = None,
+        show: bool = True,
+        save_to_file: Optional[str] = None,
+        dpi: int = 300,
+        return_figure: bool = False,
+        on_axis: Optional[plt.Axes] = None,
+        max_xticks: int = 50,
+        cmap: Optional[Union[str, mpl.colors.Colormap]] = None,
+        rotate_xticks: Optional[Numeric] = 0,
+        rotate_yticks: Optional[Numeric] = 0,
+        show_tick_lines: Optional[bool] = True,
+        show_colorbar: Optional[bool] = True,
+        show_annotations: Optional[bool] = False,
+        show_boundaries: Optional[bool] = False,
+        annotation_fontsize: int = 14,
+        tick_fontsize: int = 13,
+        *args,
+        **kwargs,
+    ):
+        df = self.df.copy()
+        if not xcats:
+            xcats = self.xcats
+        if not cids:
+            cids = self.cids
+        if not start:
+            start = self.start
+        if not end:
+            end = self.end
+
+        # Validation checks not covered by Plotter.
+        if metric not in ["value", "eop_lag", "mop_lag", "grading"]:
+            raise ValueError(
+                "`metric` must be either 'eop_lag', 'mop_lag', 'grading', or 'value'"
+            )
+
+        if not isinstance(agg, str):
+            raise TypeError("`agg` must be a string")
+        else:
+            agg: str = agg.lower()
+            if agg not in ["mean", "median", "min", "max", "first", "last"]:
+                raise ValueError(
+                    "`agg` must be one of 'mean', 'median', 'min', 'max', 'first' or 'last'"
+                )
+
+        df = df[["xcat", "cid", "real_date", metric]]
+
+        if freq:
+            df: pd.DataFrame = downsample_df_on_real_date(
+                df=df, groupby_columns=["cid", "xcat"], freq=freq, agg=agg
+            )
+
+        if "real_date" not in [x_axis_column, y_axis_column]:
+            df = df.groupby(["xcat", "cid"]).mean().reset_index()
+
+        vmax: float = max(1, df[metric].max())
+        vmin: float = min(0, df[metric].min())
+
+        df["real_date"]: pd.Series = df["real_date"].dt.strftime("%Y-%m-%d")
+
+        df = df.pivot_table(index=y_axis_column, columns=x_axis_column, values=metric)
+
+        if figsize is None:
+            figsize = (
+                max(df.shape[0] / 2, 15),
+                max(1, df.shape[1] / 2),
+            )
+        elif isinstance(figsize, list):
+            figsize = tuple(figsize)
+
+        self._plot(
+            df=df,
+            figsize=figsize,
+            x_axis_label=x_axis_label,
+            y_axis_label=y_axis_label,
+            axis_fontsize=axis_fontsize,
+            title=title,
+            title_fontsize=title_fontsize,
+            title_xadjust=title_xadjust,
+            title_yadjust=title_yadjust,
+            vmin=vmin,
+            vmax=vmax,
+            show=show,
+            save_to_file=save_to_file,
+            dpi=dpi,
+            return_figure=return_figure,
+            on_axis=on_axis,
+            max_xticks=max_xticks,
+            cmap=cmap,
+            rotate_xticks=rotate_xticks,
+            rotate_yticks=rotate_yticks,
+            show_tick_lines=show_tick_lines,
+            show_colorbar=show_colorbar,
+            show_annotations=show_annotations,
+            show_boundaries=show_boundaries,
+            annotation_fontsize=annotation_fontsize,
+            tick_fontsize=tick_fontsize,
+        )
+
 
 if __name__ == "__main__":
     test_cids: List[str] = [
@@ -265,4 +383,4 @@ if __name__ == "__main__":
         index="cid", columns="real_date", values="grading"
     )
 
-    heatmap.plot(title="abc", rotate_xticks=90)
+    heatmap._plot(heatmap.df, title="abc", rotate_xticks=90)

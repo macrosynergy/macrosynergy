@@ -69,7 +69,7 @@ class TestAll(unittest.TestCase):
 
     def test_view_grades_no_error(self):
         try:
-            msv.view.grades(**self.valid_args)
+            msv.view_grades(**self.valid_args)
         except Exception as e:
             self.fail(f"msv.view.grades raised {e} unexpectedly")
 
@@ -78,7 +78,7 @@ class TestAll(unittest.TestCase):
         invalid_args["xcats"] = ["INVALID_XCAT"]
         with self.assertRaises(ValueError):
             try:
-                msv.view.grades(**invalid_args)
+                msv.view_grades(**invalid_args)
             except Exception as e:
                 self.assertIsInstance(e, ValueError)
                 raise ValueError(e)
@@ -87,31 +87,31 @@ class TestAll(unittest.TestCase):
         invalid_args = self.valid_args
         invalid_args["grade"] = "INVALID_GRADE"
         with self.assertRaises(ValueError):
-            msv.view.grades(**invalid_args)
+            msv.view_grades(**invalid_args)
 
     def test_view_grades_empty_df(self):
         invalid_args: Dict[str, Any] = self.valid_args
         invalid_args["df"] = pd.DataFrame()
         with self.assertRaises(ValueError):
-            msv.view.grades(**invalid_args)
+            msv.view_grades(**invalid_args)
 
     def test_view_grades_invalid_cids(self):
         invalid_args = self.valid_args.copy()
         invalid_args["cids"] = [1, 2, 3]
 
         with self.assertRaises(TypeError):
-            msv.view.grades(**invalid_args)
+            msv.view_grades(**invalid_args)
 
         invalid_args["cids"] = ["bad_cid"]
         with self.assertRaises(ValueError):
-            msv.view.grades(**invalid_args)
+            msv.view_grades(**invalid_args)
 
     def test_view_grades_invalid_start_and_end(self):
         invalid_args = self.valid_args
         for arg in ["start", "end"]:
             invalid_args[arg] = "INVALID_DATE"
             with self.assertRaises(ValueError):
-                msv.view.grades(**invalid_args)
+                msv.view_grades(**invalid_args)
 
     def test_view_grades_invalid_figsize(self):
         invalid_args = self.valid_args.copy()
@@ -123,11 +123,11 @@ class TestAll(unittest.TestCase):
         for case in invalid_cases:
             invalid_args["figsize"] = case
             with self.assertRaises(TypeError):
-                msv.view.grades(**invalid_args)
+                msv.view_grades(**invalid_args)
 
         invalid_args["figsize"] = [10, 10, 10]
         with self.assertRaises(TypeError):
-            msv.view.grades(**invalid_args)
+            msv.view_grades(**invalid_args)
 
 
 if __name__ == "__main__":

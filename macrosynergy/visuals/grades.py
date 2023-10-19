@@ -8,10 +8,10 @@ import seaborn as sns
 from typing import List, Union, Tuple
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.visuals.plots import Heatmap
+from macrosynergy.visuals import Heatmap
 
 
-def grades(
+def view_grades(
     df: pd.DataFrame,
     xcats: List[str],
     cids: List[str] = None,
@@ -52,27 +52,15 @@ def grades(
             f"DataFrame: {df_cols}."
         )
 
-    heatmap.df = heatmap.df[["xcat", "cid", "real_date", grade]]
-
-    heatmap.df = (
-        heatmap.df.groupby(["xcat", "cid"])
-        .mean()
-        .reset_index()
-        .pivot(index="xcat", columns="cid", values=grade)
-    )
-
-    if figsize is None:
-        figsize = (max(heatmap.df.shape[0] / 2, 15), max(1, heatmap.df.shape[1] / 2))
-    elif isinstance(figsize, list):
-        figsize = tuple(figsize)
-
     if title is None:
         sdate = df["real_date"].min().strftime("%Y-%m-%d")
         title = f"Average grade of vintages since {sdate}"
 
-    heatmap.plot(
+    heatmap.plot_metric(
+        x_axis_column="cid",
+        y_axis_column="xcat",
+        metric=grade,
         title=title,
-        title_fontsize=20,
         figsize=figsize,
         vmin=1,
         vmax=3,
@@ -134,7 +122,7 @@ if __name__ == "__main__":
     filter_xcat = dfd["xcat"] == "XR"
     dfd.loc[filter_xcat, "grading"] = 1
 
-    grades(
+    view_grades(
         dfd,
         xcats=[
             "CRY",
