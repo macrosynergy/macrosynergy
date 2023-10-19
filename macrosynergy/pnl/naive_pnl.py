@@ -195,12 +195,17 @@ class NaivePnL:
         return pd.concat(dfw_list)
 
     @classmethod
-    def rebalancing(cls, dfw: pd.DataFrame, rebal_freq: str = "daily", rebal_slip=0):
+    def rebalancing(
+        cls, dfw: pd.DataFrame, rebal_freq: str = "daily", rebal_slip: int = 0
+    ) -> np.ndarray:
         """
         The signals are calculated daily and for each individual cross-section defined in
         the panel. However, re-balancing a position can occur more infrequently than
         daily. Therefore, produce the re-balancing values according to the more
-        infrequent timeline (weekly or monthly).
+        infrequent timeline (weekly or monthly). The re-balancing can also be done on a
+        daily basis. However, this is not recommend ed as it deviates too far from the
+        real world application (i.e. daily re-balancing is not feasible without incurring
+        significant transaction costs).
 
         :param <pd.Dataframe> dfw: DataFrame with each category represented by a column
             and the daily signal is also included with the column name 'psig'.
@@ -222,11 +227,15 @@ class NaivePnL:
         elif rebal_freq == "weekly":
             dfw["week"] = dfw["real_date"].apply(lambda x: x.week)
             rebal_dates = dfw.groupby(["cid", "year", "week"])["real_date"].min()
+        elif rebal_freq == "daily":
+            # NOTE: the re-balancing dates are the same as the original DataFrame.
+            # the DF is only cast to an indexed series to keep downstream code consistent.
+            rebal_dates = dfw.groupby(["cid", "real_date"])["real_date"].min()
 
         # Convert the index, 'cid', to a formal column aligned to the re-balancing dates.
-        r_dates_df = rebal_dates.reset_index(level=0)
+        r_dates_df: pd.DataFrame = rebal_dates.reset_index(level=0)
         r_dates_df.reset_index(drop=True, inplace=True)
-        dfw = dfw[["real_date", "psig", "cid"]]
+        dfw: pd.DataFrame = dfw[["real_date", "psig", "cid"]]
 
         # Isolate the required signals on the re-balancing dates. Only concerned with the
         # respective signal on the re-balancing date. However, the produced DataFrame
@@ -239,14 +248,16 @@ class NaivePnL:
 
         # The signal is computed for each individual cross-section. Therefore, merge on
         # the real_date and the cross-section.
-        rebal_merge = r_dates_df.merge(dfw, how="left", on=["real_date", "cid"])
+        rebal_merge: pd.DataFrame = r_dates_df.merge(
+            dfw, how="left", on=["real_date", "cid"]
+        )
         # Re-establish the daily date series index where the intermediary dates, between
         # the re-balancing dates, will be populated using a forward fill.
         rebal_merge = dfw[["real_date", "cid"]].merge(
             rebal_merge, how="left", on=["real_date", "cid"]
         )
         rebal_merge["psig"] = (
-            rebal_merge["psig"].fillna(method="ffill").shift(rebal_slip)
+            rebal_merge["psig"].ffill().shift(rebal_slip)
         )
         rebal_merge = rebal_merge.sort_values(["cid", "real_date"])
 
@@ -287,9 +298,9 @@ class NaivePnL:
             sections.
             N.B.: zn-score here means standardized score with zero being the natural
             neutral level and standardization through division by mean absolute value.
-        :param <float> sig_add: add a constant to the signal after initial transformation. 
-            This allows to give PnLs a long or short bias relative to the signal 
-            score. Default is 0.
+        :param <float> sig_add: add a constant to the signal after initial transformation.
+            This allows to give PnLs a long or short bias relative to the signal score.
+            Default is 0.
         :param <str> sig_neg: if True the PnL is based on the negative value of the
             transformed signal. Default is False.
         :param <str> pnl_name: name of the PnL to be generated and stored.
@@ -381,14 +392,10 @@ class NaivePnL:
 
         dfw = dfw.sort_values(["cid", "real_date"])
 
-        if rebal_freq != "daily":
-            sig_series = self.rebalancing(
-                dfw=dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
-            )
-            dfw["sig"] = np.squeeze(sig_series.to_numpy())
-        else:
-            dfw = dfw.rename({"psig": "sig"}, axis=1)
-
+        rb_sig: pd.DataFrame = self.rebalancing(
+            dfw=dfw, rebal_freq=rebal_freq, rebal_slip=rebal_slip
+        )
+        dfw["sig"] = np.squeeze(rb_sig.to_numpy())
         # The signals are generated across the panel.
         dfw["value"] = dfw[self.ret] * dfw["sig"]
 
@@ -397,7 +404,7 @@ class NaivePnL:
         # Compute the return across the panel. The returns are still computed daily
         # regardless of the re-balancing frequency potentially occurring weekly or
         # monthly.
-        df_pnl_all = df_pnl.groupby(["real_date"]).sum(numeric_only=True)
+        df_pnl_all: pd.DataFrame = df_pnl.groupby(["real_date"]).sum(numeric_only=True)
         df_pnl_all = df_pnl_all[df_pnl_all["value"].cumsum() != 0]
         # Returns are computed for each cross-section and across the panel.
         df_pnl_all["cid"] = "ALL"
@@ -1023,8 +1030,8 @@ if __name__ == "__main__":
         sig="GROWTH",
         sig_op="zn_score_pan",
         sig_neg=True,
-        sig_add = 0.5,
-        rebal_freq="monthly",
+        sig_add=0.5,
+        rebal_freq="weekly",
         vol_scale=5,
         rebal_slip=1,
         min_obs=250,
