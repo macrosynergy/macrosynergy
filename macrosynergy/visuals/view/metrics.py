@@ -1,16 +1,31 @@
 """
 Function for visualising the `eop_lag`, `mop_lag` or `grading` metrics for a given
 set of cross sections and extended categories.
+```python
+import macrosynergy.visuals as msv
+...
+msv.view.metrics(
+    df,
+    xcats="IR",
+    cids=["USD", "EUR", "GBP"],
+    metric='eop_lag'
+)
+...
+
+msv.FacetPlot(df).lineplot(cid_grid=True)
+```
 """
+
+from typing import List, Optional, Tuple
+
 import pandas as pd
 
-from typing import List, Tuple, Optional
-from macrosynergy.management.simulate_quantamental_data import make_test_df
+from macrosynergy.management.utils import downsample_df_on_real_date
 
-import macrosynergy.visuals as msv
+from macrosynergy.visuals import Heatmap
 
 
-def view_metrics(
+def metrics(
     df: pd.DataFrame,
     xcat: str,
     cids: Optional[List[str]] = None,
@@ -48,22 +63,71 @@ def view_metrics(
     :raises TypeError: if any of the inputs are of the wrong type.
     :raises ValueError: if any of the inputs are semantically incorrect.
     """
-    msv.view.metrics(
+
+    heatmap = Heatmap(
         df=df,
-        xcat=xcat,
         cids=cids,
+        xcats=[xcat],
+        metrics=[metric],
         start=start,
         end=end,
-        freq=freq,
-        agg=agg,
-        metric=metric,
+    )
+
+    # Validation checks not covered by Plotter.
+
+    if metric not in ["eop_lag", "mop_lag", "grading"]:
+        raise ValueError("`metric` must be either 'eop_lag', 'mop_lag' or 'grading'")
+
+    if not isinstance(agg, str):
+        raise TypeError("`agg` must be a string")
+    else:
+        agg: str = agg.lower()
+        if agg not in ["mean", "median", "min", "max", "first", "last"]:
+            raise ValueError(
+                "`agg` must be one of 'mean', 'median', 'min', 'max', 'first' or 'last'"
+            )
+
+    if title is None:
+        title = f"Visualising {metric} for {xcat} from {heatmap.start} to {heatmap.end}"
+
+    if not isinstance(figsize, tuple):
+        if not isinstance(figsize, list) or len(figsize) != 2:
+            raise TypeError("`figsize` must be a tuple or list of length 2")
+
+    if not isinstance(figsize[0], (int, float)):
+        raise ValueError("First element of `figsize` must be a float")
+
+    if figsize[1] is None:
+        figsize = (figsize[0], len(heatmap.cids) + 1)  # +1 to adjust for labels
+
+    if not isinstance(figsize[1], (int, float)):
+        raise ValueError("Second element of `figsize` must be a float")
+
+    heatmap.df: pd.DataFrame = downsample_df_on_real_date(
+        df=heatmap.df, groupby_columns=["cid", "xcat"], freq=freq, agg=agg
+    )
+
+    max_mes: float = max(1, heatmap.df[metric].max())
+    min_mes: float = min(0, heatmap.df[metric].min())
+
+    heatmap.df["real_date"]: pd.Series = heatmap.df["real_date"].dt.strftime("%Y-%m-%d")
+
+    heatmap.df = heatmap.df.pivot_table(index="cid", columns="real_date", values=metric)
+
+    heatmap.plot(
         title=title,
-        figsize=figsize
+        figsize=figsize,
+        vmin=min_mes,
+        vmax=max_mes,
+        x_axis_label="Date",
+        y_axis_label="Cross Sections",
     )
 
 
 if __name__ == "__main__":
-    test_cids: List[str] = ["USD","EUR", "GBP"]
+    from macrosynergy.management.simulate_quantamental_data import make_test_df
+
+    test_cids: List[str] = ["USD"]  # ,  "EUR", "GBP"]
     test_xcats: List[str] = ["FX", "IR"]
     dfE: pd.DataFrame = make_test_df(
         cids=test_cids, xcats=test_xcats, style="sharp-hill"
@@ -81,16 +145,16 @@ if __name__ == "__main__":
     mergeon = ["cid", "xcat", "real_date"]
     dfx: pd.DataFrame = pd.merge(pd.merge(dfE, dfM, on=mergeon), dfG, on=mergeon)
 
-    view_metrics(
+    metrics(
         df=dfx,
         xcat="FX",
     )
-    view_metrics(
+    metrics(
         df=dfx,
         xcat="IR",
         metric="mop_lag",
     )
-    view_metrics(
+    metrics(
         df=dfx,
         xcat="IR",
         metric="grading",
