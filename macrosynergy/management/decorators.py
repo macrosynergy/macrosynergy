@@ -1,6 +1,8 @@
 """
-Common types and functions used across the modules of the `macrosynergy.visuals` subpackage.
+Module housing decorators that are used to validate the arguments and return values of
+functions.
 """
+
 import inspect
 import warnings
 from functools import wraps
@@ -10,19 +12,15 @@ from typing import (
     Dict,
     List,
     Optional,
-    SupportsFloat,
-    SupportsInt,
     Tuple,
     Type,
     Union,
     get_args,
     get_origin,
 )
-
-from macrosynergy.management.types import NoneType
-
-import numpy as np
+from macrosynergy.management.types import Numeric, NoneType
 import pandas as pd
+import numpy as np
 
 
 def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
@@ -83,7 +81,7 @@ def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
     return False
 
 
-def _get_expected(arg_type_hint: Type[Any]) -> List[str]:
+def get_expected_type(arg_type_hint: Type[Any]) -> List[str]:
     """
     Based on the type hint, return a list of strings that represent
     the type hint - including any nested type hints.
@@ -96,15 +94,15 @@ def _get_expected(arg_type_hint: Type[Any]) -> List[str]:
 
     # handling lists
     if origin in [list, List]:
-        return [f"List[{_get_expected(args[0])[0]}]"]
+        return [f"List[{get_expected_type(args[0])[0]}]"]
 
     # tuples
     if origin in [tuple, Tuple]:
-        return [f"Tuple[{', '.join(_get_expected(arg) for arg in args)}]"]
+        return [f"Tuple[{', '.join(get_expected_type(arg) for arg in args)}]"]
 
     # dicts
     if origin in [dict, Dict]:
-        return [f"Dict[{', '.join(_get_expected(arg) for arg in args)}]"]
+        return [f"Dict[{', '.join(get_expected_type(arg) for arg in args)}]"]
 
     # unions and optionals
     if origin in [Union, Optional]:
@@ -112,7 +110,7 @@ def _get_expected(arg_type_hint: Type[Any]) -> List[str]:
         expected_types: List[str] = []
         for possible_type in args:
             if get_origin(possible_type):
-                expected_types.extend(_get_expected(possible_type))
+                expected_types.extend(get_expected_type(possible_type))
             else:
                 expected_types.append(str(possible_type))
         return expected_types
