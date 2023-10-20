@@ -170,6 +170,10 @@ class SignalBase:
         return isinstance(variable, list) and all(
             isinstance(item, str) for item in variable
         )
+    
+    @staticmethod
+    def manipulate_df():
+        return 0
 
     def __table_stats__(
         self,
