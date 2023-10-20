@@ -270,16 +270,21 @@ class SignalsReturns(SignalBase):
         sigs = self.sig if isinstance(self.sig, list) else [self.sig]
 
         i = 0
+
+        # Define cs_type and type_index mappings
+        cs_type_mapping = {"panel": 0, "mean_years": 1, "pr_years": 2}
+        type_mapping = {"mean_years": "years", "pr_years": "years", "mean_cids": "cids", "pr_cids": "cids"}
+
         for ret in rets:
             for freq in freqs:
                 j = 0
                 for sig in sigs:
                     for agg_sig in agg_sigs:
                         sig_original = sig
+
+                        # Prepare xcat and manipulate DataFrame
                         xcat = [sig, ret]
-
                         self.signals = [sig]
-
                         self.manipulate_df(
                             xcat=xcat,
                             freq=freq,
@@ -289,25 +294,19 @@ class SignalsReturns(SignalBase):
                             df_result=df_result,
                         )
 
-                        if type == "mean_years" or type == "pr_years":
-                            cs_type = "years"
-                        else:
-                            cs_type = "cids"
-                        if type == "panel":
-                            type_index = 0
-                        elif type == "mean_years" or type == "mean_cids":
-                            type_index = 1
-                        elif type == "pr_years" or "pr_cids":
-                            type_index = 2
+                        # Determine cs_type and type_index
+                        cs_type = type_mapping.get(type, "cids")
+                        type_index = cs_type_mapping.get(type, 1)
 
-                        df_out = self.__output_table__(
-                            cs_type=cs_type, ret=ret, sig=sig
-                        )
-
+                        # Retrieve output table and update df_result
+                        df_out = self.__output_table__(cs_type=cs_type, ret=ret, sig=sig)
                         single_stat = df_out.iloc[type_index][stat]
                         df_result.iloc[j, i] = single_stat
+
+                        # Reset self.df and sig to original values
                         self.df = self.original_df
                         sig = sig_original
+
                         j += 1
                 i += 1
 
