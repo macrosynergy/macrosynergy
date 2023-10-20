@@ -1,6 +1,10 @@
 """
 Module for analysing and visualizing signal and a return series.
 """
+import os
+import sys
+
+sys.path.append(os.getcwd())
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -58,7 +62,7 @@ class SignalsReturns(SignalBase):
         df: pd.DataFrame,
         rets: Union[str, List[str]],
         sigs: Union[str, List[str]],
-        signs: Union[int, List[int]] = 1,
+        signs: Union[int, List[int]] = [1],
         slip: int = 0,
         cosp: bool = False,
         start: str = None,
@@ -89,7 +93,7 @@ class SignalsReturns(SignalBase):
 
         self.xcats = self.sig + self.ret
 
-        self.signs = signs
+        self.signs = signs if isinstance(signs, list) else [signs]
 
         if len(self.signs) > len(self.sig):
             ValueError("Signs must have a length less than or equal to signals")
@@ -118,8 +122,11 @@ class SignalsReturns(SignalBase):
         if xcat is None:
             sig = self.sig if not isinstance(self.sig, list) else self.sig[0]
             xcat = [sig, ret]
-        else:
+        elif isinstance(xcat, list):
             sig = xcat[0]
+        else:
+            sig = xcat
+            xcat = [sig, ret]
 
         cids: List[str] = None
         dfd = reduce_df(
@@ -204,6 +211,8 @@ class SignalsReturns(SignalBase):
             agg_sigs = [agg_sigs]
         if xcats is None:
             xcats = self.xcats
+        if not isinstance(xcats, list):
+            xcats=[xcats]
 
         if not isinstance(rets, list):
             rets = [rets]
@@ -300,6 +309,13 @@ class SignalsReturns(SignalBase):
 
         i = 0
 
+        value_dict = {
+            'xcat': {},
+            'ret': {},
+            'freq': {},
+            'agg_sigs': {}
+        }
+
         for ret in rets:
             for freq in freqs:
                 j = 0
@@ -383,7 +399,6 @@ class SignalsReturns(SignalBase):
                         
 
                         single_stat = df_out.iloc[type_index][stat]
-                        orientation_arr[ctr_ret, ctr_freq, ctr_sig, ctr_agg_sig] = single_stat
                         df_result.iloc[j, i] = single_stat
                         self.df = self.original_df
                         sig = sig_original
@@ -418,6 +433,8 @@ if __name__ == "__main__":
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
+    # Basic Signal Returns showing if just single input values
+
     sr = SignalsReturns(
         dfd,
         rets="XR",
@@ -428,3 +445,41 @@ if __name__ == "__main__":
     )
 
     srt = sr.single_relation_table()
+    mrt = sr.multiple_relations_table()
+    sst = sr.single_statistic_table(stat="accuracy")
+
+    print(srt)
+    print(mrt)
+    print(sst)
+
+    # Basic Signal Returns showing for multiple input values
+
+    sr = SignalsReturns(
+    dfd,
+    rets=["XR", "GROWTH"],
+    sigs=["CRY", "INFL"],
+    signs=[1, 1],
+    cosp=True,
+    freqs=["M", "Q"],
+    agg_sigs=["last", "mean"],
+    blacklist=black,
+    )
+    
+    srt = sr.single_relation_table()
+    mrt = sr.multiple_relations_table()
+    sst = sr.single_statistic_table(stat="accuracy")
+
+    print(srt)
+    print(mrt)
+    print(sst)
+
+    # Specifying specific arguments for each of the Signal Return Functions
+
+    srt = sr.single_relation_table(ret="GROWTH", xcat="CRY", freq="Q", agg_sigs="last")
+    print(srt)
+
+    mrt = sr.multiple_relations_table(rets=["XR", "GROWTH"], xcats="CRY", freqs=["M", "Q"], agg_sigs=["last", "mean"])
+    print(mrt)
+
+    sst = sr.single_statistic_table(stat="bal_accuracy", type="pr_years")
+    print(sst)
