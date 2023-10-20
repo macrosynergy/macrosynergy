@@ -454,6 +454,9 @@ def contract_signals(
         df_hedge_signals=df_hedge_signals,
     )
 
+    # Append the strategy name to all the xcats
+    df_out["xcat"] = df_out["xcat"] + "_" + sname
+
     return df_out
 
 
