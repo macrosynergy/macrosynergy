@@ -380,14 +380,19 @@ class SignalsReturns(SignalBase):
                         df_out = self.__output_table__(
                             cs_type=cs_type, ret=ret, sig=sig
                         )
+                        
 
-                        df_result.iloc[j, i] = df_out.iloc[type_index][stat]
+                        single_stat = df_out.iloc[type_index][stat]
+                        orientation_arr[ctr_ret, ctr_freq, ctr_sig, ctr_agg_sig] = single_stat
+                        df_result.iloc[j, i] = single_stat
                         self.df = self.original_df
                         sig = sig_original
                         j += 1
                 i += 1
 
         return df_result
+
+
 
 if __name__ == "__main__":
     cids = ["AUD", "CAD", "GBP", "NZD"]
