@@ -171,9 +171,67 @@ class SignalBase:
             isinstance(item, str) for item in variable
         )
     
-    @staticmethod
-    def manipulate_df():
-        return 0
+    def manipulate_df(self, xcat, freq, agg_sig, sig, sst=False, df_result=None):
+
+        cids = None
+        dfd = reduce_df(
+            self.df,
+            xcats=xcat,
+            cids=cids,
+            start=self.start,
+            end=self.end,
+            blacklist=self.blacklist,
+        )
+        metric_cols: List[str] = list(
+            set(dfd.columns.tolist())
+            - set(["real_date", "xcat", "cid"])
+        )
+        dfd: pd.DataFrame = self.apply_slip(
+            df=dfd,
+            slip=self.slip,
+            cids=cids,
+            xcats=xcat,
+            metrics=metric_cols,
+        )
+
+        df = categories_df(
+            dfd,
+            xcats=xcat,
+            cids=cids,
+            val="value",
+            start=None,
+            end=None,
+            freq=freq,
+            blacklist=None,
+            lag=1,
+            xcat_aggs=[agg_sig, "sum"],
+        )
+        self.df = df
+        self.cids = list(
+            np.sort(self.df.index.get_level_values(0).unique())
+        )
+
+        if not isinstance(self.signs, list):
+            self.signs = [self.signs]
+
+        self.signals = [sig]
+
+        if -1 in self.signs and self.signs[self.sig.index(sig)] == -1:
+            original_name = sig + "/" + agg_sig
+            self.df.loc[:, self.signals] *= -1
+            s_copy = self.signals.copy()
+
+            self.signals = [s + "_NEG" for s in self.signals]
+            sig += "_NEG"
+            self.df.rename(
+                columns=dict(zip(s_copy, self.signals)), inplace=True
+            )
+            if sst:
+                new_name = sig + "/" + agg_sig
+                df_result.rename(
+                    index={original_name: new_name}, inplace=True
+                )
+        return df_result
 
     def __table_stats__(
         self,
