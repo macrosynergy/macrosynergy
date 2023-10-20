@@ -130,6 +130,8 @@ class SignalsReturns(SignalBase):
         else:
             sig = xcat
             xcat = [sig, ret]
+        
+        self.signals = [sig]
 
         self.manipulate_df(xcat=xcat, freq=freq, agg_sig=agg_sigs, sig=sig)
 
@@ -275,6 +277,8 @@ class SignalsReturns(SignalBase):
                     for agg_sig in agg_sigs:
                         sig_original = sig
                         xcat = [sig, ret]
+
+                        self.signals = [sig]
 
                         self.manipulate_df(
                             xcat=xcat,

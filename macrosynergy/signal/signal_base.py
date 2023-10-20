@@ -195,7 +195,9 @@ class SignalBase:
         )
 
         if self.cosp and len(self.signals) > 1:
-            dfd = self.__communal_sample__(df=dfd, signal=[xcat[0]], ret=xcat[1])
+            dfd = self.__communal_sample__(df=dfd, signal=xcat[:-1], ret=xcat[-1])
+        
+        self.dfd = dfd
 
         df = categories_df(
             dfd,
@@ -216,8 +218,6 @@ class SignalBase:
 
         if not isinstance(self.signs, list):
             self.signs = [self.signs]
-
-        self.signals = [sig]
 
         if -1 in self.signs and self.signs[self.sig.index(sig)] == -1:
             original_name = sig + "/" + agg_sig
