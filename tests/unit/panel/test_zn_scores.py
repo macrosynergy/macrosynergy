@@ -406,7 +406,7 @@ class TestAll(unittest.TestCase):
     def test_zn_scores(self):
         self.dataframe_construction()
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # Test catching neutral value error.
             df = make_zn_scores(
                 self.dfd,
@@ -417,32 +417,32 @@ class TestAll(unittest.TestCase):
                 thresh=1.5,
                 postfix="ZN",
             )
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # Test catching non-valid thresh value.
             df = make_zn_scores(
                 self.dfd,
                 "XR",
                 self.cids,
                 sequential=False,
-                neutral="std",
+                neutral="mean",
                 thresh=0.5,
                 pan_weight=1.0,
                 postfix="ZN",
             )
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # Test catching panel weight.
             df = make_zn_scores(
                 self.dfd, "XR", self.cids, sequential=False, pan_weight=1.2
             )
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(TypeError):
             # Test the iis parameter being a boolean value.
             df = make_zn_scores(
                 self.dfd, "XR", self.cids, sequential=False, pan_weight=0.2, iis=0
             )
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(TypeError):
             # Test the minimum observation parameter (non-negative Integer value).
             df = make_zn_scores(
                 self.dfd,
