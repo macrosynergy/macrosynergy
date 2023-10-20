@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  run-integration-tests:
     runs-on: ubuntu-latest
 
     steps:
