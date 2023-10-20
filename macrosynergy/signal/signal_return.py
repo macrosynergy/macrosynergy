@@ -85,6 +85,8 @@ class SignalsReturns(SignalBase):
         )
         self.df = df
 
+        self.cids = None
+
         if not self.is_list_of_strings(rets):
             self.ret = [rets]
 
@@ -97,6 +99,7 @@ class SignalsReturns(SignalBase):
 
         if len(self.signs) > len(self.sig):
             ValueError("Signs must have a length less than or equal to signals")
+        self.signals = self.sig
 
     def single_relation_table(self, ret=None, xcat=None, freq=None, agg_sigs=None):
         """
@@ -246,7 +249,7 @@ class SignalsReturns(SignalBase):
 
         type_values = ["panel", "mean_years", "mean_cids", "pr_years", "pr_cids"]
         rows_values = ["xcat", "ret", "freq", "agg_sigs"]
-        
+
         if not type in type_values:
             raise ValueError(f"Type must be one of {type_values}")
         for row in rows:
@@ -357,7 +360,6 @@ if __name__ == "__main__":
         rets=["XR", "GROWTH"],
         sigs=["CRY", "INFL"],
         signs=[1, 1],
-        cosp=True,
         freqs=["M", "Q"],
         agg_sigs=["last", "mean"],
         blacklist=black,

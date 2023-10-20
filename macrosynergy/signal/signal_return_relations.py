@@ -116,111 +116,19 @@ class SignalReturnRelations(SignalBase):
 
         self.signals = signals
 
+        self.signs = [-1 if sig_neg else 1]
+
         self.xcats = self.signals + [self.ret]
 
-        dfd = reduce_df(
-            df=df,
-            xcats=self.xcats,
-            cids=cids,
-            start=self.start,
-            end=self.end,
-            blacklist=self.blacklist,
-        )
+        self.cids = cids
 
-        # Since there may be any metrics in the DF at this point, simply apply slip to all.
-        metric_cols: List[str] = list(
-            set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
-        )
-        dfd: pd.DataFrame = self.apply_slip(
-            df=dfd,
-            slip=self.slip,
-            cids=cids,
-            xcats=self.xcats,
-            metrics=metric_cols,
-        )
-
-        # Naturally, only applicable if rival signals have been passed.
-        if self.cosp and len(signals) > 1:
-            dfd = self.__communal_sample__(df=dfd)
-
-        self.dfd = dfd
-
-        df = categories_df(
-            dfd,
-            xcats=self.xcats,
-            cids=cids,
-            val="value",
-            start=None,
-            end=None,
-            freq=self.freq,
-            blacklist=None,
-            lag=1,
-            fwin=self.fwin,
-            xcat_aggs=[self.agg_sig, "sum"],
-        )
-        self.df = df
-        self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
-
-        if sig_neg:
-            self.df.loc[:, self.signals] *= -1
-            s_copy = self.signals.copy()
-
-            self.signals = [s + "_NEG" for s in self.signals]
-            self.sig += "_NEG"
-            self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
+        self.manipulate_df(xcat=self.xcats, freq=freq, agg_sig=agg_sig, sig=sig)
 
         if len(self.signals) > 1:
             self.df_sigs = self.__rival_sigs__()
 
         self.df_cs = self.__output_table__(cs_type="cids", ret=ret, sig=self.sig)
         self.df_ys = self.__output_table__(cs_type="years", ret=ret, sig=self.sig)
-
-    def __communal_sample__(self, df: pd.DataFrame):
-        """
-        On a multi-index DataFrame, where the outer index are the cross-sections and the
-        inner index are the timestamps, exclude any row where all signals do not have
-        a realised value.
-
-        :param <pd.Dataframe> df: standardized DataFrame with the following necessary
-            columns: 'cid', 'xcat', 'real_date' and 'value'.
-
-        NB.:
-        Remove the return category from establishing the intersection to preserve the
-        maximum amount of signal data available (required because of the applied lag).
-        """
-
-        df_w = df.pivot(index=("cid", "real_date"), columns="xcat", values="value")
-
-        storage = []
-        for c, cid_df in df_w.groupby(level=0):
-            cid_df = cid_df[self.signals + [self.ret]]
-
-            final_df = pd.DataFrame(
-                data=np.empty(shape=cid_df.shape),
-                columns=cid_df.columns,
-                index=cid_df.index,
-            )
-            final_df.loc[:, :] = np.NaN
-
-            # Return category is preserved.
-            final_df.loc[:, self.ret] = cid_df[self.ret]
-
-            intersection_df = cid_df.loc[:, self.signals].droplevel(level=0)
-            # Intersection exclusively across the signals.
-            intersection_df = intersection_df.dropna(how="any")
-            s_date = intersection_df.index[0]
-            e_date = intersection_df.index[-1]
-
-            final_df.loc[
-                (c, s_date):(c, e_date), self.signals
-            ] = intersection_df.to_numpy()
-            storage.append(final_df)
-
-        df = pd.concat(storage)
-        df = df.stack().reset_index().sort_values(["cid", "xcat", "real_date"])
-        df.columns = ["cid", "real_date", "xcat", "value"]
-
-        return df[["cid", "xcat", "real_date", "value"]]
 
     def __rival_sigs__(self):
         """

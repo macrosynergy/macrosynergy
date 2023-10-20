@@ -173,7 +173,7 @@ class SignalBase:
     
     def manipulate_df(self, xcat, freq, agg_sig, sig, sst=False, df_result=None):
 
-        cids = None
+        cids = None if self.cids is None else self.cids
         dfd = reduce_df(
             self.df,
             xcats=xcat,
@@ -193,6 +193,9 @@ class SignalBase:
             xcats=xcat,
             metrics=metric_cols,
         )
+
+        if self.cosp and len(self.signals) > 1:
+            dfd = self.__communal_sample__(df=dfd)
 
         df = categories_df(
             dfd,
@@ -226,12 +229,60 @@ class SignalBase:
             self.df.rename(
                 columns=dict(zip(s_copy, self.signals)), inplace=True
             )
+            self.sig = sig
             if sst:
                 new_name = sig + "/" + agg_sig
                 df_result.rename(
                     index={original_name: new_name}, inplace=True
                 )
         return df_result
+    
+    def __communal_sample__(self, df: pd.DataFrame):
+        """
+        On a multi-index DataFrame, where the outer index are the cross-sections and the
+        inner index are the timestamps, exclude any row where all signals do not have
+        a realised value.
+
+        :param <pd.Dataframe> df: standardized DataFrame with the following necessary
+            columns: 'cid', 'xcat', 'real_date' and 'value'.
+
+        NB.:
+        Remove the return category from establishing the intersection to preserve the
+        maximum amount of signal data available (required because of the applied lag).
+        """
+
+        df_w = df.pivot(index=("cid", "real_date"), columns="xcat", values="value")
+
+        storage = []
+        for c, cid_df in df_w.groupby(level=0):
+            cid_df = cid_df[self.signals + [self.ret]]
+
+            final_df = pd.DataFrame(
+                data=np.empty(shape=cid_df.shape),
+                columns=cid_df.columns,
+                index=cid_df.index,
+            )
+            final_df.loc[:, :] = np.NaN
+
+            # Return category is preserved.
+            final_df.loc[:, self.ret] = cid_df[self.ret]
+
+            intersection_df = cid_df.loc[:, self.signals].droplevel(level=0)
+            # Intersection exclusively across the signals.
+            intersection_df = intersection_df.dropna(how="any")
+            s_date = intersection_df.index[0]
+            e_date = intersection_df.index[-1]
+
+            final_df.loc[
+                (c, s_date):(c, e_date), self.signals
+            ] = intersection_df.to_numpy()
+            storage.append(final_df)
+
+        df = pd.concat(storage)
+        df = df.stack().reset_index().sort_values(["cid", "xcat", "real_date"])
+        df.columns = ["cid", "real_date", "xcat", "value"]
+
+        return df[["cid", "xcat", "real_date", "value"]]
 
     def __table_stats__(
         self,
