@@ -195,7 +195,7 @@ class SignalBase:
         )
 
         if self.cosp and len(self.signals) > 1:
-            dfd = self.__communal_sample__(df=dfd)
+            dfd = self.__communal_sample__(df=dfd, signal=[xcat[0]], ret=xcat[1])
 
         df = categories_df(
             dfd,
@@ -237,7 +237,7 @@ class SignalBase:
                 )
         return df_result
     
-    def __communal_sample__(self, df: pd.DataFrame):
+    def __communal_sample__(self, df: pd.DataFrame, signal = None, ret = None):
         """
         On a multi-index DataFrame, where the outer index are the cross-sections and the
         inner index are the timestamps, exclude any row where all signals do not have
@@ -251,11 +251,16 @@ class SignalBase:
         maximum amount of signal data available (required because of the applied lag).
         """
 
+        if signal is None:
+            signal = self.signals
+        if ret is None:
+            ret = self.ret
+
         df_w = df.pivot(index=("cid", "real_date"), columns="xcat", values="value")
 
         storage = []
         for c, cid_df in df_w.groupby(level=0):
-            cid_df = cid_df[self.signals + [self.ret]]
+            cid_df = cid_df[signal + [ret]]
 
             final_df = pd.DataFrame(
                 data=np.empty(shape=cid_df.shape),
@@ -265,16 +270,16 @@ class SignalBase:
             final_df.loc[:, :] = np.NaN
 
             # Return category is preserved.
-            final_df.loc[:, self.ret] = cid_df[self.ret]
+            final_df.loc[:, ret] = cid_df[ret]
 
-            intersection_df = cid_df.loc[:, self.signals].droplevel(level=0)
+            intersection_df = cid_df.loc[:, signal].droplevel(level=0)
             # Intersection exclusively across the signals.
             intersection_df = intersection_df.dropna(how="any")
             s_date = intersection_df.index[0]
             e_date = intersection_df.index[-1]
 
             final_df.loc[
-                (c, s_date):(c, e_date), self.signals
+                (c, s_date):(c, e_date), signal
             ] = intersection_df.to_numpy()
             storage.append(final_df)
 

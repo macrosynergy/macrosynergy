@@ -360,6 +360,7 @@ if __name__ == "__main__":
         rets=["XR", "GROWTH"],
         sigs=["CRY", "INFL"],
         signs=[1, 1],
+        cosp=True,
         freqs=["M", "Q"],
         agg_sigs=["last", "mean"],
         blacklist=black,
