@@ -1,0 +1,24 @@
+# Ensures that a pull request title complies to quality control standards, as well as
+# some custom directives as specified by the authors.
+
+name: PR Quality Control
+
+on:
+  # Runs on pushes targeting the default branch
+  pull_request:
+    branches: [main, test, develop]
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  check-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Test PR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          python .github/scripts/check_pr.py $PR_NUMBER

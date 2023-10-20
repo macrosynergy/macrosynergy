@@ -127,6 +127,8 @@ def correl_matrix(
         The key will be the category and the value is the lag or lags. If a
         category has multiple lags applied, pass in a list of lag values. The lag factor
         will be appended to the category name in the correlation matrix.
+        If xcats_secondary is not none, this parameter will specify lags for the
+        categories in xcats.
         N.B.: Lags can include a 0 if the original should also be correlated.
     :param <dict> lags_secondary: optional dictionary of lags applied to the second set of
         categories if xcats_secondary is provided.
@@ -166,7 +168,11 @@ def correl_matrix(
     # If more than one set of xcats or cids have been supplied.
     if xcats_secondary or cids_secondary:
         if xcats_secondary:
-            xcats_secondary = xcats_secondary if isinstance(xcats_secondary, list) else [xcats_secondary]
+            xcats_secondary = (
+                xcats_secondary
+                if isinstance(xcats_secondary, list)
+                else [xcats_secondary]
+            )
         else:
             xcats_secondary = xcats
 
@@ -205,9 +211,6 @@ def correl_matrix(
         # If more than one xcat in at least one set, we will compute cross category
         # correlation.
         else:
-            if not lags_secondary:
-                lags_secondary = lags
-
             df_w1: pd.DataFrame = _transform_df_for_cross_category_corr(
                 df=df1, xcats=xcats, val=val, freq=freq, lags=lags
             )
@@ -339,9 +342,8 @@ def _transform_df_for_cross_category_corr(
     if lags is not None:
         df_w, xcat_tracker = lag_series(df_w=df_w, lags=lags, xcats=xcats)
 
-    # Order the correlation DataFrame to reflect the order of the categories
-    # parameter. Will replace the official category name with the lag appended name.
-    if lags is not None:
+        # Order the correlation DataFrame to reflect the order of the categories
+        # parameter. Will replace the official category name with the lag appended name.
         order = [
             [x] if x not in xcat_tracker.keys() else xcat_tracker[x] for x in xcats
         ]

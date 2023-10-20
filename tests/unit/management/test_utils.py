@@ -8,6 +8,7 @@ from macrosynergy.management.simulate_quantamental_data import make_test_df
 from macrosynergy.management.utils import (
     get_cid,
     get_xcat,
+    downsample_df_on_real_date,
     get_dict_max_depth,
     rec_search_dict,
     is_valid_iso_date,
@@ -344,7 +345,7 @@ class TestFunctions(unittest.TestCase):
         bad_df: pd.DataFrame = test_df.copy()
         # rename xcats to xkats
         bad_df.rename(columns={"xcat": "xkat"}, inplace=True)
-        self.assertRaises(ValueError, qdf_to_ticker_df, df=bad_df)
+        self.assertRaises(TypeError, qdf_to_ticker_df, df=bad_df)
 
     def test_ticker_df_to_qdf(self):
         cids: List[str] = ["AUD", "USD", "GBP", "EUR", "CAD"]
@@ -447,6 +448,97 @@ class TestFunctions(unittest.TestCase):
         bad_cases: List[str] = ["AUD", "USD-IR-FXXR", ""]
         for case in bad_cases:
             self.assertRaises(ValueError, get_xcat, case)
+    def test_downsample_df_on_real_date(self):
+        test_cids: List[str] = ["USD"]  # ,  "EUR", "GBP"]
+        test_xcats: List[str] = ["FX"]
+        df: pd.DataFrame = make_test_df(
+            cids=test_cids,
+            xcats=test_xcats,
+            style="any",
+            start="2010-01-01",
+            end="2010-12-31",
+        )
+
+        freq = "M"
+        agg_method = "mean"
+
+        downsampled_df: pd.DataFrame = downsample_df_on_real_date(
+            df=df, groupby_columns=["cid", "xcat"], freq=freq, agg=agg_method
+        )
+        assert downsampled_df.shape[0] == 12
+
+    def test_downsample_df_on_real_date_multiple_xcats(self):
+        test_cids: List[str] = ["USD", "EUR", "GBP"]
+        test_xcats: List[str] = ["FX"]
+        df: pd.DataFrame = make_test_df(
+            cids=test_cids,
+            xcats=test_xcats,
+            style="any",
+            start="2010-01-01",
+            end="2010-12-31",
+        )
+
+        freq = "M"
+        agg_method = "mean"
+
+        downsampled_df: pd.DataFrame = downsample_df_on_real_date(
+            df=df, groupby_columns=["cid", "xcat"], freq=freq, agg=agg_method
+        )
+        assert downsampled_df.shape[0] == 36
+
+    def test_downsample_df_on_real_date_invalid_freq(self):
+        test_cids: List[str] = ["USD"]
+        test_xcats: List[str] = ["FX"]
+        df: pd.DataFrame = make_test_df(
+            cids=test_cids,
+            xcats=test_xcats,
+            style="any",
+            start="2010-01-01",
+            end="2010-12-31",
+        )
+
+        freq = 0
+        agg_method = "mean"
+
+        with self.assertRaises(TypeError):
+            downsample_df_on_real_date(
+                df=df, groupby_columns=["cid", "xcat"], freq=freq, agg=agg_method
+            )
+
+        freq = "INVALID_FREQ"
+        agg_method = "mean"
+
+        with self.assertRaises(ValueError):
+            downsample_df_on_real_date(
+                df=df, groupby_columns=["cid", "xcat"], freq=freq, agg=agg_method
+            )
+
+    def test_downsample_df_on_real_date_invalid_agg(self):
+        test_cids: List[str] = ["USD"]
+        test_xcats: List[str] = ["FX"]
+        df: pd.DataFrame = make_test_df(
+            cids=test_cids,
+            xcats=test_xcats,
+            style="any",
+            start="2010-01-01",
+            end="2010-12-31",
+        )
+
+        freq = "M"
+        agg_method = 0
+
+        with self.assertRaises(TypeError):
+            downsample_df_on_real_date(
+                df=df, groupby_columns=["cid", "xcat"], freq=freq, agg=agg_method
+            )
+
+        freq = "M"
+        agg_method = "INVALID_AGG"
+
+        with self.assertRaises(ValueError):
+            downsample_df_on_real_date(
+                df=df, groupby_columns=["cid", "xcat"], freq=freq, agg=agg_method
+            )
 
 
 if __name__ == "__main__":

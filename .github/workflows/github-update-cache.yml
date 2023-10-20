@@ -1,0 +1,22 @@
+name: Update Cache on Develop
+
+on:
+  push:
+    branches:
+      - "develop"
+
+jobs:
+  # This workflow builds the Python package dependencies every time that the requirements
+  # files are modified and store it in cache to be accessible by all the CI in all other
+  # branches.
+  update-cache:
+    name: Update/Create cache
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Restore caches
+        uses: ./.github/actions/restore-pip-cache
+        with:
+          python-version: 3.11

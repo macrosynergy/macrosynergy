@@ -1,12 +1,13 @@
 """
-Common functions for visualizing data.
-These functions make use of the classes in the `macrosynergy.visuals` module.
-Convinient when used as:
+Function for visualising a facet grid of time line charts of one or more categories
 ```python
 import macrosynergy.visuals as msv
 ...
-msv.view.timelines( df, xcats=["FXXR", "EQXR", "IR"], 
-                    cids=["USD", "EUR", "GBP"])
+msv.view.timelines(
+    df,
+    xcats=["FXXR", "EQXR", "IR"],
+    cids=["USD", "EUR", "GBP"]
+)
 ...
 
 msv.FacetPlot(df).lineplot(cid_grid=True)
@@ -19,7 +20,7 @@ import pandas as pd
 
 from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
 from macrosynergy.visuals import FacetPlot, LinePlot
-from macrosynergy.visuals.common import Numeric
+from macrosynergy.management.types import Numeric
 
 IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
 
@@ -186,15 +187,12 @@ def timelines(
         df_mean: pd.DataFrame = pd.DataFrame()
 
     if xcat_labels:
-        if (len(xcat_labels) != len(xcats)) or (
-            cs_mean and (len(xcat_labels) != len(xcats) - 1)
-        ):
+        # when `cs_mean` is True, `xcat_labels` may have one extra label
+        if len(xcat_labels) != len(xcats) + int(cs_mean):
             raise ValueError(
                 "`xcat_labels` must have same length as `xcats` "
                 "(or one extra label if `cs_mean` is True)."
             )
-        df["xcat"] = df["xcat"].map(dict(zip(xcats, xcat_labels)))
-        xcats: List[str] = xcat_labels.copy()
 
     facet_size: Optional[Tuple[float, float]] = (
         (aspect * height, height)
@@ -277,6 +275,7 @@ def timelines(
             end=end,
         ) as fp:
             show_legend: bool = True if cross_mean_series else False
+            show_legend = show_legend or (len(xcats) > 1)
             if ncol > len(cids):
                 ncol: int = len(cids)
 
@@ -289,14 +288,13 @@ def timelines(
                 cid_grid=True,
                 title_yadjust=title_adj,
                 title_xadjust=title_xadj,
-                # compare_series=cross_mean_series if cs_mean else None,
+                compare_series=cross_mean_series if cs_mean else None,
                 facet_size=facet_size,
                 title_fontsize=title_fontsize,
                 # title_fontsize=24,
                 ncols=ncol,
                 attempt_square=square_grid,
-                # legend=show_legend,
-                legend=(len(xcats) > 1),
+                legend=show_legend,
                 legend_ncol=legend_ncol,
                 legend_labels=xcat_labels or None,
                 legend_fontsize=legend_fontsize,
@@ -304,11 +302,8 @@ def timelines(
 
 
 if __name__ == "__main__":
-    # from macrosynergy.visuals import FacetPlot
-    from macrosynergy.dev.local import LocalCache
+    from macrosynergy.visuals import FacetPlot
     from macrosynergy.management.simulate_quantamental_data import make_test_df
-
-    LOCAL_CACHE = "~/Macrosynergy/Macrosynergy - Documents/SharedData/JPMaQSTickers"
 
     cids: List[str] = [
         "USD",

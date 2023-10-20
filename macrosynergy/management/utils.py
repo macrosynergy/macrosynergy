@@ -7,6 +7,8 @@ import pandas as pd
 import numpy as np
 import datetime
 from typing import Any, List, Dict, Optional, Union, Set, Iterable, overload
+
+from macrosynergy.management.types import QuantamentalDataFrame
 import requests, requests.compat
 import warnings
 
@@ -82,7 +84,8 @@ def split_ticker(ticker: Union[str, Iterable[str]], mode: str) -> Union[str, Lis
 
     if "_" not in ticker:
         raise ValueError(
-            "Argument `ticker` must be a string" " with at least one underscore."
+            "Argument `ticker` must be a string"
+            " with at least one underscore."
             f" Received '{ticker}' instead."
         )
 
@@ -339,7 +342,11 @@ def standardise_dataframe(df: pd.DataFrame, verbose: bool = False) -> pd.DataFra
             pass
 
     non_idx_cols: list = sorted(list(set(df.columns) - set(idx_cols)))
-    return df[idx_cols + non_idx_cols]
+    return_df: pd.DataFrame = df[idx_cols + non_idx_cols]
+    assert isinstance(
+        return_df, QuantamentalDataFrame
+    ), "Failed to standardize DataFrame"
+    return return_df
 
 
 def drop_nan_series(df: pd.DataFrame, raise_warning: bool = False) -> pd.DataFrame:
@@ -387,25 +394,24 @@ def qdf_to_ticker_df(df: pd.DataFrame) -> pd.DataFrame:
     :param <pd.DataFrame> df: A standardised quantamental dataframe.
     :return <pd.DataFrame>: The converted DataFrame.
     """
-    if not isinstance(df, pd.DataFrame):
-        raise TypeError("Argument `df` must be a pandas DataFrame.")
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("Argument `df` must be a QuantamentalDataFrame.")
 
-    STD_COLS: List[str] = ["cid", "xcat", "real_date", "value"]
-    if not set(df.columns).issuperset(set(STD_COLS)):
-        df: pd.DataFrame = standardise_dataframe(df)[STD_COLS]
+    IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
+    val_col: str = list(set(df.columns) - set(IDX_COLS))[0]
 
     df["ticker"] = df["cid"] + "_" + df["xcat"]
     # drop cid and xcat
     df = (
         df.drop(columns=["cid", "xcat"])
-        .pivot(index="real_date", columns="ticker", values="value")
+        .pivot(index="real_date", columns="ticker", values=val_col)
         .rename_axis(None, axis=1)
     )
 
     return df
 
 
-def ticker_df_to_qdf(df: pd.DataFrame) -> pd.DataFrame:
+def ticker_df_to_qdf(df: pd.DataFrame) -> QuantamentalDataFrame:
     """
     Converts a wide format DataFrame (with each column representing a ticker)
     to a standardized JPMaQS DataFrame.
@@ -431,3 +437,98 @@ def ticker_df_to_qdf(df: pd.DataFrame) -> pd.DataFrame:
 
     # standardise and return
     return standardise_dataframe(df=df)
+
+def apply_slip(df: pd.DataFrame, slip: int,
+                    cids: List[str], xcats: List[str],
+                    metrics: List[str], raise_error: bool = True) -> pd.DataFrame:
+        """
+        Applied a slip, i.e. a negative lag, to the target DataFrame 
+        for the given cross-sections and categories, on the given metrics.
+        
+        :param <pd.DataFrame> target_df: DataFrame to which the slip is applied.
+        :param <int> slip: Slip to be applied.
+        :param <List[str]> cids: List of cross-sections.
+        :param <List[str]> xcats: List of categories.
+        :param <List[str]> metrics: List of metrics to which the slip is applied.
+        :return <pd.DataFrame> target_df: DataFrame with the slip applied.
+        :raises <TypeError>: If the provided parameters are not of the expected type.
+        :raises <ValueError>: If the provided parameters are semantically incorrect.
+        """
+
+        df = df.copy()
+        if not (isinstance(slip, int) and slip >= 0):
+            raise ValueError("Slip must be a non-negative integer.")
+        
+        if cids is None:
+            cids = df['cid'].unique().tolist()
+        if xcats is None:
+            xcats = df['xcat'].unique().tolist()
+
+        sel_tickers : List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+        df['tickers'] = df['cid'] + '_' + df['xcat']
+
+        if not set(sel_tickers).issubset(set(df['tickers'].unique())):
+            if raise_error:
+                raise ValueError("Tickers targetted for applying slip are not present in the DataFrame.\n"
+                f"Missing tickers: {sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}")
+            else:
+                warnings.warn("Tickers targetted for applying slip are not present in the DataFrame.\n"
+                f"Missing tickers: {sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}")
+
+        slip : int = slip.__neg__()
+        
+        df[metrics] = df.groupby('tickers')[metrics].shift(slip)
+        df = df.drop(columns=['tickers'])
+        
+        return df
+
+def downsample_df_on_real_date(
+    df: pd.DataFrame,
+    groupby_columns: List[str] = [],
+    freq: str = "M",
+    agg: str = "mean",
+):
+    """
+    Downsample JPMaQS DataFrame.
+
+    :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
+        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+    :param <List> groupby_columns: a list of columns used to group the DataFrame.
+    :param <str> freq: frequency option. Per default the correlations are calculated
+        based on the native frequency of the datetimes in 'real_date', which is business
+        daily. Downsampling options include weekly ('W'), monthly ('M'), or quarterly
+        ('Q') mean.
+    :param <str> agg: aggregation method. Must be one of "mean" (default), "median",
+        "min", "max", "first" or "last".
+
+    :return <pd.DataFrame>: the downsampled DataFrame.
+    """
+
+    if not set(groupby_columns).issubset(df.columns):
+        raise ValueError(
+            "The columns specified in 'groupby_columns' were not found in the DataFrame."
+        )
+
+    if not isinstance(freq, str):
+        raise TypeError("`freq` must be a string")
+    else:
+        freq: str = freq.upper()
+        if freq not in ["D", "W", "M", "Q", "A"]:
+            raise ValueError("`freq` must be one of 'D', 'W', 'M', 'Q' or 'A'")
+
+    if not isinstance(agg, str):
+        raise TypeError("`agg` must be a string")
+    else:
+        agg: str = agg.lower()
+        if agg not in ["mean", "median", "min", "max", "first", "last"]:
+            raise ValueError(
+                "`agg` must be one of 'mean', 'median', 'min', 'max', 'first', 'last'"
+            )
+
+    return (
+        df.set_index("real_date")
+        .groupby(groupby_columns)
+        .resample(freq)
+        .agg(agg, numeric_only=True)
+        .reset_index()
+    )
