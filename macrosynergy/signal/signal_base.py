@@ -15,6 +15,7 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.shape_dfs import reduce_df, categories_df
 from macrosynergy.management.utils import apply_slip as apply_slip_util
 
+
 class SignalBase:
     def __init__(
         self,
@@ -31,7 +32,7 @@ class SignalBase:
         slip: int = 0,
     ):
         """
-        Signal base is used as a parent class for both SignalReturns and 
+        Signal base is used as a parent class for both SignalReturns and
         SignalReturnRelations to inherit variables and methods from.
 
         :param <pd.Dataframe> df: standardized DataFrame with the following necessary
@@ -164,15 +165,14 @@ class SignalBase:
     @staticmethod
     def is_list_of_strings(variable):
         """
-        Function used to test whether a variable is a list of strings, to avoid the compiler saying a 
+        Function used to test whether a variable is a list of strings, to avoid the compiler saying a
         string is a list of characters
         """
         return isinstance(variable, list) and all(
             isinstance(item, str) for item in variable
         )
-    
-    def manipulate_df(self, xcat, freq, agg_sig, sig, sst=False, df_result=None):
 
+    def manipulate_df(self, xcat, freq, agg_sig, sig, sst=False, df_result=None):
         cids = None if self.cids is None else self.cids
         dfd = reduce_df(
             self.df,
@@ -183,8 +183,7 @@ class SignalBase:
             blacklist=self.blacklist,
         )
         metric_cols: List[str] = list(
-            set(dfd.columns.tolist())
-            - set(["real_date", "xcat", "cid"])
+            set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
         )
         dfd: pd.DataFrame = self.apply_slip(
             df=dfd,
@@ -196,7 +195,7 @@ class SignalBase:
 
         if self.cosp and len(self.signals) > 1:
             dfd = self.__communal_sample__(df=dfd, signal=xcat[:-1], ret=xcat[-1])
-        
+
         self.dfd = dfd
 
         df = categories_df(
@@ -212,9 +211,7 @@ class SignalBase:
             xcat_aggs=[agg_sig, "sum"],
         )
         self.df = df
-        self.cids = list(
-            np.sort(self.df.index.get_level_values(0).unique())
-        )
+        self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
 
         if not isinstance(self.signs, list):
             self.signs = [self.signs]
@@ -226,18 +223,14 @@ class SignalBase:
 
             self.signals = [s + "_NEG" for s in self.signals]
             sig += "_NEG"
-            self.df.rename(
-                columns=dict(zip(s_copy, self.signals)), inplace=True
-            )
+            self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
             self.sig = sig
             if sst:
                 new_name = sig + "/" + agg_sig
-                df_result.rename(
-                    index={original_name: new_name}, inplace=True
-                )
+                df_result.rename(index={original_name: new_name}, inplace=True)
         return df_result
-    
-    def __communal_sample__(self, df: pd.DataFrame, signal = None, ret = None):
+
+    def __communal_sample__(self, df: pd.DataFrame, signal=None, ret=None):
         """
         On a multi-index DataFrame, where the outer index are the cross-sections and the
         inner index are the timestamps, exclude any row where all signals do not have
@@ -278,9 +271,7 @@ class SignalBase:
             s_date = intersection_df.index[0]
             e_date = intersection_df.index[-1]
 
-            final_df.loc[
-                (c, s_date):(c, e_date), signal
-            ] = intersection_df.to_numpy()
+            final_df.loc[(c, s_date):(c, e_date), signal] = intersection_df.to_numpy()
             storage.append(final_df)
 
         df = pd.concat(storage)

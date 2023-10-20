@@ -16,6 +16,7 @@ from macrosynergy.management.shape_dfs import reduce_df, categories_df
 from macrosynergy.management.utils import apply_slip as apply_slip_util
 from macrosynergy.signal.signal_base import SignalBase
 
+
 class SignalReturnRelations(SignalBase):
 
     """

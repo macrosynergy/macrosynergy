@@ -130,7 +130,7 @@ class SignalsReturns(SignalBase):
         else:
             sig = xcat
             xcat = [sig, ret]
-        
+
         self.signals = [sig]
 
         self.manipulate_df(xcat=xcat, freq=freq, agg_sig=agg_sigs, sig=sig)
@@ -273,7 +273,12 @@ class SignalsReturns(SignalBase):
 
         # Define cs_type and type_index mappings
         cs_type_mapping = {"panel": 0, "mean_years": 1, "pr_years": 2}
-        type_mapping = {"mean_years": "years", "pr_years": "years", "mean_cids": "cids", "pr_cids": "cids"}
+        type_mapping = {
+            "mean_years": "years",
+            "pr_years": "years",
+            "mean_cids": "cids",
+            "pr_cids": "cids",
+        }
 
         for ret in rets:
             for freq in freqs:
@@ -299,7 +304,9 @@ class SignalsReturns(SignalBase):
                         type_index = cs_type_mapping.get(type, 1)
 
                         # Retrieve output table and update df_result
-                        df_out = self.__output_table__(cs_type=cs_type, ret=ret, sig=sig)
+                        df_out = self.__output_table__(
+                            cs_type=cs_type, ret=ret, sig=sig
+                        )
                         single_stat = df_out.iloc[type_index][stat]
                         df_result.iloc[j, i] = single_stat
 
