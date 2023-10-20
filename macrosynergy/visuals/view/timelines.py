@@ -20,7 +20,7 @@ import pandas as pd
 
 from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
 from macrosynergy.visuals import FacetPlot, LinePlot
-from macrosynergy.visuals.common import Numeric
+from macrosynergy.management.types import Numeric
 
 IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
 
