@@ -15,7 +15,7 @@ import os, sys
 
 sys.path.append(os.getcwd())
 
-from macrosynergy.pnl import Numeric, NoneType
+from macrosynergy.management.types import NoneType, Numeric, QuantamentalDataFrame
 from macrosynergy.management.utils import (
     is_valid_iso_date,
     standardise_dataframe,
@@ -107,7 +107,6 @@ def _gen_contract_signals(
     ctypes: List[str],
     cscales: List[Union[Numeric, str]],
     csigns: List[int],
-    sname: str,
 ) -> pd.DataFrame:
     """
     Generate contract signals from cross-section-specific signals.
@@ -130,7 +129,6 @@ def _gen_contract_signals(
         the latter variable.
     :param <List[int]> csigns: list of signs for the contract signals. These must be
         either 1 for long position or -1 for short position.
-    :param <str> sname: name of the strategy. Default is "STRAT".
 
     :return <pd.DataFrame>: dataframe with scaling applied.
     """
@@ -142,7 +140,6 @@ def _gen_contract_signals(
         ctypes=ctypes,
         cscales=cscales,
         csigns=csigns,
-        sname=sname,
     ):
         raise TypeError("Invalid arguments passed to `_gen_contract_tickers()`")
 
@@ -171,7 +168,7 @@ def _gen_contract_signals(
             else:
                 scale_var: Numeric = cscales[ix]
 
-            new_cont_name: str = _cid + "_" + ctx + "_CSIG" + "_" + sname
+            new_cont_name: str = _cid + "_" + ctx + "_CSIG"
             df_wide[new_cont_name] = df_wide[sig_col] * csigns[ix] * scale_var
             new_conts.append(new_cont_name)
 
@@ -183,18 +180,19 @@ def _gen_contract_signals(
 
 def _apply_hedge_ratios(
     df: pd.DataFrame,
+    cids: List[str],
+    sig: str,
     hbasket: List[str],
     hscales: List[Union[Numeric, str]],
-    hratios: Optional[str] = None,
-    sname: str = "STRAT",
+    hratios: str,
 ) -> pd.DataFrame:
     # Type checks
     if not _check_arg_types(
         df=df,
+        cids=cids,
         hbasket=hbasket,
         hscales=hscales,
         hratios=hratios,
-        sname=sname,
     ):
         raise TypeError("Invalid arguments passed to `apply_hedge_ratios()`")
 
@@ -202,37 +200,50 @@ def _apply_hedge_ratios(
     df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
     # check if the hedge basket is in the dataframe
 
-    expected_hratios: List[str] = [f"{cx}_{hratios}" for cx in get_cid(hbasket)]
-    found_contract_types = lambda x: any([ct.startswith(x) for ct in df_wide.columns])
-    if not all([found_contract_types(x) for x in expected_hratios]):
-        missing_hratios: List[str] = [
-            x for x in expected_hratios if not found_contract_types(x)
-        ]
-
-        warnings.warn(
-            "Some `hbasket` are missing the `hratios` in the provided dataframe."
-            f"\nMissing: {missing_hratios}",
-            UserWarning,
+    if not set(hbasket).issubset(set(df_wide.columns)):
+        raise ValueError(
+            "Some `hbasket` are missing in the provided dataframe."
+            f"\nMissing: {set(hbasket) - set(df_wide.columns)}"
         )
 
-        df_wide[missing_hratios] = pd.NA
+    # check if the CID_SIG is in the dataframe
+    expc_cid_sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
+    expc_cid_hr: List[str] = [f"{cx}_{hratios}" for cx in cids]
+    err_str: str = (
+        "Some `cids` are missing the `{sig_type}` in the provided dataframe."
+        "\nMissing: {missing_items}"
+    )
+    for sig_type, expc_sigs in zip(["sig", "hratio"], [expc_cid_sigs, expc_cid_hr]):
+        if not set(expc_sigs).issubset(set(df_wide.columns)):
+            raise ValueError(
+                err_str.format(
+                    sig_type=sig_type,
+                    missing_items=set(expc_sigs) - set(df_wide.columns),
+                )
+            )
+    hedged_assets_list: List[str] = []
+    for _cid in cids:
+        for hb_ix, _hb in enumerate(hbasket):
+            # CIDx_HBASKETx_CSIG = CIDx_SIG * CIDx_HRATIO * HBASKETx_SCALE
+            # eg:
+            # AUD_USD_EQ_CSIG = AUD_SIG * AUD_HRATIO * USD_EQ_HSCALE
 
-    # multiply each ticker by the corresponding scale and ratio
-    for ix, contractx in enumerate(hbasket):
-        scale_var: Union[Numeric, pd.Series]
-        # If the scale is a string, it must be a category ticker, else
-        # the scale is a fixed numeric value
-        if isinstance(hscales[ix], str):
-            scale_var: pd.Series = df_wide[contractx + "_" + hscales[ix]]
-        else:
-            scale_var: Numeric = hscales[ix]
+            cid_basket_pos: str = _cid + "_" + _hb + "_CSIG"
+            cid_sig: str = _cid + "_" + sig
+            cid_hr: str = _cid + "_" + hratios
 
-        ratio_str: pd.Series = contractx + "_" + hratios[ix]
+            hb_hratio: Union[Numeric, pd.Series]
+            # If the scale is a string, it must be a category ticker
+            # Otherwise it is a fixed numeric value
+            if isinstance(hscales[hb_ix], str):
+                hb_hratio: pd.Series = df_wide[_cid + "_" + hscales[hb_ix]]
+            else:
+                hb_hratio: Numeric = hscales[hb_ix]
 
-        df_wide[contractx] = df_wide[contractx] * df_wide[ratio_str] * scale_var
+            df_wide[cid_basket_pos] = df_wide[cid_sig] * df_wide[cid_hr] * hb_hratio
+            hedged_assets_list.append(cid_basket_pos)
 
-    # Only return the hedge basket
-    df_wide = df_wide[hbasket]
+    df_wide = df_wide[hedged_assets_list]
 
     return ticker_df_to_qdf(df=df_wide)
 
@@ -253,8 +264,14 @@ def _consolidate_contract_signals(
     df_cs_wide: pd.DataFrame = qdf_to_ticker_df(df=df_contract_signals)
     df_hedge_wide: pd.DataFrame = qdf_to_ticker_df(df=df_hedge_signals)
 
-    # add the columns where the name is the same
-    df_cs_wide = df_cs_wide.add(df_hedge_wide, fill_value=0)
+    extra_hedge_cols: List[str] = list(
+        set(df_hedge_wide.columns) - set(df_cs_wide.columns)
+    )
+    if len(extra_hedge_cols) > 0:
+        for colx in extra_hedge_cols:
+            df_cs_wide[colx] = np.nan
+
+    df_cs_wide = df_cs_wide.add(df_hedge_wide, fill_value=0.0)
 
     return ticker_df_to_qdf(df=df_cs_wide)
 
@@ -340,6 +357,9 @@ def contract_signals(
 
         if typex in [list, str, dict] and len(varx) == 0:
             raise ValueError(f"`{namex}` must not be an empty {str(typex)}")
+
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("`df` must be a standardised quantamental dataframe")
 
     ## Standardise and copy the dataframe
     df: pd.DataFrame = standardise_dataframe(df.copy())
