@@ -218,6 +218,7 @@ class SignalBase:
 
         if -1 in self.signs and self.signs[self.sig.index(sig)] == -1:
             original_name = sig + "/" + agg_sig
+            
             self.df.loc[:, self.signals] *= -1
             s_copy = self.signals.copy()
 
@@ -225,9 +226,11 @@ class SignalBase:
             sig += "_NEG"
             self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
             self.sig = sig
+
             if sst:
                 new_name = sig + "/" + agg_sig
                 df_result.rename(index={original_name: new_name}, inplace=True)
+
         return df_result
 
     def __communal_sample__(self, df: pd.DataFrame, signal=None, ret=None):
