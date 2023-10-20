@@ -11,6 +11,7 @@ import warnings
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.management.utils import drop_nan_series
+from macrosynergy.management.types import QuantamentalDataFrame, Numeric
 
 
 def expanding_stat(
@@ -144,30 +145,57 @@ def make_zn_scores(
     :return <pd.Dataframe>: standardized DataFrame with the zn-scores of the chosen xcat:
         'cid', 'xcat', 'real_date' and 'value'.
     """
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("The `df` parameter must be a DataFrame object.")
     df = df.copy()
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
     expected_columns = ["cid", "xcat", "real_date", "value"]
     col_error = f"The DataFrame must contain the necessary columns: {expected_columns}."
-    assert set(expected_columns).issubset(set(df.columns)), col_error
+    if not set(expected_columns).issubset(set(df.columns)):
+        raise ValueError(col_error)
 
     # --- Assertions
+    err: str = (
+        "The `neutral` parameter must be a string,"
+        " either 'mean', 'median' or 'zero'."
+    )
+    if not isinstance(neutral, str):
+        raise TypeError(err)
+    elif neutral not in ["mean", "median", "zero"]:
+        raise ValueError(err)
 
-    assert neutral in ["mean", "median", "zero"]
     if thresh is not None:
-        assert thresh > 1, "The 'thresh' parameter must be larger than 1."
-    assert 0 <= pan_weight <= 1, "The 'pan_weight' parameter must be between 0 and 1."
-    assert isinstance(iis, bool), "Boolean Object required."
+        err: str = "The `thresh` parameter must a numerical value >= 1.0."
+        if not isinstance(thresh, Numeric):
+            raise TypeError(err)
+        elif thresh < 1.0:
+            raise ValueError(err)
+
+    if not isinstance(iis, bool):
+        raise TypeError("Parameter `iis` must be a boolean.")
+
+    err = "The `pan_weight` parameter must be a numerical value between 0 and 1 (inclusive)."
+    if not isinstance(pan_weight, Numeric):
+        raise TypeError(err)
+    elif not (0 <= pan_weight <= 1):
+        raise ValueError(err)
 
     error_min = "Minimum observations must be a non-negative Integer value."
-    assert isinstance(min_obs, int) and min_obs >= 0, error_min
+    if not isinstance(min_obs, int) or min_obs < 0:
+        raise ValueError(error_min)
 
     frequencies = ["d", "w", "m", "q"]
     error_freq = (
         f"String Object required and must be one of the available frequencies: "
         f"{frequencies}."
     )
-    assert isinstance(est_freq, str) and est_freq in frequencies, error_freq
+
+    if not isinstance(est_freq, str):
+        raise TypeError(error_freq)
+    elif est_freq not in frequencies:
+        raise ValueError(error_freq)
+
     pd_freq = dict(zip(frequencies, ["B", "W-Fri", "BM", "BQ"]))
 
     # --- Prepare re-estimation dates and time-series DataFrame.
