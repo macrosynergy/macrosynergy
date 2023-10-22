@@ -7,12 +7,19 @@ Implementation of linear_composite() function as a module.
 
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Union, Optional, Tuple, Type
+from typing import List, Dict, Union, Optional, Tuple, Type, Set
 import warnings
 
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_test_df
-from macrosynergy.management.utils import is_valid_iso_date
+from macrosynergy.management.utils import (
+    is_valid_iso_date,
+    ticker_df_to_qdf,
+    qdf_to_ticker_df,
+    get_cid,
+    get_xcat,
+)
+from macrosynergy.management.types import Numeric, QuantamentalDataFrame
 
 listtypes: Tuple[Type, ...] = (list, np.ndarray, pd.Series, tuple)
 
@@ -108,7 +115,7 @@ def linear_composite_cid_agg(
     weights_df = (
         weights_df.stack(dropna=False)
         .reindex(data_df.stack(dropna=False).index)
-        .unstack(1)
+        .unstack(level=1)
     )
 
     # assert that data_df and weights_df have the same shape, index and columns
@@ -241,14 +248,12 @@ def linear_composite(
     """
 
     # df check
-    if not isinstance(df, pd.DataFrame):
-        raise TypeError("`df` must be a pandas DataFrame")
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("`df` must be a standardized Quantamental DataFrame.")
 
-    if not set(["cid", "xcat", "real_date", "value"]).issubset(set(df.columns)):
-        raise ValueError(
-            "`df` must be a standardized JPMaQS DataFrame with the necessary columns: "
-            "'cid', 'xcat', 'real_date' and 'value'."
-        )
+    # there must be a value column
+    if "value" not in df.columns:
+        raise ValueError("`df` must contain a `value` column.")
 
     if df["value"].isna().all():
         raise ValueError("`df` does not contain any valid values.")
@@ -323,7 +328,8 @@ def linear_composite(
             raise ValueError("`weights` must not contain any 0s.")
 
     elif isinstance(weights, str):
-        if weights not in df["xcat"].unique().tolist():
+        _founds_xcats: List[str] = df["xcat"].unique().tolist()
+        if (weights not in _founds_xcats) and len(set(_founds_xcats) - {weights}) == 1:
             raise ValueError(
                 "When using a category-string as `weights`"
                 " it must be present in `df`."
@@ -376,94 +382,62 @@ def linear_composite(
             "Not all `cids` have complete `xcat` data required for the calculation."
         )
 
+    df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
+
+    # Construct the warning message
+    missing_xcat_warning: str = (
+        "`cid` {cidx} does not have complete `xcat` data for {missing_xcats}."
+    )
     if _xcat_agg:
-        found_cids: List[str] = df["cid"].unique().tolist()
-        found_xcats: List[str] = df["xcat"].unique().tolist()
+        missing_xcat_warning += " These will be filled with NaNs for the calculation."
+    else:
+        missing_xcat_warning += " This `cid` will be dropped for the calculation."
 
+    found_cids: List[str] = df["cid"].unique().tolist()
+    found_xcats: List[str] = df["xcat"].unique().tolist()
+    # check the data for missing xcats
+    if _xcat_agg:
+        # Case for xcat aggregation
         for icid, cidx in enumerate(found_cids):
-            missing_xcats: List[str] = list(
-                set(found_xcats) - set(df.loc[df["cid"] == cidx, "xcat"].unique())
-            )
-            if missing_xcats:
-                # warn the user, and put in the dates with NaNs
+            # found xcats for this cid
+            _fcx_set: Set = set(df[df["cid"] == cidx]["xcat"].unique().tolist())
+            _m_xcats: List[str] = list(set(found_xcats) - _fcx_set)
+
+            if len(_m_xcats) > 0:
                 warnings.warn(
-                    f"`cid` {cidx} does not have complete `xcat` data for {missing_xcats}."
-                    " These will be filled with NaNs for the calculation."
-                )
-                # artificially add the missing xcats
-                dt_range: pd.DatetimeIndex = pd.to_datetime(df["real_date"].unique())
-                for xc in missing_xcats:
-                    df = pd.concat(
-                        [
-                            df,
-                            pd.DataFrame(
-                                data={
-                                    "cid": cidx,
-                                    "xcat": xc,
-                                    "real_date": dt_range,
-                                    "value": np.NaN,
-                                }
-                            ),
-                        ]
+                    missing_xcat_warning.format(
+                        cidx=cidx, missing_xcats=", ".join(_m_xcats)
                     )
+                )
+                # fill missing xcats with NaNs
+                for xcatx in _m_xcats:
+                    df_wide[cidx + "_" + xcatx] = np.NaN
 
-        return linear_composite_xcat_agg(
-            df=df,
-            weights=weights,
-            signs=signs,
-            normalize_weights=normalize_weights,
-            complete_xcats=complete_xcats,
-            new_xcat=new_xcat,
-        )
+                df: pd.DataFrame = ticker_df_to_qdf(df=df_wide)
+    else:
+        ...
+        for icid, cidx in enumerate(cids.copy()):
+            # found xcats for this cid
+            _fcx_set: Set = set(df[df["cid"] == cidx]["xcat"].unique().tolist())
+            _m_xcats: List[str] = list(set(found_xcats) - _fcx_set)
 
-    else:  # mode == "cid_agg" -- single xcat
-        found_cids: List[str] = df["cid"].unique().tolist()
-        found_xcats: List[str] = df["xcat"].unique().tolist()
-        if isinstance(weights, str):
-            # one of the found_xcats must be the weights, and there should be only one more
-            assert (weights in found_xcats) and len(
-                (set(found_xcats) - {weights})
-            ) == 1, (
-                "When using a category-string as `weights`"
-                " it must be present in `df` and there must be only one other `xcat`."
-            )
-
-        for icid, cidx in enumerate(
-            cids.copy()
-        ):  # copy to allow modification of `cids`
-            missing_xcats: List[str] = list(
-                set(found_xcats) - set(df.loc[df["cid"] == cidx, "xcat"].unique())
-            )
-            if missing_xcats:
+            if len(_m_xcats) > 0:
                 cids.pop(icid)
                 signs.pop(icid)
                 if isinstance(weights, list):
                     weights.pop(icid)
-                # drop from df
-                df = df.loc[df["cid"] != cidx, :]
+
+                df = df.loc[df["cid"] != cidx]
                 warnings.warn(
-                    f"`cid` {cidx} does not have complete `xcat` data for {missing_xcats}."
-                    " It will be dropped from dataframe."
+                    missing_xcat_warning.format(
+                        cidx=cidx, missing_xcats=", ".join(_m_xcats)
+                    )
                 )
 
-        if len(cids) == 0:
-            raise ValueError(
-                "No `cids` have complete `xcat` data required for the calculation."
-            )
-
-        _xcat: str = list(
-            set(found_xcats) - {weights if isinstance(weights, str) else ""}
-        )[0]
-
-        return linear_composite_cid_agg(
-            df=df,
-            xcat=_xcat,
-            weights=weights,
-            signs=signs,
-            normalize_weights=normalize_weights,
-            complete_cids=complete_cids,
-            new_cid=new_cid,
-        )
+            if len(cids) == 0:
+                raise ValueError(
+                    "Not all `cids` have complete `xcat` data required for the calculation."
+                )
 
 
 if __name__ == "__main__":
