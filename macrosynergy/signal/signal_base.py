@@ -47,25 +47,25 @@ class SignalBase:
             earliest date available will be used.
         :param <str> end: latest date in ISO format. Default is None in which case the
             latest date in the df will be used.
-        :param <dict> blacklist: cross-sections with date ranges that should be excluded from
-            the data frame. If one cross-section has several blacklist periods append numbers
-            to the cross-section code.
-        :param <str> freq: letter denoting frequency at which the series are to be sampled.
-            This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
+        :param <dict> blacklist: cross-sections with date ranges that should be excluded
+            from the data frame. If one cross-section has several blacklist periods append
+            numbers to the cross-section code.
+        :param <str> freq: letter denoting frequency at which the series are to be
+            sampled. This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
             The return series will always be summed over the sample period.
             The signal series will be aggregated according to the value of agg_sig.
         :param <str> agg_sig: aggregation method applied to the signal values in down-
             sampling. The default is "last".
-            If defined, the additional signals will also use the same aggregation method for
-            any down-sampling.
-        :param <int> fwin: forward window of return category in base periods. Default is 1.
-            This conceptually corresponds to the holding period of a position in
+            If defined, the additional signals will also use the same aggregation method
+            for any down-sampling.
+        :param <int> fwin: forward window of return category in base periods. Default is
+            1. This conceptually corresponds to the holding period of a position in
             accordance with the signal.
         :param <int> slip: implied slippage of feature availability for relationship with
             the target category. This mimics the relationship between trading signals and
-            returns, which is often characterized by a delay due to the setup of of positions.
-            Technically, this is a negative lag (early arrival) of the target category
-            in working days prior to any frequency conversion. Default is 0.
+            returns, which is often characterized by a delay due to the setup of of
+            positions. Technically, this is a negative lag (early arrival) of the target
+            category in working days prior to any frequency conversion. Default is 0.
         """
         if not isinstance(df, pd.DataFrame):
             raise TypeError(f"DataFrame expected and not {type(df)}.")
@@ -84,7 +84,8 @@ class SignalBase:
 
         if not all(col in df.columns for col in required_columns):
             raise ValueError(
-                "Dataframe columns must be of value: 'cid', 'xcat','real_date' and 'value'"
+                "Dataframe columns must be of value: 'cid', 'xcat','real_date' and  \
+                'value'"
             )
 
         freq_error = f"Frequency parameter must be one of {list(self.dic_freq.keys())}."
@@ -156,7 +157,14 @@ class SignalBase:
         metrics: List[str],
     ) -> pd.DataFrame:
         """
-        Function used to call the apply slip method that is defined in management/utils.py
+        Function used to call the apply slip method that is defined in
+        management/utils.py
+
+        :param <pd.DataFrame> df: standardised DataFrame.
+        :param <int> slip: slip value to apply to df
+        :param <List[str]> cids: list of cids in df to apply slip
+        :param <List[str]> xcats: list of xcats in df to apply slip
+        :param <List[str]> metrics: list of metrics in df to apply slip
         """
         return apply_slip_util(
             df=df, slip=slip, cids=cids, xcats=xcats, metrics=metrics, raise_error=False
@@ -165,14 +173,29 @@ class SignalBase:
     @staticmethod
     def is_list_of_strings(variable):
         """
-        Function used to test whether a variable is a list of strings, to avoid the compiler saying a
-        string is a list of characters
+        Function used to test whether a variable is a list of strings, to avoid the
+        compiler saying a string is a list of characters
         """
         return isinstance(variable, list) and all(
             isinstance(item, str) for item in variable
         )
 
     def manipulate_df(self, xcat, freq, agg_sig, sig, sst=False, df_result=None):
+        """
+        Used to manipulate the DataFrame to the desired format for the analysis. Firstly
+        reduces the dataframe to only include data outside of the blacklist and data that
+        is relevant to xcat and sig. Then applies the slip to the dataframe. It then    
+        converts the dataframe to the desired format for the analysis and checks whether
+        any negative signs should be introduced.
+
+        :param <str> xcat: xcat to be analysed
+        :param <str> freq: frequency to be used in analysis
+        :param <str> agg_sig: aggregation method to be used in analysis
+        :param <str> sig: signal to be analysed
+        :param <bool> sst: Boolean that specifies whether this function is to be used for 
+            a single statistic table.
+        :param <pd.DataFrame> df_result: DataFrame to be used for single statistic table
+        """
         cids = None if self.cids is None else self.cids
         dfd = reduce_df(
             self.df,
@@ -218,7 +241,7 @@ class SignalBase:
 
         if -1 in self.signs and self.signs[self.sig.index(sig)] == -1:
             original_name = sig + "/" + agg_sig
-            
+
             self.df.loc[:, self.signals] *= -1
             s_copy = self.signals.copy()
 
