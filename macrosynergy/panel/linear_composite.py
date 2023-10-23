@@ -10,6 +10,10 @@ import pandas as pd
 from typing import List, Dict, Union, Optional, Tuple, Type, Set
 import warnings
 
+import os, sys
+
+sys.path.append(os.getcwd())
+
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_test_df
 from macrosynergy.management.utils import (
@@ -24,159 +28,51 @@ from macrosynergy.management.types import Numeric, QuantamentalDataFrame
 listtypes: Tuple[Type, ...] = (list, np.ndarray, pd.Series, tuple)
 
 
-def _linear_composite_basic(
-    data_df: pd.DataFrame,
-    weights_df: pd.DataFrame,
-    normalize_weights: bool = True,
-    complete: bool = False,
+def _linear_composite_backend(
+    df: pd.DataFrame,
+    xcats: List[str],
+    cids: List[str],
+    weights: List[Union[Numeric, str]],
+    signs: List[int],
+    normalize_weights: bool,
     mode: str = "xcat_agg",
+    new_xcat: Optional[str] = None,
+    new_cid: Optional[str] = None,
 ):
-    """Main calculation function for linear_composite()"""
+    assert mode in [
+        "xcat_agg",
+        "cid_agg",
+    ], "`mode` must be either 'xcat_agg' or 'cid_agg'."
+    
+    XCAT_AGG: bool = mode == "xcat_agg"
 
-    # Create a boolean mask to help us work out the calcs
-    nan_mask: pd.DataFrame = data_df.isna() | weights_df.isna()
-
-    # Normalize weights (if requested)
-    if normalize_weights:
-        adj_weights_wide = weights_df[~nan_mask].div(
-            weights_df[~nan_mask].abs().sum(axis=1), axis=0
+    if (new_xcat if XCAT_AGG else new_cid) is None:
+        raise ValueError(
+            f"The new {('`xcat`' if mode == 'xcat_agg' else '`cid`')}"
+            " must be specified."
         )
-        adj_weights_wide[nan_mask] = np.NaN
 
-        assert np.allclose(
-            adj_weights_wide[~adj_weights_wide.isna().all(axis=1)].abs().sum(axis=1), 1
-        ), "Weights do not sum to 1. Normalization failed."
+    assert isinstance(
+        df, QuantamentalDataFrame
+    ), "`df` must be a QuantamentalDataFrame."
 
-        weights_df = adj_weights_wide.copy()
+    mul_var: List[str] = cids if XCAT_AGG else xcats
 
-    # Multiply the weights by the target data
-    out_df = data_df * weights_df
+    new_series = lambda x: f"{x}_{new_xcat}" if XCAT_AGG else f"{new_cid}_{x}"
 
-    # Sum across the columns
-    out_df = out_df.sum(axis="columns")
+    # df.set_index(["cid", "real_date", "xcat"][::-1])["value"].unstack(level=2)
+    FLIPPER: int = 1 if XCAT_AGG else -1
+    DF_IDX: List[str] = ["cid", "real_date", "xcat"][::FLIPPER]
+    
+    df_wide: pd.DataFrame = df.set_index(DF_IDX)["value"].unstack(level=2)
 
-    # NOTE: Using `axis` with strings, to make it more readable
-    # Remove periods with missing data (if requested) (rows with any NaNs)
-    if complete:
-        out_df[nan_mask.any(axis="columns")] = np.NaN
-
-    # put NaNs back in, as sum() removes them
-    out_df[nan_mask.all(axis="columns")] = np.NaN
-
-    # Reset index, rename columns and return
-    out_df = out_df.reset_index().rename(columns={0: "value"})
-
-    # TODO: out_df from cid_agg and xcat_agg are not in the same format...
-
-    return out_df
-
-
-def linear_composite_cid_agg(
-    df: pd.DataFrame,
-    xcat: str,
-    weights: Union[str, List[float]],
-    signs: List[float],
-    normalize_weights: bool = True,
-    complete_cids: bool = True,
-    new_cid="GLB",
-):
-    """Linear composite of various cids for a given xcat across all periods."""
-
-    if isinstance(weights, str):
-        weights_df: pd.DataFrame = df[(df["xcat"] == weights)].copy()
-        df = df[(df["xcat"] != weights)].copy()
-        weights_df = weights_df.set_index(["real_date", "cid"])["value"].unstack(
-            level=1
-        )
-        weights_df = weights_df.mul(signs, axis=1)
-
+    if XCAT_AGG:
+        ...
+        
     else:
-        weights_series: pd.Series = pd.Series(
-            np.array(weights) * np.array(signs),
-            index=df["cid"].unique().tolist(),
-        )
-        weights_df = pd.DataFrame(
-            data=[weights_series.sort_index()],
-            index=pd.to_datetime(df["real_date"].unique().tolist()),
-            columns=df["cid"].unique(),
-        )
-
-        weights_df.index.names = ["real_date"]
-        weights_df.columns.names = ["cid"]
-
-    # create the data_df
-    data_df: pd.DataFrame = (
-        df[(df["xcat"] == xcat)]
-        .set_index(["real_date", "cid"])["value"]
-        .unstack(level=1)
-    )
-    # aligning the index of weights_df to the data one
-    # so that we have the same set of dates and same set of CIDs -- thank you @mikiinterfiore
-    weights_df = (
-        weights_df.stack(dropna=False)
-        .reindex(data_df.stack(dropna=False).index)
-        .unstack(level=1)
-    )
-
-    # assert that data_df and weights_df have the same shape, index and columns
-    assert (
-        (data_df.shape == weights_df.shape)
-        and (data_df.index.equals(weights_df.index))
-        and (data_df.columns.equals(weights_df.columns))
-    ), (
-        "Unexpected shape of `data_df` and `weights_df`. "
-        "Unable to shape data for calculation."
-    )
-
-    # Calculate the linear combination
-    out_df: pd.DataFrame = _linear_composite_basic(
-        data_df=data_df,
-        weights_df=weights_df,
-        normalize_weights=normalize_weights,
-        complete=complete_cids,
-        mode="cid_agg",
-    )
-    out_df["cid"] = new_cid
-    out_df["xcat"] = xcat
-    out_df = out_df[["cid", "xcat", "real_date", "value"]]
-    return out_df
-
-
-def linear_composite_xcat_agg(
-    df: pd.DataFrame,
-    weights: List[float],
-    signs: List[float],
-    normalize_weights: bool = True,
-    complete_xcats: bool = True,
-    new_xcat="NEW",
-):
-    """Linear composite of various xcats across all cids and periods"""
-
-    # Create a weights series with the xcats as index
-    weights_series: pd.Series = pd.Series(
-        np.array(weights) * np.array(signs), index=df["xcat"].unique().tolist()
-    )
-
-    # Create wide dataframes for the data and weights
-    data_df = df.set_index(["cid", "real_date", "xcat"])["value"].unstack(level=2)
-    weights_df = pd.DataFrame(
-        data=[weights_series.sort_index()],
-        index=data_df.index,
-        columns=data_df.columns,
-    )
-
-    # Calculate the linear combination
-    out_df: pd.DataFrame = _linear_composite_basic(
-        data_df=data_df,
-        weights_df=weights_df,
-        normalize_weights=normalize_weights,
-        complete=complete_xcats,
-        mode="xcat_agg",
-    )
-    out_df["xcat"] = new_xcat
-    out_df = out_df[["cid", "xcat", "real_date", "value"]]
-    return out_df
-
+        for ix, xcatx in enumerate(xcats):
+            df_wide
+            
 
 def linear_composite(
     df: pd.DataFrame,
@@ -320,7 +216,7 @@ def linear_composite(
             )
 
         if all(isinstance(w, str) for w in weights):
-            if not _xcat_agg:
+            if _xcat_agg:
                 raise ValueError(
                     "`weights` must be a list of floats when aggregating categories "
                     "for a given cross-section."
@@ -383,7 +279,7 @@ def linear_composite(
                     signs.pop(icid)
 
     ## Reduce dataframe
-    _xcats: List[str] = xcats + (weights if category_weights else [])
+    _xcats: List[str] = list(set(xcats + (weights if category_weights else [])))
     df, remaining_xcats, remaining_cids = reduce_df(
         df=df,
         xcats=_xcats,
@@ -406,7 +302,18 @@ def linear_composite(
         )
 
     ## Calculate linear combinations
-    ...
+
+    df_out: pd.DataFrame = _linear_composite_backend(
+        df=df,
+        xcats=xcats,
+        cids=cids,
+        weights=weights,
+        signs=signs,
+        normalize_weights=normalize_weights,
+        mode=mode,
+        new_xcat=new_xcat,
+        new_cid=new_cid,
+    )
 
 
 if __name__ == "__main__":
