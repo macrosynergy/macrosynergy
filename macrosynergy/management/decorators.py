@@ -63,8 +63,8 @@ def deprecate(
         # if the message is none, use the default message
         if message is None:
             message = (
-                "{old_method} is deprecated and will be removed in a future version. "
-                "Use {new_method} instead."
+                "{old_method} was deprecated in version {deprecate_version} and will be "
+                "removed in version. Use {new_method} instead."
             )
         # else if the message does not have "{old_method}" in it, fail
         else:
