@@ -56,10 +56,9 @@ class QuantamentalDataFrameMeta(type):
     """
 
     IndexCols: List[str] = ["cid", "xcat", "real_date"]
-    IDX_COLS: List[str]  = IndexCols.copy()
 
     def __instancecheck__(cls, instance):
-        IDX_COLS = QuantamentalDataFrame.IDX_COLS
+        IDX_COLS = QuantamentalDataFrame.IndexCols
         result: bool = True
         try:
             # the try except offers a safety net in case the instance is not a pd.DataFrame
@@ -83,7 +82,7 @@ class QuantamentalDataFrameMeta(type):
             result: bool = False
         finally:
             return result
-    
+
 
 class QuantamentalDataFrame(metaclass=QuantamentalDataFrameMeta):
     """
