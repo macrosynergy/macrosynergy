@@ -20,6 +20,7 @@ except ImportError:
         from setup import VERSION as _version
     except ImportError:
         _version = "0.0.0"
+from macrosynergy.management import decorators
 
 from macrosynergy.management.utils import (
     df_tickers as _df_tickers,
@@ -28,41 +29,23 @@ from macrosynergy.management.utils import (
 )
 
 WARN_STR: str = (
-    "This method is deprecated and has been move to "
-    "`macrosynergy.management.utils.{method}()`. "
-    "This module and path will be removed in v0.1.0."
+    "`macrosynergy.management.update_df.{old_method}` has been deprecated "
+    "and moved to `macrosynergy.management.utils.{new_method}()`. "
+    "This module and path will be removed in a future release ({version})."
 )
 
 
-def deprecate(new_func):
-    def decorator(old_func):
-        @wraps(
-            old_func
-        )  # This will ensure the old function retains its name and other properties.
-        def wrapper(*args, **kwargs):
-            warnings.warn(WARN_STR.format(old_method=old_func.__name__), FutureWarning)
-            return old_func(*args, **kwargs)
-
-        # Update the signature and docstring of the old function to match the new one.
-        wrapper.__signature__ = signature(new_func)
-        wrapper.__doc__ = new_func.__doc__
-
-        return wrapper
-
-    return decorator
-
-
-@deprecate(new_func=_update_df)
+@decorators.deprecate(new_func=_update_df, deprecate_version=_version, message=WARN_STR)
 def update_df(*args, **kwargs):
     return _update_df(*args, **kwargs)
 
 
-@deprecate(new_func=_update_categories)
+@decorators.deprecate(new_func=_update_categories, deprecate_version=_version, message=WARN_STR)
 def update_categories(*args, **kwargs):
     return _update_categories(*args, **kwargs)
 
 
-@deprecate(new_func=_df_tickers)
+@decorators.deprecate(new_func=_df_tickers, deprecate_version=_version, message=WARN_STR)
 def df_tickers(*args, **kwargs):
     return _df_tickers(*args, **kwargs)
 

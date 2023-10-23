@@ -18,9 +18,101 @@ from typing import (
     get_args,
     get_origin,
 )
+from inspect import signature
 from macrosynergy.management.types import Numeric, NoneType
 import pandas as pd
 import numpy as np
+from packaging import version
+
+try:
+    from macrosynergy import __version__ as _version
+except ImportError:
+    try:
+        from setup import VERSION as _version
+    except ImportError:
+        _version = "0.0.0"
+
+
+def deprecate(
+    new_func: Callable,
+    deprecate_version: str,
+    deprecate_after: str = None,
+    message: str = None,
+):
+    """
+    Decorator for deprecating a function.
+
+    Parameters
+    :param <callable> new_func: The function that replaces the old one.
+    :param <str> deprecate_version: The version in which the old function will be deprecated.
+    :param <str> deprecate_after: The version in which the old function will be removed.
+    :param <str> message: The message to display when the old function is called. The
+        message must contain the following format strings: "{old_method}", "{version}",
+        and "{new_method}" in a string format to be replaced with the appropriate values.
+        Example: "{old_method} is deprecated and will be removed in version {version}.
+        Use {new_method} instead."
+    """
+
+    # if the message is none, use the default message
+    if message is None:
+        message = (
+            "{old_method} is deprecated and will be removed in version {deprecate_version}. "
+            "Use {new_method} instead."
+        )
+    # else if the message does not have "{old_method}" in it, fail
+    else:
+        if any(
+            [
+                fs not in message
+                for fs in ["{old_method}", "{deprecate_version}", "{new_method}"]
+            ]
+        ):
+            raise ValueError(
+                "The message must contain the following format strings: "
+                "'{old_method}', '{deprecate_version}', and '{new_method}'."
+            )
+
+    # if deprecate_after is not None, check the version
+    if deprecate_after is not None:
+        try:
+            version.parse(deprecate_after)
+        except:
+            raise ValueError(
+                f"The version in which the function is deprecated ({deprecate_after}) "
+                f"must be a valid version string."
+            )
+
+        if version.parse(deprecate_version) < version.parse(deprecate_after):
+            raise ValueError(
+                f"The version in which the old function will be removed ({deprecate_version}) "
+                f"must be greater than the version in which the function is deprecated "
+                f"({deprecate_after})."
+            )
+    else:
+        deprecate_after = _version
+
+    def decorator(old_func):
+        @wraps(old_func)
+        # This will ensure the old function retains its name and other properties.
+        def wrapper(*args, **kwargs):
+            if version.parse(deprecate_version) < version.parse(_version):
+                warnings.warn(
+                    message.format(
+                        old_method=old_func.__name__,
+                        version=deprecate_version,
+                        new_method=new_func.__name__,
+                    ),
+                    FutureWarning,
+                )
+            return old_func(*args, **kwargs)
+
+        # Update the signature and docstring of the old function to match the new one.
+        wrapper.__signature__ = signature(new_func)
+        wrapper.__doc__ = new_func.__doc__
+
+        return wrapper
+
+    return decorator
 
 
 def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
