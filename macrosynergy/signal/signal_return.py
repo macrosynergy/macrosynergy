@@ -272,7 +272,15 @@ class SignalsReturns(SignalBase):
 
         rows.sort(reverse=True)
         columns.sort(reverse=True)
-        rows_dict = {"xcat": sigs, "ret": rets, "freq": freqs, "agg_sigs": agg_sigs}
+
+        sigs_neg = []
+        for sig in sigs:
+            if self.signs[self.sig.index(sig)] == -1:
+                sigs_neg.append(sig + "_NEG")
+            else:
+                sigs_neg.append(sig)
+                
+        rows_dict = {"xcat": sigs_neg, "ret": rets, "freq": freqs, "agg_sigs": agg_sigs}
 
         rows_names, columns_names = self.set_df_labels(rows_dict, rows, columns)
 
@@ -423,7 +431,6 @@ if __name__ == "__main__":
         dfd,
         rets="XR",
         sigs="CRY",
-        signs=[-1],
         freqs="M",
         start="2002-01-01",
         agg_sigs="last",
