@@ -386,25 +386,42 @@ def drop_nan_series(df: pd.DataFrame, raise_warning: bool = False) -> pd.DataFra
     return df.reset_index(drop=True)
 
 
-def qdf_to_ticker_df(df: pd.DataFrame) -> pd.DataFrame:
+def qdf_to_ticker_df(df: pd.DataFrame, value_column: str = "value") -> pd.DataFrame:
     """
     Converts a standardized JPMaQS DataFrame to a wide format DataFrame
     with each column representing a ticker.
 
     :param <pd.DataFrame> df: A standardised quantamental dataframe.
+    :param <str> value_column: The column to be used as the value column, defaults to
+        "value". If the specified column is not present in the DataFrame, a column named
+        "value" will be used. If there is no column named "value", the first
+        column in the DataFrame will be used instead.
     :return <pd.DataFrame>: The converted DataFrame.
     """
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("Argument `df` must be a QuantamentalDataFrame.")
 
-    IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
-    val_col: str = list(set(df.columns) - set(IDX_COLS))[0]
+    if not isinstance(value_column, str):
+        raise TypeError("Argument `value_column` must be a string.")
+
+    if not value_column in df.columns:
+        cols: List[str] = list(set(df.columns) - set(QuantamentalDataFrame.IndexCols))
+        if "value" in cols:
+            value_column: str = "value"
+
+        warnings.warn(
+            f"Value column specified in `value_column` ({value_column}) "
+            f"is not present in the DataFrame. Defaulting to {cols[0]}."
+        )
+        value_column: str = cols[0]
+
+    df: pd.DataFrame = df.copy()
 
     df["ticker"] = df["cid"] + "_" + df["xcat"]
     # drop cid and xcat
     df = (
         df.drop(columns=["cid", "xcat"])
-        .pivot(index="real_date", columns="ticker", values=val_col)
+        .pivot(index="real_date", columns="ticker", values=value_column)
         .rename_axis(None, axis=1)
     )
 
@@ -438,49 +455,60 @@ def ticker_df_to_qdf(df: pd.DataFrame) -> QuantamentalDataFrame:
     # standardise and return
     return standardise_dataframe(df=df)
 
-def apply_slip(df: pd.DataFrame, slip: int,
-                    cids: List[str], xcats: List[str],
-                    metrics: List[str], raise_error: bool = True) -> pd.DataFrame:
-        """
-        Applied a slip, i.e. a negative lag, to the target DataFrame 
-        for the given cross-sections and categories, on the given metrics.
-        
-        :param <pd.DataFrame> target_df: DataFrame to which the slip is applied.
-        :param <int> slip: Slip to be applied.
-        :param <List[str]> cids: List of cross-sections.
-        :param <List[str]> xcats: List of categories.
-        :param <List[str]> metrics: List of metrics to which the slip is applied.
-        :return <pd.DataFrame> target_df: DataFrame with the slip applied.
-        :raises <TypeError>: If the provided parameters are not of the expected type.
-        :raises <ValueError>: If the provided parameters are semantically incorrect.
-        """
 
-        df = df.copy()
-        if not (isinstance(slip, int) and slip >= 0):
-            raise ValueError("Slip must be a non-negative integer.")
-        
-        if cids is None:
-            cids = df['cid'].unique().tolist()
-        if xcats is None:
-            xcats = df['xcat'].unique().tolist()
+def apply_slip(
+    df: pd.DataFrame,
+    slip: int,
+    cids: List[str],
+    xcats: List[str],
+    metrics: List[str],
+    raise_error: bool = True,
+) -> pd.DataFrame:
+    """
+    Applied a slip, i.e. a negative lag, to the target DataFrame
+    for the given cross-sections and categories, on the given metrics.
 
-        sel_tickers : List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
-        df['tickers'] = df['cid'] + '_' + df['xcat']
+    :param <pd.DataFrame> target_df: DataFrame to which the slip is applied.
+    :param <int> slip: Slip to be applied.
+    :param <List[str]> cids: List of cross-sections.
+    :param <List[str]> xcats: List of categories.
+    :param <List[str]> metrics: List of metrics to which the slip is applied.
+    :return <pd.DataFrame> target_df: DataFrame with the slip applied.
+    :raises <TypeError>: If the provided parameters are not of the expected type.
+    :raises <ValueError>: If the provided parameters are semantically incorrect.
+    """
 
-        if not set(sel_tickers).issubset(set(df['tickers'].unique())):
-            if raise_error:
-                raise ValueError("Tickers targetted for applying slip are not present in the DataFrame.\n"
-                f"Missing tickers: {sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}")
-            else:
-                warnings.warn("Tickers targetted for applying slip are not present in the DataFrame.\n"
-                f"Missing tickers: {sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}")
+    df = df.copy()
+    if not (isinstance(slip, int) and slip >= 0):
+        raise ValueError("Slip must be a non-negative integer.")
 
-        slip : int = slip.__neg__()
-        
-        df[metrics] = df.groupby('tickers')[metrics].shift(slip)
-        df = df.drop(columns=['tickers'])
-        
-        return df
+    if cids is None:
+        cids = df["cid"].unique().tolist()
+    if xcats is None:
+        xcats = df["xcat"].unique().tolist()
+
+    sel_tickers: List[str] = [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+    df["tickers"] = df["cid"] + "_" + df["xcat"]
+
+    if not set(sel_tickers).issubset(set(df["tickers"].unique())):
+        if raise_error:
+            raise ValueError(
+                "Tickers targetted for applying slip are not present in the DataFrame.\n"
+                f"Missing tickers: {sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
+            )
+        else:
+            warnings.warn(
+                "Tickers targetted for applying slip are not present in the DataFrame.\n"
+                f"Missing tickers: {sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
+            )
+
+    slip: int = slip.__neg__()
+
+    df[metrics] = df.groupby("tickers")[metrics].shift(slip)
+    df = df.drop(columns=["tickers"])
+
+    return df
+
 
 def downsample_df_on_real_date(
     df: pd.DataFrame,
