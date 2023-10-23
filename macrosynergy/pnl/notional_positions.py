@@ -19,7 +19,7 @@ from macrosynergy.management.utils import (
     apply_slip,
 )
 from macrosynergy.panel import historic_vol
-from macrosynergy.pnl import Numeric, NoneType
+from macrosynergy.management.types import Numeric, NoneType 
 
 
 def _apply_slip(

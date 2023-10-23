@@ -200,11 +200,11 @@ def _apply_hedge_ratios(
     df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
     # check if the hedge basket is in the dataframe
 
-    if not set(hbasket).issubset(set(df_wide.columns)):
-        raise ValueError(
-            "Some `hbasket` are missing in the provided dataframe."
-            f"\nMissing: {set(hbasket) - set(df_wide.columns)}"
-        )
+    # if not set(hbasket).issubset(set(df_wide.columns)):
+    #     raise ValueError(
+    #         "Some `hbasket` are missing in the provided dataframe."
+    #         f"\nMissing: {set(hbasket) - set(df_wide.columns)}"
+    #     )
 
     # check if the CID_SIG is in the dataframe
     expc_cid_sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
@@ -434,7 +434,6 @@ def contract_signals(
         ctypes=ctypes,
         cscales=cscales,
         csigns=csigns,
-        sname=sname,
     )
 
     ## Generate hedge contract signals
@@ -443,6 +442,8 @@ def contract_signals(
     if hbasket is not None:
         df_hedge_signals: pd.DataFrame = _apply_hedge_ratios(
             df=df,
+            cids=cids,
+            sig=sig,
             hbasket=hbasket,
             hscales=hscales,
             hratios=hratios,
