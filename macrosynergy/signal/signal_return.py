@@ -20,7 +20,7 @@ class SignalsReturns(SignalBase):
         corresponding to signs. Default is 1. i.e. impact is supposed to be positive.
         When -1 is chosen for one or all list elements the signal category
         that categories' values are applied in negative terms.
-    :param <int> slip: slippage of signal application in working days. This effectively 
+    :param <int> slip: slippage of signal application in working days. This effectively
         lags the signal series, i.e. values are recorded on a future date, simulating
         time it takes to adjust positions in accordance with the signal
     :param <bool> cosp: If True the comparative statistics are calculated only for the
@@ -33,7 +33,7 @@ class SignalsReturns(SignalBase):
     :param <dict> blacklist: cross-sections with date ranges that should be excluded from
         the data frame. If one cross-section has several blacklist periods append numbers
         to the cross-section code.
-    :param <str, List[str]> freqs: letters denoting all frequencies at which the series 
+    :param <str, List[str]> freqs: letters denoting all frequencies at which the series
         may be sampled.
         This must be a selection of 'D', 'W', 'M', 'Q', 'A'. Default is only 'M'.
         The return series will always be summed over the sample period.
@@ -79,11 +79,16 @@ class SignalsReturns(SignalBase):
 
         if not self.is_list_of_strings(sigs):
             self.sig = [sigs]
-            
+
         for sig in self.sig:
             assert (
-                sig in self.xcats 
+                sig in self.xcats
             ), "Primary signal must be available in the DataFrame."
+
+        for ret in self.ret:
+            assert (
+                ret in self.xcats
+            ), "Target return must be available in the DataFrame."
 
         self.xcats = self.sig + self.ret
 
@@ -119,16 +124,25 @@ class SignalsReturns(SignalBase):
             xcat = [sig, ret]
         elif isinstance(xcat, list):
             sig = xcat[0]
+        elif not isinstance(xcat, str):
+            raise TypeError("xcat must be a string")
         else:
             sig = xcat
             xcat = [sig, ret]
+
+        if not isinstance(ret, str):
+            raise TypeError("ret must be a string")
+        if not isinstance(freq, str):
+            raise TypeError("freq must be a string")
+        if not isinstance(agg_sigs, str):
+            raise TypeError("agg_sigs must be a string")
 
         self.signals = [sig]
 
         self.manipulate_df(xcat=xcat, freq=freq, agg_sig=agg_sigs, sig=sig)
 
         df_result = self.__output_table__(
-            cs_type="cids", ret=ret, sig=sig, srt=True
+            cs_type="cids", ret=ret, sig=self.new_sig, srt=True
         ).round(decimals=5)
 
         self.df = self.original_df
@@ -173,7 +187,7 @@ class SignalsReturns(SignalBase):
         xcats = [x for x in xcats if x in self.sig]
 
         index = [
-            f"{ret}/{xcat}/{agg_sig}/{freq}"
+            f"{ret}/{xcat + '_NEG' if self.signs[self.sig.index(xcat)] == -1 else xcat}/{agg_sig}/{freq}"
             for freq in freqs
             for agg_sig in agg_sigs
             for ret in rets
@@ -195,15 +209,6 @@ class SignalsReturns(SignalBase):
         df_out.index = index
 
         return df_out
-
-    def define_rows_and_columns(rows, columns):
-        """
-        Order of table will always be:
-        1) xcat
-        2) ret
-        3) freq
-        4) agg_sigs
-        """
 
     def single_statistic_table(
         self,
@@ -292,7 +297,10 @@ class SignalsReturns(SignalBase):
 
         for ret, sig, freq, agg_sig in loop_tuples:
             sig_original = sig
+            if self.signs[self.sig.index(sig)] == -1:
+                sig += "_NEG"
             hash = f"{ret}/{sig}/{freq}/{agg_sig}"
+            sig = sig_original
 
             # Prepare xcat and manipulate DataFrame
             xcat = [sig, ret]
@@ -311,7 +319,7 @@ class SignalsReturns(SignalBase):
             type_index = cs_type_mapping.get(type, 1)
 
             # Retrieve output table and update df_result
-            df_out = self.__output_table__(cs_type=cs_type, ret=ret, sig=sig)
+            df_out = self.__output_table__(cs_type=cs_type, ret=ret, sig=self.new_sig)
             single_stat = df_out.iloc[type_index][stat]
             row = self.get_rowcol(hash, rows)
             column = self.get_rowcol(hash, columns)
@@ -415,6 +423,7 @@ if __name__ == "__main__":
         dfd,
         rets="XR",
         sigs="CRY",
+        signs=[-1],
         freqs="M",
         start="2002-01-01",
         agg_sigs="last",
@@ -434,7 +443,7 @@ if __name__ == "__main__":
         dfd,
         rets=["XR", "GROWTH"],
         sigs=["CRY", "INFL"],
-        signs=[1, 1],
+        signs=[1, -1],
         cosp=True,
         freqs=["M", "Q"],
         agg_sigs=["last", "mean"],
@@ -455,7 +464,7 @@ if __name__ == "__main__":
     print(srt)
 
     mrt = sr.multiple_relations_table(
-        rets=["XR", "GROWTH"], xcats="CRY", freqs=["M", "Q"], agg_sigs=["last", "mean"]
+        rets=["XR", "GROWTH"], xcats="INFL", freqs=["M", "Q"], agg_sigs=["last", "mean"]
     )
     print(mrt)
 

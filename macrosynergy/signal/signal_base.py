@@ -113,7 +113,9 @@ class SignalBase:
         self.ret = ret
         self.freq = freq
 
-        assert isinstance(cosp, bool), f"<bool> object expected and not {type(cosp)}."
+        if not isinstance(cosp, bool): 
+            raise TypeError(f"<bool> object expected and not {type(cosp)}.")
+        
         self.cosp = cosp
         self.start = start
         self.end = end
@@ -239,7 +241,10 @@ class SignalBase:
         if not isinstance(self.signs, list):
             self.signs = [self.signs]
 
+        self.new_sig = sig
+
         if -1 in self.signs and self.signs[self.sig.index(sig)] == -1:
+            index = self.sig.index(sig)
             original_name = sig + "/" + agg_sig
 
             self.df.loc[:, self.signals] *= -1
@@ -248,7 +253,7 @@ class SignalBase:
             self.signals = [s + "_NEG" for s in self.signals]
             sig += "_NEG"
             self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
-            self.sig = sig
+            self.new_sig = sig
 
             if sst:
                 new_name = sig + "/" + agg_sig

@@ -89,7 +89,60 @@ class TestAll(unittest.TestCase):
             sr = SignalsReturns(
                 df=self.dfd,
                 rets="XR",
-                sigs=["MISSING"],
+                sigs="MISSING",
                 freqs="D",
                 blacklist=self.blacklist,
             )
+        # Test to confirm the primary signal must be present in the passed Dataframe
+        with self.assertRaises(AssertionError):
+            sr = SignalsReturns(
+                df=self.dfd,
+                rets="MISSING",
+                sigs="CRY",
+                freqs="D",
+                blacklist=self.blacklist,
+            )
+        # Test to ensure that freqs is a specified string or list of strings
+        with self.assertRaises(ValueError):
+            sr = SignalsReturns(
+                df=self.dfd,
+                rets="XR",
+                sigs="CRY",
+                freqs="X",
+                blacklist=self.blacklist,
+            )
+        # Test that cosp is set to a boolean value
+        with self.assertRaises(TypeError):
+            sr = SignalsReturns(
+                df=self.dfd,
+                rets="XR",
+                sigs="CRY",
+                freqs="D",
+                cosp="FAIL",
+                blacklist=self.blacklist,
+            )
+    
+    def test_single_relation_table(self):
+        self.dataframe_generator()
+        
+        sr = SignalsReturns(
+                df=self.dfd,
+                rets="XR",
+                sigs="CRY",
+                freqs="Q",
+                blacklist=self.blacklist,
+            )
+        
+        with self.assertRaises(TypeError):
+            sr.single_relation_table(ret=2)
+        
+        with self.assertRaises(TypeError):
+            sr.single_relation_table(sig=2)
+
+        with self.assertRaises(TypeError):
+            sr.single_relation_table(freq=2)
+        
+        with self.assertRaises(TypeError):
+            sr.single_relation_table(agg_sigs=2)
+
+        
