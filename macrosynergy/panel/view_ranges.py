@@ -105,7 +105,7 @@ def view_ranges(df: pd.DataFrame, xcats: List[str], cids: Optional[List[str]] = 
     else:
         order = None
 
-    sns.set_theme(style="darkgrid")
+    sns.set_theme(style="darkgrid", palette="colorblind")
     fig, ax = plt.subplots(figsize=size)
 
     if kind == 'bar':

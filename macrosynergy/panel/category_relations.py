@@ -502,7 +502,7 @@ class CategoryRelations(object):
 
         assert prob_est in ["pool", "map"], "prob_est must be 'pool' or 'map'"
 
-        sns.set_theme(style="whitegrid")
+        sns.set_theme(style="whitegrid", palette="colorblind")
         dfx = self.df.copy()
 
         if title is None and (self.years is None):
