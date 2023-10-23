@@ -25,6 +25,7 @@ from macrosynergy.management.utils import (
     get_xcat,
 )
 from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.management.update_df import update_df
 
 
 def _check_arg_types(
@@ -158,8 +159,8 @@ def _gen_contract_signals(
     # Multiply each cid_ctype by the corresponding scale and sign to produce the contract signal
     new_conts: List[str] = []
     for _cid in cids:
+        sig_col: str = _cid + "_" + sig
         for ix, ctx in enumerate(ctypes):
-            sig_col: str = _cid + "_" + sig
             scale_var: Union[Numeric, pd.Series]
             # If the scale is a string, it must be a category ticker
             # Otherwise it is a fixed numeric value
@@ -170,6 +171,7 @@ def _gen_contract_signals(
 
             new_cont_name: str = _cid + "_" + ctx + "_CSIG"
             df_wide[new_cont_name] = df_wide[sig_col] * csigns[ix] * scale_var
+            # For convenience, keep track of the new contract signals
             new_conts.append(new_cont_name)
 
     # Only return the new contract signals
@@ -198,13 +200,6 @@ def _apply_hedge_ratios(
 
     # Pivot the DF to wide ticker format
     df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
-    # check if the hedge basket is in the dataframe
-
-    # if not set(hbasket).issubset(set(df_wide.columns)):
-    #     raise ValueError(
-    #         "Some `hbasket` are missing in the provided dataframe."
-    #         f"\nMissing: {set(hbasket) - set(df_wide.columns)}"
-    #     )
 
     # check if the CID_SIG is in the dataframe
     expc_cid_sigs: List[str] = [f"{cx}_{sig}" for cx in cids]
@@ -426,6 +421,8 @@ def contract_signals(
                     "`hscales` must be a List of strings or numerical values"
                 )
 
+    # Actual calculation
+
     ## Generate contract signals
     df_contract_signals: pd.DataFrame = _gen_contract_signals(
         df=df,
@@ -440,6 +437,10 @@ def contract_signals(
 
     df_hedge_signals: Optional[pd.DataFrame] = None
     if hbasket is not None:
+        # Update the dataframe, as the hedge ratios and cross-section-specific signals
+        # are not present in the output from `_gen_contract_signals()`
+        df = update_df(df=df, df_add=df_contract_signals)
+
         df_hedge_signals: pd.DataFrame = _apply_hedge_ratios(
             df=df,
             cids=cids,
