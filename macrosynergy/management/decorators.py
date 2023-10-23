@@ -53,45 +53,51 @@ def deprecate(
     :return <callable>: The decorated function.
     """
 
-    # if the message is none, use the default message
-    if message is None:
-        message = (
-            "{old_method} is deprecated and will be removed in a future version. "
-            "Use {new_method} instead."
-        )
-    # else if the message does not have "{old_method}" in it, fail
-    else:
-        if any(
-            [
-                fs not in message
-                for fs in ["{old_method}", "{deprecate_version}", "{new_method}"]
-            ]
-        ):
-            raise ValueError(
-                "The message must contain the following format strings: "
-                "'{old_method}', '{deprecate_version}', and '{new_method}'."
+    def decorator(
+        old_func,
+        new_func=new_func,
+        deprecate_version=deprecate_version,
+        remove_after=remove_after,
+        message=message,
+    ):
+        # if the message is none, use the default message
+        if message is None:
+            message = (
+                "{old_method} is deprecated and will be removed in a future version. "
+                "Use {new_method} instead."
             )
+        # else if the message does not have "{old_method}" in it, fail
+        else:
+            if any(
+                [
+                    fs not in message
+                    for fs in ["{old_method}", "{deprecate_version}", "{new_method}"]
+                ]
+            ):
+                raise ValueError(
+                    "The message must contain the following format strings: "
+                    "'{old_method}', '{deprecate_version}', and '{new_method}'."
+                )
 
-    # if remove_after is not None, check the version
-    if remove_after is not None:
-        try:
-            version.parse(remove_after)
-        except:
-            raise ValueError(
-                f"The version in which the function is deprecated ({remove_after}) "
-                f"must be a valid version string."
-            )
+        # if remove_after is not None, check the version
+        if remove_after is not None:
+            try:
+                version.parse(remove_after)
+            except:
+                raise ValueError(
+                    f"The version in which the function is deprecated ({remove_after}) "
+                    f"must be a valid version string."
+                )
 
-        if version.parse(deprecate_version) < version.parse(remove_after):
-            raise ValueError(
-                f"The version in which the old function will be removed ({remove_after}) "
-                f"must be greater than the version in which it is deprecated "
-                f"({deprecate_version})."
-            )
-    else:
-        remove_after = _version
+            if version.parse(deprecate_version) < version.parse(remove_after):
+                raise ValueError(
+                    f"The version in which the old function will be removed ({remove_after}) "
+                    f"must be greater than the version in which it is deprecated "
+                    f"({deprecate_version})."
+                )
+        else:
+            remove_after = _version
 
-    def decorator(old_func):
         @wraps(old_func)
         # This will ensure the old function retains its name and other properties.
         def wrapper(*args, **kwargs):
@@ -100,6 +106,7 @@ def deprecate(
                     message.format(
                         old_method=old_func.__name__,
                         new_method=new_func.__name__,
+                        deprecate_version=deprecate_version,
                     ),
                     FutureWarning,
                 )
