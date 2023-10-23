@@ -145,4 +145,4 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(TypeError):
             sr.single_relation_table(agg_sigs=2)
 
-        
+        sr.single_relation_table()    
