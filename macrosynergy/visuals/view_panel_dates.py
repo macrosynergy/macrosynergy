@@ -5,7 +5,7 @@ from typing import List, Tuple
 from macrosynergy.management import business_day_dif
 
 
-def visual_paneldates(
+def view_panel_dates(
     df: pd.DataFrame, size: Tuple[float] = None, use_last_businessday: bool = True
 ):
     """

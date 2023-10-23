@@ -4,7 +4,7 @@ set of cross sections and extended categories.
 ```python
 import macrosynergy.visuals as msv
 ...
-msv.view.metrics(
+msv.view_metrics(
     df,
     xcats="IR",
     cids=["USD", "EUR", "GBP"],

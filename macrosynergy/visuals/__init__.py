@@ -6,7 +6,7 @@ from .heatmap import Heatmap
 from .grades import view_grades
 from .metrics import view_metrics
 from .timelines import timelines
-from .visual_paneldates import visual_paneldates
+from .view_panel_dates import view_panel_dates
 from .correlation import view_correlation
 from .ranges import view_ranges
 
@@ -17,7 +17,7 @@ FUNCTIONS = [
     "timelines",
     "view_metrics",
     "view_grades",
-    "visual_paneldates",
+    "view_panel_dates",
     "view_correlation",
     "view_ranges"
 ]

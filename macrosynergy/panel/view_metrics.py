@@ -10,7 +10,6 @@ from macrosynergy.management.simulate_quantamental_data import make_test_df
 import macrosynergy.visuals as msv
 
 
-
 def view_metrics(
     df: pd.DataFrame,
     xcat: str,

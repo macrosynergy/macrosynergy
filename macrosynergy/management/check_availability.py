@@ -156,7 +156,7 @@ def visual_paneldates(
         last business day before today as the end date. Default is True.
 
     """
-    msv.visual_paneldates(df=df, size=size, use_last_businessday=use_last_businessday)
+    msv.view_panel_dates(df=df, size=size, use_last_businessday=use_last_businessday)
 
 
 if __name__ == "__main__":
