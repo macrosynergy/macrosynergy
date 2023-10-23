@@ -188,6 +188,8 @@ def linear_composite(
     start: Optional[str] = None,
     end: Optional[str] = None,
     blacklist: Dict[str, List[str]] = None,
+    agg_cids: bool = True,
+    agg_xcats: Optional[bool] = None,
     complete_xcats: bool = False,
     complete_cids: bool = False,
     new_xcat="NEW",
@@ -281,8 +283,6 @@ def linear_composite(
         xcats: List[str] = [xcats]
     elif isinstance(xcats, listtypes):
         xcats: List[str] = list(xcats)
-    else:
-        raise TypeError("`xcats` must be a string or list of strings.")
 
     # check xcats in df
     if not set(xcats).issubset(set(df["xcat"].unique().tolist())):
@@ -293,10 +293,9 @@ def linear_composite(
         cids: List[str] = df["cid"].unique().tolist()
     elif isinstance(cids, str):
         cids: List[str] = [cids]
-    elif isinstance(cids, listtypes):
-        cids: List[str] = list(cids)
     else:
-        raise TypeError("`cids` must be a string or list of strings.")
+        if not isinstance(cids, listtypes):
+            raise TypeError("`cids` must be a string or list of strings.")
 
     # check cids in df
     if not set(cids).issubset(set(df["cid"].unique().tolist())):
@@ -305,68 +304,86 @@ def linear_composite(
     _xcat_agg: bool = len(xcats) > 1
     mode: str = "xcat_agg" if _xcat_agg else "cid_agg"
 
-    if _xcat_agg and isinstance(weights, str):
-        raise ValueError(
-            "When aggregating over xcats, `weights` "
-            "must be a list of floats or integers."
-        )
-
-    # check weights
+    ## Check weights
     expc_weights_len: int = len(xcats) if _xcat_agg else len(cids)
-
     if weights is None:
-        weights: List[float] = list(np.ones(expc_weights_len) / expc_weights_len)
-    elif isinstance(weights, listtypes):
-        weights: List[float] = list(weights)
-        if not all([isinstance(x, (float, int)) for x in weights]):
-            raise TypeError("`weights` must be a list of floats or integers.")
-        if len(weights) != expc_weights_len:
-            raise ValueError(
-                "`weights` must be a list of floats of the same length as `xcats`."
-            )
-        if any([x == 0.0 for x in weights]):
-            raise ValueError("`weights` must not contain any 0s.")
-
+        weights: List[float] = [1 / expc_weights_len] * expc_weights_len
     elif isinstance(weights, str):
-        _founds_xcats: List[str] = df["xcat"].unique().tolist()
-        if (weights not in _founds_xcats) and len(set(_founds_xcats) - {weights}) == 1:
-            raise ValueError(
-                "When using a category-string as `weights`"
-                " it must be present in `df`."
-            )
-    else:
-        raise TypeError("`weights` must be a list of floats, a string or None.")
+        weights: List[str] = [weights] * expc_weights_len
 
-    # check signs
+    if isinstance(weights, listtypes):
+        if len(weights) != expc_weights_len:
+            _temp: str = "cross-sections." if _xcat_agg else "categories."
+            err_str: str = (
+                f"`weights` must be a list of the same length as the number of "
+                f"{_temp} ({expc_weights_len})."
+            )
+
+        if all(isinstance(w, str) for w in weights):
+            if not _xcat_agg:
+                raise ValueError(
+                    "`weights` must be a list of floats when aggregating categories "
+                    "for a given cross-section."
+                )
+
+    ## Validate weights
+    category_weights: bool = False
+    if isinstance(weights, list):
+        if all(isinstance(w, Numeric) for w in weights):
+            # normalize weights
+            if normalize_weights:
+                sw: float = sum(weights)
+                weights: List[float] = [w / sw for w in weights]
+        elif all(isinstance(w, str) for w in weights):
+            # check weights in df
+            if not set(weights).issubset(set(df["xcat"].unique().tolist())):
+                raise ValueError("Not all `weights` are available in `df`.")
+            category_weights: bool = True
+        else:
+            raise TypeError("`weights` must be a list of floats or strings.")
+
+    ## Check signs
     if signs is None:
-        signs: List[float] = [1.0] * (len(xcats) if _xcat_agg else len(cids))
+        signs: List[float] = [1] * expc_weights_len
     elif isinstance(signs, listtypes):
-        signs: List[float] = list(signs)
         if len(signs) != expc_weights_len:
             raise ValueError(
-                "`signs` must be a list of floats of the same length as `xcats`."
+                f"`signs` must be a list of length {expc_weights_len} or a single "
+                "float when aggregating a category across cross-sections."
             )
-        if not all([x in [-1.0, 1.0] for x in signs]):
-            if any([x == 0.0 for x in signs]):
-                raise ValueError("`signs` must not contain any 0s.")
-            warnings.warn(
-                "`signs` must be a list of +1s or -1s. "
-                "`signs` will be coerced to +1s/-1s. "
-                "(i.e. signs ← abs(signs) / signs)"
-            )
-
-            signs: List[float] = [abs(x) / x for x in signs]
-
+        if not all(isinstance(s, Numeric) for s in signs):
+            raise TypeError("`signs` must be a list of floats.")
     else:
-        raise TypeError("`signs` must be a list of floats/ints or None.")
+        raise TypeError("`signs` must be a list of floats.")
 
-    _xcats: List[str] = xcats + ([weights] if isinstance(weights, str) else [])
+    ## Normalize signs
+    if not all(s in [-1, 1] for s in signs):
+        # are there any 0s?
+        if any(s == 0 for s in signs):
+            raise ValueError("`signs` must not contain any 0s.")
+        warnings.warn(
+            "`signs` must be a list of +1s or -1s. "
+            "`signs` will be coerced to +1s/-1s. "
+            "(i.e. signs ← abs(signs) / signs)"
+        )
+        signs: List[float] = [abs(s) / s for s in signs]
 
-    df: pd.DataFrame
-    remaining_xcats: List[str]
-    remaining_cids: List[str]
-    # NOTE: the "remaining_*" variables will not be in the same order as the input cids/xcats.
-    # Do not used these for index based lookups/operations.
+    if category_weights:
+        for icid, cid in enumerate(cids.copy()):
+            for xc, w in zip(xcats, weights):
+                _fxc: pd.Series = (df["cid"] == cid) & (df["xcat"].isin([xc, w]))
+                if not (set([xc, w]) == set(df[_fxc]["xcat"].unique().tolist())):
+                    warnings.warn(
+                        f"`{w}` not available for {cid} in {xc}. "
+                        f"Removing {cid} from `cids`."
+                    )
+                    # remove the cid, weifht and sign
+                    cids.pop(icid)
+                    weights.pop(icid)
+                    signs.pop(icid)
+
+    ## Reduce dataframe
+    _xcats: List[str] = xcats + (weights if category_weights else [])
     df, remaining_xcats, remaining_cids = reduce_df(
         df=df,
         xcats=_xcats,
@@ -382,62 +399,14 @@ def linear_composite(
             "Not all `cids` have complete `xcat` data required for the calculation."
         )
 
-    df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
+    if df.empty:
+        raise ValueError(
+            "The arguments provided do not yield any data when filtered "
+            "using reduce_df()."
+        )
 
-    # Construct the warning message
-    missing_xcat_warning: str = (
-        "`cid` {cidx} does not have complete `xcat` data for {missing_xcats}."
-    )
-    if _xcat_agg:
-        missing_xcat_warning += " These will be filled with NaNs for the calculation."
-    else:
-        missing_xcat_warning += " This `cid` will be dropped for the calculation."
-
-    found_cids: List[str] = df["cid"].unique().tolist()
-    found_xcats: List[str] = df["xcat"].unique().tolist()
-    # check the data for missing xcats
-    if _xcat_agg:
-        # Case for xcat aggregation
-        for icid, cidx in enumerate(found_cids):
-            # found xcats for this cid
-            _fcx_set: Set = set(df[df["cid"] == cidx]["xcat"].unique().tolist())
-            _m_xcats: List[str] = list(set(found_xcats) - _fcx_set)
-
-            if len(_m_xcats) > 0:
-                warnings.warn(
-                    missing_xcat_warning.format(
-                        cidx=cidx, missing_xcats=", ".join(_m_xcats)
-                    )
-                )
-                # fill missing xcats with NaNs
-                for xcatx in _m_xcats:
-                    df_wide[cidx + "_" + xcatx] = np.NaN
-
-                df: pd.DataFrame = ticker_df_to_qdf(df=df_wide)
-    else:
-        ...
-        for icid, cidx in enumerate(cids.copy()):
-            # found xcats for this cid
-            _fcx_set: Set = set(df[df["cid"] == cidx]["xcat"].unique().tolist())
-            _m_xcats: List[str] = list(set(found_xcats) - _fcx_set)
-
-            if len(_m_xcats) > 0:
-                cids.pop(icid)
-                signs.pop(icid)
-                if isinstance(weights, list):
-                    weights.pop(icid)
-
-                df = df.loc[df["cid"] != cidx]
-                warnings.warn(
-                    missing_xcat_warning.format(
-                        cidx=cidx, missing_xcats=", ".join(_m_xcats)
-                    )
-                )
-
-            if len(cids) == 0:
-                raise ValueError(
-                    "Not all `cids` have complete `xcat` data required for the calculation."
-                )
+    ## Calculate linear combinations
+    ...
 
 
 if __name__ == "__main__":
