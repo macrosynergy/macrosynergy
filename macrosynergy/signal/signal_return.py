@@ -11,18 +11,18 @@ from macrosynergy.signal.signal_base import SignalBase
 class SignalsReturns(SignalBase):
     """
     Class for analysing and visualizing signal and a return series.
+
     :param <pd.Dataframe> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcat', 'real_date' and 'value.
     :param <str, List[str]> rets: one or several target return categories.
     :param <str, List[str]> sigs: list of signal categories to be considered
     :param <int, List[int[> signs: list of signs (direction of impact) to be applied,
-        corresponding to signs.
-        Default is 1. i.e. impact is supposed to be positive.
+        corresponding to signs. Default is 1. i.e. impact is supposed to be positive.
         When -1 is chosen for one or all list elements the signal category
-        hat category is taken in negative terms.
-    :param <int> slip: slippage of signal application in days. This effectively lags
-    the signal series, i.e. values are recorded on a future date, simulating
-    time it takes to trade on the signal
+        that categories' values are applied in negative terms.
+    :param <int> slip: slippage of signal application in working days. This effectively 
+        lags the signal series, i.e. values are recorded on a future date, simulating
+        time it takes to adjust positions in accordance with the signal
     :param <bool> cosp: If True the comparative statistics are calculated only for the
         "communal sample periods", i.e. periods and cross-sections that have values
         for all compared signals. Default is False.
@@ -33,9 +33,9 @@ class SignalsReturns(SignalBase):
     :param <dict> blacklist: cross-sections with date ranges that should be excluded from
         the data frame. If one cross-section has several blacklist periods append numbers
         to the cross-section code.
-    :param <str, List[str]> freqs: letters denoting frequency at which the series are to
-        be sampled.
-        This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
+    :param <str, List[str]> freqs: letters denoting all frequencies at which the series 
+        may be sampled.
+        This must be a selection of 'D', 'W', 'M', 'Q', 'A'. Default is only 'M'.
         The return series will always be summed over the sample period.
         The signal series will be aggregated according to the values of `agg_sigs`.
     :param <str, List[str]> agg_sigs: aggregation method applied to the signal values in
@@ -90,14 +90,14 @@ class SignalsReturns(SignalBase):
 
     def single_relation_table(self, ret=None, xcat=None, freq=None, agg_sigs=None):
         """
-        Computes all the statistics for a specific panel specified by the arguments:
+        Computes all the statistics for one specific signal-return relation:
 
-        :param <str> ret: target return category
-        :param <str> xcat: signal category to be considered
-        :param <str> freq: letter denoting frequency at which the series are to
-        be sampled.
-        This must be one of 'D', 'W', 'M', 'Q', 'A'.
-        If not specified uses the freq stored in the class.
+        :param <str> ret: single target return category
+        :param <str> xcat: single signal category to be considered
+        :param <str> freq: letter denoting single frequency at which the series will
+            be sampled.
+            This must be one of the frequencies selected for the class.
+            If not specified uses the freq stored in the class.
         :param <str> agg_sigs: aggregation method applied to the signal values in
         down-sampling.
         """
