@@ -12,42 +12,50 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.panel.make_relative_value import make_relative_value
 from functools import wraps, update_wrapper
 from inspect import signature
-
-try:
-    from macrosynergy import __version__ as _version
-except ImportError:
-    try:
-        from setup import VERSION as _version
-    except ImportError:
-        _version = "0.0.0"
 from macrosynergy.management import decorators
 
 from macrosynergy.management.utils import (
     df_tickers as _df_tickers,
     update_df as _update_df,
     update_categories as _update_categories,
+    update_tickers as _update_tickers,
 )
+
+DEPRECATION_VERSION: str = "0.1.1"
 
 WARN_STR: str = (
     "`macrosynergy.management.update_df.{old_method}` has been deprecated "
     "and moved to `macrosynergy.management.utils.{new_method}()`. "
-    "This module and path will be removed in a future release ({version})."
+    "This module and path will be removed in a future release ({deprecate_version})."
 )
 
 
-@decorators.deprecate(new_func=_update_df, deprecate_version=_version, message=WARN_STR)
+@decorators.deprecate(
+    new_func=_update_df, deprecate_version=DEPRECATION_VERSION, message=WARN_STR
+)
 def update_df(*args, **kwargs):
     return _update_df(*args, **kwargs)
 
 
-@decorators.deprecate(new_func=_update_categories, deprecate_version=_version, message=WARN_STR)
+@decorators.deprecate(
+    new_func=_update_categories, deprecate_version=DEPRECATION_VERSION, message=WARN_STR
+)
 def update_categories(*args, **kwargs):
     return _update_categories(*args, **kwargs)
 
 
-@decorators.deprecate(new_func=_df_tickers, deprecate_version=_version, message=WARN_STR)
+@decorators.deprecate(
+    new_func=_df_tickers, deprecate_version=DEPRECATION_VERSION, message=WARN_STR
+)
 def df_tickers(*args, **kwargs):
     return _df_tickers(*args, **kwargs)
+
+
+@decorators.deprecate(
+    new_func=_update_tickers, deprecate_version=DEPRECATION_VERSION, message=WARN_STR
+)
+def update_tickers(*args, **kwargs):
+    return _update_tickers(*args, **kwargs)
 
 
 if __name__ == "__main__":
