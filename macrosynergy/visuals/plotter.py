@@ -196,14 +196,12 @@ class Plotter(metaclass=PlotterMetaClass):
         self.end: str = end
 
         self.backend: ModuleType
-        if backend.startswith("m"):
-            self.backend = plt
-            sns.set_style("darkgrid")
-
-        elif ...:
-            ...
-        else:
+        accepted_backends: List[str] = ["matplotlib", "plt", "mpl"]
+        if not backend.strip().lower() in accepted_backends:
             raise NotImplementedError(f"Backend `{backend}` is not supported.")
+
+        self.backend = plt
+        sns.set_theme(style="darkgrid", palette="colorblind")
 
     def __enter__(self):
         return self
