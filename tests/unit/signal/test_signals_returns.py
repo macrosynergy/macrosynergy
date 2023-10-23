@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 from typing import List, Dict
 
+
 class TestAll(unittest.TestCase):
     def dataframe_generator(self):
         """
@@ -68,9 +69,27 @@ class TestAll(unittest.TestCase):
         # Test the Class's constructor.
 
         # First, test the assertions.
-        # Testing that the dataframe is actually of type Pandas.DataFrame 
+        # Testing that the dataframe is actually of type Pandas.DataFrame
         with self.assertRaises(TypeError):
             sr = SignalsReturns(
                 df="STRING", rets="XR", sigs="CRY", freqs="D", blacklist=self.blacklist
             )
-        
+        # Testing that the dataframe has the correct columns
+        with self.assertRaises(ValueError):
+            sr = SignalsReturns(
+                df=pd.DataFrame(index=["FAIL"], columns=["FAIL"]),
+                rets="XR",
+                sigs="CRY",
+                freqs="D",
+                blacklist=self.blacklist,
+            )
+        print(self.dfd)
+        # Test to confirm the primary signal must be present in the passed Dataframe
+        with self.assertRaises(AssertionError):
+            sr = SignalsReturns(
+                df=self.dfd,
+                rets="XR",
+                sigs=["MISSING"],
+                freqs="D",
+                blacklist=self.blacklist,
+            )

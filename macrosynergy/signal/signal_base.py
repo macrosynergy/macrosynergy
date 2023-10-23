@@ -69,6 +69,14 @@ class SignalBase:
         """
         if not isinstance(df, pd.DataFrame):
             raise TypeError(f"DataFrame expected and not {type(df)}.")
+        
+        required_columns = ["cid", "xcat", "real_date", "value"]
+        
+        if not all(col in df.columns for col in required_columns):
+            raise ValueError(
+                "Dataframe columns must be of value: 'cid', 'xcat','real_date' and  \
+                'value'"
+            )
 
         df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
@@ -79,14 +87,6 @@ class SignalBase:
             "Q": "quarterly",
             "A": "annual",
         }
-
-        required_columns = ["cid", "xcat", "real_date", "value"]
-
-        if not all(col in df.columns for col in required_columns):
-            raise ValueError(
-                "Dataframe columns must be of value: 'cid', 'xcat','real_date' and  \
-                'value'"
-            )
 
         freq_error = f"Frequency parameter must be one of {list(self.dic_freq.keys())}."
         if isinstance(freq, list):

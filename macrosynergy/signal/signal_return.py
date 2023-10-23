@@ -79,6 +79,11 @@ class SignalsReturns(SignalBase):
 
         if not self.is_list_of_strings(sigs):
             self.sig = [sigs]
+            
+        for sig in self.sig:
+            assert (
+                sig in self.xcats 
+            ), "Primary signal must be available in the DataFrame."
 
         self.xcats = self.sig + self.ret
 
