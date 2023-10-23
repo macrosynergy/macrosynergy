@@ -455,8 +455,7 @@ if __name__ == "__main__":
     print(mrt)
 
     sst = sr.single_statistic_table(
-        stat="bal_accuracy",
-        type="pr_years",
+        stat="accuracy",
         rows=["xcat"],
         columns=["ret", "freq", "agg_sigs"],
     )
