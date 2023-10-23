@@ -2,7 +2,7 @@
 Module for analysing and visualizing signal and a return series.
 """
 import pandas as pd
-from typing import List, Union
+from typing import List, Union, Tuple, Dict
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.signal.signal_base import SignalBase
@@ -191,6 +191,15 @@ class SignalsReturns(SignalBase):
 
         return df_out
 
+    def define_rows_and_columns(rows, columns):
+        """
+        Order of table will always be:
+        1) xcat
+        2) ret
+        3) freq
+        4) agg_sigs
+        """
+
     def single_statistic_table(
         self,
         stat: str,
@@ -248,15 +257,16 @@ class SignalsReturns(SignalBase):
             if not column in rows_values:  # Rows values is the same as columns values
                 raise ValueError(f"Columns must only contain {rows_values}")
 
-        column_names = [ret + "/" + freq for ret in self.ret for freq in freqs]
-        row_names = [sig + "/" + agg_sig for sig in self.sig for agg_sig in agg_sigs]
-
-        df_result = pd.DataFrame(columns=column_names, index=row_names)
-
         rets = self.ret if isinstance(self.ret, list) else [self.ret]
         sigs = self.sig if isinstance(self.sig, list) else [self.sig]
 
-        i = 0
+        rows.sort(reverse=True)
+        columns.sort(reverse=True)
+        rows_dict = {"xcat": sigs, "ret": rets, "freq": freqs, "agg_sigs": agg_sigs}
+
+        rows_names, columns_names = self.set_df_labels(rows_dict, rows, columns)
+
+        df_result = pd.DataFrame(columns=columns_names, index=rows_names)
 
         # Define cs_type and type_index mappings
         cs_type_mapping = {"panel": 0, "mean_years": 1, "pr_years": 2}
@@ -267,44 +277,107 @@ class SignalsReturns(SignalBase):
             "pr_cids": "cids",
         }
 
-        for ret in rets:
-            for freq in freqs:
-                j = 0
-                for sig in sigs:
-                    for agg_sig in agg_sigs:
-                        sig_original = sig
+        loop_tuples: List[Tuple[str, str, str, str]] = [
+            (ret, sig, freq, agg_sig)
+            for ret in rets
+            for sig in sigs
+            for freq in freqs
+            for agg_sig in agg_sigs
+        ]
 
-                        # Prepare xcat and manipulate DataFrame
-                        xcat = [sig, ret]
-                        self.signals = [sig]
-                        self.manipulate_df(
-                            xcat=xcat,
-                            freq=freq,
-                            agg_sig=agg_sig,
-                            sig=sig,
-                            sst=True,
-                            df_result=df_result,
-                        )
+        for ret, sig, freq, agg_sig in loop_tuples:
+            sig_original = sig
+            hash = f"{ret}/{sig}/{freq}/{agg_sig}"
 
-                        # Determine cs_type and type_index
-                        cs_type = type_mapping.get(type, "cids")
-                        type_index = cs_type_mapping.get(type, 1)
+            # Prepare xcat and manipulate DataFrame
+            xcat = [sig, ret]
+            self.signals = [sig]
+            self.manipulate_df(
+                xcat=xcat,
+                freq=freq,
+                agg_sig=agg_sig,
+                sig=sig,
+                sst=True,
+                df_result=df_result,
+            )
 
-                        # Retrieve output table and update df_result
-                        df_out = self.__output_table__(
-                            cs_type=cs_type, ret=ret, sig=sig
-                        )
-                        single_stat = df_out.iloc[type_index][stat]
-                        df_result.iloc[j, i] = single_stat
+            # Determine cs_type and type_index
+            cs_type = type_mapping.get(type, "cids")
+            type_index = cs_type_mapping.get(type, 1)
 
-                        # Reset self.df and sig to original values
-                        self.df = self.original_df
-                        sig = sig_original
+            # Retrieve output table and update df_result
+            df_out = self.__output_table__(cs_type=cs_type, ret=ret, sig=sig)
+            single_stat = df_out.iloc[type_index][stat]
+            row = self.get_rowcol(hash, rows)
+            column = self.get_rowcol(hash, columns)
+            df_result[column][row] = single_stat
 
-                        j += 1
-                i += 1
+            # Reset self.df and sig to original values
+            self.df = self.original_df
+            sig = sig_original
 
         return df_result
+
+    def set_df_labels(self, rows_dict, rows, columns):
+        """
+        Creates two lists of strings that will be used as the row and column labels for
+        the resulting dataframe.
+
+        :param <dict> rows_dict: dictionary containing the each value for each of the
+        xcat, ret, freq and agg_sigs categories.
+        :param <List[str]> rows: list of strings specifying which of the categories are
+        included in the rows of the dataframe.
+        :param <List[str]> columns: list of strings specifying which of the categories
+        are included in the columns of the dataframe.
+        """
+        if len(rows) == 2:
+            rows_names = [
+                a + "/" + b for a in rows_dict[rows[0]] for b in rows_dict[rows[1]]
+            ]
+            columns_names = [
+                a + "/" + b
+                for a in rows_dict[columns[0]]
+                for b in rows_dict[columns[1]]
+            ]
+        elif len(rows) == 1:
+            rows_names = rows_dict[rows[0]]
+            columns_names = [
+                a + "/" + b + "/" + c
+                for a in rows_dict[columns[0]]
+                for b in rows_dict[columns[1]]
+                for c in rows_dict[columns[2]]
+            ]
+        elif len(columns) == 1:
+            rows_names = [
+                a + "/" + b + "/" + c
+                for a in rows_dict[rows[0]]
+                for b in rows_dict[rows[1]]
+                for c in rows_dict[rows[2]]
+            ]
+            columns_names = rows_dict[columns[0]]
+
+        return rows_names, columns_names
+
+    def get_rowcol(self, hash, rowcols):
+        """
+        Calculates which row/column the hash belongs to.
+
+        :param <str> hash: hash of the statistic.
+        :param <List[str]> rowcols: list of strings specifying which of the categories
+        are in the rows/columns of the dataframe.
+        """
+        rowcol = ""
+        if "xcat" in rowcols:
+            rowcol += hash.split("/")[1] + "/"
+        if "ret" in rowcols:
+            rowcol += hash.split("/")[0] + "/"
+        if "freq" in rowcols:
+            rowcol += hash.split("/")[2] + "/"
+        if "agg_sigs" in rowcols:
+            rowcol += hash.split("/")[3] + "/"
+
+        result = rowcol[:-1]
+        return result
 
 
 if __name__ == "__main__":
@@ -381,5 +454,10 @@ if __name__ == "__main__":
     )
     print(mrt)
 
-    sst = sr.single_statistic_table(stat="bal_accuracy", type="pr_years")
+    sst = sr.single_statistic_table(
+        stat="bal_accuracy",
+        type="pr_years",
+        rows=["xcat"],
+        columns=["ret", "freq", "agg_sigs"],
+    )
     print(sst)
