@@ -1,3 +1,9 @@
+"""
+A set of tools for cross-validation of panel data.
+
+**NOTE: This module is under development, and is not yet ready for production use.**
+"""
+
 import numpy as np
 import pandas as pd 
 import datetime
