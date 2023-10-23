@@ -5,6 +5,8 @@ Macrosynergy package and JPMaQS dataframes/data.
 
 import datetime
 import itertools
+
+from macrosynergy.management.types import QuantamentalDataFrame
 import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload
 
@@ -342,7 +344,11 @@ def standardise_dataframe(df: pd.DataFrame, verbose: bool = False) -> pd.DataFra
             pass
 
     non_idx_cols: list = sorted(list(set(df.columns) - set(idx_cols)))
-    return df[idx_cols + non_idx_cols]
+    return_df: pd.DataFrame = df[idx_cols + non_idx_cols]
+    assert isinstance(
+        return_df, QuantamentalDataFrame
+    ), "Failed to standardize DataFrame"
+    return return_df
 
 
 def drop_nan_series(df: pd.DataFrame, raise_warning: bool = False) -> pd.DataFrame:
@@ -390,25 +396,24 @@ def qdf_to_ticker_df(df: pd.DataFrame) -> pd.DataFrame:
     :param <pd.DataFrame> df: A standardised quantamental dataframe.
     :return <pd.DataFrame>: The converted DataFrame.
     """
-    if not isinstance(df, pd.DataFrame):
-        raise TypeError("Argument `df` must be a pandas DataFrame.")
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("Argument `df` must be a QuantamentalDataFrame.")
 
-    STD_COLS: List[str] = ["cid", "xcat", "real_date", "value"]
-    if not set(df.columns).issuperset(set(STD_COLS)):
-        df: pd.DataFrame = standardise_dataframe(df)[STD_COLS]
+    IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
+    val_col: str = list(set(df.columns) - set(IDX_COLS))[0]
 
     df["ticker"] = df["cid"] + "_" + df["xcat"]
     # drop cid and xcat
     df = (
         df.drop(columns=["cid", "xcat"])
-        .pivot(index="real_date", columns="ticker", values="value")
+        .pivot(index="real_date", columns="ticker", values=val_col)
         .rename_axis(None, axis=1)
     )
 
     return df
 
 
-def ticker_df_to_qdf(df: pd.DataFrame) -> pd.DataFrame:
+def ticker_df_to_qdf(df: pd.DataFrame) -> QuantamentalDataFrame:
     """
     Converts a wide format DataFrame (with each column representing a ticker)
     to a standardized JPMaQS DataFrame.
