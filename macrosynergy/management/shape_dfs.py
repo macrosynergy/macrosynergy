@@ -11,9 +11,16 @@ from macrosynergy.management.simulate_quantamental_data import make_qdf
 from itertools import product
 
 
-def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None,
-              start: str = None, end: str = None, blacklist: dict = None,
-              out_all: bool = False, intersect: bool = False):
+def reduce_df(
+    df: pd.DataFrame,
+    xcats: List[str] = None,
+    cids: List[str] = None,
+    start: str = None,
+    end: str = None,
+    blacklist: dict = None,
+    out_all: bool = False,
+    intersect: bool = False,
+):
     """
     Filter DataFrame by xcats and cids and notify about missing xcats and cids.
 
@@ -41,38 +48,38 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
     dfx = df.copy()
 
     if start is not None:
-        dfx = dfx[dfx['real_date'] >= pd.to_datetime(start)]
+        dfx = dfx[dfx["real_date"] >= pd.to_datetime(start)]
 
     if end is not None:
-        dfx = dfx[dfx['real_date'] <= pd.to_datetime(end)]
+        dfx = dfx[dfx["real_date"] <= pd.to_datetime(end)]
 
     if blacklist is not None:
         masks = []
         for key, value in blacklist.items():
-            filt1 = dfx['cid'] == key[:3]
-            filt2 = dfx['real_date'] >= pd.to_datetime(value[0])
-            filt3 = dfx['real_date'] <= pd.to_datetime(value[1])
+            filt1 = dfx["cid"] == key[:3]
+            filt2 = dfx["real_date"] >= pd.to_datetime(value[0])
+            filt3 = dfx["real_date"] <= pd.to_datetime(value[1])
             combined_mask = filt1 & filt2 & filt3
             masks.append(combined_mask)
-            
+
         if masks:
             combined_mask = pd.concat(masks, axis=1).any(axis=1)
             dfx = dfx[~combined_mask]
 
-    xcats_in_df = dfx['xcat'].unique()
+    xcats_in_df = dfx["xcat"].unique()
     if xcats is None:
         xcats = sorted(xcats_in_df)
     else:
         xcats = [xcat for xcat in xcats if xcat in xcats_in_df]
 
-    dfx = dfx[dfx['xcat'].isin(xcats)]
+    dfx = dfx[dfx["xcat"].isin(xcats)]
 
     if intersect:
-        df_uns = dict(dfx.groupby('xcat')['cid'].unique())
+        df_uns = dict(dfx.groupby("xcat")["cid"].unique())
         df_uns = {k: set(v) for k, v in df_uns.items()}
         cids_in_df = list(set.intersection(*list(df_uns.values())))
     else:
-        cids_in_df = dfx['cid'].unique()
+        cids_in_df = dfx["cid"].unique()
 
     if cids is None:
         cids = sorted(cids_in_df)
@@ -81,7 +88,7 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
         cids = [cid for cid in cids if cid in cids_in_df]
 
         cids = set(cids).intersection(cids_in_df)
-        dfx = dfx[dfx['cid'].isin(cids)]
+        dfx = dfx[dfx["cid"].isin(cids)]
 
     if out_all:
         return dfx.drop_duplicates(), xcats, sorted(list(cids))
@@ -89,8 +96,13 @@ def reduce_df(df: pd.DataFrame, xcats: List[str] = None,  cids: List[str] = None
         return dfx.drop_duplicates()
 
 
-def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str = None,
-                        end: str = None, blacklist: dict = None):
+def reduce_df_by_ticker(
+    df: pd.DataFrame,
+    ticks: List[str] = None,
+    start: str = None,
+    end: str = None,
+    blacklist: dict = None,
+):
     """
     Filter dataframe by xcats and cids and notify about missing xcats and cids
 
@@ -128,7 +140,7 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
             combined_mask = pd.concat(masks, axis=1).any(axis=1)
             dfx = dfx[~combined_mask]
 
-    dfx["ticker"] = dfx["cid"] + '_' + dfx["xcat"]
+    dfx["ticker"] = dfx["cid"] + "_" + dfx["xcat"]
     ticks_in_df = dfx["ticker"].unique()
     if ticks is None:
         ticks = sorted(ticks_in_df)
@@ -138,6 +150,7 @@ def reduce_df_by_ticker(df: pd.DataFrame, ticks: List[str] = None,  start: str =
     dfx = dfx[dfx["ticker"].isin(ticks)]
 
     return dfx.drop_duplicates()
+
 
 def aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
     """
@@ -151,17 +164,19 @@ def aggregation_helper(dfx: pd.DataFrame, xcat_agg: str):
 
     """
 
-    dfx = dfx.groupby(['xcat', 'cid', 'custom_date'])
+    dfx = dfx.groupby(["xcat", "cid", "custom_date"])
     dfx = dfx.aggregate(xcat_agg, numeric_only=True).reset_index()
 
-    if 'real_date' in dfx.columns:
-        dfx = dfx.drop(['real_date'], axis=1)
+    if "real_date" in dfx.columns:
+        dfx = dfx.drop(["real_date"], axis=1)
     dfx = dfx.rename(columns={"custom_date": "real_date"})
 
     return dfx
 
-def expln_df(df_w: pd.DataFrame, xpls: List[str], agg_meth: str, sum_condition: bool,
-             lag: int):
+
+def expln_df(
+    df_w: pd.DataFrame, xpls: List[str], agg_meth: str, sum_condition: bool, lag: int
+):
     """
     Produces the explanatory column(s) for the custom DataFrame.
 
@@ -177,7 +192,6 @@ def expln_df(df_w: pd.DataFrame, xpls: List[str], agg_meth: str, sum_condition: 
 
     dfw_xpls = pd.DataFrame()
     for xpl in xpls:
-
         if not sum_condition:
             xpl_col = df_w[xpl].agg(agg_meth).astype(dtype=np.float32)
         else:
@@ -190,11 +204,21 @@ def expln_df(df_w: pd.DataFrame, xpls: List[str], agg_meth: str, sum_condition: 
 
     return dfw_xpls
 
-def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
-                  val: str = 'value', start: str = None, end: str = None,
-                  blacklist: dict = None, years: int = None, freq: str = 'M',
-                  lag: int = 0, fwin: int = 1, xcat_aggs: List[str] = ['mean', 'mean']):
 
+def categories_df(
+    df: pd.DataFrame,
+    xcats: List[str],
+    cids: List[str] = None,
+    val: str = "value",
+    start: str = None,
+    end: str = None,
+    blacklist: dict = None,
+    years: int = None,
+    freq: str = "M",
+    lag: int = 0,
+    fwin: int = 1,
+    xcat_aggs: List[str] = ["mean", "mean"],
+):
     """
     In principle, create custom two-categories DataFrame with appropriate frequency and,
     if applicable, lags.
@@ -240,62 +264,80 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     columns will reflect the order of the categories list.
     """
 
-    frq_options = ['D', 'W', 'M', 'Q', 'A']
+    frq_options = ["D", "W", "M", "Q", "A"]
     frq_error = f"Frequency parameter must be one of the stated options, {frq_options}."
     assert freq in frq_options, frq_error
-    frq_dict = dict(zip(frq_options, ['B', 'W-Fri', 'BM', 'BQ', 'BA']))
+    frq_dict = dict(zip(frq_options, ["B", "W-Fri", "BM", "BQ", "BA"]))
 
     assert isinstance(xcats, list), f"<list> expected and not {type(xcats)}."
     assert all([isinstance(c, str) for c in xcats]), "List of categories expected."
-    xcat_error = "The minimum requirement is that a single dependent and explanatory " \
-                 "variable are included."
+    xcat_error = (
+        "The minimum requirement is that a single dependent and explanatory "
+        "variable are included."
+    )
     assert len(xcats) >= 2, xcat_error
 
     aggs_error = "List of strings, outlining the aggregation methods, expected."
     assert isinstance(xcat_aggs, list), aggs_error
     assert all([isinstance(a, str) for a in xcat_aggs]), aggs_error
-    aggs_len = "Only two aggregation methods required. The first will be used for all " \
-               "explanatory category(s)."
+    aggs_len = (
+        "Only two aggregation methods required. The first will be used for all "
+        "explanatory category(s)."
+    )
     assert len(xcat_aggs) == 2, aggs_len
 
-    assert not (years is not None) & (lag != 0), "Lags cannot be applied to year groups."
+    assert not (years is not None) & (
+        lag != 0
+    ), "Lags cannot be applied to year groups."
     if years is not None:
         assert isinstance(start, str), "Year aggregation requires a start date."
 
-        no_xcats = "If the data is aggregated over a multi-year timeframe, only two " \
-                   "categories are permitted."
+        no_xcats = (
+            "If the data is aggregated over a multi-year timeframe, only two "
+            "categories are permitted."
+        )
         assert len(xcats) == 2, no_xcats
 
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, blacklist, out_all=True)
 
     metric = ["value", "grading", "mop_lag", "eop_lag"]
-    val_error = "The column of interest must be one of the defined JPMaQS metrics, " \
-                f"{metric}, but received {val}."
+    val_error = (
+        "The column of interest must be one of the defined JPMaQS metrics, "
+        f"{metric}, but received {val}."
+    )
     assert val in metric, val_error
     avbl_cols = list(df.columns)
-    assert val in avbl_cols, f"The passed column name, {val}, must be present in the " \
-                             f"received DataFrame. DataFrame contains {avbl_cols}."
+    assert val in avbl_cols, (
+        f"The passed column name, {val}, must be present in the "
+        f"received DataFrame. DataFrame contains {avbl_cols}."
+    )
 
     # Reduce the columns in the DataFrame to the necessary columns:
     # ['cid', 'xcat', 'real_date'] + [val] (name of column that contains the
     # values of interest: "value", "grading", "mop_lag", "eop_lag").
-    col_names = ['cid', 'xcat', 'real_date', val]
+    col_names = ["cid", "xcat", "real_date", val]
 
     df_output = []
     if years is None:
-
-        df_w = df.pivot(index=('cid', 'real_date'), columns='xcat', values=val)
+        df_w = df.pivot(index=("cid", "real_date"), columns="xcat", values=val)
 
         dep = xcats[-1]
         # The possibility of multiple explanatory variables.
         xpls = xcats[:-1]
 
-        df_w = df_w.groupby([pd.Grouper(level='cid'),
-                             pd.Grouper(level='real_date', freq=frq_dict[freq])])
+        df_w = df_w.groupby(
+            [
+                pd.Grouper(level="cid"),
+                pd.Grouper(level="real_date", freq=frq_dict[freq]),
+            ]
+        )
 
         dfw_xpls = expln_df(
-            df_w=df_w, xpls=xpls, agg_meth=xcat_aggs[0],
-            sum_condition=(xcat_aggs[0] == "sum"), lag=lag
+            df_w=df_w,
+            xpls=xpls,
+            agg_meth=xcat_aggs[0],
+            sum_condition=(xcat_aggs[0] == "sum"),
+            lag=lag,
         )
 
         # Handles for falsified zeros. Following the frequency conversion, if the
@@ -319,7 +361,7 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
     else:
         s_year = pd.to_datetime(start).year
         start_year = s_year
-        e_year = df['real_date'].max().year + 1
+        e_year = df["real_date"].max().year + 1
 
         grouping = int((e_year - s_year) / years)
         remainder = (e_year - s_year) % years
@@ -338,57 +380,65 @@ def categories_df(df: pd.DataFrame, xcats: List[str], cids: List[str] = None,
         list_y_groups = list(year_groups.keys())
 
         translate_ = lambda year: list_y_groups[int((year % start_year) / years)]
-        df['real_date'] = pd.to_datetime(df['real_date'], errors='coerce')
-        df['custom_date'] = df['real_date'].dt.year.apply(translate_)
+        df["real_date"] = pd.to_datetime(df["real_date"], errors="coerce")
+        df["custom_date"] = df["real_date"].dt.year.apply(translate_)
 
-        dfx_list = [df[df['xcat'] == xcats[0]],
-                    df[df['xcat'] == xcats[1]]]
+        dfx_list = [df[df["xcat"] == xcats[0]], df[df["xcat"] == xcats[1]]]
         df_agg = list(map(aggregation_helper, dfx_list, xcat_aggs))
         df_output.extend([d[col_names] for d in df_agg])
 
         dfc = pd.concat(df_output)
-        dfc = dfc.pivot(index=('cid', 'real_date'), columns='xcat',
-                        values=val)
+        dfc = dfc.pivot(index=("cid", "real_date"), columns="xcat", values=val)
 
     # Adjusted to account for multiple signals requested. If the DataFrame is
     # two-dimensional, signal & a return, NaN values will be handled inside other
     # functionality, as categories_df() is simply a support function. If the parameter
     # how is set to "any", a potential unnecessary loss of data on certain categories
     # could arise.
-    return dfc.dropna(axis=0, how='all')
+    return dfc.dropna(axis=0, how="all")
 
 
 if __name__ == "__main__":
+    cids = ["NZD", "AUD", "GBP", "CAD"]
+    xcats = ["XR", "CRY", "GROWTH", "INFL"]
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD"] = ["2000-01-01", "2020-12-31", 0.1, 1]
+    df_cids.loc["CAD"] = ["2001-01-01", "2020-11-30", 0, 1]
+    df_cids.loc["GBP"] = ["2002-01-01", "2020-11-30", 0, 2]
+    df_cids.loc["NZD"] = ["2002-01-01", "2020-09-30", -0.1, 2]
 
-    cids = ['NZD', 'AUD', 'GBP', 'CAD']
-    xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
-    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
-                                                'sd_mult'])
-    df_cids.loc['AUD'] = ['2000-01-01', '2020-12-31', 0.1, 1]
-    df_cids.loc['CAD'] = ['2001-01-01', '2020-11-30', 0, 1]
-    df_cids.loc['GBP'] = ['2002-01-01', '2020-11-30', 0, 2]
-    df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
+    df_xcats = pd.DataFrame(
+        index=xcats,
+        columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+    )
+    df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY"] = ["2000-01-01", "2020-10-30", 1, 2, 0.95, 1]
+    df_xcats.loc["GROWTH"] = ["2001-01-01", "2020-10-30", 1, 2, 0.9, 1]
+    df_xcats.loc["INFL"] = ["2001-01-01", "2020-10-30", 1, 2, 0.8, 0.5]
 
-    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
-                                                  'sd_mult', 'ar_coef', 'back_coef'])
-    df_xcats.loc['XR'] = ['2000-01-01', '2020-12-31', 0.1, 1, 0, 0.3]
-    df_xcats.loc['CRY'] = ['2000-01-01', '2020-10-30', 1, 2, 0.95, 1]
-    df_xcats.loc['GROWTH'] = ['2001-01-01', '2020-10-30', 1, 2, 0.9, 1]
-    df_xcats.loc['INFL'] = ['2001-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
-
-    black = {'AUD': ['2000-01-01', '2003-12-31'], 'GBP': ['2018-01-01', '2100-01-01']}
+    black = {"AUD": ["2000-01-01", "2003-12-31"], "GBP": ["2018-01-01", "2100-01-01"]}
 
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    dfd_x1 = reduce_df(dfd, xcats=xcats[:-1], cids=cids[0],
-                       start='2012-01-01', end='2018-01-31')
+    dfd_x1 = reduce_df(
+        dfd, xcats=xcats[:-1], cids=cids[0], start="2012-01-01", end="2018-01-31"
+    )
 
     tickers = [cid + "_XR" for cid in cids]
     dfd_xt = reduce_df_by_ticker(dfd, ticks=tickers, blacklist=black)
 
     # Testing categories_df().
     dfc1 = categories_df(
-        dfd, xcats=['GROWTH', 'CRY'], cids=cids, val="value", freq='W', lag=1,
-        xcat_aggs=['mean', 'mean'], start='2000-01-01', blacklist=black
+        dfd,
+        xcats=["GROWTH", "CRY"],
+        cids=cids,
+        val="value",
+        freq="W",
+        lag=1,
+        xcat_aggs=["mean", "mean"],
+        start="2000-01-01",
+        blacklist=black,
     )
