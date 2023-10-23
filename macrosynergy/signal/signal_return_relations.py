@@ -4,16 +4,9 @@ Module for analysing and visualizing signal and a return series.
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn import metrics as skm
-from scipy import stats
 from typing import List, Union, Tuple
-from datetime import timedelta
-from collections import defaultdict
-import warnings
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.shape_dfs import reduce_df, categories_df
-from macrosynergy.management.utils import apply_slip as apply_slip_util
 from macrosynergy.signal.signal_base import SignalBase
 
 
