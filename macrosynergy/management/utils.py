@@ -388,25 +388,42 @@ def drop_nan_series(df: pd.DataFrame, raise_warning: bool = False) -> pd.DataFra
     return df.reset_index(drop=True)
 
 
-def qdf_to_ticker_df(df: pd.DataFrame) -> pd.DataFrame:
+def qdf_to_ticker_df(df: pd.DataFrame, value_column: str = "value") -> pd.DataFrame:
     """
     Converts a standardized JPMaQS DataFrame to a wide format DataFrame
     with each column representing a ticker.
 
     :param <pd.DataFrame> df: A standardised quantamental dataframe.
+    :param <str> value_column: The column to be used as the value column, defaults to
+        "value". If the specified column is not present in the DataFrame, a column named
+        "value" will be used. If there is no column named "value", the first
+        column in the DataFrame will be used instead.
     :return <pd.DataFrame>: The converted DataFrame.
     """
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("Argument `df` must be a QuantamentalDataFrame.")
 
-    IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
-    val_col: str = list(set(df.columns) - set(IDX_COLS))[0]
+    if not isinstance(value_column, str):
+        raise TypeError("Argument `value_column` must be a string.")
+
+    if not value_column in df.columns:
+        cols: List[str] = list(set(df.columns) - set(QuantamentalDataFrame.IndexCols))
+        if "value" in cols:
+            value_column: str = "value"
+
+        warnings.warn(
+            f"Value column specified in `value_column` ({value_column}) "
+            f"is not present in the DataFrame. Defaulting to {cols[0]}."
+        )
+        value_column: str = cols[0]
+
+    df: pd.DataFrame = df.copy()
 
     df["ticker"] = df["cid"] + "_" + df["xcat"]
     # drop cid and xcat
     df = (
         df.drop(columns=["cid", "xcat"])
-        .pivot(index="real_date", columns="ticker", values=val_col)
+        .pivot(index="real_date", columns="ticker", values=value_column)
         .rename_axis(None, axis=1)
     )
 
