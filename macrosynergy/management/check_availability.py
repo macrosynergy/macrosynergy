@@ -13,7 +13,7 @@ import seaborn as sns
 from typing import List, Tuple
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.management.utils import reduce_df
 
 
 def missing_in_df(df: pd.DataFrame, xcats: List[str] = None, cids: List[str] = None):
