@@ -467,6 +467,7 @@ if __name__ == "__main__":
     mrt = sr.multiple_relations_table()
     sst = sr.single_statistic_table(stat="accuracy")
 
+    print("SRT HERE")
     print(srt)
     print(mrt)
     print(sst)
