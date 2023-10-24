@@ -206,6 +206,63 @@ class TestAll(unittest.TestCase):
             )
 
         # Test table outputted is correct
+        data = {
+            "cid": [
+                "AUD",
+                "AUD",
+                "AUD",
+                "AUD",
+                "AUD",
+                "AUD",
+                "AUD",
+                "AUD",
+                "AUD",
+                "AUD",
+            ],
+            "xcat": ["XR", "XR", "XR", "XR", "XR", "CRY", "CRY", "CRY", "CRY", "CRY"],
+            "real_date": [
+                "1990-01-01",
+                "1990-01-02",
+                "1990-01-03",
+                "1990-01-04",
+                "1990-01-05",
+                "1990-01-01",
+                "1990-01-02",
+                "1990-01-03",
+                "1990-01-04",
+                "1990-01-05",
+            ],
+            "value": [1.0, 1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0, 1.0],
+        }
+
+        test_df = pd.DataFrame(data)
+
+        sr = SignalsReturns(
+            df=test_df,
+            rets="XR",
+            sigs="CRY",
+            freqs="D",
+            blacklist=None,
+            slip=0,
+        )
+
+        srt = sr.single_relation_table()
+
+        correct_stats = [
+            0.25,
+            0.25,
+            0.5,
+            0.75,
+            0.5,
+            0.0,
+            -0.57735,
+            0.42265,
+            -0.57735,
+            0.31731,
+        ]
+
+        for val1, val2 in zip(srt.iloc[0].values.tolist(), correct_stats):
+            self.assertTrue(np.isclose(val1, val2))
 
     def test_multiple_relation_table(self):
         self.dataframe_generator()
@@ -367,7 +424,6 @@ class TestAll(unittest.TestCase):
         return 0
 
     def test_get_rowcol(self):
-
         self.dataframe_generator()
 
         rets = ["XR", "GROWTH"]
@@ -390,8 +446,6 @@ class TestAll(unittest.TestCase):
 
         self.assertTrue(sr.get_rowcol(hash, rows) == "CRY/XR/Q")
         self.assertTrue(sr.get_rowcol(hash, columns) == "mean")
-
-
 
 
 if __name__ == "__main__":
