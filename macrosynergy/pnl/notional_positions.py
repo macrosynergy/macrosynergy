@@ -17,9 +17,11 @@ from macrosynergy.management.utils import (
     standardise_dataframe,
     is_valid_iso_date,
     apply_slip,
+    qdf_to_ticker_df,
+    ticker_df_to_qdf,
 )
 from macrosynergy.panel import historic_vol
-from macrosynergy.management.types import Numeric, NoneType 
+from macrosynergy.management.types import Numeric, NoneType, QuantamentalDataFrame
 
 
 def _apply_slip(
@@ -27,7 +29,7 @@ def _apply_slip(
     slip: int,
     cids: List[str],
     xcats: List[str],
-    metrics: List[str],
+    metrics: List[str] = ["value"],
 ) -> pd.DataFrame:
     """
     Applies a slip using the function `apply_slip()` to a dataframe with contract
