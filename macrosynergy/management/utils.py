@@ -301,6 +301,16 @@ def common_cids(df: pd.DataFrame, xcats: List[str]):
 
 
 def standardise_dataframe(df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
+    """
+    Applies the standard JPMaQS Quantamental DataFrame format to a DataFrame.
+
+    :param <pd.DataFrame> df: The DataFrame to be standardized.
+    :param <bool> verbose: Whether to print warnings if the DataFrame is not in the
+        correct format.
+    :return <pd.DataFrame>: The standardized DataFrame.
+    :raises <TypeError>: If the input is not a pandas DataFrame.
+    :raises <ValueError>: If the input DataFrame is not in the correct format.
+    """
     idx_cols: List[str] = ["cid", "xcat", "real_date"]
     commonly_used_cols: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
     if not set(df.columns).issuperset(set(idx_cols)):
@@ -675,7 +685,6 @@ def update_categories(df: pd.DataFrame, df_add):
         df = pd.concat([df, df_add], axis=0, ignore_index=True)
 
     return df
-
 
 
 def reduce_df(
@@ -1063,6 +1072,3 @@ def categories_df(
     # how is set to "any", a potential unnecessary loss of data on certain categories
     # could arise.
     return dfc.dropna(axis=0, how="all")
-
-
-
