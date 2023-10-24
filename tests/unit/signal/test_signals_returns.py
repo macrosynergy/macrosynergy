@@ -264,6 +264,18 @@ class TestAll(unittest.TestCase):
         for val1, val2 in zip(srt.iloc[0].values.tolist(), correct_stats):
             self.assertTrue(np.isclose(val1, val2))
 
+        # Check when signs are negative
+
+        sr = SignalsReturns(
+            df=test_df,
+            rets="XR",
+            sigs="CRY",
+            freqs="D",
+            signs=-1,
+            blacklist=None,
+            slip=0,
+        )    
+
     def test_multiple_relation_table(self):
         self.dataframe_generator()
 
