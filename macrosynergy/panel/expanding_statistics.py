@@ -7,9 +7,31 @@ import pandas as pd
 import numpy as np
 from itertools import accumulate
 from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management import decorators
+
+from macrosynergy.management.utils import (
+    expanding_mean_with_nan as _expanding_mean_with_nan,
+)
+
+DEPRECATION_VERSION: str = "0.1.1"
+
+WARN_STR: str = (
+    "`macrosynergy.panel.{old_method}` was deprecated in version {deprecate_version} "
+    "and moved to `macrosynergy.management.utils.{new_method}()`. "
+    "This module and path will be removed in a future release."
+)
 
 
-from macrosynergy.management.utils import expanding_mean_with_nan
+@decorators.deprecate(
+    new_func=_expanding_mean_with_nan,
+    deprecate_version=DEPRECATION_VERSION,
+    message=WARN_STR,
+)
+def expanding_mean_with_nan(*args, **kwargs):
+    """
+    Deprecated. Moved to `macrosynergy.management.utils.expanding_mean_with_nan()`.
+    """
+    return _expanding_mean_with_nan(*args, **kwargs)
 
 
 if __name__ == "__main__":
