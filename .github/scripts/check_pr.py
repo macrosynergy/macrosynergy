@@ -82,7 +82,7 @@ def is_user_in_organization(username: str, org: str = ORGANIZATION) -> bool:
     :param <str> org: The organization to check against.
     :return <bool>: True if the user is a member, False otherwise.
     """
-    url = f"https://api.github.com/orgs/{org}/members
+    url = f"https://api.github.com/orgs/{org}/members"
     #url = f"https://api.github.com/orgs/{org}/members/{username}"
     try:
         api_request(url)
@@ -253,13 +253,16 @@ def _check_required_reviewers(
     pr_info: Dict[str, Any],
 ) -> bool:
     assert bool(body)
-    RR_STR: str = "REQUIRED-REVIEW-@"
+    RR_STR: str = "-MUST-REVIEW"
 
     if RR_STR not in body:
         return True
 
     fidx, sidx = _get_pattern_idx(body=body, pattern=RR_STR, numeric=True)
     # get all the chars between fidx and sidx
+    print(body)
+    print(fidx)
+    print(sidx)
     required_reviewer: str = body[sidx:].strip()
     # check if the user is a member of the organization
     is_member: bool = is_user_in_organization(username=required_reviewer)
