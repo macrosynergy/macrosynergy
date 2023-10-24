@@ -83,7 +83,6 @@ def is_user_in_organization(username: str, org: str = ORGANIZATION) -> bool:
     :return <bool>: True if the user is a member, False otherwise.
     """
     url = f"https://api.github.com/orgs/{org}/members/{username}"
-    raise ValueError(url)
     try:
         api_request(url)
         return True  # If the request is successful, the user is a member
@@ -261,6 +260,7 @@ def _check_required_reviewers(
     fidx, sidx = _get_pattern_idx(body=body, pattern=RR_STR, numeric=True)
     # get all the chars between fidx and sidx
     required_reviewer: str = body[sidx:].strip()
+    raise ValueError(required_reviewer)
     # check if the user is a member of the organization
     is_member: bool = is_user_in_organization(username=required_reviewer)
 
