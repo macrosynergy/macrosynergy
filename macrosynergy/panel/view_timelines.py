@@ -79,7 +79,7 @@ def view_timelines(
     :param <int> legend_fontsize: font size of legend. Default is 12.
 
     """
-    msv.view.timelines(
+    msv.timelines(
         df=df,
         xcats=xcats,
         cids=cids,
