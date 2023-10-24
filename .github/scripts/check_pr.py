@@ -73,6 +73,7 @@ def api_request(
 
     raise Exception(f"Request failed")  # If the request fails, raise an exception
 
+
 def check_title(
     title: str,
 ) -> bool:
@@ -227,8 +228,8 @@ def _check_merge_after(
     mergable: bool = pr_info["state"] == "closed"
     return mergable
 
-def find_previous_at(body: str, idx: int) -> int:
 
+def find_previous_at(body: str, idx: int) -> int:
     i = idx
 
     while i >= 0:
@@ -236,6 +237,7 @@ def find_previous_at(body: str, idx: int) -> int:
             return i + 1
         i -= 1
     raise ValueError("NO @ FOUND")
+
 
 def _check_required_reviewers(
     body: str,
@@ -247,7 +249,7 @@ def _check_required_reviewers(
     if RR_STR not in body:
         return True
 
-    last_idx = body.find(RR_STR) 
+    last_idx = body.find(RR_STR)
     first_idx = find_previous_at(body, last_idx)
 
     required_reviewer: str = body[first_idx:last_idx].strip()
@@ -256,7 +258,9 @@ def _check_required_reviewers(
     # check the reviews
     pr_reviews: Dict[str, Any] = get_pr_reviews(pr_number=pr_info["number"])
     # check if the user has approved the PR
-    approved: bool = required_reviewer in pr_reviews["APPROVED"]
+    approved: bool = any(
+        [str(rx).upper() == required_reviewer.upper() for rx in pr_reviews["APPROVED"]]
+    )
 
     return approved
 
