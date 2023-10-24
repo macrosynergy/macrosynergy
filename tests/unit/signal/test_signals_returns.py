@@ -274,7 +274,25 @@ class TestAll(unittest.TestCase):
             signs=-1,
             blacklist=None,
             slip=0,
-        )    
+        )
+
+        srt = sr.single_relation_table()
+
+        correct_stats = [
+            0.75,
+            0.75,
+            0.5,
+            0.75,
+            1.0,
+            0.5,
+            0.57735,
+            0.42265,
+            0.57735,
+            0.31731,
+        ]
+
+        for val1, val2 in zip(srt.iloc[0].values.tolist(), correct_stats):
+            self.assertTrue(np.isclose(val1, val2))
 
     def test_multiple_relation_table(self):
         self.dataframe_generator()
