@@ -203,11 +203,8 @@ def argcopy(func: Callable) -> Callable:
         copy_types = (
             list,
             dict,
-            pd.DataFrame,
             np.ndarray,
             pd.Series,
-            pd.Index,
-            pd.MultiIndex,
             set,
         )
         new_args: List[Tuple[Any, ...]] = []
