@@ -150,6 +150,8 @@ def _get_pattern_idx(
         # set sidx to the first non-numeric char after the pattern
         sidx = fidx + idx
 
+    raise ValueError(f"fidx:{fidx}  sidx:{sidx}")
+
     return (fidx, sidx)
 
 
@@ -259,7 +261,6 @@ def _check_required_reviewers(
 
     fidx, sidx = _get_pattern_idx(body=body, pattern=RR_STR, numeric=True)
     # get all the chars between fidx and sidx
-    raise ValueError(body)
     required_reviewer: str = body[fidx:sidx].strip()
     # check if the user is a member of the organization
     is_member: bool = is_user_in_organization(username=required_reviewer)
