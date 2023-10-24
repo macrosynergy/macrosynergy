@@ -53,6 +53,30 @@ def _apply_slip(
             raise_error=False,
         )
 
+def _get_csigs_for_contract(
+    df: pd.DataFrame,
+    contid: str,
+    sname: str,
+) -> List[str]:
+    """
+    Returns the contract signals for a given contract identifier and strategy name.
+
+    :param <pd.DataFrame> df: Quantamental dataframe with contract signals and returns.
+    :param <str> contid: the contract identifier.
+    :param <str> sname: the strategy name.
+
+    :return: <List[str]> list of contract signals.
+    """
+    # Get all tickers in the df
+    tickers: List[str] = (df["cid"] + "_" + df["xcat"]).unique().tolist()
+
+    # Identify the contract signals for the contract identifier and strategy name
+    sig_ident: str = f"{sname}_CSIG"
+    find_contid = lambda x: str(x).startswith(contid) and str(x).endswith(sig_ident)
+
+    # filter and return
+    tickers: List[str] = [tx for tx in tickers if find_contid(tx)]
+    return tickers
 
 def notional_positions(
     df: pd.DataFrame,
