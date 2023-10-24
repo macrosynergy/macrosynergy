@@ -451,7 +451,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
         :return None
         """
-        sns.set_style("whitegrid")
+        sns.set_theme(style="whitegrid", palette="colorblind")
         Xy: pd.DataFrame = pd.concat(
             [X, y], axis=1
         ).dropna()  # remove dropna when splitter method fixed as per TODO #3
