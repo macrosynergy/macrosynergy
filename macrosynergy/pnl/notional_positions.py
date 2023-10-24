@@ -157,6 +157,18 @@ def notional_positions(
         if isinstance(varx, (str, list, dict)) and len(varx) == 0:
             raise ValueError(f"`{namex}` must not be an empty {str(typex)}.")
 
+    ## Volatility targeting and leverage cannot be applied at the same time
+    if not (bool(leverage) ^ bool(vol_target)):
+        e_msg: str = "Either `leverage` or `vol_target` must be specified"
+        e_msg += (", but not both.") if (bool(leverage) and bool(vol_target)) else (".")
+        raise ValueError(e_msg)
+
+    if not isinstance(df, QuantamentalDataFrame):
+        raise ValueError("`df` must be a QuantamentalDataFrame.")
+
+    if "value" not in df.columns:
+        raise ValueError("`df` must have a `value` column.")
+
     df: pd.DataFrame = standardise_dataframe(df.copy())
 
     ## Check the dates
