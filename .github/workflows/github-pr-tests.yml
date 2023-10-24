@@ -7,7 +7,10 @@ on:
   # Runs on pushes targeting the default branch
   pull_request:
     branches: [main, test, develop]
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+  pull_request_review:
+    types: [edited, dismissed]
 
 jobs:
   check-pr:
