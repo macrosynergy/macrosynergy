@@ -1,5 +1,7 @@
 """
 Class to provide benchmark signals based on z-scores.
+
+**NOTE: This module is under development, and is not yet ready for production use.**
 """
 
 import numpy as np

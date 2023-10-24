@@ -1,5 +1,7 @@
 """
 Tools to produce, visualise and use walk-forward validation splits across panels.
+
+**NOTE: This module is under development, and is not yet ready for production use.**
 """
 
 import logging
@@ -9,6 +11,7 @@ from typing import Optional, List, Tuple, Union
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 from sklearn.model_selection import BaseCrossValidator, cross_validate, GridSearchCV
 from sklearn.linear_model import Lasso, LinearRegression
@@ -448,7 +451,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
         :return None
         """
-        plt.style.use("seaborn-whitegrid")
+        sns.set_theme(style="whitegrid", palette="colorblind")
         Xy: pd.DataFrame = pd.concat(
             [X, y], axis=1
         ).dropna()  # remove dropna when splitter method fixed as per TODO #3
