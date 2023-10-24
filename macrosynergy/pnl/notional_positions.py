@@ -78,6 +78,45 @@ def _get_csigs_for_contract(
     tickers: List[str] = [tx for tx in tickers if find_contid(tx)]
     return tickers
 
+
+def _leverage_positions(
+    df: pd.DataFrame,
+    sname: str,
+    contids: List[str],
+    aum: Numeric = 100,
+    dollar_per_signal: Numeric = 1.0,
+    leverage: Numeric = 1.0,
+    pname: str = "POS",
+) -> QuantamentalDataFrame:
+    """"""
+    df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
+    sig_ident: str = f"{sname}_CSIG"
+    find_contid = lambda x: any(
+        [str(x).startswith(c) and str(x).endswith(sig_ident) for c in contids]
+    )
+    sel_cols: pd.Series = [find_contid(x) for x in df_wide.columns]
+    df_wide: pd.DataFrame = df_wide.loc[:, sel_cols]
+
+    for ic, contx in enumerate(contids):
+        pos_col: str = contx + "_" + pname
+
+        # Get all signals for that contract
+        asset_cols: List[str] = _get_csigs_for_contract(
+            df=df_wide, contid=contx, sname=sname
+        )
+        # sum of all assets for that contract; if zero, set to NaN to avoid div by zero
+        df_wide[pos_col] = df_wide[asset_cols].sum(axis=1)
+        df_wide.loc[df_wide[pos_col] == 0, pos_col] = np.nan
+        # USD position(asset) = AUM * leverage / (sum of signals * dollar per signal)
+        df_wide[pos_col] = aum * leverage / (df_wide[pos_col] * dollar_per_signal)
+
+    generated_positions: List[str] = [f"{contx}_{pname}" for contx in contids]
+
+    df_wide = df_wide.loc[:, generated_positions]
+
+    return ticker_df_to_qdf(df=df_wide)
+
+
 def notional_positions(
     df: pd.DataFrame,
     sname: str,
