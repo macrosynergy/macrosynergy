@@ -9,7 +9,7 @@ import seaborn as sns
 import random
 from typing import List, Union, Tuple
 from macrosynergy.panel.historic_vol import expo_weights, expo_std, flat_std
-from macrosynergy.management.shape_dfs import reduce_df_by_ticker
+from macrosynergy.management.utils import reduce_df_by_ticker
 from macrosynergy.panel.converge_row import ConvergeRow
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 import matplotlib.pyplot as plt
