@@ -504,7 +504,7 @@ if __name__ == "__main__":
 
     sst = sr.single_statistic_table(
         stat="accuracy",
-        rows=["xcat"],
-        columns=["ret", "freq", "agg_sigs"],
+        rows=["xcat", "ret", "freq"],
+        columns=["agg_sigs"],
     )
     print(sst)

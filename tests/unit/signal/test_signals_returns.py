@@ -312,5 +312,87 @@ class TestAll(unittest.TestCase):
             == (8, 2)
         )
 
+    def test_set_df_labels(self):
+        self.dataframe_generator()
+
+        rets = ["XR", "GROWTH"]
+        freqs = ["Q", "M"]
+        sigs = ["CRY", "INFL"]
+        agg_sigs = ["mean", "last"]
+
+        rows_dict = {"xcat": sigs, "ret": rets, "freq": freqs, "agg_sigs": agg_sigs}
+        rows = ["xcat", "ret", "freq"]
+        columns = ["agg_sigs"]
+
+        sr = SignalsReturns(
+            df=self.dfd,
+            rets=rets,
+            sigs=sigs,
+            freqs=freqs,
+            agg_sigs=agg_sigs,
+            blacklist=self.blacklist,
+        )
+
+        rows_names, columns_names = sr.set_df_labels(
+            rows_dict=rows_dict, rows=rows, columns=columns
+        )
+        expected_col_names = ["mean", "last"]
+        expected_row_names = [
+            "CRY/XR/Q",
+            "CRY/XR/M",
+            "CRY/GROWTH/Q",
+            "CRY/GROWTH/M",
+            "INFL/XR/Q",
+            "INFL/XR/M",
+            "INFL/GROWTH/Q",
+            "INFL/GROWTH/M",
+        ]
+
+        self.assertTrue(rows_names == expected_row_names)
+        self.assertTrue(columns_names == expected_col_names)
+
+        rows = ["xcat", "ret"]
+        columns = ["agg_sigs", "freq"]
+
+        rows_names, columns_names = sr.set_df_labels(
+            rows_dict=rows_dict, rows=rows, columns=columns
+        )
+
+        expected_col_names = ["mean/Q", "mean/M", "last/Q", "last/M"]
+        expected_row_names = ["CRY/XR", "CRY/GROWTH", "INFL/XR", "INFL/GROWTH"]
+
+        self.assertTrue(rows_names == expected_row_names)
+        self.assertTrue(columns_names == expected_col_names)
+
+        return 0
+
+    def test_get_rowcol(self):
+
+        self.dataframe_generator()
+
+        rets = ["XR", "GROWTH"]
+        freqs = ["Q", "M"]
+        sigs = ["CRY", "INFL"]
+        agg_sigs = ["mean", "last"]
+
+        sr = SignalsReturns(
+            df=self.dfd,
+            rets=rets,
+            sigs=sigs,
+            freqs=freqs,
+            agg_sigs=agg_sigs,
+            blacklist=self.blacklist,
+        )
+
+        hash = "XR/CRY/Q/mean"
+        rows = ["xcat", "ret", "freq"]
+        columns = ["agg_sigs"]
+
+        self.assertTrue(sr.get_rowcol(hash, rows) == "CRY/XR/Q")
+        self.assertTrue(sr.get_rowcol(hash, columns) == "mean")
+
+
+
+
 if __name__ == "__main__":
     unittest.main()
