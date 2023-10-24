@@ -259,6 +259,22 @@ def notional_positions(
     if not any(df["tickers"].str.endswith(f"_{sname}_CSIG")):
         raise ValueError(f"No contract signals for strategy `{sname}` in dataframe.")
 
+    # Check that all contract identifiers have at least one signal
+    u_tickers: List[str] = list(df["tickers"].unique())
+    for contx in contids:
+        if not any(
+            [tx.startswith(contx) and tx.endswith(f"_{sname}_CSIG") for tx in u_tickers]
+        ):
+            raise ValueError(f"Contract identifier `{contx}` not in dataframe.")
+
+    ## Apply the slip
+    df: pd.DataFrame = _apply_slip(
+        df=df,
+        slip=slip,
+        cids=contids,
+        xcats=[],
+        metrics=["value"],
+    )
 
 def historic_portfolio_vol(
     df: pd.DataFrame,
