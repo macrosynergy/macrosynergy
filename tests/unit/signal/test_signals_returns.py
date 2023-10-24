@@ -121,39 +121,196 @@ class TestAll(unittest.TestCase):
                 cosp="FAIL",
                 blacklist=self.blacklist,
             )
-    
-    def test_single_relation_table(self):
-        self.dataframe_generator()
-        
-        sr = SignalsReturns(
+        # Test that Signals Returns can take in lists as arguments
+        self.assertTrue(
+            SignalsReturns(
                 df=self.dfd,
-                rets="XR",
-                sigs="CRY",
-                freqs="Q",
+                rets=["XR", "GROWTH"],
+                sigs=["CRY", "INFL"],
+                freqs=["Q", "M"],
+                signs=[1, 1],
+                agg_sigs=["last", "mean"],
                 blacklist=self.blacklist,
             )
-        
+        )
+
+    def test_single_relation_table(self):
+        self.dataframe_generator()
+
+        sr = SignalsReturns(
+            df=self.dfd,
+            rets="XR",
+            sigs="CRY",
+            freqs="Q",
+            blacklist=self.blacklist,
+            slip=1,
+        )
+
+        sr_no_slip = SignalsReturns(
+            df=self.dfd,
+            rets="XR",
+            sigs="CRY",
+            freqs="Q",
+            blacklist=self.blacklist,
+            slip=0,
+        )
+
         # Test that each argument must be of the correct type
         with self.assertRaises(TypeError):
             sr.single_relation_table(ret=2)
-        
+
         with self.assertRaises(TypeError):
             sr.single_relation_table(sig=2)
 
         with self.assertRaises(TypeError):
             sr.single_relation_table(freq=2)
-        
+
         with self.assertRaises(TypeError):
             sr.single_relation_table(agg_sigs=2)
 
         sr.single_relation_table()
+        sr_no_slip.single_relation_table()
 
         # Test that dataframe has been reduced to just the relevant columns and has
         # applied slippage
 
-        self.assertTrue(set(sr.dfd['xcat']) == set(['XR', 'CRY']))
+        self.assertTrue(set(sr.dfd["xcat"]) == set(["XR", "CRY"]))
 
-        for cid in self.blacklist:
-            dates = self.blacklist.get(cid)
-            filtered = self.dfd[(self.dfd['real_date'] >= dates[0]) & (self.dfd['real_date'] <= dates[1])]
-            self.assertTrue(cid not in set(filtered['cid']))
+        self.assertTrue(sr.dfd["value"][0] != sr.df["value"][0])
+
+        self.assertTrue(sr_no_slip.dfd["value"][0] == sr_no_slip.df["value"][0])
+
+        # Test Negative signs are correctly handled
+
+        with self.assertRaises(TypeError):
+            sr = SignalsReturns(
+                df=self.dfd,
+                rets="XR",
+                sigs="CRY",
+                freqs="Q",
+                signs=["FAIL"],
+                blacklist=self.blacklist,
+                slip=1,
+            )
+
+        # Ensure that the signs doesn't have a longer length than the number of signals
+        with self.assertRaises(ValueError):
+            sr = SignalsReturns(
+                df=self.dfd,
+                rets="XR",
+                sigs="CRY",
+                freqs="Q",
+                signs=[-1, -1],
+                blacklist=self.blacklist,
+                slip=1,
+            )
+
+        # Test table outputted is correct
+
+    def test_multiple_relation_table(self):
+        self.dataframe_generator()
+
+        num_of_acc_cols = 10
+
+        sr = SignalsReturns(
+            df=self.dfd,
+            rets="XR",
+            sigs="CRY",
+            freqs="Q",
+            agg_sigs="last",
+            blacklist=self.blacklist,
+            slip=1,
+        )
+
+        self.assertTrue(sr.multiple_relations_table().shape == (1, num_of_acc_cols))
+
+        sr = SignalsReturns(
+            df=self.dfd,
+            rets=["XR", "GROWTH"],
+            sigs=["CRY", "INFL"],
+            freqs=["Q", "M"],
+            signs=[1, 1],
+            agg_sigs=["last", "mean"],
+            blacklist=self.blacklist,
+        )
+
+        self.assertTrue(sr.multiple_relations_table().shape == (16, num_of_acc_cols))
+
+        with self.assertRaises(ValueError):
+            sr.multiple_relations_table(rets="TEST")
+
+        with self.assertRaises(ValueError):
+            sr.multiple_relations_table(xcats="TEST")
+
+        with self.assertRaises(ValueError):
+            sr.multiple_relations_table(freqs="TEST")
+
+        with self.assertRaises(ValueError):
+            sr.multiple_relations_table(agg_sigs="TEST")
+
+        rets = ["XR", "GROWTH"]
+        xcats = ["INFL"]
+        freqs = ["Q", "M"]
+        agg_sigs = ["mean"]
+        mrt = sr.multiple_relations_table(
+            rets=rets, xcats=xcats, freqs=freqs, agg_sigs=agg_sigs
+        )
+        self.assertTrue(mrt.shape == (4, num_of_acc_cols))
+
+    def test_single_statistic_table(self):
+        self.dataframe_generator()
+
+        sr = SignalsReturns(
+            df=self.dfd,
+            rets="XR",
+            sigs="CRY",
+            freqs="Q",
+            blacklist=self.blacklist,
+            slip=1,
+        )
+
+        with self.assertRaises(KeyError):
+            sr.single_statistic_table(stat="FAIL")
+
+        with self.assertRaises(ValueError):
+            sr.single_statistic_table(stat="accuracy", type="FAIL")
+
+        with self.assertRaises(TypeError):
+            sr.single_statistic_table(stat="accuracy", rows="FAIL")
+
+        with self.assertRaises(TypeError):
+            sr.single_statistic_table(stat="accuracy", columns="FAIL")
+
+        with self.assertRaises(ValueError):
+            sr.single_statistic_table(stat="accuracy", rows=["FAIL"])
+
+        with self.assertRaises(ValueError):
+            sr.single_statistic_table(stat="accuracy", columns=["FAIL"])
+
+        # Test that table is correctly shaped
+
+        self.assertTrue(sr.single_statistic_table(stat="accuracy").shape == (1, 1))
+
+        sr = SignalsReturns(
+            df=self.dfd,
+            rets=["XR", "GROWTH"],
+            sigs=["CRY", "INFL"],
+            freqs=["Q", "M"],
+            agg_sigs=["last", "mean"],
+            blacklist=self.blacklist,
+            slip=1,
+        )
+
+        self.assertTrue(sr.single_statistic_table(stat="accuracy").shape == (4, 4))
+
+        # Test that the table is correctly shaped when rows and columns are specified
+
+        self.assertTrue(
+            sr.single_statistic_table(
+                stat="accuracy", rows=["freq", "xcat", "ret"], columns=["agg_sigs"]
+            ).shape
+            == (8, 2)
+        )
+
+if __name__ == "__main__":
+    unittest.main()

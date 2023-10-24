@@ -93,9 +93,15 @@ class SignalsReturns(SignalBase):
         self.xcats = self.sig + self.ret
 
         self.signs = signs if isinstance(signs, list) else [signs]
+        for sign in self.signs:
+            if not sign in [-1, 1]:
+                raise TypeError("Sign must be either 1 or -1.")
+            
+        while len(self.signs) < len(self.sig):
+            self.signs.append(1)
 
         if len(self.signs) > len(self.sig):
-            ValueError("Signs must have a length less than or equal to signals")
+            raise ValueError("Signs must have a length less than or equal to signals")
         self.signals = self.sig
 
     def single_relation_table(self, ret=None, xcat=None, freq=None, agg_sigs=None):
@@ -181,6 +187,22 @@ class SignalsReturns(SignalBase):
         if not isinstance(xcats, list):
             xcats = [xcats]
 
+        for ret in rets:
+            if not ret in self.xcats:
+                raise ValueError(f"{ret} is not a valid return category")
+            
+        for xcat in xcats:
+            if not xcat in self.xcats:
+                raise ValueError(f"{xcat} is not a valid signal category")
+        
+        for freq in freqs:
+            if not freq in self.freq:
+                raise ValueError(f"{freq} is not a valid frequency")
+            
+        for agg_sig in agg_sigs:
+            if not agg_sig in self.agg_sig:
+                raise ValueError(f"{agg_sig} is not a valid aggregation method")
+
         if not isinstance(rets, list):
             rets = [rets]
 
@@ -240,6 +262,11 @@ class SignalsReturns(SignalBase):
         strings () or if only one frequency is available.
         """
         self.df = self.original_df
+
+        if not isinstance(rows, list):
+            raise TypeError("Rows must be a list")
+        if not isinstance(columns, list):
+            raise TypeError("Columns must be a list")
 
         if not "agg_sigs" in rows and not "agg_sigs" in columns:
             agg_sigs = ["last"]
