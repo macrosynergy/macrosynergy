@@ -41,15 +41,17 @@ def _apply_slip(
     :param <List[str]> xcats: list of contract categories.
     :param <List[str]> metrics: list of metrics to apply the slip to.
     """
-
-    return apply_slip(
-        df=df,
-        slip=slip,
-        cids=cids,
-        xcats=xcats,
-        metrics=metrics,
-        raise_error=False,
-    )
+    if slip == 0:
+        return df
+    else:
+        return apply_slip(
+            df=df,
+            slip=slip,
+            cids=cids,
+            xcats=xcats,
+            metrics=metrics,
+            raise_error=False,
+        )
 
 
 def notional_positions(
