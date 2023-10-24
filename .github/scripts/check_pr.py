@@ -257,10 +257,10 @@ def _check_required_reviewers(
     if RR_STR not in body:
         return True
 
+    print(body)
     fidx, sidx = _get_pattern_idx(body=body, pattern=RR_STR, numeric=True)
     # get all the chars between fidx and sidx
     required_reviewer: str = body[sidx:].strip()
-    print(required_reviewer)
     # check if the user is a member of the organization
     is_member: bool = is_user_in_organization(username=required_reviewer)
 
