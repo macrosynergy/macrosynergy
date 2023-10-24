@@ -53,6 +53,7 @@ def _apply_slip(
             raise_error=False,
         )
 
+
 def _get_csigs_for_contract(
     df: pd.DataFrame,
     contid: str,
@@ -255,7 +256,7 @@ def notional_positions(
 
     df["tickers"]: str = df["cid"] + "_" + df["xcat"]
 
-    # there must be atleast one contract signal with the strategy name
+    # There must be atleast one contract signal with the strategy name
     if not any(df["tickers"].str.endswith(f"_{sname}_CSIG")):
         raise ValueError(f"No contract signals for strategy `{sname}` in dataframe.")
 
