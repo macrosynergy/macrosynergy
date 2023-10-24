@@ -10,7 +10,8 @@ from typing import List, Tuple, Callable, Optional
 from packaging import version
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.check_availability import reduce_df
+from macrosynergy.management.shape_dfs import reduce_df
+import macrosynergy.visuals as msv
 
 
 def view_ranges(df: pd.DataFrame, xcats: List[str], cids: Optional[List[str]] = None,
@@ -43,104 +44,20 @@ def view_ranges(df: pd.DataFrame, xcats: List[str], cids: Optional[List[str]] = 
     :param <List[str]> xcat_labels: custom labels to be used for the ranges.
 
     """
-
-    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
-
-    possible_xcats = set(df["xcat"])
-    missing_xcats = set(xcats).difference(possible_xcats)
-    error_xcats = "The categories passed in to view_ranges() must be present in the " \
-                  f"DataFrame: missing {missing_xcats}."
-    if not set(xcats).issubset(possible_xcats):
-        raise ValueError(error_xcats)
-
-    sort_cids_func: Callable = None
-    if sort_cids_by is not None:
-        if not isinstance(sort_cids_by, str):
-            raise TypeError("`sort_cids_by` must be a string.")
-        sort_error = "Sorting parameter must either be 'mean' or 'std'."
-        if not sort_cids_by in ['mean', 'std']:
-            raise ValueError(sort_error)
-        if sort_cids_by == "mean":
-            sort_cids_func = np.mean
-        else:
-            sort_cids_func = np.std
-
-    error_message = "The number of custom labels must match the defined number of " \
-                    "categories in pnl_cats."
-    if xcat_labels is not None:
-        if (len(xcat_labels) != len(xcats)):
-            raise ValueError(error_message)
-
-    # Unique cross-sections across the union of categories passed - not the intersection.
-    # Order of categories will be preserved.
-    df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
-
-    s_date = df['real_date'].min().strftime('%Y-%m-%d')
-    e_date = df['real_date'].max().strftime('%Y-%m-%d')
-
-    sns.set(style="darkgrid")
-
-    if title is None:
-        if kind == "bar":
-            title = f"Means and standard deviations from {s_date} to {e_date}."
-        elif kind == "box":
-            title = f"Interquartile ranges, extended ranges and outliers " \
-                    f"from {s_date} to {e_date}."
-    if ylab is None:
-        ylab = ""
-
-    filt_1 = df['xcat'] == xcats[0]
-    first_xcat_cids = set(df[filt_1]['cid'])
-    # First category is not defined over all cross-sections.
-    order_condition = list(set(cids)) == list(first_xcat_cids)
-
-    if order_condition and sort_cids_func is not None:
-        # Sort exclusively on the first category.
-        dfx = df[filt_1].groupby(['cid'])[val].apply(sort_cids_func)
-        order = dfx.sort_values(ascending=False).index
-    elif not order_condition and sort_cids_func is not None:
-        # Sort across all categories on the available cross-sections.
-        dfx = df.groupby(['cid'])[val].apply(sort_cids_func)
-        order = dfx.sort_values(ascending=False).index
-    else:
-        order = None
-
-    sns.set_theme(style="darkgrid")
-    fig, ax = plt.subplots(figsize=size)
-
-    if kind == 'bar':
-        if version.parse(sns.__version__) >= version.parse('0.12.0'):        
-            ax = sns.barplot(
-                x='cid', y=val, hue='xcat', hue_order=xcats,
-                palette='Paired', data=df, errorbar='sd', order=order
-                )
-        else:
-            ax = sns.barplot(x='cid', y=val, hue='xcat', hue_order=xcats,
-                            palette='Paired', data=df, ci='sd', order=order)
-    elif kind == 'box':
-        ax = sns.boxplot(x='cid', y=val, hue='xcat', hue_order=xcats,
-                         palette='Paired', data=df,  order=order)
-        ax.xaxis.grid(True)
-
-    ax.set_title(title,  fontdict={'fontsize': 16})
-    ax.set_xlabel("")
-    ax.set_ylabel(ylab)
-    ax.xaxis.grid(True)
-    ax.axhline(0, ls='--', linewidth=1, color='black')
-    handles, labels = ax.get_legend_handles_labels()
-
-    if xcat_labels is not None:
-        error_message = "The number of custom labels must match the defined number of " \
-                        "categories in pnl_cats."
-        if (len(xcat_labels) != len(xcats)):
-            raise ValueError(error_message)
-        labels = xcat_labels
-
-    if (len(xcats) == 1) and (xcat_labels is None):
-        ax.get_legend().remove()
-    else:
-        ax.legend(handles=handles[0:], labels=labels[0:])
-    plt.show()
+    msv.view_ranges(
+        df=df,
+        xcats=xcats,
+        cids=cids,
+        start=start,
+        end=end,
+        val=val,
+        kind=kind,
+        sort_cids_by=sort_cids_by,
+        title=title,
+        ylab=ylab,
+        size=size,
+        xcat_labels=xcat_labels,
+    )
 
 
 if __name__ == "__main__":
