@@ -276,6 +276,23 @@ def notional_positions(
         metrics=["value"],
     )
 
+    if leverage:
+        leveraged_positions: QuantamentalDataFrame = _leverage_positions(
+            df=df,
+            sname=sname,
+            contids=contids,
+            aum=aum,
+            dollar_per_signal=dollar_per_signal,
+            leverage=leverage,
+            pname=pname,
+        )
+
+        return leveraged_positions
+
+    else:
+        raise NotImplementedError("Volatility targeting not implemented yet.")
+
+
 def historic_portfolio_vol(
     df: pd.DataFrame,
     sname: str,
