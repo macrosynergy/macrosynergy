@@ -263,6 +263,9 @@ def _check_required_reviewers(
     # check if the user is a member of the organization
     is_member: bool = is_user_in_organization(username=required_reviewer)
 
+    if not is_member:
+        raise ValueError(f"{required_reviewer} is not a member of {ORGANIZATION}.")
+
     # check from the PR details if the user has approved the PR
     # check the reviews
     pr_reviews: Dict[str, Any] = get_pr_reviews(pr_number=pr_info["number"])
