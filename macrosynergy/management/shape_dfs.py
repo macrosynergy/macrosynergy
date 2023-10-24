@@ -25,14 +25,23 @@ WARN_STR: str = (
     new_func=_reduce_df, deprecate_version=DEPRECATION_VERSION, message=WARN_STR
 )
 def reduce_df(*args, **kwargs):
+    """
+    Deprecated. Moved to `macrosynergy.management.utils.reduce_df()`.
+    """
     return _reduce_df(*args, **kwargs)
 
 
 def reduce_df_by_ticker(*args, **kwargs):
+    """
+    Deprecated. Moved to `macrosynergy.management.utils.reduce_df_by_ticker()`.
+    """
     return _reduce_df_by_ticker(*args, **kwargs)
 
 
 def categories_df(*args, **kwargs):
+    """
+    Deprecated. Moved to `macrosynergy.management.utils.categories_df()`.
+    """
     return _categories_df(*args, **kwargs)
 
 
