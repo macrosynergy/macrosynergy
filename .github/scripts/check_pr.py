@@ -249,6 +249,7 @@ def _check_merge_after(
 
 def _check_required_reviewers(
     body: str,
+    pr_info: Dict[str, Any],
 ) -> bool:
     assert bool(body)
     RR_STR: str = "REQUIRED-REVIEW-@"
@@ -263,10 +264,12 @@ def _check_required_reviewers(
     is_member: bool = is_user_in_organization(username=required_reviewer)
 
     # check from the PR details if the user has approved the PR
-    pr_info: Dict[str, Any] = get_pr_details(pr_number=pr_number)
+    # check the reviews
+    pr_reviews: Dict[str, Any] = get_pr_reviews(pr_number=pr_info["number"])
+    # check if the user has approved the PR
+    approved: bool = required_reviewer in pr_reviews["APPROVED"]
 
-    # if the user has approved the PR return true
-    return is_member and pr_info["state"] == "closed" and pr_info["merged"]
+    return is_member and approved
 
 
 def check_pr_directives(
