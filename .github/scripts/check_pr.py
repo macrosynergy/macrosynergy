@@ -273,9 +273,10 @@ def _check_required_reviewers(
 
 
 def check_pr_directives(
-    body: str,
-    state: str,
+    pr_info: Dict[str, Any],
 ) -> bool:
+    body: str = pr_info["body"]
+
     if body is None:
         return True
 
@@ -286,7 +287,7 @@ def check_pr_directives(
         _check_do_not_merge(body=body),
         _check_merge_after(body=body),
         _check_merge_w_version(body=body),
-        _check_required_reviewers(body=body),
+        _check_required_reviewers(body=body, pr_info=pr_info),
     ]
 
     return all(results)
@@ -300,7 +301,7 @@ def test_pr_info(
     if not check_title(title=pr_info["title"]):
         err_msg += f"PR #{pr_info['number']} is not mergable due to invalid title.\n"
 
-    if not check_pr_directives(body=pr_info["body"], state=pr_info["state"]):
+    if not check_pr_directives(pr_info=pr_info):
         err_msg += (
             f"PR #{pr_info['number']} is not mergable due to merge restrictions"
             " specified in the PR body."
@@ -310,6 +311,29 @@ def test_pr_info(
         raise ValueError(err_msg.strip())
 
     return True
+
+
+def get_pr_reviews(
+    pr_number: int,
+):
+    URL: str = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls/{pr_number}/reviews"
+
+    pr_reviews: Dict[str, Any] = api_request(url=URL)
+    results: Dict[str, List[str]] = {
+        "APPROVED": [],
+        "CHANGES_REQUESTED": [],
+        "COMMENTED": [],
+        "DISMISSED": [],
+    }
+
+    for item in pr_reviews:
+        review_name: str = item["user"]["login"]
+        review_state: str = item["state"]
+        if review_state not in results:
+            results[review_state] = []
+        results[review_state].append(review_name)
+
+    return results
 
 
 def get_pr_details(
@@ -342,5 +366,5 @@ def main(pr_number: int):
 
 
 if __name__ == "__main__":
-    pr_number: int = int(sys.argv[1])
-    main(pr_number=pr_number)
+    # pr_number: int = int(sys.argv[1])
+    main(pr_number=1117)
