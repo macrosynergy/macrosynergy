@@ -302,9 +302,6 @@ class SignalsReturns(SignalBase):
         rets = self.ret if isinstance(self.ret, list) else [self.ret]
         sigs = self.sig if isinstance(self.sig, list) else [self.sig]
 
-        rows.sort(reverse=True)
-        columns.sort(reverse=True)
-
         sigs_neg = []
         for sig in sigs:
             if self.signs[self.sig.index(sig)] == -1:
