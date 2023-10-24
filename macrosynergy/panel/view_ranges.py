@@ -7,21 +7,25 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import List, Tuple, Callable, Optional
-from packaging import version
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.shape_dfs import reduce_df
 import macrosynergy.visuals as msv
 
 
-def view_ranges(df: pd.DataFrame, xcats: List[str], cids: Optional[List[str]] = None,
-                start: str = '2000-01-01', end: Optional[str] = None,
-                val: str = 'value', kind: str = 'bar', 
-                sort_cids_by: Optional[str] = None, 
-                title: Optional[str] = None, ylab: Optional[str] = None, 
-                size: Tuple[float] = (16, 8),
-                xcat_labels: Optional[List[str]] = None):
-
+def view_ranges(
+    df: pd.DataFrame,
+    xcats: List[str],
+    cids: Optional[List[str]] = None,
+    start: str = "2000-01-01",
+    end: Optional[str] = None,
+    val: str = "value",
+    kind: str = "bar",
+    sort_cids_by: Optional[str] = None,
+    title: Optional[str] = None,
+    ylab: Optional[str] = None,
+    size: Tuple[float] = (16, 8),
+    xcat_labels: Optional[List[str]] = None,
+):
     """Plots averages and various ranges across sections for one or more categories.
 
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
@@ -40,7 +44,7 @@ def view_ranges(df: pd.DataFrame, xcats: List[str], cids: Optional[List[str]] = 
         computed across all categories.
     :param <str> title: string of chart title; defaults depend on type of range plot.
     :param <str> ylab: y label. Default is no label.
-    :param <Tuple[float]> size: Tuple of width and height of graph. Default is (16, 8). 
+    :param <Tuple[float]> size: Tuple of width and height of graph. Default is (16, 8).
     :param <List[str]> xcat_labels: custom labels to be used for the ranges.
 
     """
@@ -61,29 +65,44 @@ def view_ranges(df: pd.DataFrame, xcats: List[str], cids: Optional[List[str]] = 
 
 
 if __name__ == "__main__":
+    cids = ["AUD", "CAD", "GBP", "USD"]
+    xcats = ["XR", "CRY"]
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD",] = ["2010-01-01", "2020-12-31", 0.5, 0.2]
+    df_cids.loc["CAD",] = ["2011-01-01", "2020-11-30", 0, 1]
+    df_cids.loc["GBP",] = ["2012-01-01", "2020-11-30", 0, 2]
+    df_cids.loc["USD",] = ["2012-01-01", "2020-11-30", 1, 2]
 
-    cids = ['AUD', 'CAD', 'GBP', 'USD']
-    xcats = ['XR', 'CRY']
-    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
-                                                'sd_mult'])
-    df_cids.loc['AUD', ] = ['2010-01-01', '2020-12-31', 0.5, 0.2]
-    df_cids.loc['CAD', ] = ['2011-01-01', '2020-11-30', 0, 1]
-    df_cids.loc['GBP', ] = ['2012-01-01', '2020-11-30', 0, 2]
-    df_cids.loc['USD', ] = ['2012-01-01', '2020-11-30', 1, 2]
-
-    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
-                                                  'sd_mult', 'ar_coef', 'back_coef'])
-    df_xcats.loc['XR', ] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
-    df_xcats.loc['CRY', ] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
+    df_xcats = pd.DataFrame(
+        index=xcats,
+        columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+    )
+    df_xcats.loc["XR",] = ["2010-01-01", "2020-12-31", 0, 1, 0, 0.3]
+    df_xcats.loc["CRY",] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    view_ranges(dfd, xcats=['XR'], kind='box', start='2012-01-01',
-                end='2018-01-01', sort_cids_by='std')
+    view_ranges(
+        dfd,
+        xcats=["XR"],
+        kind="box",
+        start="2012-01-01",
+        end="2018-01-01",
+        sort_cids_by="std",
+    )
 
-    filter_1 = (dfd['xcat'] == 'XR') & (dfd['cid'] == 'AUD')
+    filter_1 = (dfd["xcat"] == "XR") & (dfd["cid"] == "AUD")
     dfd = dfd[~filter_1]
 
-    view_ranges(dfd, xcats=['XR', 'CRY'], cids=cids, kind='box',
-                start='2012-01-01', end='2018-01-01', sort_cids_by=None,
-                xcat_labels=['EQXR_NSA', 'CRY_NSA'])
+    view_ranges(
+        dfd,
+        xcats=["XR", "CRY"],
+        cids=cids,
+        kind="box",
+        start="2012-01-01",
+        end="2018-01-01",
+        sort_cids_by=None,
+        xcat_labels=["EQXR_NSA", "CRY_NSA"],
+    )
