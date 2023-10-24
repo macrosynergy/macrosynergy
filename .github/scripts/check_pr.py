@@ -247,6 +247,15 @@ def _check_merge_after(
     mergable: bool = pr_info["state"] == "closed"
     return mergable
 
+def find_previous_at(body: str, idx: int) -> int:
+
+    i = idx
+
+    while i >= 0:
+        if body[i] == "@":
+            return i
+        i -= 1
+    raise ValueError("NO @ FOUND")
 
 def _check_required_reviewers(
     body: str,
@@ -258,12 +267,11 @@ def _check_required_reviewers(
     if RR_STR not in body:
         return True
 
-    fidx, sidx = _get_pattern_idx(body=body, pattern=RR_STR, numeric=True)
-    # get all the chars between fidx and sidx
-    print(body)
-    print(fidx)
-    print(sidx)
-    required_reviewer: str = body[sidx:].strip()
+    last_idx = body.find(RR_STR) 
+    first_idx = find_previous_at(body, last_idx)
+
+    required_reviewer: str = body[first_idx:last_idx].strip()
+    print(required_reviewer)
     # check if the user is a member of the organization
     is_member: bool = is_user_in_organization(username=required_reviewer)
 
