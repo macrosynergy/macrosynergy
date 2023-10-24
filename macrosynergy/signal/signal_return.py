@@ -416,18 +416,19 @@ class SignalsReturns(SignalBase):
         :param <List[str]> rowcols: list of strings specifying which of the categories
         are in the rows/columns of the dataframe.
         """
-        rowcol = ""
-        if "xcat" in rowcols:
-            rowcol += hash.split("/")[1] + "/"
-        if "ret" in rowcols:
-            rowcol += hash.split("/")[0] + "/"
-        if "freq" in rowcols:
-            rowcol += hash.split("/")[2] + "/"
-        if "agg_sigs" in rowcols:
-            rowcol += hash.split("/")[3] + "/"
+        result = ""
+        for rowcol in rowcols:
 
-        result = rowcol[:-1]
-        return result
+            if "ret" == rowcol:
+                result += hash.split("/")[0] + "/"
+            if "xcat" == rowcol:
+                result += hash.split("/")[1] + "/"
+            if "freq" == rowcol:
+                result += hash.split("/")[2] + "/"
+            if "agg_sigs" == rowcol:
+                result += hash.split("/")[3] + "/"
+
+        return result[:-1]
 
 
 if __name__ == "__main__":
@@ -507,7 +508,7 @@ if __name__ == "__main__":
 
     sst = sr.single_statistic_table(
         stat="accuracy",
-        rows=["xcat", "ret", "freq"],
+        rows=["ret", "xcat", "freq"],
         columns=["agg_sigs"],
     )
     print(sst)
