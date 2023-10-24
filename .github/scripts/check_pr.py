@@ -82,8 +82,8 @@ def is_user_in_organization(username: str, org: str = ORGANIZATION) -> bool:
     :param <str> org: The organization to check against.
     :return <bool>: True if the user is a member, False otherwise.
     """
-    url = f"https://api.github.com/orgs/{org}/members/{username}"
-    print(url)
+    url = f"https://api.github.com/orgs/{org}/members
+    #url = f"https://api.github.com/orgs/{org}/members/{username}"
     try:
         api_request(url)
         return True  # If the request is successful, the user is a member
