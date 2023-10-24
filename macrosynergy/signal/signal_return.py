@@ -59,7 +59,7 @@ class SignalsReturns(SignalBase):
         agg_sigs: Union[int, List[int]] = "last",
     ):
         super().__init__(
-            df=df, 
+            df=df,
             ret=rets,
             sig=sigs,
             slip=slip,
@@ -96,7 +96,7 @@ class SignalsReturns(SignalBase):
         for sign in self.signs:
             if not sign in [-1, 1]:
                 raise TypeError("Sign must be either 1 or -1.")
-            
+
         if len(self.signs) < len(self.sig):
             self.signs.extend([1] * (len(self.sig) - len(self.signs)))
 
@@ -211,7 +211,7 @@ class SignalsReturns(SignalBase):
         xcats = [x for x in xcats if x in self.sig]
 
         index = [
-            f"{ret}/{xcat + '_NEG' if self.signs[self.sig.index(xcat)] == -1 else xcat}/{agg_sig}/{freq}"
+            f"{freq}: {xcat + '_NEG' if self.signs[self.sig.index(xcat)] == -1 else xcat}/{agg_sig} => {ret}"
             for freq in freqs
             for agg_sig in agg_sigs
             for ret in rets
