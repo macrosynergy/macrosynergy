@@ -220,10 +220,11 @@ def _apply_hedge_ratios(
     for _cid in cids:
         for hb_ix, _hb in enumerate(hbasket):
             # CIDx_HBASKETx_CSIG = CIDx_SIG * CIDx_HRATIO * HBASKETx_SCALE
-            # eg:
+            # e.g.:
             # AUD_USD_EQ_CSIG = AUD_SIG * AUD_HRATIO * USD_EQ_HSCALE
 
             cid_basket_pos: str = _cid + "_" + _hb + "_CSIG"
+            # TODO: the above naming should be just: _hb + "_CSIG"
             cid_sig: str = _cid + "_" + sig
             cid_hr: str = _cid + "_" + hratios
 
@@ -236,6 +237,7 @@ def _apply_hedge_ratios(
                 hb_hratio: Numeric = hscales[hb_ix]
 
             df_wide[cid_basket_pos] = df_wide[cid_sig] * df_wide[cid_hr] * hb_hratio
+            # TODO: the hedge positions must be added up
             hedged_assets_list.append(cid_basket_pos)
 
     df_wide = df_wide[hedged_assets_list]
@@ -423,7 +425,7 @@ def contract_signals(
 
     # Actual calculation
 
-    ## Generate contract signals
+    ## Generate primary contract signals
     df_contract_signals: pd.DataFrame = _gen_contract_signals(
         df=df,
         cids=cids,
@@ -434,12 +436,8 @@ def contract_signals(
     )
 
     ## Generate hedge contract signals
-
     df_hedge_signals: Optional[pd.DataFrame] = None
     if hbasket is not None:
-        # Update the dataframe, as the hedge ratios and cross-section-specific signals
-        # are not present in the output from `_gen_contract_signals()`
-        df = update_df(df=df, df_add=df_contract_signals)
 
         df_hedge_signals: pd.DataFrame = _apply_hedge_ratios(
             df=df,

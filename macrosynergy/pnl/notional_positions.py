@@ -110,6 +110,8 @@ def _leverage_positions(
         df_wide.loc[df_wide[pos_col] == 0, pos_col] = np.nan
         # USD position(asset) = AUM * leverage / (sum of signals * dollar per signal)
         df_wide[pos_col] = aum * leverage / (df_wide[pos_col] * dollar_per_signal)
+        # TODO: ioncorrect since here dollar_per_signal must be excatly 1
+        # TODO: this should be dfw_pos = dfw_sigs * aum * leverage / rowsums(dfw_sigs)
 
     generated_positions: List[str] = [f"{contx}_{pname}" for contx in contids]
 
@@ -228,6 +230,8 @@ def notional_positions(
     ## Volatility targeting and leverage cannot be applied at the same time
     if not (bool(leverage) ^ bool(vol_target)):
         e_msg: str = "Either `leverage` or `vol_target` must be specified"
+        # TODO: No it needs not. You can define notional positions simply on a 
+        #       dollar_per_signal basis. This is useful for testing.
         e_msg += (", but not both.") if (bool(leverage) and bool(vol_target)) else (".")
         raise ValueError(e_msg)
 
