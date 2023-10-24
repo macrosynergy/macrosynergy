@@ -3,7 +3,7 @@ import random
 import numpy as np
 import pandas as pd
 from tests.simulate import make_qdf
-from macrosynergy.management.update_df import (
+from macrosynergy.management.utils import (
     update_df,
     update_tickers,
     update_categories,
