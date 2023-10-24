@@ -96,7 +96,7 @@ class SignalsReturns(SignalBase):
         for sign in self.signs:
             if not sign in [-1, 1]:
                 raise TypeError("Sign must be either 1 or -1.")
-            
+
         while len(self.signs) < len(self.sig):
             self.signs.append(1)
 
@@ -108,8 +108,10 @@ class SignalsReturns(SignalBase):
         """
         Computes all the statistics for one specific signal-return relation:
 
-        :param <str> ret: single target return category
-        :param <str> xcat: single signal category to be considered
+        :param <str> ret: single target return category. Default is first in target
+            return ist of the class
+        :param <str> xcat: single signal category to be considered. Default is first in
+            feature category list of the class.
         :param <str> freq: letter denoting single frequency at which the series will
             be sampled.
             This must be one of the frequencies selected for the class.
@@ -190,15 +192,15 @@ class SignalsReturns(SignalBase):
         for ret in rets:
             if not ret in self.xcats:
                 raise ValueError(f"{ret} is not a valid return category")
-            
+
         for xcat in xcats:
             if not xcat in self.xcats:
                 raise ValueError(f"{xcat} is not a valid signal category")
-        
+
         for freq in freqs:
             if not freq in self.freq:
                 raise ValueError(f"{freq} is not a valid frequency")
-            
+
         for agg_sig in agg_sigs:
             if not agg_sig in self.agg_sig:
                 raise ValueError(f"{agg_sig} is not a valid aggregation method")
@@ -306,7 +308,7 @@ class SignalsReturns(SignalBase):
                 sigs_neg.append(sig + "_NEG")
             else:
                 sigs_neg.append(sig)
-                
+
         rows_dict = {"xcat": sigs_neg, "ret": rets, "freq": freqs, "agg_sigs": agg_sigs}
 
         rows_names, columns_names = self.set_df_labels(rows_dict, rows, columns)
@@ -430,7 +432,7 @@ class SignalsReturns(SignalBase):
 
 if __name__ == "__main__":
     cids = ["AUD", "CAD", "GBP", "NZD"]
-    xcats = ["XR", "CRY", "GROWTH", "INFL"]
+    xcats = ["XR", "XRH", "CRY", "GROWTH", "INFL"]
     df_cids = pd.DataFrame(
         index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
     )
@@ -444,6 +446,7 @@ if __name__ == "__main__":
         columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
     )
     df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["XRH"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
     df_xcats.loc["CRY"] = ["2000-01-01", "2020-10-30", 0, 2, 0.95, 1]
     df_xcats.loc["GROWTH"] = ["2001-01-01", "2020-10-30", 0, 2, 0.9, 1]
     df_xcats.loc["INFL"] = ["2001-01-01", "2020-10-30", 0, 2, 0.8, 0.5]
@@ -467,7 +470,6 @@ if __name__ == "__main__":
     mrt = sr.multiple_relations_table()
     sst = sr.single_statistic_table(stat="accuracy")
 
-    print("SRT HERE")
     print(srt)
     print(mrt)
     print(sst)
@@ -476,8 +478,8 @@ if __name__ == "__main__":
 
     sr = SignalsReturns(
         dfd,
-        rets=["XR", "GROWTH"],
-        sigs=["CRY", "INFL"],
+        rets=["XR", "XRH"],
+        sigs=["CRY", "INFL", "GROWTH"],
         signs=[1, -1],
         cosp=True,
         freqs=["M", "Q"],
@@ -495,7 +497,7 @@ if __name__ == "__main__":
 
     # Specifying specific arguments for each of the Signal Return Functions
 
-    srt = sr.single_relation_table(ret="GROWTH", xcat="CRY", freq="Q", agg_sigs="last")
+    srt = sr.single_relation_table(ret="XR", xcat="CRY", freq="Q", agg_sigs="last")
     print(srt)
 
     mrt = sr.multiple_relations_table(
