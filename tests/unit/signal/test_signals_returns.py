@@ -133,6 +133,7 @@ class TestAll(unittest.TestCase):
                 blacklist=self.blacklist,
             )
         
+        # Test that each argument must be of the correct type
         with self.assertRaises(TypeError):
             sr.single_relation_table(ret=2)
         
@@ -145,4 +146,14 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(TypeError):
             sr.single_relation_table(agg_sigs=2)
 
-        sr.single_relation_table()    
+        sr.single_relation_table()
+
+        # Test that dataframe has been reduced to just the relevant columns and has
+        # applied slippage
+
+        self.assertTrue(set(sr.dfd['xcat']) == set(['XR', 'CRY']))
+
+        for cid in self.blacklist:
+            dates = self.blacklist.get(cid)
+            filtered = self.dfd[(self.dfd['real_date'] >= dates[0]) & (self.dfd['real_date'] <= dates[1])]
+            self.assertTrue(cid not in set(filtered['cid']))

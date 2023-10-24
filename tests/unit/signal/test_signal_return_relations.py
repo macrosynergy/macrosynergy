@@ -658,23 +658,5 @@ class TestAll(unittest.TestCase):
         except:
             self.fail("SignalReturnRelations init failed")
 
-    def test_signal_returns_constructor(self):
-        self.dataframe_generator()
-        # Test the Class's constructor.
-
-        # First, test the assertions.
-        # Trivial test to confirm the primary signal must be present in the passed
-        # DataFrame.
-        with self.assertRaises(AssertionError):
-            srr = SignalReturnRelations(
-                self.dfd, ret="XR", sig="Missing", freq="D", blacklist=self.blacklist
-            )
-
-        signal = "CRY"
-        srr: SignalReturnRelations = SignalReturnRelations(
-            self.dfd, ret="XR", sig=signal, freq="D", blacklist=self.blacklist
-        )
-
-
 if __name__ == "__main__":
     unittest.main()

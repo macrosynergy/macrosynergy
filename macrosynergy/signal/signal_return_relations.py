@@ -121,6 +121,8 @@ class SignalReturnRelations(SignalBase):
         if len(self.signals) > 1:
             self.df_sigs = self.__rival_sigs__()
 
+        self.sig = self.new_sig
+
         self.df_cs = self.__output_table__(cs_type="cids", ret=ret, sig=self.sig)
         self.df_ys = self.__output_table__(cs_type="years", ret=ret, sig=self.sig)
 
