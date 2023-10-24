@@ -7,6 +7,7 @@ import requests
 from packaging import version
 
 REPO_OWNER: str = "macrosynergy"
+ORGANIZATION: str = "macrosynergy"
 REPO_NAME: str = "macrosynergy"
 REPO_URL: str = f"github.com/{REPO_OWNER}/{REPO_NAME}"
 
@@ -61,6 +62,24 @@ def api_request(
             sleep(1)
     print(f"Request failed after {max_retries} retries. Exiting.")
     sys.exit(1)
+
+
+def is_user_in_organization(username: str, org: str = ORGANIZATION) -> bool:
+    """
+    Check if a user is a member of a specific organization.
+
+    :param <str> username: The username to check.
+    :param <str> org: The organization to check against.
+    :return <bool>: True if the user is a member, False otherwise.
+    """
+    url = f"https://api.github.com/orgs/{org}/members/{username}"
+    try:
+        api_request(url)
+        return True  # If the request is successful, the user is a member
+    except Exception as exc:
+        if "404" in str(exc):  # If the user is not a member, a 404 error is returned
+            return False
+        raise  # If it's another exception, raise it
 
 
 def check_title(
@@ -218,6 +237,28 @@ def _check_merge_after(
     return mergable
 
 
+def _check_required_reviewers(
+    body: str,
+) -> bool:
+    assert bool(body)
+    RR_STR: str = "REQUIRED-REVIEW-@"
+
+    if RR_STR not in body:
+        return True
+
+    fidx, sidx = _get_pattern_idx(body=body, pattern=RR_STR, numeric=True)
+    # get all the chars between fidx and sidx
+    required_reviewer: str = body[fidx:sidx].strip()
+    # check if the user is a member of the organization
+    is_member: bool = is_user_in_organization(username=required_reviewer)
+
+    # check from the PR details if the user has approved the PR
+    pr_info: Dict[str, Any] = get_pr_details(pr_number=pr_number)
+
+    # if the user has approved the PR return true
+    return is_member and pr_info["state"] == "closed" and pr_info["merged"]
+
+
 def check_pr_directives(
     body: str,
     state: str,
@@ -232,6 +273,7 @@ def check_pr_directives(
         _check_do_not_merge(body=body),
         _check_merge_after(body=body),
         _check_merge_w_version(body=body),
+        _check_required_reviewers(body=body),
     ]
 
     return all(results)
