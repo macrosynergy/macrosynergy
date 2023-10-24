@@ -253,7 +253,7 @@ def find_previous_at(body: str, idx: int) -> int:
 
     while i >= 0:
         if body[i] == "@":
-            return i
+            return i + 1
         i -= 1
     raise ValueError("NO @ FOUND")
 
@@ -271,9 +271,6 @@ def _check_required_reviewers(
     first_idx = find_previous_at(body, last_idx)
 
     required_reviewer: str = body[first_idx:last_idx].strip()
-    print(required_reviewer)
-    # check if the user is a member of the organization
-    is_member: bool = is_user_in_organization(username=required_reviewer)
 
     # check from the PR details if the user has approved the PR
     # check the reviews
@@ -281,7 +278,7 @@ def _check_required_reviewers(
     # check if the user has approved the PR
     approved: bool = required_reviewer in pr_reviews["APPROVED"]
 
-    return is_member and approved
+    return approved
 
 
 def check_pr_directives(
