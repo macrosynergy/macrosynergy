@@ -11,7 +11,7 @@ import pandas as pd
 from typing import List, Tuple
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.management.utils import reduce_df
 import macrosynergy.visuals as msv
 
 
