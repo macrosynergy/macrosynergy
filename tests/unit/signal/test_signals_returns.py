@@ -125,7 +125,7 @@ class TestAll(unittest.TestCase):
             )
         # Test that Signals Returns can take in lists as arguments
         self.assertTrue(
-            """SignalsReturns(
+            SignalsReturns(
                 df=self.dfd,
                 rets=["XR", "GROWTH"],
                 sigs=["CRY", "INFL"],
@@ -133,7 +133,7 @@ class TestAll(unittest.TestCase):
                 signs=[1, 1],
                 agg_sigs=["last", "mean"],
                 blacklist=self.blacklist,
-            )"""
+            )
         )
 
     def test_single_relation_table(self):
