@@ -73,26 +73,6 @@ def api_request(
 
     raise Exception(f"Request failed")  # If the request fails, raise an exception
 
-
-def is_user_in_organization(username: str, org: str = ORGANIZATION) -> bool:
-    """
-    Check if a user is a member of a specific organization.
-
-    :param <str> username: The username to check.
-    :param <str> org: The organization to check against.
-    :return <bool>: True if the user is a member, False otherwise.
-    """
-    url = f"https://api.github.com/orgs/{org}/members"
-    #url = f"https://api.github.com/orgs/{org}/members/{username}"
-    try:
-        api_request(url)
-        return True  # If the request is successful, the user is a member
-    except Exception as exc:
-        if "404" in str(exc):  # If the user is not a member, a 404 error is returned
-            return False
-        raise  # If it's another exception, raise it
-
-
 def check_title(
     title: str,
 ) -> bool:
@@ -289,7 +269,7 @@ def check_pr_directives(
     if body is None:
         return True
 
-    body = body.strip().replace(" ", "-")
+    body = body.strip().replace(" ", "-").upper()
     body = f" {body} "
 
     results: List[bool] = [
