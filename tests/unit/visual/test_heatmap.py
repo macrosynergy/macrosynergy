@@ -56,6 +56,13 @@ class TestAll(unittest.TestCase):
             "return_figure": False,
             "on_axis": None,
             "max_xticks": 50,
+            "cmap": "vlag",
+            "rotate_xticks": 0,
+            "rotate_yticks": 0,
+            "show_tick_lines": True,
+            "show_colorbar": True,
+            "show_annotations": False,
+            "show_boundaries": False,
         }
 
     def test_instantiate_heatmap_no_error(self):
@@ -70,7 +77,7 @@ class TestAll(unittest.TestCase):
             index="cid", columns="real_date", values=self.metric
         )
         try:
-            heatmap.plot(**self.plot_args)
+            heatmap._plot(heatmap.df, **self.plot_args)
         except Exception as e:
             self.fail(f"Heatmap.plot raised {e} unexpectedly")
 
@@ -85,7 +92,7 @@ class TestAll(unittest.TestCase):
         self.plot_args["return_figure"] = True
 
         try:
-            fig = heatmap.plot(**self.plot_args)
+            fig = heatmap._plot(heatmap.df, **self.plot_args)
         except Exception as e:
             self.fail(f"Heatmap.plot raised {e} unexpectedly")
 
@@ -94,3 +101,4 @@ class TestAll(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

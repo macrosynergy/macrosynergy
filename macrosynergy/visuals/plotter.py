@@ -16,7 +16,7 @@ import pandas as pd
 
 from macrosynergy.management import reduce_df
 from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
-from macrosynergy.visuals.common import argcopy, argvalidation
+from macrosynergy.management.decorators import argcopy, argvalidation
 
 logger = logging.getLogger(__name__)
 
@@ -196,24 +196,12 @@ class Plotter(metaclass=PlotterMetaClass):
         self.end: str = end
 
         self.backend: ModuleType
-        if backend.startswith("m"):
-            self.backend = plt
-            try:
-                self.backend.style.use("seaborn-v0_8-darkgrid")
-            except:
-                try:
-                    sns.set_style("darkgrid")
-                except:
-                    warnings.warn(
-                        "Unable to set the default style to Seaborne's darkgrid. \n"
-                        "Please make sure Seaborn and Matplotlib are installed, "
-                        " and updated to their latest versions.",
-                        RuntimeWarning,
-                    )
-        elif ...:
-            ...
-        else:
+        accepted_backends: List[str] = ["matplotlib", "plt", "mpl"]
+        if not backend.strip().lower() in accepted_backends:
             raise NotImplementedError(f"Backend `{backend}` is not supported.")
+
+        self.backend = plt
+        sns.set_theme(style="darkgrid", palette="colorblind")
 
     def __enter__(self):
         return self

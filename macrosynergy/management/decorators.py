@@ -1,6 +1,8 @@
 """
-Common types and functions used across the modules of the `macrosynergy.visuals` subpackage.
+Module housing decorators that are used to validate the arguments and return values of
+functions.
 """
+
 import inspect
 import warnings
 from functools import wraps
@@ -10,49 +12,114 @@ from typing import (
     Dict,
     List,
     Optional,
-    SupportsFloat,
-    SupportsInt,
     Tuple,
     Type,
     Union,
     get_args,
     get_origin,
 )
-
-import numpy as np
+from inspect import signature
+from macrosynergy.management.types import Numeric, NoneType
 import pandas as pd
+import numpy as np
+from packaging import version
+
+try:
+    from macrosynergy import __version__ as _version
+except ImportError:
+    try:
+        from setup import VERSION as _version
+    except ImportError:
+        _version = "0.0.0"
 
 
-class NumericType(type):
+def deprecate(
+    new_func: Callable,
+    deprecate_version: str,
+    remove_after: str = None,
+    message: str = None,
+):
     """
-    MetaClass to support type checks across `int`, `float`, `np.int64`, `np.float64`,
-    `SupportsInt`, and `SupportsFloat`.
+    Decorator for deprecating a function.
+
+    Parameters
+    :param <callable> new_func: The function that replaces the old one.
+    :param <str> deprecate_version: The version in which the old function is deprecated.
+    :param <str> remove_after: The version in which the old function is removed.
+    :param <str> message: The message to display when the old function is called.
+        This message must contain the following format strings:
+        "{old_method}", "{deprecate_version}", and "{new_method}".
+        If None, the default message is used.
+    :return <callable>: The decorated function.
     """
 
-    # A tuple of the desired types
-    _numeric_types = (int, float, np.int64, np.float64, SupportsInt, SupportsFloat)
+    def decorator(
+        old_func,
+        new_func=new_func,
+        deprecate_version=deprecate_version,
+        remove_after=remove_after,
+        message=message,
+    ):
+        # if the message is none, use the default message
+        if message is None:
+            message = (
+                "{old_method} was deprecated in version {deprecate_version} and will be "
+                "removed in version. Use {new_method} instead."
+            )
+        # else if the message does not have "{old_method}" in it, fail
+        else:
+            if any(
+                [
+                    fs not in message
+                    for fs in ["{old_method}", "{deprecate_version}", "{new_method}"]
+                ]
+            ):
+                raise ValueError(
+                    "The message must contain the following format strings: "
+                    "'{old_method}', '{deprecate_version}', and '{new_method}'."
+                )
 
-    def __instancecheck__(cls, instance):
-        return isinstance(instance, cls._numeric_types)
+        # if remove_after is not None, check the version
+        if remove_after is not None:
+            try:
+                version.parse(remove_after)
+            except:
+                raise ValueError(
+                    f"The version in which the function is deprecated ({remove_after}) "
+                    f"must be a valid version string."
+                )
 
+            if version.parse(deprecate_version) < version.parse(remove_after):
+                raise ValueError(
+                    f"The version in which the old function will be removed ({remove_after}) "
+                    f"must be greater than the version in which it is deprecated "
+                    f"({deprecate_version})."
+                )
+        else:
+            remove_after = _version
 
-class Numeric(metaclass=NumericType):
-    """
-    Custom class definition for a numeric type that supports type checks across `int`,
-    `float`, `np.int64`, `np.float64`, `SupportsInt`, and `SupportsFloat`.
-    """
+        @wraps(old_func)
+        # This will ensure the old function retains its name and other properties.
+        def wrapper(*args, **kwargs):
+            if version.parse(deprecate_version) < version.parse(_version):
+                warnings.warn(
+                    message.format(
+                        old_method=old_func.__name__,
+                        new_method=new_func.__name__,
+                        deprecate_version=deprecate_version,
+                    ),
+                    FutureWarning,
+                )
 
-    # Alternatively, use `numbers.Number` directly
-    pass
+            return old_func(*args, **kwargs)
 
+        # Update the signature and docstring of the old function to match the new one.
+        wrapper.__signature__ = signature(new_func)
+        wrapper.__doc__ = new_func.__doc__
 
-class NoneType(type):
-    """
-    MetaClass to support type checks for `None`.
-    """
+        return wrapper
 
-    def __instancecheck__(cls, instance):
-        return instance is None
+    return decorator
 
 
 def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
@@ -113,7 +180,7 @@ def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
     return False
 
 
-def _get_expected(arg_type_hint: Type[Any]) -> List[str]:
+def get_expected_type(arg_type_hint: Type[Any]) -> List[str]:
     """
     Based on the type hint, return a list of strings that represent
     the type hint - including any nested type hints.
@@ -126,15 +193,15 @@ def _get_expected(arg_type_hint: Type[Any]) -> List[str]:
 
     # handling lists
     if origin in [list, List]:
-        return [f"List[{_get_expected(args[0])[0]}]"]
+        return [f"List[{get_expected_type(args[0])[0]}]"]
 
     # tuples
     if origin in [tuple, Tuple]:
-        return [f"Tuple[{', '.join(_get_expected(arg) for arg in args)}]"]
+        return [f"Tuple[{', '.join(get_expected_type(arg) for arg in args)}]"]
 
     # dicts
     if origin in [dict, Dict]:
-        return [f"Dict[{', '.join(_get_expected(arg) for arg in args)}]"]
+        return [f"Dict[{', '.join(get_expected_type(arg) for arg in args)}]"]
 
     # unions and optionals
     if origin in [Union, Optional]:
@@ -142,7 +209,7 @@ def _get_expected(arg_type_hint: Type[Any]) -> List[str]:
         expected_types: List[str] = []
         for possible_type in args:
             if get_origin(possible_type):
-                expected_types.extend(_get_expected(possible_type))
+                expected_types.extend(get_expected_type(possible_type))
             else:
                 expected_types.append(str(possible_type))
         return expected_types
@@ -235,11 +302,8 @@ def argcopy(func: Callable) -> Callable:
         copy_types = (
             list,
             dict,
-            pd.DataFrame,
             np.ndarray,
             pd.Series,
-            pd.Index,
-            pd.MultiIndex,
             set,
         )
         new_args: List[Tuple[Any, ...]] = []
