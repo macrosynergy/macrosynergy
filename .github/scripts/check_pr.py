@@ -36,6 +36,7 @@ def api_request(
     url: str,
     headers: Dict[str, str] = {"Accept": "application/vnd.github.v3+json"},
     params: Dict[str, Any] = {},
+    max_retries: int = 5,
 ) -> Any:
     """
     Make a request to the GitHub API.
@@ -46,7 +47,7 @@ def api_request(
     :return <Any>: The response from the API.
     """
     retries = 0
-    max_retries = 5
+    last_exception: Optional[Exception] = None
     while retries < max_retries:
         try:
             # Add the OAuth token to the headers if it exists
@@ -54,14 +55,23 @@ def api_request(
                 headers["Authorization"] = f"token {OAUTH_TOKEN}"
 
             response = requests.get(url, headers=headers, params=params)
+
+            if response.status_code == 404:
+                raise Exception(f"404: {url} not found.")
             response.raise_for_status()  # Raise exception for failed requests
+
             return response.json()
         except Exception as exc:
+            fail_codes = [403, 404, 422]
+            if response.status_code in fail_codes:
+                raise Exception(f"Request failed: {exc}")
+
             print(f"Request failed: {exc}")
+            last_exception = exc
             retries += 1
             sleep(1)
-    print(f"Request failed after {max_retries} retries. Exiting.")
-    sys.exit(1)
+
+    raise Exception(f"Request failed")  # If the request fails, raise an exception
 
 
 def is_user_in_organization(username: str, org: str = ORGANIZATION) -> bool:
