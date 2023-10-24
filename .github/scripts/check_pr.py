@@ -281,7 +281,7 @@ def check_pr_directives(
     if body is None:
         return True
 
-    body = body.strip().replace(" ", "-").upper()
+    body = body.strip().replace(" ", "-")
     body = f" {body} "
 
     results: List[bool] = [
