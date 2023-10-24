@@ -49,7 +49,7 @@ class SignalsReturns(SignalBase):
         df: pd.DataFrame,
         rets: Union[str, List[str]],
         sigs: Union[str, List[str]],
-        signs: Union[int, List[int]] = [1],
+        signs: Union[int, List[int]] = 1,
         slip: int = 0,
         cosp: bool = False,
         start: str = None,
@@ -59,7 +59,7 @@ class SignalsReturns(SignalBase):
         agg_sigs: Union[int, List[int]] = "last",
     ):
         super().__init__(
-            df=df,
+            df=df, 
             ret=rets,
             sig=sigs,
             slip=slip,
@@ -70,7 +70,7 @@ class SignalsReturns(SignalBase):
             freq=freqs,
             agg_sig=agg_sigs,
         )
-        self.df = df
+        self.df = df.copy()
 
         self.cids = None
 
@@ -97,8 +97,8 @@ class SignalsReturns(SignalBase):
             if not sign in [-1, 1]:
                 raise TypeError("Sign must be either 1 or -1.")
             
-        while len(self.signs) < len(self.sig):
-            self.signs.append(1)
+        if len(self.signs) < len(self.sig):
+            self.signs.extend([1] * (len(self.sig) - len(self.signs)))
 
         if len(self.signs) > len(self.sig):
             raise ValueError("Signs must have a length less than or equal to signals")

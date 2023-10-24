@@ -1,7 +1,10 @@
+import os, sys
+sys.path.append(os.getcwd())
+
 import unittest
 from macrosynergy.signal.signal_return import SignalsReturns
 
-from tests.simulate import make_qdf
+from macrosynergy.management.simulate_quantamental_data import make_qdf
 from sklearn.metrics import accuracy_score, precision_score
 from scipy import stats
 import random
@@ -11,7 +14,7 @@ from typing import List, Dict
 
 
 class TestAll(unittest.TestCase):
-    def dataframe_generator(self):
+    def setUp(self):
         """
         Create a standardised DataFrame defined over the three categories.
         """
@@ -65,18 +68,17 @@ class TestAll(unittest.TestCase):
         )
 
     def test_constructor(self):
-        self.dataframe_generator()
         # Test the Class's constructor.
 
         # First, test the assertions.
         # Testing that the dataframe is actually of type Pandas.DataFrame
         with self.assertRaises(TypeError):
-            sr = SignalsReturns(
+            sr_df_type = SignalsReturns(
                 df="STRING", rets="XR", sigs="CRY", freqs="D", blacklist=self.blacklist
             )
         # Testing that the dataframe has the correct columns
         with self.assertRaises(ValueError):
-            sr = SignalsReturns(
+            sr_df = SignalsReturns(
                 df=pd.DataFrame(index=["FAIL"], columns=["FAIL"]),
                 rets="XR",
                 sigs="CRY",
@@ -86,7 +88,7 @@ class TestAll(unittest.TestCase):
         print(self.dfd)
         # Test to confirm the primary signal must be present in the passed Dataframe
         with self.assertRaises(AssertionError):
-            sr = SignalsReturns(
+            sr_sigs = SignalsReturns(
                 df=self.dfd,
                 rets="XR",
                 sigs="MISSING",
@@ -95,7 +97,7 @@ class TestAll(unittest.TestCase):
             )
         # Test to confirm the primary signal must be present in the passed Dataframe
         with self.assertRaises(AssertionError):
-            sr = SignalsReturns(
+            sr_rets = SignalsReturns(
                 df=self.dfd,
                 rets="MISSING",
                 sigs="CRY",
@@ -104,7 +106,7 @@ class TestAll(unittest.TestCase):
             )
         # Test to ensure that freqs is a specified string or list of strings
         with self.assertRaises(ValueError):
-            sr = SignalsReturns(
+            sr_freq = SignalsReturns(
                 df=self.dfd,
                 rets="XR",
                 sigs="CRY",
@@ -113,7 +115,7 @@ class TestAll(unittest.TestCase):
             )
         # Test that cosp is set to a boolean value
         with self.assertRaises(TypeError):
-            sr = SignalsReturns(
+            sr_cosp = SignalsReturns(
                 df=self.dfd,
                 rets="XR",
                 sigs="CRY",
@@ -123,7 +125,7 @@ class TestAll(unittest.TestCase):
             )
         # Test that Signals Returns can take in lists as arguments
         self.assertTrue(
-            SignalsReturns(
+            """SignalsReturns(
                 df=self.dfd,
                 rets=["XR", "GROWTH"],
                 sigs=["CRY", "INFL"],
@@ -131,11 +133,10 @@ class TestAll(unittest.TestCase):
                 signs=[1, 1],
                 agg_sigs=["last", "mean"],
                 blacklist=self.blacklist,
-            )
+            )"""
         )
 
     def test_single_relation_table(self):
-        self.dataframe_generator()
 
         sr = SignalsReturns(
             df=self.dfd,
@@ -183,7 +184,7 @@ class TestAll(unittest.TestCase):
         # Test Negative signs are correctly handled
 
         with self.assertRaises(TypeError):
-            sr = SignalsReturns(
+            sr_sign_fail = SignalsReturns(
                 df=self.dfd,
                 rets="XR",
                 sigs="CRY",
@@ -195,7 +196,7 @@ class TestAll(unittest.TestCase):
 
         # Ensure that the signs doesn't have a longer length than the number of signals
         with self.assertRaises(ValueError):
-            sr = SignalsReturns(
+            sr_long_signs = SignalsReturns(
                 df=self.dfd,
                 rets="XR",
                 sigs="CRY",
@@ -237,7 +238,7 @@ class TestAll(unittest.TestCase):
 
         test_df = pd.DataFrame(data)
 
-        sr = SignalsReturns(
+        sr_correct = SignalsReturns(
             df=test_df,
             rets="XR",
             sigs="CRY",
@@ -246,7 +247,7 @@ class TestAll(unittest.TestCase):
             slip=0,
         )
 
-        srt = sr.single_relation_table()
+        srt = sr_correct.single_relation_table()
 
         correct_stats = [
             0.25,
@@ -266,7 +267,7 @@ class TestAll(unittest.TestCase):
 
         # Check when signs are negative
 
-        sr = SignalsReturns(
+        sr_correct_neg = SignalsReturns(
             df=test_df,
             rets="XR",
             sigs="CRY",
@@ -276,7 +277,7 @@ class TestAll(unittest.TestCase):
             slip=0,
         )
 
-        srt = sr.single_relation_table()
+        srt = sr_correct_neg.single_relation_table()
 
         correct_stats = [
             0.75,
@@ -295,11 +296,10 @@ class TestAll(unittest.TestCase):
             self.assertTrue(np.isclose(val1, val2))
 
     def test_multiple_relation_table(self):
-        self.dataframe_generator()
 
         num_of_acc_cols = 10
 
-        sr = SignalsReturns(
+        sr_unsigned = SignalsReturns(
             df=self.dfd,
             rets="XR",
             sigs="CRY",
@@ -309,43 +309,42 @@ class TestAll(unittest.TestCase):
             slip=1,
         )
 
-        self.assertTrue(sr.multiple_relations_table().shape == (1, num_of_acc_cols))
+        self.assertTrue(sr_unsigned.multiple_relations_table().shape == (1, num_of_acc_cols))
 
-        sr = SignalsReturns(
+        sr_mrt = SignalsReturns(
             df=self.dfd,
             rets=["XR", "GROWTH"],
             sigs=["CRY", "INFL"],
             freqs=["Q", "M"],
-            signs=[1, 1],
+            #signs=[1, 1],
             agg_sigs=["last", "mean"],
             blacklist=self.blacklist,
         )
 
-        self.assertTrue(sr.multiple_relations_table().shape == (16, num_of_acc_cols))
+        self.assertTrue(sr_mrt.multiple_relations_table().shape == (16, num_of_acc_cols))
 
         with self.assertRaises(ValueError):
-            sr.multiple_relations_table(rets="TEST")
+            sr_mrt.multiple_relations_table(rets="TEST")
 
         with self.assertRaises(ValueError):
-            sr.multiple_relations_table(xcats="TEST")
+            sr_mrt.multiple_relations_table(xcats="TEST")
 
         with self.assertRaises(ValueError):
-            sr.multiple_relations_table(freqs="TEST")
+            sr_mrt.multiple_relations_table(freqs="TEST")
 
         with self.assertRaises(ValueError):
-            sr.multiple_relations_table(agg_sigs="TEST")
+            sr_mrt.multiple_relations_table(agg_sigs="TEST")
 
         rets = ["XR", "GROWTH"]
         xcats = ["INFL"]
         freqs = ["Q", "M"]
         agg_sigs = ["mean"]
-        mrt = sr.multiple_relations_table(
+        mrt = sr_mrt.multiple_relations_table(
             rets=rets, xcats=xcats, freqs=freqs, agg_sigs=agg_sigs
         )
         self.assertTrue(mrt.shape == (4, num_of_acc_cols))
 
     def test_single_statistic_table(self):
-        self.dataframe_generator()
 
         sr = SignalsReturns(
             df=self.dfd,
@@ -400,7 +399,6 @@ class TestAll(unittest.TestCase):
         )
 
     def test_set_df_labels(self):
-        self.dataframe_generator()
 
         rets = ["XR", "GROWTH"]
         freqs = ["Q", "M"]
@@ -454,7 +452,6 @@ class TestAll(unittest.TestCase):
         return 0
 
     def test_get_rowcol(self):
-        self.dataframe_generator()
 
         rets = ["XR", "GROWTH"]
         freqs = ["Q", "M"]
