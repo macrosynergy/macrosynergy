@@ -6,7 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn import metrics as skm
 from scipy import stats
-from typing import List, Union, Tuple
+from typing import List, Union, Tuple, Any, Optional
 from datetime import timedelta
 from collections import defaultdict
 import warnings
@@ -69,9 +69,9 @@ class SignalBase:
         """
         if not isinstance(df, pd.DataFrame):
             raise TypeError(f"DataFrame expected and not {type(df)}.")
-        
+
         required_columns = ["cid", "xcat", "real_date", "value"]
-        
+
         if not all(col in df.columns for col in required_columns):
             raise ValueError(
                 "Dataframe columns must be of value: 'cid', 'xcat','real_date' and  \
@@ -113,9 +113,9 @@ class SignalBase:
         self.ret = ret
         self.freq = freq
 
-        if not isinstance(cosp, bool): 
+        if not isinstance(cosp, bool):
             raise TypeError(f"<bool> object expected and not {type(cosp)}.")
-        
+
         self.cosp = cosp
         self.start = start
         self.end = end
@@ -163,41 +163,53 @@ class SignalBase:
         management/utils.py
 
         :param <pd.DataFrame> df: standardised DataFrame.
-        :param <int> slip: slip value to apply to df
-        :param <List[str]> cids: list of cids in df to apply slip
-        :param <List[str]> xcats: list of xcats in df to apply slip
-        :param <List[str]> metrics: list of metrics in df to apply slip
+        :param <int> slip: slip value to apply to df.
+        :param <List[str]> cids: list of cids in df to apply slip.
+        :param <List[str]> xcats: list of xcats in df to apply slip.
+        :param <List[str]> metrics: list of metrics in df to apply slip.
         """
         return apply_slip_util(
             df=df, slip=slip, cids=cids, xcats=xcats, metrics=metrics, raise_error=False
         )
 
     @staticmethod
-    def is_list_of_strings(variable):
+    def is_list_of_strings(variable: Any) -> bool:
         """
         Function used to test whether a variable is a list of strings, to avoid the
         compiler saying a string is a list of characters
+        :param <Any> variable: variable to be tested.
+        :return <bool>: True if variable is a list of strings, False otherwise.
         """
         return isinstance(variable, list) and all(
             isinstance(item, str) for item in variable
         )
 
-    def manipulate_df(self, xcat, freq, agg_sig, sig, sst=False, df_result=None):
+    def manipulate_df(
+        self,
+        xcat: str,
+        freq: str,
+        agg_sig: str,
+        sig: str,
+        sst: bool = False,
+        df_result: Optional[pd.DataFrame] = None,
+    ):
         """
         Used to manipulate the DataFrame to the desired format for the analysis. Firstly
         reduces the dataframe to only include data outside of the blacklist and data that
-        is relevant to xcat and sig. Then applies the slip to the dataframe. It then    
+        is relevant to xcat and sig. Then applies the slip to the dataframe. It then
         converts the dataframe to the desired format for the analysis and checks whether
         any negative signs should be introduced.
 
-        :param <str> xcat: xcat to be analysed
-        :param <str> freq: frequency to be used in analysis
-        :param <str> agg_sig: aggregation method to be used in analysis
-        :param <str> sig: signal to be analysed
-        :param <bool> sst: Boolean that specifies whether this function is to be used for 
+        :param <str> xcat: xcat to be analysed.
+        :param <str> freq: frequency to be used in analysis.
+        :param <str> agg_sig: aggregation method to be used in analysis.
+        :param <str> sig: signal to be analysed.
+        :param <bool> sst: Boolean that specifies whether this function is to be used for
             a single statistic table.
-        :param <pd.DataFrame> df_result: DataFrame to be used for single statistic table
+        :param <Optional[pd.DataFrame]> df_result: DataFrame to be used for single statistic
+            table. `None` by default, and when using with `sst` set to `False`.
         """
+
         cids = None if self.cids is None else self.cids
         dfd = reduce_df(
             self.df,
