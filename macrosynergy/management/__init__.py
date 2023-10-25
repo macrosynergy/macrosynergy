@@ -7,8 +7,11 @@ from .check_availability import (
     missing_in_df,
     business_day_dif,
 )
-from .simulate_vintage_data import VintageData
-from .simulate_quantamental_data import make_qdf
+
+from .simulate import simulate_vintage_data, simulate_quantamental_data
+
+from .simulate.simulate_vintage_data import VintageData
+from .simulate.simulate_quantamental_data import make_qdf
 from .utils import (
     common_cids,
     update_df
