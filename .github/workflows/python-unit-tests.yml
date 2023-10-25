@@ -21,11 +21,22 @@ jobs:
         shell: bash
         run: |
           TVAR="$(grep -r -H 'sys.path.append')"
-          if [ -n "$TVAR" ]; then
+          while IFS= read -r line; do
+          VAREXIT=0
+          if [[ $line == .github/* ]]; then
+              
+          else
             echo "sys.path.append found in the following files:"
-            echo "$TVAR"
+            echo "$line"
+            VAREXIT=1
+          fi
+          done <<< "$TVAR"
+
+          if VAREXIT=1; then
             exit 1
           fi
+
+          
       - name: Lint with flake8
         run: |
           # stop the build if there are Python syntax errors or undefined names
