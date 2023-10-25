@@ -7,6 +7,10 @@ on:
     branches: [main, test, develop]
   workflow_dispatch:
 
+concurrency:
+  group: "integration-tests"
+  cancel-in-progress: true
+
 jobs:
   run-integration-tests:
     runs-on: ubuntu-latest
