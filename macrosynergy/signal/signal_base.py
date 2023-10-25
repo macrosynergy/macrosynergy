@@ -11,9 +11,11 @@ from datetime import timedelta
 from collections import defaultdict
 import warnings
 
-from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.shape_dfs import reduce_df, categories_df
-from macrosynergy.management.utils import apply_slip as apply_slip_util
+from macrosynergy.management.utils import (
+    apply_slip as apply_slip_util,
+    reduce_df,
+    categories_df,
+)
 
 
 class SignalBase:

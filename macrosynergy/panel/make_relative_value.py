@@ -8,8 +8,9 @@ to calculate values for indicators relative to a basket of cross-sections.
 import numpy as np
 import pandas as pd
 from typing import List, Set
+
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.management.utils import reduce_df
 import warnings
 
 
