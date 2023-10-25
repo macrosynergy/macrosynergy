@@ -15,7 +15,9 @@ import requests.compat
 from .core import get_cid, get_xcat
 
 
-def standardise_dataframe(df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
+def standardise_dataframe(
+    df: pd.DataFrame, verbose: bool = False
+) -> QuantamentalDataFrame:
     """
     Applies the standard JPMaQS Quantamental DataFrame format to a DataFrame.
 
@@ -26,7 +28,7 @@ def standardise_dataframe(df: pd.DataFrame, verbose: bool = False) -> pd.DataFra
     :raises <TypeError>: If the input is not a pandas DataFrame.
     :raises <ValueError>: If the input DataFrame is not in the correct format.
     """
-    idx_cols: List[str] = ["cid", "xcat", "real_date"]
+    idx_cols: List[str] = QuantamentalDataFrame.IndexCols
     commonly_used_cols: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
     if not set(df.columns).issuperset(set(idx_cols)):
         fail_str: str = (
@@ -76,21 +78,28 @@ def standardise_dataframe(df: pd.DataFrame, verbose: bool = False) -> pd.DataFra
     return return_df
 
 
-def drop_nan_series(df: pd.DataFrame, raise_warning: bool = False) -> pd.DataFrame:
+def drop_nan_series(
+    df: pd.DataFrame, column: str = "value", raise_warning: bool = False
+) -> QuantamentalDataFrame:
     """
     Drops any series that are entirely NaNs.
     Raises a user warning if any series are dropped.
 
     :param <pd.DataFrame> df: The dataframe to be cleaned.
+    :param <str> column: The column to be used as the value column, defaults to
+        "value".
     :param <bool> raise_warning: Whether to raise a warning if any series are dropped.
+    :return <pd.DataFrame | QuantamentalDataFrame>: The cleaned DataFrame.
+    :raises <TypeError>: If the input is not a pandas DataFrame.
+    :raises <ValueError>: If the input DataFrame is not in the correct format.
     """
-    if not isinstance(df, pd.DataFrame):
-        raise TypeError("Error: The input must be a pandas DataFrame.")
-    elif not set(df.columns).issuperset(set(["cid", "xcat", "value"])):
-        raise ValueError(
-            "Error: The input DataFrame must have columns 'cid', 'xcat', 'value'."
-        )
-    elif not df["value"].isna().any():
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("Argument `df` must be a Quantamental DataFrame.")
+
+    if not column in df.columns:
+        raise ValueError(f"Column {column} not present in DataFrame.")
+
+    if not df["value"].isna().any():
         return df
 
     if not isinstance(raise_warning, bool):
