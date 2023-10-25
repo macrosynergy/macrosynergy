@@ -20,9 +20,8 @@ jobs:
       - name: Check for sys.path.append
         shell: bash
         run: |
-          echo "HI"
-          TVAR="$(grep -r -H --exclude-dir=.github 'sys.path.append')"
-          if [ -n "$TVAR" ]; then
+          TVAR="$(grep -r -H 'sys.path.append')"
+          if [ -n "$TVAR"]; then
             echo "sys.path.append found in the following files:"
             echo "$TVAR"
             exit 1
