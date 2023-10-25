@@ -191,3 +191,91 @@ def common_cids(df: pd.DataFrame, xcats: List[str]):
 
     ls: List[str] = list(cid_sets[0].intersection(*cid_sets[1:]))
     return sorted(ls)
+
+
+def generate_random_date(
+    start: Optional[Union[str, datetime.datetime, pd.Timestamp]] = "1990-01-01",
+    end: Optional[Union[str, datetime.datetime, pd.Timestamp]] = "2020-01-01",
+) -> str:
+    """
+    Generates a random date between two dates.
+
+    :param <str> start: The start date, in the ISO format (YYYY-MM-DD).
+    :param <str> end: The end date, in the ISO format (YYYY-MM-DD).
+
+    Returns
+    :return <str>: The random date.
+    """
+
+    if not isinstance(start, (str, datetime.datetime, pd.Timestamp)):
+        raise TypeError(
+            "Argument `start` must be a string, datetime.datetime, or pd.Timestamp."
+        )
+    if not isinstance(end, (str, datetime.datetime, pd.Timestamp)):
+        raise TypeError(
+            "Argument `end` must be a string, datetime.datetime, or pd.Timestamp."
+        )
+
+    start: pd.Timestamp = pd.Timestamp(start)
+    end: pd.Timestamp = pd.Timestamp(end)
+    if start == end:
+        return start.strftime("%Y-%m-%d")
+    else:
+        return pd.Timestamp(
+            np.random.randint(start.value, end.value, dtype=np.int64)
+        ).strftime("%Y-%m-%d")
+
+
+def get_dict_max_depth(d: dict) -> int:
+    """
+    Returns the maximum depth of a dictionary.
+
+    :param <dict> d: The dictionary to be searched.
+
+    Returns
+    :return <int>: The maximum depth of the dictionary.
+    """
+    return (
+        1 + max(map(get_dict_max_depth, d.values()), default=0)
+        if isinstance(d, dict)
+        else 0
+    )
+
+
+def rec_search_dict(d: dict, key: str, match_substring: bool = False, match_type=None):
+    """
+    Recursively searches a dictionary for a key and returns the value
+    associated with it.
+
+    :param <dict> d: The dictionary to be searched.
+    :param <str> key: The key to be searched for.
+    :param <bool> match_substring: If True, the function will return
+        the value of the first key that contains the substring
+        specified by the key parameter. If False, the function will
+        return the value of the first key that matches the key
+        parameter exactly. Default is False.
+    :param <Any> match_type: If not None, the function will look for
+        a key that matches the search parameters and has
+        the specified type. Default is None.
+    :return Any: The value associated with the key, or None if the key
+        is not found.
+    """
+    if not isinstance(d, dict):
+        return None
+
+    for k, v in d.items():
+        if match_substring:
+            if key in k:
+                if match_type is None or isinstance(v, match_type):
+                    return v
+        else:
+            if k == key:
+                if match_type is None or isinstance(v, match_type):
+                    return v
+
+        if isinstance(v, dict):
+            result = rec_search_dict(v, key, match_substring, match_type)
+            if result is not None:
+                return result
+
+    return None
