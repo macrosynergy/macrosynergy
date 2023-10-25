@@ -34,4 +34,6 @@ __all__ = [
     "common_cids",
     "utils",
     "types",
+    "simulate_vintage_data",
+    "simulate_quantamental_data",
 ]
