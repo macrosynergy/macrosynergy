@@ -11,7 +11,7 @@ from .simulate import simulate_vintage_data, simulate_quantamental_data
 
 from .simulate.simulate_vintage_data import VintageData
 from .simulate.simulate_quantamental_data import make_qdf
-from .utils import common_cids, update_df
+from .utils import common_cids, update_df, reduce_df, categories_df, reduce_df_by_ticker
 from . import utils, types, decorators, simulate
 
 __all__ = [
