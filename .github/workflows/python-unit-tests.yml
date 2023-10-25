@@ -21,6 +21,7 @@ jobs:
         shell: bash
         run: |
           TVAR="$(grep -r -H 'sys.path.append')"
+          echo "$TVAR"
           while IFS= read -r line; do
             VAREXIT=0
             if [[ $line == .github/* ]]; 
