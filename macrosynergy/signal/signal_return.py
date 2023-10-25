@@ -214,7 +214,11 @@ class SignalsReturns(SignalBase):
         xcats = [x for x in xcats if x in self.sig]
 
         index = [
-            f"{freq}: {xcat + '_NEG' if self.signs[self.sig.index(xcat)] == -1 else xcat}/{agg_sig} => {ret}"
+            (
+                f"{freq}: "
+                f"{xcat + '_NEG' if self.signs[self.sig.index(xcat)] == -1 else xcat}"
+                f"/{agg_sig} => {ret}"
+            )
             for freq in freqs
             for agg_sig in agg_sigs
             for ret in rets
