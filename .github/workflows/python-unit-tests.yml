@@ -19,10 +19,10 @@ jobs:
 
       - name: Check for sys.path.append
         run: |
-          grep -r -H --exclude-dir=./.github/ "sys\.path\.append" .
+          grep -r -H --exclude-dir=./.github/* "sys\.path\.append" .
           if [ $? -eq 0]; then
             echo "ERROR: Found 'sys.path.append' in the following file(s):"
-            grep -r -H --exclude-dir=./.github/ "sys\.path\.append" . | cut -d':' -f1 | sort -u
+            grep -r -H --exclude-dir=./.github/* "sys\.path\.append" . | cut -d':' -f1 | sort -u
             exit 1
           fi
 
