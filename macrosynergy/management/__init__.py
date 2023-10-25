@@ -1,3 +1,4 @@
+from .utils import reduce_df, categories_df, reduce_df_by_ticker
 from .check_availability import (
     check_availability,
     visual_paneldates,
@@ -8,7 +9,10 @@ from .check_availability import (
 )
 from .simulate_vintage_data import VintageData
 from .simulate_quantamental_data import make_qdf
-from .utils import common_cids, update_df, reduce_df, categories_df, reduce_df_by_ticker
+from .utils import (
+    common_cids,
+    update_df
+)
 from . import utils, types
 
 __all__ = [
@@ -16,15 +20,15 @@ __all__ = [
     "visual_paneldates",
     "check_enddates",
     "check_startyears",
+    "reduce_df",
+    "reduce_df_by_ticker",
     "missing_in_df",
-    "business_day_dif",
     "VintageData",
     "make_qdf",
-    "common_cids",
     "update_df",
-    "reduce_df",
+    "business_day_dif",
     "categories_df",
-    "reduce_df_by_ticker",
+    "common_cids",
     "utils",
     "types",
 ]
