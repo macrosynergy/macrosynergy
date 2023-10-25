@@ -421,16 +421,11 @@ class SignalsReturns(SignalBase):
         are in the rows/columns of the dataframe.
         """
         result = ""
-        for rowcol in rowcols:
+        idx: List[str] = ["ret", "xcat", "freq", "agg_sigs"]
+        assert all([x in idx for x in rowcols]), "rowcols must be a subset of idx"
 
-            if "ret" == rowcol:
-                result += hash.split("/")[0] + "/"
-            if "xcat" == rowcol:
-                result += hash.split("/")[1] + "/"
-            if "freq" == rowcol:
-                result += hash.split("/")[2] + "/"
-            if "agg_sigs" == rowcol:
-                result += hash.split("/")[3] + "/"
+        for rowcol in rowcols:
+            result += hash.split("/")[idx.index(rowcol)] + "/"
 
         return result[:-1]
 
