@@ -4,7 +4,7 @@ import random
 import numpy as np
 import pandas as pd
 from tests.simulate import make_qdf
-from macrosynergy.management.shape_dfs import reduce_df, categories_df
+from macrosynergy.management.utils import reduce_df, categories_df
 from math import ceil, floor
 from datetime import timedelta
 from pandas.tseries.offsets import BMonthEnd
