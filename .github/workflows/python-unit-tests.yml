@@ -19,9 +19,10 @@ jobs:
 
       - name: Check for sys.path.append
         run: |
-          grep -r "sys\.path\.append(os\.getcwd())" .
+          grep -r -H "sys\.path\.append(os\.getcwd())" .
           if [ $? -eq 0 ]; then
-            echo "ERROR: Found 'sys.path.append(os.getcwd())' in the codebase. Please remove it."
+            echo "ERROR: Found 'sys.path.append(os.getcwd())' in the following file(s):"
+            grep -r -H "sys\.path\.append(os\.getcwd())" . | cut -d':' -f1 | sort -u
             exit 1
           fi
 
