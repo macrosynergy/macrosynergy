@@ -18,6 +18,7 @@ jobs:
           python-version: 3.11
 
       - name: Check for sys.path.append
+        shell: bash
         run: |
           TVAR=`grep -r -H --exclude-dir=.github "sys.path.append"`
           if [ -n "$TVAR" ]; then
