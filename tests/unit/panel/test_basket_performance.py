@@ -5,7 +5,7 @@ import pandas as pd
 import sys
 from tests.simulate import dataframe_basket, construct_df
 from macrosynergy.panel.basket import Basket
-from macrosynergy.management.shape_dfs import reduce_df, reduce_df_by_ticker
+from macrosynergy.management.utils import reduce_df, reduce_df_by_ticker
 from macrosynergy.panel.historic_vol import flat_std
 from itertools import chain
 import warnings
