@@ -372,7 +372,7 @@ class SignalsReturns(SignalBase):
 
         return df_result
 
-    def set_df_labels(self, rows_dict, rows, columns):
+    def set_df_labels(self, rows_dict: Dict, rows: List[str], columns: List[str]):
         """
         Creates two lists of strings that will be used as the row and column labels for
         the resulting dataframe.
