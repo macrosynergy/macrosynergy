@@ -57,7 +57,7 @@ class BasePanelTimeSeriesSplit(BaseCrossValidator):
         self.logger = logging.getLogger(__name__)
         self.logger.info("Initializing PanelTimeSeriesSplit")
         self.n_splits: Optional[int] = n_splits
-        
+
     def split(
         self, X: pd.DataFrame, y: pd.DataFrame, groups: int = None
     ) -> List[Tuple[np.array, np.array]]:
@@ -106,37 +106,21 @@ class BasePanelTimeSeriesSplit(BaseCrossValidator):
         if len(cs_dates) == 0:
             return xranges
 
-        lower_bound: pd.Timestamp = cs_dates.min()
-        upper_bound: pd.Timestamp = cs_dates.max()
+        filtered_real_dates = real_dates[
+            (real_dates >= cs_dates.min()) & (real_dates <= cs_dates.max())
+        ]
+        difference = filtered_real_dates.difference(cs_dates)
+        if len(difference) == 0:
+            xranges.append((cs_dates.min(), cs_dates.max() - cs_dates.min()))
+            return xranges
+        else:
+            while len(difference) > 0:
+                xranges.append((cs_dates.min(), difference.min() - cs_dates.min()))
+                cs_dates = cs_dates[(cs_dates >= difference.min())]
+                difference = difference[(difference >= cs_dates.min())]
 
-        upper_bound_idx = np.where(real_dates == upper_bound)[0]
-        if upper_bound_idx and upper_bound_idx[0] + 1 < len(real_dates):
-            upper_bound = real_dates[upper_bound_idx[0] + 1]
-
-        in_contiguous: bool = True
-        lower: pd.Timestamp = lower_bound
-        upper: pd.Timestamp = upper_bound
-
-        for real_date in real_dates[
-            (real_dates >= lower_bound) & (real_dates <= upper_bound)
-        ]:
-            if real_date in cs_dates:
-                if not in_contiguous:
-                    in_contiguous = True
-                    lower = real_date
-
-                upper = (
-                    real_date
-                    if real_date == upper_bound
-                    else real_dates[np.where(real_dates == real_date)[0][0] + 1]
-                )
-            else:
-                if in_contiguous:
-                    xranges.append((lower, upper - lower))
-                    in_contiguous = False
-
-        xranges.append((lower, upper - lower))
-        return xranges
+            xranges.append((cs_dates.min(), cs_dates.max() - cs_dates.min()))
+            return xranges
 
     def visualise_splits(
         self, X: pd.DataFrame, y: pd.DataFrame, figsize: Tuple[int, int] = (20, 5)
@@ -158,11 +142,10 @@ class BasePanelTimeSeriesSplit(BaseCrossValidator):
             [X, y], axis=1
         ).dropna()  # remove dropna when splitter method fixed as per TODO #3
         cross_sections: np.array[str] = np.array(
-            sorted(Xy.index.get_level_values(0).unique())
+            sorted(Xy.index.get_level_values("cid").unique())
         )
-        real_dates: np.array[pd.Timestamp] = np.array(
-            sorted(Xy.index.get_level_values(1).unique())
-        )
+        real_dates = Xy.index.get_level_values("real_date").unique()
+
         splits: List[Tuple[np.array[int], np.array[int]]] = self.split(X, y)
 
         n_splits: int = self.adjusted_n_splits if self.adjusted_n_splits <= 5 else 5
@@ -184,7 +167,7 @@ class BasePanelTimeSeriesSplit(BaseCrossValidator):
         )
 
         fig, ax = plt.subplots(
-            nrows=len(Xy.index.get_level_values(0).unique()),
+            nrows=len(Xy.index.get_level_values("cid").unique()),
             ncols=n_splits,
             figsize=figsize,
         )
@@ -194,11 +177,11 @@ class BasePanelTimeSeriesSplit(BaseCrossValidator):
         for cs_idx, cs in enumerate(cross_sections):
             for idx, split_idx in enumerate(split_idxs):
                 cs_train_dates: pd.DatetimeIndex = Xy.iloc[splits[split_idx][0]][
-                    Xy.iloc[splits[split_idx][0]].index.get_level_values(0) == cs
-                ].index.get_level_values(1)
+                    Xy.iloc[splits[split_idx][0]].index.get_level_values("cid") == cs
+                ].index.get_level_values("real_date")
                 cs_test_dates: pd.DatetimeIndex = Xy.iloc[splits[split_idx][1]][
-                    Xy.iloc[splits[split_idx][1]].index.get_level_values(0) == cs
-                ].index.get_level_values(1)
+                    Xy.iloc[splits[split_idx][1]].index.get_level_values("cid") == cs
+                ].index.get_level_values("real_date")
 
                 xranges_train: List[
                     Tuple[pd.Timestamp, pd.Timedelta]
@@ -232,7 +215,7 @@ class BasePanelTimeSeriesSplit(BaseCrossValidator):
         plt.legend(frameon=True)
         plt.tight_layout()
         plt.show()
-        
+
     def determine_unique_time_splits(
         self, X: pd.DataFrame, y: pd.DataFrame
     ) -> Tuple[List[pd.DatetimeIndex], pd.DataFrame, int]:
@@ -284,16 +267,17 @@ class BasePanelTimeSeriesSplit(BaseCrossValidator):
 class NSplitsPanelTimeSeriesSplits(BasePanelTimeSeriesSplit):
     def __init__(
         self,
-        n_splits: Optional[int] = None,
+        n_splits: int = 5,
         n_split_method: Optional[str] = "expanding",
     ):
-        assert n_split_method in [
-            "expanding",
-            "rolling",
-        ], "n_split_method must be either 'expanding' or 'rolling'."
-        self.n_splits = n_splits
+        if not isinstance(n_splits, int):
+            raise TypeError("n_splits must be an integer.")
+
+        if n_split_method not in ["expanding", "rolling"]:
+            raise ValueError("n_split_method must be either 'expanding' or 'rolling'.")
+
         self.n_split_method = n_split_method
-        super().__init__()
+        super().__init__(n_splits=n_splits)
 
     def get_n_splits(self, X: pd.DataFrame, y: pd.DataFrame, groups=None) -> int:
         """
@@ -331,10 +315,10 @@ class NSplitsPanelTimeSeriesSplits(BasePanelTimeSeriesSplit):
         assert isinstance(y.index, pd.MultiIndex), "y must be multi-indexed."
         # Check the inner multi-index levels are datetime indices
         assert isinstance(
-            X.index.get_level_values(1)[0], datetime.date
+            X.index.get_level_values("real_date")[0], datetime.date
         ), "The inner index of X must be datetime.date."
         assert isinstance(
-            y.index.get_level_values(1)[0], datetime.date
+            y.index.get_level_values("real_date")[0], datetime.date
         ), "The inner index of y must be datetime.date."
         # Check that X and y are indexed in the same order
         assert X.index.equals(
@@ -344,7 +328,7 @@ class NSplitsPanelTimeSeriesSplits(BasePanelTimeSeriesSplit):
         Xy: pd.DataFrame = pd.concat([X, y], axis=1)
         Xy = Xy.dropna()
         self.unique_times: pd.DatetimeIndex = (
-            Xy.index.get_level_values(1).sort_values().unique()
+            Xy.index.get_level_values("real_date").sort_values().unique()
         )
 
         # when n_splits is specified, the unique dates in each training split are determined based on whether n_split_method is expanding or rolling.
@@ -410,12 +394,14 @@ class NSplitsPanelTimeSeriesSplits(BasePanelTimeSeriesSplit):
                 if split_idx != self.adjusted_n_splits - 1:
                     self.train_indices.append(
                         np.where(
-                            Xy.index.get_level_values(1).isin(train_splits[split_idx])
+                            Xy.index.get_level_values("real_date").isin(
+                                train_splits[split_idx]
+                            )
                         )[0]
                     )
                     self.test_indices.append(
                         np.where(
-                            Xy.index.get_level_values(1).isin(
+                            Xy.index.get_level_values("real_date").isin(
                                 train_splits_basic[split_idx + 1]
                             )
                         )[0]
@@ -423,34 +409,39 @@ class NSplitsPanelTimeSeriesSplits(BasePanelTimeSeriesSplit):
                 else:
                     self.train_indices.append(
                         np.where(
-                            Xy.index.get_level_values(1).isin(train_splits[split_idx])
+                            Xy.index.get_level_values("real_date").isin(
+                                train_splits[split_idx]
+                            )
                         )[0]
                     )
-                    if self.n_split_method == "expanding":
-                        self.test_indices.append(
-                            np.where(
-                                Xy.index.get_level_values(1).isin(
-                                    self.unique_times[
-                                        np.where(
-                                            self.unique_times
-                                            == np.max(train_splits[split_idx])
-                                        )[0][0]
-                                        + 1 :
-                                    ]
-                                )
-                            )[0]
-                        )
+                    self.test_indices.append(
+                        np.where(
+                            Xy.index.get_level_values("real_date").isin(
+                                self.unique_times[
+                                    np.where(
+                                        self.unique_times
+                                        == np.max(train_splits[split_idx])
+                                    )[0][0]
+                                    + 1 :
+                                ]
+                            )
+                        )[0]
+                    )
         else:
             # rolling
             for split_idx in range(self.n_splits):
                 self.train_indices.append(
                     np.where(
-                        Xy.index.get_level_values(1).isin(train_splits[split_idx])
+                        Xy.index.get_level_values("real_date").isin(
+                            train_splits[split_idx]
+                        )
                     )[0]
                 )
                 self.test_indices.append(
                     np.where(
-                        ~Xy.index.get_level_values(1).isin(train_splits[split_idx])
+                        ~Xy.index.get_level_values("real_date").isin(
+                            train_splits[split_idx]
+                        )
                     )[0]
                 )
 
@@ -460,34 +451,37 @@ class NSplitsPanelTimeSeriesSplits(BasePanelTimeSeriesSplit):
 class IntervalPanelTimeSeriesSplits(BasePanelTimeSeriesSplit):
     def __init__(
         self,
-        train_intervals: Optional[int] = 21,
-        min_cids: Optional[int] = 4,
-        min_periods: Optional[int] = 500,
+        train_intervals: int = 21,
+        min_cids: int = 4,
+        min_periods: int = 500,
         test_size: int = 21,
         max_periods: Optional[int] = None,
     ):
-        assert (
-            (train_intervals is not None)
-            & (min_periods is not None)
-            & (min_cids is not None)
-            & (test_size is not None)
-        ), "If 'n_splits' is not specified, then 'train_intervals', 'min_periods', 'min_cids' and 'test_size' must be specified."
-        assert (min_cids > 0) & (
-            type(min_cids) == int
-        ), "min_cids must be an integer greater than 0."
-        assert (min_periods > 0) & (
-            type(min_periods) == int
-        ), "min_periods must be an integer greater than 0."
-        assert (test_size > 0) & (
-            type(test_size) == int
-        ), "test_size must be an integer greater than 0."
+        if not isinstance(train_intervals, int):
+            raise TypeError("train_intervals must be an integer.")
+        if not isinstance(min_periods, int):
+            raise TypeError("min_periods must be an integer.")
+        if not isinstance(min_cids, int):
+            raise TypeError("min_cids must be an integer.")
+        if not isinstance(test_size, int):
+            raise TypeError("test_size must be an integer.")
+
+        if train_intervals <= 0:
+            raise ValueError("train_intervals must be an integer greater than 0.")
+        if min_cids <= 0:
+            raise ValueError("min_cids must be an integer greater than 0.")
+        if min_periods <= 0:
+            raise ValueError("min_periods must be an integer greater than 0.")
+        if test_size <= 0:
+            raise ValueError("test_size must be an integer greater than 0.")
+
         self.train_intervals = train_intervals
         self.min_cids = min_cids
         self.min_periods = min_periods
         self.test_size = test_size
         self.max_periods = max_periods
         super().__init__()
-        
+
     def get_n_splits(self, X: pd.DataFrame, y: pd.DataFrame, groups=None) -> int:
         """
         Calculates number of splits. This method is implemented for compatibility with scikit-learn,
@@ -526,10 +520,10 @@ class IntervalPanelTimeSeriesSplits(BasePanelTimeSeriesSplit):
         assert isinstance(y.index, pd.MultiIndex), "y must be multi-indexed."
         # Check the inner multi-index levels are datetime indices
         assert isinstance(
-            X.index.get_level_values(1)[0], datetime.date
+            X.index.get_level_values("real_date")[0], datetime.date
         ), "The inner index of X must be datetime.date."
         assert isinstance(
-            y.index.get_level_values(1)[0], datetime.date
+            y.index.get_level_values("real_date")[0], datetime.date
         ), "The inner index of y must be datetime.date."
         # Check that X and y are indexed in the same order
         assert X.index.equals(
@@ -539,7 +533,7 @@ class IntervalPanelTimeSeriesSplits(BasePanelTimeSeriesSplit):
         Xy: pd.DataFrame = pd.concat([X, y], axis=1)
         Xy = Xy.dropna()
         self.unique_times: pd.DatetimeIndex = (
-            Xy.index.get_level_values(1).sort_values().unique()
+            Xy.index.get_level_values("real_date").sort_values().unique()
         )
         if self.min_periods is not None:
             assert self.min_periods <= len(
@@ -579,8 +573,8 @@ class IntervalPanelTimeSeriesSplits(BasePanelTimeSeriesSplit):
         # (e) add the first training set to the list of training splits, so that the dates that constitute each training split are together.
         train_splits_basic.insert(
             0,
-            Xy.index.get_level_values(1)[
-                Xy.index.get_level_values(1) <= date_last_train
+            Xy.index.get_level_values("real_date")[
+                Xy.index.get_level_values("real_date") <= date_last_train
             ]
             .unique()
             .sort_values(),
@@ -602,18 +596,17 @@ class IntervalPanelTimeSeriesSplits(BasePanelTimeSeriesSplit):
 
         :return <List[pd.DatetimeIndex]> train_splits: list of unique dates in each training split, adjusted for rolling or expanding windows.
         """
-        if self.train_intervals:
-            train_splits: List[np.array] = [
-                train_splits_basic[0]
-                if not self.max_periods
-                else train_splits_basic[0][-self.max_periods:]
-            ]
-            for i in range(1, self.adjusted_n_splits):
-                train_splits.append(
-                    np.concatenate([train_splits[i - 1], train_splits_basic[i]])
-                )
-                if self.max_periods and self.train_intervals:
-                    train_splits[i] = train_splits[i][-self.max_periods:]
+        train_splits: List[np.array] = [
+            train_splits_basic[0]
+            if not self.max_periods
+            else train_splits_basic[0][-self.max_periods :]
+        ]
+        for i in range(1, self.adjusted_n_splits):
+            train_splits.append(
+                np.concatenate([train_splits[i - 1], train_splits_basic[i]])
+            )
+            if self.max_periods and self.train_intervals:
+                train_splits[i] = train_splits[i][-self.max_periods :]
 
         return train_splits
 
@@ -633,11 +626,11 @@ class IntervalPanelTimeSeriesSplits(BasePanelTimeSeriesSplit):
         """
         for split in train_splits:
             self.train_indices.append(
-                np.where(Xy.index.get_level_values(1).isin(split))[0]
+                np.where(Xy.index.get_level_values("real_date").isin(split))[0]
             )
             self.test_indices.append(
                 np.where(
-                    Xy.index.get_level_values(1).isin(
+                    Xy.index.get_level_values("real_date").isin(
                         self.unique_times[
                             np.where(self.unique_times == np.max(split))[0][0]
                             + 1 : np.where(self.unique_times == np.max(split))[0][0]
@@ -653,6 +646,8 @@ class IntervalPanelTimeSeriesSplits(BasePanelTimeSeriesSplit):
 if __name__ == "__main__":
     from macrosynergy.management.simulate_quantamental_data import make_qdf
     import macrosynergy.management as msm
+
+    np.random.seed(0)
 
     cids = ["AUD", "CAD", "GBP", "USD"]
     xcats = ["XR", "CRY", "GROWTH", "INFL"]
@@ -683,35 +678,46 @@ if __name__ == "__main__":
     X2 = dfd2.drop(columns=["XR"])
     y2 = dfd2["XR"]
 
-    # 1) Demonstration of basic functionality
+    # # 1) Demonstration of basic functionality
 
     # # a) n_splits = 4, n_split_method = expanding
-    # splitter = NSplitsPanelTimeSeriesSplits(n_splits=4, n_split_method="expanding")
-    # splitter.split(X2, y2)
-    # cv_results = cross_validate(
-    #     LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
-    # )
-    # splitter.visualise_splits(X2, y2)
+    import pyinstrument
+
+    profiler = pyinstrument.Profiler()
+    profiler.start()
+    splitter = NSplitsPanelTimeSeriesSplits(n_splits=4, n_split_method="expanding")
+    splitter.split(X2, y2)
+    cv_results = cross_validate(
+        LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
+    )
+    splitter.visualise_splits(X2, y2)
+    profiler.stop()
+    print(profiler.output_text(unicode=True, color=True))
 
     # # b) n_splits = 4, n_split_method = rolling
-    # splitter = NSplitsPanelTimeSeriesSplits(n_splits=4, n_split_method="rolling")
-    # splitter.split(X2, y2)
-    # cv_results = cross_validate(
-    #     LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
-    # )
-    # splitter.visualise_splits(X2, y2)
-
-    # c) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4
-    splitter = IntervalPanelTimeSeriesSplits(
-        train_intervals=21 * 12, test_size=1, min_periods=21, min_cids=4
-    )
+    splitter = NSplitsPanelTimeSeriesSplits(n_splits=4, n_split_method="rolling")
     splitter.split(X2, y2)
     cv_results = cross_validate(
         LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
     )
     splitter.visualise_splits(X2, y2)
 
-    # d) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4, max_periods=12*21
+    # # c) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4
+
+    # import pyinstrument
+    # profiler = pyinstrument.Profiler()
+    # profiler.start()
+    # splitter = IntervalPanelTimeSeriesSplits(
+    #     train_intervals=21 * 12, test_size=1, min_periods=21, min_cids=4
+    # )
+    # splitter.split(X2, y2)
+    # cv_results = cross_validate(
+    #     LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
+    # )
+    # splitter.visualise_splits(X2, y2)
+    # profiler.stop()
+    # print(profiler.output_text(unicode=True, color=True))
+    # # d) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4, max_periods=12*21
     splitter = IntervalPanelTimeSeriesSplits(
         train_intervals=21 * 12,
         test_size=21 * 12,

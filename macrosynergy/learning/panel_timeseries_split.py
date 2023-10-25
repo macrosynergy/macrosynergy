@@ -536,6 +536,8 @@ if __name__ == "__main__":
     from macrosynergy.management.simulate_quantamental_data import make_qdf
     import macrosynergy.management as msm
 
+    np.random.seed(0)
+
     cids = ["AUD", "CAD", "GBP", "USD"]
     xcats = ["XR", "CRY", "GROWTH", "INFL"]
     cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
