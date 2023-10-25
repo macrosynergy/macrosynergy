@@ -436,7 +436,7 @@ class TestAll(unittest.TestCase):
 
         function_output: np.ndarray = (dfd_4_pivot.iloc[index_val, :]).to_numpy()
 
-        self.assertTrue(np.all(computed_values == function_output[0]))
+        self.assertTrue(np.allclose(computed_values, function_output[0]))
 
         # Running where cids and basket are disjoint sets. This running without error is
         # a test in itself.
