@@ -17,6 +17,14 @@ jobs:
         with:
           python-version: 3.11
 
+      - name: Check for sys.path.append
+        run: |
+          grep -r "sys\.path\.append(os\.getcwd())" .
+          if [ $? -eq 0 ]; then
+            echo "ERROR: Found 'sys.path.append(os.getcwd())' in the codebase. Please remove it."
+            exit 1
+          fi
+
       - name: Lint with flake8
         run: |
           # stop the build if there are Python syntax errors or undefined names
