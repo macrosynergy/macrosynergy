@@ -412,7 +412,7 @@ class SignalsReturns(SignalBase):
 
         return rows_names, columns_names
 
-    def get_rowcol(self, hash, rowcols):
+    def get_rowcol(self, hash: str, rowcols: List[str]):
         """
         Calculates which row/column the hash belongs to.
 
