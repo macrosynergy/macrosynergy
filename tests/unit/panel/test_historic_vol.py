@@ -6,7 +6,7 @@ from collections import deque
 
 from tests.simulate import make_qdf
 from macrosynergy.panel.historic_vol import *
-from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.management.utils import reduce_df
 
 
 class TestAll(unittest.TestCase):

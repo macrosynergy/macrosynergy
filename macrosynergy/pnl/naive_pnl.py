@@ -10,9 +10,8 @@ import matplotlib.ticker as mticker
 from typing import List, Union, Tuple, Optional
 from itertools import product
 from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.panel.make_zn_scores import make_zn_scores
-from macrosynergy.management.update_df import update_df
+from macrosynergy.management.utils import update_df, reduce_df
 
 
 class NaivePnL:

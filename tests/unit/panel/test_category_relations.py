@@ -6,7 +6,7 @@ import pandas as pd
 from random import randint
 from tests.simulate import make_qdf
 from macrosynergy.panel.category_relations import CategoryRelations
-from macrosynergy.management.shape_dfs import categories_df
+from macrosynergy.management.utils import categories_df
 from typing import List, Tuple, Dict, Union, Optional
 import warnings
 
