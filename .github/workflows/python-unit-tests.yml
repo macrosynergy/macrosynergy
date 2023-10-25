@@ -21,7 +21,7 @@ jobs:
         shell: bash
         run: |
           TVAR="$(grep -r -H 'sys.path.append')"
-          if [ -n "$TVAR"]; then
+          if [ -n "$TVAR" ]; then
             echo "sys.path.append found in the following files:"
             echo "$TVAR"
             exit 1
