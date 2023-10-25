@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import pandas as pd
 from tests.simulate import make_qdf
-from macrosynergy.management.simulate_quantamental_data import make_test_df
+from macrosynergy.management.simulate import make_test_df
 from macrosynergy.panel.panel_calculator import panel_calculator
 import warnings
 from random import randint, choice

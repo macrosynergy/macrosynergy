@@ -4,7 +4,7 @@ Module for analysing and visualizing signal and a return series.
 import pandas as pd
 from typing import List, Union, Tuple, Dict
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 from macrosynergy.signal.signal_base import SignalBase
 
 

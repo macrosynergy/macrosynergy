@@ -342,7 +342,7 @@ def make_test_df(
     :param <str> style: A string that specifies the type of line to generate.
         Current choices are: 'linear', 'decreasing-linear', 'sharp-hill',
         'four-bit-sine', 'sine', 'cosine', 'sawtooth', 'any'.
-        See `macrosynergy.management.simulate_quantamental_data.generate_lines`.
+        See `macrosynergy.management.simulate.simulate_quantamental_data.generate_lines()`.
     """
 
     if isinstance(cids, str):

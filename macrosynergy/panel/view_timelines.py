@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from typing import List, Tuple, Optional
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 
 import macrosynergy.visuals as msv
 

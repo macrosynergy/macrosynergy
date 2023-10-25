@@ -6,7 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from typing import List, Union, Tuple
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 from macrosynergy.signal.signal_base import SignalBase
 
 

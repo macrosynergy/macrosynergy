@@ -4,7 +4,7 @@ import warnings
 import datetime
 
 from typing import List, Tuple, Dict, Union, Set, Any
-from macrosynergy.management.simulate_quantamental_data import make_test_df
+from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import (
     get_cid,

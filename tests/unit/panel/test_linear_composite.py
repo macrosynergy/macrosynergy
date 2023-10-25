@@ -4,7 +4,7 @@ import pandas as pd
 from typing import List, Tuple, Union, Dict, Any
 
 from macrosynergy.panel.linear_composite import linear_composite
-from macrosynergy.management.simulate_quantamental_data import make_test_df
+from macrosynergy.management.simulate import make_test_df
 
 
 class TestAll(unittest.TestCase):

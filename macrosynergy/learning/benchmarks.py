@@ -65,7 +65,7 @@ class BenchmarkEstimator(BaseEstimator, RegressorMixin):
         return X
 
 if __name__ == "__main__":
-    from macrosynergy.management.simulate_quantamental_data import make_qdf
+    from macrosynergy.management.simulate import make_qdf
     import macrosynergy.management as msm
     from macrosynergy.learning.panel_timeseries_split import PanelTimeSeriesSplit
     import pandas as pd

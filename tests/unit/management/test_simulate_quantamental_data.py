@@ -3,7 +3,8 @@ import random
 import numpy as np
 import pandas as pd
 import os
-from macrosynergy.management.simulate_quantamental_data import *
+from typing import List
+from macrosynergy.management.simulate import *
 
 
 class Test_All(unittest.TestCase):

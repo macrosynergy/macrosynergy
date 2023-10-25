@@ -4,7 +4,7 @@ Utilities and common functions for the manipulating DataFrames.
 
 import pandas as pd
 import random
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management import decorators
 from macrosynergy.management.utils import (
     reduce_df as _reduce_df,

@@ -16,7 +16,7 @@ The Academy is designed to provide a basic introduction to the JPMaQS indicators
 
 ## How to use the Academy without a JPMaQS licence
 
-The Macrosynergy package and the Academy are designed designed to be used in conjunction with the JPMaQS Quantamental System. However, if you do not have access to JPMaQS, you can use the free data sets on Kaggle [here](https://www.kaggle.com/datasets/macrosynergy/fixed-income-returns-and-macro-trends). You can also use the Academy with simulated data from [macrosynergy.management.simulate_quantamental_data](./macrosynergy/management/simulate_quantamental_data).
+The Macrosynergy package and the Academy are designed designed to be used in conjunction with the JPMaQS Quantamental System. However, if you do not have access to JPMaQS, you can use the free data sets on Kaggle [here](https://www.kaggle.com/datasets/macrosynergy/fixed-income-returns-and-macro-trends). You can also use the Academy with simulated data from [macrosynergy.management.simulate](./macrosynergy.management.simulate.md).
 
 ---
 

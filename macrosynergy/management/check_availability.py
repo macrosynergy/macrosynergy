@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from typing import List, Tuple
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df
 import macrosynergy.visuals as msv
 

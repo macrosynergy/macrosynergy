@@ -1,7 +1,7 @@
 import unittest
 import pandas as pd
 from typing import List, Dict, Any
-from macrosynergy.management.simulate_quantamental_data import make_test_df
+from macrosynergy.management.simulate import make_test_df
 import macrosynergy.visuals as msv
 import matplotlib
 

@@ -8,7 +8,7 @@ Tools used to update and modify a quantamental DataFrame.
 import pandas as pd
 import warnings
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 from macrosynergy.panel.make_relative_value import make_relative_value
 from functools import wraps, update_wrapper
 from inspect import signature

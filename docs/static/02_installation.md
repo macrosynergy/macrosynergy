@@ -34,4 +34,4 @@ python setup.py build
 
 ## Usage
 
-The package is designed to be used in conjunction with JPMaQS Quantamental Data from the J.P. Morgan DataQuery API. If you do not have access to the DataQuery API, you can still use the package with simulated data from [macrosynergy.management.simulate_quantamental_data](./macrosynergy/management/simulate_quantamental_data).
+The package is designed to be used in conjunction with JPMaQS Quantamental Data from the J.P. Morgan DataQuery API. If you do not have access to the DataQuery API, you can still use the package with simulated data from [macrosynergy.management.simulate](./macrosynergy/management/simulate).

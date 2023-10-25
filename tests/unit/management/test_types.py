@@ -4,7 +4,7 @@ import pandas as pd
 
 from typing import Any, List
 from macrosynergy.management.types import Numeric, NoneType, QuantamentalDataFrame
-from macrosynergy.management.simulate_quantamental_data import make_test_df
+from macrosynergy.management.simulate import make_test_df
 
 
 class TestTypes(unittest.TestCase):

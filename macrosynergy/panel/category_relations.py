@@ -10,7 +10,7 @@ from scipy import stats
 import statsmodels.api as sm
 import warnings
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import categories_df
 from macrosynergy.management.utils import apply_slip as apply_slip_util
 
