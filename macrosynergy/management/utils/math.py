@@ -1,3 +1,7 @@
+"""
+Contains mathematical utility functions used across the package.
+"""
+
 from typing import List, Union, Tuple
 from ..types import QuantamentalDataFrame, Numeric
 
