@@ -1,3 +1,6 @@
+import os,sys
+sys.path.append(os.getcwd())
+
 """
 Module for analysing and visualizing signal and a return series.
 """
