@@ -111,15 +111,14 @@ class SignalsReturns(SignalBase):
         Computes all the statistics for one specific signal-return relation:
 
         :param <str> ret: single target return category. Default is first in target
-            return ist of the class
+            return list of the class.
         :param <str> xcat: single signal category to be considered. Default is first in
             feature category list of the class.
         :param <str> freq: letter denoting single frequency at which the series will
-            be sampled.
-            This must be one of the frequencies selected for the class.
+            be sampled. This must be one of the frequencies selected for the class.
             If not specified uses the freq stored in the class.
         :param <str> agg_sigs: aggregation method applied to the signal values in
-        down-sampling.
+            down-sampling.
         """
         if ret is None:
             ret = self.ret if not isinstance(self.ret, list) else self.ret[0]
@@ -171,17 +170,16 @@ class SignalsReturns(SignalBase):
     ):
         """
         Calculates all the statistics for each return and signal category specified with
-        each frequency and aggregation
-        method, note that if none are defined it does this for all categories,
-        frequencies and aggregation methods that
-        were stored in the class.
+        each frequency and aggregation method, note that if none are defined it does this 
+        for all categories, frequencies and aggregation methods that were stored in the 
+        class.
 
         :param <str, List[str]> rets: target return category
         :param <str, List[str]> xcats: signal categories to be considered
         :param <str, List[str]> freqs: letters denoting frequency at which the series
-        are to be sampled
+        are to be sampled.
         This must be one of 'D', 'W', 'M', 'Q', 'A'. If not specified uses the freq
-        stored in the class
+        stored in the class.
         :param <str, List[str]> agg_sigs: aggregation methods applied to the signal
         values in down-sampling
         """
@@ -258,8 +256,8 @@ class SignalsReturns(SignalBase):
         Creates a table which shows the specified statistic for each row and
         column specified as arguments:
 
-        :param stat: type of statistic to be displayed. (this can be any of
-        the column names of summary_table)
+        :param stat: type of statistic to be displayed (this can be any of
+        the column names of summary_table).
         :param type: type of the statistic displayed. This can be based on
         the overall panel ("panel", default), an
         average of annual panels (mean_years), an average of cross-sectional
