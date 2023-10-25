@@ -17,7 +17,7 @@ runs:
     - name: Get Week Number
       shell: bash
       id: week
-      run: echo ::set-output name=week::$(date +%V)
+      run: echo ::add-mask::$(date +%V)
 
     - name: Restore pip cache
       id: cache
