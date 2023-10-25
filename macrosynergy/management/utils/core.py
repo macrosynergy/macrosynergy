@@ -1,3 +1,8 @@
+"""
+This module contains core utility functions, as well as stand-alone functions
+that are used across the package.
+"""
+
 import datetime
 import itertools
 
