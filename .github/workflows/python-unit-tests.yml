@@ -18,28 +18,8 @@ jobs:
           python-version: 3.11
 
       - name: Check for sys.path.append
-        shell: bash
         run: |
-          TVAR="$(grep -r -H 'sys.path.append')"
-          echo "$TVAR"
-          VAREXIT=0
-          while IFS= read -r line; do
-            if [[ $line == .github/* ]]; 
-            then
-              echo "sys.path.append found in .github directory, ignoring"
-            else
-              echo "sys.path.append found in the following files:"
-              echo "$line"
-              VAREXIT=1
-            fi
-          done <<< "$TVAR"
-
-          if [ "$VAREXIT" -eq 1 ]; then
-            exit 1
-          else
-              exit 0
-          fi
-
+          bash .github/scripts/check_sys_path.sh
           
       - name: Lint with flake8
         run: |
