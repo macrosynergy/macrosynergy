@@ -7,6 +7,9 @@ from .core import (
     convert_dq_to_iso,
     form_full_url,
     common_cids,
+    generate_random_date,
+    get_dict_max_depth,
+    rec_search_dict,
 )
 
 
@@ -42,6 +45,9 @@ CORE_UTILS = [
     "convert_dq_to_iso",
     "form_full_url",
     "common_cids",
+    "generate_random_date",
+    "get_dict_max_depth",
+    "rec_search_dict",
 ]
 
 
