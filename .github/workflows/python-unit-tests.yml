@@ -19,13 +19,12 @@ jobs:
 
       - name: Check for sys.path.append
         run: |
-          grep -r -H --exclude-dir=.github "sys\.path\.append" .
-          if [ $? -eq 0 ]; then
-            echo "ERROR: Found 'sys.path.append' in the following file(s):"
-            grep -r -H --exclude-dir=.github "sys\.path\.append" . | cut -d':' -f1 | sort -u
+          TVAR=`grep -q -r -H --exclude-dir=.github "sys\.path\.append" .`
+          if [ -n "$TVAR" ]; then
+            echo "sys.path.append found in the following files:"
+            echo "$TVAR"
             exit 1
           fi
-          exit 0
 
       - name: Lint with flake8
         run: |
