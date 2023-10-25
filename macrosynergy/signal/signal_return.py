@@ -156,7 +156,7 @@ class SignalsReturns(SignalBase):
         self.df = self.original_df
         index = f"{freq}: {sig + '_NEG' if self.signs[self.sig.index(sig)] == -1 else sig}/{agg_sigs} => {ret}"
 
-        df_result.rename(index={'Panel': index}, inplace=True)
+        df_result.rename(index={"Panel": index}, inplace=True)
 
         return df_result
 
@@ -214,7 +214,11 @@ class SignalsReturns(SignalBase):
         xcats = [x for x in xcats if x in self.sig]
 
         index = [
-            f"{freq}: {xcat + '_NEG' if self.signs[self.sig.index(xcat)] == -1 else xcat}/{agg_sig} => {ret}"
+            (
+                f"{freq}: "
+                f"{xcat + '_NEG' if self.signs[self.sig.index(xcat)] == -1 else xcat}"
+                f"/{agg_sig} => {ret}"
+            )
             for freq in freqs
             for agg_sig in agg_sigs
             for ret in rets
@@ -292,12 +296,12 @@ class SignalsReturns(SignalBase):
 
         if not type in type_values:
             raise ValueError(f"Type must be one of {type_values}")
-        for row in rows:
-            if not row in rows_values:
-                raise ValueError(f"Rows must only contain {rows_values}")
-        for column in columns:
-            if not column in rows_values:  # Rows values is the same as columns values
-                raise ValueError(f"Columns must only contain {rows_values}")
+
+        if not all([x in rows_values for x in rows]):
+            raise ValueError(f"Rows must only contain {rows_values}")
+
+        if not all([x in rows_values for x in columns]):
+            raise ValueError(f"Columns must only contain {rows_values}")
 
         rets = self.ret if isinstance(self.ret, list) else [self.ret]
         sigs = self.sig if isinstance(self.sig, list) else [self.sig]
@@ -368,7 +372,7 @@ class SignalsReturns(SignalBase):
 
         return df_result
 
-    def set_df_labels(self, rows_dict, rows, columns):
+    def set_df_labels(self, rows_dict: Dict, rows: List[str], columns: List[str]):
         """
         Creates two lists of strings that will be used as the row and column labels for
         the resulting dataframe.
@@ -408,7 +412,7 @@ class SignalsReturns(SignalBase):
 
         return rows_names, columns_names
 
-    def get_rowcol(self, hash, rowcols):
+    def get_rowcol(self, hash: str, rowcols: List[str]):
         """
         Calculates which row/column the hash belongs to.
 
@@ -417,16 +421,11 @@ class SignalsReturns(SignalBase):
         are in the rows/columns of the dataframe.
         """
         result = ""
-        for rowcol in rowcols:
+        idx: List[str] = ["ret", "xcat", "freq", "agg_sigs"]
+        assert all([x in idx for x in rowcols]), "rowcols must be a subset of idx"
 
-            if "ret" == rowcol:
-                result += hash.split("/")[0] + "/"
-            if "xcat" == rowcol:
-                result += hash.split("/")[1] + "/"
-            if "freq" == rowcol:
-                result += hash.split("/")[2] + "/"
-            if "agg_sigs" == rowcol:
-                result += hash.split("/")[3] + "/"
+        for rowcol in rowcols:
+            result += hash.split("/")[idx.index(rowcol)] + "/"
 
         return result[:-1]
 
