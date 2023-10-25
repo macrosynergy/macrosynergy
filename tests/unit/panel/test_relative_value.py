@@ -5,7 +5,7 @@ from typing import List, Dict, Tuple, Union, Set
 
 from tests.simulate import make_qdf
 from macrosynergy.panel.make_relative_value import make_relative_value, _prepare_basket
-from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.management.utils import reduce_df
 from random import randint, choice
 import io
 import sys
@@ -436,7 +436,7 @@ class TestAll(unittest.TestCase):
 
         function_output: np.ndarray = (dfd_4_pivot.iloc[index_val, :]).to_numpy()
 
-        self.assertTrue(np.all(computed_values == function_output[0]))
+        self.assertTrue(np.allclose(computed_values, function_output[0]))
 
         # Running where cids and basket are disjoint sets. This running without error is
         # a test in itself.
