@@ -19,13 +19,12 @@ jobs:
 
       - name: Check for sys.path.append
         run: |
-          TVAR=`grep -q -r -H --exclude-dir=.github "sys\.path\.append" .`
+          TVAR=`grep -r -H --exclude-dir=.github "sys.path.append"`
           if [ -n "$TVAR" ]; then
             echo "sys.path.append found in the following files:"
             echo "$TVAR"
             exit 1
           fi
-
       - name: Lint with flake8
         run: |
           # stop the build if there are Python syntax errors or undefined names
