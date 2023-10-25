@@ -1,6 +1,3 @@
-import os, sys
-sys.path.append(os.getcwd())
-
 import unittest
 from macrosynergy.signal.signal_return import SignalsReturns
 
@@ -11,7 +8,6 @@ import random
 import pandas as pd
 import numpy as np
 from typing import List, Dict
-
 
 class TestAll(unittest.TestCase):
     def setUp(self):
@@ -42,7 +38,7 @@ class TestAll(unittest.TestCase):
                 "mean_add",
                 "sd_mult",
                 "ar_coef",
-                "back_coef",
+                "back_coef", 
             ],
         )
 
