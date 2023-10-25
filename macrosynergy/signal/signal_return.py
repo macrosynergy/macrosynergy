@@ -104,7 +104,9 @@ class SignalsReturns(SignalBase):
             raise ValueError("Signs must have a length less than or equal to signals")
         self.signals = self.sig
 
-    def single_relation_table(self, ret=None, xcat=None, freq=None, agg_sigs=None):
+    def single_relation_table(
+        self, ret: str = None, xcat: str = None, freq: str = None, agg_sigs: str = None
+    ):
         """
         Computes all the statistics for one specific signal-return relation:
 
@@ -161,7 +163,11 @@ class SignalsReturns(SignalBase):
         return df_result
 
     def multiple_relations_table(
-        self, rets=None, xcats=None, freqs=None, agg_sigs=None
+        self,
+        rets: Union[str, List[str]] = None,
+        xcats: Union[str, List[str]] = None,
+        freqs: Union[str, List[str]] = None,
+        agg_sigs: Union[str, List[str]] = None,
     ):
         """
         Calculates all the statistics for each return and signal category specified with
