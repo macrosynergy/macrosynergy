@@ -22,7 +22,7 @@ jobs:
           grep -r -H "sys\.path\.append(os\.getcwd())" . --exclude=./.github/workflows/python-unit-tests.yml
           if [ $? -eq 0 ]; then
             echo "ERROR: Found 'sys.path.append(os.getcwd())' in the following file(s):"
-            grep -r -H "sys\.path\.append(os\.getcwd())" . | cut -d':' -f1 | sort -u
+            grep -r -H "sys\.path\.append(os\.getcwd())" . --exclude=./.github/workflows/python-unit-tests.yml | cut -d':' -f1 | sort -u
             exit 1
           fi
 
