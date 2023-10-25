@@ -22,8 +22,8 @@ jobs:
         run: |
           TVAR="$(grep -r -H 'sys.path.append')"
           echo "$TVAR"
+          VAREXIT=0
           while IFS= read -r line; do
-            VAREXIT=0
             if [[ $line == .github/* ]]; 
             then
               echo "sys.path.append found in .github directory, ignoring"
