@@ -1,4 +1,7 @@
-import datetime
+"""
+Utility functions for working with DataFrames.
+"""
+
 import itertools
 
 from macrosynergy.management.types import QuantamentalDataFrame
