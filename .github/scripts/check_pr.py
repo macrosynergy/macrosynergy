@@ -1,5 +1,3 @@
-import os
-import sys
 from time import sleep
 from typing import Any, Dict, List, Optional, Callable, Tuple
 
@@ -9,8 +7,6 @@ from packaging import version
 REPO_OWNER: str = "macrosynergy"
 REPO_NAME: str = "macrosynergy"
 REPO_URL: str = f"github.com/{REPO_OWNER}/{REPO_NAME}"
-
-sys.path.append(os.getcwd())
 
 OAUTH_TOKEN: Optional[str] = os.getenv("GH_TOKEN", None)
 
