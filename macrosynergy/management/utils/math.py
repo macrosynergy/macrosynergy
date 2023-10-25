@@ -21,12 +21,20 @@ def expanding_mean_with_nan(dfw: pd.DataFrame, absolute: bool = False):
         the series is defined over.
     """
 
-    assert isinstance(
-        dfw, QuantamentalDataFrame
-    ), "Method expects to receive a pd.DataFrame."
-    error_index = "The index of the DataFrame must be timestamps."
-    assert all([isinstance(d, pd.Timestamp) for d in dfw.index]), error_index
-    assert isinstance(absolute, bool), "Boolean value expected."
+    # assert all([isinstance(d, pd.Timestamp) for d in dfw.index]), error_index
+    # assert isinstance(absolute, bool), "Boolean value expected."
+
+    if not isinstance(dfw, pd.DataFrame):
+        raise TypeError("Method expects to receive a pd.DataFrame.")
+
+    # cast the index to pd.Timestamp, if error raise TypeError
+    try:
+        dfw.index = pd.to_datetime(dfw.index)
+    except:
+        raise TypeError("The index of the DataFrame must be of type `<pd.Timestamp>`.")
+
+    if not isinstance(absolute, bool):
+        raise TypeError("The parameter `absolute` must be of type `<bool>`.")
 
     data: np.ndarray = dfw.to_numpy()
 
