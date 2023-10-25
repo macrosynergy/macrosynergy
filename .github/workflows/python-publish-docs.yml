@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-docs:
     runs-on: ubuntu-latest # Alternative: windows-latest
 
     steps:

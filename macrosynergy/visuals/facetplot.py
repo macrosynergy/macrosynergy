@@ -16,7 +16,7 @@ import pandas as pd
 from matplotlib.gridspec import GridSpec
 
 from macrosynergy.visuals.plotter import Plotter
-from macrosynergy.visuals.common import Numeric, NoneType
+from macrosynergy.management.types import Numeric, NoneType
 
 
 def _get_square_grid(
@@ -433,7 +433,6 @@ class FacetPlot(Plotter):
             elif xcat_grid:
                 facet_titles: List[str] = _xcats
             elif cid_xcat_grid:
-                ...
                 # cid_xcat_grid facets only make sense if they have cid_xcat as the title
                 legend: bool = False
             else:
@@ -458,19 +457,17 @@ class FacetPlot(Plotter):
                 facet_titles: List[str] = [_cids, _xcats][::flipper][0]
             if legend_labels is None:
                 legend_labels: List[str] = [_xcats, _cids][::flipper][0]
-            elif len(legend_labels) != len([_xcats, _cids][::flipper][0]):
+            elif len(legend_labels) != (
+                len([_xcats, _cids][::flipper][0]) + bool(compare_series)
+            ):
                 raise ValueError(
                     "The number of legend labels does not match the lines to plot."
                 )
 
             if legend_color_map is None:
                 legend_color_map: Dict[str, str] = {
-                    x: colormap(i) for i, x in enumerate(legend_labels)
+                    x: colormap(i) for i, x in enumerate([_xcats, _cids][::flipper][0])
                 }
-            # if there is a compare series, add it as the last element of the list, give it a red color and a dashed line
-            if compare_series is not None:
-                legend_labels.append(compare_series)
-                legend_color_map[compare_series] = "red"
 
             for i, fvar in enumerate([_cids, _xcats][::flipper][0]):
                 tks: List[str] = [

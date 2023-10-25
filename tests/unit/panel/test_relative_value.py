@@ -351,7 +351,7 @@ class TestAll(unittest.TestCase):
 
         basket_df: pd.DataFrame = dfd_2[dfd_2["cid"] == basket_cid[0]]
         values: np.ndarray = basket_df["value"].to_numpy()
-        self.assertTrue((np.sum(values) - 0.0) < 0.00001)
+        self.assertTrue(np.isclose(np.sum(values), 0.0, rtol=0.001))
 
         # Test the logic of the function if there are multiple cross-sections defined in
         # basket. First, test the relative value using subtraction and secondly test
@@ -436,7 +436,7 @@ class TestAll(unittest.TestCase):
 
         function_output: np.ndarray = (dfd_4_pivot.iloc[index_val, :]).to_numpy()
 
-        self.assertTrue(np.all(computed_values == function_output[0]))
+        self.assertTrue(np.allclose(computed_values, function_output[0]))
 
         # Running where cids and basket are disjoint sets. This running without error is
         # a test in itself.
