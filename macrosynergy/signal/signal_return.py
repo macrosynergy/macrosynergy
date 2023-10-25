@@ -292,12 +292,12 @@ class SignalsReturns(SignalBase):
 
         if not type in type_values:
             raise ValueError(f"Type must be one of {type_values}")
-        for row in rows:
-            if not row in rows_values:
-                raise ValueError(f"Rows must only contain {rows_values}")
-        for column in columns:
-            if not column in rows_values:  # Rows values is the same as columns values
-                raise ValueError(f"Columns must only contain {rows_values}")
+
+        if not all([x in rows_values for x in rows]):
+            raise ValueError(f"Rows must only contain {rows_values}")
+
+        if not all([x in rows_values for x in columns]):
+            raise ValueError(f"Columns must only contain {rows_values}")
 
         rets = self.ret if isinstance(self.ret, list) else [self.ret]
         sigs = self.sig if isinstance(self.sig, list) else [self.sig]
