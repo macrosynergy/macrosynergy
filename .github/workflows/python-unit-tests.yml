@@ -24,7 +24,7 @@ jobs:
           while IFS= read -r line; do
             VAREXIT=0
             if [[ $line == .github/* ]]; then
-                
+              echo "sys.path.append found in .github directory, ignoring"
             else
               echo "sys.path.append found in the following files:"
               echo "$line"
