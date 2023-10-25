@@ -25,6 +25,7 @@ jobs:
             grep -r -H --exclude-dir=.github "sys\.path\.append" . | cut -d':' -f1 | sort -u
             exit 1
           fi
+          exit 0
 
       - name: Lint with flake8
         run: |
