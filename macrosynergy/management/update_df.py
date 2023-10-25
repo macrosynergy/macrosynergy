@@ -24,9 +24,9 @@ from macrosynergy.management.utils import (
 DEPRECATION_VERSION: str = "0.1.1"
 
 WARN_STR: str = (
-    "`macrosynergy.management.update_df.{old_method}` has been deprecated "
+    "`macrosynergy.management.update_df.{old_method}` was deprecated in version {deprecate_version}"
     "and moved to `macrosynergy.management.utils.{new_method}()`. "
-    "This module and path will be removed in a future release ({deprecate_version})."
+    "This module and path will be removed in a future release."
 )
 
 
