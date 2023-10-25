@@ -7,7 +7,7 @@ from typing import List, Union
 from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.panel.historic_vol import historic_vol
-from macrosynergy.panel.make_zn_scores import *
+from macrosynergy.panel.make_zn_scores import make_zn_scores
 from macrosynergy.panel.basket import Basket
 import random
 
