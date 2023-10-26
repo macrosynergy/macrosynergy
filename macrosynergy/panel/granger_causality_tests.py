@@ -1,7 +1,6 @@
 """
 Run Granger Causality Test on a standardized quantamental dataframe.
 """
-
 import warnings
 from typing import Any, Dict, List, Optional, Union
 
@@ -24,6 +23,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _statsmodels_compatibility_wrapper(
+    x: Any = None, maxlag: Any = None, addconst: Any = None, verbose: Any = None
+) -> Any:
+    if version_parse(sm.__version__) < version_parse("0.15.0"):
+        with warnings.catch_warnings():
+            warnings.simplefilter(action="ignore", category=FutureWarning)
+            return grangercausalitytests(x, maxlag, addconst, False)
+
+    else:
+        return grangercausalitytests(x, maxlag, addconst)
+
+
 def _granger_causality_backend(
     data: pd.DataFrame, max_lag: Union[int, List[int]], add_constant: bool = True
 ) -> Dict[Any, Any]:
@@ -42,18 +53,7 @@ def _granger_causality_backend(
         addconst=add_constant,
     )
 
-    silence_warnings: bool = version_parse(sm.__version__) < version_parse("0.15.0")
-
-    if silence_warnings:
-        arguments["verbose"] = False
-        with warnings.catch_warnings():
-            warnings.simplefilter(action="ignore", category=FutureWarning)
-            result = grangercausalitytests(**arguments)
-
-    else:
-        result = grangercausalitytests(**arguments)
-
-    return result
+    return _statsmodels_compatibility_wrapper(**arguments)
 
 
 def _get_tickers(
