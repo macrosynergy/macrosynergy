@@ -205,6 +205,11 @@ def granger_causality_test(
         specified, the latest date in `df` is used.
     :param <str> metric: The metric to run the test on. Must be a column in `df`.
         Default is "value".
+
+    :return <Dict[Any, Any]>: A dictionary containing the results of the Granger Causality
+        Test. The keys are the lags and the values are the results of the test.
+    :raises <TypeError>: If any of the inputs are of the wrong type.
+    :raises <ValueError>: If any of the input values are invalid.
     """
     ## Check inputs
 
