@@ -93,12 +93,13 @@ def _type_checks(
     freq: str,
     agg: str,
     metric: str,
-) -> None:
+) -> bool:
     """
     Does type checks on the inputs to `granger_causality_test`.
     All inputs are checked for type and value errors.
 
     :params: See `granger_causality_test` for details.
+    :return <bool>: True if all type checks pass.
     :raises <TypeError>: If any of the inputs are of the wrong type.
     :raises <ValueError>: If any of the input values are invalid.
     """
@@ -187,6 +188,8 @@ def _type_checks(
 
     if add_constant not in [True, False] or not isinstance(add_constant, bool):
         raise TypeError("`add_constant` must be a boolean")
+
+    return True
 
 
 def granger_causality_test(
