@@ -1,0 +1,19 @@
+name: PR Quality Control
+
+on:
+  pull_request_review:
+    types: [edited, dismissed, submitted]
+
+jobs:
+  check-pr:
+    runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v3
+  
+        - name: Test PR
+          shell: bash
+          env:
+            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            PR_NUMBER: ${{ github.event.pull_request.number }}
+          run: |
+            python .github/scripts/check_pr.py $PR_NUMBER
