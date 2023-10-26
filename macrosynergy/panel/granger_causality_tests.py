@@ -293,6 +293,12 @@ def granger_causality_test(
 
     # drop any rows with NANs
     df_wide = df_wide.dropna(how="any", axis=0)
+    if df_wide.empty:
+        raise ValueError(
+            "The input data contains only NANs. "
+            "Please check the input data for missing values or "
+            "consider using a different downsampling frequency/date range."
+        )
 
     gct: Dict[Any, Any] = _granger_causality_backend(
         data=df_wide,
