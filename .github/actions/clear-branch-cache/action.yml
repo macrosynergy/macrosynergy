@@ -3,7 +3,7 @@ name: Clear branch cache
 description: "Clear branch cache on merge to develop"
 
 inputs:
-  ref:
+  branch:
     description: "The branch to clear the cache for"
     required: true
 runs:
@@ -21,4 +21,4 @@ runs:
     - name: Delete cache scripts
       shell: bash
       run: |
-        python .github/actions/clear-branch-cache/gh_cache_api.py --ref ${{ inputs.ref }}
+        python .github/actions/clear-branch-cache/gh_cache_api.py --ref ${{ inputs.branch }}
