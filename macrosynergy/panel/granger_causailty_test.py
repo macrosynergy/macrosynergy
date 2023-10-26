@@ -171,7 +171,7 @@ def granger_causality_test(
     start: Optional[str] = None,
     end: Optional[str] = None,
     metric: str = "value",
-) -> pd.DataFrame:
+) -> Dict[Any, Any]:
     """
     Run Granger Causality Test on a standardized quantamental dataframe.
     Since the Graner Causality Test is a pairwise test, only two tickers can be specified.
