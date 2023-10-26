@@ -143,6 +143,12 @@ def _type_checks(
                 )
 
         tks: List[str] = [f"{c}_{x}" for c in cids for x in xcats]
+        if not len(tks) == 2:
+            raise ValueError(
+                "The combination of `cids` & `xcats` must yield two tickers",
+                f"Found {len(tks)} tickers: {tks}, ",
+                f"from `cids` {cids} and `xcats` {xcats}",
+            )
         if not set(tks).issubset(set(found_tickers)):
             raise ValueError(
                 "All combinations of `cids` & `xcats` (i.e. tickers) specified must be in `df`."
@@ -155,7 +161,7 @@ def _type_checks(
     if not isinstance(agg, str):
         raise TypeError("`agg` must be a string")
 
-    if add_constant not in [True, False]:
+    if add_constant not in [True, False] or not isinstance(add_constant, bool):
         raise TypeError("`add_constant` must be a boolean")
 
 
