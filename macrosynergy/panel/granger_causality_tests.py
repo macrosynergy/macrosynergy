@@ -6,7 +6,7 @@ import warnings
 from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
-import statsmodels.api as sm
+import statsmodels
 from packaging import version
 from statsmodels.tsa.stattools import grangercausalitytests
 
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 def _statsmodels_compatibility_wrapper(
     x: Any = None, maxlag: Any = None, addconst: Any = None, verbose: Any = None
 ) -> Any:
-    if version.parse(sm.__version__) < version.parse("0.15.0"):
+    if version.parse(statsmodels.__version__) < version.parse("0.15.0"):
         with warnings.catch_warnings():
             warnings.simplefilter(action="ignore", category=FutureWarning)
             return grangercausalitytests(x, maxlag, addconst, False)
