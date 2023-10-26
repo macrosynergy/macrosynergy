@@ -61,6 +61,16 @@ def _get_tickers(
     cids: Optional[List[str]] = None,
     xcats: Optional[List[str]] = None,
 ) -> List[str]:
+    """
+    Simply returns the tickers if they are specified. If they are not specified, then
+    the function forms the list of tickers from the `cids` and `xcats` such that the
+    order of the formed tickers is preserved.
+
+    :param <List[str]> tickers: A list of tickers.
+    :param <Union[str, List[str]]> cids: One or two cids.
+    :param <Union[str, List[str]]> xcats: One or two xcats.
+    """
+
     if tickers is not None:
         return tickers
     else:
