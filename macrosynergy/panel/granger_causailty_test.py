@@ -281,18 +281,15 @@ if __name__ == "__main__":
 
     cids: List[str] = ["AUD", "CAD"]
     xcats: str = "FX"
-
+    # tickers =  AUD_FX, CAD_FX
     df: pd.DataFrame = make_test_df(
         cids=cids,
         xcats=xcats,
     )
 
-    tks: List[str] = [f"{c}_{xcats}" for c in cids]
-    # AUD_FX, CAD_FX
-
     gct: Dict[Any, Any] = granger_causality_test(
         df=df,
-        tickers=tks,
+        tickers=["AUD_FX", "CAD_FX"],
     )
 
     print(gct)
