@@ -134,5 +134,5 @@ addopts = "-rEf -rP -n auto --cov=macrosynergy --verbose"
 
 [tool.coverage]
 source = "macrosynergy"
-exclude_lines = ["if __name__ == .__main__.:", "if 0:", "if False:"]
+exclude_lines = ["if __name__ == .__main__.:*", "if 0:", "if False:"]
 omit = ["test/*", "setup.py", "macrosynergy/version.py", "**/__init__.py"]
