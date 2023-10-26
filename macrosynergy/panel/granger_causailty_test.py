@@ -1,20 +1,19 @@
+import warnings
+from typing import Any, Dict, List, Optional, Union
+
+import pandas as pd
 import statsmodels.api as sm
+from packaging.version import parse as version_parse
 from statsmodels.tsa.stattools import grangercausalitytests
-import numpy as np
+
 from macrosynergy.management.simulate_quantamental_data import make_test_df
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import (
-    reduce_df,
-    reduce_df_by_ticker,
+    downsample_df_on_real_date,
     is_valid_iso_date,
     qdf_to_ticker_df,
-    downsample_df_on_real_date,
+    reduce_df_by_ticker,
 )
-from macrosynergy.management.types import QuantamentalDataFrame
-from typing import List, Tuple, Dict, Union, Optional, Any
-import pandas as pd
-import warnings
-
-from packaging.version import parse as version_parse
 
 
 def _granger_causality_backend(
