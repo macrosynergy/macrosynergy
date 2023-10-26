@@ -238,6 +238,11 @@ def granger_causality_test(
     # there must only be two columns in df_wide
     assert len(df_wide.columns) == 2, "df_wide must have only two columns"
 
+    logger.info(
+        "Running Granger Causality Test: Testing whether %s Granger causes %s",
+        df_wide.columns[0],
+        df_wide.columns[1],
+    )
     # NOTE: Since no NANs are allowed in the input data, we must drop them here
     # This may yield unexpected/unreliable results for tickers with large periods of missing data
 
