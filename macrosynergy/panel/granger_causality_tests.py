@@ -1,3 +1,7 @@
+"""
+Run Granger Causality Test on a standardized quantamental dataframe.
+"""
+
 import warnings
 from typing import Any, Dict, List, Optional, Union
 
