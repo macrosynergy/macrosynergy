@@ -1,4 +1,4 @@
-import unittest
+import unittest, unittest.mock
 from typing import Any, Dict, List, Union
 
 import numpy as np
@@ -15,6 +15,10 @@ from macrosynergy.panel.granger_causality_tests import (
 )
 
 
+def mock_wrapper(*args, **kwargs):
+    return {1: 1}
+
+
 class TestGrangerCausality(unittest.TestCase):
     def setUp(self) -> None:
         self.cids: List[str] = ["USD", "EUR", "JPY", "GBP", "CAD"]
@@ -27,6 +31,7 @@ class TestGrangerCausality(unittest.TestCase):
             xcats=self.xcats,
             start="2000-01-01",
             end="2020-01-01",
+            style="linear",
         )
 
         good_args: Dict[str, Any] = {
@@ -99,6 +104,12 @@ class TestGrangerCausality(unittest.TestCase):
         with self.assertRaises(ValueError):
             _type_checks(**bad_args)
 
+        # test only specifying cids
+        bad_args = good_args.copy()
+        bad_args["cids"] = None
+        with self.assertRaises(ValueError):
+            _type_checks(**bad_args)
+
         # Test specifying more than 2 tickers
         bad_args = good_args.copy()
         bad_args["tickers"] = [
@@ -148,9 +159,7 @@ class TestGrangerCausality(unittest.TestCase):
             _type_checks(**bad_args)
 
         # reuse df from above
-        bad_args["tickers"] = [
-            f"{cid}_{xcat}" for cid in good_args["cids"] for xcat in good_args["xcats"]
-        ]
+        bad_args["tickers"] = ["USD_EQ", "USD_FX"]
         bad_args["cids"] = None
         bad_args["xcats"] = None
         with self.assertRaises(ValueError):
@@ -181,7 +190,11 @@ class TestGrangerCausality(unittest.TestCase):
         }
 
         # Test that good args work
-        _granger_causality_backend(**good_args)
+        with unittest.mock.patch(
+            "macrosynergy.panel.granger_causality_tests._statsmodels_compatibility_wrapper",
+            mock_wrapper,
+        ):
+            self.assertIsInstance(_granger_causality_backend(**good_args), dict)
 
         # Test whether the full wdf works
         bad_args: Dict[str, Any] = good_args.copy()
@@ -199,7 +212,11 @@ class TestGrangerCausality(unittest.TestCase):
         good_args_2: Dict[str, Any] = good_args.copy()
         good_args_2["max_lag"] = [1, 1]
         # check if the output is a dict
-        self.assertIsInstance(_granger_causality_backend(**good_args_2), dict)
+        with unittest.mock.patch(
+            "macrosynergy.panel.granger_causality_tests._statsmodels_compatibility_wrapper",
+            mock_wrapper,
+        ):
+            self.assertIsInstance(_granger_causality_backend(**good_args_2), dict)
 
         # Should not work with a list of strings or an empty list for max_lag
         bad_args = good_args.copy()
@@ -221,7 +238,14 @@ class TestGrangerCausality(unittest.TestCase):
     def test_gct_wrapper(self):
         # all failure cases are already tested in the backend tests or utils tests
         # run with good args to see if it works
-        granger_causality_test(**self.good_args)
+
+        # mock macrosynergy.panel.granger_causality_tests._statsmodels_compatibility_wrapper to return a dict
+
+        with unittest.mock.patch(
+            "macrosynergy.panel.granger_causality_tests._statsmodels_compatibility_wrapper",
+            mock_wrapper,
+        ):
+            self.assertIsInstance(granger_causality_test(**self.good_args), dict)
 
         bad_args = self.good_args.copy()
 
@@ -234,3 +258,31 @@ class TestGrangerCausality(unittest.TestCase):
         bad_args["df"] = dfb
         with self.assertRaises(ValueError):
             granger_causality_test(**bad_args)
+
+        # run a test that will run with the backend
+        cids: List[str] = ["USD"]
+        xcats: List[str] = ["EQ", "IR"]
+        dfc: pd.DataFrame = make_test_df(
+            cids=cids,
+            xcats=xcats[0],
+            start="2000-01-01",
+            end="2020-01-01",
+            style="sine",
+        )
+
+        dfc = pd.concat(
+            [
+                dfc,
+                make_test_df(
+                    cids=cids,
+                    xcats=xcats[1],
+                    start="2000-01-01",
+                    end="2020-01-01",
+                    style="sine",
+                ),
+            ]
+        )
+
+        test_args: Dict[str, Any] = self.good_args.copy()
+        test_args["df"] = dfc
+        self.assertIsInstance(granger_causality_test(**test_args), dict)
