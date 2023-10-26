@@ -10,7 +10,7 @@ on:
 
 jobs:
   # Single deploy job since we're just deploying
-  deploy:
+  build-docs-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

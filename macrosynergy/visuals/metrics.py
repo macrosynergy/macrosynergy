@@ -4,28 +4,24 @@ set of cross sections and extended categories.
 ```python
 import macrosynergy.visuals as msv
 ...
-msv.view.metrics(
+msv.view_metrics(
     df,
     xcats="IR",
     cids=["USD", "EUR", "GBP"],
     metric='eop_lag'
 )
 ...
-
-msv.FacetPlot(df).lineplot(cid_grid=True)
 ```
 """
 
 from typing import List, Optional, Tuple
-
 import pandas as pd
-
-from macrosynergy.management.utils import downsample_df_on_real_date
+import seaborn as sns
 
 from macrosynergy.visuals import Heatmap
 
 
-def metrics(
+def view_metrics(
     df: pd.DataFrame,
     xcat: str,
     cids: Optional[List[str]] = None,
@@ -73,20 +69,6 @@ def metrics(
         end=end,
     )
 
-    # Validation checks not covered by Plotter.
-
-    if metric not in ["eop_lag", "mop_lag", "grading"]:
-        raise ValueError("`metric` must be either 'eop_lag', 'mop_lag' or 'grading'")
-
-    if not isinstance(agg, str):
-        raise TypeError("`agg` must be a string")
-    else:
-        agg: str = agg.lower()
-        if agg not in ["mean", "median", "min", "max", "first", "last"]:
-            raise ValueError(
-                "`agg` must be one of 'mean', 'median', 'min', 'max', 'first' or 'last'"
-            )
-
     if title is None:
         title = f"Visualising {metric} for {xcat} from {heatmap.start} to {heatmap.end}"
 
@@ -103,31 +85,25 @@ def metrics(
     if not isinstance(figsize[1], (int, float)):
         raise ValueError("Second element of `figsize` must be a float")
 
-    heatmap.df: pd.DataFrame = downsample_df_on_real_date(
-        df=heatmap.df, groupby_columns=["cid", "xcat"], freq=freq, agg=agg
-    )
-
-    max_mes: float = max(1, heatmap.df[metric].max())
-    min_mes: float = min(0, heatmap.df[metric].min())
-
-    heatmap.df["real_date"]: pd.Series = heatmap.df["real_date"].dt.strftime("%Y-%m-%d")
-
-    heatmap.df = heatmap.df.pivot_table(index="cid", columns="real_date", values=metric)
-
-    heatmap.plot(
+    heatmap.plot_metric(
+        x_axis_column="real_date",
+        y_axis_column="cid",
+        metric=metric,
+        freq=freq,
+        agg=agg,
         title=title,
         figsize=figsize,
-        vmin=min_mes,
-        vmax=max_mes,
         x_axis_label="Date",
         y_axis_label="Cross Sections",
+        cmap=sns.color_palette("light:red", as_cmap=True),
+        rotate_xticks=90
     )
 
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate_quantamental_data import make_test_df
 
-    test_cids: List[str] = ["USD"]  # ,  "EUR", "GBP"]
+    test_cids: List[str] = ["USD","EUR", "GBP"]
     test_xcats: List[str] = ["FX", "IR"]
     dfE: pd.DataFrame = make_test_df(
         cids=test_cids, xcats=test_xcats, style="sharp-hill"
@@ -145,16 +121,16 @@ if __name__ == "__main__":
     mergeon = ["cid", "xcat", "real_date"]
     dfx: pd.DataFrame = pd.merge(pd.merge(dfE, dfM, on=mergeon), dfG, on=mergeon)
 
-    metrics(
+    view_metrics(
         df=dfx,
         xcat="FX",
     )
-    metrics(
+    view_metrics(
         df=dfx,
         xcat="IR",
         metric="mop_lag",
     )
-    metrics(
+    view_metrics(
         df=dfx,
         xcat="IR",
         metric="grading",
