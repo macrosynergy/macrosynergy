@@ -2,10 +2,12 @@
 Module for analysing and visualizing signal and a return series.
 """
 import pandas as pd
-from typing import List, Union, Tuple, Dict
+from typing import List, Union, Tuple, Dict, Optional
+import numpy as np
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 from macrosynergy.signal.signal_base import SignalBase
+import macrosynergy.visuals as msv
 
 
 class SignalsReturns(SignalBase):
@@ -105,7 +107,11 @@ class SignalsReturns(SignalBase):
         self.signals = self.sig
 
     def single_relation_table(
-        self, ret: str = None, xcat: str = None, freq: str = None, agg_sigs: str = None
+        self,
+        ret: str = None,
+        xcat: str = None,
+        freq: str = None,
+        agg_sigs: str = None,
     ):
         """
         Computes all the statistics for one specific signal-return relation:
@@ -229,7 +235,7 @@ class SignalsReturns(SignalBase):
             for xcat in xcats
         ]
 
-        df_out = pd.concat(
+        df_result = pd.concat(
             [
                 self.single_relation_table(
                     ret=ret, xcat=[xcat, ret], freq=freq, agg_sigs=agg_sig
@@ -241,9 +247,9 @@ class SignalsReturns(SignalBase):
             ],
             axis=0,
         )
-        df_out.index = index
+        df_result.index = index
 
-        return df_out
+        return df_result
 
     def single_statistic_table(
         self,
@@ -251,6 +257,14 @@ class SignalsReturns(SignalBase):
         type: str = "panel",
         rows: List[str] = ["xcat", "agg_sigs"],
         columns: List[str] = ["ret", "freq"],
+        show_heatmap: bool = False,
+        title: Optional[str] = None,
+        row_names: Optional[List[str]] = None,
+        column_names: Optional[List[str]] = None,
+        min_color: Optional[float] = None,
+        max_color: Optional[float] = None,
+        figsize: Tuple[float] = (14, 8),
+        annotate: bool = True,
     ):
         """
         Creates a table which shows the specified statistic for each row and
@@ -273,6 +287,19 @@ class SignalsReturns(SignalBase):
         choice is made through a list of one or more of "xcat", "ret", "freq"
         and "agg_sigs". The default is ["ret", "freq] resulting in index
         strings () or if only one frequency is available.
+        :param <bool> show_heatmap: if True, the table is visualized as a
+        heatmap. Default is False.
+        :param <str> title: plot title; if none given default title is shown.
+        :param <List[str]> row_names: specifies the labels of rows in the heatmap.
+        If None, the indices of the generated DataFrame are used.
+        :param <List[str]> column_names: specifies the labels of columns in the
+        heatmap. If None, the columns of the generated DataFrame are used.
+        :param <float> min_color: minimum value of the color scale. Default
+        is None, in which case the minimum value of the table is used.
+        :param <float> max_color: maximum value of the color scale. Default
+        is None, in which case the maximum value of the table is used.
+        :param <Tuple[float]> figsize: Tuple (w, h) of width and height of graph.
+        :param <bool> annotate: if True, the values are annotated in the heatmap.
         """
 
         stat_values = [
@@ -334,9 +361,11 @@ class SignalsReturns(SignalBase):
 
         rows_dict = {"xcat": sigs_neg, "ret": rets, "freq": freqs, "agg_sigs": agg_sigs}
 
-        rows_names, columns_names = self.set_df_labels(rows_dict, rows, columns)
+        df_row_names, df_column_names = self.set_df_labels(rows_dict, rows, columns)
 
-        df_result = pd.DataFrame(columns=columns_names, index=rows_names)
+        df_result = pd.DataFrame(
+            columns=df_column_names, index=df_row_names, dtype=np.float64
+        )
 
         # Define cs_type and type_index mappings
         cs_type_mapping = {"panel": 0, "mean_years": 1, "pr_years": 2}
@@ -388,6 +417,26 @@ class SignalsReturns(SignalBase):
             # Reset self.df and sig to original values
             self.df = self.original_df
             sig = sig_original
+
+        if show_heatmap:
+            if not title:
+                title = f"{stat}"
+
+            if min_color is None:
+                min_color = df_result.values.min()
+            if max_color is None:
+                max_color = df_result.values.max()
+
+            msv.view_table(
+                df_result,
+                title=title,
+                min_color=min_color,
+                max_color=max_color,
+                figsize=figsize,
+                annot=annotate,
+                xticklabels=column_names,
+                yticklabels=row_names,
+            )
 
         return df_result
 
@@ -508,15 +557,11 @@ if __name__ == "__main__":
 
     srt = sr.single_relation_table()
     mrt = sr.multiple_relations_table()
-    sst = sr.single_statistic_table(stat="accuracy")
-    sst1 = sr.single_statistic_table(stat="accuracy")
-    sst2 = sr.single_statistic_table(stat="accuracy")
+    sst = sr.single_statistic_table(stat="accuracy", show_heatmap=True)
 
-    # print(srt)
-    # print(mrt)
+    print(srt)
+    print(mrt)
     print(sst)
-    print(sst1)
-    print(sst2)
 
     # Specifying specific arguments for each of the Signal Return Functions
 

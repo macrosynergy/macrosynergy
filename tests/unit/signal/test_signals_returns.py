@@ -8,6 +8,8 @@ import random
 import pandas as pd
 import numpy as np
 from typing import List, Dict
+import matplotlib
+
 
 class TestAll(unittest.TestCase):
     def setUp(self):
@@ -38,7 +40,7 @@ class TestAll(unittest.TestCase):
                 "mean_add",
                 "sd_mult",
                 "ar_coef",
-                "back_coef", 
+                "back_coef",
             ],
         )
 
@@ -133,7 +135,6 @@ class TestAll(unittest.TestCase):
         )
 
     def test_single_relation_table(self):
-
         sr = SignalsReturns(
             df=self.dfd,
             rets="XR",
@@ -292,7 +293,6 @@ class TestAll(unittest.TestCase):
             self.assertTrue(np.isclose(val1, val2))
 
     def test_multiple_relation_table(self):
-
         num_of_acc_cols = 10
 
         sr_unsigned = SignalsReturns(
@@ -305,19 +305,23 @@ class TestAll(unittest.TestCase):
             slip=1,
         )
 
-        self.assertTrue(sr_unsigned.multiple_relations_table().shape == (1, num_of_acc_cols))
+        self.assertTrue(
+            sr_unsigned.multiple_relations_table().shape == (1, num_of_acc_cols)
+        )
 
         sr_mrt = SignalsReturns(
             df=self.dfd,
             rets=["XR", "GROWTH"],
             sigs=["CRY", "INFL"],
             freqs=["Q", "M"],
-            #signs=[1, 1],
+            # signs=[1, 1],
             agg_sigs=["last", "mean"],
             blacklist=self.blacklist,
         )
 
-        self.assertTrue(sr_mrt.multiple_relations_table().shape == (16, num_of_acc_cols))
+        self.assertTrue(
+            sr_mrt.multiple_relations_table().shape == (16, num_of_acc_cols)
+        )
 
         with self.assertRaises(ValueError):
             sr_mrt.multiple_relations_table(rets="TEST")
@@ -341,7 +345,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(mrt.shape == (4, num_of_acc_cols))
 
     def test_single_statistic_table(self):
-
         sr = SignalsReturns(
             df=self.dfd,
             rets="XR",
@@ -395,7 +398,6 @@ class TestAll(unittest.TestCase):
         )
 
     def test_set_df_labels(self):
-
         rets = ["XR", "GROWTH"]
         freqs = ["Q", "M"]
         sigs = ["CRY", "INFL"]
@@ -448,7 +450,6 @@ class TestAll(unittest.TestCase):
         return 0
 
     def test_get_rowcol(self):
-
         rets = ["XR", "GROWTH"]
         freqs = ["Q", "M"]
         sigs = ["CRY", "INFL"]
@@ -469,6 +470,44 @@ class TestAll(unittest.TestCase):
 
         self.assertTrue(sr.get_rowcol(hash, rows) == "CRY/XR/Q")
         self.assertTrue(sr.get_rowcol(hash, columns) == "mean")
+
+    def test_single_statistic_table_show_heatmap(self):
+        self.mpl_backend: str = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
+        sr = SignalsReturns(
+            df=self.dfd,
+            rets="XR",
+            sigs="CRY",
+            freqs="Q",
+            blacklist=self.blacklist,
+            slip=1,
+        )
+
+        try:
+            sr.single_statistic_table(stat="accuracy", show_heatmap=True)
+        except Exception as e:
+            self.fail(f"single_statistic_table raised {e} unexpectedly")
+
+        try:
+            sr.single_statistic_table(
+                stat="accuracy", show_heatmap=True, row_names=["X"], column_names=["Y"]
+            )
+        except Exception as e:
+            self.fail(f"single_statistic_table raised {e} unexpectedly")
+
+        try:
+            sr.single_statistic_table(
+                stat="accuracy",
+                show_heatmap=True,
+                title="Test",
+                min_color=0,
+                max_color=1,
+                annotate=False,
+                figsize=(10, 10),
+            )
+        except Exception as e:
+            self.fail(f"single_statistic_table raised {e} unexpectedly")
 
 
 if __name__ == "__main__":

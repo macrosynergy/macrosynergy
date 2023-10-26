@@ -9,6 +9,7 @@ from .timelines import timelines
 from .view_panel_dates import view_panel_dates
 from .correlation import view_correlation
 from .ranges import view_ranges
+from .table import view_table
 
 TYPES = ["NoneType", "Numeric"]
 CLASSES = ["FacetPlot", "LinePlot", "Plotter", "Heatmap"]
@@ -19,7 +20,8 @@ FUNCTIONS = [
     "view_grades",
     "view_panel_dates",
     "view_correlation",
-    "view_ranges"
+    "view_ranges",
+    "view_table"
 ]
 
 __all__ = CLASSES + MODULES
