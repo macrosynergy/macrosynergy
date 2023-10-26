@@ -15,6 +15,10 @@ from macrosynergy.management.utils import (
     reduce_df_by_ticker,
 )
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def _granger_causality_backend(
     data: pd.DataFrame, max_lag: Union[int, List[int]], add_constant: bool = True
