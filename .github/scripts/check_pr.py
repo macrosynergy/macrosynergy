@@ -93,6 +93,7 @@ def check_title(
 def _get_pattern_idx(
     body: str,
     pattern: str,
+    numeric: bool = False,
 ) -> Tuple[int, int]:
     """
     Get the start and end index of a pattern in a string.
@@ -101,13 +102,25 @@ def _get_pattern_idx(
     :return <Tuple[int, int]>: The start and end index of the pattern.
     :raises <AssertionError>: If the body or pattern is empty.
     """
+    NUM_CHARS: List[str] = list(map(str, range(10))) + ["."]
     assert bool(body)
     assert bool(pattern)
     assert pattern in body
     fidx: int = body.find(pattern)
-    sidx: int = body.find(" ", fidx)
-    if sidx == -1:
-        sidx = len(body)
+    sidx: int = body.find("-", fidx)  # all spaces have been replaced with dashes
+    if sidx == -1 and not numeric:
+        return (fidx, len(body))
+
+    if numeric:
+        # set fidx to the end of the pattern
+        fidx = fidx + len(pattern)
+        # get the first non-numeric char after the pattern
+        for idx, char in enumerate(body[fidx:]):
+            if char not in NUM_CHARS:
+                break
+        # set sidx to the first non-numeric char after the pattern
+        sidx = fidx + idx
+
     return (fidx, sidx)
 
 
@@ -162,8 +175,8 @@ def _check_merge_w_version(
     for px, pattern in enumerate(p_methods):
         if pattern not in body:
             continue
-        fidx, sidx = _get_pattern_idx(body=body, pattern=pattern)
-        mversion: str = body[fidx + len(pattern) : sidx].strip()
+        fidx, sidx = _get_pattern_idx(body=body, pattern=pattern, numeric=True)
+        mversion: str = body[fidx:sidx].strip()
         results[px] = p_methods[pattern](mversion)
 
         if not results[px]:
@@ -189,9 +202,9 @@ def _check_merge_after(
     if MA_STR not in body:
         return True
 
-    fidx, sidx = _get_pattern_idx(body=body, pattern=MA_STR)
+    fidx, sidx = _get_pattern_idx(body=body, pattern=MA_STR, numeric=True)
     # get all the chars between fidx and sidx
-    merge_after_pr: str = body[fidx + len(MA_STR) : sidx].strip()
+    merge_after_pr: str = body[fidx:sidx].strip()
     try:
         merge_after_pr = int(merge_after_pr)
     except ValueError:
@@ -213,6 +226,7 @@ def check_pr_directives(
         return True
 
     body = body.strip().replace(" ", "-").upper()
+    body = f" {body} "
 
     results: List[bool] = [
         _check_do_not_merge(body=body),
@@ -227,15 +241,18 @@ def test_pr_info(
     pr_info: Dict[str, Any],
 ) -> bool:
     assert set(["number", "title", "state", "body"]).issubset(pr_info.keys())
-
+    err_msg: str = ""
     if not check_title(title=pr_info["title"]):
-        raise ValueError("PR title does not match any of the accepted patterns.")
+        err_msg += f"PR #{pr_info['number']} is not mergable due to invalid title.\n"
 
     if not check_pr_directives(body=pr_info["body"], state=pr_info["state"]):
-        raise ValueError(
-            "PR number is not mergable due to merge restrictions"
+        err_msg += (
+            f"PR #{pr_info['number']} is not mergable due to merge restrictions"
             " specified in the PR body."
         )
+
+    if err_msg:
+        raise ValueError(err_msg.strip())
 
     return True
 

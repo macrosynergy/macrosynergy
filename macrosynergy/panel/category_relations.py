@@ -11,7 +11,7 @@ import statsmodels.api as sm
 import warnings
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.shape_dfs import categories_df
+from macrosynergy.management.utils import categories_df
 from macrosynergy.management.utils import apply_slip as apply_slip_util
 
 
@@ -502,7 +502,7 @@ class CategoryRelations(object):
 
         assert prob_est in ["pool", "map"], "prob_est must be 'pool' or 'map'"
 
-        sns.set_theme(style="whitegrid")
+        sns.set_theme(style="whitegrid", palette="colorblind")
         dfx = self.df.copy()
 
         if title is None and (self.years is None):

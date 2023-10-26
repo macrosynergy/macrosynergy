@@ -7,8 +7,11 @@ on:
     branches: [main, test, develop]
   workflow_dispatch:
 
+concurrency:
+  group: "integration-tests"
+
 jobs:
-  build:
+  run-integration-tests:
     runs-on: ubuntu-latest
 
     steps:

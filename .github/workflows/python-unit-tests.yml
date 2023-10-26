@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  run-unit-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -17,6 +17,10 @@ jobs:
         with:
           python-version: 3.11
 
+      - name: Check for sys.path.append
+        run: |
+          bash .github/scripts/check_sys_path.sh
+          
       - name: Lint with flake8
         run: |
           # stop the build if there are Python syntax errors or undefined names
