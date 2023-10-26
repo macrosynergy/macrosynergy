@@ -177,7 +177,10 @@ def granger_causality_test(
     Since the Graner Causality Test is a pairwise test, only two tickers can be specified.
     Specify either `tickers` or `cids` & `xcats`. When specifying `cids` & `xcats`, the
     user may input one `cid` and two `xcats`; or two `cids` and one `xcat` to yield two
-    tickers.
+    tickers. The function forms the list of tickers from the `cids` and `xcats` such that
+    the order of the formed tickers is preserved. The order of the tickers is important
+    as the first ticker is the one that is tested to Granger cause the second ticker.
+    The function tests whether the first ticker Granger causes the second ticker.
 
     :param <pd.DataFrame> df: A standardized quantamental dataframe.
     :param <List[str]> tickers: A list of tickers to run the test on. A maximum of two
