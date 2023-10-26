@@ -45,6 +45,7 @@ class TestGrangerCausality(unittest.TestCase):
             "df": self.df,
             "cids": self.cids[0],
             "xcats": self.xcats[:2],
+            "tickers": None,
             "max_lag": 1,
             "add_constant": True,
             "start": "2000-01-01",
@@ -64,6 +65,9 @@ class TestGrangerCausality(unittest.TestCase):
             bad_args[key] = 1
             if key == "max_lag":
                 bad_args[key] = "apple"
+
+            if key == "tickers":
+                continue
 
             with self.assertRaises(TypeError, msg=f"Key: {key}={bad_args[key]}"):
                 granger_causality_test(**bad_args)
@@ -99,9 +103,32 @@ class TestGrangerCausality(unittest.TestCase):
         with self.assertRaises(ValueError):
             granger_causality_test(**bad_args)
 
+        # pass a list of ints for tickers
+        bad_args["tickers"] = [1, 2]
+        with self.assertRaises(TypeError):
+            granger_causality_test(**bad_args)
+
         # Pass random xcats to test ValueError
         bad_args = good_args.copy()
         bad_args["xcats"] = [u[::-1] for u in self.xcats[:2]]
+        with self.assertRaises(ValueError):
+            granger_causality_test(**bad_args)
+
+        # Value error when metric="return"
+        bad_args = good_args.copy()
+        bad_args["metric"] = "return"
+        with self.assertRaises(ValueError):
+            granger_causality_test(**bad_args)
+
+        # test with max_lag as a list of string
+        bad_args = good_args.copy()
+        bad_args["max_lag"] = ["apple", "orange"]
+        with self.assertRaises(TypeError):
+            granger_causality_test(**bad_args)
+
+        # test random strings for dates
+        bad_args = good_args.copy()
+        bad_args["start"] = "apple"
         with self.assertRaises(ValueError):
             granger_causality_test(**bad_args)
 
@@ -114,6 +141,11 @@ class TestGrangerCausality(unittest.TestCase):
 
         # test when specifying cids and xcats, `ticks` is returned
         self.assertEqual(_get_tickers(cids=self.cids, xcats=self.xcats), ticks)
+
+        # pass an xcat as a string
+        xc: str = self.xcats[0]
+        ticks: List[str] = [f"{cid}_{xc}" for cid in self.cids]
+        self.assertEqual(_get_tickers(cids=self.cids, xcats=xc), ticks)
 
     def test_gct_backend_asserts(self):
         wdf: pd.DataFrame = qdf_to_ticker_df(self.df)
