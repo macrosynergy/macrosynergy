@@ -390,7 +390,9 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
         return iterator
 
-    def calculate_xranges(self, cs_dates: pd.DatetimeIndex, real_dates: pd.DatetimeIndex):
+    def _calculate_xranges(
+        self, cs_dates: pd.DatetimeIndex, real_dates: pd.DatetimeIndex
+    ):
         """
         Helper method to determine the ranges of contiguous dates in each training and test set, for use in visualisation.
 
@@ -404,20 +406,28 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         if len(cs_dates) == 0:
             return xranges
 
-        filtered_real_dates = real_dates[
+        filtered_real_dates: pd.DatetimeIndex = real_dates[
             (real_dates >= cs_dates.min()) & (real_dates <= cs_dates.max())
         ]
-        difference = filtered_real_dates.difference(cs_dates)
+        difference: pd.DatetimeIndex = filtered_real_dates.difference(cs_dates)
+
+        # A single contiguous range of dates.
         if len(difference) == 0:
-            xranges.append((cs_dates.min(), cs_dates.max() - cs_dates.min()))
+            xranges.append(
+                (cs_dates.min(), cs_dates.max() - cs_dates.min() + pd.Timedelta(days=1))
+            )
             return xranges
+
+        # Multiple contiguous ranges of dates.
         else:
             while len(difference) > 0:
                 xranges.append((cs_dates.min(), difference.min() - cs_dates.min()))
                 cs_dates = cs_dates[(cs_dates >= difference.min())]
                 difference = difference[(difference >= cs_dates.min())]
 
-            xranges.append((cs_dates.min(), cs_dates.max() - cs_dates.min()))
+            xranges.append(
+                (cs_dates.min(), cs_dates.max() - cs_dates.min() + pd.Timedelta(days=1))
+            )
             return xranges
 
     def visualise_splits(
@@ -483,10 +493,10 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
                 xranges_train: List[
                     Tuple[pd.Timestamp, pd.Timedelta]
-                ] = self.calculate_xranges(cs_train_dates, real_dates)
+                ] = self._calculate_xranges(cs_train_dates, real_dates)
                 xranges_test: List[
                     Tuple[pd.Timestamp, pd.Timedelta]
-                ] = self.calculate_xranges(cs_test_dates, real_dates)
+                ] = self._calculate_xranges(cs_test_dates, real_dates)
 
                 if xranges_train:
                     operations.append(
