@@ -286,3 +286,11 @@ class TestGrangerCausality(unittest.TestCase):
         test_args: Dict[str, Any] = self.good_args.copy()
         test_args["df"] = dfc
         self.assertIsInstance(granger_causality_test(**test_args), dict)
+
+        # mock grangercausalitytests to return a dict - solely to avoid real computation
+        with unittest.mock.patch(
+            "statsmodels.tsa.stattools.grangercausalitytests", mock_wrapper
+        ):
+            # mock sm.__version__ as 0.15.0
+            with unittest.mock.patch("statsmodels.__version__", "0.15.0"):
+                self.assertIsInstance(granger_causality_test(**test_args), dict)
