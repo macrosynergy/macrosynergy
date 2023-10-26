@@ -147,8 +147,14 @@ class TestGrangerCausality(unittest.TestCase):
         with self.assertRaises(ValueError):
             _type_checks(**bad_args)
 
-        bad_args = good_args.copy()
+        # reuse df from above
+        bad_args["tickers"] = [
+            f"{cid}_{xcat}" for cid in good_args["cids"] for xcat in good_args["xcats"]
+        ]
         bad_args["cids"] = None
+        bad_args["xcats"] = None
+        with self.assertRaises(ValueError):
+            _type_checks(**bad_args)
 
     def test_get_tickers(self):
         ticks: List[str] = [f"{cid}_{xcat}" for cid in self.cids for xcat in self.xcats]
@@ -212,7 +218,19 @@ class TestGrangerCausality(unittest.TestCase):
         with self.assertRaises(AssertionError):
             _granger_causality_backend(**bad_args)
 
-    def test_wrapper(self):
+    def test_gct_wrapper(self):
         # all failure cases are already tested in the backend tests or utils tests
         # run with good args to see if it works
         granger_causality_test(**self.good_args)
+
+        bad_args = self.good_args.copy()
+
+        # for 0th cid and 0th xcat, set all values to np.nan
+        dfb: pd.DataFrame = self.df.copy()
+        dfb.loc[
+            (dfb["cid"] == self.cids[0]) & (dfb["xcat"] == self.xcats[0]), "value"
+        ] = np.nan
+
+        bad_args["df"] = dfb
+        with self.assertRaises(ValueError):
+            granger_causality_test(**bad_args)
