@@ -287,10 +287,12 @@ if __name__ == "__main__":
         xcats=xcats,
     )
 
-    tks: List[str] = [f"{c}_{x}" for c in cids for x in xcats]
+    tks: List[str] = [f"{c}_{xcats}" for c in cids]
     # AUD_FX, CAD_FX
 
     gct: Dict[Any, Any] = granger_causality_test(
         df=df,
         tickers=tks,
     )
+
+    print(gct)
