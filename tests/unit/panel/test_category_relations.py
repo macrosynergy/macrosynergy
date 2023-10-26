@@ -167,6 +167,107 @@ class TestAll(unittest.TestCase):
                 xcat_trims=[3.25, 3.0, 2.0],
             )
 
+        with self.assertRaises(TypeError):
+            # Test freq is of type string.
+            cr = CategoryRelations(
+                self.dfdx,
+                xcats=["GROWTH", "INFL"],
+                cids=self.cidx,
+                freq=1,
+                xcat_aggs=["mean", "mean"],
+                lag=1,
+                start="2000-01-01",
+                years=None,
+                blacklist=self.black,
+            )
+
+        with self.assertRaises(TypeError):
+            # Test val is of type string.
+            cr = CategoryRelations(
+                self.dfdx,
+                xcats=["GROWTH", "INFL"],
+                cids=self.cidx,
+                freq='D',
+                xcat_aggs=["mean", "mean"],
+                lag=1,
+                start="2000-01-01",
+                years=None,
+                blacklist=self.black,
+                val=1,
+            )
+        
+        with self.assertRaises(TypeError):
+            # Test xcat is of type either List or Tuple.
+            cr = CategoryRelations(
+                self.dfdx,
+                xcats="GROWTH, INFL",
+                cids=self.cidx,
+                freq='D',
+                xcat_aggs=["mean", "mean"],
+                lag=1,
+                start="2000-01-01",
+                years=None,
+                blacklist=self.black,
+            )
+
+        with self.assertRaises(TypeError):
+            # Test slip is of type int.
+            cr = CategoryRelations(
+                self.dfdx,
+                xcats=["GROWTH", "INFL"],
+                cids=self.cidx,
+                freq='D',
+                xcat_aggs=["mean", "mean"],
+                lag=1,
+                start="2000-01-01",
+                years=None,
+                blacklist=self.black,
+                slip="1",
+            )
+
+        with self.assertRaises(ValueError):
+            # Test slip is non-negative.
+            cr = CategoryRelations(
+                self.dfdx,
+                xcats=["GROWTH", "INFL"],
+                cids=self.cidx,
+                freq='D',
+                xcat_aggs=["mean", "mean"],
+                lag=1,
+                start="2000-01-01",
+                years=None,
+                blacklist=self.black,
+                slip=-2,
+            )
+
+        with self.assertRaises(TypeError):
+            # Test xcat_aggs is of type List or Tuple.
+            cr = CategoryRelations(
+                self.dfdx,
+                xcats=["GROWTH", "INFL"],
+                cids=self.cidx,
+                freq='D',
+                xcat_aggs="mean, mean",
+                lag=1,
+                start="2000-01-01",
+                years=None,
+                blacklist=self.black,
+            )
+
+        with self.assertRaises(ValueError):
+            # Test slip is of type int.
+            cr = CategoryRelations(
+                self.dfdx,
+                xcats=["GROWTH", "INFL"],
+                cids=self.cidx,
+                freq='D',
+                xcat_aggs=["mean", "mean"],
+                lag=1,
+                start="2000-01-01",
+                years=None,
+                blacklist=self.black,
+            )
+
     def test_intersection_cids(self):
         self.dataframe_generator()
 
