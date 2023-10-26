@@ -30,6 +30,7 @@ def _granger_causality_backend(
         and all(isinstance(l, int) for l in max_lag)
         and len(max_lag) > 0
     ), "`max_lag` must be an integer or a list of integers"
+    assert isinstance(add_constant, bool), "`add_constant` must be a boolean"
 
     arguments: Dict[str, Any] = dict(
         x=data,
