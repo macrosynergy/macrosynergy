@@ -84,6 +84,15 @@ def _type_checks(
     agg: str,
     metric: str,
 ) -> None:
+    """
+    Does type checks on the inputs to `granger_causality_test`.
+    All inputs are checked for type and value errors.
+
+    :params: See `granger_causality_test` for details.
+    :raises <TypeError>: If any of the inputs are of the wrong type.
+    :raises <ValueError>: If any of the input values are invalid.
+    """
+
     if not isinstance(df, QuantamentalDataFrame):
         raise TypeError("df must be a standardized quantamental dataframe")
 
