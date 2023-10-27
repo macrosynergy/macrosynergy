@@ -85,7 +85,6 @@ def _leverage_positions(
     sname: str,
     contids: List[str],
     aum: Numeric = 100,
-    dollar_per_signal: Numeric = 1.0,
     leverage: Numeric = 1.0,
     pname: str = "POS",
 ) -> QuantamentalDataFrame:
@@ -106,11 +105,10 @@ def _leverage_positions(
             df=df_wide, contid=contx, sname=sname
         )
         # sum of all assets for that contract; if zero, set to NaN to avoid div by zero
-        df_wide[pos_col] = df_wide[asset_cols].sum(axis=1)
+        df_wide[pos_col] = df_wide[asset_cols].sum(axis='columns') # sum(row) all signals 
         df_wide.loc[df_wide[pos_col] == 0, pos_col] = np.nan
         # USD position(asset) = AUM * leverage / (sum of signals * dollar per signal)
-        df_wide[pos_col] = aum * leverage / (df_wide[pos_col] * dollar_per_signal)
-        # TODO: ioncorrect since here dollar_per_signal must be excatly 1
+        df_wide[pos_col] = aum * leverage / (df_wide[pos_col])
         # TODO: this should be dfw_pos = dfw_sigs * aum * leverage / rowsums(dfw_sigs)
 
     generated_positions: List[str] = [f"{contx}_{pname}" for contx in contids]
