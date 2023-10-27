@@ -12,9 +12,9 @@ import seaborn as sns
 
 from typing import List, Union, Tuple, Optional
 
-from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.utils import (
     standardise_dataframe,
+    reduce_df,
     is_valid_iso_date,
     apply_slip,
     qdf_to_ticker_df,
@@ -105,7 +105,7 @@ def _leverage_positions(
             df=df_wide, contid=contx, sname=sname
         )
         # sum of all assets for that contract; if zero, set to NaN to avoid div by zero
-        df_wide[pos_col] = df_wide[asset_cols].sum(axis='columns') # sum(row) all signals 
+        df_wide[pos_col] = df_wide[asset_cols].sum(axis=1)  # sum(row) all signals
         df_wide.loc[df_wide[pos_col] == 0, pos_col] = np.nan
         # USD position(asset) = AUM * leverage / (sum of signals * dollar per signal)
         df_wide[pos_col] = aum * leverage / (df_wide[pos_col])
@@ -228,7 +228,7 @@ def notional_positions(
     ## Volatility targeting and leverage cannot be applied at the same time
     if not (bool(leverage) ^ bool(vol_target)):
         e_msg: str = "Either `leverage` or `vol_target` must be specified"
-        # TODO: No it needs not. You can define notional positions simply on a 
+        # TODO: No it needs not. You can define notional positions simply on a
         #       dollar_per_signal basis. This is useful for testing.
         e_msg += (", but not both.") if (bool(leverage) and bool(vol_target)) else (".")
         raise ValueError(e_msg)
@@ -285,7 +285,6 @@ def notional_positions(
             sname=sname,
             contids=contids,
             aum=aum,
-            dollar_per_signal=dollar_per_signal,
             leverage=leverage,
             pname=pname,
         )
