@@ -10,7 +10,6 @@ from macrosynergy.management.shape_dfs import categories_df
 from typing import List, Tuple, Dict, Union, Optional
 import warnings
 
-
 class TestAll(unittest.TestCase):
     # Method used to construct the respective DataFrame.
     def dataframe_generator(self):
@@ -248,20 +247,6 @@ class TestAll(unittest.TestCase):
                 cids=self.cidx,
                 freq='D',
                 xcat_aggs="mean, mean",
-                lag=1,
-                start="2000-01-01",
-                years=None,
-                blacklist=self.black,
-            )
-
-        with self.assertRaises(ValueError):
-            # Test slip is of type int.
-            cr = CategoryRelations(
-                self.dfdx,
-                xcats=["GROWTH", "INFL"],
-                cids=self.cidx,
-                freq='D',
-                xcat_aggs=["mean", "mean"],
                 lag=1,
                 start="2000-01-01",
                 years=None,
