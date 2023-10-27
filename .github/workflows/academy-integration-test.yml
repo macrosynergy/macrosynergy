@@ -1,0 +1,26 @@
+# Unit tests for the package, running on PRs to `test` and `develop` branches
+name: Test package changes to run with Academy notebooks
+
+on:
+  pull_request:
+    branches: [test]
+  workflow_dispatch:
+
+jobs:
+  run-unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore caches - Python 3.11
+        uses: ./.github/actions/restore-pip-cache
+        with:
+          python-version: 3.11
+
+      - name: Install package
+        run: |
+          python -m pip install .
+
+      - name: Run academy-integration-test
+        run: |
+          python .github\scripts\setup_academy_integration_test.py
