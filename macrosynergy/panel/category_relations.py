@@ -91,6 +91,9 @@ class CategoryRelations(object):
     ):
         """Initializes CategoryRelations"""
 
+        if not isinstance(freq, str):
+            raise TypeError("freq must be a string.")
+
         self.xcats: List[str] = xcats
         self.cids: List[str] = cids
         self.val: str = val
@@ -103,9 +106,7 @@ class CategoryRelations(object):
         self.xcat_trims: List[float] = xcat_trims
         self.slip: int = slip
 
-        if not isinstance(self.freq, str):
-            raise TypeError("freq must be a string.")
-        elif self.freq not in ["D", "W", "M", "Q", "A"]:
+        if self.freq not in ["D", "W", "M", "Q", "A"]:
             raise ValueError("freq must be one of 'D', 'W', 'M', 'Q', 'A'.")
         if not isinstance(val, str):
             raise TypeError("val must be a string.")
