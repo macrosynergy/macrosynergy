@@ -21,11 +21,11 @@ from macrosynergy.management.utils import (
     standardise_dataframe,
     ticker_df_to_qdf,
     qdf_to_ticker_df,
+    reduce_df,
+    update_df,
     get_cid,
     get_xcat,
 )
-from macrosynergy.management.shape_dfs import reduce_df
-from macrosynergy.management.update_df import update_df
 
 
 def _check_arg_types(
