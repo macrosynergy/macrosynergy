@@ -248,34 +248,6 @@ def _apply_hedge_ratios(
     return ticker_df_to_qdf(df=df_wide)
 
 
-def _consolidate_contract_signals(
-    df_contract_signals: pd.DataFrame,
-    df_hedge_signals: Optional[pd.DataFrame] = None,
-) -> pd.DataFrame:
-    """
-    Consolidate contract signals and hedge signals into a single dataframe.
-    :param <pd.DataFrame> df_contract_signals: dataframe with contract signals.
-    :param <pd.DataFrame> df_hedge_signals: dataframe with hedge signals.
-    """
-
-    if df_hedge_signals is None:
-        return df_contract_signals
-
-    df_cs_wide: pd.DataFrame = qdf_to_ticker_df(df=df_contract_signals)
-    df_hedge_wide: pd.DataFrame = qdf_to_ticker_df(df=df_hedge_signals)
-
-    extra_hedge_cols: List[str] = list(
-        set(df_hedge_wide.columns) - set(df_cs_wide.columns)
-    )
-    if len(extra_hedge_cols) > 0:
-        for colx in extra_hedge_cols:
-            df_cs_wide[colx] = np.nan
-
-    df_cs_wide = df_cs_wide.add(df_hedge_wide, fill_value=0.0)
-
-    return ticker_df_to_qdf(df=df_cs_wide)
-
-
 def contract_signals(
     df: pd.DataFrame,
     sig: str,
@@ -441,7 +413,6 @@ def contract_signals(
     ## Generate hedge contract signals
     df_hedge_signals: Optional[pd.DataFrame] = None
     if hbasket is not None:
-
         df_hedge_signals: pd.DataFrame = _apply_hedge_ratios(
             df=df,
             cids=cids,
@@ -451,11 +422,8 @@ def contract_signals(
             hratios=hratios,
         )
 
-    ## Consolidate contract signals and hedge signals
-    df_out: pd.DataFrame = _consolidate_contract_signals(
-        df_contract_signals=df_contract_signals,
-        df_hedge_signals=df_hedge_signals,
-    )
+    # Append the (rows of) the hedge signals to the contract signals
+    df_out: pd.DataFrame = pd.concat([df_contract_signals, df_hedge_signals], axis=0)
 
     # Append the strategy name to all the xcats
     df_out["xcat"] = df_out["xcat"] + "_" + sname
