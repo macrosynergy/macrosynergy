@@ -55,6 +55,7 @@ test = [
   "coverage>=6.0.0",
   "pytest-xdist>=3.3.1",
   "flake8>=4.0.1",
+  "gitpython>=3.1.24",
 ]
 excel = ["openpyxl>=3.0.10"]
 notebook = [
@@ -94,6 +95,7 @@ all = [
   "coverage>=6.0.0",
   "pytest-xdist>=3.3.1",
   "flake8>=4.0.1",
+  "gitpython>=3.1.24",
 ]
 
 [tool.setuptools]
@@ -141,5 +143,5 @@ exclude_also = [
   "if __name__ == .__main__.:",
   "if 0:",
   "if False:",
-  "if __name__ == __main__:"
-  ]
+  "if __name__ == __main__:",
+]
