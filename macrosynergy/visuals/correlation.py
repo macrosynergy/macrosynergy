@@ -13,7 +13,7 @@ from matplotlib import pyplot as plt
 from typing import List, Union, Tuple, Dict, Optional, Any
 from collections import defaultdict
 
-from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 
