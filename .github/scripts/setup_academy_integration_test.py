@@ -56,12 +56,7 @@ def clone_notebook_runner(
         logger.info("Cloning notebook runner repository.")
         while max_retries > 0:
             try:
-                git.Repo.clone_from(
-                    f"https://{token}@{repo}",
-                    path,
-                    branch=branch,
-                    depth=1,
-                )
+                git.Repo.clone_from(f"https://{UTILS_REPO}", path, branch=branch)
 
                 return
             except Exception as e:

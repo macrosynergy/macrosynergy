@@ -24,5 +24,7 @@ jobs:
       - name: Run academy-integration-test
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DQ_CLIENT_ID: ${{ secrets.DQ_CLIENT_ID }}
+          DQ_CLIENT_SECRET: ${{ secrets.DQ_CLIENT_SECRET }}
         run: |
           python .github/scripts/setup_academy_integration_test.py
