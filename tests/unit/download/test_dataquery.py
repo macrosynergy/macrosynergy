@@ -34,7 +34,7 @@ from macrosynergy.download.exceptions import (
     NoContentError,
 )
 
-from macrosynergy.download.request_wrapper import request_wrapper, validate_response
+from macrosynergy.download.utils import request_wrapper, validate_response
 
 from .mock_helpers import mock_jpmaqs_value, mock_request_wrapper, random_string
 
