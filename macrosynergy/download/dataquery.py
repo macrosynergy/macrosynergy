@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Union, Tuple
 from timeit import default_timer as timer
 from tqdm import tqdm
+from dq_auth import OAuth, CertAuth
 
 from macrosynergy import __version__ as ms_version_info
 from macrosynergy.download.exceptions import (
@@ -36,24 +37,23 @@ from macrosynergy.management.utils import (
     form_full_url,
 )
 
-CERT_BASE_URL: str = "https://platform.jpmorgan.com/research/dataquery/api/v2"
-OAUTH_BASE_URL: str = (
-    "https://api-developer.jpmorgan.com/research/dataquery-authe/api/v2"
+from .request_wrapper import request_wrapper
+
+from .constants import (
+    CERT_BASE_URL,
+    OAUTH_BASE_URL,
+    OAUTH_TOKEN_URL,
+    JPMAQS_GROUP_ID,
+    API_DELAY_PARAM,
+    HL_RETRY_COUNT,
+    MAX_CONTINUOUS_FAILURES,
+    HEARTBEAT_ENDPOINT,
+    TIMESERIES_ENDPOINT,
+    CATALOGUE_ENDPOINT,
+    HEARTBEAT_TRACKING_ID,
+    TIMESERIES_TRACKING_ID,
+    CATALOGUE_TRACKING_ID,
 )
-OAUTH_TOKEN_URL: str = "https://authe.jpmchase.com/as/token.oauth2"
-OAUTH_DQ_RESOURCE_ID: str = "JPMC:URI:RS-06785-DataQueryExternalApi-PROD"
-JPMAQS_GROUP_ID: str = "JPMAQS"
-API_DELAY_PARAM: float = 0.3  # 300ms delay between requests
-API_RETRY_COUNT: int = 5  # retry count for transient errors
-HL_RETRY_COUNT: int = 5  # retry count for "high-level" requests
-MAX_CONTINUOUS_FAILURES: int = 5  # max number of continuous errors before stopping
-HEARTBEAT_ENDPOINT: str = "/services/heartbeat"
-TIMESERIES_ENDPOINT: str = "/expressions/time-series"
-CATALOGUE_ENDPOINT: str = "/group/instruments"
-HEARTBEAT_TRACKING_ID: str = "heartbeat"
-OAUTH_TRACKING_ID: str = "oauth"
-TIMESERIES_TRACKING_ID: str = "timeseries"
-CATALOGUE_TRACKING_ID: str = "catalogue"
 
 logger: logging.Logger = logging.getLogger(__name__)
 debug_stream_handler = logging.StreamHandler(io.StringIO())
@@ -64,366 +64,6 @@ debug_stream_handler.setFormatter(
     )
 )
 logger.addHandler(debug_stream_handler)
-
-def validate_response(
-    response: requests.Response,
-    user_id: str,
-) -> dict:
-    """
-    Validates a response from the API. Raises an exception if the response
-    is invalid (e.g. if the response is not a 200 status code).
-
-    :param <requests.Response> response: response object from requests.request().
-
-    :return <dict>: response as a dictionary. If the response is not valid,
-        this function will raise an exception.
-
-    :raises <InvalidResponseError>: if the response is not valid.
-    :raises <AuthenticationError>: if the response is a 401 status code.
-    :raises <KeyboardInterrupt>: if the user interrupts the download.
-    """
-
-    error_str: str = (
-        f"Response: {response}\n"
-        f"User ID: {user_id}\n"
-        f"Requested URL: {response.request.url}\n"
-        f"Response status code: {response.status_code}\n"
-        f"Response headers: {response.headers}\n"
-        f"Response text: {response.text}\n"
-        f"Timestamp (UTC): {datetime.utcnow().isoformat()}; \n"
-    )
-    # TODO : Use response.raise_for_status() as a better way to check for errors
-    if not response.ok:
-        logger.info("Response status is NOT OK : %s", response.status_code)
-        if response.status_code == 401:
-            raise AuthenticationError(error_str)
-
-        if HEARTBEAT_ENDPOINT in response.request.url:
-            raise HeartbeatError(error_str)
-
-        raise InvalidResponseError(
-            f"Request did not return a 200 status code.\n{error_str}"
-        )
-
-    try:
-        response_dict = response.json()
-        if response_dict is None:
-            raise InvalidResponseError(f"Response is empty.\n{error_str}")
-        return response_dict
-    except Exception as exc:
-        if isinstance(exc, KeyboardInterrupt):
-            raise exc
-
-        raise InvalidResponseError(error_str + f"Error parsing response as JSON: {exc}")
-
-
-def request_wrapper(
-    url: str,
-    headers: Optional[Dict] = None,
-    params: Optional[Dict] = None,
-    method: str = "get",
-    tracking_id: Optional[str] = None,
-    proxy: Optional[Dict] = None,
-    cert: Optional[Tuple[str, str]] = None,
-    **kwargs,
-) -> dict:
-    """
-    Wrapper for requests.request() that handles retries and logging.
-    All parameters and kwargs are passed to requests.request().
-
-    :param <str> url: URL to request.
-    :param <dict> headers: headers to pass to requests.request().
-    :param <dict> params: params to pass to requests.request().
-    :param <str> method: HTTP method to use. Must be one of "get"
-        or "post". Defaults to "get".
-    :param <dict> kwargs: kwargs to pass to requests.request().
-    :param <str> tracking_id: default None, unique tracking ID of request.
-    :param <dict> proxy: default None, dictionary of proxy settings for request.
-    :param <Tuple[str, str]> cert: default None, tuple of string for filename
-        of certificate and key.
-
-    :return <dict>: response as a dictionary.
-
-    :raises <InvalidResponseError>: if the response is not valid.
-    :raises <AuthenticationError>: if the response is a 401 status code.
-    :raises <DownloadError>: if the request fails after retrying.
-    :raises <KeyboardInterrupt>: if the user interrupts the download.
-    :raises <ValueError>: if the method is not one of "get" or "post".
-    :raises <Exception>: other exceptions may be raised by requests.request().
-    """
-
-    if method not in ["get", "post"]:
-        raise ValueError(f"Invalid method: {method}")
-
-    user_id: str = kwargs.pop("user_id", "unknown")
-
-    # insert tracking info in headers
-    if headers is None:
-        headers: Dict = {}
-    headers["User-Agent"]: str = f"MacrosynergyPackage/{ms_version_info}"
-
-    uuid_str: str = str(uuid.uuid4())
-    if (tracking_id is None) or (tracking_id == ""):
-        tracking_id: str = uuid_str
-    else:
-        tracking_id: str = f"uuid::{uuid_str}::{tracking_id}"
-
-    headers["X-Tracking-Id"]: str = tracking_id
-
-    log_url: str = form_full_url(url, params)
-    logger.debug(f"Requesting URL: {log_url} with tracking_id: {tracking_id}")
-    raised_exceptions: List[Exception] = []
-    error_statements: List[str] = []
-    error_statement: str = ""
-    retry_count: int = 0
-    response: Optional[requests.Response] = None
-    while retry_count < API_RETRY_COUNT:
-        try:
-            prepared_request: requests.PreparedRequest = requests.Request(
-                method, url, headers=headers, params=params, **kwargs
-            ).prepare()
-
-            response: requests.Response = requests.Session().send(
-                prepared_request,
-                proxies=proxy,
-                cert=cert,
-            )
-
-            if isinstance(response, requests.Response):
-                return validate_response(response=response, user_id=user_id)
-
-        except Exception as exc:
-            # if keyboard interrupt, raise as usual
-            if isinstance(exc, KeyboardInterrupt):
-                print("KeyboardInterrupt -- halting download")
-                raise exc
-
-            # authentication error, clearly not a transient error
-            if isinstance(exc, AuthenticationError):
-                raise exc
-
-            error_statement = (
-                f"Request to {log_url} failed with error {exc}. "
-                f"User ID: {user_id}. "
-                f"Retry count: {retry_count}. "
-                f"Tracking ID: {tracking_id}"
-            )
-            raised_exceptions.append(exc)
-            error_statements.append(error_statement)
-
-            known_exceptions = KNOWN_EXCEPTIONS + [HeartbeatError]
-            # NOTE : HeartBeat is a special case
-
-            # NOTE: exceptions that need the code to break should be caught before this
-            # all other exceptions are caught here and retried after a delay
-
-            if any([isinstance(exc, e) for e in known_exceptions]):
-                logger.warning(error_statement)
-                retry_count += 1
-                time.sleep(API_DELAY_PARAM)
-            else:
-                raise exc
-
-    if isinstance(raised_exceptions[-1], HeartbeatError):
-        raise HeartbeatError(error_statement)
-
-    errs_str = "\n\n".join(
-        ("\t" + str(e) + " - \n\t\t" + est)
-        for e, est in zip(raised_exceptions, error_statements)
-    )
-
-    e_str = f"Request to {log_url} failed with error {raised_exceptions[-1]}. \n"
-    e_str += "-" * 20 + "\n"
-    if isinstance(response, requests.Response):
-        e_str += f" Status code: {response.status_code}."
-    e_str += (
-        f" No longer retrying. Tracking ID: {tracking_id}"
-        f"Exceptions raised:\n{errs_str}"
-    )
-
-    raise DownloadError(e_str)
-
-
-class OAuth(object):
-    """
-    Class for handling OAuth authentication for the DataQuery API.
-
-    :param <str> client_id: client ID for the OAuth application.
-    :param <str> client_secret: client secret for the OAuth application.
-    :param <dict> proxy: proxy to use for requests. Defaults to None.
-    :param <str> token_url: URL for getting OAuth tokens.
-    :param <str> dq_resource_id: resource ID for the JPMaQS Application.
-
-    :return <OAuth>: OAuth object.
-
-    :raises <ValueError>: if any of the parameters are semantically incorrect.
-    :raises <TypeError>: if any of the parameters are of the wrong type.
-    :raises <Exception>: other exceptions may be raised by underlying functions.
-    """
-
-    def __init__(
-        self,
-        client_id: str,
-        client_secret: str,
-        proxy: Optional[dict] = None,
-        token_url: str = OAUTH_TOKEN_URL,
-        dq_resource_id: str = OAUTH_DQ_RESOURCE_ID,
-    ):
-        logger.debug("Instantiate OAuth pathway to DataQuery")
-        vars_types_zip: zip = zip(
-            [client_id, client_secret, token_url, dq_resource_id],
-            [
-                "client_id",
-                "client_secret",
-                "token_url",
-                "dq_resource_id",
-            ],
-        )
-
-        for varx, namex in vars_types_zip:
-            if not isinstance(varx, str):
-                raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
-
-        if not isinstance(proxy, dict) and proxy is not None:
-            raise TypeError(f"proxy must be a <dict> and not {type(proxy)}.")
-
-        self.token_url: str = token_url
-        self.proxy: Optional[dict] = proxy
-
-        self._stored_token: Optional[dict] = None
-        self.token_data = {
-            "grant_type": "client_credentials",
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "aud": dq_resource_id,
-        }
-
-    def _valid_token(self) -> bool:
-        """
-        Method to check if the stored token is valid.
-
-        :return <bool>: True if the token is valid, False otherwise.
-        """
-        if self._stored_token is None:
-            logger.debug("No token stored")
-            return False
-
-        created: datetime = self._stored_token["created_at"]  # utc time of creation
-        expires: datetime = created + timedelta(
-            seconds=self._stored_token["expires_in"]
-        )
-
-        utcnow = datetime.utcnow()
-        is_active: bool = expires > utcnow
-
-        logger.debug(
-            "Active token: %s, created: %s, expires: %s, now: %s",
-            is_active,
-            created,
-            expires,
-            utcnow,
-        )
-
-        return is_active
-
-    def _get_token(self) -> str:
-        """Method to get a new OAuth token.
-
-        :return <str>: OAuth token.
-        """
-        if not self._valid_token():
-            logger.debug("Request new OAuth token")
-            js = request_wrapper(
-                url=self.token_url,
-                data=self.token_data,
-                method="post",
-                proxy=self.proxy,
-                tracking_id=OAUTH_TRACKING_ID,
-                user_id=self._get_user_id(),
-            )
-            # on failure, exception will be raised by request_wrapper
-
-            # NOTE : use UTC time for token expiry
-            self._stored_token: dict = {
-                "created_at": datetime.utcnow(),
-                "access_token": js["access_token"],
-                "expires_in": js["expires_in"],
-            }
-
-        return self._stored_token["access_token"]
-
-    def _get_user_id(self) -> str:
-        return "OAuth_ClientID - " + self.token_data["client_id"]
-
-    def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
-        """
-        Returns a dictionary with the authentication information, in the same
-        format as the `macrosynergy.download.dataquery.CertAuth.get_auth()` method.
-        """
-        headers: Dict = {"Authorization": "Bearer " + self._get_token()}
-        return {
-            "headers": headers,
-            "cert": None,
-            "user_id": self._get_user_id(),
-        }
-
-
-class CertAuth(object):
-    """
-    Class for handling certificate based authentication for the DataQuery API.
-
-    :param <str> username: username for the DataQuery API.
-    :param <str> password: password for the DataQuery API.
-    :param <str> crt: path to the certificate file.
-    :param <str> key: path to the key file.
-
-    :return <CertAuth>: CertAuth object.
-
-    :raises <AssertionError>: if any of the parameters are of the wrong type.
-    :raises <FileNotFoundError>: if certificate or key file is missing from filesystem.
-    :raises <Exception>: other exceptions may be raised by underlying functions.
-    """
-
-    def __init__(
-        self,
-        username: str,
-        password: str,
-        crt: str,
-        key: str,
-        proxy: Optional[dict] = None,
-    ):
-        for varx, namex in zip([username, password], ["username", "password"]):
-            if not isinstance(varx, str):
-                raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
-
-        self.auth: str = base64.b64encode(
-            bytes(f"{username:s}:{password:s}", "utf-8")
-        ).decode("ascii")
-
-        # Key and Certificate check
-        for varx, namex in zip([crt, key], ["crt", "key"]):
-            if not isinstance(varx, str):
-                raise TypeError(f"{namex} must be a <str> and not {type(varx)}.")
-            if not os.path.isfile(varx):
-                raise FileNotFoundError(f"The file '{varx}' does not exist.")
-        self.key: str = key
-        self.crt: str = crt
-        self.username: str = username
-        self.password: str = password
-        self.proxy: Optional[dict] = proxy
-
-    def get_auth(self) -> Dict[str, Union[str, Optional[Tuple[str, str]]]]:
-        """
-        Returns a dictionary with the authentication information, in the same
-        format as the `macrosynergy.download.dataquery.OAuth.get_auth()` method.
-        """
-        headers = {"Authorization": f"Basic {self.auth:s}"}
-        user_id = "CertAuth_Username - " + self.username
-        return {
-            "headers": headers,
-            "cert": (self.crt, self.key),
-            "user_id": user_id,
-        }
 
 
 def validate_download_args(
@@ -906,7 +546,7 @@ class DataQueryInterface(object):
         self,
         expressions: List[str],
         start_date: str = "2000-01-01",
-        end_date: str = None,
+        end_date: Optional[str] = None,
         show_progress: bool = False,
         endpoint: str = TIMESERIES_ENDPOINT,
         calender: str = "CAL_ALLDAYS",
@@ -915,7 +555,7 @@ class DataQueryInterface(object):
         nan_treatment: str = "NA_NOTHING",
         reference_data: str = "NO_REFERENCE_DATA",
         retry_counter: int = 0,
-        delay_param: float = API_DELAY_PARAM,  # TODO do we want the user to have access to this?
+        delay_param: float = API_DELAY_PARAM,
     ) -> List[Dict]:
         """
         Download data from the DataQuery API.
