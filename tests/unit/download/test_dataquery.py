@@ -14,11 +14,9 @@ from macrosynergy.download.dataquery import (
     DataQueryInterface,
     OAuth,
     CertAuth,
-    request_wrapper,
-    validate_response,
     validate_download_args,
 )
-from macrosynergy.download.dataquery import (
+from macrosynergy.download.constants import (
     OAUTH_BASE_URL,
     OAUTH_TOKEN_URL,
     HEARTBEAT_ENDPOINT,
@@ -26,7 +24,6 @@ from macrosynergy.download.dataquery import (
     API_DELAY_PARAM,
     CERT_BASE_URL,
     CATALOGUE_ENDPOINT,
-    JPMAQS_GROUP_ID,
 )
 from macrosynergy.download.exceptions import (
     AuthenticationError,
@@ -36,6 +33,8 @@ from macrosynergy.download.exceptions import (
     InvalidDataframeError,
     NoContentError,
 )
+
+from macrosynergy.download.request_wrapper import request_wrapper, validate_response
 
 from .mock_helpers import mock_jpmaqs_value, mock_request_wrapper, random_string
 
