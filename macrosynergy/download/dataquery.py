@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Union, Tuple
 from timeit import default_timer as timer
 from tqdm import tqdm
-from dq_auth import OAuth, CertAuth
+from .dq_auth import OAuth, CertAuth
 
 from macrosynergy import __version__ as ms_version_info
 from macrosynergy.download.exceptions import (
