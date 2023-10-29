@@ -12,25 +12,19 @@ import time
 import os
 import logging
 import itertools
-import base64
-import uuid
 import io
 import warnings
-import requests
-from datetime import datetime, timedelta
-from typing import List, Optional, Dict, Union, Tuple
-from timeit import default_timer as timer
+from datetime import datetime
+from typing import List, Optional, Dict, Union
 from tqdm import tqdm
 from .dq_auth import OAuth, CertAuth
 
-from macrosynergy import __version__ as ms_version_info
 from macrosynergy.download.exceptions import (
     AuthenticationError,
     DownloadError,
     InvalidResponseError,
     HeartbeatError,
     NoContentError,
-    KNOWN_EXCEPTIONS,
 )
 from macrosynergy.management.utils import (
     is_valid_iso_date,
