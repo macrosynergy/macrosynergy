@@ -15,7 +15,6 @@ from macrosynergy.management.utils import (
     is_valid_iso_date,
     convert_dq_to_iso,
     convert_iso_to_dq,
-    form_full_url,
     generate_random_date,
     common_cids,
     drop_nan_series,
