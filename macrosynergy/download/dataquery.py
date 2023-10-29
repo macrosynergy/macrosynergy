@@ -31,7 +31,7 @@ from macrosynergy.management.utils import (
     form_full_url,
 )
 
-from .request_wrapper import request_wrapper
+from .utils import request_wrapper
 
 from .constants import (
     CERT_BASE_URL,
