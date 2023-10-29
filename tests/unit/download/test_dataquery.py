@@ -1,7 +1,6 @@
 from unittest import mock
 import unittest
 import pandas as pd
-import os
 import datetime
 import base64
 import io
@@ -34,7 +33,7 @@ from macrosynergy.download.exceptions import (
     NoContentError,
 )
 
-from macrosynergy.download.utils import request_wrapper, validate_response
+from macrosynergy.download.utils import request_wrapper, validate_response, form_full_url
 
 from .mock_helpers import mock_jpmaqs_value, mock_request_wrapper, random_string
 
@@ -55,6 +54,23 @@ class TestRequestWrapper(unittest.TestCase):
         mock_resp._text = text
         mock_resp.request = requests.Request("GET", url)
         return mock_resp
+
+    def test_form_full_url(self):
+        url: str = "https://www.google.com"
+        params: Dict[str, Union[str, int]] = {"a": 1, "b": 2}
+        # html safe url
+        self.assertEqual(form_full_url(url, params), "https://www.google.com?a=1&b=2")
+        # url = http://foo.bar
+        # params = {'banana': '!@#$%^&*()_+{}|:"<>?'}', 'apple': '><?>?<?><?'}
+        url = "http://foo.bar"
+        params = {"banana": """!@#$%^&*()_+{}|:"<>?}""", "apple": "><?>?<?><?"}
+
+        exp_out: str = (
+            "http://foo.bar?banana=%21%40%23%24%25%5E%26%"
+            "2A%28%29_%2B%7B%7D%7C%3A%22%3C%3E%3F%7D&apple"
+            "=%3E%3C%3F%3E%3F%3C%3F%3E%3C%3F"
+        )
+        self.assertEqual(form_full_url(url, params), exp_out)
 
     def test_validate_response(self):
         # mock a response with 401. assert raises authentication error

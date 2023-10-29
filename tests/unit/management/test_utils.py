@@ -132,22 +132,7 @@ class TestFunctions(unittest.TestCase):
         for dt in dts:
             self.assertEqual(convert_iso_to_dq(dt), dt.replace("-", ""))
 
-    def test_form_full_url(self):
-        url: str = "https://www.google.com"
-        params: Dict[str, Union[str, int]] = {"a": 1, "b": 2}
-        # html safe url
-        self.assertEqual(form_full_url(url, params), "https://www.google.com?a=1&b=2")
-        # url = http://foo.bar
-        # params = {'banana': '!@#$%^&*()_+{}|:"<>?'}', 'apple': '><?>?<?><?'}
-        url = "http://foo.bar"
-        params = {"banana": """!@#$%^&*()_+{}|:"<>?}""", "apple": "><?>?<?><?"}
 
-        exp_out: str = (
-            "http://foo.bar?banana=%21%40%23%24%25%5E%26%"
-            "2A%28%29_%2B%7B%7D%7C%3A%22%3C%3E%3F%7D&apple"
-            "=%3E%3C%3F%3E%3F%3C%3F%3E%3C%3F"
-        )
-        self.assertEqual(form_full_url(url, params), exp_out)
 
     def test_generate_random_date(self):
         # get 20 random dates
