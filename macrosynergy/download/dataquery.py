@@ -28,10 +28,9 @@ from macrosynergy.download.exceptions import (
 )
 from macrosynergy.management.utils import (
     is_valid_iso_date,
-    form_full_url,
 )
 
-from .utils import request_wrapper
+from .utils import request_wrapper, form_full_url
 
 from .constants import (
     CERT_BASE_URL,

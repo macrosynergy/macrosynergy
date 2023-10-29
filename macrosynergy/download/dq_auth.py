@@ -7,7 +7,7 @@ from .constants import (
     OAUTH_TRACKING_ID,
 )
 
-from .request_wrapper import request_wrapper
+from .utils import request_wrapper
 import base64
 import os
 
