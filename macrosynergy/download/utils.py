@@ -4,8 +4,13 @@ import requests, requests.compat
 from datetime import datetime
 import logging
 import warnings
+import pandas as pd
 
-from typing import List, Optional, Dict, Tuple, Union
+import os, sys
+
+sys.path.append(os.getcwd())
+
+from typing import List, Optional, Dict, Tuple, Union, Any, overload, Iterable
 
 from macrosynergy import __version__ as ms_version_info
 from macrosynergy.download.exceptions import (
@@ -15,7 +20,7 @@ from macrosynergy.download.exceptions import (
     HeartbeatError,
     KNOWN_EXCEPTIONS,
 )
-from .constants import (
+from macrosynergy.download.constants import (
     API_DELAY_PARAM,
     API_RETRY_COUNT,
     HEARTBEAT_ENDPOINT,
@@ -219,9 +224,19 @@ def request_wrapper(
     raise DownloadError(e_str)
 
 
+@overload
+def deconstruct_expression(expression: str) -> Tuple[str]:
+    ...
+
+
+@overload
+def deconstruct_expression(expression: Iterable[str]) -> List[Tuple[str]]:
+    ...
+
+
 def deconstruct_expression(
     expression: Union[str, List[str]]
-) -> Union[List[str], List[List[str]]]:
+) -> Union[Tuple[str], List[Tuple[str]]]:
     """
     Deconstruct an expression into a list of cid, xcat, and metric.
     Coupled with JPMaQSDownload.time_series_to_df(), achieves the inverse of
@@ -263,28 +278,211 @@ def deconstruct_expression(
             # fail safely, return list where cid = xcat = expression,
             #  and metric = 'value'
             return [expression, expression, "value"]
-        
 
 
 def construct_expressions(
-    tickers: Optional[List[str]] = None,
-    cids: Optional[List[str]] = None,
-    xcats: Optional[List[str]] = None,
-    metrics: Optional[List[str]] = None,
-) -> List[str]:
+    tickers: Optional[Iterable[str]] = None,
+    cids: Optional[Iterable[str]] = None,
+    xcats: Optional[Iterable[str]] = None,
+    metrics: Optional[Iterable[str]] = None,
+) -> Iterable[str]:
     """Construct expressions from the provided arguments.
 
-    :param <list[str]> tickers: list of tickers.
-    :param <list[str]> cids: list of cids.
-    :param <list[str]> xcats: list of xcats.
-    :param <list[str]> metrics: list of metrics.
+    :param <Iterable[str]> tickers: list of tickers.
+    :param <Iterable[str]> cids: list of cids.
+    :param <Iterable[str]> xcats: list of xcats.
+    :param <Iterable[str]> metrics: list of metrics.
 
-    :return <list[str]>: list of expressions.
+    :return <Iterable[str]>: list of expressions.
     """
+    if isinstance(tickers, str):
+        tickers = [tickers]
+    if isinstance(cids, str):
+        cids = [cids]
+    if isinstance(xcats, str):
+        xcats = [xcats]
+    if isinstance(metrics, str):
+        metrics = [metrics]
 
-    if tickers is None:
-        tickers = []
-    if cids is not None and xcats is not None:
-        tickers += [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+    for argx, arg_name in zip(
+        [tickers, cids, xcats, metrics],
+        ["tickers", "cids", "xcats", "metrics"],
+    ):
+        if not (isinstance(argx, (list, tuple, set, pd.Series)) or argx is None):
+            raise TypeError(f"`{arg_name}` must be a list, tuple, set, or pd.Series.")
 
-    return [f"DB(JPMAQS,{tick},{metric})" for tick in tickers for metric in metrics]
+    try:
+        if tickers is None:
+            tickers = []
+        if bool(cids) and bool(xcats):
+            tickers += [f"{cid}_{xcat}" for cid in cids for xcat in xcats]
+
+        return [f"DB(JPMAQS,{tick},{metric})" for tick in tickers for metric in metrics]
+
+    except Exception as exc:
+        if isinstance(exc, TypeError):
+            raise TypeError(
+                "All elements of `tickers`, `cids`, `xcats`, & `metrics` "
+                "must be strings when provided."
+            )
+        raise exc
+
+
+@overload
+def timeseries_to_df(timeseries_dict: dict) -> pd.DataFrame:
+    ...
+
+
+@overload
+def timeseries_to_df(
+    timeseries_dict: Iterable[dict],
+) -> Union[List[pd.DataFrame], pd.DataFrame]:
+    ...
+
+
+def _timeseries_to_df_helper(
+    tsdict: Dict[Any, Any],
+    indexed: bool = False,
+) -> pd.DataFrame:
+    assert isinstance(tsdict, dict), "`tsdict` must be a timeseries dictionary."
+
+    cid, xcat, metricx = deconstruct_expression(tsdict["attributes"][0]["expression"])
+    df = (
+        pd.DataFrame(
+            tsdict["attributes"][0]["time-series"],
+            columns=["real_date", metricx],
+        )
+        .assign(cid=cid, xcat=xcat, metric=metricx)
+        .rename(columns={metricx: "obs"})
+    )
+    if indexed:
+        df = df.set_index(["cid", "xcat", "real_date"])
+    return df
+
+
+def timeseries_to_df(
+    timeseries_dict: Union[Dict[Any, Any], Iterable[Dict[Any, Any]]],
+    combine_dfs: bool = False,
+) -> Union[pd.DataFrame, Union[List[pd.DataFrame], pd.DataFrame]]:
+    """Convert a timeseries dictionary to a pandas DataFrame.
+    When a list of timeseries dictionaries is provided, a list of DataFrames is returned.
+    If `combine_dfs` is True, a single Quantamenal DataFrame is returned.
+
+    :param <dict> timeseries_dict: timeseries dictionary.
+    :param <bool> combine_dfs: default True, whether to combine the returned
+        DataFrames into a single DataFrame.
+
+    :return <pd.DataFrame>: DataFrame of timeseries data.
+    """
+    if not isinstance(timeseries_dict, (dict, list)):
+        raise TypeError(
+            "`timeseries_dict` must be a dictionary or a list of dictionaries."
+        )
+
+    if isinstance(timeseries_dict, dict):
+        return _timeseries_to_df_helper(tsdict=timeseries_dict)
+
+    if not all(isinstance(tsdict, dict) for tsdict in timeseries_dict):
+        raise TypeError("All elements of `timeseries_dict` must be dictionaries.")
+
+    dfs_list: List[pd.DataFrame] = [
+        _timeseries_to_df_helper(tsdict=tsdict) for tsdict in timeseries_dict
+    ]
+
+    if not combine_dfs:
+        return dfs_list
+    # now set the index to cid, xcat, real date for all dfs_list and concat them
+
+    # join all on the index of cid, xcat, real_date
+    df: pd.DataFrame = pd.concat(dfs_list, axis=0, ignore_index=True)
+    df["real_date"] = pd.to_datetime(df["real_date"])
+    # now make all the metrics columns with obs as the value
+    df = df.pivot_table(index=["cid", "xcat", "real_date"], columns="metric")
+    df.columns = df.columns.droplevel(0)
+    return df.reset_index()
+
+
+if __name__ == "__main__":
+
+    def mock_request_wrapper(
+        dq_expressions: List[str], start_date: str, end_date: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Contrived request method to replicate output from DataQuery. Will replicate the
+        form of a JPMaQS expression from DataQuery which will subsequently be used to
+        test methods held in the api.Interface() Class.
+        """
+        aggregator: List[dict] = []
+        dates: pd.DatetimeIndex = pd.bdate_range(start_date, end_date)
+        for i, elem in enumerate(dq_expressions):
+            elem_dict = {
+                "item": (i + 1),
+                "group": None,
+                "attributes": [
+                    {
+                        "expression": elem,
+                        "label": None,
+                        "attribute-id": None,
+                        "attribute-name": None,
+                        "time-series": [[d.strftime("%Y%m%d"), 1] for d in dates],
+                    },
+                ],
+                "instrument-id": None,
+                "instrument-name": None,
+            }
+            aggregator.append(elem_dict)
+
+        return aggregator
+
+    cids: List[str] = ["USD", "CAD", "GBP", "EUR" "JPY"]
+    xcats: List[str] = ["FXXR", "EQXR", "RIR_NSA", "RIR_SA", "RIR_LAG"]
+    metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
+
+    expressions: List[str] = construct_expressions(
+        cids=cids, xcats=xcats, metrics=metrics
+    )
+
+    tss: List[dict] = mock_request_wrapper(
+        dq_expressions=expressions, start_date="19900101", end_date="20200101"
+    )
+
+    df: pd.DataFrame = timeseries_to_df(timeseries_dict=tss, combine_dfs=True)
+    print(df)
+
+    import time, random, json
+
+    timings: List[Dict] = []
+
+    stdate: str = "20100101"
+    endate: str = "20200101"
+    for i in range(10):
+        # shuffle the expressions
+        random.shuffle(expressions)
+        mock_tss: List[dict] = mock_request_wrapper(
+            dq_expressions=expressions, start_date=stdate, end_date=endate
+        )
+        start_time: float = time.time()
+        df: pd.DataFrame = timeseries_to_df(timeseries_dict=mock_tss, combine_dfs=True)
+        end_time: float = time.time()
+        timings.append({"time": end_time - start_time, "n": len(expressions)})
+        print(f"Completed iteration {i} in {end_time - start_time} seconds.")
+        print(json.dumps(timings[-1], indent=4))
+
+    # do it without combining the dfs
+    for i in range(10):
+        # shuffle the expressions
+        random.shuffle(expressions)
+        mock_tss: List[dict] = mock_request_wrapper(
+            dq_expressions=expressions, start_date=stdate, end_date=endate
+        )
+        start_time: float = time.time()
+        df: List[pd.DataFrame] = timeseries_to_df(
+            timeseries_dict=mock_tss, combine_dfs=False
+        )
+        end_time: float = time.time()
+        timings.append({"time": end_time - start_time, "n": len(expressions)})
+        print(f"Completed iteration {i} in {end_time - start_time} seconds.")
+        print(json.dumps(timings[-1], indent=4))
+
+    timings_df: pd.DataFrame = pd.DataFrame(timings)
+    print(timings_df)
