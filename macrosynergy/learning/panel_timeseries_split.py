@@ -390,7 +390,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
         return iterator
 
-    def _calculate_xranges(
+    def __calculate_xranges(
         self, cs_dates: pd.DatetimeIndex, real_dates: pd.DatetimeIndex
     ):
         """
@@ -448,7 +448,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         sns.set_theme(style="whitegrid", palette="colorblind")
         Xy: pd.DataFrame = pd.concat(
             [X, y], axis=1
-        ).dropna()  # remove dropna when splitter method fixed as per TODO #3
+        ).dropna()
         cross_sections: np.array[str] = np.array(
             sorted(Xy.index.get_level_values(0).unique())
         )
@@ -484,6 +484,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
         for cs_idx, cs in enumerate(cross_sections):
             for idx, split_idx in enumerate(split_idxs):
+                # Get the dates in the training and test sets for the given cross-section.
                 cs_train_dates: pd.DatetimeIndex = Xy.iloc[splits[split_idx][0]][
                     Xy.iloc[splits[split_idx][0]].index.get_level_values(0) == cs
                 ].index.get_level_values(1)
@@ -493,10 +494,10 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
                 xranges_train: List[
                     Tuple[pd.Timestamp, pd.Timedelta]
-                ] = self._calculate_xranges(cs_train_dates, real_dates)
+                ] = self.__calculate_xranges(cs_train_dates, real_dates)
                 xranges_test: List[
                     Tuple[pd.Timestamp, pd.Timedelta]
-                ] = self._calculate_xranges(cs_test_dates, real_dates)
+                ] = self.__calculate_xranges(cs_test_dates, real_dates)
 
                 if xranges_train:
                     operations.append(
