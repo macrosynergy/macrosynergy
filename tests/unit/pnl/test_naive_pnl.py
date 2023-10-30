@@ -1,7 +1,7 @@
 
 from tests.simulate import make_qdf
 from macrosynergy.pnl.naive_pnl import NaivePnL
-from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.shape_dfs import reduce_df
 import unittest
 import numpy as np
 import pandas as pd

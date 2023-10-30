@@ -12,7 +12,7 @@ from macrosynergy.panel.return_beta import (
     adjusted_returns,
     return_beta,
 )
-from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.shape_dfs import reduce_df
 import math
 from typing import List, Dict
 
