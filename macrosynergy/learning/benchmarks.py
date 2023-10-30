@@ -5,64 +5,147 @@ Class to provide benchmark signals based on z-scores.
 """
 
 import numpy as np
+import pandas as pd
 
-from sklearn.base import BaseEstimator, TransformerMixin, RegressorMixin
-from sklearn.pipeline import Pipeline
+from sklearn.base import BaseEstimator, RegressorMixin
 
-class BenchmarkTransformer(BaseEstimator, TransformerMixin):
-    def __init__(self):
+from typing import List
+
+
+class ZScoreRegressor(BaseEstimator, RegressorMixin):
+    """
+    Scikit-learn predictor class to determine a benchmark signal based on
+    the rolling z-scores of the features.
+    """
+
+    def __update_metrics(
+        self,
+        current_mean: pd.Series,
+        current_sum_squares: pd.Series,
+        current_n: int,
+        new_mean: pd.Series,
+        new_sum_squares: pd.Series,
+        new_n: int,
+    ):
         """
-        Transformer to create a benchmark signal based on z-scores.
+        Helper method to update means and standard deviations in light of the mean,
+        standard deviation and sample size of a new, previously unobserved, sample.
+        Only the mean, sample size and sum of squares are needed to update the 
+        mean and standard deviation.
+
+        :param <pd.Series> current_mean: Pandas series of means of features.
+        :param <pd.Series> current_sum_squares: Pandas series of
+            the sum of squares of features.
+        :param <int> current_n: Number of samples used to compute the current mean
+        :param <pd.Series> new_mean: Pandas series of the new means of features.
+        :param <pd.Series> new_sum_squares: Pandas series of
+            the new sum of squares of features.
+        :param <int> new_n: Number of samples in the new sample.
+
+        :return <Tuple[pd.Series, pd.Series, pd.Series, int]>
+            updated_mean: Pandas series of updated means of features.
+            updated_std: Pandas series of updated standard deviations of features.
+            updated_sum_squares: Pandas series of updated sum of squares of features.
+            updated_n: Number of samples used to compute the updated mean.
         """
-        self.current_mean = None
-        self.current_sum_squares = None 
-        self.current_n = 0
+        # TODO: possibly write the updating rule formulae in a comment.
+        updated_n: int = current_n + new_n
 
+        # First update the means
+        updated_mean = (current_n * current_mean + new_n * new_mean) / (updated_n)
 
-    def fit(self, X, y=None):
-        return self
-    
-    def transform(self, X, y=None):
-        if self.current_mean is None:
-            self.current_mean = np.zeros(X.shape[1])
-            self.current_sum_squares = np.zeros(X.shape[1])
+        # Secondly, update the standard deviations.
+        # Only the sample sizes, sums of squares and means are needed to do this.
+        updated_sum_squares = current_sum_squares + new_sum_squares
+        comp1 = (updated_sum_squares) / (updated_n - 1)
+        comp2 = 2 * np.square(updated_mean) * (updated_n) / (updated_n - 1)
+        comp3 = (updated_n) * np.square(updated_mean) / (updated_n - 1)
+        updated_std = np.sqrt(comp1 - comp2 + comp3)
 
-        n_update = len(X)
-        new_n = self.current_n + n_update
-        
-        # determine updated mean
-        new_mean = (self.current_n * self.current_mean + n_update*np.mean(X,axis=0))/(new_n)
+        # Return updated mean, sum of squares and sample size for ease of future 
+        # computation. The standard deviation is returned for convenience in computing
+        # the z-score in the predict method.
+        return updated_mean, updated_std, updated_sum_squares, updated_n
 
-        # determine updated standard deviation
-        new_sum_squares = self.current_sum_squares + np.sum(np.square(X),axis=0)
-        comp1 = (new_sum_squares)/(new_n - 1)
-        comp2 = 2 * np.square(new_mean) * (new_n)/(new_n - 1)
-        comp3 = (new_n)*np.square(new_mean)/(new_n - 1)
-        new_std = np.sqrt(comp1 - comp2 + comp3)
-
-        # update parameters
-        self.current_mean = new_mean
-        self.current_sum_squares = new_sum_squares
-        self.current_n = new_n
-
-        # get z-scores
-        normalised_X = (X - self.current_mean)/new_std
-
-        # return the benchmark signal as the sum of the z-scores
-        return np.sum(normalised_X, axis = 1)
-    
-class BenchmarkEstimator(BaseEstimator, RegressorMixin):
-    def __init__(self):
+    def fit(self, X: pd.DataFrame, y: pd.Series = None):
         """
-        Basic estimator to use the determined signal from BenchmarkTransformer as the predictions.
+        Fit method to learn the mean and sum of squares of the features in X, as well as the number of samples.
+
+        :param <pd.DataFrame> X: Pandas dataframe of features multi-indexed by (cross-section, date).
+            The dates must be in datetime format.
+            The dataframe must be in wide format: each feature is a column.
+        :param <pd.Series> y: Pandas series of target variable multi-indexed by (cross-section, date).
+            The dates must be in datetime format.
+
+        :return None
         """
-        pass
-    
-    def fit(self, X, y=None):
-        return self
-    
-    def predict(self, X):
-        return X
+        self.mean: pd.Series = np.mean(X, axis=0)
+        self.sum_squares: pd.Series = np.sum(np.square(X), axis=0)
+        self.n: int = len(X)
+
+    def predict(self, X: pd.DataFrame) -> pd.Series:
+        """
+        Predict method to compute an out-of-sample benchmark signal for each unique date in the input test dataframe.
+        At a given test time, the means and standard deviations for each feature are calculated over all training dates
+        and all test dates prior (and including) the concerned test date. This is dne in an online fashion.
+        The benchmark signal for that test time is computed as the mean of the z-scores across features using the
+        previously calculated means and standard deviations.
+
+        :param <pd.DataFrame> X: Pandas dataframe of features multi-indexed by (cross-section, date).
+            The dates must be in datetime format.
+            The dataframe must be in wide format: each feature is a column.
+            This only makes sense as a test set, as the benchmark signal is computed out-of-sample.
+
+        :return <pd.Series> signal_df: Pandas series of benchmark signals multi-indexed by (cross-section, date).
+        """
+        # Create a series to store the benchmark signal
+        signal_df = pd.Series(index=X.index, name="signal")
+
+        # Set up all quantities needed to compute the z-scores sequentially
+        unique_dates: List[pd.Timestamp] = sorted(X.index.get_level_values(1).unique())
+
+        current_mean: pd.Series = self.mean
+        current_sum_squares: pd.Series = self.sum_squares
+        current_n: int = self.n
+
+        for date in unique_dates:
+            # get the subset of X corresponding to the current date
+            X_date: pd.DataFrame = X.loc[(slice(None), date), :]
+            new_mean: pd.Series = X_date.mean(axis=0)
+            new_n: int = len(X_date)
+            new_sum_squares: pd.Series = np.sum(np.square(X_date), axis=0)
+            # get the updated mean, sum of squares and num_samples
+            updated_mean: pd.Series
+            updated_std: pd.Series
+            updated_sum_squares: pd.Series
+            updated_n: int
+            (
+                updated_mean,
+                updated_std,
+                updated_sum_squares,
+                updated_n,
+            ) = self.__update_metrics(
+                current_mean,
+                current_sum_squares,
+                current_n,
+                new_mean,
+                new_sum_squares,
+                new_n,
+            )
+            # normalise and take the mean across features
+            normalised_X: pd.DataFrame = (X_date - updated_mean) / updated_std
+            benchmark_signal: pd.Series = pd.Series(
+                np.mean(normalised_X, axis=1), name="signal"
+            )
+            # store the signal
+            signal_df.loc[benchmark_signal.index] = benchmark_signal
+            # update metrics for the next iteration
+            current_mean = updated_mean
+            current_sum_squares = updated_sum_squares
+            current_n = updated_n
+
+        return signal_df
+
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate_quantamental_data import make_qdf
@@ -103,8 +186,12 @@ if __name__ == "__main__":
     y2 = dfd2["XR"]
 
     # Demonstration of BenchmarkTransformer
-    pipe = Pipeline([("signal", BenchmarkTransformer()),("identity", BenchmarkEstimator())])
+    zsregressor = ZScoreRegressor()
     splitter = PanelTimeSeriesSplit(n_splits=4, n_split_method="expanding")
+    splitter.visualise_splits(X2, y2)
     # Convert the regression problem into a classification problem
-    acc_metric = make_scorer(lambda y_true, y_pred: np.mean(np.sign(y_true) == np.sign(y_pred)))
-    print(cross_val_score(pipe, X2, y2, cv=splitter, scoring=acc_metric))
+    acc_metric = make_scorer(
+        lambda y_true, y_pred: np.mean(np.sign(y_true) == np.sign(y_pred))
+    )
+    print(cross_val_score(zsregressor, X2, y2, cv=splitter, scoring=acc_metric))
+    print("Done")
