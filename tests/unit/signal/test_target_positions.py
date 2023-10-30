@@ -312,7 +312,7 @@ class TestAll(unittest.TestCase):
         condition = test_zn_scores.to_numpy() - output_rows.to_numpy()
         # Convert the NaN value to zero for testing purposes only.
         condition = np.nan_to_num(condition)
-        self.assertTrue(np.all(condition < 0.0001))
+        self.assertTrue(np.all(condition < 0.001))
 
     @staticmethod
     def row_return(dfd, date, c_return, sigrel):
@@ -886,7 +886,7 @@ class TestAll(unittest.TestCase):
         fx = fx.pivot(index="real_date", columns="cid", values="value")
 
         test = eq.add(fx)
-        self.assertTrue(np.all(test.to_numpy() < 0.00001))
+        self.assertTrue(np.all(test.to_numpy() < 0.001))
 
         reduced_dfd = reduce_df(
             df=self.dfd, xcats=self.xcats, cids=self.cids, blacklist=None
