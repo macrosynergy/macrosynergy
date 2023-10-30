@@ -130,6 +130,10 @@ Currently functional directives are:
   been incremented to `<VERSION>`. Mostly used for queueing features later in the development cycle.
 - `MERGE-AFTER-VERSION-<VERSION>` - Similar to `MERGE-IN-VERSION-<VERSION>`, but allows
   the PR to be merged in any version after `<VERSION>`.
+- `@<REVIEWER>-MUST-REVIEW` - Only allows the PR to be merged once the specified reviewer
+  `@<REVIEWER>` has reviewed the PR. Note upon review the PR test will not automatically 
+  re-run. To trigger a re-run add a tickbox before the directive `- [ ]` so upon ticking 
+  this box a re-run of the check will be performed.
 
 **NOTE: `PR_NUMBER` must be an integer, and `VERSION` must be a valid version string (vX.Y.Z)**
 
@@ -160,6 +164,13 @@ or
 ```
 (Merge in version v0.20.5)
 ...
+```
+
+or
+
+```
+New feature as to be overlooked by @reviewer123
+- [ ] @reviewer123-MUST-REVIEW
 ```
 
 
