@@ -335,6 +335,7 @@ def timeseries_to_df(
 
 def _timeseries_to_df_helper(
     tsdict: Dict[Any, Any],
+    as_qdf: bool = True,
 ) -> pd.DataFrame:
     assert isinstance(tsdict, dict), "`tsdict` must be a timeseries dictionary."
 
@@ -342,10 +343,11 @@ def _timeseries_to_df_helper(
     df = pd.DataFrame(
         tsdict["attributes"][0]["time-series"],
         columns=["real_date", metricx],
-    ).assign(
-        cid=cid,
-        xcat=xcat,
     )
+    if as_qdf:
+        df["cid"] = cid
+        df["xcat"] = xcat
+
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y%m%d")
     col_order = ["real_date", "cid", "xcat"] + [metricx]
     return df[col_order]
@@ -354,6 +356,7 @@ def _timeseries_to_df_helper(
 def timeseries_to_df(
     timeseries_dict: Union[Dict[Any, Any], Iterable[Dict[Any, Any]]],
     combine_dfs: bool = False,
+    as_qdf: bool = True,
 ) -> Union[pd.DataFrame, Union[List[pd.DataFrame], pd.DataFrame]]:
     """Convert a timeseries dictionary to a pandas DataFrame.
     When a list of timeseries dictionaries is provided, a list of DataFrames is returned.
@@ -375,6 +378,8 @@ def timeseries_to_df(
 
     if not all(isinstance(tsdict, dict) for tsdict in timeseries_dict):
         raise TypeError("All elements of `timeseries_dict` must be dictionaries.")
+    if not as_qdf:
+        combine_dfs = False
 
     if not combine_dfs:
         return [_timeseries_to_df_helper(tsdict=tsdict) for tsdict in timeseries_dict]
