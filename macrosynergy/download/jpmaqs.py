@@ -16,7 +16,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import pandas as pd
 
 from macrosynergy.download.dataquery import DataQueryInterface
-from macrosynergy.download.exceptions import HeartbeatError, InvalidDataframeError
+from macrosynergy.download.common import HeartbeatError, InvalidDataframeError
 from macrosynergy.management.utils import is_valid_iso_date
 from .utils import deconstruct_expression, construct_expressions
 

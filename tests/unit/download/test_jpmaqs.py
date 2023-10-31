@@ -4,7 +4,7 @@ import pandas as pd
 from typing import List, Dict, Any
 from macrosynergy.download import JPMaQSDownload
 
-from macrosynergy.download.exceptions import InvalidDataframeError
+from macrosynergy.download.common import InvalidDataframeError
 from .mock_helpers import (
     mock_jpmaqs_value,
     mock_request_wrapper,

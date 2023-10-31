@@ -6,7 +6,7 @@ from random import random
 from typing import List, Dict, Any
 from macrosynergy.download import JPMaQSDownload
 from macrosynergy.download.dataquery import DataQueryInterface
-from macrosynergy.download.exceptions import (
+from macrosynergy.download.common import (
     AuthenticationError,
     InvalidDataframeError,
 )

@@ -8,14 +8,12 @@ import pandas as pd
 from typing import List, Optional, Dict, Tuple, Union, Any, overload, Iterable
 
 from macrosynergy import __version__ as ms_version_info
-from macrosynergy.download.exceptions import (
+from macrosynergy.download.common import (
     AuthenticationError,
     DownloadError,
     InvalidResponseError,
     HeartbeatError,
     KNOWN_EXCEPTIONS,
-)
-from macrosynergy.download.constants import (
     API_DELAY_PARAM,
     API_RETRY_COUNT,
     HEARTBEAT_ENDPOINT,

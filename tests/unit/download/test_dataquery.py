@@ -15,7 +15,14 @@ from macrosynergy.download.dataquery import (
     CertAuth,
     validate_download_args,
 )
-from macrosynergy.download.constants import (
+
+from macrosynergy.download.common import (
+    AuthenticationError,
+    HeartbeatError,
+    InvalidResponseError,
+    DownloadError,
+    InvalidDataframeError,
+    NoContentError,    
     OAUTH_BASE_URL,
     OAUTH_TOKEN_URL,
     HEARTBEAT_ENDPOINT,
@@ -23,14 +30,6 @@ from macrosynergy.download.constants import (
     API_DELAY_PARAM,
     CERT_BASE_URL,
     CATALOGUE_ENDPOINT,
-)
-from macrosynergy.download.exceptions import (
-    AuthenticationError,
-    HeartbeatError,
-    InvalidResponseError,
-    DownloadError,
-    InvalidDataframeError,
-    NoContentError,
 )
 
 from macrosynergy.download.utils import request_wrapper, validate_response, form_full_url
