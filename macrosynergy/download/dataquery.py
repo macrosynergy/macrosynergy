@@ -12,14 +12,16 @@ import time
 import os
 import logging
 import itertools
-import io
+import os
+import json
 import warnings
 from datetime import datetime
 from typing import List, Optional, Dict, Union
 from tqdm import tqdm
 from .dq_auth import OAuth, CertAuth
+import pandas as pd
 
-from macrosynergy.download.common import (
+from .common import (
     # exceptions
     AuthenticationError,
     DownloadError,
@@ -43,7 +45,7 @@ from macrosynergy.download.common import (
 )
 from macrosynergy.management.utils import is_valid_iso_date
 
-from .utils import request_wrapper, form_full_url
+from .utils import request_wrapper, form_full_url, timeseries_to_df
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -418,6 +420,48 @@ class DataQueryInterface(object):
 
         return tickers
 
+    def get_timeseries(
+        self,
+        url: str,
+        params: dict,
+        tracking_id: str,
+        to_path: Optional[str] = None,
+    ) -> Union[List[Dict], List[bool]]:
+        """
+        Method to get timeseries data. Allows saving the data to a file. When saving to a
+        file, each expression is saved to a separate JSON file. If the file already exists,
+        it will be overwritten.
+        """
+        fetch_result: List[Dict] = self._fetch(
+            url=url,
+            params=params,
+            tracking_id=tracking_id,
+        )
+
+        if to_path is not None:
+            result_bools: List[bool] = []
+            for d in fetch_result:
+                try:
+                    expr: str = d["attributes"][0]["expression"]
+                    with open(os.path.join(to_path, f"{expr}.json"), "w") as f:
+                        f.write(json.dumps(d))
+
+                    logger.info(f"Saved expression {expr} to file.")
+                    result_bools.append(True)
+                except Exception as exc:
+                    if isinstance(exc, KeyboardInterrupt):
+                        raise exc
+                    logger.error(
+                        f"Failed to save expression {expr} to file. Exception: {exc}"
+                    )
+                    result_bools.append(False)
+
+            return result_bools
+
+        result_ts: pd.DataFrame = timeseries_to_df(timeseries_dict=fetch_result)
+
+        return result_ts
+
     def _download(
         self,
         expressions: List[str],
@@ -427,6 +471,7 @@ class DataQueryInterface(object):
         delay_param: float,
         show_progress: bool = False,
         retry_counter: int = 0,
+        to_path: Optional[str] = None,
     ) -> List[dict]:
         """
         Backend method to download data from the DataQuery API.
@@ -464,10 +509,11 @@ class DataQueryInterface(object):
                 curr_params["expressions"] = expr_batch
                 future_objects.append(
                     executor.submit(
-                        self._fetch,
+                        self.get_timeseries,
                         url=url,
                         params=curr_params,
                         tracking_id=tracking_id,
+                        to_path=to_path,
                     )
                 )
                 time.sleep(delay_param)
@@ -481,6 +527,11 @@ class DataQueryInterface(object):
                 try:
                     download_outputs.append(future.result())
                     continuous_failures = 0
+                    if to_path is not None:
+                        if download_outputs[-1] == False:
+                            raise DownloadError(
+                                f"Failed to download expression {expr_batches[ib]}."
+                            )
                 except Exception as exc:
                     if isinstance(exc, (KeyboardInterrupt, AuthenticationError)):
                         raise exc
@@ -510,6 +561,14 @@ class DataQueryInterface(object):
                 len(failed_batches),
                 len(flat_failed_batches),
             )
+            # if the to_path is specified, the failed expressions list is a list of bools
+            if to_path is not None:
+                flat_failed_batches: List[str] = [
+                    expressions[i]
+                    for i, expr in enumerate(expressions)
+                    if not download_outputs[i]
+                ]
+
             retried_output: List[dict] = self._download(
                 expressions=flat_failed_batches,
                 params=params,
@@ -530,6 +589,7 @@ class DataQueryInterface(object):
         start_date: str = "2000-01-01",
         end_date: Optional[str] = None,
         show_progress: bool = False,
+        to_path: Optional[str] = None,
         endpoint: str = TIMESERIES_ENDPOINT,
         calender: str = "CAL_ALLDAYS",
         frequency: str = "FREQ_DAY",
@@ -616,6 +676,9 @@ class DataQueryInterface(object):
                 )
             time.sleep(delay_param)
 
+        if to_path is not None:
+            os.makedirs(to_path, exist_ok=True)
+
         logger.info(
             "Download %d expressions from DataQuery from %s to %s",
             len(expressions),
@@ -633,22 +696,24 @@ class DataQueryInterface(object):
             "data": reference_data,
         }
 
-        final_output: List[dict] = self._download(
+        final_output: Union[List[bool], List[dict]] = self._download(
             expressions=expressions,
             params=params_dict,
             url=self.base_url + endpoint,
             tracking_id=tracking_id,
             delay_param=delay_param,
             show_progress=show_progress,
+            to_path=to_path,
         )
 
-        self.unavailable_expressions = _get_unavailable_expressions(
-            expected_exprs=expressions, dicts_list=final_output
-        )
+        if to_path is None:
+            self.unavailable_expressions = _get_unavailable_expressions(
+                expected_exprs=expressions, dicts_list=final_output
+            )
         logger.info(
             "Downloaded expressions: %d, unavailable: %d",
             len(final_output),
-            len(self.unavailable_expressions),
+            len(self.unavailable_expressions) if to_path is None else sum(final_output),
         )
 
         return final_output
@@ -676,6 +741,7 @@ if __name__ == "__main__":
             start_date="2020-01-25",
             end_date="2023-02-05",
             show_progress=True,
+            to_path="data",
         )
 
     print(f"Succesfully downloaded data for {len(data)} expressions.")
