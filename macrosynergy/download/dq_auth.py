@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict, Union, Tuple
 import logging
 from datetime import datetime, timedelta
-from .constants import (
+from .common import (
     OAUTH_TOKEN_URL,
     OAUTH_DQ_RESOURCE_ID,
     OAUTH_TRACKING_ID,
