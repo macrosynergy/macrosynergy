@@ -10,7 +10,7 @@ import pandas as pd
 import datetime
 
 import statsmodels.api as sm
-from sklearn.metrics import make_scorer
+from sklearn.metrics import make_scorer, accuracy_score, balanced_accuracy_score
 from sklearn.model_selection import cross_val_score
 from sklearn.linear_model import LinearRegression
 
@@ -62,6 +62,47 @@ def panel_significance_probability(
 
     return 1 - pval
 
+def regression_accuracy(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float:
+    """
+    Function to return the accuracy between the signs of the predictions and targets.
+    """
+
+    # checks
+    if not isinstance(y_true, pd.Series):
+        raise TypeError("y_true must be a pandas series")
+
+    if not isinstance(y_true.index, pd.MultiIndex):
+        raise ValueError("y_true must be multi-indexed.")
+
+    if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+        raise TypeError("The inner index of y must be datetime.date.")
+
+    if not (len(y_true) == len(y_pred)):
+        raise ValueError("y_true and y_pred must have the same length.")
+    
+    return accuracy_score(y_true < 0, y_pred < 0)
+
+def regression_balanced_accuracy(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float:
+    """
+    Function to return the balancedaccuracy between the signs
+    of the predictions and targets.
+    """
+
+    # checks
+    if not isinstance(y_true, pd.Series):
+        raise TypeError("y_true must be a pandas series")
+
+    if not isinstance(y_true.index, pd.MultiIndex):
+        raise ValueError("y_true must be multi-indexed.")
+
+    if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+        raise TypeError("The inner index of y must be datetime.date.")
+
+    if not (len(y_true) == len(y_pred)):
+        raise ValueError("y_true and y_pred must have the same length.")
+    
+    return balanced_accuracy_score(y_true < 0, y_pred < 0)
+    
 
 def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float:
     """
