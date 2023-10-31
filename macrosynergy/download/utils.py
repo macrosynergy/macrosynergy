@@ -337,22 +337,20 @@ def timeseries_to_df(
 
 def _timeseries_to_df_helper(
     tsdict: Dict[Any, Any],
-    indexed: bool = False,
 ) -> pd.DataFrame:
     assert isinstance(tsdict, dict), "`tsdict` must be a timeseries dictionary."
 
     cid, xcat, metricx = deconstruct_expression(tsdict["attributes"][0]["expression"])
-    df = (
-        pd.DataFrame(
-            tsdict["attributes"][0]["time-series"],
-            columns=["real_date", metricx],
-        )
-        .assign(cid=cid, xcat=xcat, metric=metricx)
-        .rename(columns={metricx: "obs"})
+    df = pd.DataFrame(
+        tsdict["attributes"][0]["time-series"],
+        columns=["real_date", metricx],
+    ).assign(
+        cid=cid,
+        xcat=xcat,
     )
-    if indexed:
-        df = df.set_index(["cid", "xcat", "real_date"])
-    return df
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y%m%d")
+    col_order = ["real_date", "cid", "xcat"] + [metricx]
+    return df[col_order]
 
 
 def timeseries_to_df(
