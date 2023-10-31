@@ -545,7 +545,9 @@ class JPMaQSDownload(object):
 
         return True
 
-    def get_catalogue(self):
+    def get_catalogue(self, verbose: bool = True):
+        if verbose:
+            print("Downloading the JPMaQS catalogue from DataQuery...")
         self.catalogue: List[str] = self.dq_interface.get_catalogue()
         return self.catalogue
 
@@ -562,8 +564,7 @@ class JPMaQSDownload(object):
 
         :return <List[str]>: list of tickers that are in the JPMaQS catalogue.
         """
-        print("Downloading the JPMaQS catalogue from DataQuery...")
-        catalogue_tickers: List[str] = self.get_catalogue()
+        catalogue_tickers: List[str] = self.get_catalogue(verbose=verbose)
         catalogue_expressions: List[str] = self.construct_expressions(
             tickers=catalogue_tickers, metrics=self.valid_metrics
         )
@@ -580,25 +581,43 @@ class JPMaQSDownload(object):
 
         return r
 
-    def download_all(
+    def download_to_disk(
         self,
         path: str,
         show_progress: bool = True,
+        all_jpmaqs_tickers: bool = True,
         expressions: Optional[List[str]] = None,
         start_date: str = "1990-01-01",
         end_date: Optional[str] = None,
         *args,
         **kwargs,
     ):
-        os.makedirs(path, exist_ok=True)
-
-        if expressions is None:
-            all_tickers: List[str] = self.get_catalogue()
-            expressions: List[str] = self.construct_expressions(
-                tickers=all_tickers, metrics=self.valid_metrics
+        if expressions is None and not all_jpmaqs_tickers:
+            raise ValueError(
+                "Must provide `expressions` or set `all_jpmaqs_tickers=True`."
             )
 
-        # jsut pass this dq
+        if all_jpmaqs_tickers:
+            all_tickers: List[str] = self.get_catalogue(verbose=True)
+            jpmaqs_expressions: List[str] = self.construct_expressions(
+                tickers=all_tickers, metrics=self.valid_metrics
+            )
+        else:
+            jpmaqs_expressions: List[str] = []
+            all_tickers: List[str] = []
+
+        if expressions is None:
+            expressions: List[str] = []
+
+        expressions += jpmaqs_expressions
+
+        # inform about directory creation
+        if not os.path.exists(path):
+            logger.info(
+                "Creating directory %s", os.path.abspath(os.path.expanduser(path))
+            )
+            os.makedirs(path, exist_ok=True)
+
         self.dq_interface.download_data(
             expressions=expressions,
             start_date=start_date,
@@ -608,45 +627,6 @@ class JPMaQSDownload(object):
             *args,
             **kwargs,
         )
-
-        # goto path and get a list of all jsons
-        downloaded_jsons: List[str] = sorted(glob.glob(os.path.join(path, "*.json")))
-        if not all(
-            [
-                os.path.basename(downloaded_jsons[i]).split(".")[0] in expressions
-                for i in range(len(downloaded_jsons))
-            ]
-        ):
-            raise ValueError(
-                "The folder contains JSONs that are not part of the requested expressions."
-            )
-
-        # move all jsons to a folder called "jsons"
-        logger.info(f"Moving downloaded JSONs to {os.path.join(path, 'json')}")
-        os.makedirs(os.path.join(path, "json"), exist_ok=True)
-        for jsonx in downloaded_jsons:
-            os.rename(jsonx, os.path.join(path, "json", os.path.basename(jsonx)))
-
-        # make a folder called "csvs"
-        logger.info(
-            f"Converting JSONs to CSVs and saving to {os.path.join(path, 'csv')}"
-        )
-        os.makedirs(os.path.join(path, "csv"), exist_ok=True)
-        for ix, ticker in enumerate(all_tickers):
-            # get the full file name of
-            rexprs: List[str] = [
-                os.path.join(path, "json", cx)
-                for cx in self.construct_expressions(
-                    tickers=[ticker], metrics=self.valid_metrics
-                )
-            ]
-            rexprs: List[Dict] = [
-                json.load(open(cx, "r")) for cx in rexprs if os.path.exists(cx)
-            ]
-
-            df: pd.DataFrame = timeseries_to_df(timeseries_dict=rexprs)
-            df.to_csv(os.path.join(path, "csv", f"{ticker}.csv"), index=False)
-            logger.info(f"Saved {ticker} ({ix+1}/{len(all_tickers)})")
 
     def download(
         self,
