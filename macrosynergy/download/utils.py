@@ -5,11 +5,6 @@ from datetime import datetime
 import logging
 import warnings
 import pandas as pd
-
-import os, sys
-
-sys.path.append(os.getcwd())
-
 from typing import List, Optional, Dict, Tuple, Union, Any, overload, Iterable
 
 from macrosynergy import __version__ as ms_version_info
