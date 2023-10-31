@@ -232,6 +232,8 @@ if __name__ == "__main__":
     scorer2 = make_scorer(sharpe_ratio, greater_is_better=True)
     scorer3 = make_scorer(sortino_ratio, greater_is_better=True)
     scorer4 = make_scorer(max_drawdown, greater_is_better=False)
+    scorer5 = make_scorer(regression_accuracy, greater_is_better=True)
+    scorer6 = make_scorer(regression_balanced_accuracy, greater_is_better=True)
     cv_results1 = cross_val_score(
         LinearRegression(), X, y, cv=splitter, scoring=scorer1
     )
@@ -244,8 +246,16 @@ if __name__ == "__main__":
     cv_results4 = cross_val_score(
         LinearRegression(), X, y, cv=splitter, scoring=scorer4
     )
+    cv_results5 = cross_val_score(
+        LinearRegression(), X, y, cv=splitter, scoring=scorer5
+    )
+    cv_results6 = cross_val_score(
+        LinearRegression(), X, y, cv=splitter, scoring=scorer6
+    )
     print("Probabilities of significances, per split:", cv_results1)
     print("Sharpe ratios, per split:", cv_results2)
     print("Sortino ratios, per split:", cv_results3)
     print("Max drawdowns, per split:", -1 * cv_results4)
+    print("Regression accuracies, per split:", cv_results5)
+    print("Regression balanced accuracies, per split:", cv_results6)
     print("Done")
