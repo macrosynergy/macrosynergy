@@ -6,6 +6,8 @@ from .metrics import (
     sharpe_ratio,
     sortino_ratio,
     max_drawdown,
+    regression_accuracy,
+    regression_balanced_accuracy,
 )
 
 __all__ = [
@@ -14,6 +16,8 @@ __all__ = [
     "BenchmarkTransformer",
     "BenchmarkEstimator",
     "panel_significance_probability",
+    "regression_accuracy",
+    "regression_balanced_accuracy",
     "sharpe_ratio",
     "sortino_ratio",
     "max_drawdown",
