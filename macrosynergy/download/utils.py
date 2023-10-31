@@ -378,104 +378,14 @@ def timeseries_to_df(
     if not all(isinstance(tsdict, dict) for tsdict in timeseries_dict):
         raise TypeError("All elements of `timeseries_dict` must be dictionaries.")
 
-    dfs_list: List[pd.DataFrame] = [
-        _timeseries_to_df_helper(tsdict=tsdict) for tsdict in timeseries_dict
-    ]
-
     if not combine_dfs:
-        return dfs_list
-    # now set the index to cid, xcat, real date for all dfs_list and concat them
+        return [_timeseries_to_df_helper(tsdict=tsdict) for tsdict in timeseries_dict]
+    else:
+        # df: pd.DataFrame = pd.concat(dfs_list, axis=0, ignore_index=True)
+        # return df.reset_index(drop=True)
 
-    # join all on the index of cid, xcat, real_date
-    df: pd.DataFrame = pd.concat(dfs_list, axis=0, ignore_index=True)
-    df["real_date"] = pd.to_datetime(df["real_date"])
-    # now make all the metrics columns with obs as the value
-    df = df.pivot_table(index=["cid", "xcat", "real_date"], columns="metric")
-    df.columns = df.columns.droplevel(0)
-    return df.reset_index()
-
-
-if __name__ == "__main__":
-
-    def mock_request_wrapper(
-        dq_expressions: List[str], start_date: str, end_date: str
-    ) -> List[Dict[str, Any]]:
-        """
-        Contrived request method to replicate output from DataQuery. Will replicate the
-        form of a JPMaQS expression from DataQuery which will subsequently be used to
-        test methods held in the api.Interface() Class.
-        """
-        aggregator: List[dict] = []
-        dates: pd.DatetimeIndex = pd.bdate_range(start_date, end_date)
-        for i, elem in enumerate(dq_expressions):
-            elem_dict = {
-                "item": (i + 1),
-                "group": None,
-                "attributes": [
-                    {
-                        "expression": elem,
-                        "label": None,
-                        "attribute-id": None,
-                        "attribute-name": None,
-                        "time-series": [[d.strftime("%Y%m%d"), 1] for d in dates],
-                    },
-                ],
-                "instrument-id": None,
-                "instrument-name": None,
-            }
-            aggregator.append(elem_dict)
-
-        return aggregator
-
-    cids: List[str] = ["USD", "CAD", "GBP", "EUR" "JPY"]
-    xcats: List[str] = ["FXXR", "EQXR", "RIR_NSA", "RIR_SA", "RIR_LAG"]
-    metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
-
-    expressions: List[str] = construct_expressions(
-        cids=cids, xcats=xcats, metrics=metrics
-    )
-
-    tss: List[dict] = mock_request_wrapper(
-        dq_expressions=expressions, start_date="19900101", end_date="20200101"
-    )
-
-    df: pd.DataFrame = timeseries_to_df(timeseries_dict=tss, combine_dfs=True)
-    print(df)
-
-    import time, random, json
-
-    timings: List[Dict] = []
-
-    stdate: str = "20100101"
-    endate: str = "20200101"
-    for i in range(10):
-        # shuffle the expressions
-        random.shuffle(expressions)
-        mock_tss: List[dict] = mock_request_wrapper(
-            dq_expressions=expressions, start_date=stdate, end_date=endate
-        )
-        start_time: float = time.time()
-        df: pd.DataFrame = timeseries_to_df(timeseries_dict=mock_tss, combine_dfs=True)
-        end_time: float = time.time()
-        timings.append({"time": end_time - start_time, "n": len(expressions)})
-        print(f"Completed iteration {i} in {end_time - start_time} seconds.")
-        print(json.dumps(timings[-1], indent=4))
-
-    # do it without combining the dfs
-    for i in range(10):
-        # shuffle the expressions
-        random.shuffle(expressions)
-        mock_tss: List[dict] = mock_request_wrapper(
-            dq_expressions=expressions, start_date=stdate, end_date=endate
-        )
-        start_time: float = time.time()
-        df: List[pd.DataFrame] = timeseries_to_df(
-            timeseries_dict=mock_tss, combine_dfs=False
-        )
-        end_time: float = time.time()
-        timings.append({"time": end_time - start_time, "n": len(expressions)})
-        print(f"Completed iteration {i} in {end_time - start_time} seconds.")
-        print(json.dumps(timings[-1], indent=4))
-
-    timings_df: pd.DataFrame = pd.DataFrame(timings)
-    print(timings_df)
+        return pd.concat(
+            [_timeseries_to_df_helper(tsdict=tsdict) for tsdict in timeseries_dict],
+            axis=0,
+            ignore_index=True,
+        ).reset_index(drop=True)
