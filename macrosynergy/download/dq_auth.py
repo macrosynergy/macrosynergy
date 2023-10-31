@@ -42,12 +42,7 @@ class OAuth(object):
         logger.debug("Instantiate OAuth pathway to DataQuery")
         vars_types_zip: zip = zip(
             [client_id, client_secret, token_url, dq_resource_id],
-            [
-                "client_id",
-                "client_secret",
-                "token_url",
-                "dq_resource_id",
-            ],
+            ["client_id", "client_secret", "token_url", "dq_resource_id"],
         )
 
         for varx, namex in vars_types_zip:
