@@ -1,4 +1,3 @@
-from .utils import reduce_df, categories_df, reduce_df_by_ticker
 from .check_availability import (
     check_availability,
     visual_paneldates,
@@ -23,11 +22,11 @@ __all__ = [
     "visual_paneldates",
     "check_enddates",
     "check_startyears",
-    "reduce_df",
-    "reduce_df_by_ticker",
     "missing_in_df",
+    "business_day_dif",
     "VintageData",
     "make_qdf",
+    "common_cids",
     "update_df",
     # Modules/Subpackages
     "utils",

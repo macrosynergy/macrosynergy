@@ -10,7 +10,7 @@ from macrosynergy.signal.target_positions import (
 )
 from typing import List, Dict, Tuple, Union, Optional, Any
 
-from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.management.utils import reduce_df
 from macrosynergy.panel.basket import Basket
 from tests.simulate import make_qdf
 import random

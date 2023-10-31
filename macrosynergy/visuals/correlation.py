@@ -14,7 +14,7 @@ from typing import List, Union, Tuple, Dict, Optional, Any
 from collections import defaultdict
 
 from macrosynergy.management.utils import reduce_df
-from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.simulate_quantamental_data import make_qdf
 
 
 def view_correlation(
