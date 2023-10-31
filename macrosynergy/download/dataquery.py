@@ -20,11 +20,13 @@ from tqdm import tqdm
 from .dq_auth import OAuth, CertAuth
 
 from macrosynergy.download.common import (
+    # exceptions
     AuthenticationError,
     DownloadError,
     InvalidResponseError,
     HeartbeatError,
     NoContentError,
+    # constants
     CERT_BASE_URL,
     OAUTH_BASE_URL,
     OAUTH_TOKEN_URL,
@@ -39,9 +41,7 @@ from macrosynergy.download.common import (
     TIMESERIES_TRACKING_ID,
     CATALOGUE_TRACKING_ID,
 )
-from macrosynergy.management.utils import (
-    is_valid_iso_date,
-)
+from macrosynergy.management.utils import is_valid_iso_date
 
 from .utils import request_wrapper, form_full_url
 
