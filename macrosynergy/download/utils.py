@@ -322,13 +322,19 @@ def construct_expressions(
 
 
 @overload
-def timeseries_to_df(timeseries_dict: dict) -> pd.DataFrame:
+def timeseries_to_df(
+    timeseries_dict: dict,
+    combine_dfs: bool,
+    as_qdf: bool,
+) -> pd.DataFrame:
     ...
 
 
 @overload
 def timeseries_to_df(
     timeseries_dict: Iterable[dict],
+    combine_dfs: bool,
+    as_qdf: bool,
 ) -> Union[List[pd.DataFrame], pd.DataFrame]:
     ...
 
