@@ -351,7 +351,7 @@ class TestAll(unittest.TestCase):
             slip=1,
         )
 
-        with self.assertRaises(KeyError):
+        with self.assertRaises(ValueError):
             sr.single_statistic_table(stat="FAIL")
 
         with self.assertRaises(ValueError):
