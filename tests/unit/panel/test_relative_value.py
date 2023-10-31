@@ -5,7 +5,7 @@ from typing import List, Dict, Tuple, Union, Set
 
 from tests.simulate import make_qdf
 from macrosynergy.panel.make_relative_value import make_relative_value, _prepare_basket
-from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.management.utils import reduce_df
 from random import randint, choice
 import io
 import sys

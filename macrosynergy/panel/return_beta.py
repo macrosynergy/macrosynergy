@@ -11,7 +11,7 @@ from typing import List, Union
 import statsmodels.api as sm
 from statsmodels.regression.linear_model import RegressionResults
 from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.management.utils import reduce_df
 import matplotlib.pyplot as plt
 
 
