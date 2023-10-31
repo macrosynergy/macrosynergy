@@ -5,7 +5,7 @@ from typing import List, Dict, Tuple, Union, Set
 
 from tests.simulate import make_qdf
 from macrosynergy.panel.make_relative_value import make_relative_value, _prepare_basket
-from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.shape_dfs import reduce_df
 from random import randint, choice
 import io
 import sys
@@ -287,6 +287,20 @@ class TestAll(unittest.TestCase):
 
         rl_xcat: str = next(iter(rlt_value_xcats))
         self.assertTrue(rl_xcat == "CRY_RelVal")
+
+        # try with xcats=xcats, it should NOT raise a warning
+        sel_cids: List[str] = ["CAD", "GBP", "NZD"]
+        with warnings.catch_warnings(record=True) as w:
+            dfd_rl: pd.DataFrame = make_relative_value(
+                df=dfdx,
+                xcats=xcats,
+                cids=sel_cids,
+                start=start,
+                end=end,
+            )
+
+            # Assert a UserWarning is not raised.
+            self.assertTrue(len(w) == 0)
 
     def test_prepare_basket(self):
         # Explicitly test _prepare_basket() method.

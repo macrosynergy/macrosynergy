@@ -11,7 +11,7 @@ from typing import List, Union, Tuple, Optional
 from itertools import product
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.panel.make_zn_scores import make_zn_scores
-from macrosynergy.management.utils import update_df, reduce_df
+from macrosynergy.management.update_df import update_df
 
 
 class NaivePnL:

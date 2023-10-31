@@ -170,8 +170,8 @@ class SignalsReturns(SignalBase):
     ):
         """
         Calculates all the statistics for each return and signal category specified with
-        each frequency and aggregation method, note that if none are defined it does this 
-        for all categories, frequencies and aggregation methods that were stored in the 
+        each frequency and aggregation method, note that if none are defined it does this
+        for all categories, frequencies and aggregation methods that were stored in the
         class.
 
         :param <str, List[str]> rets: target return category
@@ -274,7 +274,22 @@ class SignalsReturns(SignalBase):
         and "agg_sigs". The default is ["ret", "freq] resulting in index
         strings () or if only one frequency is available.
         """
-        self.df = self.original_df
+
+        stat_values = [
+            "accuracy",
+            "bal_accuracy",
+            "pos_sigr",
+            "pos_retr",
+            "pos_prec",
+            "neg_prec",
+            "kendall",
+            "kendall_pval",
+            "pearson",
+            "pearson_pval",
+        ]
+
+        if not stat in stat_values:
+            raise ValueError(f"Stat must be one of {stat_values}")
 
         if not isinstance(rows, list):
             raise TypeError("Rows must be a list")
@@ -494,10 +509,14 @@ if __name__ == "__main__":
     srt = sr.single_relation_table()
     mrt = sr.multiple_relations_table()
     sst = sr.single_statistic_table(stat="accuracy")
+    sst1 = sr.single_statistic_table(stat="accuracy")
+    sst2 = sr.single_statistic_table(stat="accuracy")
 
-    print(srt)
-    print(mrt)
+    # print(srt)
+    # print(mrt)
     print(sst)
+    print(sst1)
+    print(sst2)
 
     # Specifying specific arguments for each of the Signal Return Functions
 
