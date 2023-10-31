@@ -49,14 +49,6 @@ from .constants import (
 )
 
 logger: logging.Logger = logging.getLogger(__name__)
-debug_stream_handler = logging.StreamHandler(io.StringIO())
-debug_stream_handler.setLevel(logging.NOTSET)
-debug_stream_handler.setFormatter(
-    logging.Formatter(
-        "%(asctime)s - %(levelname)s - %(module)s - %(funcName)s :: %(message)s"
-    )
-)
-logger.addHandler(debug_stream_handler)
 
 
 def validate_download_args(
