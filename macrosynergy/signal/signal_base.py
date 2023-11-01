@@ -252,9 +252,6 @@ class SignalBase:
         self.df = df
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
 
-        if not isinstance(self.signs, list):
-            self.signs = [self.signs]
-
         self.new_sig = sig
 
         if -1 in self.signs and self.signs[self.sig.index(sig)] == -1:
@@ -275,7 +272,7 @@ class SignalBase:
 
         return df_result
 
-    def __communal_sample__(self, df: pd.DataFrame, signal=None, ret=None):
+    def __communal_sample__(self, df: pd.DataFrame, signal: str, ret: str):
         """
         On a multi-index DataFrame, where the outer index are the cross-sections and the
         inner index are the timestamps, exclude any row where all signals do not have
@@ -288,11 +285,6 @@ class SignalBase:
         Remove the return category from establishing the intersection to preserve the
         maximum amount of signal data available (required because of the applied lag).
         """
-
-        if signal is None:
-            signal = self.signals
-        if ret is None:
-            ret = self.ret
 
         df_w = df.pivot(index=("cid", "real_date"), columns="xcat", values="value")
 
@@ -396,10 +388,7 @@ class SignalBase:
 
         # Analysis completed exclusively on the primary signal.
         r = [ret]
-        if isinstance(sig, list):
-            r += sig
-        else:
-            r.append(sig)
+        r.append(sig)
         df = self.df[r]
 
         # Will remove any timestamps where both the signal & return are not realised.
