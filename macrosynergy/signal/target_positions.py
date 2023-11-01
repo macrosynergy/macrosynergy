@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from typing import List, Union
 from macrosynergy.management.utils import reduce_df
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 from macrosynergy.panel.historic_vol import historic_vol
 from macrosynergy.panel.make_zn_scores import make_zn_scores
 from macrosynergy.panel.basket import Basket
