@@ -136,7 +136,7 @@ with JPMaQSDownload(
 ```
 
 ### Management 
-In order to use the rest of the package without access to the API you can [simulate](./macrosynergy/management/simulate_quantamental_data.py) quantamental data using the management sub-package. 
+In order to use the rest of the package without access to the API you can [simulate](./macrosynergy/management/simulate.md) quantamental data using the management sub-package. 
 ```python
 from macrosynergy.management.simulate import make_qdf
 
