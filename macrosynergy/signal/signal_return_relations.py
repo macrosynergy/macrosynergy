@@ -213,7 +213,6 @@ class SignalReturnRelations(SignalBase):
         title: str = None,
         size: Tuple[float] = None,
         legend_pos: str = "best",
-        testing: bool = False,
     ):
         """
         Plot bar chart for the overall and balanced accuracy metrics.
@@ -281,16 +280,12 @@ class SignalReturnRelations(SignalBase):
         plt.legend(loc=legend_pos)
         plt.show()
 
-        if testing:
-            return "finished"
-
     def correlation_bars(
         self,
         type: str = "cross_section",
         title: str = None,
         size: Tuple[float] = None,
         legend_pos: str = "best",
-        testing: bool = False,
     ):
         """
         Plot correlation coefficients and significance.
@@ -363,9 +358,6 @@ class SignalReturnRelations(SignalBase):
         plt.title(title)
         plt.legend(loc=legend_pos)
         plt.show()
-
-        if testing:
-            return "finished"
 
     def summary_table(self):
         """

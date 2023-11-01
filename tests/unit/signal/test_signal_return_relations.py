@@ -695,10 +695,16 @@ class TestAll(unittest.TestCase):
             blacklist=self.blacklist,
         )
 
-
         #Check that accuracy bars actually outputs an image
-        self.assertTrue(srr.accuracy_bars(testing=True) == "finished")
-        self.assertTrue(srr.correlation_bars(testing=True) == "finished")
+        try:
+            srr.accuracy_bars()
+        except Exception as e:
+            self.fail(f"accuracy_bars raised {e} unexpectedly")
+
+        try:
+            srr.correlation_bars()
+        except Exception as e:
+            self.fail(f"correlation_bars raised {e} unexpectedly")
 
     def test_summary_table(self):
         self.dataframe_generator()
