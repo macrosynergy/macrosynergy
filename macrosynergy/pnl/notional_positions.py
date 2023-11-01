@@ -102,11 +102,11 @@ def _leverage_positions(
         pos_col: str = contx + "_" + pname
 
         # Get all signals for that contract
-        asset_cols: List[str] = _get_csigs_for_contract(
+        sig_cols: List[str] = _get_csigs_for_contract(
             df=df_wide, contid=contx, sname=sname
         )
         # sum of all assets for that contract; if zero, set to NaN to avoid div by zero
-        df_wide[pos_col] = df_wide[asset_cols].sum(axis=1)  # sum(row) all signals
+        df_wide[pos_col] = df_wide[sig_cols].sum(axis=1)  # sum(row) all signals
         df_wide.loc[df_wide[pos_col] == 0, pos_col] = np.nan
         # USD position(asset) = AUM * leverage / (sum of signals * dollar per signal)
         df_wide[pos_col] = aum * leverage / (df_wide[pos_col])
