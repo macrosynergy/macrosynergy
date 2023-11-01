@@ -57,7 +57,7 @@ class DocstringMethods:
             return ""
 
         lines = docstring.split("\n")
-        formatted_lines = []
+        formatted_lines: List[str] = []
 
         for il, line in enumerate(lines):
             try:
@@ -232,7 +232,7 @@ def process_file(filepath: str, output_directory: str) -> bool:
             RuntimeWarning,
         )
         return False
-    
+
     LINE_SEPARATOR = "----------------\n\n"
 
     if structure:
