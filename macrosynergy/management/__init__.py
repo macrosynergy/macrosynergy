@@ -1,4 +1,4 @@
-from .check_availability import (
+from .utils.check_availability import (
     check_availability,
     visual_paneldates,
     check_enddates,

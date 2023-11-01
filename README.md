@@ -164,12 +164,12 @@ df_xcats.loc['FXWBASE_NSA'] = ['2010-01-01', '2022-02-01', 1, 1.5, 0.8, 0.5]
 df_xcats.loc['EQWBASE_NSA'] = ['2010-01-01', '2022-02-01', 1, 1.5, 0.9, 0.5]
 data = make_qdf(df_cids, df_xcats, back_ar=0.75)
 ```
-The management sub-package can also be used to [check](./macrosynergy/management/check_availability.py) which data is available
+The management sub-package can also be used to [check](./macrosynergy/management/utils/check_availability.py) which data is available
 in the dataframe.
 
 
 ```python
-from macrosynergy.management.check_availability import check_availability
+from macrosynergy.management import check_availability
 filt_na = (data['cid'] == 'USD') & (data['real_date'] < '2015-01-01')
 data_filt.loc[filt_na, 'value'] = np.nan
 check_availability(df=data_filt, xcats=xcats, cids=cids)
