@@ -158,7 +158,7 @@ class TestAll(unittest.TestCase):
             sr.single_relation_table(ret=2)
 
         with self.assertRaises(TypeError):
-            sr.single_relation_table(sig=2)
+            sr.single_relation_table(xcat=2)
 
         with self.assertRaises(TypeError):
             sr.single_relation_table(freq=2)
@@ -177,6 +177,12 @@ class TestAll(unittest.TestCase):
         self.assertTrue(sr.dfd["value"][0] != sr.df["value"][0])
 
         self.assertTrue(sr_no_slip.dfd["value"][0] == sr_no_slip.df["value"][0])
+
+        sr.single_relation_table(ret="XR", xcat="CRY", freq="Q", agg_sigs="last")
+
+        self.assertTrue(set(sr.dfd["xcat"]) == set(["XR", "CRY"]))
+
+        self.assertTrue(sr.dfd["value"][0] != sr.df["value"][0])
 
         # Test Negative signs are correctly handled
 
@@ -306,7 +312,8 @@ class TestAll(unittest.TestCase):
         )
 
         self.assertTrue(
-            sr_unsigned.multiple_relations_table().shape == (1, num_of_acc_cols)
+            sr_unsigned.multiple_relations_table(rets="XR", xcats="CRY").shape
+            == (1, num_of_acc_cols)
         )
 
         sr_mrt = SignalsReturns(
@@ -334,6 +341,9 @@ class TestAll(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             sr_mrt.multiple_relations_table(agg_sigs="TEST")
+
+        # Test that the table is inputs can take in both a list of strings and a string
+        # self.assertTrue(sr_mrt.multiple_relations_table(rets="XR", freqs='Q'))
 
         rets = ["XR", "GROWTH"]
         xcats = ["INFL"]
@@ -397,6 +407,23 @@ class TestAll(unittest.TestCase):
             == (8, 2)
         )
 
+        sr = SignalsReturns(
+            df=self.dfd,
+            rets=["XR", "GROWTH"],
+            sigs=["CRY", "INFL"],
+            freqs=["Q", "M"],
+            agg_sigs=["last", "mean"],
+            blacklist=self.blacklist,
+            signs=[1, -1],
+        )
+
+        self.assertTrue(
+            sr.single_statistic_table(
+                stat="accuracy", rows=["xcat"], columns=["freq", "agg_sigs", "ret"]
+            ).index[1]
+            == "INFL_NEG"
+        )
+
     def test_set_df_labels(self):
         rets = ["XR", "GROWTH"]
         freqs = ["Q", "M"]
@@ -443,6 +470,28 @@ class TestAll(unittest.TestCase):
 
         expected_col_names = ["mean/Q", "mean/M", "last/Q", "last/M"]
         expected_row_names = ["CRY/XR", "CRY/GROWTH", "INFL/XR", "INFL/GROWTH"]
+
+        self.assertTrue(rows_names == expected_row_names)
+        self.assertTrue(columns_names == expected_col_names)
+
+        rows = ["xcat"]
+        columns = columns = ["agg_sigs", "ret", "freq"]
+
+        rows_names, columns_names = sr.set_df_labels(
+            rows_dict=rows_dict, rows=rows, columns=columns
+        )
+
+        expected_col_names = [
+            "mean/XR/Q",
+            "mean/XR/M",
+            "mean/GROWTH/Q",
+            "mean/GROWTH/M",
+            "last/XR/Q",
+            "last/XR/M",
+            "last/GROWTH/Q",
+            "last/GROWTH/M",
+        ]
+        expected_row_names = ["CRY", "INFL"]
 
         self.assertTrue(rows_names == expected_row_names)
         self.assertTrue(columns_names == expected_col_names)
