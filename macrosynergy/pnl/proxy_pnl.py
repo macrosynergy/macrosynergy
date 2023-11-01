@@ -9,8 +9,8 @@ import seaborn as sns
 
 from typing import List, Union, Tuple, Optional
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.utils import reduce_df
 
 
 def proxy_pnl(
@@ -106,7 +106,3 @@ def proxy_pnl(
     ]:
         if not isinstance(_varx, _typex):
             raise TypeError(f"{_namex} must be {_typex}")
-        
-        
-        
-    

@@ -432,7 +432,7 @@ def contract_signals(
 
 
 if __name__ == "__main__":
-    from macrosynergy.management.simulate_quantamental_data import make_test_df
+    from macrosynergy.management.simulate import make_test_df
 
     cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
     xcats: List[str] = ["SIG", "HR"]
