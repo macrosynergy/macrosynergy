@@ -4,6 +4,7 @@ Module for analysing and visualizing signal and a return series.
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 from typing import List, Union, Tuple
 
 from macrosynergy.management.simulate_quantamental_data import make_qdf
@@ -248,7 +249,7 @@ class SignalReturnRelations(SignalBase):
         if size is None:
             size = (np.max([dfx.shape[0] / 2, 8]), 6)
 
-        plt.style.use("seaborn")
+        sns.set_style("darkgrid")
         plt.figure(figsize=size)
         x_indexes = np.arange(dfx.shape[0])
 
@@ -337,7 +338,7 @@ class SignalReturnRelations(SignalBase):
         if size is None:
             size = (np.max([dfx.shape[0] / 2, 8]), 6)
 
-        plt.style.use("seaborn")
+        sns.set_style("darkgrid")
         plt.figure(figsize=size)
         x_indexes = np.arange(len(dfx.index))
         w = 0.4
