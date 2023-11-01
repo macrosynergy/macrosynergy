@@ -117,7 +117,7 @@ def panel_cv_scores(
     return metrics_df
 
 if __name__ == "__main__":
-    from macrosynergy.management.simulate_quantamental_data import make_qdf
+    from macrosynergy.management.simulate import make_qdf
     import macrosynergy.management as msm
 
     from sklearn.linear_model import LinearRegression, Lasso

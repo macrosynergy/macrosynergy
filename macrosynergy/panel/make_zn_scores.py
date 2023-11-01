@@ -8,9 +8,8 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Set
 import warnings
-from macrosynergy.management.shape_dfs import reduce_df
-from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.utils import drop_nan_series
+from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.utils import drop_nan_series, reduce_df
 from macrosynergy.management.types import QuantamentalDataFrame, Numeric
 
 

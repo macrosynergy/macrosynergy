@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import List, Union, Tuple
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 from macrosynergy.signal.signal_base import SignalBase
 
 
