@@ -8,7 +8,7 @@ from typing import List, Dict, Tuple, Optional
 import matplotlib.pyplot as plt
 
 from macrosynergy.visuals.plotter import Plotter
-from macrosynergy.visuals.common import Numeric, NoneType
+from macrosynergy.management.types import Numeric, NoneType
 
 from macrosynergy.management.simulate_quantamental_data import make_test_df
 

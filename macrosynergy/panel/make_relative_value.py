@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from typing import List, Set
 from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.management.utils import reduce_df
 import warnings
 
 
@@ -34,28 +34,26 @@ def _prepare_basket(
     """
 
     cids_used: List[str] = sorted(set(basket) & set(cids_avl))
-    cids_miss = [b for b in basket if b not in cids_used]
+    cids_miss: List[str] = list(set(basket) - set(cids_used))
 
-    # Not able to be greater than because of assertion on line 126. If the basket
-    # references a cross-section not defined in the DataFrame, an error will be thrown.
-    condition = len(cids_used) < len(basket)
-    if condition and complete_cross:
-        cids_used = []
-        err_str: str = (
-            f"The category, {xcat}, is missing {cids_miss} which are included "
-            f"in the basket {basket}. Therefore, the category will be excluded "
-            f"from the returned DataFrame."
-        )
-        print(err_str)
-        warnings.warn(err_str, UserWarning)
-
-    elif condition:
-        err_str: str = (
-            f"The category, {xcat}, is missing {cids_miss} from the requested "
-            f"basket. The new basket will be {cids_used}."
-        )
-        print(err_str)
-        warnings.warn(err_str, UserWarning)
+    # if any missing cids, warn
+    if cids_miss:
+        if complete_cross:
+            cids_used = []
+            err_str: str = (
+                f"The category, {xcat}, is missing {cids_miss} which are included "
+                f"in the basket {basket}. Therefore, the category will be excluded "
+                "from the returned DataFrame."
+            )
+            print(err_str)
+            warnings.warn(err_str, UserWarning)
+        else:
+            err_str: str = (
+                f"The category, {xcat}, is missing {cids_miss} from the requested "
+                f"basket. The new basket will be {cids_used}."
+            )
+            print(err_str)
+            warnings.warn(err_str, UserWarning)
 
     # Reduce the DataFrame to the specified basket given the available cross-sections.
     dfb = df[df["cid"].isin(cids_used)]

@@ -9,7 +9,7 @@ jobs:
   # This workflow builds the Python package dependencies every time that the requirements
   # files are modified and store it in cache to be accessible by all the CI in all other
   # branches.
-  build-cache:
+  update-cache:
     name: Update/Create cache
     runs-on: ubuntu-latest
     steps:

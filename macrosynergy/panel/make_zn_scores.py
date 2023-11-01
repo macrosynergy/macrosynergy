@@ -8,14 +8,19 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Set
 import warnings
-from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.utils import drop_nan_series
+from macrosynergy.management.utils import drop_nan_series, reduce_df
+from macrosynergy.management.types import QuantamentalDataFrame, Numeric
 
-def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
-                   stat: str = 'mean', sequential: bool = True,
-                   min_obs: int = 261, iis: bool = True):
 
+def expanding_stat(
+    df: pd.DataFrame,
+    dates_iter: pd.DatetimeIndex,
+    stat: str = "mean",
+    sequential: bool = True,
+    min_obs: int = 261,
+    iis: bool = True,
+):
     """
     Compute statistic based on an expanding sample.
 
@@ -35,22 +40,21 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
     :return: Time series dataframe of the chosen statistic across all columns
     """
 
-    df_out = pd.DataFrame(np.nan, index=df.index, columns=['value'])
+    df_out = pd.DataFrame(np.nan, index=df.index, columns=["value"])
     # An adjustment for individual series' first realised value is not required given the
     # returned DataFrame will be subtracted from the original DataFrame. The original
     # DataFrame will implicitly host this information through NaN values such that when
     # the arithmetic operation is made, any falsified values will be displaced by NaN
     # values.
 
-    first_observation = df.dropna(axis=0, how='all').index[0]
+    first_observation = df.dropna(axis=0, how="all").index[0]
     # Adjust for individual cross-sections' series commencing at different dates.
-    first_estimation = df.dropna(axis=0, how='all').index[min_obs]
+    first_estimation = df.dropna(axis=0, how="all").index[min_obs]
 
     obs_index = next(iter(np.where(df.index == first_observation)))[0]
     est_index = next(iter(np.where(df.index == first_estimation)))[0]
 
     if stat == "zero":
-
         df_out["value"] = 0
 
     elif not sequential:
@@ -60,30 +64,41 @@ def expanding_stat(df: pd.DataFrame, dates_iter: pd.DatetimeIndex,
         df_out["value"] = statval
 
     else:
-
         dates = dates_iter[dates_iter >= first_estimation]
         for date in dates:
+            df_out.loc[date, "value"] = (
+                df.loc[first_observation:date].stack().apply(stat)
+            )
 
-            df_out.loc[date, "value"] = df.loc[first_observation:date].stack().apply(stat)
-
-        df_out = df_out.fillna(method='ffill')
+        df_out = df_out.fillna(method="ffill")
 
         if iis:
-            if (est_index - obs_index)>0:
+            if (est_index - obs_index) > 0:
                 df_out = df_out.fillna(method="bfill", limit=(est_index - obs_index))
 
-    df_out.columns.name = 'cid'
+    df_out.columns.name = "cid"
     return df_out
 
-def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
-                   start: str = None, end: str = None, blacklist: dict = None,
-                   sequential: bool = True, min_obs: int = 261, iis: bool = True,
-                   neutral: str = 'zero', est_freq: str = 'd', thresh: float = None,
-                   pan_weight: float = 1, postfix: str = 'ZN'):
 
+def make_zn_scores(
+    df: pd.DataFrame,
+    xcat: str,
+    cids: List[str] = None,
+    start: str = None,
+    end: str = None,
+    blacklist: dict = None,
+    sequential: bool = True,
+    min_obs: int = 261,
+    iis: bool = True,
+    neutral: str = "zero",
+    est_freq: str = "d",
+    thresh: float = None,
+    pan_weight: float = 1,
+    postfix: str = "ZN",
+):
     """
     Computes z-scores for a panel around a neutral level ("zn scores").
-    
+
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
         'cid', 'xcat', 'real_date' and 'value'.
     :param <str> xcat:  extended category for which the zn_score is calculated.
@@ -129,42 +144,73 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     :return <pd.Dataframe>: standardized DataFrame with the zn-scores of the chosen xcat:
         'cid', 'xcat', 'real_date' and 'value'.
     """
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("The `df` parameter must be a DataFrame object.")
     df = df.copy()
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
 
     expected_columns = ["cid", "xcat", "real_date", "value"]
     col_error = f"The DataFrame must contain the necessary columns: {expected_columns}."
-    assert set(expected_columns).issubset(set(df.columns)), col_error
+    if not set(expected_columns).issubset(set(df.columns)):
+        raise ValueError(col_error)
 
     # --- Assertions
+    err: str = (
+        "The `neutral` parameter must be a string,"
+        " either 'mean', 'median' or 'zero'."
+    )
+    if not isinstance(neutral, str):
+        raise TypeError(err)
+    elif neutral not in ["mean", "median", "zero"]:
+        raise ValueError(err)
 
-    assert neutral in ["mean", "median", "zero"]
     if thresh is not None:
-        assert thresh > 1, "The 'thresh' parameter must be larger than 1."
-    assert 0 <= pan_weight <= 1, "The 'pan_weight' parameter must be between 0 and 1."
-    assert isinstance(iis, bool), "Boolean Object required."
+        err: str = "The `thresh` parameter must a numerical value >= 1.0."
+        if not isinstance(thresh, Numeric):
+            raise TypeError(err)
+        elif thresh < 1.0:
+            raise ValueError(err)
+
+    if not isinstance(iis, bool):
+        raise TypeError("Parameter `iis` must be a boolean.")
+
+    err = "The `pan_weight` parameter must be a numerical value between 0 and 1 (inclusive)."
+    if not isinstance(pan_weight, Numeric):
+        raise TypeError(err)
+    elif not (0 <= pan_weight <= 1):
+        raise ValueError(err)
 
     error_min = "Minimum observations must be a non-negative Integer value."
-    assert isinstance(min_obs, int) and min_obs >= 0, error_min
+    if not isinstance(min_obs, int) or min_obs < 0:
+        raise ValueError(error_min)
 
     frequencies = ["d", "w", "m", "q"]
-    error_freq = f"String Object required and must be one of the available frequencies: " \
-                 f"{frequencies}."
-    assert isinstance(est_freq, str) and est_freq in frequencies, error_freq
-    pd_freq = dict(zip(frequencies, ['B', 'W-Fri', 'BM', 'BQ']))
+    error_freq = (
+        f"String Object required and must be one of the available frequencies: "
+        f"{frequencies}."
+    )
+
+    if not isinstance(est_freq, str):
+        raise TypeError(error_freq)
+    elif est_freq not in frequencies:
+        raise ValueError(error_freq)
+
+    pd_freq = dict(zip(frequencies, ["B", "W-Fri", "BM", "BQ"]))
 
     # --- Prepare re-estimation dates and time-series DataFrame.
 
     # Remove any additional metrics defined in the DataFrame.
     df = df.loc[:, expected_columns]
     if cids is not None:
-        missing_cids = set(cids).difference(set(df['cid']))
+        missing_cids = set(cids).difference(set(df["cid"]))
         if missing_cids:
-            raise ValueError(f"The following cids are not available in the DataFrame: "
-                                f"{missing_cids}.")
-    if xcat not in df['xcat'].unique():
+            raise ValueError(
+                f"The following cids are not available in the DataFrame: "
+                f"{missing_cids}."
+            )
+    if xcat not in df["xcat"].unique():
         raise ValueError(f"The xcat {xcat} is not available in the DataFrame.")
-    
+
     df = reduce_df(
         df, xcats=[xcat], cids=cids, start=start, end=end, blacklist=blacklist
     )
@@ -172,11 +218,11 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     if df.isna().values.any():
         df = drop_nan_series(df=df, raise_warning=True)
 
-    s_date = min(df['real_date'])
-    e_date = max(df['real_date'])
+    s_date = min(df["real_date"])
+    e_date = max(df["real_date"])
     dates_iter = pd.date_range(start=s_date, end=e_date, freq=pd_freq[est_freq])
 
-    dfw = df.pivot(index='real_date', columns='cid', values='value')
+    dfw = df.pivot(index="real_date", columns="cid", values="value")
     cross_sections = dfw.columns
 
     # --- The actual scoring.
@@ -185,104 +231,168 @@ def make_zn_scores(df: pd.DataFrame, xcat: str, cids: List[str] = None,
     dfw_zns_css = dfw * 0
 
     if pan_weight > 0:
-
-        df_neutral = expanding_stat(dfw, dates_iter, stat=neutral,
-                                    sequential=sequential, min_obs=min_obs,
-                                    iis=iis)
-        dfx = dfw.sub(df_neutral['value'], axis=0)
-        df_mabs = expanding_stat(dfx.abs(), dates_iter, stat="mean",
-                                 sequential=sequential,
-                                 min_obs=min_obs, iis=iis)
-        dfw_zns_pan = dfx.div(df_mabs['value'], axis='rows')
+        df_neutral = expanding_stat(
+            dfw,
+            dates_iter,
+            stat=neutral,
+            sequential=sequential,
+            min_obs=min_obs,
+            iis=iis,
+        )
+        dfx = dfw.sub(df_neutral["value"], axis=0)
+        df_mabs = expanding_stat(
+            dfx.abs(),
+            dates_iter,
+            stat="mean",
+            sequential=sequential,
+            min_obs=min_obs,
+            iis=iis,
+        )
+        dfw_zns_pan = dfx.div(df_mabs["value"], axis="rows")
 
     if pan_weight < 1:
-
         for cid in cross_sections:
             dfi = dfw[cid]
 
-            df_neutral = expanding_stat(dfi.to_frame(name=cid), dates_iter, stat=neutral,
-                                        sequential=sequential,
-                                        min_obs=min_obs, iis=iis)
-            dfx = dfi - df_neutral['value']
+            df_neutral = expanding_stat(
+                dfi.to_frame(name=cid),
+                dates_iter,
+                stat=neutral,
+                sequential=sequential,
+                min_obs=min_obs,
+                iis=iis,
+            )
+            dfx = dfi - df_neutral["value"]
 
-            df_mabs = expanding_stat(dfx.abs().to_frame(name=cid), dates_iter,
-                                     stat="mean", sequential=sequential,
-                                     min_obs=min_obs, iis=iis)
-            dfx = pd.DataFrame(data=dfx.to_numpy(),
-                               index=dfx.index, columns=['value'])
-            dfx = dfx.rename_axis('cid', axis=1)
+            df_mabs = expanding_stat(
+                dfx.abs().to_frame(name=cid),
+                dates_iter,
+                stat="mean",
+                sequential=sequential,
+                min_obs=min_obs,
+                iis=iis,
+            )
+            dfx = pd.DataFrame(data=dfx.to_numpy(), index=dfx.index, columns=["value"])
+            dfx = dfx.rename_axis("cid", axis=1)
 
             zns_css_df = dfx / df_mabs
             dfw_zns_css.loc[:, cid] = zns_css_df.to_numpy()
 
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
-    dfw_zns = dfw_zns.dropna(axis=0, how='all')
-    
+    dfw_zns = dfw_zns.dropna(axis=0, how="all")
+
     if thresh is not None:
         dfw_zns.clip(lower=-thresh, upper=thresh, inplace=True)
 
     # --- Reformatting of output into standardised DataFrame.
 
     df_out = dfw_zns.stack().to_frame("value").reset_index()
-    df_out['xcat'] = xcat + postfix
+    df_out["xcat"] = xcat + postfix
 
-    col_names = ['cid', 'xcat', 'real_date', 'value']
-    df_out = df_out.sort_values(['cid', 'real_date'])[col_names]
+    col_names = ["cid", "xcat", "real_date", "value"]
+    df_out = df_out.sort_values(["cid", "real_date"])[col_names]
 
     return df_out[df.columns].reset_index(drop=True)
 
 
 if __name__ == "__main__":
+    cids = ["AUD", "CAD", "GBP", "USD", "NZD"]
+    xcats = ["XR", "CRY", "GROWTH", "INFL"]
 
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
 
-    cids = ['AUD', 'CAD', 'GBP', 'USD', 'NZD']
-    xcats = ['XR', 'CRY', 'GROWTH', 'INFL']
+    df_cids.loc["AUD"] = ["2010-01-01", "2020-12-31", 0.5, 2]
+    df_cids.loc["CAD"] = ["2006-01-01", "2020-11-30", 0, 1]
+    df_cids.loc["GBP"] = ["2008-01-01", "2020-11-30", -0.2, 0.5]
+    df_cids.loc["USD"] = ["2007-01-01", "2020-09-30", -0.2, 0.5]
+    df_cids.loc["NZD"] = ["2002-01-01", "2020-09-30", -0.1, 2]
 
-    df_cids = pd.DataFrame(index = cids, columns = ['earliest', 'latest', 'mean_add',
-                                                    'sd_mult'])
-
-    df_cids.loc['AUD'] = ['2010-01-01', '2020-12-31', 0.5, 2]
-    df_cids.loc['CAD'] = ['2006-01-01', '2020-11-30', 0, 1]
-    df_cids.loc['GBP'] = ['2008-01-01', '2020-11-30', -0.2, 0.5]
-    df_cids.loc['USD'] = ['2007-01-01', '2020-09-30', -0.2, 0.5]
-    df_cids.loc['NZD'] = ['2002-01-01', '2020-09-30', -0.1, 2]
-
-    df_xcats = pd.DataFrame(index = xcats, columns = ['earliest', 'latest', 'mean_add',
-                                                      'sd_mult', 'ar_coef', 'back_coef'])
-    df_xcats.loc['XR'] = ['2008-01-01', '2020-12-31', 0, 1, 0, 0.3]
-    df_xcats.loc['CRY'] = ['2011-01-01', '2020-10-30', 1, 2, 0.9, 0.5]
-    df_xcats.loc['GROWTH'] = ['2012-01-01', '2020-10-30', 1, 2, 0.9, 1]
-    df_xcats.loc['INFL'] = ['2013-01-01', '2020-10-30', 1, 2, 0.8, 0.5]
+    df_xcats = pd.DataFrame(
+        index=xcats,
+        columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+    )
+    df_xcats.loc["XR"] = ["2008-01-01", "2020-12-31", 0, 1, 0, 0.3]
+    df_xcats.loc["CRY"] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
+    df_xcats.loc["GROWTH"] = ["2012-01-01", "2020-10-30", 1, 2, 0.9, 1]
+    df_xcats.loc["INFL"] = ["2013-01-01", "2020-10-30", 1, 2, 0.8, 0.5]
 
     # Apply a blacklist period from series' start date.
-    black = {'AUD': ['2010-01-01', '2013-12-31'],
-             'GBP': ['2018-01-01', '2100-01-01']}
+    black = {"AUD": ["2010-01-01", "2013-12-31"], "GBP": ["2018-01-01", "2100-01-01"]}
 
-    dfd = make_qdf(df_cids, df_xcats, back_ar = 0.75)
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
     dfd["grading"] = np.ones(dfd.shape[0])
 
     # Monthly: panel + cross.
-    dfzm = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids,
-                          blacklist=black, iis=True, neutral='mean',
-                          pan_weight=0.75, min_obs=261, est_freq="m")
+    dfzm = make_zn_scores(
+        dfd,
+        xcat="XR",
+        sequential=True,
+        cids=cids,
+        blacklist=black,
+        iis=True,
+        neutral="mean",
+        pan_weight=0.75,
+        min_obs=261,
+        est_freq="m",
+    )
     print(dfzm)
 
     # Weekly: panel + cross.
-    dfzw = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids,
-                          blacklist=black, iis=False, neutral='mean',
-                          pan_weight=0.5, min_obs=261, est_freq="w")
+    dfzw = make_zn_scores(
+        dfd,
+        xcat="XR",
+        sequential=True,
+        cids=cids,
+        blacklist=black,
+        iis=False,
+        neutral="mean",
+        pan_weight=0.5,
+        min_obs=261,
+        est_freq="w",
+    )
 
     # Daily: panel. Neutral and standard deviation will be computed daily.
-    dfzd = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids,
-                          blacklist=black, iis=True, neutral='mean',
-                          pan_weight=1.0, min_obs=261, est_freq="d")
+    dfzd = make_zn_scores(
+        dfd,
+        xcat="XR",
+        sequential=True,
+        cids=cids,
+        blacklist=black,
+        iis=True,
+        neutral="mean",
+        pan_weight=1.0,
+        min_obs=261,
+        est_freq="d",
+    )
 
     # Daily: cross.
-    dfd['ticker'] = dfd["cid"] + "_" + dfd["xcat"]
-    dfzd = make_zn_scores(dfd, xcat='XR', sequential=True, cids=cids,
-                          blacklist=black, iis=True, neutral='mean',
-                          pan_weight=0.0, min_obs=261, est_freq="d")
+    dfd["ticker"] = dfd["cid"] + "_" + dfd["xcat"]
+    dfzd = make_zn_scores(
+        dfd,
+        xcat="XR",
+        sequential=True,
+        cids=cids,
+        blacklist=black,
+        iis=True,
+        neutral="mean",
+        pan_weight=0.0,
+        min_obs=261,
+        est_freq="d",
+    )
 
-    panel_df = make_zn_scores(dfd, 'CRY', cids, start="2010-01-04", blacklist=black,
-                              sequential=False, min_obs=0, neutral='mean',
-                              iis=True, thresh=None, pan_weight=0.75, postfix='ZN')
+    panel_df = make_zn_scores(
+        dfd,
+        "CRY",
+        cids,
+        start="2010-01-04",
+        blacklist=black,
+        sequential=False,
+        min_obs=0,
+        neutral="mean",
+        iis=True,
+        thresh=None,
+        pan_weight=0.75,
+        postfix="ZN",
+    )

@@ -16,7 +16,7 @@ import pandas as pd
 from matplotlib.gridspec import GridSpec
 
 from macrosynergy.visuals.plotter import Plotter
-from macrosynergy.visuals.common import Numeric, NoneType
+from macrosynergy.management.types import Numeric, NoneType
 
 
 def _get_square_grid(

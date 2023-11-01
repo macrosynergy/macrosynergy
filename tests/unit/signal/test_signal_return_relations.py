@@ -1,5 +1,5 @@
 import unittest
-from macrosynergy.signal.signal_return import SignalReturnRelations
+from macrosynergy.signal.signal_return_relations import SignalReturnRelations
 
 from tests.simulate import make_qdf
 from sklearn.metrics import accuracy_score, precision_score
@@ -657,7 +657,6 @@ class TestAll(unittest.TestCase):
             )
         except:
             self.fail("SignalReturnRelations init failed")
-
 
 if __name__ == "__main__":
     unittest.main()

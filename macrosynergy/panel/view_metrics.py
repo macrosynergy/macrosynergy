@@ -48,7 +48,7 @@ def view_metrics(
     :raises TypeError: if any of the inputs are of the wrong type.
     :raises ValueError: if any of the inputs are semantically incorrect.
     """
-    msv.view.metrics(
+    msv.view_metrics(
         df=df,
         xcat=xcat,
         cids=cids,

@@ -7,6 +7,7 @@ import requests
 from packaging import version
 
 REPO_OWNER: str = "macrosynergy"
+ORGANIZATION: str = "macrosynergy"
 REPO_NAME: str = "macrosynergy"
 REPO_URL: str = f"github.com/{REPO_OWNER}/{REPO_NAME}"
 
@@ -35,6 +36,7 @@ def api_request(
     url: str,
     headers: Dict[str, str] = {"Accept": "application/vnd.github.v3+json"},
     params: Dict[str, Any] = {},
+    max_retries: int = 5,
 ) -> Any:
     """
     Make a request to the GitHub API.
@@ -45,7 +47,7 @@ def api_request(
     :return <Any>: The response from the API.
     """
     retries = 0
-    max_retries = 5
+    last_exception: Optional[Exception] = None
     while retries < max_retries:
         try:
             # Add the OAuth token to the headers if it exists
@@ -53,14 +55,23 @@ def api_request(
                 headers["Authorization"] = f"token {OAUTH_TOKEN}"
 
             response = requests.get(url, headers=headers, params=params)
+
+            if response.status_code == 404:
+                raise Exception(f"404: {url} not found.")
             response.raise_for_status()  # Raise exception for failed requests
+
             return response.json()
         except Exception as exc:
+            fail_codes = [403, 404, 422]
+            if response.status_code in fail_codes:
+                raise Exception(f"Request failed: {exc}")
+
             print(f"Request failed: {exc}")
+            last_exception = exc
             retries += 1
             sleep(1)
-    print(f"Request failed after {max_retries} retries. Exiting.")
-    sys.exit(1)
+
+    raise Exception(f"Request failed")  # If the request fails, raise an exception
 
 
 def check_title(
@@ -93,6 +104,7 @@ def check_title(
 def _get_pattern_idx(
     body: str,
     pattern: str,
+    numeric: bool = False,
 ) -> Tuple[int, int]:
     """
     Get the start and end index of a pattern in a string.
@@ -101,13 +113,25 @@ def _get_pattern_idx(
     :return <Tuple[int, int]>: The start and end index of the pattern.
     :raises <AssertionError>: If the body or pattern is empty.
     """
+    NUM_CHARS: List[str] = list(map(str, range(10))) + ["."]
     assert bool(body)
     assert bool(pattern)
     assert pattern in body
     fidx: int = body.find(pattern)
-    sidx: int = body.find(" ", fidx)
-    if sidx == -1:
-        sidx = len(body)
+    sidx: int = body.find("-", fidx)  # all spaces have been replaced with dashes
+    if sidx == -1 and not numeric:
+        return (fidx, len(body))
+
+    if numeric:
+        # set fidx to the end of the pattern
+        fidx = fidx + len(pattern)
+        # get the first non-numeric char after the pattern
+        for idx, char in enumerate(body[fidx:]):
+            if char not in NUM_CHARS:
+                break
+        # set sidx to the first non-numeric char after the pattern
+        sidx = fidx + idx
+
     return (fidx, sidx)
 
 
@@ -162,8 +186,8 @@ def _check_merge_w_version(
     for px, pattern in enumerate(p_methods):
         if pattern not in body:
             continue
-        fidx, sidx = _get_pattern_idx(body=body, pattern=pattern)
-        mversion: str = body[fidx + len(pattern) : sidx].strip()
+        fidx, sidx = _get_pattern_idx(body=body, pattern=pattern, numeric=True)
+        mversion: str = body[fidx:sidx].strip()
         results[px] = p_methods[pattern](mversion)
 
         if not results[px]:
@@ -189,9 +213,9 @@ def _check_merge_after(
     if MA_STR not in body:
         return True
 
-    fidx, sidx = _get_pattern_idx(body=body, pattern=MA_STR)
+    fidx, sidx = _get_pattern_idx(body=body, pattern=MA_STR, numeric=True)
     # get all the chars between fidx and sidx
-    merge_after_pr: str = body[fidx + len(MA_STR) : sidx].strip()
+    merge_after_pr: str = body[fidx:sidx].strip()
     try:
         merge_after_pr = int(merge_after_pr)
     except ValueError:
@@ -205,19 +229,58 @@ def _check_merge_after(
     return mergable
 
 
-def check_pr_directives(
+def find_previous_at(body: str, idx: int) -> int:
+    i = idx
+
+    while i >= 0:
+        if body[i] == "@":
+            return i + 1
+        i -= 1
+    raise ValueError("NO @ FOUND")
+
+
+def _check_required_reviewers(
     body: str,
-    state: str,
+    pr_info: Dict[str, Any],
 ) -> bool:
+    assert bool(body)
+    RR_STR: str = "-MUST-REVIEW"
+
+    if RR_STR not in body:
+        return True
+
+    last_idx = body.find(RR_STR)
+    first_idx = find_previous_at(body, last_idx)
+
+    required_reviewer: str = body[first_idx:last_idx].strip()
+
+    # check from the PR details if the user has approved the PR
+    # check the reviews
+    pr_reviews: Dict[str, Any] = get_pr_reviews(pr_number=pr_info["number"])
+    # check if the user has approved the PR
+    approved: bool = any(
+        [str(rx).upper() == required_reviewer.upper() for rx in pr_reviews["APPROVED"]]
+    )
+
+    return approved
+
+
+def check_pr_directives(
+    pr_info: Dict[str, Any],
+) -> bool:
+    body: str = pr_info["body"]
+
     if body is None:
         return True
 
     body = body.strip().replace(" ", "-").upper()
+    body = f" {body} "
 
     results: List[bool] = [
         _check_do_not_merge(body=body),
         _check_merge_after(body=body),
         _check_merge_w_version(body=body),
+        _check_required_reviewers(body=body, pr_info=pr_info),
     ]
 
     return all(results)
@@ -227,17 +290,43 @@ def test_pr_info(
     pr_info: Dict[str, Any],
 ) -> bool:
     assert set(["number", "title", "state", "body"]).issubset(pr_info.keys())
-
+    err_msg: str = ""
     if not check_title(title=pr_info["title"]):
-        raise ValueError("PR title does not match any of the accepted patterns.")
+        err_msg += f"PR #{pr_info['number']} is not mergable due to invalid title.\n"
 
-    if not check_pr_directives(body=pr_info["body"], state=pr_info["state"]):
-        raise ValueError(
-            "PR number is not mergable due to merge restrictions"
+    if not check_pr_directives(pr_info=pr_info):
+        err_msg += (
+            f"PR #{pr_info['number']} is not mergable due to merge restrictions"
             " specified in the PR body."
         )
 
+    if err_msg:
+        raise ValueError(err_msg.strip())
+
     return True
+
+
+def get_pr_reviews(
+    pr_number: int,
+):
+    URL: str = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls/{pr_number}/reviews"
+
+    pr_reviews: Dict[str, Any] = api_request(url=URL)
+    results: Dict[str, List[str]] = {
+        "APPROVED": [],
+        "CHANGES_REQUESTED": [],
+        "COMMENTED": [],
+        "DISMISSED": [],
+    }
+
+    for item in pr_reviews:
+        review_name: str = item["user"]["login"]
+        review_state: str = item["state"]
+        if review_state not in results:
+            results[review_state] = []
+        results[review_state].append(review_name)
+
+    return results
 
 
 def get_pr_details(

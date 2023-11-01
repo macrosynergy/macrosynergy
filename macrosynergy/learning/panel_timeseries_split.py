@@ -390,7 +390,9 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
         return iterator
 
-    def calculate_xranges(self, cs_dates: pd.DatetimeIndex, real_dates: np.array):
+    def __calculate_xranges(
+        self, cs_dates: pd.DatetimeIndex, real_dates: pd.DatetimeIndex
+    ):
         """
         Helper method to determine the ranges of contiguous dates in each training and test set, for use in visualisation.
 
@@ -404,37 +406,29 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
         if len(cs_dates) == 0:
             return xranges
 
-        lower_bound: pd.Timestamp = cs_dates.min()
-        upper_bound: pd.Timestamp = cs_dates.max()
+        filtered_real_dates: pd.DatetimeIndex = real_dates[
+            (real_dates >= cs_dates.min()) & (real_dates <= cs_dates.max())
+        ]
+        difference: pd.DatetimeIndex = filtered_real_dates.difference(cs_dates)
 
-        upper_bound_idx = np.where(real_dates == upper_bound)[0]
-        if upper_bound_idx and upper_bound_idx[0] + 1 < len(real_dates):
-            upper_bound = real_dates[upper_bound_idx[0] + 1]
+        # A single contiguous range of dates.
+        if len(difference) == 0:
+            xranges.append(
+                (cs_dates.min(), cs_dates.max() - cs_dates.min() + pd.Timedelta(days=1))
+            )
+            return xranges
 
-        in_contiguous: bool = True
-        lower: pd.Timestamp = lower_bound
-        upper: pd.Timestamp = upper_bound
+        # Multiple contiguous ranges of dates.
+        else:
+            while len(difference) > 0:
+                xranges.append((cs_dates.min(), difference.min() - cs_dates.min()))
+                cs_dates = cs_dates[(cs_dates >= difference.min())]
+                difference = difference[(difference >= cs_dates.min())]
 
-        for real_date in real_dates[
-            (real_dates >= lower_bound) & (real_dates <= upper_bound)
-        ]:
-            if real_date in cs_dates:
-                if not in_contiguous:
-                    in_contiguous = True
-                    lower = real_date
-
-                upper = (
-                    real_date
-                    if real_date == upper_bound
-                    else real_dates[np.where(real_dates == real_date)[0][0] + 1]
-                )
-            else:
-                if in_contiguous:
-                    xranges.append((lower, upper - lower))
-                    in_contiguous = False
-
-        xranges.append((lower, upper - lower))
-        return xranges
+            xranges.append(
+                (cs_dates.min(), cs_dates.max() - cs_dates.min() + pd.Timedelta(days=1))
+            )
+            return xranges
 
     def visualise_splits(
         self, X: pd.DataFrame, y: pd.DataFrame, figsize: Tuple[int, int] = (20, 5)
@@ -451,16 +445,15 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
         :return None
         """
-        sns.set_style("whitegrid")
+        sns.set_theme(style="whitegrid", palette="colorblind")
         Xy: pd.DataFrame = pd.concat(
             [X, y], axis=1
-        ).dropna()  # remove dropna when splitter method fixed as per TODO #3
+        ).dropna()
         cross_sections: np.array[str] = np.array(
             sorted(Xy.index.get_level_values(0).unique())
         )
-        real_dates: np.array[pd.Timestamp] = np.array(
-            sorted(Xy.index.get_level_values(1).unique())
-        )
+        real_dates = Xy.index.get_level_values(1).unique().sort_values()
+
         splits: List[Tuple[np.array[int], np.array[int]]] = self.split(X, y)
 
         n_splits: int = self.adjusted_n_splits if self.adjusted_n_splits <= 5 else 5
@@ -491,6 +484,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
         for cs_idx, cs in enumerate(cross_sections):
             for idx, split_idx in enumerate(split_idxs):
+                # Get the dates in the training and test sets for the given cross-section.
                 cs_train_dates: pd.DatetimeIndex = Xy.iloc[splits[split_idx][0]][
                     Xy.iloc[splits[split_idx][0]].index.get_level_values(0) == cs
                 ].index.get_level_values(1)
@@ -500,10 +494,10 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
                 xranges_train: List[
                     Tuple[pd.Timestamp, pd.Timedelta]
-                ] = self.calculate_xranges(cs_train_dates, real_dates)
+                ] = self.__calculate_xranges(cs_train_dates, real_dates)
                 xranges_test: List[
                     Tuple[pd.Timestamp, pd.Timedelta]
-                ] = self.calculate_xranges(cs_test_dates, real_dates)
+                ] = self.__calculate_xranges(cs_test_dates, real_dates)
 
                 if xranges_train:
                     operations.append(
@@ -574,7 +568,7 @@ if __name__ == "__main__":
         LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
     )
     splitter.visualise_splits(X2, y2)
-    
+
     # b) n_splits = 4, n_split_method = rolling
     splitter = PanelTimeSeriesSplit(n_splits=4, n_split_method="rolling")
     splitter.split(X2, y2)

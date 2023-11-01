@@ -2,14 +2,15 @@ import unittest
 import pandas as pd
 from pandas.testing import assert_frame_equal
 from tests.simulate import make_qdf
-from macrosynergy.panel.view_correlations import (
-    correl_matrix,
+from macrosynergy.panel.view_correlations import correl_matrix
+from macrosynergy.visuals.correlation import (
     lag_series,
     _transform_df_for_cross_sectional_corr,
     _transform_df_for_cross_category_corr,
     _cluster_correlations,
 )
-from macrosynergy.management.check_availability import reduce_df
+
+from macrosynergy.management.utils import reduce_df
 
 
 class TestAll(unittest.TestCase):
