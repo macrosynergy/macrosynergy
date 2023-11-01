@@ -29,7 +29,7 @@ def time_series_check(formula: str, index: int):
     :return <Tuple[int, bool]>:
     """
 
-    check = lambda a, b, c: (a.isupper() and b == "." and c.islower())
+    check = lambda a, b, c: ((a.isupper() or a.isnumeric()) and b == "." and c.islower())
 
     f = formula
     length = len(f)
