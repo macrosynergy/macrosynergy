@@ -310,71 +310,32 @@ class JPMaQSDownload(object):
         xcat: str
         found_expressions: List[str] = []
         _missing_exprs: List[str] = []
+        _missing_list_idx: List[int] = []
         self.unavailable_expr_messages = []
-        # _missing_exprs is just a sanity check to verify self.unavailable_expressions
-        for d in dicts_list:
-            cid, xcat, metricx = JPMaQSDownload.deconstruct_expression(
-                d["attributes"][0]["expression"]
-            )
-            if d["attributes"][0]["time-series"] is not None:
-                found_expressions.append(d["attributes"][0]["expression"])
-                df: pd.DataFrame = (
-                    pd.DataFrame(
-                        d["attributes"][0]["time-series"],
-                        columns=["real_date", metricx],
+
+        for di, dx in enumerate(dicts_list):
+            if dx["attributes"][0]["time-series"] is None:
+                _missing_exprs.append(dx["attributes"][0]["expression"])
+                if "message" in dx["attributes"][0]:
+                    self.unavailable_expr_messages.append(
+                        dx["attributes"][0]["message"]
                     )
-                    .assign(cid=cid, xcat=xcat, metric=metricx)
-                    .rename(columns={metricx: "obs"})
-                )
-                df = df[["real_date", "cid", "xcat", "obs", "metric"]]
-                dfs.append(df)
-            else:
-                _missing_exprs.append(d["attributes"][0]["expression"])
-                if "message" in d["attributes"][0]:
-                    self.unavailable_expr_messages.append(d["attributes"][0]["message"])
                 else:
                     self.unavailable_expr_messages.append(
                         "DataQuery did not return data or error message for expression "
-                        f"{d['attributes'][0]['expression']}"
+                        f"{dx['attributes'][0]['expression']}"
                     )
+                _missing_list_idx.append(di)
 
-        if len(dfs) == 0:
-            raise InvalidDataframeError(
-                "No data was downloaded. Check logger output for"
-                " complete list of missing expressions."
-            )
+        if len(_missing_list_idx) > 0:
+            dicts_list = [
+                dicts_list[i]
+                for i in range(len(dicts_list))
+                if i not in _missing_list_idx
+            ]
 
-        final_df: pd.DataFrame = pd.concat(dfs, ignore_index=True)
-        dups_df: pd.DataFrame = final_df.groupby(
-            ["real_date", "cid", "xcat", "metric"]
-        )["obs"].count()
-        if sum(dups_df > 1) > 0:
-            dups_df = pd.DataFrame(dups_df[dups_df > 1].index.tolist())
-            err_str: str = "Duplicate data found for the following expressions:\n"
-            for i in dups_df.groupby([1, 2, 3]).groups:
-                dts_series: pd.Series = dups_df.iloc[
-                    dups_df.groupby([1, 2, 3]).groups[i]
-                ][0]
-                dts: List[str] = dts_series.tolist()
-                max_date: str = pd.to_datetime(max(dts)).strftime("%Y-%m-%d")
-                min_date: str = pd.to_datetime(min(dts)).strftime("%Y-%m-%d")
-                expression: str = self.construct_expressions(
-                    cids=[i[0]], xcats=[i[1]], metrics=[i[2]]
-                )[0]
-                err_str += (
-                    f"Expression: {expression}, Dates: {min_date} to {max_date}\n"
-                )
-
-            raise InvalidDataframeError(err_str)
-
-        final_df = (
-            final_df.set_index(["real_date", "cid", "xcat", "metric"])["obs"]
-            .unstack(3)
-            .rename_axis(None, axis=1)
-            .reset_index()
-        )  # thank you @mikiinterfiore
-
-        final_df["real_date"] = pd.to_datetime(final_df["real_date"])
+        
+        final_df: pd.DataFrame = timeseries_to_df(timeseries_dict=dicts_list)
 
         # list expected business dates, and non-business dates
         expc_bdates: pd.DatetimeIndex = pd.bdate_range(start=start_date, end=end_date)
