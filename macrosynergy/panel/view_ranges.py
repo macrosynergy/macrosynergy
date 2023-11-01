@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import List, Tuple, Callable, Optional
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 import macrosynergy.visuals as msv
 
 

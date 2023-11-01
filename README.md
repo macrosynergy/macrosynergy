@@ -136,9 +136,9 @@ with JPMaQSDownload(
 ```
 
 ### Management 
-In order to use the rest of the package without access to the API you can [simulate](./macrosynergy/management/simulate_quantamental_data.py) quantamental data using the management sub-package. 
+In order to use the rest of the package without access to the API you can [simulate](./macrosynergy/management/simulate/README.md) quantamental data using the management sub-package. 
 ```python
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 
 cids = ['AUD', 'GBP', 'NZD', 'USD']
 xcats = ['FXXR_NSA', 'FXCRY_NSA', 'FXCRR_NSA', 'EQXR_NSA', 'EQCRY_NSA', 'EQCRR_NSA',

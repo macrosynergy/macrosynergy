@@ -9,7 +9,7 @@ import matplotlib.ticker as mticker
 
 from typing import List, Union, Tuple, Optional
 from itertools import product
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 from macrosynergy.panel.make_zn_scores import make_zn_scores
 from macrosynergy.management.utils import update_df, reduce_df
 
@@ -286,8 +286,8 @@ class NaivePnL:
             sections.
             N.B.: zn-score here means standardized score with zero being the natural
             neutral level and standardization through division by mean absolute value.
-        :param <float> sig_add: add a constant to the signal after initial transformation. 
-            This allows to give PnLs a long or short bias relative to the signal 
+        :param <float> sig_add: add a constant to the signal after initial transformation.
+            This allows to give PnLs a long or short bias relative to the signal
             score. Default is 0.
         :param <str> sig_neg: if True the PnL is based on the negative value of the
             transformed signal. Default is False.
@@ -1022,7 +1022,7 @@ if __name__ == "__main__":
         sig="GROWTH",
         sig_op="zn_score_pan",
         sig_neg=True,
-        sig_add = 0.5,
+        sig_add=0.5,
         rebal_freq="monthly",
         vol_scale=5,
         rebal_slip=1,

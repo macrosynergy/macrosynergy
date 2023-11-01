@@ -101,7 +101,7 @@ def view_metrics(
 
 
 if __name__ == "__main__":
-    from macrosynergy.management.simulate_quantamental_data import make_test_df
+    from macrosynergy.management.simulate import make_test_df
 
     test_cids: List[str] = ["USD","EUR", "GBP"]
     test_xcats: List[str] = ["FX", "IR"]

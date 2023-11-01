@@ -1,7 +1,7 @@
 import unittest
 from macrosynergy.signal.signal_return import SignalsReturns
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 from sklearn.metrics import accuracy_score, precision_score
 from scipy import stats
 import random
