@@ -9,7 +9,9 @@ import numpy as np
 import pandas as pd
 import datetime
 
-import statsmodels.api as sm
+from statsmodels.regression.mixed_linear_model import MixedLM
+from statsmodels.tools.tools import add_constant
+
 from sklearn.metrics import make_scorer, accuracy_score, balanced_accuracy_score
 from sklearn.model_selection import cross_val_score
 from sklearn.linear_model import LinearRegression
@@ -53,11 +55,11 @@ def panel_significance_probability(
         raise ValueError("y_true and y_pred must have the same length.")
 
     # regress ground truth against predictions
-    X = sm.add_constant(y_pred)
+    X = add_constant(y_pred)
     groups = y_true.index.get_level_values(1)
 
     # fit model
-    re = sm.MixedLM(y_true, X, groups=groups).fit(reml=False)
+    re = MixedLM(y_true, X, groups=groups).fit(reml=False)
     pval = re.pvalues[1]
 
     return 1 - pval
