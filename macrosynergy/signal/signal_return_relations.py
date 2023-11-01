@@ -1,6 +1,7 @@
 """
 Module for analysing and visualizing signal and a return series.
 """
+from io import BytesIO
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -135,10 +136,7 @@ class SignalReturnRelations(SignalBase):
         df_out = pd.DataFrame(index=self.signals, columns=self.metrics)
         df = self.df
 
-        if isinstance(self.ret, list):
-            ret = self.ret[0]
-        else:
-            ret = self.ret
+        ret: str = self.ret
 
         for s in self.signals:
             # Entire panel will be passed in.
@@ -215,6 +213,7 @@ class SignalReturnRelations(SignalBase):
         title: str = None,
         size: Tuple[float] = None,
         legend_pos: str = "best",
+        testing: bool = False,
     ):
         """
         Plot bar chart for the overall and balanced accuracy metrics.
@@ -282,12 +281,16 @@ class SignalReturnRelations(SignalBase):
         plt.legend(loc=legend_pos)
         plt.show()
 
+        if testing:
+            return "finished"
+
     def correlation_bars(
         self,
         type: str = "cross_section",
         title: str = None,
         size: Tuple[float] = None,
         legend_pos: str = "best",
+        testing: bool = False,
     ):
         """
         Plot correlation coefficients and significance.
@@ -360,6 +363,9 @@ class SignalReturnRelations(SignalBase):
         plt.title(title)
         plt.legend(loc=legend_pos)
         plt.show()
+
+        if testing:
+            return "finished"
 
     def summary_table(self):
         """
