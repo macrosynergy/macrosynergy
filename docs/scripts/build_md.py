@@ -272,9 +272,6 @@ def process_file(filepath: str, output_directory: str) -> bool:
             output_str += f"{function_info['doc']}\n\n"
             output_str += LINE_SEPARATOR
 
-        # remove the last line separator
-        output_str = "\n".join(output_str.split("\n")[:-2])
-
         output_str = DocstringMethods.format_parameters(docstring=output_str)
 
         with open(output_path, "w", encoding="utf-8") as f:
