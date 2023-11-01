@@ -13,6 +13,7 @@ from .simulate.simulate_vintage_data import VintageData
 from .simulate.simulate_quantamental_data import make_qdf
 from .utils import common_cids, update_df, reduce_df, categories_df, reduce_df_by_ticker
 from . import utils, types, decorators, simulate
+from .validation import validate_and_reduce_qdf
 
 __all__ = [
     # METHODS
@@ -37,4 +38,5 @@ __all__ = [
     "check_availability",
     "simulate_vintage_data",
     "simulate_quantamental_data",
+    "validate_and_reduce_qdf",
 ]
