@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from macrosynergy.visuals.plotter import Plotter
 from macrosynergy.management.types import Numeric, NoneType
 
-from macrosynergy.management.simulate_quantamental_data import make_test_df
+from macrosynergy.management.simulate import make_test_df
 
 
 class LinePlot(Plotter):
@@ -199,7 +199,7 @@ class LinePlot(Plotter):
 
 
 if __name__ == "__main__":
-    from macrosynergy.management.simulate_quantamental_data import make_test_df
+    from macrosynergy.management.simulate import make_test_df
     from macrosynergy.dev.local import LocalCache as JPMaQSDownload
 
     cids: List[str] = [

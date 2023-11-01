@@ -3,7 +3,7 @@ import unittest
 import matplotlib
 import pandas as pd
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 from macrosynergy.panel.view_timelines import view_timelines
 
 
