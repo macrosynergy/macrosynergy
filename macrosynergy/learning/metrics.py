@@ -48,7 +48,7 @@ def panel_significance_probability(
     if not isinstance(y_true.index, pd.MultiIndex):
         raise ValueError("y_true must be multi-indexed.")
 
-    if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+    if not isinstance(y_true.index.get_level_values(1)[0], datetime.date):
         raise TypeError("The inner index of y must be datetime.date.")
 
     if not (len(y_true) == len(y_pred)):
@@ -76,7 +76,7 @@ def regression_accuracy(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -
     if not isinstance(y_true.index, pd.MultiIndex):
         raise ValueError("y_true must be multi-indexed.")
 
-    if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+    if not isinstance(y_true.index.get_level_values(1)[0], datetime.date):
         raise TypeError("The inner index of y must be datetime.date.")
 
     if not (len(y_true) == len(y_pred)):
@@ -97,7 +97,7 @@ def regression_balanced_accuracy(y_true: pd.Series, y_pred: Union[pd.Series, np.
     if not isinstance(y_true.index, pd.MultiIndex):
         raise ValueError("y_true must be multi-indexed.")
 
-    if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+    if not isinstance(y_true.index.get_level_values(1)[0], datetime.date):
         raise TypeError("The inner index of y must be datetime.date.")
 
     if not (len(y_true) == len(y_pred)):
@@ -120,7 +120,7 @@ def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float
     if not isinstance(y_true.index, pd.MultiIndex):
         raise ValueError("y_true must be multi-indexed.")
 
-    if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+    if not isinstance(y_true.index.get_level_values(1)[0], datetime.date):
         raise TypeError("The inner index of y must be datetime.date.")
 
     if not (len(y_true) == len(y_pred)):
@@ -149,7 +149,7 @@ def sortino_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> floa
     if not isinstance(y_true.index, pd.MultiIndex):
         raise ValueError("y_true must be multi-indexed.")
 
-    if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+    if not isinstance(y_true.index.get_level_values(1)[0], datetime.date):
         raise TypeError("The inner index of y must be datetime.date.")
 
     if not (len(y_true) == len(y_pred)):
@@ -177,7 +177,7 @@ def max_drawdown(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float
     if not isinstance(y_true.index, pd.MultiIndex):
         raise ValueError("y_true must be multi-indexed.")
 
-    if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+    if not isinstance(y_true.index.get_level_values(1)[0], datetime.date):
         raise TypeError("The inner index of y must be datetime.date.")
 
     if not (len(y_true) == len(y_pred)):
@@ -193,8 +193,6 @@ def max_drawdown(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float
 
 
 if __name__ == "__main__":
-    from macrosynergy.management.simulate_quantamental_data import make_qdf
-    import macrosynergy.management as msm
 
     cids = ["AUD", "CAD", "GBP", "USD"]
     xcats = ["XR", "CPI", "GROWTH", "RIR"]
