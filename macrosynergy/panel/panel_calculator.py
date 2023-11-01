@@ -8,7 +8,7 @@ The functionality allows applying mathematical operations on time-series data.
 import numpy as np
 import pandas as pd
 from typing import List
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.utils import drop_nan_series
 import re

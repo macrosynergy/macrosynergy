@@ -527,7 +527,7 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
 
 
 if __name__ == "__main__":
-    from macrosynergy.management.simulate_quantamental_data import make_qdf
+    from macrosynergy.management.simulate import make_qdf
     import macrosynergy.management as msm
 
     cids = ["AUD", "CAD", "GBP", "USD"]

@@ -6,7 +6,7 @@ on time series data.
 import pandas as pd
 import numpy as np
 from itertools import accumulate
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management import decorators
 
 from macrosynergy.management.utils import (

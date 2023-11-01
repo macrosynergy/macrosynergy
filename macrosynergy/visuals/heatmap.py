@@ -15,7 +15,7 @@ from macrosynergy.management.utils import downsample_df_on_real_date
 from macrosynergy.visuals.plotter import Plotter
 from macrosynergy.management.types import Numeric, NoneType
 
-from macrosynergy.management.simulate_quantamental_data import make_test_df
+from macrosynergy.management.simulate import make_test_df
 
 
 class Heatmap(Plotter):
