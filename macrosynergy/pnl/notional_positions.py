@@ -12,11 +12,11 @@ import seaborn as sns
 
 from typing import List, Union, Tuple, Optional
 
-from macrosynergy.management.shape_dfs import reduce_df
 from macrosynergy.management.utils import (
     standardise_dataframe,
     is_valid_iso_date,
     apply_slip,
+    reduce_df,
     qdf_to_ticker_df,
     ticker_df_to_qdf,
 )
@@ -441,7 +441,7 @@ def historic_portfolio_vol(
 
 
 if __name__ == "__main__":
-    from macrosynergy.management.simulate_quantamental_data import (
+    from macrosynergy.management.simulate import (
         make_qdf,
         make_test_df,
     )

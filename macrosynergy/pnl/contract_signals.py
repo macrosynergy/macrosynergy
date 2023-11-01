@@ -21,11 +21,11 @@ from macrosynergy.management.utils import (
     standardise_dataframe,
     ticker_df_to_qdf,
     qdf_to_ticker_df,
+    reduce_df,
+    update_df,
     get_cid,
     get_xcat,
 )
-from macrosynergy.management.shape_dfs import reduce_df
-from macrosynergy.management.update_df import update_df
 
 
 def _check_arg_types(
@@ -438,7 +438,6 @@ def contract_signals(
     ## Generate hedge contract signals
     df_hedge_signals: Optional[pd.DataFrame] = None
     if hbasket is not None:
-
         df_hedge_signals: pd.DataFrame = _apply_hedge_ratios(
             df=df,
             cids=cids,
@@ -461,7 +460,7 @@ def contract_signals(
 
 
 if __name__ == "__main__":
-    from macrosynergy.management.simulate_quantamental_data import make_test_df
+    from macrosynergy.management.simulate import make_test_df
 
     cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
     xcats: List[str] = ["SIG", "HR"]
