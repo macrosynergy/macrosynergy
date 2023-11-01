@@ -11,7 +11,7 @@ from typing import List, Dict, Union, Optional, Tuple, Type
 import warnings
 
 from macrosynergy.management.utils import reduce_df
-from macrosynergy.management.simulate_quantamental_data import make_test_df
+from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.utils import is_valid_iso_date
 
 listtypes: Tuple[Type, ...] = (list, np.ndarray, pd.Series, tuple)

@@ -75,6 +75,17 @@ class TestAll(unittest.TestCase):
             srr = SignalReturnRelations(
                 self.dfd, ret="XR", sig="Missing", freq="D", blacklist=self.blacklist
             )
+        
+        # Test that frequency must be one of the following: 'D', 'W', 'M', 'Q', 'Y'.
+        with self.assertRaises(ValueError):
+            srr = SignalReturnRelations(
+                self.dfd,
+                ret="XR",
+                sig="CRY",
+                freq="S",
+                blacklist=self.blacklist,
+                sig_neg=True,
+            )
 
         signal = "CRY"
         srr: SignalReturnRelations = SignalReturnRelations(
