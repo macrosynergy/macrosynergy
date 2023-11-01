@@ -10,7 +10,7 @@ from macrosynergy.visuals.correlation import (
     _cluster_correlations,
 )
 
-from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.management.utils import reduce_df
 
 
 class TestAll(unittest.TestCase):
