@@ -314,7 +314,7 @@ class TestAll(unittest.TestCase):
         condition = np.nan_to_num(condition)
         target_value = 0.0  # You should replace this with the actual target value
         # Check if all elements in 'condition' are close to 'target_value' within a tolerance of 0.001
-        self.assertTrue(np.allclose(condition, target_value, atol=0.0001))
+        self.assertTrue(np.allclose(condition, target_value, rtol=0.001))
 
     @staticmethod
     def row_return(dfd, date, c_return, sigrel):
@@ -891,7 +891,7 @@ class TestAll(unittest.TestCase):
         target_value = 0.0  # You should replace this with the actual target value
 
         # Check if all elements in 'test.to_numpy()' are close to 'target_value' within a tolerance of 0.001
-        self.assertTrue(np.allclose(test.to_numpy(), target_value, atol=0.001))
+        self.assertTrue(np.allclose(test.to_numpy(), target_value, rtol=0.001))
 
         reduced_dfd = reduce_df(
             df=self.dfd, xcats=self.xcats, cids=self.cids, blacklist=None
