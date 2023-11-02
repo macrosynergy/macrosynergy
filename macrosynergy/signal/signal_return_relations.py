@@ -1,6 +1,7 @@
 """
 Module for analysing and visualizing signal and a return series.
 """
+from io import BytesIO
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -135,10 +136,7 @@ class SignalReturnRelations(SignalBase):
         df_out = pd.DataFrame(index=self.signals, columns=self.metrics)
         df = self.df
 
-        if isinstance(self.ret, list):
-            ret = self.ret[0]
-        else:
-            ret = self.ret
+        ret: str = self.ret
 
         for s in self.signals:
             # Entire panel will be passed in.
