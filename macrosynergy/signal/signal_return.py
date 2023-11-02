@@ -201,6 +201,10 @@ class SignalsReturns(SignalBase):
             xcats = self.xcats
         if not isinstance(xcats, list):
             xcats = [xcats]
+        if not isinstance(rets, list):
+            rets = [rets]
+        if not isinstance(freqs, list):
+            freqs = [freqs]
 
         for ret in rets:
             if not ret in self.xcats:
@@ -217,9 +221,6 @@ class SignalsReturns(SignalBase):
         for agg_sig in agg_sigs:
             if not agg_sig in self.agg_sig:
                 raise ValueError(f"{agg_sig} is not a valid aggregation method")
-
-        if not isinstance(rets, list):
-            rets = [rets]
 
         xcats = [x for x in xcats if x in self.sig]
 
