@@ -22,7 +22,7 @@ from macrosynergy.download.common import (
     InvalidResponseError,
     DownloadError,
     InvalidDataframeError,
-    NoContentError,    
+    NoContentError,
     OAUTH_BASE_URL,
     OAUTH_TOKEN_URL,
     HEARTBEAT_ENDPOINT,
@@ -32,7 +32,11 @@ from macrosynergy.download.common import (
     CATALOGUE_ENDPOINT,
 )
 
-from macrosynergy.download.utils import request_wrapper, validate_response, form_full_url
+from macrosynergy.download.utils import (
+    request_wrapper,
+    validate_response,
+    form_full_url,
+)
 
 from .mock_helpers import mock_jpmaqs_value, mock_request_wrapper, random_string
 
@@ -451,57 +455,57 @@ class TestDataQueryInterface(unittest.TestCase):
             ) as downloader:
                 pass
 
-    def test_timeseries_to_df(self):
-        cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY"]
-        xcats = ["EQXR_NSA", "FXXR_NSA"]
+    # def test_timeseries_to_df(self):
+    #     cids_dmca = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY"]
+    #     xcats = ["EQXR_NSA", "FXXR_NSA"]
 
-        tickers = [cid + "_" + xcat for xcat in xcats for cid in cids_dmca]
+    #     tickers = [cid + "_" + xcat for xcat in xcats for cid in cids_dmca]
 
-        jpmaqs_download = JPMaQSDownload(
-            oauth=True,
-            client_id="client_id",
-            client_secret="client_secret",
-            check_connection=False,
-        )
+    #     jpmaqs_download = JPMaQSDownload(
+    #         oauth=True,
+    #         client_id="client_id",
+    #         client_secret="client_secret",
+    #         check_connection=False,
+    #     )
 
-        # First replicate the api.Interface()._request() method using the associated
-        # JPMaQS expression.
-        expression = jpmaqs_download.construct_expressions(
-            metrics=["value", "grading"], tickers=tickers
-        )
-        start_date: str = "2000-01-01"
-        end_date: str = "2020-01-01"
+    #     # First replicate the api.Interface()._request() method using the associated
+    #     # JPMaQS expression.
+    #     expression = jpmaqs_download.construct_expressions(
+    #         metrics=["value", "grading"], tickers=tickers
+    #     )
+    #     start_date: str = "2000-01-01"
+    #     end_date: str = "2020-01-01"
 
-        timeseries_output = self.request_wrapper(
-            dq_expressions=expression, start_date=start_date, end_date=end_date
-        )
+    #     timeseries_output = self.request_wrapper(
+    #         dq_expressions=expression, start_date=start_date, end_date=end_date
+    #     )
 
-        expressions_found: List[str] = [
-            ts["attributes"][0]["expression"] for ts in timeseries_output
-        ]
+    #     expressions_found: List[str] = [
+    #         ts["attributes"][0]["expression"] for ts in timeseries_output
+    #     ]
 
-        out_df: pd.DataFrame = jpmaqs_download.time_series_to_df(
-            dicts_list=timeseries_output,
-            expected_expressions=expressions_found,
-            start_date=start_date,
-            end_date=end_date,
-        )
+    #     out_df: pd.DataFrame = jpmaqs_download.time_series_to_df(
+    #         dicts_list=timeseries_output,
+    #         expected_expressions=expressions_found,
+    #         start_date=start_date,
+    #         end_date=end_date,
+    #     )
 
-        # Check that the output is a Pandas DataFrame
-        self.assertIsInstance(out_df, pd.DataFrame)
+    #     # Check that the output is a Pandas DataFrame
+    #     self.assertIsInstance(out_df, pd.DataFrame)
 
-        # Check that the output has the correct number of rows and columns
-        # len(tickers)*len(pd.bdate_range(start_date, end_date)) = expected number of rows
-        # expected cols = [["real_date", "cid", "xcat", "value", "grading"]] = 5
-        self.assertEqual(
-            out_df.shape, (len(tickers) * len(pd.bdate_range(start_date, end_date)), 5)
-        )
+    #     # Check that the output has the correct number of rows and columns
+    #     # len(tickers)*len(pd.bdate_range(start_date, end_date)) = expected number of rows
+    #     # expected cols = [["real_date", "cid", "xcat", "value", "grading"]] = 5
+    #     self.assertEqual(
+    #         out_df.shape, (len(tickers) * len(pd.bdate_range(start_date, end_date)), 5)
+    #     )
 
-        # Check that the output has the correct columns
-        self.assertEqual(
-            set(out_df.columns.tolist()),
-            set(["real_date", "cid", "xcat", "value", "grading"]),
-        )
+    #     # Check that the output has the correct columns
+    #     self.assertEqual(
+    #         set(out_df.columns.tolist()),
+    #         set(["real_date", "cid", "xcat", "value", "grading"]),
+    #     )
 
     def test_construct_expressions(self):
         jpmaqs_download = JPMaQSDownload(

@@ -5,7 +5,7 @@ from datetime import datetime
 import logging
 import warnings
 import pandas as pd
-from typing import List, Optional, Dict, Tuple, Union, Any, overload, Iterable
+from typing import List, Optional, Dict, Tuple, Union, Any, overload, Iterable, Callable
 
 from macrosynergy import __version__ as ms_version_info
 from macrosynergy.download.common import (
@@ -324,7 +324,6 @@ def construct_expressions(
 @overload
 def timeseries_to_df(
     timeseries_dict: dict,
-    combine_dfs: bool,
     as_qdf: bool,
 ) -> pd.DataFrame:
     ...
@@ -333,10 +332,42 @@ def timeseries_to_df(
 @overload
 def timeseries_to_df(
     timeseries_dict: Iterable[dict],
-    combine_dfs: bool,
     as_qdf: bool,
 ) -> Union[List[pd.DataFrame], pd.DataFrame]:
     ...
+
+
+def qdf_concat_helper(dfs_list: List[pd.DataFrame]) -> pd.DataFrame:
+    ...
+    IDX_COLS: List[str] = ["cid", "xcat", "real_date"]
+    get_metric: Callable = lambda df: (set(df.columns) - set(IDX_COLS)).pop()
+    get_cid: Callable = lambda df: df["cid"].iloc[0]
+    get_xcat: Callable = lambda df: df["xcat"].iloc[0]
+    get_ticker: Callable = lambda df: f"{get_cid(df)}_{get_xcat(df)}"
+
+    dmap: Dict[str, Dict[str, int]] = {
+        ticker: {} for ticker in [get_ticker(df) for df in dfs_list]
+    }
+    for idf, df in enumerate(dfs_list):
+        dmap[get_ticker(df)][get_metric(df)] = idf
+
+    return pd.concat(
+        [
+            pd.concat(
+                [dfs_list[idf_map[metric]].set_index(IDX_COLS) for metric in sorted(idf_map.keys())],
+                axis=1,
+            ).reset_index(drop=False)
+            for ticker, idf_map in dmap.items()
+        ],
+        axis=0,
+        ignore_index=True,
+    ).reset_index(drop=True)
+
+    # Effectively the same as the above:
+    # new_dfs: List[pd.DataFrame] = []
+    # for ticker, idf_map in dmap.items():
+    #     new_dfs.append(pd.concat([dfs_list[idf_map[metric]] for metric in sorted(idf_map.keys())],axis=1,))
+    # return pd.concat(new_dfs, axis=0, ignore_index=True).reset_index(drop=True)
 
 
 def _timeseries_to_df_helper(
@@ -354,9 +385,15 @@ def _timeseries_to_df_helper(
         df["cid"] = cid
         df["xcat"] = xcat
 
+    if df.empty:
+        return df
+
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y%m%d")
+    expc_dates: pd.Series = pd.bdate_range(
+        start=df["real_date"].min(), end=df["real_date"].max()
+    )
     col_order = ["real_date", "cid", "xcat"] + [metricx]
-    return df[col_order]
+    return df[col_order].loc[df["real_date"].isin(expc_dates)].reset_index(drop=True)
 
 
 def timeseries_to_df(
@@ -390,11 +427,6 @@ def timeseries_to_df(
     if not combine_dfs:
         return [_timeseries_to_df_helper(tsdict=tsdict) for tsdict in timeseries_dict]
     else:
-        # df: pd.DataFrame = pd.concat(dfs_list, axis=0, ignore_index=True)
-        # return df.reset_index(drop=True)
-
-        return pd.concat(
-            [_timeseries_to_df_helper(tsdict=tsdict) for tsdict in timeseries_dict],
-            axis=0,
-            ignore_index=True,
-        ).reset_index(drop=True)
+        return qdf_concat_helper(
+            [_timeseries_to_df_helper(tsdict=tsdict) for tsdict in timeseries_dict]
+        )

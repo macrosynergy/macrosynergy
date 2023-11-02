@@ -19,7 +19,12 @@ import pandas as pd
 from macrosynergy.download.dataquery import DataQueryInterface
 from macrosynergy.download.common import HeartbeatError, InvalidDataframeError
 from macrosynergy.management.utils import is_valid_iso_date
-from .utils import deconstruct_expression, construct_expressions, timeseries_to_df
+from .utils import (
+    deconstruct_expression,
+    construct_expressions,
+    timeseries_to_df,
+    qdf_concat_helper,
+)
 
 logger = logging.getLogger(__name__)
 debug_stream_handler = logging.StreamHandler(io.StringIO())
@@ -167,10 +172,7 @@ class JPMaQSDownload(object):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if exc_type:
-            print(f"Exception: {exc_type} {exc_value}")
-            print(tb.print_exc())
-            raise exc_type(exc_value)
+        ...
 
     @staticmethod
     def construct_expressions(
@@ -283,123 +285,6 @@ class JPMaQSDownload(object):
                 print(log_str)
 
         return True
-
-    def time_series_to_df(
-        self,
-        dicts_list: List[Dict],
-        validate_df: bool = True,
-        expected_expressions: Optional[List[str]] = None,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        verbose: bool = True,
-    ) -> pd.DataFrame:
-        """
-        Convert the downloaded data to a pandas DataFrame.
-
-        :param dicts_list <list>: List of dictionaries containing time series
-            data from the DataQuery API
-
-        :return <pd.DataFrame>: JPMaQS standard dataframe with columns:
-            real_date, cid, xcat, <metric>. The <metric> column contains the
-            observed data for the given cid and xcat on the given real_date.
-
-        :raises <InvalidDataError>: if the downloaded dataframe is invalid.
-        """
-        dfs: List[pd.DataFrame] = []
-        cid: str
-        xcat: str
-        found_expressions: List[str] = []
-        _missing_exprs: List[str] = []
-        _missing_list_idx: List[int] = []
-        self.unavailable_expr_messages = []
-
-        for di, dx in enumerate(dicts_list):
-            if dx["attributes"][0]["time-series"] is None:
-                _missing_exprs.append(dx["attributes"][0]["expression"])
-                if "message" in dx["attributes"][0]:
-                    self.unavailable_expr_messages.append(
-                        dx["attributes"][0]["message"]
-                    )
-                else:
-                    self.unavailable_expr_messages.append(
-                        "DataQuery did not return data or error message for expression "
-                        f"{dx['attributes'][0]['expression']}"
-                    )
-                _missing_list_idx.append(di)
-
-        if len(_missing_list_idx) > 0:
-            dicts_list = [
-                dicts_list[i]
-                for i in range(len(dicts_list))
-                if i not in _missing_list_idx
-            ]
-
-        
-        final_df: pd.DataFrame = timeseries_to_df(timeseries_dict=dicts_list)
-
-        # list expected business dates, and non-business dates
-        expc_bdates: pd.DatetimeIndex = pd.bdate_range(start=start_date, end=end_date)
-        expc_nbdates: pd.DatetimeIndex = pd.DatetimeIndex(
-            list(set(pd.date_range(start=start_date, end=end_date)) - set(expc_bdates))
-        )
-
-        # check if any dates in the downloaded data are not in the expected dates (business + non-business)
-        dates_bools: pd.Series = final_df["real_date"].isin(expc_bdates) | final_df[
-            "real_date"
-        ].isin(expc_nbdates)
-
-        unexpected_dates: pd.DatetimeIndex = final_df[~dates_bools][
-            "real_date"
-        ].unique()
-
-        if any(~dates_bools):
-            raise InvalidDataframeError(
-                f"Unexpected dates were found in the downloaded data: {unexpected_dates}"
-            )
-
-        # finally, filter out the non-business dates
-        final_df = final_df[final_df["real_date"].isin(expc_bdates)]
-
-        final_df = final_df.sort_values(["real_date", "cid", "xcat"])
-
-        # sort all metrics in the order of self.valid_metrics, all other metrics will be at the end
-        found_metrics = [
-            metricx for metricx in self.valid_metrics if metricx in final_df.columns
-        ]
-        # sort found_metrics in the order of self.valid_metrics, then re-order the columns
-        final_df = final_df[["real_date", "cid", "xcat"] + found_metrics]
-
-        # IMPORTANT NOTE:
-        # Drop NA containing rows to be revisited when blacklisting is implemented
-
-        final_df = final_df.dropna(axis=0, how="any").reset_index(drop=True)
-
-        if validate_df:
-            vdf = self.validate_downloaded_df(
-                data_df=final_df,
-                expected_expressions=expected_expressions,
-                found_expressions=found_expressions,
-                start_date=start_date,
-                end_date=end_date,
-                verbose=verbose,
-            )
-            if not vdf:
-                self.downloaded_data: Dict = {
-                    "data_df": final_df,
-                    "expected_expressions": expected_expressions,
-                    "found_expressions": found_expressions,
-                    "start_date": start_date,
-                    "end_date": end_date,
-                    "downloaded_dicts": dicts_list,
-                }
-
-                raise InvalidDataframeError(
-                    "The downloaded data is not valid. "
-                    "Please check JPMaQSDownload.downloaded_data "
-                    "(dict) for more information."
-                )
-
-        return final_df
 
     def check_connection(
         self, verbose: bool = False, raise_error: bool = False
@@ -712,7 +597,7 @@ class JPMaQSDownload(object):
             expressions = self.filter_expressions_from_catalogue(expressions)
 
         # Download data.
-        data: List[Dict] = []
+        data: Union[List[Dict], List[pd.DataFrame], List[bool]]
         download_time_taken: float = timer()
         with self.dq_interface as dq:
             print(
@@ -726,6 +611,7 @@ class JPMaQSDownload(object):
                 start_date=start_date,
                 end_date=end_date,
                 show_progress=show_progress,
+                as_dataframe=as_dataframe,
                 **self.dq_download_kwargs,
             )
 
@@ -743,15 +629,7 @@ class JPMaQSDownload(object):
         download_time_taken: float = timer() - download_time_taken
         dfs_time_taken: float = timer()
         if as_dataframe:
-            data_df: pd.DataFrame = self.time_series_to_df(
-                dicts_list=data,
-                validate_df=True,
-                expected_expressions=expressions,
-                start_date=start_date,
-                end_date=end_date,
-                verbose=not self.suppress_warning,
-            )
-            data = data_df
+            data: pd.DataFrame = qdf_concat_helper(dfs_list=data)
 
         dfs_time_taken: float = timer() - dfs_time_taken
 

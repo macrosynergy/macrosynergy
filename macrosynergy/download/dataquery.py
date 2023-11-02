@@ -130,7 +130,8 @@ def validate_download_args(
 
 def _get_unavailable_expressions(
     expected_exprs: List[str],
-    dicts_list: List[Dict],
+    dicts_list: Optional[List[Dict]] = None,
+    dfs_list: Optional[List[pd.DataFrame]] = None,
 ) -> List[str]:
     """
     Method to get the expressions that are not available in the response.
@@ -139,14 +140,19 @@ def _get_unavailable_expressions(
 
     :param <List[str]> expected_exprs: list of expressions that were requested.
     :param <List[Dict]> dicts_list: list of dicts to search for the expressions.
+    :param <List[pd.DataFrame]> dfs_list: list of dataframes to search for the expressions.
 
     :return <List[str]>: list of expressions that were not found in the dicts.
     """
-    found_exprs: List[str] = [
-        curr_dict["attributes"][0]["expression"]
-        for curr_dict in dicts_list
-        if curr_dict["attributes"][0]["time-series"] is not None
-    ]
+    found_exprs: List[str] = []
+
+    if dicts_list is not None:
+        found_exprs: List[str] = [
+            curr_dict["attributes"][0]["expression"]
+            for curr_dict in dicts_list
+            if curr_dict["attributes"][0]["time-series"] is not None
+        ]
+
     return list(set(expected_exprs) - set(found_exprs))
 
 
@@ -426,6 +432,7 @@ class DataQueryInterface(object):
         params: dict,
         tracking_id: str,
         to_path: Optional[str] = None,
+        as_dataframe: bool = True,
     ) -> Union[List[Dict], List[bool]]:
         """
         Method to get timeseries data. Allows saving the data to a file. When saving to a
@@ -437,6 +444,9 @@ class DataQueryInterface(object):
             params=params,
             tracking_id=tracking_id,
         )
+
+        if (not as_dataframe) and (to_path is None):
+            return fetch_result
 
         if to_path is not None:
             result_bools: List[bool] = []
@@ -458,6 +468,7 @@ class DataQueryInterface(object):
 
             return result_bools
 
+        assert as_dataframe
         result_ts: pd.DataFrame = timeseries_to_df(timeseries_dict=fetch_result)
 
         return result_ts
@@ -472,7 +483,8 @@ class DataQueryInterface(object):
         show_progress: bool = False,
         retry_counter: int = 0,
         to_path: Optional[str] = None,
-    ) -> List[dict]:
+        as_dataframe: bool = True,
+    ) -> Union[List[Dict], List[bool], List[pd.DataFrame]]:
         """
         Backend method to download data from the DataQuery API.
         Used by the `download_data()` method.
@@ -492,7 +504,7 @@ class DataQueryInterface(object):
             for i in range(0, len(expressions), self.batch_size)
         ]
 
-        download_outputs: List[List[Dict]] = []
+        download_outputs: List[List[pd.DataFrame]] = []
         failed_batches: List[List[str]] = []
         continuous_failures: int = 0
         last_five_exc: List[Exception] = []
@@ -514,6 +526,7 @@ class DataQueryInterface(object):
                         params=curr_params,
                         tracking_id=tracking_id,
                         to_path=to_path,
+                        as_dataframe=as_dataframe,
                     )
                 )
                 time.sleep(delay_param)
@@ -550,7 +563,9 @@ class DataQueryInterface(object):
                     if self.debug:
                         raise exc
 
-        final_output: List[Dict] = list(itertools.chain.from_iterable(download_outputs))
+        final_output: List[pd.DataFrame] = list(
+            itertools.chain.from_iterable(download_outputs)
+        )
 
         if len(failed_batches) > 0:
             flat_failed_batches: List[str] = list(
@@ -569,10 +584,11 @@ class DataQueryInterface(object):
                     if not download_outputs[i]
                 ]
 
-            retried_output: List[dict] = self._download(
+            retried_output: List = self._download(
                 expressions=flat_failed_batches,
                 params=params,
                 url=url,
+                as_dataframe=as_dataframe,
                 tracking_id=tracking_id,
                 delay_param=delay_param + 0.1,
                 show_progress=show_progress,
@@ -581,7 +597,7 @@ class DataQueryInterface(object):
 
             final_output += retried_output  # extend retried output
 
-        return final_output
+        return [f for f in final_output if not f.empty]
 
     def download_data(
         self,
@@ -590,6 +606,7 @@ class DataQueryInterface(object):
         end_date: Optional[str] = None,
         show_progress: bool = False,
         to_path: Optional[str] = None,
+        as_dataframe: bool = True,
         endpoint: str = TIMESERIES_ENDPOINT,
         calender: str = "CAL_ALLDAYS",
         frequency: str = "FREQ_DAY",
@@ -598,7 +615,7 @@ class DataQueryInterface(object):
         reference_data: str = "NO_REFERENCE_DATA",
         retry_counter: int = 0,
         delay_param: float = API_DELAY_PARAM,
-    ) -> List[Dict]:
+    ) -> Union[List[Dict], List[bool], List[pd.DataFrame]]:
         """
         Download data from the DataQuery API.
 
@@ -696,7 +713,7 @@ class DataQueryInterface(object):
             "data": reference_data,
         }
 
-        final_output: Union[List[bool], List[dict]] = self._download(
+        final_output: Union[List[bool], List[pd.DataFrame]] = self._download(
             expressions=expressions,
             params=params_dict,
             url=self.base_url + endpoint,
@@ -704,9 +721,10 @@ class DataQueryInterface(object):
             delay_param=delay_param,
             show_progress=show_progress,
             to_path=to_path,
+            as_dataframe=as_dataframe,
         )
 
-        if to_path is None:
+        if to_path is None and not as_dataframe:
             self.unavailable_expressions = _get_unavailable_expressions(
                 expected_exprs=expressions, dicts_list=final_output
             )
