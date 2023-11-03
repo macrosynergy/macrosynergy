@@ -65,12 +65,16 @@ class TestAll(unittest.TestCase):
     def test_view_metrics_invalid_xcat(self):
         invalid_args: Dict[str, Any] = self.valid_args
         invalid_args["xcat"] = "bad_xcat"
+        mpl_backend = matplotlib.get_backend()
+        matplotlib.use("Agg")
         with self.assertRaises(ValueError):
             try:
                 msv.view_metrics(**invalid_args)
             except Exception as e:
                 self.assertIsInstance(e, ValueError)
                 raise ValueError(e)
+        
+        matplotlib.use(mpl_backend)
 
     def test_view_metrics_invalid_metric(self):
         bad_args = self.valid_args
@@ -111,15 +115,23 @@ class TestAll(unittest.TestCase):
     def test_view_metrics_lowercase_freq(self):
         invalid_args = self.valid_args.copy()
         invalid_args["freq"] = "m"
+        mpl_backend = matplotlib.get_backend()
+        matplotlib.use("Agg")
         try:
             msv.view_metrics(**invalid_args)
         except Exception as e:
             self.fail(f"view_metrics raised {e} unexpectedly")
 
+        matplotlib.use(mpl_backend)
+
     def test_view_metrics_invalid_agg(self):
         # test agg
         invalid_args = self.valid_args.copy()
         invalid_args["agg"] = "bad_agg"
+
+        mpl_backend = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
         with self.assertRaises(ValueError):
             msv.view_metrics(**invalid_args)
 
@@ -129,8 +141,12 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"view_metrics raised {e} unexpectedly")
 
+        matplotlib.use(mpl_backend)
+
     def test_view_metrics_invalid_figsize(self):
         invalid_args = self.valid_args.copy()
+        mpl_backend = matplotlib.get_backend()
+        matplotlib.use("Agg")
         invalid_cases: List[Any] = [
             ["apple", 10],
             (10, "apple"),
@@ -150,6 +166,8 @@ class TestAll(unittest.TestCase):
             msv.view_metrics(**invalid_args)
         except Exception as e:
             self.fail(f"view_metrics raised {e} unexpectedly")
+
+        matplotlib.use(mpl_backend)
 
 
 if __name__ == "__main__":
