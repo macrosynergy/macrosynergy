@@ -13,7 +13,6 @@ from .view_grades import heatmap_grades
 from .view_ranges import view_ranges
 from .view_timelines import view_timelines
 from .view_metrics import view_metrics
-# from .granger_causality_test import granger_causality_test
 
 __all__ = [
     "Basket",
@@ -32,5 +31,4 @@ __all__ = [
     "view_ranges",
     "view_timelines",
     "view_metrics",
-    # "granger_causality_test",
 ]
