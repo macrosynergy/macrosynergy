@@ -5,7 +5,6 @@ from .metrics import (
     panel_significance_probability,
     sharpe_ratio,
     sortino_ratio,
-    max_drawdown,
     regression_accuracy,
     regression_balanced_accuracy,
 )
@@ -20,5 +19,4 @@ __all__ = [
     "regression_balanced_accuracy",
     "sharpe_ratio",
     "sortino_ratio",
-    "max_drawdown",
 ]
