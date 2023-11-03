@@ -6,7 +6,7 @@ import pandas as pd
 
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.utils import qdf_to_ticker_df
-from macrosynergy.panel.granger_causality_tests import (
+from macrosynergy.panel.granger_causality_test import (
     _get_tickers,
     _granger_causality_backend,
     granger_causality_test,
@@ -190,7 +190,7 @@ class TestGrangerCausality(unittest.TestCase):
 
         # Test that good args work
         with unittest.mock.patch(
-            "macrosynergy.panel.granger_causality_tests._statsmodels_compatibility_wrapper",
+            "macrosynergy.panel.granger_causality_test._statsmodels_compatibility_wrapper",
             mock_wrapper,
         ):
             self.assertIsInstance(_granger_causality_backend(**good_args), dict)
@@ -212,7 +212,7 @@ class TestGrangerCausality(unittest.TestCase):
         good_args_2["max_lag"] = [1, 1]
         # check if the output is a dict
         with unittest.mock.patch(
-            "macrosynergy.panel.granger_causality_tests._statsmodels_compatibility_wrapper",
+            "macrosynergy.panel.granger_causality_test._statsmodels_compatibility_wrapper",
             mock_wrapper,
         ):
             self.assertIsInstance(_granger_causality_backend(**good_args_2), dict)
@@ -238,10 +238,10 @@ class TestGrangerCausality(unittest.TestCase):
         # all failure cases are already tested in the backend tests or utils tests
         # run with good args to see if it works
 
-        # mock macrosynergy.panel.granger_causality_tests._statsmodels_compatibility_wrapper to return a dict
+        # mock macrosynergy.panel.granger_causality_test._statsmodels_compatibility_wrapper to return a dict
 
         with unittest.mock.patch(
-            "macrosynergy.panel.granger_causality_tests._statsmodels_compatibility_wrapper",
+            "macrosynergy.panel.granger_causality_test._statsmodels_compatibility_wrapper",
             mock_wrapper,
         ):
             self.assertIsInstance(granger_causality_test(**self.good_args), dict)
