@@ -3,9 +3,8 @@ from typing import Any, Dict, List, Union
 
 import numpy as np
 import pandas as pd
-from statsmodels.tsa.stattools import grangercausalitytests
 
-from macrosynergy.management.simulate_quantamental_data import make_test_df
+from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.utils import qdf_to_ticker_df
 from macrosynergy.panel.granger_causality_tests import (
     _get_tickers,
