@@ -164,34 +164,6 @@ def sortino_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> floa
     return sortino_ratio
 
 
-def max_drawdown(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float:
-    """
-    NOTE: This function is experimental.
-    Function to return the maximum drawdown for a strategy where we go long if the predictions
-    are positive and short if the predictions are negative.
-    """
-    # checks
-    if not isinstance(y_true, pd.Series):
-        raise TypeError("y_true must be a pandas series")
-
-    if not isinstance(y_true.index, pd.MultiIndex):
-        raise ValueError("y_true must be multi-indexed.")
-
-    if not isinstance(y_true.index.get_level_values(1)[0], datetime.date):
-        raise TypeError("The inner index of y must be datetime.date.")
-
-    if not (len(y_true) == len(y_pred)):
-        raise ValueError("y_true and y_pred must have the same length.")
-
-    portfolio_returns = np.where(y_pred > 0, y_true, -y_true)
-    cumulative_returns = np.cumsum(portfolio_returns)
-    max_drawdown = np.max(
-        np.maximum.accumulate(cumulative_returns) - cumulative_returns
-    )
-
-    return max_drawdown
-
-
 if __name__ == "__main__":
 
     cids = ["AUD", "CAD", "GBP", "USD"]
@@ -231,9 +203,8 @@ if __name__ == "__main__":
     scorer1 = make_scorer(panel_significance_probability, greater_is_better=True)
     scorer2 = make_scorer(sharpe_ratio, greater_is_better=True)
     scorer3 = make_scorer(sortino_ratio, greater_is_better=True)
-    scorer4 = make_scorer(max_drawdown, greater_is_better=False)
-    scorer5 = make_scorer(regression_accuracy, greater_is_better=True)
-    scorer6 = make_scorer(regression_balanced_accuracy, greater_is_better=True)
+    scorer4 = make_scorer(regression_accuracy, greater_is_better=True)
+    scorer5 = make_scorer(regression_balanced_accuracy, greater_is_better=True)
     cv_results1 = cross_val_score(
         LinearRegression(), X, y, cv=splitter, scoring=scorer1
     )
@@ -249,13 +220,9 @@ if __name__ == "__main__":
     cv_results5 = cross_val_score(
         LinearRegression(), X, y, cv=splitter, scoring=scorer5
     )
-    cv_results6 = cross_val_score(
-        LinearRegression(), X, y, cv=splitter, scoring=scorer6
-    )
     print("Probabilities of significances, per split:", cv_results1)
     print("Sharpe ratios, per split:", cv_results2)
     print("Sortino ratios, per split:", cv_results3)
-    print("Max drawdowns, per split:", -1 * cv_results4)
-    print("Regression accuracies, per split:", cv_results5)
-    print("Regression balanced accuracies, per split:", cv_results6)
+    print("Regression accuracies, per split:", cv_results4)
+    print("Regression balanced accuracies, per split:", cv_results5)
     print("Done")
