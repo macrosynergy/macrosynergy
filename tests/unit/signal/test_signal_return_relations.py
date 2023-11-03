@@ -8,6 +8,7 @@ import random
 import pandas as pd
 import numpy as np
 from typing import List, Dict
+import matplotlib
 
 
 class TestAll(unittest.TestCase):
@@ -685,6 +686,9 @@ class TestAll(unittest.TestCase):
     
     def test_accuracy_and_correlation_bars(self):
         self.dataframe_generator()
+        mpl_backend = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
         srr = SignalReturnRelations(
             self.dfd,
             ret="XR",
@@ -705,6 +709,8 @@ class TestAll(unittest.TestCase):
             srr.correlation_bars()
         except Exception as e:
             self.fail(f"correlation_bars raised {e} unexpectedly")
+
+        matplotlib.use(mpl_backend)
 
     def test_summary_table(self):
         self.dataframe_generator()
