@@ -274,6 +274,8 @@ class TestAll(unittest.TestCase):
 
         # Test if proportionate signals have correct values.
 
+        thresh = 5
+
         df_unit_pos = modify_signals(
             df=dfd_modified,
             cids=self.cids,
@@ -282,7 +284,7 @@ class TestAll(unittest.TestCase):
             end="2020-10-30",
             scale="prop",
             min_obs=0,
-            thresh=5,
+            thresh=thresh,
         )
         df_unit_pos_w = df_unit_pos.pivot(
             index="real_date", columns="cid", values="value"
@@ -308,13 +310,13 @@ class TestAll(unittest.TestCase):
 
         std = np.array(std)
         row_vector = std[:, np.newaxis]
-        test_zn_scores = numerator.div(row_vector, axis="rows")
+        test_zn_scores = np.clip(numerator.div(row_vector, axis="rows"), -thresh, thresh)
         condition = test_zn_scores.to_numpy() - output_rows.to_numpy()
         # Convert the NaN value to zero for testing purposes only.
         condition = np.nan_to_num(condition)
         target_value = 0.0  # You should replace this with the actual target value
         # Check if all elements in 'condition' are close to 'target_value' within a tolerance of 0.001
-        self.assertTrue(np.allclose(condition, target_value, atol=0.0001))
+        self.assertTrue(np.allclose(condition, target_value, rtol=0.001))
 
     @staticmethod
     def row_return(dfd, date, c_return, sigrel):
@@ -891,7 +893,7 @@ class TestAll(unittest.TestCase):
         target_value = 0.0  # You should replace this with the actual target value
 
         # Check if all elements in 'test.to_numpy()' are close to 'target_value' within a tolerance of 0.001
-        self.assertTrue(np.allclose(test.to_numpy(), target_value, atol=0.001))
+        self.assertTrue(np.allclose(test.to_numpy(), target_value, rtol=0.001))
 
         reduced_dfd = reduce_df(
             df=self.dfd, xcats=self.xcats, cids=self.cids, blacklist=None

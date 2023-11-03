@@ -8,6 +8,7 @@ import random
 import pandas as pd
 import numpy as np
 from typing import List, Dict
+import matplotlib
 
 
 class TestAll(unittest.TestCase):
@@ -668,6 +669,63 @@ class TestAll(unittest.TestCase):
             )
         except:
             self.fail("SignalReturnRelations init failed")
+
+    def test_cross_section_and_yearly_table(self):
+        self.dataframe_generator()
+        srr = SignalReturnRelations(
+            self.dfd,
+            ret="XR",
+            sig="CRY",
+            rival_sigs=["GROWTH", "INFL"],
+            sig_neg=False,
+            freq="M",
+            blacklist=self.blacklist,
+        )
+        self.assertTrue(srr.cross_section_table().shape == (8, 10))
+        self.assertTrue(srr.yearly_table().shape == (16, 10))
+    
+    def test_accuracy_and_correlation_bars(self):
+        self.dataframe_generator()
+        mpl_backend = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
+        srr = SignalReturnRelations(
+            self.dfd,
+            ret="XR",
+            sig="CRY",
+            rival_sigs=["GROWTH", "INFL"],
+            sig_neg=False,
+            freq="M",
+            blacklist=self.blacklist,
+        )
+
+        #Check that accuracy bars actually outputs an image
+        try:
+            srr.accuracy_bars()
+        except Exception as e:
+            self.fail(f"accuracy_bars raised {e} unexpectedly")
+
+        try:
+            srr.correlation_bars()
+        except Exception as e:
+            self.fail(f"correlation_bars raised {e} unexpectedly")
+
+        matplotlib.use(mpl_backend)
+
+    def test_summary_table(self):
+        self.dataframe_generator()
+        srr = SignalReturnRelations(
+            self.dfd,
+            ret="XR",
+            sig="CRY",
+            rival_sigs=["GROWTH", "INFL"],
+            sig_neg=False,
+            freq="M",
+            blacklist=self.blacklist,
+        )
+
+        self.assertTrue(srr.summary_table().shape == (5, 10))
+
 
 if __name__ == "__main__":
     unittest.main()
