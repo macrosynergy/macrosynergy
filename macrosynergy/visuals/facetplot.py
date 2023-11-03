@@ -683,7 +683,7 @@ class FacetPlot(Plotter):
 
 if __name__ == "__main__":
     # from macrosynergy.visuals import FacetPlot
-    from macrosynergy.management.simulate_quantamental_data import make_test_df
+    from macrosynergy.management.simulate import make_test_df
 
     import time
 
