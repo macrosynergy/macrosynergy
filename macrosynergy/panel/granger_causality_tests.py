@@ -1,5 +1,7 @@
 """
 Run Granger Causality Test on a standardized quantamental dataframe.
+
+**NOTE: This module is under development, and is not yet ready for production use.**
 """
 
 import warnings
