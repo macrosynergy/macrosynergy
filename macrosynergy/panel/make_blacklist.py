@@ -1,10 +1,18 @@
+"""
+Module with functions for processing "blacklist" data for cross-sections in a quantamental
+DataFrame.
+
+::docs::make_blacklist::sort_first::
+
+"""
+
 import numpy as np
 import pandas as pd
 from typing import List
 from itertools import groupby
 import random
-from macrosynergy.management.shape_dfs import reduce_df
-from macrosynergy.management.simulate_quantamental_data import make_qdf_black, make_qdf
+from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.simulate import make_qdf_black, make_qdf
 
 
 def startend(dti, start, length):
@@ -15,7 +23,7 @@ def startend(dti, start, length):
     :param <int> start: index of start
     :param <int> length: number of sequential days
 
-    :return tuple of start and end date
+    :return <Tuple[pd.Timestamp, pd.Timestamp]>: tuple of start and end date
     """
 
     tup = (dti[start], dti[start + (length - 1)])

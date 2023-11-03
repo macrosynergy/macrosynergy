@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 import pandas as pd
 from tests.simulate import make_qdf
-from macrosynergy.management.simulate_quantamental_data import make_test_df
+from macrosynergy.management.simulate import make_test_df
 from macrosynergy.panel.panel_calculator import panel_calculator
 import warnings
 from random import randint, choice
@@ -251,8 +251,8 @@ class TestAll(unittest.TestCase):
             test_df : pd.DataFrame = make_test_df(
                 cids=test_cids,
                 xcats=test_xcats,
-                start_date=self.start,
-                end_date=self.end
+                start=self.start,
+                end=self.end
             )
             
             test_df.loc[(test_df['cid'] == 'USD') , 'value'] = pd.NA

@@ -1,0 +1,25 @@
+# .github/actions/clear-branch-cache/action.yml
+name: Clear branch cache
+description: "Clear branch cache on merge to develop"
+
+inputs:
+  branch:
+    description: "The branch to clear the cache for"
+    required: true
+runs:
+  
+  using: "composite"
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.11
+
+    - name: Delete cache scripts
+      shell: bash
+      run: |
+        python -m pip install requests
+        python .github/scripts/gh_cache_api.py --ref ${{ inputs.branch }}

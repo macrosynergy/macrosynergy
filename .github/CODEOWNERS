@@ -1,0 +1,12 @@
+* @macrosynergy/package-maintainers
+
+/macrosynergy/pnl/* @rsueppel  @macrosynergy/package-maintainers
+/macrosynergy/signal/* @rsueppel  @macrosynergy/package-maintainers
+/macrosynergy/panel/* @rsueppel  @macrosynergy/package-maintainers
+
+/docs/scripts/* @Magnus167 @macrosynergy/package-maintainers
+/macrosynergy/download/* @Magnus167 @macrosynergy/package-maintainers
+/macrosynergy/visuals/* @Magnus167 @macrosynergy/package-maintainers
+
+
+/macrosynergy/learning/* @rushilg99 @macrosynergy/package-maintainers

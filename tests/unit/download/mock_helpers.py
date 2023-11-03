@@ -6,7 +6,6 @@ from macrosynergy.download.dataquery import (
     TIMESERIES_ENDPOINT,
     DataQueryInterface,
 )
-from macrosynergy.management.utils import Config
 
 
 def random_string() -> str:
@@ -84,10 +83,10 @@ class MockDataQueryInterface(DataQueryInterface):
         )
 
     def __init__(self, *args, **kwargs):
-        if "config" in kwargs:
-            self.config = kwargs["config"]
-        else:
-            self.config = Config(
+        # if there is nothing in args or kwargs, use the default config
+        config: dict = {}
+        if not args and not kwargs:
+            config: dict = dict(
                 client_id="test_clid",
                 client_secret="test_clsc",
                 crt="test_crt",
@@ -98,7 +97,7 @@ class MockDataQueryInterface(DataQueryInterface):
 
         self.mask_expressions = []
         self.duplicate_entries = []
-        super().__init__(config=self.config)
+        super().__init__(*args, **kwargs, **config)
 
     def __enter__(self):
         return self
@@ -150,7 +149,6 @@ class MockDataQueryInterface(DataQueryInterface):
         msg_warnings: List[str] = None,
         catalogue: List[str] = None,
         unavailable_expressions: List[str] = None,
-        egress_data: List[Dict[str, Any]] = None,
         duplicate_entries: List[str] = None,
     ):
         self.msg_errors: List[str] = [] if msg_errors is None else msg_errors
@@ -159,14 +157,6 @@ class MockDataQueryInterface(DataQueryInterface):
             [] if unavailable_expressions is None else unavailable_expressions
         )
         self.catalogue: List[str] = [] if catalogue is None else catalogue
-        self.egress_data: List[Dict[str, Any]] = {
-            "tracking-id-123": {
-                "upload_size": 200,
-                "download_size": 2000,
-                "url": OAUTH_BASE_URL + TIMESERIES_ENDPOINT,
-                "time_taken": 10,
-            }
-        }
 
         self.mask_expressions: List[str] = (
             [] if mask_expressions is None else mask_expressions

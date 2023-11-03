@@ -1,7 +1,7 @@
 
 import unittest
 import pandas as pd
-from macrosynergy.management.check_availability import *
+from macrosynergy.management.utils.check_availability import *
 from tests.simulate import make_qdf
 
 class TestAll(unittest.TestCase):
