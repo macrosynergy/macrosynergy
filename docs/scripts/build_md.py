@@ -57,7 +57,7 @@ class DocstringMethods:
             return ""
 
         lines = docstring.split("\n")
-        formatted_lines = []
+        formatted_lines: List[str] = []
 
         for il, line in enumerate(lines):
             try:
@@ -232,7 +232,7 @@ def process_file(filepath: str, output_directory: str) -> bool:
             RuntimeWarning,
         )
         return False
-    
+
     LINE_SEPARATOR = "----------------\n\n"
 
     if structure:
@@ -272,9 +272,6 @@ def process_file(filepath: str, output_directory: str) -> bool:
             output_str += f"{function_info['doc']}\n\n"
             output_str += LINE_SEPARATOR
 
-        # remove the last line separator
-        output_str = "\n".join(output_str.split("\n")[:-2])
-
         output_str = DocstringMethods.format_parameters(docstring=output_str)
 
         with open(output_path, "w", encoding="utf-8") as f:
@@ -293,7 +290,6 @@ def create_subpackage_readmes(package_dir: str, root_package_dir: str) -> bool:
     px = lambda x: os.path.normpath(os.path.abspath(os.path.expanduser(x)))
     if px(package_dir) == px(root_package_dir):
         return True
-
     # get all .py and .md files using glob
     files: List[str] = glob.glob(os.path.join(package_dir, "**/*.py"), recursive=True)
     files += glob.glob(os.path.join(package_dir, "**/*.md"), recursive=True)
@@ -307,9 +303,15 @@ def create_subpackage_readmes(package_dir: str, root_package_dir: str) -> bool:
     files: List[str] = [
         file for file in files if not any(word in file for word in filter_words)
     ]
-    # create a list of the subpackages
+
     subpackages: List[str] = [
-        file for file in files if os.path.isdir(os.path.join(package_dir, file))
+        os.path.relpath(file, root_package_dir).replace("\\", "/")
+        for file in glob.glob(os.path.join(package_dir, "**/"), recursive=True)
+        if os.path.isdir(file)
+        and (
+            os.path.normpath(os.path.abspath(file))
+            != os.path.normpath(os.path.abspath(package_dir))
+        )
     ]
     # create a list of the modules
     modules: List[str] = [
@@ -327,7 +329,11 @@ def create_subpackage_readmes(package_dir: str, root_package_dir: str) -> bool:
     if subpackages:
         output_str += "### Subpackages\n\n"
         for subpackage in sorted(subpackages):
-            output_str += f"- [{subpackage}](./{subpackage})\n"
+            sreadme: str = os.path.join(
+                os.path.relpath(subpackage, package_dir), "index.md"
+            ).replace("\\", "/")
+            spname: str = subpackage.replace("\\", "/").replace("/", ".")
+            output_str += f"- [{spname}](./{sreadme})\n"
     output_str += "\n"
     if modules:
         # remove README.md from modules
@@ -336,11 +342,15 @@ def create_subpackage_readmes(package_dir: str, root_package_dir: str) -> bool:
         ]
         output_str += "### Modules\n\n"
         for module in sorted(modules):
+            if not os.path.dirname(module) == package_dir:
+                continue  # filtering for modules within subpackages within subpackages
+
             mrpath: str = os.path.relpath(
                 os.path.join(package_dir, module), root_package_dir
             ).replace("\\", "/")
             mrname: str = mrpath.split(".")[0].replace("/", ".")
-            output_str += f"- [{mrname}](./{os.path.basename(mrpath)})\n"
+            mrpath = os.path.relpath(mrpath, package_dir).replace("\\", "/")
+            output_str += f"- [{mrname}](./{mrpath})\n"
 
     if "README.md" not in os.listdir(package_dir):
         output_str = DocstringMethods.markdown_format(docstring=output_str)
