@@ -72,8 +72,6 @@ class TestAll(unittest.TestCase):
             self.fail(f"Heatmap raised {e} unexpectedly")
 
     def test_plot_heatmap_no_error(self):
-        mpl_backend = matplotlib.get_backend()
-        matplotlib.use("Agg")
         heatmap = Heatmap(**self.constructor_args)
         heatmap.df: pd.DataFrame = heatmap.df.pivot_table(
             index="cid", columns="real_date", values=self.metric
@@ -99,8 +97,6 @@ class TestAll(unittest.TestCase):
             self.fail(f"Heatmap.plot raised {e} unexpectedly")
 
         assert isinstance(fig, plt.Figure)
-
-        matplotlib.use(mpl_backend)
 
 
 if __name__ == "__main__":
