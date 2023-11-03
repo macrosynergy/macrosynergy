@@ -83,10 +83,15 @@ class TestAll(unittest.TestCase):
     def test_view_table_valid_tick_labels(self):
         self.valid_args["xticklabels"] = ["A", "B", "C", "D"]
         self.valid_args["yticklabels"] = ["Row1", "Row2", "Row3", "Row4"]
+        mpl_backend = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
         try:
             msv.view_table(**self.valid_args)
         except Exception as e:
             self.fail(f"view_table raised {e} unexpectedly")
+
+        matplotlib.use(mpl_backend)
 
     def test_view_table_invalid_tick_labels(self):
         args = self.valid_args.copy()

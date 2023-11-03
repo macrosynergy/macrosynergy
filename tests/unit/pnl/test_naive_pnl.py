@@ -5,6 +5,7 @@ import unittest
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple, Union
+import matplotlib
 
 
 class TestAll(unittest.TestCase):
@@ -516,6 +517,9 @@ class TestAll(unittest.TestCase):
     def test_plotting_methods(self):
         self.dataframe_construction()
 
+        mpl_backend = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
         ret = "EQXR"
         sigs = ["CRY", "GROWTH", "INFL"]
 
@@ -566,7 +570,9 @@ class TestAll(unittest.TestCase):
                 pnl_name="PNL_GROWTH"
             )
         except Exception as e:
-            self.fail(f"agg_signal_bars raised {e} unexpectedly")   
+            self.fail(f"agg_signal_bars raised {e} unexpectedly")
+
+        matplotlib.use(mpl_backend)
 
 
 if __name__ == "__main__":
