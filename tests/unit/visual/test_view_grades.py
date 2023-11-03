@@ -68,10 +68,14 @@ class TestAll(unittest.TestCase):
         }
 
     def test_view_grades_no_error(self):
+        mpl_backend = matplotlib.get_backend()
+        matplotlib.use("Agg")
         try:
             msv.view_grades(**self.valid_args)
         except Exception as e:
             self.fail(f"msv.view.grades raised {e} unexpectedly")
+
+        matplotlib.use(mpl_backend)
 
     def test_view_grades_invalid_xcat(self):
         invalid_args: Dict[str, Any] = self.valid_args
