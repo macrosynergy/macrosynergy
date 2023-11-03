@@ -9,4 +9,23 @@
     border-radius: 4%;
 }
 
+.bd-sidebar-primary {
+    flex-basis: content;
+}
 
+.bd-page-width {
+    max-width: 100%;
+}
+
+.bd-sidebar-secondary {
+    flex-basis: content;
+}
+
+.bd-article-container {
+    flex-basis: content;
+}
+
+.bd-main .bd-content .bd-article-container{
+    flex-basis: content;
+    max-width: 60%;
+}
