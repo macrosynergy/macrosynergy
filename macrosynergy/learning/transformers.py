@@ -269,13 +269,13 @@ if __name__ == "__main__":
     X = dfd2.drop(columns=["XR"])
     y = dfd2["XR"]
 
-    """selector = MapSelectorTransformer(0.05)
+    selector = MapSelectorTransformer(0.05)
     selector.fit(X, y)
     print(selector.transform(X).columns)
 
     selector = LassoSelectorTransformer(0.00001)
     selector.fit(X, y)
-    print(selector.transform(X).columns)"""
+    print(selector.transform(X).columns)
 
     # Split X and y into training and test sets
     X_train, X_test = X[X.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], X[X.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
@@ -284,6 +284,3 @@ if __name__ == "__main__":
     selector = BenchmarkTransformer(neutral="mean")
     selector.fit(X_train, y_train)
     print(selector.transform(X_test))
-    #selector = LassoSelectorTransformer(0.00001)
-    #selector.fit(X2, y2)
-    #print(selector.transform(X2).columns)
