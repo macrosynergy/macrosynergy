@@ -27,4 +27,8 @@ jobs:
           DQ_CLIENT_ID: ${{ secrets.DQ_CLIENT_ID }}
           DQ_CLIENT_SECRET: ${{ secrets.DQ_CLIENT_SECRET }}
         run: |
+          if [ -z "${{ secrets.GITHUB_TOKEN }}" ]; then
+            echo "GITHUB_TOKEN is not set. Aborting the job."
+            exit 1
+          fi
           python .github/scripts/setup_academy_integration_test.py
