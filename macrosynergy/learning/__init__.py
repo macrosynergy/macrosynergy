@@ -8,6 +8,7 @@ from .metrics import (
     regression_accuracy,
     regression_balanced_accuracy,
 )
+from .preds_to_pnl import static_preds_to_pnl
 
 __all__ = [
     "PanelTimeSeriesSplit",
@@ -20,4 +21,5 @@ __all__ = [
     "regression_balanced_accuracy",
     "sharpe_ratio",
     "sortino_ratio",
+    "static_preds_to_pnl"
 ]
