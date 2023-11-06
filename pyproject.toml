@@ -131,7 +131,7 @@ exclude = '''
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "-rEf -rP -n auto --cov=macrosynergy --verbose"
+addopts = "-rEf -rP -n auto --durations=10 --cov=macrosynergy --verbose"
 # testpaths = ['./tests/']
 
 [tool.coverage]
