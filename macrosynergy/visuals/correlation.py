@@ -74,7 +74,7 @@ def view_correlation(
         N.B.: Lags can include a 0 if the original should also be correlated.
     :param <dict> lags_secondary: optional dictionary of lags applied to the second set of
         categories if xcats_secondary is provided.
-    :param <str> title: chart heading. If none is given, a default title is used.
+    :param <str> title: chart heading. If none is given, no title is shown.
     :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default
         is (14, 8).
     :param <float> max_color: maximum values of positive/negative correlation
@@ -448,7 +448,7 @@ if __name__ == "__main__":
         val="value",
         freq=None,
         cluster=True,
-        title="Correlation Matrix",
+        # title="Correlation Matrix",
         size=(14, 8),
         max_color=None,
         lags=None,
