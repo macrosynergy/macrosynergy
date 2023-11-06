@@ -21,7 +21,7 @@ from macrosynergy.management.utils import (
     qdf_to_ticker_df,
     ticker_df_to_qdf,
 )
-from macrosynergy.panel import historic_vol
+
 from macrosynergy.management.types import Numeric, NoneType, QuantamentalDataFrame
 
 
