@@ -1,10 +1,10 @@
 import os
 import sys
-from time import sleep
 from typing import Any, Dict, List, Optional, Callable, Tuple
 
-import requests
 from packaging import version
+
+from gh_api_request import api_request
 
 REPO_OWNER: str = "macrosynergy"
 ORGANIZATION: str = "macrosynergy"
@@ -12,9 +12,6 @@ REPO_NAME: str = "macrosynergy"
 REPO_URL: str = f"github.com/{REPO_OWNER}/{REPO_NAME}"
 
 sys.path.append(os.getcwd())
-
-OAUTH_TOKEN: Optional[str] = os.getenv("GH_TOKEN", None)
-
 
 ACCEPTED_TITLE_PATTERNS: List[str] = [
     "Feature:",
@@ -30,48 +27,6 @@ ACCEPTED_TITLE_PATTERNS: List[str] = [
     "Suggestion:",
     "Suggestions:",
 ]
-
-
-def api_request(
-    url: str,
-    headers: Dict[str, str] = {"Accept": "application/vnd.github.v3+json"},
-    params: Dict[str, Any] = {},
-    max_retries: int = 5,
-) -> Any:
-    """
-    Make a request to the GitHub API.
-
-    :param <str> url: The URL to make the request to.
-    :param <Dict[str, str]> headers: The headers to send with the request.
-    :param <Dict[str, Any]> params: The parameters to send with the request.
-    :return <Any>: The response from the API.
-    """
-    retries = 0
-    last_exception: Optional[Exception] = None
-    while retries < max_retries:
-        try:
-            # Add the OAuth token to the headers if it exists
-            if OAUTH_TOKEN:
-                headers["Authorization"] = f"token {OAUTH_TOKEN}"
-
-            response = requests.get(url, headers=headers, params=params)
-
-            if response.status_code == 404:
-                raise Exception(f"404: {url} not found.")
-            response.raise_for_status()  # Raise exception for failed requests
-
-            return response.json()
-        except Exception as exc:
-            fail_codes = [403, 404, 422]
-            if response.status_code in fail_codes:
-                raise Exception(f"Request failed: {exc}")
-
-            print(f"Request failed: {exc}")
-            last_exception = exc
-            retries += 1
-            sleep(1)
-
-    raise Exception(f"Request failed")  # If the request fails, raise an exception
 
 
 def check_title(
