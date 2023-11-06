@@ -90,26 +90,27 @@ def static_preds_to_pnl(
 
     # (2b) For each model and each (training, test) pair, fit the model (with additional data if necessary)
     #      and store the test set predictions in the signal dataframe.
-    for idx1, (train_idx, test_idx) in enumerate(splitter.split(X, y)):
-        for idx2, name in enumerate(models.keys()):
-            # training sets
-            X_train_i: pd.DataFrame = X.iloc[train_idx]
-            y_train_i: pd.Series = y.iloc[train_idx]
-            if additional_X is not None:
-                X_train_i = pd.concat([X_train_i, X_old], axis=0)
-                y_train_i = pd.concat([y_train_i, y_old], axis=0)
-            # test sets
-            X_test_i: pd.DataFrame = X.iloc[test_idx]
+    for train_idx, test_idx in splitter.split(X, y):
+        # Set up training and test sets
+        X_train_i: pd.DataFrame = X.iloc[train_idx]
+        y_train_i: pd.Series = y.iloc[train_idx]
+        X_test_i: pd.DataFrame = X.iloc[test_idx]
+        # Append additional data if necessary
+        if additional_X is not None:
+            X_train_i = pd.concat([X_train_i, X_old], axis=0)
+            y_train_i = pd.concat([y_train_i, y_old], axis=0)
+        # Get correct index to match with
+        test_xs_levels: List[str] = X_test_i.index.get_level_values(0).unique()
+        test_date_levels: List[pd.Timestamp] = sorted(X_test_i.index.get_level_values(1).unique())
+        # Since the features lag behind the targets, the dates need to be adjusted 
+        # by a single frequency unit
+        locs: np.ndarray = np.searchsorted(original_date_levels, test_date_levels, side="left") - 1
+        test_date_levels: pd.DatetimeIndex = pd.DatetimeIndex([original_date_levels[i] if i >= 0 else pd.NaT for i in locs])
+        # Fit and predict for each model
+        for name, model in models.items():
             # Train model
-            models[name].fit(X_train_i, y_train_i)
-            preds: np.ndarray = models[name].predict(X_test_i)
-            # Get correct index to match with
-            test_xs_levels: List[str] = sorted(X_test_i.index.get_level_values(0).unique())
-            test_date_levels: List[pd.Timestamp] = sorted(X_test_i.index.get_level_values(1).unique())
-            # Since the features lag behind the targets, the dates need to be adjusted 
-            # by a single frequency unit
-            locs: np.ndarray = np.searchsorted(original_date_levels, test_date_levels, side="left") - 1
-            test_date_levels: pd.DatetimeIndex = pd.DatetimeIndex([original_date_levels[i] if i >= 0 else pd.NaT for i in locs])
+            model.fit(X_train_i, y_train_i)
+            preds: np.ndarray = model.predict(X_test_i)
             # Store the predictions.
             sig_idxs: pd.MultiIndex = pd.MultiIndex.from_product([test_xs_levels, test_date_levels])
             signal_df[name].loc[sig_idxs] = preds
