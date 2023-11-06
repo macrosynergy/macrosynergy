@@ -139,7 +139,7 @@ def notional_positions(
     pname: str = "POS",
 ):
     """
-    Calculates contract positions based on contract signals, assets under management (AUM) 
+    Calculates contract positions based on contract signals, assets under management (AUM)
     and other specifications.
 
     :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
@@ -184,7 +184,7 @@ def notional_positions(
         "xma", for exponential moving average. Again this is passed through to
         the function `historic_portfolio_vol()`.
     :param <int> half_life: the half-life of the exponential moving average for
-        volatility-targeting if the exponential moving average "xma" method has been 
+        volatility-targeting if the exponential moving average "xma" method has been
         chosen Default is 11. This is passed through to
         the function `historic_portfolio_vol()`.
     :param <str> rstring: a general string of the return category. This identifies
@@ -397,60 +397,13 @@ def historic_portfolio_vol(
     ## Reduce the dataframe
     df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
 
-    ## Add ticker column and filter for snames
-    df["tickers"]: str = df["cid"] + "_" + df["xcat"]
-    df: pd.DataFrame = df.loc[df["tickers"].str.endswith(f"_{sname}_CSIG")]
-
-    df["scat"] = df["xcat"]  # TODO : Temp, just to pass linting
-    df["contid"] = df["cid"] + "_" + df["scat"]
-
-    ## Check the contract identifiers
-    u_contids: List[str] = list(df["contid"].unique())
-    if not all([cid in u_contids for cid in contids]):
-        raise ValueError(
-            f"Contract identifiers must be in the dataframe. "
-            f"Missing: {set(contids) - set(u_contids)}"
-        )
-
-    ## Run calcs using historic_vol()
-
-    expanded_conts: List[Tuple[str, str]] = [contx.split("_", 1) for contx in contids]
-
-    calc_dfs: List[pd.DataFrame] = []
-
-    for contx in expanded_conts:
-        cid, ctype = contx
-        cdf: pd.DataFrame = df.loc[(df["cid"] == cid) & (df["scat"] == ctype)].copy()
-
-        # drop xcat, rename scat to xcat
-        cdf = cdf.drop(columns=["xcat", "contid"]).rename(columns={"scat": "xcat"})
-
-        cdf = historic_vol(
-            df=cdf,
-            xcat=ctype,
-            est_freq=est_freq,
-            lback_periods=lback_periods,
-            lback_meth=lback_meth,
-            half_life=half_life,
-            postfix=rstring,
-        )
-
-        calc_dfs.append(cdf)
-
-    calc_df: pd.DataFrame = pd.concat(calc_dfs, axis=0)
-
-    return calc_df
-
 
 if __name__ == "__main__":
-    from macrosynergy.management.simulate import (
-        make_qdf,
-        make_test_df,
-    )
+    from macrosynergy.management.simulate import make_test_df
+    from contract_signals import contract_signals
 
     cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
-    xcats: List[str] = ["FXXR_NSA", "EQXR_NSA", "FX_STRAT_CSIG",  "EQ_STRAT_CSIG"]
-    ctypes: List[str] = ["FX", "EQ"]
+    xcats: List[str] = ["SIG", "HR"]
 
     start: str = "2000-01-01"
     end: str = "2020-12-31"
@@ -462,26 +415,22 @@ if __name__ == "__main__":
         end=end,
     )
 
-    df_nps = notional_positions(
-        df=df,
-        sname="STRAT",
-        contids=[f"{cid}_{ctype}" for cid in cids for ctype in ctypes],
-        aum=100,
-        leverage=2.0,
-        slip=1,
-        start=start,
-        end=end,
-    )
+    df.loc[(df["cid"] == "USD") & (df["xcat"] == "SIG"), "value"] = 1.0
+    ctypes = ["FX", "IRS", "CDS"]
+    cscales = [1.0, 0.5, 0.1]
+    csigns = [1, -1, 1]
 
-    hist_vols: pd.DataFrame = historic_portfolio_vol(
+    hbasket = ["USD_EQ", "EUR_EQ"]
+    hscales = [0.7, 0.3]
+
+    df_cs: pd.DataFrame = contract_signals(
         df=df,
-        sname="TEST",
-        contids=[f"{cid}_{xcat}" for cid in cids for xcat in xcats],
-        est_freq="m",
-        lback_periods=21,
-        lback_meth="ma",
-        half_life=11,
-        rstring="XR",
-        start=start,
-        end=end,
+        sig="SIG",
+        cids=cids,
+        ctypes=ctypes,
+        cscales=cscales,
+        csigns=csigns,
+        hbasket=hbasket,
+        hscales=hscales,
+        hratios="HR",
     )
