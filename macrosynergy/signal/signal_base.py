@@ -398,6 +398,7 @@ class SignalBase:
 
         if cs_type == "cids":
             css = self.cids
+            css = [cid for cid in css if cid in list(df.index.get_level_values(0).unique())]
         else:
             df["year"] = np.array(df.reset_index(level=1)["real_date"].dt.year)
             css = [str(y) for y in list(set(df["year"]))]
