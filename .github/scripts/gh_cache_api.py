@@ -2,52 +2,14 @@ import argparse
 import logging
 import os
 from typing import Any, Dict, List, Optional
-import datetime
 
-import requests
-import requests.compat
+from gh_api_request import api_request
 
 REPO_OWNER: str = "macrosynergy"
 REPO_NAME: str = "macrosynergy"
 REPO_URL: str = f"github.com/{REPO_OWNER}/{REPO_NAME}"
 
 API_URL = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/actions/caches"
-
-
-GH_OAUTH_TOKEN: Optional[str] = os.getenv("GH_TOKEN")
-if not GH_OAUTH_TOKEN:
-    raise ValueError("GH_TOKEN not set")
-
-
-HEADERS = {
-    "Accept": "application/vnd.github.v3+json",
-    "Authorization": f"token {GH_OAUTH_TOKEN}",
-    "X-GitHub-Api-Version": "2022-11-28",
-}
-
-
-def api_request(
-    url: str,
-    headers: Optional[dict] = None,
-    params: Optional[dict] = None,
-    method: str = "GET",
-) -> Dict[str, Any]:
-    assert method in ["GET", "DELETE", "POST", "PATCH", "PUT"]
-    headers = headers or HEADERS
-    max_retries = 3
-    retry_count = 0
-    while retry_count < max_retries:
-        try:
-            response: requests.Response = requests.request(
-                method=method, url=url, headers=headers, params=params
-            )
-            response.raise_for_status()
-            return response.json()
-        except:
-            retry_count += 1
-            logging.warning(f"Request to {url} failed. Retrying...")
-
-    raise RuntimeError(f"Request to {url} failed after {max_retries} retries")
 
 
 def get_caches_list(ref: str) -> List[str]:
