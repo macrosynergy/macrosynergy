@@ -74,7 +74,7 @@ def view_correlation(
         N.B.: Lags can include a 0 if the original should also be correlated.
     :param <dict> lags_secondary: optional dictionary of lags applied to the second set of
         categories if xcats_secondary is provided.
-    :param <str> title: chart heading. If none is given, a default title is used.
+    :param <str> title: chart heading. If none is given, no title is shown.
     :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default
         is (14, 8).
     :param <float> max_color: maximum values of positive/negative correlation
@@ -141,12 +141,6 @@ def view_correlation(
             df_w2: pd.DataFrame = _transform_df_for_cross_sectional_corr(
                 df=df2, val=val, freq=freq
             )
-
-            if title is None:
-                title = (
-                    f"Cross-sectional correlation of {xcats[0]} and {xcats_secondary[0]} from {s_date} to "
-                    f"{e_date}"
-                )
             xlabel = f"{xcats[0]} cross-sections"
             ylabel = f"{xcats_secondary[0]} cross-sections"
 
@@ -159,12 +153,7 @@ def view_correlation(
             df_w2: pd.DataFrame = _transform_df_for_cross_category_corr(
                 df=df2, xcats=xcats_secondary, val=val, freq=freq, lags=lags_secondary
             )
-
-            if title is None:
-                title = (
-                    f"Cross-category correlation of {xcats[0]} from {s_date} to "
-                    f"{e_date}"
-                )
+            
         corr = (
             pd.concat([df_w1, df_w2], axis=1, keys=["df_w1", "df_w2"])
             .corr()
@@ -189,19 +178,10 @@ def view_correlation(
         if len(xcats) == 1:
             df_w = _transform_df_for_cross_sectional_corr(df=df, val=val, freq=freq)
 
-            if title is None:
-                title = (
-                    f"Cross-sectional correlation of {xcats[0]} from {s_date} to "
-                    f"{e_date}"
-                )
-
         else:
             df_w = _transform_df_for_cross_category_corr(
                 df=df, xcats=xcats, val=val, freq=freq, lags=lags
             )
-
-            if title is None:
-                title = f"Cross-category correlation from {s_date} to {e_date}"
 
         corr = df_w.corr(method="pearson")
 
