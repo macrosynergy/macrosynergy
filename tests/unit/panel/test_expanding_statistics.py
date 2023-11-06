@@ -2,7 +2,7 @@
 import unittest
 import numpy as np
 import pandas as pd
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 from macrosynergy.panel.expanding_statistics import expanding_mean_with_nan
 
 class TestAll(unittest.TestCase):
