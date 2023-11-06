@@ -57,8 +57,7 @@ def clone_notebook_runner(
         print("user is", user)
         print("token is", token)
         git.Repo.clone_from(
-            #f"https://{user}:{token}@{repo}",
-            f"https://{repo}",
+            f"https://{token}@{repo}",
             path,
             branch=branch,
             depth=1,
