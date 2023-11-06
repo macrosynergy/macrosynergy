@@ -81,6 +81,7 @@ def setup_test(test_dir: str = TEST_DIR) -> None:
     os.makedirs(test_dir, exist_ok=True)
     notebook_filename = os.path.join(test_dir, "notebook.ipynb")
     download_notebook(NOTEBOOK_URL, notebook_filename)
+    print("Downloaded notebook.")
 
     clone_notebook_runner(UTILS_REPO, "feature/notebook_script", "notebook-runner")
 
