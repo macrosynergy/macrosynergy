@@ -149,7 +149,7 @@ def static_preds_to_pnl(
             rebal_freq=rebal_freq, 
             vol_scale=10,
             rebal_slip=1,
-            pnl_name=(sig + "_BINARY" if sig_mode == "binary" else "_ZN"),
+            pnl_name=(sig + "_BINARY" if sig_mode == "binary" else sig + "_ZN"),
             thresh=3,
             min_obs=min_obs,
         )
@@ -201,4 +201,5 @@ if __name__ == "__main__":
         train_intervals=1, test_size=1, min_cids=4, min_periods=2
     )
     models = {"ols": LinearRegression(), "knn": KNeighborsRegressor()}
-    static_preds_to_pnl(models=models, splitter=splitter, X=X, y=y, daily_return_series=y_long, sig_mode="binary")
+    #static_preds_to_pnl(models=models, splitter=splitter, X=X, y=y, daily_return_series=y_long, sig_mode="binary")
+    static_preds_to_pnl(models=models, splitter=splitter, X=X, y=y, daily_return_series=y_long, sig_mode="zn_score_pan")
