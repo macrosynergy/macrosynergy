@@ -53,12 +53,9 @@ def clone_notebook_runner(
     """
     Clone the notebook runner repository.
     """
-    print("###################################################################")
-    print(f"URL is: https://{user}:{token}@{repo}")
-    print("Path is: ", path)
-    print("branch is: ", branch)
-    print("###################################################################")
     try:
+        print("user is", user)
+        print("token is", token)
         git.Repo.clone_from(
             f"https://{user}:{token}@{repo}",
             path,
