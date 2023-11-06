@@ -4,7 +4,8 @@ import warnings
 import datetime
 
 from typing import List, Tuple, Dict, Union, Set, Any
-from macrosynergy.management.simulate_quantamental_data import make_test_df
+from macrosynergy.management.simulate import make_test_df
+from macrosynergy.management.types import QuantamentalDataFrame
 from macrosynergy.management.utils import (
     get_cid,
     get_xcat,
@@ -347,6 +348,12 @@ class TestFunctions(unittest.TestCase):
         bad_df.rename(columns={"xcat": "xkat"}, inplace=True)
         self.assertRaises(TypeError, qdf_to_ticker_df, df=bad_df)
 
+        # test case 3 - NO side effects
+        # test case 3.1 - df is not modified
+        df: pd.DataFrame = test_df.copy()
+        rdf: pd.DataFrame = qdf_to_ticker_df(df=df)
+        self.assertTrue(df.equals(test_df))
+
     def test_ticker_df_to_qdf(self):
         cids: List[str] = ["AUD", "USD", "GBP", "EUR", "CAD"]
         xcats: List[str] = ["FXXR", "IR", "EQXR", "CRY", "FXFW"]
@@ -373,11 +380,22 @@ class TestFunctions(unittest.TestCase):
         # test 0.3 - are all dates present?
         self.assertEqual(set(rdf["real_date"]), set(bdtrange))
 
+        # test 0.4 - isinstance
+        self.assertTrue(isinstance(rdf, QuantamentalDataFrame))
+        self.assertTrue(
+            set(rdf.columns), set(QuantamentalDataFrame.IndexCols + ["value"])
+        )
         # test case 1 - type error on df
         self.assertRaises(TypeError, ticker_df_to_qdf, df=1)
 
         # test case 2 - there should only be cid, xcat, real_date, value columns in rdf
         self.assertEqual(set(rdf.columns), set(["cid", "xcat", "real_date", "value"]))
+
+        # test case 3 - NO side effects
+        # test case 3.1 - df is not modified
+        df: pd.DataFrame = test_df.copy()
+        rdf: pd.DataFrame = ticker_df_to_qdf(df=df)
+        self.assertTrue(df.equals(test_df))
 
     def test_get_cid(self):
         good_cases: List[Tuple[str, str]] = [
@@ -448,6 +466,7 @@ class TestFunctions(unittest.TestCase):
         bad_cases: List[str] = ["AUD", "USD-IR-FXXR", ""]
         for case in bad_cases:
             self.assertRaises(ValueError, get_xcat, case)
+
     def test_downsample_df_on_real_date(self):
         test_cids: List[str] = ["USD"]  # ,  "EUR", "GBP"]
         test_xcats: List[str] = ["FX"]

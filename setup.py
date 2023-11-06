@@ -10,7 +10,7 @@ if sys.version_info[:2] < (3, 8):
 
 MAJOR = 0
 MINOR = 0
-MICRO = 45
+MICRO = 47
 ISRELEASED = False
 VERSION = "%d.%d.%d" % (MAJOR, MINOR, MICRO)
 
@@ -83,7 +83,7 @@ def get_version_info():
         import time
 
         time_stamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
-        FULLVERSION += f".dev0+{time_stamp}_{GIT_REVISION[:7]}"
+        FULLVERSION += f"dev0+{time_stamp}_{GIT_REVISION[:7]}"
 
     return FULLVERSION, GIT_REVISION
 

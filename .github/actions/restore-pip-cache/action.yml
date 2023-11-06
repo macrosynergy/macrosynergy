@@ -17,7 +17,7 @@ runs:
     - name: Get Week Number
       shell: bash
       id: week
-      run: echo ::set-output name=week::$(date +%V)
+      run: echo "week=$(date +%V)" >> $GITHUB_ENV
 
     - name: Restore pip cache
       id: cache
@@ -25,7 +25,7 @@ runs:
       with:
         # using OS-name + "pip" + hash of TOML + week number as key
         path: ${{ env.pythonLocation }}
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}-${{ steps.week.outputs.week }}
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}-${{ env.week }}
         restore-keys: |
           ${{ runner.os }}-pip-
 

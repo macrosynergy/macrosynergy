@@ -6,8 +6,8 @@ Function for calculating historic volatility of quantamental data.
 import numpy as np
 import pandas as pd
 from typing import List, Union, Tuple, Optional
-from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.utils import reduce_df
 from datetime import timedelta
 
 

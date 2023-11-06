@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from typing import List, Tuple, Optional
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
+from macrosynergy.management.simulate import make_qdf
 
 import macrosynergy.visuals as msv
 
@@ -79,7 +79,7 @@ def view_timelines(
     :param <int> legend_fontsize: font size of legend. Default is 12.
 
     """
-    msv.view.timelines(
+    msv.timelines(
         df=df,
         xcats=xcats,
         cids=cids,

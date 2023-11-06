@@ -7,7 +7,11 @@ on:
   # Runs on pushes targeting the default branch
   pull_request:
     branches: [main, test, develop]
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+# specify concurrency to cancel pull_request run if a pull_request_review run has been triggered
+concurrency:
+  group: pr
 
 jobs:
   check-pr:

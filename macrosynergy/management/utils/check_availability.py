@@ -8,18 +8,67 @@ and end dates of a DataFrame, as well as visualizing the results.
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 from typing import List, Tuple
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.utils import reduce_df
+import macrosynergy.visuals as msv
+
+
+def check_availability(
+    df: pd.DataFrame,
+    xcats: List[str] = None,
+    cids: List[str] = None,
+    start: str = None,
+    start_size: Tuple[float] = None,
+    end_size: Tuple[float] = None,
+    start_years: bool = True,
+    missing_recent: bool = True,
+    use_last_businessday: bool = True,
+):
+    """
+    Wrapper for visualizing start and end dates of a filtered DataFrame.
+
+    :param <pd.DataFrame> df: standardized DataFrame with the following necessary
+        columns: 'cid', 'xcats', 'real_date'.
+    :param <List[str]> xcats: extended categories to be checked on.
+        Default is all in the DataFrame.
+    :param <List[str]> cids: cross sections to be checked on.
+        Default is all in the DataFrame.
+    :param <str> start: string representing earliest considered date. Default is None.
+    :param <Tuple[float]> start_size: tuple of floats with width / length of
+        the start years heatmap. Default is None (format adjusted to data).
+    :param <Tuple[float]> end_size: tuple of floats with width/length of
+        the end dates heatmap. Default is None (format adjusted to data).
+    :param <bool> start_years: boolean indicating whether or not to display a chart
+        of starting years for each cross-section and indicator.
+        Default is True (display start years).
+    :param <bool> missing_recent: boolean indicating whether or not to display a chart
+        of missing date numbers for each cross-section and indicator.
+        Default is True (display missing days).
+    :param <bool> use_last_businessday: boolean indicating whether or not to use the
+        last business day before today as the end date. Default is True.
+    """
+    if not isinstance(start_years, bool):
+        raise TypeError(f"<bool> object expected and not {type(start_years)}.")
+    if not isinstance(missing_recent, bool):
+        raise TypeError(f"<bool> object expected and not {type(missing_recent)}.")
+
+    dfx = reduce_df(df, xcats=xcats, cids=cids, start=start)
+    if start_years:
+        dfs = check_startyears(dfx)
+        visual_paneldates(
+            dfs, size=start_size, use_last_businessday=use_last_businessday
+        )
+    if missing_recent:
+        dfe = check_enddates(dfx)
+        visual_paneldates(dfe, size=end_size, use_last_businessday=use_last_businessday)
 
 
 def missing_in_df(df: pd.DataFrame, xcats: List[str] = None, cids: List[str] = None):
     """
     Print missing cross-sections and categories
-    
+
     :param <pd.DataFrame> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcats', 'real_date'.
     :param <List[str]> xcats: extended categories to be checked on. Default is all
@@ -107,98 +156,7 @@ def visual_paneldates(
         last business day before today as the end date. Default is True.
 
     """
-
-    # DataFrame of official timestamps.
-    if all(df.dtypes == object):
-        df = df.apply(pd.to_datetime)
-        # All series, in principle, should be populated to the last active release date
-        # in the DataFrame.
-
-        if use_last_businessday:
-            maxdate: pd.Timestamp = (
-                pd.Timestamp.today() - pd.tseries.offsets.BusinessDay()
-            )
-        else:
-            maxdate: pd.Timestamp = df.max().max()
-
-        df = business_day_dif(df=df, maxdate=maxdate)
-
-        df = df.astype(float)
-        # Ideally the data type should be int, but Pandas cannot represent NaN as int.
-        # -- https://pandas.pydata.org/pandas-docs/stable/user_guide/gotchas.html#support-for-integer-na
-
-        header = f"Missing days up to {maxdate.strftime('%Y-%m-%d')}"
-
-    else:
-        header = "Start years of quantamental indicators."
-
-    if size is None:
-        size = (max(df.shape[0] / 2, 18), max(1, df.shape[1] / 2))
-
-    sns.set(rc={"figure.figsize": size})
-    sns.heatmap(
-        df.T,
-        cmap="YlOrBr",
-        center=df.stack().mean(),
-        annot=True,
-        fmt=".0f",
-        linewidth=1,
-        cbar=False,
-    )
-    plt.xlabel("")
-    plt.ylabel("")
-    plt.title(header, fontsize=18)
-    plt.show()
-
-
-def check_availability(
-    df: pd.DataFrame,
-    xcats: List[str] = None,
-    cids: List[str] = None,
-    start: str = None,
-    start_size: Tuple[float] = None,
-    end_size: Tuple[float] = None,
-    start_years: bool = True,
-    missing_recent: bool = True,
-    use_last_businessday: bool = True,
-):
-    """
-    Wrapper for visualizing start and end dates of a filtered DataFrame.
-
-    :param <pd.DataFrame> df: standardized DataFrame with the following necessary
-        columns: 'cid', 'xcats', 'real_date'.
-    :param <List[str]> xcats: extended categories to be checked on.
-        Default is all in the DataFrame.
-    :param <List[str]> cids: cross sections to be checked on.
-        Default is all in the DataFrame.
-    :param <str> start: string representing earliest considered date. Default is None.
-    :param <Tuple[float]> start_size: tuple of floats with width / length of
-        the start years heatmap. Default is None (format adjusted to data).
-    :param <Tuple[float]> end_size: tuple of floats with width/length of
-        the end dates heatmap. Default is None (format adjusted to data).
-    :param <bool> start_years: boolean indicating whether or not to display a chart
-        of starting years for each cross-section and indicator.
-        Default is True (display start years).
-    :param <bool> missing_recent: boolean indicating whether or not to display a chart
-        of missing date numbers for each cross-section and indicator.
-        Default is True (display missing days).
-    :param <bool> use_last_businessday: boolean indicating whether or not to use the
-        last business day before today as the end date. Default is True.
-    """
-    if not isinstance(start_years, bool):
-        raise TypeError(f"<bool> object expected and not {type(start_years)}.")
-    if not isinstance(missing_recent, bool):
-        raise TypeError(f"<bool> object expected and not {type(missing_recent)}.")
-
-    dfx = reduce_df(df, xcats=xcats, cids=cids, start=start)
-    if start_years:
-        dfs = check_startyears(dfx)
-        visual_paneldates(
-            dfs, size=start_size, use_last_businessday=use_last_businessday
-        )
-    if missing_recent:
-        dfe = check_enddates(dfx)
-        visual_paneldates(dfe, size=end_size, use_last_businessday=use_last_businessday)
+    msv.view_panel_dates(df=df, size=size, use_last_businessday=use_last_businessday)
 
 
 if __name__ == "__main__":

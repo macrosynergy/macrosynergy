@@ -18,9 +18,108 @@ from typing import (
     get_args,
     get_origin,
 )
+from inspect import signature
 from macrosynergy.management.types import Numeric, NoneType
 import pandas as pd
 import numpy as np
+from packaging import version
+
+try:
+    from macrosynergy import __version__ as _version
+except ImportError:
+    try:
+        from setup import VERSION as _version
+    except ImportError:
+        _version = "0.0.0"
+
+
+def deprecate(
+    new_func: Callable,
+    deprecate_version: str,
+    remove_after: str = None,
+    message: str = None,
+):
+    """
+    Decorator for deprecating a function.
+
+    Parameters
+    :param <callable> new_func: The function that replaces the old one.
+    :param <str> deprecate_version: The version in which the old function is deprecated.
+    :param <str> remove_after: The version in which the old function is removed.
+    :param <str> message: The message to display when the old function is called.
+        This message must contain the following format strings:
+        "{old_method}", "{deprecate_version}", and "{new_method}".
+        If None, the default message is used.
+    :return <callable>: The decorated function.
+    """
+
+    def decorator(
+        old_func,
+        new_func=new_func,
+        deprecate_version=deprecate_version,
+        remove_after=remove_after,
+        message=message,
+    ):
+        # if the message is none, use the default message
+        if message is None:
+            message = (
+                "{old_method} was deprecated in version {deprecate_version} and will be "
+                "removed in version. Use {new_method} instead."
+            )
+        # else if the message does not have "{old_method}" in it, fail
+        else:
+            if any(
+                [
+                    fs not in message
+                    for fs in ["{old_method}", "{deprecate_version}", "{new_method}"]
+                ]
+            ):
+                raise ValueError(
+                    "The message must contain the following format strings: "
+                    "'{old_method}', '{deprecate_version}', and '{new_method}'."
+                )
+
+        # if remove_after is not None, check the version
+        if remove_after is not None:
+            try:
+                version.parse(remove_after)
+            except:
+                raise ValueError(
+                    f"The version in which the function is deprecated ({remove_after}) "
+                    f"must be a valid version string."
+                )
+
+            if version.parse(deprecate_version) < version.parse(remove_after):
+                raise ValueError(
+                    f"The version in which the old function will be removed ({remove_after}) "
+                    f"must be greater than the version in which it is deprecated "
+                    f"({deprecate_version})."
+                )
+        else:
+            remove_after = _version
+
+        @wraps(old_func)
+        # This will ensure the old function retains its name and other properties.
+        def wrapper(*args, **kwargs):
+            if version.parse(deprecate_version) < version.parse(_version):
+                warnings.warn(
+                    message.format(
+                        old_method=old_func.__name__,
+                        new_method=new_func.__name__,
+                        deprecate_version=deprecate_version,
+                    ),
+                    FutureWarning,
+                )
+
+            return old_func(*args, **kwargs)
+
+        # Update the signature and docstring of the old function to match the new one.
+        wrapper.__signature__ = signature(new_func)
+        wrapper.__doc__ = new_func.__doc__
+
+        return wrapper
+
+    return decorator
 
 
 def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
@@ -203,11 +302,8 @@ def argcopy(func: Callable) -> Callable:
         copy_types = (
             list,
             dict,
-            pd.DataFrame,
             np.ndarray,
             pd.Series,
-            pd.Index,
-            pd.MultiIndex,
             set,
         )
         new_args: List[Tuple[Any, ...]] = []

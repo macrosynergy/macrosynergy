@@ -1,5 +1,5 @@
 import unittest
-from macrosynergy.signal.signal_return import SignalReturnRelations
+from macrosynergy.signal.signal_return_relations import SignalReturnRelations
 
 from tests.simulate import make_qdf
 from sklearn.metrics import accuracy_score, precision_score
@@ -8,6 +8,7 @@ import random
 import pandas as pd
 import numpy as np
 from typing import List, Dict
+import matplotlib
 
 
 class TestAll(unittest.TestCase):
@@ -74,6 +75,17 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(AssertionError):
             srr = SignalReturnRelations(
                 self.dfd, ret="XR", sig="Missing", freq="D", blacklist=self.blacklist
+            )
+        
+        # Test that frequency must be one of the following: 'D', 'W', 'M', 'Q', 'Y'.
+        with self.assertRaises(ValueError):
+            srr = SignalReturnRelations(
+                self.dfd,
+                ret="XR",
+                sig="CRY",
+                freq="S",
+                blacklist=self.blacklist,
+                sig_neg=True,
             )
 
         signal = "CRY"
@@ -657,6 +669,62 @@ class TestAll(unittest.TestCase):
             )
         except:
             self.fail("SignalReturnRelations init failed")
+
+    def test_cross_section_and_yearly_table(self):
+        self.dataframe_generator()
+        srr = SignalReturnRelations(
+            self.dfd,
+            ret="XR",
+            sig="CRY",
+            rival_sigs=["GROWTH", "INFL"],
+            sig_neg=False,
+            freq="M",
+            blacklist=self.blacklist,
+        )
+        self.assertTrue(srr.cross_section_table().shape == (8, 10))
+        self.assertTrue(srr.yearly_table().shape == (16, 10))
+    
+    def test_accuracy_and_correlation_bars(self):
+        self.dataframe_generator()
+        mpl_backend = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
+        srr = SignalReturnRelations(
+            self.dfd,
+            ret="XR",
+            sig="CRY",
+            rival_sigs=["GROWTH", "INFL"],
+            sig_neg=False,
+            freq="M",
+            blacklist=self.blacklist,
+        )
+
+        #Check that accuracy bars actually outputs an image
+        try:
+            srr.accuracy_bars()
+        except Exception as e:
+            self.fail(f"accuracy_bars raised {e} unexpectedly")
+
+        try:
+            srr.correlation_bars()
+        except Exception as e:
+            self.fail(f"correlation_bars raised {e} unexpectedly")
+
+        matplotlib.use(mpl_backend)
+
+    def test_summary_table(self):
+        self.dataframe_generator()
+        srr = SignalReturnRelations(
+            self.dfd,
+            ret="XR",
+            sig="CRY",
+            rival_sigs=["GROWTH", "INFL"],
+            sig_neg=False,
+            freq="M",
+            blacklist=self.blacklist,
+        )
+
+        self.assertTrue(srr.summary_table().shape == (5, 10))
 
 
 if __name__ == "__main__":
