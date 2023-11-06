@@ -127,6 +127,8 @@ def run_notebooks(root_dir: str = "./"):
             logger.info(f"{notebook} ran successfully")
             with open(notebook, "w", encoding="utf-8") as f:
                 nbformat.write(nb, f)
+    
+    return error_notebooks
 
 
 def run_test(test_dir: str = TEST_DIR) -> None:
@@ -134,7 +136,9 @@ def run_test(test_dir: str = TEST_DIR) -> None:
     Run the integration test.
     """
     logger.info("Running integration test.")
-    run_notebooks(test_dir)
+    errors = run_notebooks(test_dir)
+    if errors:
+        raise Exception(f"Integration test failed with errors: {errors}")
     #os.system(f"python notebook-runner/notebook_scripts/run_notebooks.py {test_dir}")
     logger.info("Integration test complete.")
 
