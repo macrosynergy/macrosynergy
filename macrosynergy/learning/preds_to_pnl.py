@@ -10,6 +10,7 @@ TODO: write adaptive_preds_to_pnl function
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm 
 
 from macrosynergy.learning import PanelTimeSeriesSplit
 import macrosynergy.pnl as msn
@@ -17,7 +18,7 @@ import macrosynergy.pnl as msn
 from sklearn.base import BaseEstimator
 from sklearn.pipeline import Pipeline
 
-from typing import List, Union, Dict, Optional
+from typing import List, Union, Dict, Optional, Callable
 
 
 def static_preds_to_pnl(
@@ -90,7 +91,7 @@ def static_preds_to_pnl(
 
     # (2b) For each model and each (training, test) pair, fit the model (with additional data if necessary)
     #      and store the test set predictions in the signal dataframe.
-    for train_idx, test_idx in splitter.split(X, y):
+    for train_idx, test_idx in tqdm(splitter.split(X, y)):
         # Set up training and test sets
         X_train_i: pd.DataFrame = X.iloc[train_idx]
         y_train_i: pd.Series = y.iloc[train_idx]
@@ -157,6 +158,66 @@ def static_preds_to_pnl(
     title = "Cumulative naive PnLs, binary signal" if sig_mode == "binary" else "Cumulative naive PnLs, z-score signal"
     pnl.plot_pnls(title=title)
 
+def adaptive_preds_to_pnl(
+    models: Dict[str, Union[BaseEstimator, Pipeline]],
+    metrics_opt: Dict[str, Callable],
+    X: pd.DataFrame,
+    y: pd.Series,
+    outer_splitter: PanelTimeSeriesSplit,
+    inner_splitter: PanelTimeSeriesSplit,
+    daily_return_series: pd.DataFrame,
+    sig_mode: str = "binary",
+    rebal_freq: str = "monthly",
+    min_obs: int = 12,
+    additional_X: Optional[List[pd.DataFrame]] = None,
+    additional_y: Optional[List[pd.Series]] = None,
+):
+    """
+    Function to create a naive PnL from the predictions of a adaptive hyperparameter model.
+
+    :param <Dict[str, Union[BaseEstimator,Pipeline]]> models: dictionary of sklearn predictors.
+        PnLs are generated from predictions for each of the models in the dictionary.
+    :param <Dict[str, Callable]> metrics_opt: dictionary of sklearn metrics. These indicate 
+        the metrics to optimise at each time step, for each model.
+    :param <pd.DataFrame> X: Wide-format pandas dataframe of features over the time period for which
+        the PnL is to be calculated. These should lag behind returns by a single frequency
+        unit. 
+    :param <pd.Series> y: Pandas series of targets corresponding with the features in X.
+        This should be the same length as X.
+    :param <PanelTimeSeriesSplit> outer_splitter: Panel walk-forward validation splitter.
+        This should be initialised to perform interval training. It represents the progression
+        of time over the trading period. Each training split represents the knowledge 
+        available to a model at the last training time in order to make prediction (or rolling predictions)
+        over the training set. 
+    :param <PanelTimeSeriesSplit> inner_splitter: Panel walk-forward validation splitter.
+        This splitter is required to perform a hyperparameter optimisation at each time step.
+        For each model type, a hyperparameter search is run over each training set in the
+        outer splitter, using the inner splitter in a nested cross-validation loop. Each of the specified
+        metrics are optimised. 
+    :param <pd.DataFrame> daily_return_series: Pandas dataframe of daily returns
+        for each cross-section in X. This spans the minimum and maximum dates in X.
+        The dataframe should have the following columns: cid, real_date, xcat, value.
+        Since each signal is propagated forward to the next rebalancing date, a daily
+        return series is required to add to the internal signal dataframe for the 
+        cumulative PnL.
+    :param <str> sig_mode: Signal transformation option for PnL construction. Either "binary" or "zn_score_pan".
+        Default is "binary". 
+    :param <str> rebal_freq: Rebalancing frequency for the PnL. Either "daily", "weekly" or "monthly".
+        Default is "monthly".
+    :param <int> min_obs: Minimum number of observations required to calculate 
+        make_zn_scores. This is only relevant if sig_mode == "zn_score_pan".
+        Default is 12 (one year), since the default rebalancing frequency is monthly.
+        If rebal_freq is "daily", 252 days is the recommended value. If rebal_freq is "weekly", 
+        52 weeks is the recommended value.
+    :param <List[pd.DataFrame]> additional_X: List of Pandas dataframes of additional, "seen" features
+        prior to the PnL calculation over (X, y). These should be listed sequentially
+        and will be appended to each training dataframe created by the splitter.
+    :param <List[pd.Series]> additional_y: List of Pandas series of additional, "seen" targets
+        prior to the PnL calculation over (X, y). These should be listed sequentially
+        and will be appended to each training target series created by the splitter. These
+        should be ordered accordingly with the dataframes in additional_X.
+    """
+    pass
     
 
 
