@@ -139,7 +139,8 @@ def notional_positions(
     pname: str = "POS",
 ):
     """
-    Calculates contract positions based on contract signals, AUM and other specs.
+    Calculates contract positions based on contract signals, assets under management (AUM) 
+    and other specifications.
 
     :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
@@ -152,8 +153,8 @@ def notional_positions(
         "<cid>_<ctype>". It must correspond to contract signals in the dataframe.
     :param <float> aum: the assets under management in USD million (for consistency).
         This is basis for all position sizes. Default is 100.
-    :param <float> dollar_per_signal: the amount of notional currency (e.g. USD) per
-        contract signal value. Default is 1. The default scale has no specific meaning
+    :param <float> dollar_per_signal: the amount of notional (e.g. USD) per
+        contract signal value. Default is 1. The default scale is arbitrary
         and is merely a basis for tryouts.
     :param <float> leverage: the ratio of the sum of notional positions to AUM.
         This is the main basis for leveraged-based positioning. Since different
@@ -172,8 +173,9 @@ def notional_positions(
         Contract signals are taken from the end of the holding period and applied to
         positions at the beginning of the next period, subject to slippage.
     :param <int> slip: the number of days to wait before applying the signal. Default is 1.
-        This means that positions are taken at the very end of the first business day
-        of the holding period.
+        This means that new positions are taken at the very end of the first trading day
+        of the holding period and are the basis of PnL calculation from the second
+        Trading day onward.
     :param <int> lback_periods: the number of periods to use for the lookback period
         of the volatility-targeting method. Default is 21. This passed through to
         the function `historic_portfolio_vol()`.
@@ -181,8 +183,9 @@ def notional_positions(
         volatility-targeting method. Default is 'ma' for moving average. Alternative is
         "xma", for exponential moving average. Again this is passed through to
         the function `historic_portfolio_vol()`.
-    :param <int> half_life: the half-life of the exponential moving average for the
-        volatility-targeting method. Default is 11. This is passed through to
+    :param <int> half_life: the half-life of the exponential moving average for
+        volatility-targeting if the exponential moving average "xma" method has been 
+        chosen Default is 11. This is passed through to
         the function `historic_portfolio_vol()`.
     :param <str> rstring: a general string of the return category. This identifies
         the contract returns that are required for the volatility-targeting method, based
@@ -310,7 +313,8 @@ def historic_portfolio_vol(
     blacklist: Optional[dict] = None,
 ):
     """
-    Estimates the annualized standard deviations of a changing portfolio of contracts.
+    Estimates the annualized standard deviations of portfolio, based on historic
+    variances and co-variances.
 
     :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
@@ -445,7 +449,8 @@ if __name__ == "__main__":
     )
 
     cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
-    xcats: List[str] = ["FXXR_NSA", "EQXR_NSA", "IRXR_NSA", "CDS_NSA"]
+    xcats: List[str] = ["FXXR_NSA", "EQXR_NSA", "FX_STRAT_CSIG",  "EQ_STRAT_CSIG"]
+    ctypes: List[str] = ["FX", "EQ"]
 
     start: str = "2000-01-01"
     end: str = "2020-12-31"
@@ -453,6 +458,17 @@ if __name__ == "__main__":
     df: pd.DataFrame = make_test_df(
         cids=cids,
         xcats=xcats,
+        start=start,
+        end=end,
+    )
+
+    df_nps = notional_positions(
+        df=df,
+        sname="STRAT",
+        contids=[f"{cid}_{ctype}" for cid in cids for ctype in ctypes],
+        aum=100,
+        leverage=2.0,
+        slip=1,
         start=start,
         end=end,
     )
