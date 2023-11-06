@@ -23,6 +23,7 @@ jobs:
 
       - name: Run academy-integration-test
         env:
+          GH_USERNAME: ${{github.actor}}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DQ_CLIENT_ID: ${{ secrets.DQ_CLIENT_ID }}
           DQ_CLIENT_SECRET: ${{ secrets.DQ_CLIENT_SECRET }}
