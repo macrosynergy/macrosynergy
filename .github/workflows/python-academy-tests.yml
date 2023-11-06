@@ -14,7 +14,8 @@ jobs:
     steps:
     - uses: actions/checkout@v3
       with:
-        repository: macrosynergy/academy@develop
+        repository: macrosynergy/academy
+        ref: develop
 
     - name: Run Notebooks - Python 3.11
       shell: bash
