@@ -397,8 +397,16 @@ class SignalBase:
         df = df.dropna(how="any")
 
         if cs_type == "cids":
-            css = self.cids
-            css = [cid for cid in css if cid in list(df.index.get_level_values(0).unique())]
+            css = set(self.cids)
+            unique_cids_df = set(df.index.get_level_values(0).unique())
+
+            if not css.issubset(unique_cids_df):
+                warnings.warn(
+                    f"Cross-sections {css - unique_cids_df} have no corresponding xcats in the dataframe."
+                )
+                css = css.intersection(unique_cids_df)
+
+            css = sorted(list(css))
         else:
             df["year"] = np.array(df.reset_index(level=1)["real_date"].dt.year)
             css = [str(y) for y in list(set(df["year"]))]
