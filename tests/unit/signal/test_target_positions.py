@@ -63,7 +63,6 @@ class TestAll(unittest.TestCase):
             "GBP": ["2018-01-01", "2100-01-01"],
         }
 
-
         # Exclude the blacklist from the creation of the dataframe. All dates are used
         # for calculating the evolving volatility for the volatility targeting mechanism.
         self.dfd_reduced: pd.DataFrame = reduce_df(
@@ -310,7 +309,9 @@ class TestAll(unittest.TestCase):
 
         std = np.array(std)
         row_vector = std[:, np.newaxis]
-        test_zn_scores = np.clip(numerator.div(row_vector, axis="rows"), -thresh, thresh)
+        test_zn_scores = np.clip(
+            numerator.div(row_vector, axis="rows"), -thresh, thresh
+        )
         condition = test_zn_scores.to_numpy() - output_rows.to_numpy()
         # Convert the NaN value to zero for testing purposes only.
         condition = np.nan_to_num(condition)
@@ -544,16 +545,16 @@ class TestAll(unittest.TestCase):
         df_basket_pos_test_date = df_basket_pos.loc[test_date]
 
         for c in non_basket_cids:
-            logic = test_values[test_values["cid"] == c]["value"]
+            logic = (test_values[test_values["cid"] == c]["value"]).iloc[0]
+            logic: float = float(logic)
             t_val = df_mods_w_test_date[c]
-            logic = float(logic)
             self.assertTrue(abs(t_val - logic) < 0.000001)
 
         # Consolidate the positions computed for the basket contracts and the respective
         # panel.
         for c in contract_cids:
-            logic = test_values[test_values["cid"] == c]["value"]
-            logic = float(logic)
+            logic = (test_values[test_values["cid"] == c]["value"]).iloc[0]
+            logic: float = float(logic)
             panel_val = df_mods_w_test_date[c]
             basket_val = df_basket_pos_test_date[c]
             # Consolidation operation.
