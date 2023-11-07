@@ -44,6 +44,10 @@ class SignalsReturns(SignalBase):
         down-sampling. The default is "last". Alternatives are "mean", "median" and "sum".
         If a single aggregation type is chosen for multiple signal categories it is
         applied to all of them.
+    :param <str, List[str]> cids: list of cross-sections to be considered. Default is
+        None in which case all cross-sections in the provided `df` are used. `cids` may
+        be specified as a list of strings or a single string; only `cids` available for
+        all `xcats` are used.
     """
 
     def __init__(
@@ -54,11 +58,12 @@ class SignalsReturns(SignalBase):
         signs: Union[int, List[int]] = 1,
         slip: int = 0,
         cosp: bool = False,
-        start: str = None,
-        end: str = None,
-        blacklist: dict = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        blacklist: Optional[dict] = None,
         freqs: Union[str, List[str]] = "M",
         agg_sigs: Union[int, List[int]] = "last",
+        cids: Optional[Union[str, List[str]]] = None,
     ):
         super().__init__(
             df=df,
@@ -74,7 +79,10 @@ class SignalsReturns(SignalBase):
         )
         self.df = df.copy()
 
-        self.cids = None
+        if isinstance(cids, str):
+            self.cids = [cids]
+        else:
+            self.cids = cids
 
         if not self.is_list_of_strings(rets):
             self.ret = [rets]
