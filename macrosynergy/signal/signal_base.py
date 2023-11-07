@@ -401,7 +401,9 @@ class SignalBase:
             unique_cids_df = set(df.index.get_level_values(0).unique())
 
             if not css.issubset(unique_cids_df):
-                warnings.warn("Cross-sections in the DataFrame do not match the cids list.")
+                warnings.warn(
+                    f"Cross-sections {css - unique_cids_df} have no corresponding xcats in the dataframe."
+                )
                 css = css.intersection(unique_cids_df)
 
             css = sorted(list(css))
