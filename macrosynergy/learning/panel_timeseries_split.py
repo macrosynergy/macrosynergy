@@ -530,6 +530,8 @@ if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
     import macrosynergy.management as msm
 
+    np.random.seed(0)
+    
     cids = ["AUD", "CAD", "GBP", "USD"]
     xcats = ["XR", "CRY", "GROWTH", "INFL"]
     cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
@@ -562,58 +564,58 @@ if __name__ == "__main__":
     # 1) Demonstration of basic functionality
 
     # a) n_splits = 4, n_split_method = expanding
-    splitter = PanelTimeSeriesSplit(n_splits=4, n_split_method="expanding")
+    splitter = PanelTimeSeriesSplit(n_splits=8, n_split_method="expanding")
     splitter.split(X2, y2)
     cv_results = cross_validate(
         LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
     )
     splitter.visualise_splits(X2, y2)
 
-    # b) n_splits = 4, n_split_method = rolling
-    splitter = PanelTimeSeriesSplit(n_splits=4, n_split_method="rolling")
-    splitter.split(X2, y2)
-    cv_results = cross_validate(
-        LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
-    )
-    splitter.visualise_splits(X2, y2)
+    # # b) n_splits = 4, n_split_method = rolling
+    # splitter = PanelTimeSeriesSplit(n_splits=4, n_split_method="rolling")
+    # splitter.split(X2, y2)
+    # cv_results = cross_validate(
+    #     LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
+    # )
+    # splitter.visualise_splits(X2, y2)
 
-    # c) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4
-    splitter = PanelTimeSeriesSplit(
-        train_intervals=21 * 12, test_size=1, min_periods=21, min_cids=4
-    )
-    splitter.split(X2, y2)
-    cv_results = cross_validate(
-        LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
-    )
-    splitter.visualise_splits(X2, y2)
+    # # c) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4
+    # splitter = PanelTimeSeriesSplit(
+    #     train_intervals=21 * 12, test_size=1, min_periods=21, min_cids=4
+    # )
+    # splitter.split(X2, y2)
+    # cv_results = cross_validate(
+    #     LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
+    # )
+    # splitter.visualise_splits(X2, y2)
 
-    # d) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4, max_periods=12*21
-    splitter = PanelTimeSeriesSplit(
-        train_intervals=21 * 12,
-        test_size=21 * 12,
-        min_periods=21,
-        min_cids=4,
-        max_periods=12 * 21,
-    )
-    splitter.split(X2, y2)
-    cv_results = cross_validate(
-        LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
-    )
-    splitter.visualise_splits(X2, y2)
+    # # d) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4, max_periods=12*21
+    # splitter = PanelTimeSeriesSplit(
+    #     train_intervals=21 * 12,
+    #     test_size=21 * 12,
+    #     min_periods=21,
+    #     min_cids=4,
+    #     max_periods=12 * 21,
+    # )
+    # splitter.split(X2, y2)
+    # cv_results = cross_validate(
+    #     LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
+    # )
+    # splitter.visualise_splits(X2, y2)
 
-    # 2) Grid search capabilities
-    lasso = Lasso()
-    parameters = {"alpha": [0.1, 1, 10]}
-    splitter = PanelTimeSeriesSplit(
-        train_intervals=21 * 12, test_size=1, min_periods=21, min_cids=4
-    )
-    gs = GridSearchCV(
-        lasso,
-        parameters,
-        cv=splitter,
-        scoring="neg_root_mean_squared_error",
-        refit=False,
-        verbose=3,
-    )
-    gs.fit(X2, y2)
-    print(gs.best_params_)
+    # # 2) Grid search capabilities
+    # lasso = Lasso()
+    # parameters = {"alpha": [0.1, 1, 10]}
+    # splitter = PanelTimeSeriesSplit(
+    #     train_intervals=21 * 12, test_size=1, min_periods=21, min_cids=4
+    # )
+    # gs = GridSearchCV(
+    #     lasso,
+    #     parameters,
+    #     cv=splitter,
+    #     scoring="neg_root_mean_squared_error",
+    #     refit=False,
+    #     verbose=3,
+    # )
+    # gs.fit(X2, y2)
+    # print(gs.best_params_)
