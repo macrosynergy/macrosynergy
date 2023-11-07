@@ -217,8 +217,28 @@ def adaptive_preds_to_pnl(
         and will be appended to each training target series created by the splitter. These
         should be ordered accordingly with the dataframes in additional_X.
     """
+    # (1) Create a dataframe to store the signals induced by each model and cross-section. 
+    signal_xs_levels: List[str] = sorted(X.index.get_level_values(0).unique())
+    original_date_levels: List[pd.Timestamp] = sorted(X.index.get_level_values(1).unique())
+    min_date: pd.Timestamp = min(original_date_levels)
+    max_date: pd.Timestamp = max(original_date_levels)
+    signal_date_levels: pd.DatetimeIndex = pd.bdate_range(start=min_date, end=max_date, freq="B")
+
+    sig_idxs = pd.MultiIndex.from_product(
+        [signal_xs_levels, signal_date_levels], names=["cid", "real_date"]
+    )
+    # The columns are the names 
+    signal_df: pd.MultiIndex = pd.DataFrame(
+        index=sig_idxs, columns=models.keys(), data=np.nan, dtype="float64"
+    )
+    # (2) For each adaptive model, create the signal that it induces.
+    # (2a) First concatenate the additional dataframes and series, if they exist, for
+    #      efficiency in the later loop. 
+    if additional_X is not None:
+        X_old: pd.DataFrame = pd.concat(additional_X, axis=0)
+        y_old: pd.Series = pd.concat(additional_y, axis=0)
+
     pass
-    
 
 
 if __name__ == "__main__":
