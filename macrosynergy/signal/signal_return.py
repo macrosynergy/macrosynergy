@@ -79,7 +79,10 @@ class SignalsReturns(SignalBase):
         )
         self.df = df.copy()
 
-        self.cids = cids if isinstance(cids, list) else [cids]
+        if isinstance(cids, str):
+            self.cids = [cids]
+        else:
+            self.cids = cids
 
         if not self.is_list_of_strings(rets):
             self.ret = [rets]
