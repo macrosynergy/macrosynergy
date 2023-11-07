@@ -54,12 +54,12 @@ class SignalsReturns(SignalBase):
         signs: Union[int, List[int]] = 1,
         slip: int = 0,
         cosp: bool = False,
-        start: str = None,
-        end: str = None,
-        blacklist: dict = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        blacklist: Optional[dict] = None,
         freqs: Union[str, List[str]] = "M",
         agg_sigs: Union[int, List[int]] = "last",
-        cids: Union[str, List[str]] = None,
+        cids: Optional[Union[str, List[str]]] = None,
     ):
         super().__init__(
             df=df,
