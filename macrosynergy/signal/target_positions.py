@@ -37,12 +37,15 @@ def weight_dataframes(df: pd.DataFrame, basket_names: Union[str, List[str]] = No
     df_c_wgts = []
     b_dict = {}
     contr_func = lambda index: "_".join(index.split("_")[0:2])
+
+    r_df_copy = r_df.copy()
+
     for b in basket_names:
         b_df = r_df[r_df["basket_name"] == b]
-        b_df_copy = b_df.copy()
+        b_df_copy = r_df_copy[r_df_copy["basket_name"] == b]
         b_df_copy = b_df_copy.drop(["basket_name"], axis=1)
-        column = (b_df["cid"] + "_" + b_df["xcat"]).to_numpy()
-        b_df_copy["xcat"] = np.array(map(contr_func, column))
+        column = b_df["cid"] + "_" + b_df["xcat"]
+        b_df_copy["xcat"] = np.array(list(map(contr_func, column)))
         b_wgt = b_df_copy.pivot(index="real_date", columns="xcat", values="value")
         b_wgt = b_wgt.reindex(sorted(b_wgt.columns), axis=1)
         df_c_wgts.append(b_wgt)
@@ -144,18 +147,20 @@ def cs_unit_returns(
 
     error_message = "Each individual contract requires an associated signal."
     assert len(contract_returns) == len(sigrels), error_message
+    df_c_rets = None
 
     for i, c_ret in enumerate(contract_returns):
+        # Filter the DataFrame 'df' to just c_ret xcats
         df_c_ret = df[df["xcat"] == c_ret]
+        # Reshape the DataFrame by setting 'real_date' as index, 'cid' as columns, and 
+        # 'value' as values.
         df_c_ret = df_c_ret.pivot(index="real_date", columns="cid", values="value")
 
+        # Sort the dataframe and multiply by the respective signal.
         df_c_ret = df_c_ret.sort_index(axis=1)
         df_c_ret *= sigrels[i]
 
-        if i == 0:  # Add each return series of the contract.
-            df_c_rets = df_c_ret
-        else:
-            df_c_rets += df_c_ret
+        df_c_rets = df_c_ret if i == 0 else df_c_rets + df_c_ret
 
     # Any dates not shared by all categories will be removed.
     df_c_rets.dropna(how="all", inplace=True)
@@ -233,20 +238,20 @@ def date_alignment(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
     p_dates = panel_df["real_date"].to_numpy()
     b_dates = basket_df["real_date"].to_numpy()
     if p_dates[0] > b_dates[0]:
-        index = np.where(b_dates == p_dates[0])[0]
-        basket_df = basket_df.iloc[index[0] :, :]
+        index = np.searchsorted(b_dates, p_dates[0])
+        basket_df = basket_df.iloc[index:, :]
     elif p_dates[0] < b_dates[0]:
-        index = np.where(p_dates == b_dates[0])[0]
-        panel_df = panel_df.iloc[index[0] :, :]
+        index = np.searchsorted(p_dates, b_dates[0])
+        panel_df = panel_df.iloc[index:, :]
     else:
         pass
 
     if p_dates[-1] > b_dates[-1]:
-        index = np.where(p_dates == b_dates[-1])[0]
-        panel_df = panel_df.iloc[: index[0], :]
+        index = np.searchsorted(p_dates, b_dates[-1], side='right')
+        panel_df = panel_df.iloc[:index, :]
     elif p_dates[-1] < b_dates[-1]:
-        index = np.where(b_dates == p_dates[-1])[0]
-        basket_df = basket_df.iloc[: index[0], :]
+        index = np.searchsorted(b_dates, p_dates[-1], side='right')
+        basket_df = basket_df.iloc[:index, :]
     else:
         pass
 
@@ -306,16 +311,13 @@ def consolidate_positions(data_frames: List[pd.DataFrame], ctypes: List[str]):
     no_ctypes = len(ctypes)
     dict_ = dict(zip(ctypes[:no_ctypes], data_frames[:no_ctypes]))
     df_baskets = data_frames[no_ctypes:]
-
-    split_2 = lambda b: b.split("_")[1]
     # Iterating exclusively through the basket dataframes.
     for df in df_baskets:
-        category = list(map(split_2, df["xcat"].to_numpy()))
-        c_type = category[0]
+        category = df["xcat"].str.split("_", expand=True)[1]
+        c_type = category.iloc[0]
 
         panel_df = dict_[c_type]
-        panel_df = consolidation_help(panel_df, basket_df=df)
-        dict_[c_type] = panel_df
+        dict_[c_type] = consolidation_help(panel_df, basket_df=df)
 
     return list(dict_.values())
 

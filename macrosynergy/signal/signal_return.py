@@ -165,7 +165,8 @@ class SignalsReturns(SignalBase):
         ).round(decimals=5)
 
         self.df = self.original_df
-        index = f"{freq}: {sig + '_NEG' if self.signs[self.sig.index(sig)] == -1 else sig}/{agg_sigs} => {ret}"
+        sig_string = sig + '_NEG' if self.signs[self.sig.index(sig)] == -1 else sig
+        index = f"{freq}: {sig_string}/{agg_sigs} => {ret}"
 
         df_result.rename(index={"Panel": index}, inplace=True)
 
