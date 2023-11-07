@@ -147,7 +147,7 @@ def cs_unit_returns(
 
     error_message = "Each individual contract requires an associated signal."
     assert len(contract_returns) == len(sigrels), error_message
-    df_crets = None
+    df_c_rets = None
 
     for i, c_ret in enumerate(contract_returns):
         # Filter the DataFrame 'df' to just c_ret xcats
