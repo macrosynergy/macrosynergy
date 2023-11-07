@@ -3,12 +3,9 @@ Module for analysing and visualizing signal and a return series.
 """
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from sklearn import metrics as skm
 from scipy import stats
-from typing import List, Union, Tuple, Any, Optional
-from datetime import timedelta
-from collections import defaultdict
+from typing import List, Union, Any, Optional
 import warnings
 
 from macrosynergy.management.utils import (
@@ -129,7 +126,7 @@ class SignalBase:
             self.cids = [cids]
         else:
             self.cids = cids
-            
+
         self.sig = sig
         self.slip = slip
         self.agg_sig = agg_sig
@@ -407,7 +404,8 @@ class SignalBase:
 
             if not css.issubset(unique_cids_df):
                 warnings.warn(
-                    f"Cross-sections {css - unique_cids_df} have no corresponding xcats in the dataframe."
+                    f"Cross-sections {css - unique_cids_df} have no corresponding xcats \
+                        in the dataframe."
                 )
                 css = css.intersection(unique_cids_df)
 
