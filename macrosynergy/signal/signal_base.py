@@ -32,6 +32,7 @@ class SignalBase:
         agg_sig: Union[str, List[str]] = "last",
         fwin: int = 1,
         slip: int = 0,
+        cids: Optional[List[str]] = None,
     ):
         """
         Signal base is used as a parent class for both SignalReturns and
@@ -124,10 +125,14 @@ class SignalBase:
         self.blacklist = blacklist
         self.fwin = fwin
 
+        if isinstance(cids, str):
+            self.cids = [cids]
+        else:
+            self.cids = cids
+            
         self.sig = sig
         self.slip = slip
         self.agg_sig = agg_sig
-
         self.xcats = list(df["xcat"].unique())
         self.df = df
         self.original_df = df.copy()
