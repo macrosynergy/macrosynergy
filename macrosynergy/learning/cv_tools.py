@@ -5,13 +5,14 @@ A set of tools for cross-validation of panel data.
 """
 
 import numpy as np
-import pandas as pd 
+import pandas as pd
 import datetime
 from typing import Union, Optional, Dict
 
 from macrosynergy.learning import PanelTimeSeriesSplit
 from sklearn.model_selection import cross_validate
 from sklearn.metrics import make_scorer
+
 
 def panel_cv_scores(
     X: pd.DataFrame,
@@ -46,7 +47,7 @@ def panel_cv_scores(
         Default is 1.
     :param <int> n_jobs: integer specifying the number of jobs to run in parallel.
         Default is -1, which uses all cores.
-        
+
     :return <pd.DataFrame> metrics_df: dataframe comprising means & standard deviations of
         cross-validation metrics for each sklearn estimator, over the walk-forward history.
 
@@ -81,13 +82,15 @@ def panel_cv_scores(
     if not isinstance(y.index.get_level_values(1)[0], datetime.date):
         raise TypeError("The inner index of y must be datetime.date.")
     if not X.index.equals(y.index):
-        raise ValueError("The indices of the input dataframe X and the output dataframe y don't match.")
+        raise ValueError(
+            "The indices of the input dataframe X and the output dataframe y don't match."
+        )
 
     # check that there is at least one estimator and at least one scoring metric
     if len(estimators) <= 0:
         raise ValueError("There must be at least one estimator provided.")
     if len(scoring) <= 0:
-        raise ValueError("There must be at least one scoring metric provided.") 
+        raise ValueError("There must be at least one scoring metric provided.")
     if verbose < 0:
         raise ValueError("verbose must be a non-negative integer.")
     if (n_jobs < 1) & (n_jobs != -1):
@@ -95,16 +98,28 @@ def panel_cv_scores(
 
     # construct the dataframe to return
     if show_longbias:
-        scoring["Positive prediction ratio"] = make_scorer(lambda y_true, y_pred: np.sum(y_pred > 0)/len(y_pred))
-        scoring["Positive test-target ratio"] = make_scorer(lambda y_true, y_pred: np.sum(y_true > 0)/len(y_true))
+        scoring["Positive prediction ratio"] = make_scorer(
+            lambda y_true, y_pred: np.sum(y_pred > 0) / len(y_pred)
+        )
+        scoring["Positive test-target ratio"] = make_scorer(
+            lambda y_true, y_pred: np.sum(y_true > 0) / len(y_true)
+        )
 
-    results: Dict[str, Dict[str, float]] = {estimator_name: {} for estimator_name in estimators}
+    results: Dict[str, Dict[str, float]] = {
+        estimator_name: {} for estimator_name in estimators
+    }
 
     for estimator_name, estimator in estimators.items():
         if verbose:
             print(f"Calculating walk-forward validation metrics for {estimator_name}.")
         cv_results: Dict[str, np.ndarray] = cross_validate(
-            estimator, X, y, cv=splitter, scoring=scoring, verbose=verbose, n_jobs=n_jobs
+            estimator,
+            X,
+            y,
+            cv=splitter,
+            scoring=scoring,
+            verbose=verbose,
+            n_jobs=n_jobs,
         )
 
         for metric_name in scoring:
@@ -115,11 +130,16 @@ def panel_cv_scores(
 
     metrics_df = pd.DataFrame(results)
     if show_std:
-        multi_index: pd.MultiIndex = pd.MultiIndex.from_tuples([(key.split('_')[0], 'std' if 'std' in key else 'mean')
-                                                for key in metrics_df.index])
+        multi_index: pd.MultiIndex = pd.MultiIndex.from_tuples(
+            [
+                (key.split("_")[0], "std" if "std" in key else "mean")
+                for key in metrics_df.index
+            ]
+        )
         metrics_df.index = multi_index
 
     return metrics_df
+
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
@@ -127,7 +147,11 @@ if __name__ == "__main__":
     import macrosynergy.learning as msl
 
     from sklearn.linear_model import LinearRegression, Lasso
-    from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
+    from sklearn.metrics import (
+        mean_squared_error,
+        mean_absolute_error,
+        mean_absolute_percentage_error,
+    )
 
     cids = ["AUD", "CAD", "GBP", "USD"]
     xcats = ["XR", "CRY", "GROWTH", "INFL"]
@@ -162,7 +186,9 @@ if __name__ == "__main__":
     splitex = PanelTimeSeriesSplit(n_splits=100, n_split_method="expanding")
     models = {"OLS": LinearRegression(), "Lasso": Lasso()}
     metrics = {
-        "rmse": make_scorer(lambda y_true, y_pred: np.sqrt(mean_squared_error(y_true, y_pred))),
+        "rmse": make_scorer(
+            lambda y_true, y_pred: np.sqrt(mean_squared_error(y_true, y_pred))
+        ),
         "mae": make_scorer(mean_absolute_error),
         "mape": make_scorer(mean_absolute_percentage_error),
         "acc": make_scorer(msl.regression_accuracy),
