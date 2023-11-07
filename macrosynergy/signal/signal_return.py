@@ -63,7 +63,7 @@ class SignalsReturns(SignalBase):
         blacklist: Optional[dict] = None,
         freqs: Union[str, List[str]] = "M",
         agg_sigs: Union[int, List[int]] = "last",
-        cids: Optional[Union[str, List[str]]] = None,
+        cids: Union[str, List[str]] = None,
     ):
         super().__init__(
             df=df,
@@ -76,13 +76,9 @@ class SignalsReturns(SignalBase):
             blacklist=blacklist,
             freq=freqs,
             agg_sig=agg_sigs,
+            cids=cids,
         )
         self.df = df.copy()
-
-        if isinstance(cids, str):
-            self.cids = [cids]
-        else:
-            self.cids = cids
 
         if not self.is_list_of_strings(rets):
             self.ret = [rets]
