@@ -5,10 +5,9 @@ Function for calculating historic volatility of quantamental data.
 """
 import numpy as np
 import pandas as pd
-from typing import List, Union, Tuple, Optional
+from typing import List, Optional, Dict, Any
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils import reduce_df
-from datetime import timedelta
+from macrosynergy.management.utils import reduce_df, standardise_dataframe
 
 
 def expo_weights(lback_periods: int = 21, half_life: int = 11):
@@ -321,30 +320,28 @@ def historic_vol(
             )
 
         fills = {"d": 1, "w": 5, "m": 24, "q": 64}
-        dfwa = dfwa.reindex(dfw.index).fillna(method="ffill", limit=fills[est_freq])
+        dfwa = dfwa.reindex(dfw.index).ffill(limit=fills[est_freq])
 
     df_out = dfwa.unstack().reset_index().rename({0: "value"}, axis=1)
     df_out["xcat"] = xcat + postfix
 
     # iteratively ensure that each cid has the same date entries as the input df
-    df_out_copy = df_out.copy()
-    df_out = pd.DataFrame(columns=df_out.columns)
-
+    out_dfs: List[pd.DataFrame] = []
     for cid in cids:
-        date_list = in_df[in_df["cid"] == cid]["real_date"].unique()
-        date_range = pd.date_range(date_list.min(), date_list.max())
-        # only copy over values that are in the date range
-        df_out = pd.concat(
-            [
-                df_out,
-                df_out_copy[
-                    df_out_copy["real_date"].isin(date_range)
-                    & (df_out_copy["cid"] == cid)
-                ],
-            ]
+        sel_bools = df_out["cid"] == cid
+        in_df_start = in_df["cid"] == cid
+        sel_dts = df_out["real_date"].isin(
+            (
+                pd.bdate_range(
+                    start=in_df.loc[in_df_start, "real_date"].min(),
+                    end=in_df.loc[in_df_start, "real_date"].max(),
+                )
+            )
         )
 
-    return df_out[df.columns].sort_values(["cid", "xcat", "real_date"])
+        out_dfs.append(df_out.loc[sel_bools & sel_dts])
+
+    return standardise_dataframe(pd.concat(out_dfs))
 
 
 if __name__ == "__main__":
