@@ -129,7 +129,7 @@ class TestAll(unittest.TestCase):
         self.assertEqual(period_t_gbp, period_t_2_gbp)
 
         # INFL_L5 on GBP.
-        period_t_5_gbp = float(period_t_5.loc["GBP"])
+        period_t_5_gbp = float(period_t_5.loc["GBP"].values[0])
         self.assertEqual(period_t_gbp, period_t_5_gbp)
 
         # Lag inflation & Growth by a range of possible options.

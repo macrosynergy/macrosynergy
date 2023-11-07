@@ -1,7 +1,7 @@
 import unittest
 from macrosynergy.signal.signal_return_relations import SignalReturnRelations
 
-from tests.simulate import make_qdf
+from macrosynergy.management.simulate import make_qdf
 from sklearn.metrics import accuracy_score, precision_score
 from scipy import stats
 import random
@@ -76,7 +76,7 @@ class TestAll(unittest.TestCase):
             srr = SignalReturnRelations(
                 self.dfd, ret="XR", sig="Missing", freq="D", blacklist=self.blacklist
             )
-        
+
         # Test that frequency must be one of the following: 'D', 'W', 'M', 'Q', 'Y'.
         with self.assertRaises(ValueError):
             srr = SignalReturnRelations(
@@ -261,7 +261,7 @@ class TestAll(unittest.TestCase):
         dfd = srr_cosp.dfd
         filt_1 = (dfd["real_date"] == "2011-01-04") & (dfd["xcat"] == "XR")
         dfd_filt = dfd[filt_1]
-        benchmark_value = float(dfd_filt[dfd_filt["cid"] == "AUD"]["value"])
+        benchmark_value = float(dfd_filt[dfd_filt["cid"] == "AUD"]["value"].iloc[0])
         benchmark_value = round(benchmark_value, 5)
 
         test_row = srr_cosp.df.loc["AUD"].loc["2011-01-04"]
@@ -275,7 +275,7 @@ class TestAll(unittest.TestCase):
         signals = [primary_signal] + rival_signals
 
         for s in signals:
-            test_value = float(dfd_filt[dfd_filt["xcat"] == s]["value"])
+            test_value = float(dfd_filt[dfd_filt["xcat"] == s]["value"].iloc[0])
             self.assertTrue(np.isclose(test_value, test_row[s]))
 
         # Confirm the dimensions of the return column remains unchanged - alignment
@@ -569,7 +569,7 @@ class TestAll(unittest.TestCase):
             slip=test_slip,
             xcats=sel_xcats,
             cids=sel_cids,
-            metrics=["value", "vx"]
+            metrics=["value", "vx"],
         )
 
         # NOTE: casting df.vx to int as pandas casts it to float64
@@ -623,7 +623,11 @@ class TestAll(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             SignalReturnRelations.apply_slip(
-                df=df, slip=-1, xcats=sel_xcats, cids=sel_cids, metrics=["value"],
+                df=df,
+                slip=-1,
+                xcats=sel_xcats,
+                cids=sel_cids,
+                metrics=["value"],
             )
 
         with self.assertRaises(ValueError):
@@ -683,7 +687,7 @@ class TestAll(unittest.TestCase):
         )
         self.assertTrue(srr.cross_section_table().shape == (8, 10))
         self.assertTrue(srr.yearly_table().shape == (16, 10))
-    
+
     def test_accuracy_and_correlation_bars(self):
         self.dataframe_generator()
         mpl_backend = matplotlib.get_backend()
@@ -699,7 +703,7 @@ class TestAll(unittest.TestCase):
             blacklist=self.blacklist,
         )
 
-        #Check that accuracy bars actually outputs an image
+        # Check that accuracy bars actually outputs an image
         try:
             srr.accuracy_bars()
         except Exception as e:
