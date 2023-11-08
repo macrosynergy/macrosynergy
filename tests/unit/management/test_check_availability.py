@@ -7,6 +7,8 @@ from macrosynergy.management.utils.check_availability import (
     check_enddates,
     business_day_dif,
 )
+
+
 import numpy as np
 from tests.simulate import make_qdf
 
@@ -75,20 +77,22 @@ class TestAll(unittest.TestCase):
         dfd = self.dfd
 
         df_ed = check_enddates(dfd)
+
         # Reorder the categories alphabetically.
         df_ed = df_ed.reindex(sorted(df_ed.columns), axis=1)
 
-        df_exp = pd.DataFrame(
-            data=np.zeros((3, 5)), index=self.cids, columns=self.xcats
+        df_exp: pd.DataFrame = pd.DataFrame(
+            # data=np.zeros((3, 5)),
+            index=self.cids,
+            columns=self.xcats,
         )
 
         for cid in self.cids:
             for xcat in self.xcats:
                 # Validate on the DataFrame received by the method.
                 filt_1 = (dfd["xcat"] == xcat) & (dfd["cid"] == cid)
-                dfd_reduced = dfd[filt_1]["real_date"]
-                end_date = max(dfd_reduced)
-                df_exp.loc[cid, xcat] = end_date.strftime("%Y-%m-%d")
+                end_date = dfd[filt_1]["real_date"].max()
+                df_exp.loc[cid, xcat] = pd.Timestamp(end_date).strftime("%Y-%m-%d")
 
         df_exp = df_exp.reindex(sorted(df_exp.columns), axis=1)
         self.assertTrue(df_ed.equals(df_exp))
