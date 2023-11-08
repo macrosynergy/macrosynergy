@@ -5,6 +5,7 @@ of financial contracts using various weighting methods.
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import warnings
 
 import random
 from typing import List, Union, Tuple
@@ -293,7 +294,7 @@ class Basket(object):
         negative_condition = np.any((dfw_wgt < 0).to_numpy())
         if negative_condition:
             dfw_wgt[dfw_wgt < 0] = 0.0
-            print("Negative values in the weight matrix set to zero.")
+            warnings.warn("Negative values in the weight matrix set to zero.")
 
         exo_array = dfw_wgt.to_numpy()
         df_bool = ~dfw_ret.isnull()
