@@ -1,3 +1,5 @@
+from typing import List, Dict, Union, Tuple, Optional
+
 import unittest
 import numpy as np
 import pandas as pd
@@ -10,36 +12,34 @@ from itertools import chain
 import warnings
 
 
-warnings.filterwarnings("ignore")
-
-
 class TestAll(unittest.TestCase):
-    def dataframe_generator(self):
-        self.__dict__["ret"] = "XR_NSA"
-        self.__dict__["cry"] = ["CRY_NSA", "CRR_NSA"]
-        black = {
+    def setUp(self) -> None:
+        self.ret: str = "XR_NSA"
+        self.cry: List[str] = ["CRY_NSA", "CRR_NSA"]
+        self.black: Dict[str, List[str]] = {
             "AUD": ["2000-01-01", "2003-12-31"],
             "GBP": ["2018-01-01", "2100-01-01"],
         }
-        self.__dict__["black"] = black
+
         dfw_ret, dfw_cry, dfd = dataframe_basket(
             ret=self.ret, cry=self.cry, black=self.black
         )
-        self.__dict__["dfw_ret"] = dfw_ret
-        self.__dict__["dfw_cry"] = dfw_cry
-        self.__dict__["dfd"] = dfd
-        contracts = ["AUD_FX", "AUD_EQ", "NZD_FX", "GBP_EQ", "USD_EQ"]
-        self.__dict__["contracts"] = contracts
+        self.dfw_ret: pd.DataFrame = dfw_ret
+        self.dfw_cry: List[pd.DataFrame] = dfw_cry
+        self.dfd: pd.DataFrame = dfd
+        self.contracts: List[str] = ["AUD_FX", "AUD_EQ", "NZD_FX", "GBP_EQ", "USD_EQ"]
 
-        # Instantiate an instance of the Class.
         basket = Basket(
             df=dfd,
-            contracts=contracts,
+            contracts=self.contracts,
             ret="XR_NSA",
             cry=["CRY_NSA", "CRR_NSA"],
-            blacklist=black,
+            blacklist=self.black,
         )
-        self.__dict__["basket"] = basket
+        self.basket: Basket = basket
+
+    def tearDown(self) -> None:
+        return super().tearDown()
 
     # Internal method used to return a dataframe with the uniform weights and a bool
     # array indicating which rows the procedure is necessary for.
@@ -68,7 +68,6 @@ class TestAll(unittest.TestCase):
             Basket.check_weights(weights)
 
     def test_equal_weight(self):
-        self.dataframe_generator()
         dfw_bool = ~self.dfw_ret.isnull()
         dfw_bool = dfw_bool.astype(dtype=np.uint8)
         bool_arr = dfw_bool.to_numpy()
@@ -88,7 +87,6 @@ class TestAll(unittest.TestCase):
             self.assertTrue(np.all(np.nan_to_num(row) == test))
 
     def test_fixed_weight(self):
-        self.dataframe_generator()
         w = [6, 12, 7, 8, 13]
         weights = self.basket.fixed_weight(df_ret=self.dfw_ret, weights=w)
 
@@ -104,7 +102,6 @@ class TestAll(unittest.TestCase):
             self.assertAlmostEqual(sum_of_diffs, 0, 4)
 
     def test_inverse_weight(self):
-        self.dataframe_generator()
         weights = self.basket.inverse_weight(self.dfw_ret, "ma")
         fvi = weights.first_valid_index()
         weights = weights[fvi:]
@@ -147,7 +144,6 @@ class TestAll(unittest.TestCase):
             self.assertTrue(reverse_order == sorted(row_weight, reverse=True))
 
     def test_values_weights(self):
-        self.dataframe_generator()
         # Construct an additional dataframe on a different category to delimit weights.
         # Comparable to the design of basket_performance.py file which isolates a
         # category, from the dataframe produced by make_qdf(), and uses the now truncated
@@ -196,7 +192,6 @@ class TestAll(unittest.TestCase):
             self.assertTrue(np.allclose(compare_1, compare_2))
 
     def test_max_weight(self):
-        self.dataframe_generator()
         # Test on a randomly generated set of weights (pseudo-DataFrame).
         max_weight = 0.3
 
@@ -254,7 +249,6 @@ class TestAll(unittest.TestCase):
         # Test the operations associated with the Class's Constructor. Will implicitly
         # test the methods: store_attributes(), pivot_dataframe(), date_check().
 
-        self.dataframe_generator()
         dfw_ret = self.dfw_ret
         dfw_cry = self.dfw_cry
         dfd_test = self.dfd
@@ -344,7 +338,6 @@ class TestAll(unittest.TestCase):
         # be stored inside the respective dictionaries: "self.dict_retcry" &
         # "self.dict_wgs".
 
-        self.dataframe_generator()
         basket_1 = Basket(
             df=self.dfd,
             contracts=self.contracts,
@@ -497,7 +490,6 @@ class TestAll(unittest.TestCase):
         # visualisation tools require certain parameters to be defined (dependency
         # between parameters.
 
-        self.dataframe_generator()
         basket_1 = Basket(
             df=self.dfd,
             contracts=self.contracts,
@@ -576,7 +568,6 @@ class TestAll(unittest.TestCase):
 
     def test_return_basket(self):
         # Method used to return the computed dataframes.
-        self.dataframe_generator()
         basket_1 = Basket(
             df=self.dfd,
             contracts=self.contracts,
