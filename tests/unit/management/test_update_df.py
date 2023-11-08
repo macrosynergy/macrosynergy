@@ -157,18 +157,20 @@ class TestAll(unittest.TestCase):
         self.assertTrue(new_categories.issubset(set(dfd_1_rv["xcat"])))
 
         dfd_1_rv_growth = dfd_1_rv[dfd_1_rv["xcat"] == "GROWTHRV"]
-        dfd_1_rv_growth_aud = dfd_1_rv_growth[dfd_1_rv_growth["cid"] == "AUD"]
+        dfd_1_rv_growth_aud: pd.DataFrame = dfd_1_rv_growth[
+            dfd_1_rv_growth["cid"] == "AUD"
+        ]
 
         value = dfd_1_rv_growth_aud[dfd_1_rv_growth_aud["real_date"] == fixed_date][
             "value"
-        ]
+        ].iloc[0]
 
         # Confirm the values do not change during the aggregation mechanism.
         dfd_add_growth = dfd_add[dfd_add["xcat"] == "GROWTHRV"]
         dfd_add_aud = dfd_add_growth[dfd_add_growth["cid"] == "AUD"]
 
-        test = dfd_add_aud[dfd_add_aud["real_date"] == fixed_date]["value"]
-        self.assertTrue(float(test) == float(value))
+        test = dfd_add_aud[dfd_add_aud["real_date"] == fixed_date]["value"].iloc[0]
+        self.assertTrue(test == value)
 
         # Test the replacement mechanism: categories are already in the dataframe but are
         # to be replaced by new values.
@@ -190,8 +192,10 @@ class TestAll(unittest.TestCase):
         dfd_add_growth_2 = dfd_add_2[dfd_add_2["xcat"] == "GROWTHRV"]
         dfd_add_aud_2 = dfd_add_growth_2[dfd_add_growth_2["cid"] == "AUD"]
 
-        test_2 = dfd_add_aud_2[dfd_add_aud_2["real_date"] == fixed_date]["value"]
-        self.assertTrue(float(test_2) != float(value))
+        test_2 = dfd_add_aud_2[dfd_add_aud_2["real_date"] == fixed_date]["value"].iloc[
+            0
+        ]
+        self.assertTrue(test_2 != value)
 
         # Hence, confirm the new value stored in "dfd_add_2" is sourced from the latest
         # dataframe "dfd_1_rv_divide".
@@ -200,8 +204,8 @@ class TestAll(unittest.TestCase):
 
         value_2 = dfd_2_rv_growth_aud[dfd_2_rv_growth_aud["real_date"] == fixed_date][
             "value"
-        ]
-        self.assertTrue(float(test_2) == float(value_2))
+        ].iloc[0]
+        self.assertTrue(test_2 == value_2)
 
         # The final test is to confirm that the method is able to replace categories
         # that already exist in the dataframe, with the latest computed values, whilst
@@ -245,16 +249,17 @@ class TestAll(unittest.TestCase):
 
         incorrect_value = dfd_1_rv_growth_aud[
             dfd_1_rv_growth_aud["real_date"] == fixed_date
-        ]
-        incorrect_value = incorrect_value["value"]
+        ]["value"].iloc[0]
         # Isolate the respective date on the output dataframe, "dfd_add_2", and confirm
         # the value is not equal to the legacy value.
 
         dfd_add_growth_2 = dfd_add_2[dfd_add_2["xcat"] == "GROWTHRV"]
         dfd_add_aud_2 = dfd_add_growth_2[dfd_add_growth_2["cid"] == "AUD"]
 
-        test_1 = dfd_add_aud_2[dfd_add_aud_2["real_date"] == fixed_date]["value"]
-        self.assertTrue(float(test_1) != float(incorrect_value))
+        test_1 = dfd_add_aud_2[dfd_add_aud_2["real_date"] == fixed_date]["value"].iloc[
+            0
+        ]
+        self.assertTrue(test_1 != incorrect_value)
 
         # The latest value will be held in the dataframe, "dfd_3".
         dfd_1_rv_growth = dfd_3[dfd_3["xcat"] == "GROWTHRV"]
