@@ -193,8 +193,7 @@ class TestAll(unittest.TestCase):
         for i in range(weights_test.shape[0]):
             compare_1 = np.nan_to_num(weights_test[i, :])
             compare_2 = np.nan_to_num(weights_arr[i, :])
-            condition = (np.all(compare_1 - compare_2)) < 0.000001
-            # self.assertTrue(condition)
+            self.assertTrue(np.allclose(compare_1, compare_2))
 
     def test_max_weight(self):
         self.dataframe_generator()
