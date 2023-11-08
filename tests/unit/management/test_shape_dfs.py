@@ -237,8 +237,8 @@ class TestAll(unittest.TestCase):
         cad = cad["value"].to_numpy()[0]
 
         # Isolate the first value for both cross-sectional series: '2011 - 2016'.
-        aud_xr = dfc["XR"].loc["AUD"][0]
-        cad_xr = dfc["XR"].loc["CAD"][0]
+        aud_xr = dfc.loc["AUD", "XR"].iloc[0]
+        cad_xr = dfc.loc["CAD", "XR"].iloc[0]
         self.assertTrue(aud == aud_xr)
         self.assertTrue(cad == cad_xr)
 
@@ -304,10 +304,10 @@ class TestAll(unittest.TestCase):
 
         # Isolate a fixed week to test on and a single cross-section. It is the signal
         # that is being lagged, 'CRY'.
-        dfc_aud = dfc.loc["AUD"]
+        dfc_aud: pd.DataFrame = dfc.loc["AUD"]
 
         fixed_date = "2011-02-25"
-        test_value = dfc_aud.loc[fixed_date]["CRY"]
+        test_value = dfc_aud.loc[fixed_date, "CRY"]
 
         # Lagged the arbitrarily chosen date by 3 weeks. The frequency has been reduced
         # to weekly and the applied lag is three.
@@ -325,9 +325,13 @@ class TestAll(unittest.TestCase):
         # Subtract to the previous Sunday to include the entire week's individual series.
         test_week = df_cr_aud.loc[date_lag - timedelta(6) : lagged_date]
         # Compute the average manually and confirm the lag has been applied correctly.
-        manual_calc = test_week.mean()
-        condition = abs(float(test_value) - float(manual_calc))
-        self.assertTrue(condition < 0.00001)
+        manual_calc = test_week.mean().values[0]
+        self.assertTrue(
+            np.isclose(
+                test_value,
+                manual_calc,
+            )
+        )
 
     def test_categories_df_multiple_xcats(self):
         # The method categories_df allows for multiple signals to be passed but the same
@@ -400,13 +404,14 @@ class TestAll(unittest.TestCase):
         dfd_values = dict(zip(dfd_values["xcat"], dfd_values["value"]))
 
         # Isolate the signals.
-        test_values = dfc[dfc.index.get_level_values("real_date") == fixed_date]
-        test_values_sigs = test_values.loc["AUD"][extra_signals[:-1]]
+        test_values: pd.DataFrame = dfc[
+            dfc.index.get_level_values("real_date") == fixed_date
+        ]
+        test_values_sigs: pd.DataFrame = test_values.loc["AUD"][extra_signals[:-1]]
 
         for xcat in test_values_sigs.columns:
-            t_value = float(test_values_sigs[xcat])
-            condition = abs(t_value - dfd_values[xcat])
-            self.assertTrue(condition < 0.00001)
+            t_value = float(test_values_sigs[xcat].values[0])
+            self.assertTrue(np.isclose(t_value, dfd_values[xcat]))
 
         # Test the return category whose summation method is mean.
         df_copy = df.copy()
@@ -419,9 +424,9 @@ class TestAll(unittest.TestCase):
             & (df_copy["cid"] == "AUD")
             & (df_copy["xcat"] == ret)
         )
-        df_copy = df_copy[filt_3]["value"]
+        df_copy: pd.Series = df_copy[filt_3]["value"]
 
-        test_value_ret = test_values.loc["AUD"][ret]
+        test_value_ret = test_values.loc["AUD", ret].iloc[0]
         condition = abs(float(test_value_ret) - df_copy.mean())
 
         self.assertTrue(condition < 0.00001)
