@@ -83,7 +83,6 @@ class TestAll(unittest.TestCase):
                 freqs="D",
                 blacklist=self.blacklist,
             )
-        print(self.dfd)
         # Test to confirm the primary signal must be present in the passed Dataframe
         with self.assertRaises(AssertionError):
             sr_sigs = SignalsReturns(

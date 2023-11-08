@@ -563,7 +563,7 @@ class TestAll(unittest.TestCase):
         )
         test_slip: int = 5
         # apply the slip method
-        print(int(min(df["vx"])))
+        
         out_df = SignalReturnRelations.apply_slip(
             df=df,
             slip=test_slip,
