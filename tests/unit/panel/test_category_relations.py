@@ -11,9 +11,12 @@ from typing import List, Tuple, Dict, Union, Optional
 import warnings
 
 warnings.resetwarnings()
+
+
 class TestAll(unittest.TestCase):
     # Method used to construct the respective DataFrame.
-    def dataframe_generator(self):
+
+    def setUp(self) -> None:
         self.cids: List[str] = ["AUD", "CAD", "GBP", "NZD", "JPY", "CHF"]
         self.xcats: List[str] = ["XR", "CRY", "GROWTH", "INFL"]
 
@@ -68,8 +71,10 @@ class TestAll(unittest.TestCase):
         # functionality.
         self.cidx: List[str] = ["AUD", "CAD", "GBP"]
 
+    def tearDown(self) -> None:
+        return super().tearDown()
+
     def test_constructor(self):
-        self.dataframe_generator()
         # Testing the various assert statements built into the Class's Constructor.
 
         with self.assertRaises(ValueError):
@@ -187,7 +192,7 @@ class TestAll(unittest.TestCase):
                 self.dfdx,
                 xcats=["GROWTH", "INFL"],
                 cids=self.cidx,
-                freq='D',
+                freq="D",
                 xcat_aggs=["mean", "mean"],
                 lag=1,
                 start="2000-01-01",
@@ -195,14 +200,14 @@ class TestAll(unittest.TestCase):
                 blacklist=self.black,
                 val=1,
             )
-        
+
         with self.assertRaises(TypeError):
             # Test xcat is of type either List or Tuple.
             cr = CategoryRelations(
                 self.dfdx,
                 xcats="GROWTH, INFL",
                 cids=self.cidx,
-                freq='D',
+                freq="D",
                 xcat_aggs=["mean", "mean"],
                 lag=1,
                 start="2000-01-01",
@@ -216,7 +221,7 @@ class TestAll(unittest.TestCase):
                 self.dfdx,
                 xcats=["GROWTH", "INFL"],
                 cids=self.cidx,
-                freq='D',
+                freq="D",
                 xcat_aggs=["mean", "mean"],
                 lag=1,
                 start="2000-01-01",
@@ -231,7 +236,7 @@ class TestAll(unittest.TestCase):
                 self.dfdx,
                 xcats=["GROWTH", "INFL"],
                 cids=self.cidx,
-                freq='D',
+                freq="D",
                 xcat_aggs=["mean", "mean"],
                 lag=1,
                 start="2000-01-01",
@@ -246,7 +251,7 @@ class TestAll(unittest.TestCase):
                 self.dfdx,
                 xcats=["GROWTH", "INFL"],
                 cids=self.cidx,
-                freq='D',
+                freq="D",
                 xcat_aggs="mean, mean",
                 lag=1,
                 start="2000-01-01",
@@ -255,8 +260,6 @@ class TestAll(unittest.TestCase):
             )
 
     def test_intersection_cids(self):
-        self.dataframe_generator()
-
         self.cidx = ["AUD", "CAD", "GBP", "USD", "CHF"]
 
         with warnings.catch_warnings(record=True) as w:
@@ -303,8 +306,6 @@ class TestAll(unittest.TestCase):
     # Test the conversion method from raw value to either n-period differencing or
     # percentage change.
     def test_time_series(self):
-        self.dataframe_generator()
-
         # Generate the DataFrame passed into the time_series() method: the procedure
         # occurs inside the Class's constructor.
         shared_cids = CategoryRelations.intersection_cids(
@@ -466,8 +467,6 @@ class TestAll(unittest.TestCase):
         # packages.
 
     def test_outlier_trim(self):
-        self.dataframe_generator()
-
         # Generate the dataframe passed into the outlier_trim() method: the procedure
         # occurs inside the Class's constructor.
         shared_cids = CategoryRelations.intersection_cids(
@@ -534,8 +533,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(df_outlier.shape == df_time_series.shape)
 
     def test_apply_slip(self):
-        self.dataframe_generator()
-
         # pick 3 random cids
         sel_xcats: List[str] = ["XR", "CRY"]
         sel_cids: List[str] = ["AUD", "CAD", "GBP"]
@@ -562,7 +559,6 @@ class TestAll(unittest.TestCase):
         )
         test_slip: int = 5
         # apply the slip method
-        print(int(min(df["vx"])))
         out_df = CategoryRelations.apply_slip(
             df=df,
             slip=test_slip,
@@ -630,7 +626,6 @@ class TestAll(unittest.TestCase):
             )
 
         # check that a value error is raised when cids and xcats are not in the dataframe
-        print(df)
         with self.assertRaises(ValueError):
             CategoryRelations.apply_slip(
                 df=df,
