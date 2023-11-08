@@ -1,26 +1,33 @@
-
 import unittest
 import pandas as pd
 from macrosynergy.management.utils.check_availability import *
 from tests.simulate import make_qdf
 
+
 class TestAll(unittest.TestCase):
-
     def dataframe_constructor(self):
-
         self.cids: List[str] = ["AUD", "CAD", "GBP"]
         self.xcats: List[str] = ["CRY", "XR", "GROWTH", "INFL", "GDP"]
 
-        df_cids = pd.DataFrame(index=self.cids,
-                               columns=["earliest", "latest", "mean_add", "sd_mult"])
+        df_cids = pd.DataFrame(
+            index=self.cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+        )
 
         df_cids.loc["AUD", :] = ["2011-01-01", "2022-08-10", 0.5, 2]
         df_cids.loc["CAD", :] = ["2011-01-01", "2022-08-24", 0, 1]
         df_cids.loc["GBP", :] = ["2011-01-01", "2022-08-15", -0.2, 0.5]
 
-        df_xcats = pd.DataFrame(index=self.xcats,
-                                columns=["earliest", "latest", "mean_add", "sd_mult",
-                                         "ar_coef", "back_coef"])
+        df_xcats = pd.DataFrame(
+            index=self.xcats,
+            columns=[
+                "earliest",
+                "latest",
+                "mean_add",
+                "sd_mult",
+                "ar_coef",
+                "back_coef",
+            ],
+        )
 
         df_xcats.loc["CRY", :] = ["2011-01-01", "2022-08-25", 1, 2, 0.9, 0.5]
         df_xcats.loc["XR", :] = ["2011-01-01", "2022-08-25", 0, 1, 0, 0.3]
@@ -33,7 +40,6 @@ class TestAll(unittest.TestCase):
         self.dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     def test_check_startyears(self):
-
         self.dataframe_constructor()
         dfd = self.dfd
 
@@ -47,7 +53,6 @@ class TestAll(unittest.TestCase):
 
         for cid in self.cids:
             for xcat in self.xcats:
-
                 # Validate on the DataFrame received by the method.
                 filt_1 = (dfd["xcat"] == xcat) & (dfd["cid"] == cid)
                 dfd_reduced = dfd[filt_1]["real_date"].dt.year
@@ -58,7 +63,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue((df_sy.astype(int)).equals(df_exp.astype(int)))
 
     def test_check_enddates(self):
-
         self.dataframe_constructor()
         dfd = self.dfd
 
@@ -72,7 +76,6 @@ class TestAll(unittest.TestCase):
 
         for cid in self.cids:
             for xcat in self.xcats:
-
                 # Validate on the DataFrame received by the method.
                 filt_1 = (dfd["xcat"] == xcat) & (dfd["cid"] == cid)
                 dfd_reduced = dfd[filt_1]["real_date"]
@@ -83,7 +86,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(df_ed.equals(df_exp))
 
     def test_business_day_dif(self):
-
         self.dataframe_constructor()
         dfd: pd.DataFrame = self.dfd
 
@@ -100,6 +102,5 @@ class TestAll(unittest.TestCase):
         self.assertTrue(all(bus_df.loc["GBP", :].values == 7))
 
 
-if __name__ == '__main__':
-
+if __name__ == "__main__":
     unittest.main()
