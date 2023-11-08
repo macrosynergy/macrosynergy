@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import os
 from typing import List
-from macrosynergy.management.simulate import *
+from macrosynergy.management.simulate import make_qdf, make_qdf_black, simulate_ar, generate_lines, make_test_df
 
 
 class Test_All(unittest.TestCase):
