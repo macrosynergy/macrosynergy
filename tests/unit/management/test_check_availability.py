@@ -5,7 +5,7 @@ from tests.simulate import make_qdf
 
 
 class TestAll(unittest.TestCase):
-    def dataframe_constructor(self):
+    def setUp(self) -> None:
         self.cids: List[str] = ["AUD", "CAD", "GBP"]
         self.xcats: List[str] = ["CRY", "XR", "GROWTH", "INFL", "GDP"]
 
@@ -39,8 +39,10 @@ class TestAll(unittest.TestCase):
 
         self.dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
+    def tearDown(self) -> None:
+        return super().tearDown()
+
     def test_check_startyears(self):
-        self.dataframe_constructor()
         dfd = self.dfd
 
         df_sy = check_startyears(self.dfd)
@@ -63,7 +65,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue((df_sy.astype(int)).equals(df_exp.astype(int)))
 
     def test_check_enddates(self):
-        self.dataframe_constructor()
         dfd = self.dfd
 
         df_ed = check_enddates(dfd)
@@ -86,7 +87,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(df_ed.equals(df_exp))
 
     def test_business_day_dif(self):
-        self.dataframe_constructor()
         dfd: pd.DataFrame = self.dfd
 
         dfe: pd.DataFrame = check_enddates(dfd)
