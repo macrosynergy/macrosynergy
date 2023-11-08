@@ -180,7 +180,15 @@ def view_ranges(
     if (len(xcats) == 1) and (xcat_labels is None):
         ax.get_legend().remove()
     else:
-        ax.legend(handles=handles[0:], labels=labels[0:])
+        ax.legend(
+            handles=handles[0:],
+            labels=labels[0:],
+            loc=legend_loc,
+            bbox_to_anchor=legend_bbox_to_anchor,
+        )
+
+    plt.tight_layout()
+
     plt.show()
 
 
