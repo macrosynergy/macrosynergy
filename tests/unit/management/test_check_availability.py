@@ -1,6 +1,13 @@
 import unittest
 import pandas as pd
-from macrosynergy.management.utils.check_availability import *
+from typing import List
+from macrosynergy.management.utils.check_availability import (
+    check_availability,
+    check_startyears,
+    check_enddates,
+    business_day_dif,
+)
+import numpy as np
 from tests.simulate import make_qdf
 
 
