@@ -162,7 +162,7 @@ def view_correlation(
 
             if title is None:
                 title = (
-                    f"Cross-category correlation of {xcats[0]} from {s_date} to "
+                    f"Cross-category correlation from {s_date} to "
                     f"{e_date}"
                 )
         corr = (
