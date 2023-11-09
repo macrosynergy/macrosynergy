@@ -1,3 +1,7 @@
+"""
+Module for calculating the historic portfolio volatility for a given strategy.
+"""
+
 from typing import List, Optional
 import pandas as pd
 
