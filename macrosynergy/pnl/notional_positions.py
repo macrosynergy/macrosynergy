@@ -2,7 +2,6 @@
 Module for calculating notional positions based on contract signals, assets-under-management, 
 and other relevant parameters.
 
-::docs::notional_positions::sort_first::
 """
 
 import numpy as np
@@ -12,25 +11,31 @@ import seaborn as sns
 
 from typing import List, Union, Tuple, Optional
 
+
+import os, sys
+
+sys.path.append(os.getcwd())
+
+
 from macrosynergy.management.utils import (
     standardise_dataframe,
     reduce_df,
     is_valid_iso_date,
-    apply_slip,
+    apply_slip as apply_slip_util,
     reduce_df,
     qdf_to_ticker_df,
     ticker_df_to_qdf,
+    get_cid,
+    get_xcat,
 )
-from macrosynergy.panel import historic_vol
+
 from macrosynergy.management.types import Numeric, NoneType, QuantamentalDataFrame
 
 
 def _apply_slip(
     df: pd.DataFrame,
     slip: int,
-    cids: List[str],
-    xcats: List[str],
-    metrics: List[str] = ["value"],
+    fcids: List[str],
 ) -> pd.DataFrame:
     """
     Applies a slip using the function `apply_slip()` to a dataframe with contract
@@ -38,83 +43,67 @@ def _apply_slip(
 
     :param <pd.DataFrame> df: Quantamental dataframe with contract signals and returns.
     :param <int> slip: the number of days to wait before applying the signal.
-    :param <List[str]> cids: list of contract identifiers.
-    :param <List[str]> xcats: list of contract categories.
+    :param <List[str]> fcids: list of contract identifiers to apply the slip to.
     :param <List[str]> metrics: list of metrics to apply the slip to.
     """
+    assert isinstance(df, QuantamentalDataFrame)
+    assert isinstance(slip, int)
+    assert (
+        isinstance(fcids, list)
+        and len(fcids) > 0
+        and all([isinstance(x, str) for x in fcids])
+    )
+
     if slip == 0:
         return df
     else:
-        return apply_slip(
-            df=df,
-            slip=slip,
+        cdf: pd.DataFrame = df[df["ticker"].str.startswith(tuple(fcids))].copy()
+        cids: List[str] = cdf["cid"].unique().tolist()
+        xcats: List[str] = cdf["xcat"].unique().tolist()
+        return apply_slip_util(
+            df=cdf,
             cids=cids,
             xcats=xcats,
-            metrics=metrics,
+            slip=slip,
             raise_error=False,
+            metrics=["value"],
         )
-
-
-def _get_csigs_for_contract(
-    df: pd.DataFrame,
-    contid: str,
-    sname: str,
-) -> List[str]:
-    """
-    Returns the contract signals for a given contract identifier and strategy name.
-
-    :param <pd.DataFrame> df: Quantamental dataframe with contract signals and returns.
-    :param <str> contid: the contract identifier.
-    :param <str> sname: the strategy name.
-
-    :return: <List[str]> list of contract signals.
-    """
-    # Get all tickers in the df
-    tickers: List[str] = (df["cid"] + "_" + df["xcat"]).unique().tolist()
-
-    # Identify the contract signals for the contract identifier and strategy name
-    sig_ident: str = f"{sname}_CSIG"
-    find_contid = lambda x: str(x).startswith(contid) and str(x).endswith(sig_ident)
-
-    # filter and return
-    tickers: List[str] = [tx for tx in tickers if find_contid(tx)]
-    return tickers
 
 
 def _leverage_positions(
     df: pd.DataFrame,
     sname: str,
-    contids: List[str],
+    fcids: List[str],
     aum: Numeric = 100,
     leverage: Numeric = 1.0,
     pname: str = "POS",
 ) -> QuantamentalDataFrame:
     """"""
+    assert isinstance(df, QuantamentalDataFrame)
+
     df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
-    sig_ident: str = f"{sname}_CSIG"
-    find_contid = lambda x: any(
-        [str(x).startswith(c) and str(x).endswith(sig_ident) for c in contids]
-    )
-    sel_cols: pd.Series = [find_contid(x) for x in df_wide.columns]
-    df_wide: pd.DataFrame = df_wide.loc[:, sel_cols]
+    sig_ident: str = f"_CSIG_{sname}"
 
-    for ic, contx in enumerate(contids):
-        pos_col: str = contx + "_" + pname
-
-        # Get all signals for that contract
-        sig_cols: List[str] = _get_csigs_for_contract(
-            df=df_wide, contid=contx, sname=sname
+    _check_conts: List[str] = [f"{contx}{sig_ident}" for contx in fcids]
+    if not set(_check_conts).issubset(set(df_wide.columns)):
+        raise ValueError(
+            f"Contract signals for all contracts not in dataframe. \n"
+            f"Missing: {set(_check_conts) - set(df_wide.columns)}"
         )
-        # sum of all assets for that contract; if zero, set to NaN to avoid div by zero
-        df_wide[pos_col] = df_wide[sig_cols].sum(axis=1)  # sum(row) all signals
-        df_wide.loc[df_wide[pos_col] == 0, pos_col] = np.nan
-        # USD position(asset) = AUM * leverage / (sum of signals * dollar per signal)
-        df_wide[pos_col] = aum * leverage / (df_wide[pos_col])
+
+    rowsums: pd.Series = df_wide.loc[:, _check_conts].sum(axis=1)
+    # if any of the rowsums are zero, set to NaN to avoid div by zero
+    rowsums[rowsums == 0] = np.nan
+
+    for ic, contx in enumerate(fcids):
+        pos_col: str = contx + "_" + pname
+        cont_name: str = contx + sig_ident
+        df_wide[pos_col] = df_wide[cont_name] * aum * leverage / rowsums
+
         # TODO: this should be dfw_pos = dfw_sigs * aum * leverage / rowsums(dfw_sigs)
 
-    generated_positions: List[str] = [f"{contx}_{pname}" for contx in contids]
-
-    df_wide = df_wide.loc[:, generated_positions]
+    # filter df to only contain position columns
+    df_wide = df_wide.loc[:, [f"{contx}_{pname}" for contx in fcids]]
 
     return ticker_df_to_qdf(df=df_wide)
 
@@ -122,7 +111,7 @@ def _leverage_positions(
 def notional_positions(
     df: pd.DataFrame,
     sname: str,
-    contids: List[str],
+    fcids: List[str],
     aum: Numeric = 100,
     dollar_per_signal: Numeric = 1.0,
     leverage: Optional[Numeric] = None,
@@ -139,7 +128,7 @@ def notional_positions(
     pname: str = "POS",
 ):
     """
-    Calculates contract positions based on contract signals, assets under management (AUM) 
+    Calculates contract positions based on contract signals, assets under management (AUM)
     and other specifications.
 
     :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
@@ -147,9 +136,9 @@ def notional_positions(
         This dataframe must contain the contract-specific signals and possibly
         related return series (for vol-targeting).
     :param <str> sname: the name of the strategy. It must correspond to contract
-        signals in the dataframe, which have the format "<cid>_<ctype>_<sname>_CSIG", and
+        signals in the dataframe, which have the format "<cid>_<ctype>_CSIG_<sname>", and
         which are typically calculated by the function contract_signals().
-    :param <List[str]> contids: list of contract identifiers in the format
+    :param <List[str]> fcids: list of financial contract identifiers in the format
         "<cid>_<ctype>". It must correspond to contract signals in the dataframe.
     :param <float> aum: the assets under management in USD million (for consistency).
         This is basis for all position sizes. Default is 100.
@@ -184,7 +173,7 @@ def notional_positions(
         "xma", for exponential moving average. Again this is passed through to
         the function `historic_portfolio_vol()`.
     :param <int> half_life: the half-life of the exponential moving average for
-        volatility-targeting if the exponential moving average "xma" method has been 
+        volatility-targeting if the exponential moving average "xma" method has been
         chosen Default is 11. This is passed through to
         the function `historic_portfolio_vol()`.
     :param <str> rstring: a general string of the return category. This identifies
@@ -207,7 +196,7 @@ def notional_positions(
     for varx, namex, typex in [
         (df, "df", pd.DataFrame),
         (sname, "sname", str),
-        (contids, "contids", list),
+        (fcids, "fcids", list),
         (aum, "aum", Numeric),
         (dollar_per_signal, "dollar_per_signal", Numeric),
         (leverage, "leverage", (Numeric, NoneType)),
@@ -230,12 +219,10 @@ def notional_positions(
             raise ValueError(f"`{namex}` must not be an empty {str(typex)}.")
 
     ## Volatility targeting and leverage cannot be applied at the same time
-    if not (bool(leverage) ^ bool(vol_target)):
-        e_msg: str = "Either `leverage` or `vol_target` must be specified"
-        # TODO: No it needs not. You can define notional positions simply on a
-        #       dollar_per_signal basis. This is useful for testing.
-        e_msg += (", but not both.") if (bool(leverage) and bool(vol_target)) else (".")
-        raise ValueError(e_msg)
+    if bool(leverage) and bool(vol_target):
+        raise ValueError(
+            "Either `leverage` or `vol_target` must be specified, but not both."
+        )
 
     if not isinstance(df, QuantamentalDataFrame):
         raise ValueError("`df` must be a QuantamentalDataFrame.")
@@ -260,17 +247,17 @@ def notional_positions(
 
     ## Check the contract identifiers and contract signals
 
-    df["tickers"]: str = df["cid"] + "_" + df["xcat"]
+    df["ticker"]: str = df["cid"] + "_" + df["xcat"]
 
     # There must be atleast one contract signal with the strategy name
-    if not any(df["tickers"].str.endswith(f"_{sname}_CSIG")):
+    if not any(df["ticker"].str.contains(f"_CSIG_{sname}")):
         raise ValueError(f"No contract signals for strategy `{sname}` in dataframe.")
 
     # Check that all contract identifiers have at least one signal
-    u_tickers: List[str] = list(df["tickers"].unique())
-    for contx in contids:
+    u_tickers: List[str] = list(df["ticker"].unique())
+    for contx in fcids:
         if not any(
-            [tx.startswith(contx) and tx.endswith(f"_{sname}_CSIG") for tx in u_tickers]
+            [tx.startswith(contx) and tx.endswith(f"_CSIG_{sname}") for tx in u_tickers]
         ):
             raise ValueError(f"Contract identifier `{contx}` not in dataframe.")
 
@@ -278,16 +265,14 @@ def notional_positions(
     df: pd.DataFrame = _apply_slip(
         df=df,
         slip=slip,
-        cids=contids,
-        xcats=[],
-        metrics=["value"],
+        fcids=fcids,
     )
 
     if leverage:
         leveraged_positions: QuantamentalDataFrame = _leverage_positions(
             df=df,
             sname=sname,
-            contids=contids,
+            fcids=fcids,
             aum=aum,
             leverage=leverage,
             pname=pname,
@@ -299,158 +284,12 @@ def notional_positions(
         raise NotImplementedError("Volatility targeting not implemented yet.")
 
 
-def historic_portfolio_vol(
-    df: pd.DataFrame,
-    sname: str,
-    contids: List[str],
-    est_freq: str = "m",
-    lback_periods: int = 21,
-    lback_meth: str = "ma",
-    half_life=11,
-    rstring: str = "XR",
-    start: Optional[str] = None,
-    end: Optional[str] = None,
-    blacklist: Optional[dict] = None,
-):
-    """
-    Estimates the annualized standard deviations of portfolio, based on historic
-    variances and co-variances.
-
-    :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
-        columns: 'cid', 'xcat', 'real_date' and 'value'.
-        This dataframe must contain the contract-specific signals and return series.
-    :param <str> sname: the name of the strategy. It must correspond to contract
-        signals in the dataframe, which have the format "<cid>_<ctype>_<sname>_CSIG", and
-        which are typically calculated by the function contract_signals().
-    :param <list[str]> contids: list of contract identifiers in the format
-        "<cid>_<ctype>". It must correspond to contract signals in the dataframe.
-    :param <str> est_freq: the frequency of the volatility estimation. Default is 'm'
-        for monthly. Alternatives are 'w' for business weekly, 'd' for daily, and 'q'
-        for quarterly. Estimations are conducted for the end of the period.
-    :param <float> dollar_per_signal: the amount of notional currency (e.g. USD) per
-        contract signal value. Default is 1. The default scale has no specific meaning
-        and is merely a basis for tryouts.
-    :param <int> lback_periods: the number of periods to use for the lookback period
-        of the volatility-targeting method. Default is 21. This passed through to
-        the function `historic_portfolio_vol()`.
-    :param <str> lback_meth: the method to use for the lookback period of the
-        volatility-targeting method. Default is 'ma' for moving average. Alternative is
-        "xma", for exponential moving average. Again this is passed through to
-        the function `historic_portfolio_vol()`.
-    :param <str> rstring: a general string of the return category. This identifies
-        the contract returns that are required for the volatility-targeting method, based
-        on the category identifier format <cid>_<ctype><rstring>_<rstring> in accordance
-        with JPMaQS conventions. Default is 'XR'.
-    :param <str> start: the start date of the data. Default is None, which means that
-        the start date is taken from the dataframe.
-    :param <str> end: the end date of the data. Default is None, which means that
-        the end date is taken from the dataframe.
-    :param <dict> blacklist: a dictionary of contract identifiers to exclude from
-        the calculation. Default is None, which means that no contracts are excluded.
-
-
-    :return: <pd.DataFrame> with the annualized standard deviations of the portfolios.
-        The values are in % annualized. Values between estimation points are forward
-        filled.
-
-    N.B.: If returns in the lookback window are not available the function will replace
-    them with the average of the available returns of the same contract type. If no
-    returns are available for a contract type the function will reduce the lookback window
-    up to a minimum of 11 days. If no returns are available for a contract type for
-    at least 11 days the function returns an NaN for that date and sends a warning of all
-    the dates for which this happened.
-
-
-    """
-    ## Check inputs
-    for varx, namex, typex in [
-        (df, "df", pd.DataFrame),
-        # (sname, "sname", str),
-        (contids, "contids", list),
-        (est_freq, "est_freq", str),
-        (lback_periods, "lback_periods", int),
-        (lback_meth, "lback_meth", str),
-        (half_life, "half_life", int),
-        (rstring, "rstring", str),
-        (start, "start", (str, NoneType)),
-        (end, "end", (str, NoneType)),
-        (blacklist, "blacklist", (dict, NoneType)),
-    ]:
-        if not isinstance(varx, typex):
-            raise ValueError(f"`{namex}` must be {typex}.")
-        if typex in [str, list, dict] and len(varx) == 0:
-            raise ValueError(f"`{namex}` must not be an empty {str(typex)}.")
-
-    ## Standardize and copy DF
-    df: pd.DataFrame = standardise_dataframe(df.copy())
-
-    ## Check the dates
-    if start is None:
-        start: str = pd.Timestamp(df["real_date"].min()).strftime("%Y-%m-%d")
-    if end is None:
-        end: str = pd.Timestamp(df["real_date"].max()).strftime("%Y-%m-%d")
-
-    for dx, nx in [(start, "start"), (end, "end")]:
-        if not is_valid_iso_date(dx):
-            raise ValueError(f"`{nx}` must be a valid ISO-8601 date string")
-
-    ## Reduce the dataframe
-    df: pd.DataFrame = reduce_df(df=df, start=start, end=end, blacklist=blacklist)
-
-    ## Add ticker column and filter for snames
-    df["tickers"]: str = df["cid"] + "_" + df["xcat"]
-    df: pd.DataFrame = df.loc[df["tickers"].str.endswith(f"_{sname}_CSIG")]
-
-    df["scat"] = df["xcat"]  # TODO : Temp, just to pass linting
-    df["contid"] = df["cid"] + "_" + df["scat"]
-
-    ## Check the contract identifiers
-    u_contids: List[str] = list(df["contid"].unique())
-    if not all([cid in u_contids for cid in contids]):
-        raise ValueError(
-            f"Contract identifiers must be in the dataframe. "
-            f"Missing: {set(contids) - set(u_contids)}"
-        )
-
-    ## Run calcs using historic_vol()
-
-    expanded_conts: List[Tuple[str, str]] = [contx.split("_", 1) for contx in contids]
-
-    calc_dfs: List[pd.DataFrame] = []
-
-    for contx in expanded_conts:
-        cid, ctype = contx
-        cdf: pd.DataFrame = df.loc[(df["cid"] == cid) & (df["scat"] == ctype)].copy()
-
-        # drop xcat, rename scat to xcat
-        cdf = cdf.drop(columns=["xcat", "contid"]).rename(columns={"scat": "xcat"})
-
-        cdf = historic_vol(
-            df=cdf,
-            xcat=ctype,
-            est_freq=est_freq,
-            lback_periods=lback_periods,
-            lback_meth=lback_meth,
-            half_life=half_life,
-            postfix=rstring,
-        )
-
-        calc_dfs.append(cdf)
-
-    calc_df: pd.DataFrame = pd.concat(calc_dfs, axis=0)
-
-    return calc_df
-
-
 if __name__ == "__main__":
-    from macrosynergy.management.simulate import (
-        make_qdf,
-        make_test_df,
-    )
+    from macrosynergy.management.simulate import make_test_df
+    from contract_signals import contract_signals
 
     cids: List[str] = ["USD", "EUR", "GBP", "AUD", "CAD"]
-    xcats: List[str] = ["FXXR_NSA", "EQXR_NSA", "FX_STRAT_CSIG",  "EQ_STRAT_CSIG"]
-    ctypes: List[str] = ["FX", "EQ"]
+    xcats: List[str] = ["SIG", "HR"]
 
     start: str = "2000-01-01"
     end: str = "2020-12-31"
@@ -462,26 +301,65 @@ if __name__ == "__main__":
         end=end,
     )
 
-    df_nps = notional_positions(
+    df.loc[(df["cid"] == "USD") & (df["xcat"] == "SIG"), "value"] = 1.0
+    ctypes = ["FX", "IRS", "CDS"]
+    cscales = [1.0, 0.5, 0.1]
+    csigns = [1, -1, 1]
+
+    hbasket = ["USD_EQ", "EUR_EQ"]
+    hscales = [0.7, 0.3]
+
+    df_cs: pd.DataFrame = contract_signals(
         df=df,
-        sname="STRAT",
-        contids=[f"{cid}_{ctype}" for cid in cids for ctype in ctypes],
-        aum=100,
-        leverage=2.0,
-        slip=1,
-        start=start,
-        end=end,
+        sig="SIG",
+        cids=cids,
+        ctypes=ctypes,
+        cscales=cscales,
+        csigns=csigns,
+        hbasket=hbasket,
+        hscales=hscales,
+        hratios="HR",
     )
 
-    hist_vols: pd.DataFrame = historic_portfolio_vol(
-        df=df,
-        sname="TEST",
-        contids=[f"{cid}_{xcat}" for cid in cids for xcat in xcats],
-        est_freq="m",
-        lback_periods=21,
-        lback_meth="ma",
-        half_life=11,
-        rstring="XR",
-        start=start,
-        end=end,
+    # df_cs looks like:
+    # """
+    #         cid            xcat  real_date         value
+    # 0      AUD  CDS_CSIG_STRAT 2000-01-03     10.000000
+    # 1      AUD   FX_CSIG_STRAT 2000-01-03    100.000000
+    # 2      AUD  IRS_CSIG_STRAT 2000-01-03    -50.000000
+    # 3      CAD  CDS_CSIG_STRAT 2000-01-03      0.001825
+    # 4      CAD   FX_CSIG_STRAT 2000-01-03      0.018252
+    # ...    ...             ...        ...           ...
+    # 54785  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
+    # 54786  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
+    # 54787  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
+    # 54788  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
+    # 54789  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
+
+    # """
+
+    fcids: List[str] = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
+
+    df_notional: pd.DataFrame = notional_positions(
+        df=df_cs,
+        fcids=fcids,
+        leverage=1.1,
+        sname="STRAT",
     )
+    # print(df_notional)
+
+    # df_notional looks like:
+    # """
+    #         cid     xcat  real_date      value
+    # 0      AUD  CDS_POS 2000-01-03   0.006619
+    # 1      AUD   FX_POS 2000-01-03   0.066188
+    # 2      AUD  IRS_POS 2000-01-03  -0.033094
+    # 3      CAD  CDS_POS 2000-01-03   0.006619
+    # 4      CAD   FX_POS 2000-01-03   0.066188
+    # ...    ...      ...        ...        ...
+    # 82165  GBP   FX_POS 2020-12-30  45.719036
+    # 82166  GBP  IRS_POS 2020-12-30 -22.859518
+    # 82167  USD  CDS_POS 2020-12-30   0.045719
+    # 82168  USD   FX_POS 2020-12-30   0.457190
+    # 82169  USD  IRS_POS 2020-12-30  -0.228595
+    # """

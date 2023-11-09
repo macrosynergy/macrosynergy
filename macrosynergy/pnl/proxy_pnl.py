@@ -16,7 +16,7 @@ from macrosynergy.management.utils import reduce_df
 def proxy_pnl(
     df: pd.DataFrame,
     spos: str,
-    contids: List[str],
+    fcids: List[str],
     tcost_n: Optional[str] = None,
     rcost_n: Optional[str] = None,
     size_n: Optional[str] = None,
@@ -41,7 +41,7 @@ def proxy_pnl(
         of the format "<cid>_<ctype>_<sname>_<pname>". The strategy name <sname> has
         usually been set by the `contract_signals` function and the string for <pname> by
         the `notional_positions` function.
-    :param <list[str]> contids: list of contract identifiers in the format
+    :param <list[str]> fcids: list of contract identifiers in the format
         "<cid>_<ctype>". It must correspond to contract signals in the dataframe in the
         format "<cid>_<ctype>_<sname>_<pname>".
     :param <str> tcost_n: the postfix of the trading cost category for normal size. Values
@@ -92,7 +92,7 @@ def proxy_pnl(
     for _varx, _namex, _typex in [
         (df, "df", pd.DataFrame),
         (spos, "spos", str),
-        (contids, "contids", list),
+        (fcids, "fcids", list),
         (tcost_n, "tcost_n", (str, type(None))),
         (rcost_n, "rcost_n", (str, type(None))),
         (size_n, "size_n", (str, type(None))),
