@@ -162,7 +162,7 @@ def view_correlation(
 
             if title is None:
                 title = (
-                    f"Cross-category correlation of {xcats[0]} from {s_date} to "
+                    f"Cross-category correlation from {s_date} to "
                     f"{e_date}"
                 )
         corr = (
@@ -213,19 +213,22 @@ def view_correlation(
         # mask is implemented because correlation coefficients are symmetric.
         mask: np.ndarray = np.triu(np.ones_like(corr, dtype=bool))
 
+    ax: plt.Axes
     fig, ax = plt.subplots(figsize=size)
-    sns.set(style="ticks")
-    sns.heatmap(
-        corr,
-        mask=mask,
-        cmap="vlag_r",
-        center=0,
-        vmin=min_color,
-        vmax=max_color,
-        square=False,
-        linewidths=0.5,
-        cbar_kws={"shrink": 0.5},
-    )
+
+    with sns.axes_style("white"):
+        with sns.axes_style("ticks"):
+            sns.heatmap(
+                corr,
+                mask=mask,
+                cmap="vlag_r",
+                center=0,
+                vmin=min_color,
+                vmax=max_color,
+                square=False,
+                linewidths=0.5,
+                cbar_kws={"shrink": 0.5},
+            )
 
     ax.set(xlabel=xlabel, ylabel=ylabel)
     ax.set_title(title, fontsize=14)

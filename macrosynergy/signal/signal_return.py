@@ -44,6 +44,10 @@ class SignalsReturns(SignalBase):
         down-sampling. The default is "last". Alternatives are "mean", "median" and "sum".
         If a single aggregation type is chosen for multiple signal categories it is
         applied to all of them.
+    :param <str, List[str]> cids: list of cross-sections to be considered. Default is
+        None in which case all cross-sections in the provided `df` are used. `cids` may
+        be specified as a list of strings or a single string; only `cids` available for
+        all `xcats` are used.
     """
 
     def __init__(
@@ -54,11 +58,12 @@ class SignalsReturns(SignalBase):
         signs: Union[int, List[int]] = 1,
         slip: int = 0,
         cosp: bool = False,
-        start: str = None,
-        end: str = None,
-        blacklist: dict = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        blacklist: Optional[dict] = None,
         freqs: Union[str, List[str]] = "M",
         agg_sigs: Union[int, List[int]] = "last",
+        cids: Union[str, List[str]] = None,
     ):
         super().__init__(
             df=df,
@@ -71,10 +76,9 @@ class SignalsReturns(SignalBase):
             blacklist=blacklist,
             freq=freqs,
             agg_sig=agg_sigs,
+            cids=cids,
         )
         self.df = df.copy()
-
-        self.cids = None
 
         if not self.is_list_of_strings(rets):
             self.ret = [rets]
@@ -161,7 +165,8 @@ class SignalsReturns(SignalBase):
         ).round(decimals=5)
 
         self.df = self.original_df
-        index = f"{freq}: {sig + '_NEG' if self.signs[self.sig.index(sig)] == -1 else sig}/{agg_sigs} => {ret}"
+        sig_string = sig + '_NEG' if self.signs[self.sig.index(sig)] == -1 else sig
+        index = f"{freq}: {sig_string}/{agg_sigs} => {ret}"
 
         df_result.rename(index={"Panel": index}, inplace=True)
 
