@@ -434,3 +434,20 @@ if __name__ == "__main__":
         hscales=hscales,
         hratios="HR",
     )
+    
+    # df_cs looks like:
+    """
+            cid            xcat  real_date         value
+    0      AUD  CDS_CSIG_STRAT 2000-01-03     10.000000
+    1      AUD   FX_CSIG_STRAT 2000-01-03    100.000000
+    2      AUD  IRS_CSIG_STRAT 2000-01-03    -50.000000
+    3      CAD  CDS_CSIG_STRAT 2000-01-03      0.001825
+    4      CAD   FX_CSIG_STRAT 2000-01-03      0.018252
+    ...    ...             ...        ...           ...
+    54785  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
+    54786  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
+    54787  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
+    54788  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
+    54789  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
+
+    """
