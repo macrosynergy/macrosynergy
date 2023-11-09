@@ -1,7 +1,6 @@
 """
 Module for analysing and visualizing signal and a return series.
 """
-from io import BytesIO
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -65,7 +64,7 @@ class SignalReturnRelations(SignalBase):
         ret: str,
         sig: str,
         rival_sigs: Union[str, List[str]] = None,
-        cids: List[str] = None,
+        cids: Union[str, List[str]] = None,
         sig_neg: bool = False,
         cosp: bool = False,
         start: str = None,
@@ -88,6 +87,7 @@ class SignalReturnRelations(SignalBase):
             freq=freq,
             agg_sig=agg_sig,
             fwin=fwin,
+            cids=cids,
         )
         assert (
             self.sig in self.xcats
@@ -111,12 +111,8 @@ class SignalReturnRelations(SignalBase):
             signals += r_sigs
 
         self.signals = signals
-
         self.signs = [-1 if sig_neg else 1]
-
         self.xcats = self.signals + [self.ret]
-
-        self.cids = cids
 
         self.manipulate_df(xcat=self.xcats, freq=freq, agg_sig=agg_sig, sig=sig)
 
@@ -183,7 +179,6 @@ class SignalReturnRelations(SignalBase):
 
     def cross_section_table(self):
         """Output table on relations across sections and the panel."""
-
         return self.df_cs.round(decimals=3)
 
     def yearly_table(self):
