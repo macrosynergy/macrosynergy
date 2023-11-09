@@ -9,7 +9,7 @@ import pandas as pd
 import datetime
 from typing import Union, Optional, Dict
 
-from macrosynergy.learning import PanelTimeSeriesSplit
+from macrosynergy.learning.panel_time_series_split import BasePanelTimeSeriesSplit, ExpandingPanelTimeSeriesSplit
 from sklearn.model_selection import cross_validate
 from sklearn.metrics import make_scorer
 
@@ -17,7 +17,7 @@ from sklearn.metrics import make_scorer
 def panel_cv_scores(
     X: pd.DataFrame,
     y: Union[pd.DataFrame, pd.Series],
-    splitter: PanelTimeSeriesSplit,
+    splitter: BasePanelTimeSeriesSplit,
     estimators: dict,
     scoring: dict,
     show_longbias: Optional[bool] = True,
@@ -33,8 +33,8 @@ def panel_cv_scores(
         be in datetime format.
     :param <pd.DataFrame> y: Dataframe of the target variable, multi-indexed by
         (cross-section, date). The dates must be in datetime format.
-    :param <PanelTimeSeriesSplit> splitter: splitter object instantiated from
-        PanelTimeSeriesSplit.
+    :param <BasePanelTimeSeriesSplit> splitter: splitter object of a class inheriting
+        from BasePanelTimeSeriesSplit.
     :param <dict> estimators: dictionary of estimators, where the keys are the estimator
         names and the values are the sklearn estimator objects.
     :param <dict> scoring: dictionary of scoring metrics, where the keys are the metric
