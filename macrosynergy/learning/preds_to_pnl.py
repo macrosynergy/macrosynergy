@@ -157,9 +157,6 @@ def static_preds_to_pnl(
     title = "Cumulative naive PnLs, binary signal" if sig_mode == "binary" else "Cumulative naive PnLs, z-score signal"
     pnl.plot_pnls(title=title)
 
-    
-
-
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
     import macrosynergy.management as msm

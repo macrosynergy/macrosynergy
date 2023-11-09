@@ -44,6 +44,8 @@ class LassoSelectorTransformer(BaseEstimator, TransformerMixin):
             self.lasso = Lasso(alpha=self.alpha).fit(X, y)
         self.selected_ftr_idxs = [i for i in range(self.p) if self.lasso.coef_[i] != 0]
 
+        return self
+
     def transform(self, X: pd.DataFrame):
         """
         Transform method to return only the selected features of the dataframe.
@@ -92,6 +94,8 @@ class MapSelectorTransformer(BaseEstimator, TransformerMixin):
             pval = re.pvalues[1]
             if pval < self.threshold:
                 self.ftrs.append(col)
+
+        return self
 
 
     def transform(self, X: pd.DataFrame):
@@ -147,6 +151,8 @@ class BenchmarkTransformer(BaseEstimator, TransformerMixin):
             mads: pd.Series = np.mean(np.abs(X), axis=0)
             self.stats: List[pd.Series] = [mads]
 
+        return self
+
     def transform(self, X: pd.DataFrame, y: Any = None):
         """
         Transform method to compute an out-of-sample benchmark signal for each unique
@@ -160,7 +166,7 @@ class BenchmarkTransformer(BaseEstimator, TransformerMixin):
         :param <Any> y: Placeholder for scikit-learn compatibility.
         """
         unique_dates: List[pd.Timestamp] = sorted(X.index.get_level_values(1).unique())
-        signal_df = pd.Series(index=X.index, name="signal")
+        signal_df = pd.DataFrame(index=X.index, columns=["signal"])
 
         if self.neutral == "zero":
             # Then iteratively compute the MAD
@@ -174,7 +180,7 @@ class BenchmarkTransformer(BaseEstimator, TransformerMixin):
                 updated_n: int = test_n + training_n
                 updated_mads: pd.Series = (test_mads * test_n + training_mads * training_n)/updated_n
                 standardised_X: pd.DataFrame = X_test_date / updated_mads
-                benchmark_signal = pd.Series(np.mean(standardised_X, axis=1), name="signal")
+                benchmark_signal = pd.DataFrame(np.mean(standardised_X, axis=1), columns=["signal"])
                 # store the signal 
                 signal_df.loc[benchmark_signal.index] = benchmark_signal
                 # update metrics for the next iteration
@@ -194,8 +200,8 @@ class BenchmarkTransformer(BaseEstimator, TransformerMixin):
                 updated_means, updated_sum_squares, updated_stds, updated_n = self.__update_metrics(test_means, test_sum_squares, test_n, training_means, training_sum_squares, training_n)
 
                 normalised_X: pd.DataFrame = (X_test_date - updated_means) / updated_stds
-                benchmark_signal: pd.Series = pd.Series(
-                    np.mean(normalised_X, axis=1), name="signal"
+                benchmark_signal: pd.DataFrame = pd.DataFrame(
+                    np.mean(normalised_X, axis=1), columns=["signal"]
                 )
                 signal_df.loc[benchmark_signal.index] = benchmark_signal
                 # update metrics for the next iteration
@@ -281,6 +287,6 @@ if __name__ == "__main__":
     X_train, X_test = X[X.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], X[X.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
     y_train, y_test = y[y.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], y[y.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
 
-    selector = BenchmarkTransformer(neutral="mean")
+    selector = BenchmarkTransformer(neutral="zero")
     selector.fit(X_train, y_train)
     print(selector.transform(X_test))
