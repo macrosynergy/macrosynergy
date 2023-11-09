@@ -2,7 +2,6 @@
 Module for calculating notional positions based on contract signals, assets-under-management, 
 and other relevant parameters.
 
-::docs::notional_positions::sort_first::
 """
 
 import numpy as np
@@ -12,14 +11,22 @@ import seaborn as sns
 
 from typing import List, Union, Tuple, Optional
 
+
+import os, sys
+
+sys.path.append(os.getcwd())
+
+
 from macrosynergy.management.utils import (
     standardise_dataframe,
     reduce_df,
     is_valid_iso_date,
-    apply_slip,
+    apply_slip as apply_slip_util,
     reduce_df,
     qdf_to_ticker_df,
     ticker_df_to_qdf,
+    get_cid,
+    get_xcat,
 )
 
 from macrosynergy.management.types import Numeric, NoneType, QuantamentalDataFrame
@@ -28,9 +35,7 @@ from macrosynergy.management.types import Numeric, NoneType, QuantamentalDataFra
 def _apply_slip(
     df: pd.DataFrame,
     slip: int,
-    cids: List[str],
-    xcats: List[str],
-    metrics: List[str] = ["value"],
+    contids: List[str],
 ) -> pd.DataFrame:
     """
     Applies a slip using the function `apply_slip()` to a dataframe with contract
@@ -38,47 +43,31 @@ def _apply_slip(
 
     :param <pd.DataFrame> df: Quantamental dataframe with contract signals and returns.
     :param <int> slip: the number of days to wait before applying the signal.
-    :param <List[str]> cids: list of contract identifiers.
-    :param <List[str]> xcats: list of contract categories.
+    :param <List[str]> contids: list of contract identifiers to apply the slip to.
     :param <List[str]> metrics: list of metrics to apply the slip to.
     """
+    assert isinstance(df, QuantamentalDataFrame)
+    assert isinstance(slip, int)
+    assert (
+        isinstance(contids, list)
+        and len(contids) > 0
+        and all([isinstance(x, str) for x in contids])
+    )
+
     if slip == 0:
         return df
     else:
-        return apply_slip(
-            df=df,
-            slip=slip,
+        cdf: pd.DataFrame = df[df["ticker"].str.startswith(tuple(contids))].copy()
+        cids: List[str] = cdf["cid"].unique().tolist()
+        xcats: List[str] = cdf["xcat"].unique().tolist()
+        return apply_slip_util(
+            df=cdf,
             cids=cids,
             xcats=xcats,
-            metrics=metrics,
+            slip=slip,
             raise_error=False,
+            metrics=["value"],
         )
-
-
-def _get_csigs_for_contract(
-    df: pd.DataFrame,
-    contid: str,
-    sname: str,
-) -> List[str]:
-    """
-    Returns the contract signals for a given contract identifier and strategy name.
-
-    :param <pd.DataFrame> df: Quantamental dataframe with contract signals and returns.
-    :param <str> contid: the contract identifier.
-    :param <str> sname: the strategy name.
-
-    :return: <List[str]> list of contract signals.
-    """
-    # Get all tickers in the df
-    tickers: List[str] = (df["cid"] + "_" + df["xcat"]).unique().tolist()
-
-    # Identify the contract signals for the contract identifier and strategy name
-    sig_ident: str = f"{sname}_CSIG"
-    find_contid = lambda x: str(x).startswith(contid) and str(x).endswith(sig_ident)
-
-    # filter and return
-    tickers: List[str] = [tx for tx in tickers if find_contid(tx)]
-    return tickers
 
 
 def _leverage_positions(
@@ -90,31 +79,31 @@ def _leverage_positions(
     pname: str = "POS",
 ) -> QuantamentalDataFrame:
     """"""
+    assert isinstance(df, QuantamentalDataFrame)
+
     df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
-    sig_ident: str = f"{sname}_CSIG"
-    find_contid = lambda x: any(
-        [str(x).startswith(c) and str(x).endswith(sig_ident) for c in contids]
-    )
-    sel_cols: pd.Series = [find_contid(x) for x in df_wide.columns]
-    df_wide: pd.DataFrame = df_wide.loc[:, sel_cols]
+    sig_ident: str = f"_CSIG_{sname}"
+
+    _check_conts: List[str] = [f"{contx}{sig_ident}" for contx in contids]
+    if not set(_check_conts).issubset(set(df_wide.columns)):
+        raise ValueError(
+            f"Contract signals for all contracts not in dataframe. \n"
+            f"Missing: {set(_check_conts) - set(df_wide.columns)}"
+        )
+
+    rowsums: pd.Series = df_wide.loc[:, _check_conts].sum(axis=1)
+    # if any of the rowsums are zero, set to NaN to avoid div by zero
+    rowsums[rowsums == 0] = np.nan
 
     for ic, contx in enumerate(contids):
         pos_col: str = contx + "_" + pname
+        cont_name: str = contx + sig_ident
+        df_wide[pos_col] = df_wide[cont_name] * aum * leverage / rowsums
 
-        # Get all signals for that contract
-        sig_cols: List[str] = _get_csigs_for_contract(
-            df=df_wide, contid=contx, sname=sname
-        )
-        # sum of all assets for that contract; if zero, set to NaN to avoid div by zero
-        df_wide[pos_col] = df_wide[sig_cols].sum(axis=1)  # sum(row) all signals
-        df_wide.loc[df_wide[pos_col] == 0, pos_col] = np.nan
-        # USD position(asset) = AUM * leverage / (sum of signals * dollar per signal)
-        df_wide[pos_col] = aum * leverage / (df_wide[pos_col])
         # TODO: this should be dfw_pos = dfw_sigs * aum * leverage / rowsums(dfw_sigs)
 
-    generated_positions: List[str] = [f"{contx}_{pname}" for contx in contids]
-
-    df_wide = df_wide.loc[:, generated_positions]
+    # filter df to only contain position columns
+    df_wide = df_wide.loc[:, [f"{contx}_{pname}" for contx in contids]]
 
     return ticker_df_to_qdf(df=df_wide)
 
@@ -147,7 +136,7 @@ def notional_positions(
         This dataframe must contain the contract-specific signals and possibly
         related return series (for vol-targeting).
     :param <str> sname: the name of the strategy. It must correspond to contract
-        signals in the dataframe, which have the format "<cid>_<ctype>_<sname>_CSIG", and
+        signals in the dataframe, which have the format "<cid>_<ctype>_CSIG_<sname>", and
         which are typically calculated by the function contract_signals().
     :param <List[str]> contids: list of contract identifiers in the format
         "<cid>_<ctype>". It must correspond to contract signals in the dataframe.
@@ -258,17 +247,17 @@ def notional_positions(
 
     ## Check the contract identifiers and contract signals
 
-    df["tickers"]: str = df["cid"] + "_" + df["xcat"]
+    df["ticker"]: str = df["cid"] + "_" + df["xcat"]
 
     # There must be atleast one contract signal with the strategy name
-    if not any(df["tickers"].str.endswith(f"_{sname}_CSIG")):
+    if not any(df["ticker"].str.contains(f"_CSIG_{sname}")):
         raise ValueError(f"No contract signals for strategy `{sname}` in dataframe.")
 
     # Check that all contract identifiers have at least one signal
-    u_tickers: List[str] = list(df["tickers"].unique())
+    u_tickers: List[str] = list(df["ticker"].unique())
     for contx in contids:
         if not any(
-            [tx.startswith(contx) and tx.endswith(f"_{sname}_CSIG") for tx in u_tickers]
+            [tx.startswith(contx) and tx.endswith(f"_CSIG_{sname}") for tx in u_tickers]
         ):
             raise ValueError(f"Contract identifier `{contx}` not in dataframe.")
 
@@ -276,9 +265,7 @@ def notional_positions(
     df: pd.DataFrame = _apply_slip(
         df=df,
         slip=slip,
-        cids=contids,
-        xcats=[],
-        metrics=["value"],
+        contids=contids,
     )
 
     if leverage:
@@ -335,18 +322,44 @@ if __name__ == "__main__":
     )
 
     # df_cs looks like:
-    """
-            cid            xcat  real_date         value
-    0      AUD  CDS_CSIG_STRAT 2000-01-03     10.000000
-    1      AUD   FX_CSIG_STRAT 2000-01-03    100.000000
-    2      AUD  IRS_CSIG_STRAT 2000-01-03    -50.000000
-    3      CAD  CDS_CSIG_STRAT 2000-01-03      0.001825
-    4      CAD   FX_CSIG_STRAT 2000-01-03      0.018252
-    ...    ...             ...        ...           ...
-    54785  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
-    54786  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
-    54787  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
-    54788  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
-    54789  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
+    # """
+    #         cid            xcat  real_date         value
+    # 0      AUD  CDS_CSIG_STRAT 2000-01-03     10.000000
+    # 1      AUD   FX_CSIG_STRAT 2000-01-03    100.000000
+    # 2      AUD  IRS_CSIG_STRAT 2000-01-03    -50.000000
+    # 3      CAD  CDS_CSIG_STRAT 2000-01-03      0.001825
+    # 4      CAD   FX_CSIG_STRAT 2000-01-03      0.018252
+    # ...    ...             ...        ...           ...
+    # 54785  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
+    # 54786  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
+    # 54787  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
+    # 54788  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
+    # 54789  USD   EQ_CSIG_STRAT 2020-12-31  21053.286999
 
-    """
+    # """
+
+    contids: List[str] = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
+
+    df_notional: pd.DataFrame = notional_positions(
+        df=df_cs,
+        contids=contids,
+        leverage=1.1,
+        sname="STRAT",
+    )
+    # print(df_notional)
+
+    # df_notional looks like:
+    # """
+    #         cid     xcat  real_date      value
+    # 0      AUD  CDS_POS 2000-01-03   0.006619
+    # 1      AUD   FX_POS 2000-01-03   0.066188
+    # 2      AUD  IRS_POS 2000-01-03  -0.033094
+    # 3      CAD  CDS_POS 2000-01-03   0.006619
+    # 4      CAD   FX_POS 2000-01-03   0.066188
+    # ...    ...      ...        ...        ...
+    # 82165  GBP   FX_POS 2020-12-30  45.719036
+    # 82166  GBP  IRS_POS 2020-12-30 -22.859518
+    # 82167  USD  CDS_POS 2020-12-30   0.045719
+    # 82168  USD   FX_POS 2020-12-30   0.457190
+    # 82169  USD  IRS_POS 2020-12-30  -0.228595
+    # """
