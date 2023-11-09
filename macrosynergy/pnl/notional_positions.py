@@ -230,12 +230,10 @@ def notional_positions(
             raise ValueError(f"`{namex}` must not be an empty {str(typex)}.")
 
     ## Volatility targeting and leverage cannot be applied at the same time
-    if not (bool(leverage) ^ bool(vol_target)):
-        e_msg: str = "Either `leverage` or `vol_target` must be specified"
-        # TODO: No it needs not. You can define notional positions simply on a
-        #       dollar_per_signal basis. This is useful for testing.
-        e_msg += (", but not both.") if (bool(leverage) and bool(vol_target)) else (".")
-        raise ValueError(e_msg)
+    if bool(leverage) and bool(vol_target):
+        raise ValueError(
+            "Either `leverage` or `vol_target` must be specified, but not both."
+        )
 
     if not isinstance(df, QuantamentalDataFrame):
         raise ValueError("`df` must be a QuantamentalDataFrame.")
@@ -299,9 +297,6 @@ def notional_positions(
         raise NotImplementedError("Volatility targeting not implemented yet.")
 
 
-
-
-
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_test_df
     from contract_signals import contract_signals
@@ -338,7 +333,7 @@ if __name__ == "__main__":
         hscales=hscales,
         hratios="HR",
     )
-    
+
     # df_cs looks like:
     """
             cid            xcat  real_date         value
