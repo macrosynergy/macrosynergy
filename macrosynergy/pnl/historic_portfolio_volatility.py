@@ -16,7 +16,7 @@ from macrosynergy.management.utils import (
 def historic_portfolio_vol(
     df: pd.DataFrame,
     sname: str,
-    fcids: List[str],
+    fids: List[str],
     est_freq: str = "m",
     lback_periods: int = 21,
     lback_meth: str = "ma",
@@ -36,7 +36,7 @@ def historic_portfolio_vol(
     :param <str> sname: the name of the strategy. It must correspond to contract
         signals in the dataframe, which have the format "<cid>_<ctype>_<sname>_CSIG", and
         which are typically calculated by the function contract_signals().
-    :param <List[str]> fcids: list of financial contract identifiers in the format
+    :param <List[str]> fids: list of financial contract identifiers in the format
         "<cid>_<ctype>". It must correspond to contract signals in the dataframe.
     :param <str> est_freq: the frequency of the volatility estimation. Default is 'm'
         for monthly. Alternatives are 'w' for business weekly, 'd' for daily, and 'q'
@@ -80,7 +80,7 @@ def historic_portfolio_vol(
     for varx, namex, typex in [
         (df, "df", pd.DataFrame),
         (sname, "sname", str),
-        (fcids, "fcids", list),
+        (fids, "fids", list),
         (est_freq, "est_freq", str),
         (lback_periods, "lback_periods", int),
         (lback_meth, "lback_meth", str),

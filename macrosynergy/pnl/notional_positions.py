@@ -35,7 +35,7 @@ from macrosynergy.management.types import Numeric, NoneType, QuantamentalDataFra
 def _apply_slip(
     df: pd.DataFrame,
     slip: int,
-    fcids: List[str],
+    fids: List[str],
 ) -> pd.DataFrame:
     """
     Applies a slip using the function `apply_slip()` to a dataframe with contract
@@ -43,21 +43,21 @@ def _apply_slip(
 
     :param <pd.DataFrame> df: Quantamental dataframe with contract signals and returns.
     :param <int> slip: the number of days to wait before applying the signal.
-    :param <List[str]> fcids: list of contract identifiers to apply the slip to.
+    :param <List[str]> fids: list of contract identifiers to apply the slip to.
     :param <List[str]> metrics: list of metrics to apply the slip to.
     """
     assert isinstance(df, QuantamentalDataFrame)
     assert isinstance(slip, int)
     assert (
-        isinstance(fcids, list)
-        and len(fcids) > 0
-        and all([isinstance(x, str) for x in fcids])
+        isinstance(fids, list)
+        and len(fids) > 0
+        and all([isinstance(x, str) for x in fids])
     )
 
     if slip == 0:
         return df
     else:
-        cdf: pd.DataFrame = df[df["ticker"].str.startswith(tuple(fcids))].copy()
+        cdf: pd.DataFrame = df[df["ticker"].str.startswith(tuple(fids))].copy()
         cids: List[str] = cdf["cid"].unique().tolist()
         xcats: List[str] = cdf["xcat"].unique().tolist()
         return apply_slip_util(
@@ -73,7 +73,7 @@ def _apply_slip(
 def _leverage_positions(
     df: pd.DataFrame,
     sname: str,
-    fcids: List[str],
+    fids: List[str],
     aum: Numeric = 100,
     leverage: Numeric = 1.0,
     pname: str = "POS",
@@ -84,7 +84,7 @@ def _leverage_positions(
     df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
     sig_ident: str = f"_CSIG_{sname}"
 
-    _check_conts: List[str] = [f"{contx}{sig_ident}" for contx in fcids]
+    _check_conts: List[str] = [f"{contx}{sig_ident}" for contx in fids]
     if not set(_check_conts).issubset(set(df_wide.columns)):
         raise ValueError(
             f"Contract signals for all contracts not in dataframe. \n"
@@ -95,7 +95,7 @@ def _leverage_positions(
     # if any of the rowsums are zero, set to NaN to avoid div by zero
     rowsums[rowsums == 0] = np.nan
 
-    for ic, contx in enumerate(fcids):
+    for ic, contx in enumerate(fids):
         pos_col: str = contx + "_" + pname
         cont_name: str = contx + sig_ident
         df_wide[pos_col] = df_wide[cont_name] * aum * leverage / rowsums
@@ -103,7 +103,7 @@ def _leverage_positions(
         # TODO: this should be dfw_pos = dfw_sigs * aum * leverage / rowsums(dfw_sigs)
 
     # filter df to only contain position columns
-    df_wide = df_wide.loc[:, [f"{contx}_{pname}" for contx in fcids]]
+    df_wide = df_wide.loc[:, [f"{contx}_{pname}" for contx in fids]]
 
     return ticker_df_to_qdf(df=df_wide)
 
@@ -111,7 +111,7 @@ def _leverage_positions(
 def notional_positions(
     df: pd.DataFrame,
     sname: str,
-    fcids: List[str],
+    fids: List[str],
     aum: Numeric = 100,
     dollar_per_signal: Numeric = 1.0,
     leverage: Optional[Numeric] = None,
@@ -138,7 +138,7 @@ def notional_positions(
     :param <str> sname: the name of the strategy. It must correspond to contract
         signals in the dataframe, which have the format "<cid>_<ctype>_CSIG_<sname>", and
         which are typically calculated by the function contract_signals().
-    :param <List[str]> fcids: list of financial contract identifiers in the format
+    :param <List[str]> fids: list of financial contract identifiers in the format
         "<cid>_<ctype>". It must correspond to contract signals in the dataframe.
     :param <float> aum: the assets under management in USD million (for consistency).
         This is basis for all position sizes. Default is 100.
@@ -196,7 +196,7 @@ def notional_positions(
     for varx, namex, typex in [
         (df, "df", pd.DataFrame),
         (sname, "sname", str),
-        (fcids, "fcids", list),
+        (fids, "fids", list),
         (aum, "aum", Numeric),
         (dollar_per_signal, "dollar_per_signal", Numeric),
         (leverage, "leverage", (Numeric, NoneType)),
@@ -255,7 +255,7 @@ def notional_positions(
 
     # Check that all contract identifiers have at least one signal
     u_tickers: List[str] = list(df["ticker"].unique())
-    for contx in fcids:
+    for contx in fids:
         if not any(
             [tx.startswith(contx) and tx.endswith(f"_CSIG_{sname}") for tx in u_tickers]
         ):
@@ -265,14 +265,14 @@ def notional_positions(
     df: pd.DataFrame = _apply_slip(
         df=df,
         slip=slip,
-        fcids=fcids,
+        fids=fids,
     )
 
     if leverage:
         leveraged_positions: QuantamentalDataFrame = _leverage_positions(
             df=df,
             sname=sname,
-            fcids=fcids,
+            fids=fids,
             aum=aum,
             leverage=leverage,
             pname=pname,
@@ -338,11 +338,11 @@ if __name__ == "__main__":
 
     # """
 
-    fcids: List[str] = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
+    fids: List[str] = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
 
     df_notional: pd.DataFrame = notional_positions(
         df=df_cs,
-        fcids=fcids,
+        fids=fids,
         leverage=1.1,
         sname="STRAT",
     )
