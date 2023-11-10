@@ -308,9 +308,10 @@ class TestAll(unittest.TestCase):
     def test_time_series(self):
         # Generate the DataFrame passed into the time_series() method: the procedure
         # occurs inside the Class's constructor.
-        shared_cids = CategoryRelations.intersection_cids(
-            self.dfdx, ["GROWTH", "INFL"], self.cidx
-        )
+        with warnings.catch_warnings(record=True) as w:
+            shared_cids = CategoryRelations.intersection_cids(
+                self.dfdx, ["GROWTH", "INFL"], self.cidx
+            )
 
         no_cross_sections = len(shared_cids)
         # DataFrame passed into time_series() method.
@@ -469,9 +470,10 @@ class TestAll(unittest.TestCase):
     def test_outlier_trim(self):
         # Generate the dataframe passed into the outlier_trim() method: the procedure
         # occurs inside the Class's constructor.
-        shared_cids = CategoryRelations.intersection_cids(
-            self.dfdx, ["GROWTH", "INFL"], self.cidx
-        )
+        with warnings.catch_warnings(record=True) as w:
+            shared_cids = CategoryRelations.intersection_cids(
+                self.dfdx, ["GROWTH", "INFL"], self.cidx
+            )
 
         no_cross_sections = len(shared_cids)
         # DataFrame passed into time_series() method or outlier_trim() depending on
