@@ -1,10 +1,6 @@
 from unittest import mock
 import unittest
 import pandas as pd
-import os, sys
-
-sys.path.append(os.getcwd())
-
 import datetime
 import base64
 import io
