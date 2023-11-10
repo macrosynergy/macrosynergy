@@ -109,7 +109,7 @@ class TestRequestWrapper(unittest.TestCase):
             )
 
     def test_request_wrapper(self):
-        warnings.simplefilter("always")
+        warnings.filterwarnings("ignore", category=UserWarning, module="logger")
         curr_logger_level: int = logging.getLogger().getEffectiveLevel()
         logging.getLogger().setLevel(logging.ERROR)
         user_id: str = f"User_{random_string()}"
