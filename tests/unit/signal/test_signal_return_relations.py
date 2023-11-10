@@ -5,7 +5,12 @@ from tests.simulate import make_qdf
 from sklearn.metrics import accuracy_score, precision_score
 from scipy import stats
 import random
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 import numpy as np
 from typing import List, Dict
 import matplotlib

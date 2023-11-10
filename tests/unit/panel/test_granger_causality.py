@@ -2,7 +2,12 @@ import unittest, unittest.mock
 from typing import Any, Dict, List, Union
 
 import numpy as np
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.management.utils import qdf_to_ticker_df

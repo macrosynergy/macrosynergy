@@ -2,7 +2,12 @@
 "Naive" PnLs with limited signal options and disregarding transaction costs.
 """
 import numpy as np
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker

@@ -1,6 +1,11 @@
 """Module with functions to simulate data for testing."""
 import numpy as np
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 from typing import List, Union, Tuple
 from statsmodels.tsa.arima_process import ArmaProcess
 import random

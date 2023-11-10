@@ -7,7 +7,12 @@ and end dates of a DataFrame, as well as visualizing the results.
 """
 
 import numpy as np
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 from typing import List, Tuple
 
 from macrosynergy.management.simulate import make_qdf

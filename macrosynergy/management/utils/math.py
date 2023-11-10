@@ -5,7 +5,12 @@ Contains mathematical utility functions used across the package.
 from typing import List, Union, Tuple
 from ..types import QuantamentalDataFrame, Numeric
 
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 import numpy as np
 import itertools
 

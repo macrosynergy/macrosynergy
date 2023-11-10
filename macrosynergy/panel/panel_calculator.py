@@ -6,7 +6,12 @@ The functionality allows applying mathematical operations on time-series data.
 
 """
 import numpy as np
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 from typing import List
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df

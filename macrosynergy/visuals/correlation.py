@@ -5,7 +5,12 @@ panels.
 ::docs::correl_matrix::sort_first::
 """
 import itertools
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 import numpy as np
 import seaborn as sns
 import scipy.cluster.hierarchy as sch

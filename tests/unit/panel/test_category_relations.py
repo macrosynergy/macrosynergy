@@ -2,7 +2,12 @@ import unittest
 import io
 import sys
 import numpy as np
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 from random import randint
 from tests.simulate import make_qdf
 from macrosynergy.panel.category_relations import CategoryRelations

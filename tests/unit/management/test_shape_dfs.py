@@ -1,7 +1,12 @@
 import unittest
 import random
 import numpy as np
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 from tests.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df, categories_df
 from math import ceil, floor

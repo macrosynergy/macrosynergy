@@ -3,7 +3,12 @@ import os
 import random
 from itertools import groupby
 import numpy as np
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 import datetime
 from macrosynergy.panel.make_blacklist import make_blacklist
 

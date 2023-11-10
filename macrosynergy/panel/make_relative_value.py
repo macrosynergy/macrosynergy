@@ -6,7 +6,12 @@ to calculate values for indicators relative to a basket of cross-sections.
 
 """
 import numpy as np
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 from typing import List, Set
 
 from macrosynergy.management.simulate import make_qdf

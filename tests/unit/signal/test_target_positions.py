@@ -14,7 +14,12 @@ from macrosynergy.management.utils import reduce_df
 from macrosynergy.panel.basket import Basket
 from tests.simulate import make_qdf
 import random
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 import numpy as np
 import math
 

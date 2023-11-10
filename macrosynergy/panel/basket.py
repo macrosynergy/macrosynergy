@@ -3,7 +3,12 @@ Basket class for calculating the returns and carries of baskets
 of financial contracts using various weighting methods.
 """
 import numpy as np
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 import seaborn as sns
 
 import random

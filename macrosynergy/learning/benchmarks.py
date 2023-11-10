@@ -68,7 +68,12 @@ if __name__ == "__main__":
     from macrosynergy.management.simulate import make_qdf
     import macrosynergy.management as msm
     from macrosynergy.learning.panel_timeseries_split import PanelTimeSeriesSplit
+    from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
     import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
     from sklearn.model_selection import cross_val_score
     from sklearn.pipeline import Pipeline
     from sklearn.metrics import make_scorer

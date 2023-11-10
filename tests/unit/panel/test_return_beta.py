@@ -1,6 +1,11 @@
 import unittest
 import numpy as np
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 import warnings
 import statsmodels.api as sm
 from statsmodels.regression.linear_model import RegressionResults

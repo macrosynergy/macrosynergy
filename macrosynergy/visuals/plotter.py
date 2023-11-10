@@ -12,7 +12,12 @@ from typing import Any, Dict, List, Optional
 
 import matplotlib.pyplot as plt
 import seaborn as sns
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 
 from macrosynergy.management import reduce_df
 from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date

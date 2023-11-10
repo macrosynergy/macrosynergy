@@ -1,7 +1,12 @@
 import unittest
 import random
 import numpy as np
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 import os
 from typing import List
 from macrosynergy.management.simulate import *

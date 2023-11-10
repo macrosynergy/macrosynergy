@@ -20,7 +20,12 @@ from typing import (
 )
 from inspect import signature
 from macrosynergy.management.types import Numeric, NoneType
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 import numpy as np
 from packaging import version
 

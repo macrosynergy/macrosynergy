@@ -11,7 +11,12 @@ import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload
 
 import numpy as np
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 import requests
 import requests.compat
 

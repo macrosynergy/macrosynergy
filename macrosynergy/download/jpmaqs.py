@@ -13,7 +13,12 @@ from timeit import default_timer as timer
 from typing import Dict, List, Optional, Tuple, Union
 
 
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 
 from macrosynergy.download.dataquery import DataQueryInterface
 from macrosynergy.download.exceptions import HeartbeatError, InvalidDataframeError

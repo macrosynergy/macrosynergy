@@ -1,6 +1,11 @@
 import unittest
 from matplotlib import pyplot as plt
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 from typing import List, Dict, Any
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.visuals import Heatmap

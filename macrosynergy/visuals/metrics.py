@@ -15,7 +15,12 @@ msv.view_metrics(
 """
 
 from typing import List, Optional, Tuple
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 import seaborn as sns
 
 from macrosynergy.visuals import Heatmap

@@ -2,7 +2,12 @@
 Function for visualising the `eop_lag`, `mop_lag` or `grading` metrics for a given
 set of cross sections and extended categories.
 """
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 
 from typing import List, Tuple, Optional
 from macrosynergy.management.simulate import make_test_df

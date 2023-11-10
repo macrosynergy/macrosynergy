@@ -8,7 +8,12 @@ quantamental data for testing purposes.
 
 """
 import numpy as np
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 from statsmodels.tsa.arima_process import ArmaProcess
 from typing import List, Tuple, Dict, Union
 from collections import defaultdict

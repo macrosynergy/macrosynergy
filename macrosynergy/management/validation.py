@@ -5,8 +5,13 @@ from typing import (
     NamedTuple,
     Optional,
 )
-import pandas as pd
 
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 from macrosynergy.management.utils import reduce_df, is_valid_iso_date
 from macrosynergy.management.utils.df_utils import standardise_dataframe
 

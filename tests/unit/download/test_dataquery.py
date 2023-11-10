@@ -1,6 +1,11 @@
 from unittest import mock
 import unittest
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 import os
 import datetime
 import base64

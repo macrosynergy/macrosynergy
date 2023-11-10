@@ -16,7 +16,12 @@ msv.FacetPlot(df).lineplot(cid_grid=True)
 
 from typing import List, Optional, Tuple
 
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 
 from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
 from macrosynergy.visuals import FacetPlot, LinePlot

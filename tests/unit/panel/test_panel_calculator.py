@@ -1,7 +1,12 @@
 
 import unittest
 import numpy as np
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 from tests.simulate import make_qdf
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.panel.panel_calculator import panel_calculator

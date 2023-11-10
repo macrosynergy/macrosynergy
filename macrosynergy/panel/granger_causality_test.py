@@ -7,7 +7,12 @@ Run Granger Causality Test on a standardized quantamental dataframe.
 import warnings
 from typing import Any, Dict, List, Optional, Union
 
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 import statsmodels
 from packaging import version
 from statsmodels.tsa.stattools import grangercausalitytests

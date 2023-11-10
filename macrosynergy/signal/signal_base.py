@@ -2,7 +2,12 @@
 Module for analysing and visualizing signal and a return series.
 """
 import numpy as np
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 import matplotlib.pyplot as plt
 from sklearn import metrics as skm
 from scipy import stats

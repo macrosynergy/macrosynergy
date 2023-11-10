@@ -1,6 +1,11 @@
 import unittest
 import os
-import pandas as pd
+from macrosynergy.backend import get_current_backend
+
+if get_current_backend() == "pandas":
+    import pandas as pd
+elif get_current_backend() == "modin.pandas":
+    import modin.pandas as pd
 import datetime
 from random import random
 from typing import List, Dict, Any
