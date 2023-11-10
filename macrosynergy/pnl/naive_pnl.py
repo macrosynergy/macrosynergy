@@ -7,6 +7,10 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 
+import os, sys
+
+sys.path.append(os.getcwd())
+
 from typing import List, Union, Tuple, Optional
 from itertools import product
 from macrosynergy.management.simulate import make_qdf
@@ -244,9 +248,7 @@ class NaivePnL:
         rebal_merge = dfw[["real_date", "cid"]].merge(
             rebal_merge, how="left", on=["real_date", "cid"]
         )
-        rebal_merge["psig"] = (
-            rebal_merge["psig"].ffill().shift(rebal_slip)
-        )
+        rebal_merge["psig"] = rebal_merge["psig"].ffill().shift(rebal_slip)
         rebal_merge = rebal_merge.sort_values(["cid", "real_date"])
 
         rebal_merge = rebal_merge.set_index("real_date")
@@ -740,9 +742,9 @@ class NaivePnL:
         assert isinstance(x_label, str), f"<str> expected - received {type(x_label)}."
         assert isinstance(y_label, str), f"<str> expected - received {type(y_label)}."
 
-        dfx = self.signal_df[pnl_name]
-        dfw = dfx.pivot(index="real_date", columns="cid", values="sig")
-        dfw = dfw[pnl_cids]
+        dfx: pd.DataFrame = self.signal_df[pnl_name]
+        dfw: pd.DataFrame = dfx.pivot(index="real_date", columns="cid", values="sig")
+        dfw: pd.DataFrame = dfw[pnl_cids]
 
         if start is None:
             start = dfw.index[0]
@@ -811,8 +813,8 @@ class NaivePnL:
         if title is None:
             title = f"Directional Bar Chart of {pnl_name}."
 
-        dfx = self.signal_df[pnl_name]
-        dfw = dfx.pivot(index="real_date", columns="cid", values="sig")
+        dfx: pd.DataFrame = self.signal_df[pnl_name]
+        dfw: pd.DataFrame = dfx.pivot(index="real_date", columns="cid", values="sig")
 
         # The method allows for visually understanding the overall direction of the
         # aggregate signal but also gaining insight into the proportional exposure to the
@@ -821,7 +823,7 @@ class NaivePnL:
         if metric == "strength":
             dfw = dfw.abs()
 
-        dfw = dfw.resample(freq, axis=0).mean()
+        dfw = dfw.resample(freq).mean()
         # Sum across the timestamps to compute the aggregate signal according to the
         # down-sampling frequency.
         df_s = dfw.sum(axis=1)
