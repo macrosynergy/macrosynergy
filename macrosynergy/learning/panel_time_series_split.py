@@ -267,7 +267,7 @@ class ForwardPanelSplit(BasePanelSplit):
 class KFoldPanelSplit(BasePanelSplit):
     """
     Class for the production of paired training and test splits of panel data
-    for rolling window validation.
+    for KFold cross validation.
 
     :param <int> n_splits: number of splits. Must be at least 2.
     """
@@ -456,6 +456,8 @@ class IntervalPanelSplit(BasePanelSplit):
         ]
         for i in range(1, self.n_splits):
             train_splits.append(np.concatenate([train_splits[i - 1], splits[i]]))
+            
+            # Drop beginning of training set if it exceeds max_periods.
             if self.max_periods:
                 train_splits[i] = train_splits[i][-self.max_periods :]
 

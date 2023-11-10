@@ -49,36 +49,36 @@ class TestAll(unittest.TestCase):
         self.X = df.drop(columns="XR")
         self.y = df["XR"]
 
-    # def test_crossval_application(self):
-    #     # Given a generated panel with a true linear relationship between features and target,
-    #     # test that the cross validation procedure correctly identifies that a linear regression
-    #     # is more suitable than a 1-nearest neighbor model.
-    #     # self.setUp()
+    def test_crossval_application(self):
+        # Given a generated panel with a true linear relationship between features and target,
+        # test that the cross validation procedure correctly identifies that a linear regression
+        # is more suitable than a 1-nearest neighbor model.
+        # self.setUp()
 
-    #     # models
-    #     lr = LinearRegression()
-    #     knn = KNeighborsRegressor(n_neighbors=1)
-    #     splitter = IntervalPanelSplit(
-    #         train_intervals=1, min_cids=2, min_periods=21 * 12, test_size=1
-    #     )
-    #     lrsplits = cross_val_score(
-    #         lr,
-    #         self.X,
-    #         self.y,
-    #         scoring="neg_root_mean_squared_error",
-    #         cv=splitter,
-    #         n_jobs=-1,
-    #     )
-    #     knnsplits = cross_val_score(
-    #         knn,
-    #         self.X,
-    #         self.y,
-    #         scoring="neg_root_mean_squared_error",
-    #         cv=splitter,
-    #         n_jobs=-1,
-    #     )
+        # models
+        lr = LinearRegression()
+        knn = KNeighborsRegressor(n_neighbors=1)
+        splitter = IntervalPanelSplit(
+            train_intervals=1, min_cids=2, min_periods=21 * 12, test_size=1
+        )
+        lrsplits = cross_val_score(
+            lr,
+            self.X,
+            self.y,
+            scoring="neg_root_mean_squared_error",
+            cv=splitter,
+            n_jobs=-1,
+        )
+        knnsplits = cross_val_score(
+            knn,
+            self.X,
+            self.y,
+            scoring="neg_root_mean_squared_error",
+            cv=splitter,
+            n_jobs=-1,
+        )
 
-    #     self.assertLess(np.mean(-lrsplits), np.mean(-knnsplits))
+        self.assertLess(np.mean(-lrsplits), np.mean(-knnsplits))
 
     @parameterized.expand([2, 4, 8])
     def test_forward_n_splits(self, n_splits):
@@ -106,15 +106,16 @@ class TestAll(unittest.TestCase):
         n_splits = 5
         X, y = self.make_simple_df(periods1=periods1, periods2=periods2)
         splitter = ForwardPanelSplit(n_splits=n_splits)
-        splits = list(splitter.split(X, y))
-        for i in range(n_splits):
+        for i, split in enumerate(splitter.split(X, y)):
+            train_set, test_set = split
+
             # Training sets for each cid
-            self.assertEqual(splits[i][0][i], i)
-            self.assertEqual(splits[i][0][i * 2 + 1], i + periods1)
+            self.assertEqual(train_set[i], i)
+            self.assertEqual(train_set[i * 2 + 1], i + periods1)
 
             # Test sets for each cid
-            self.assertEqual(splits[i][1][0], i + 1)
-            self.assertEqual(splits[i][1][1], i + periods1 + 1)
+            self.assertEqual(test_set[0], i + 1)
+            self.assertEqual(test_set[1], i + periods1 + 1)
 
     def test_kfold_split(self):
         periods1 = 5
@@ -123,17 +124,57 @@ class TestAll(unittest.TestCase):
         X, y = self.make_simple_df(periods1=periods1, periods2=periods2)
         indices = np.arange(X.shape[0])
         splitter = KFoldPanelSplit(n_splits=n_splits)
-        splits = list(splitter.split(X, y))
-        for i in range(n_splits):
-            # Test sets for each cid
-            self.assertEqual(splits[i][1][0], i)
-            self.assertEqual(splits[i][1][1], i + periods1)
+        for i, split in enumerate(splitter.split(X, y)):
+            train_set, test_set = split
 
-            test_set = splits[i][1]
-            train_set = splits[i][0]
+            # Test sets for each cid
+            self.assertEqual(test_set[0], i)
+            self.assertEqual(test_set[1], i + periods1)
 
             # assert train set is indices excluding test set
             self.assertTrue(np.array_equal(np.setdiff1d(indices, test_set), train_set))
+
+    def test_interval_split_basic(self):
+        periods1 = 6
+        periods2 = 6
+        X, y = self.make_simple_df(periods1=periods1, periods2=periods2)
+        splitter = IntervalPanelSplit(
+            train_intervals=1, test_size=1, min_periods=1, min_cids=2, max_periods=None
+        )
+        for i, split in enumerate(splitter.split(X, y)):
+            train_set, test_set = split
+
+            # Training sets for each cid
+            self.assertEqual(train_set[i], i)
+            self.assertEqual(train_set[i * 2 + 1], i + periods1)
+
+            # Test sets for each cid
+            self.assertEqual(test_set[0], i + 1)
+            self.assertEqual(test_set[1], i + periods1 + 1)
+
+    def test_interval_split_min_cids(self):
+        periods1 = 6
+        periods2 = 5
+        X, y = self.make_simple_df(
+            start1="2020-01-01",
+            start2="2020-01-02",
+            periods1=periods1,
+            periods2=periods2,
+        )
+        splitter = IntervalPanelSplit(
+            train_intervals=1, test_size=1, min_periods=1, min_cids=2, max_periods=None
+        )
+        for i, split in enumerate(splitter.split(X, y)):
+            train_set, test_set = split
+
+            # Training sets for each cid
+            self.assertEqual(train_set[i], i)
+            self.assertEqual(train_set[i * 2 + 2], i + periods1)
+            if i == 0:
+                self.assertEqual(train_set.shape[0], 3)
+            # Test sets for each cid
+            self.assertEqual(test_set[0], i + 2)
+            self.assertEqual(test_set[1], i + periods1 + 1)
 
     def make_simple_df(
         self,
