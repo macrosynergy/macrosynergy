@@ -8,9 +8,10 @@ from .metrics import (
     regression_accuracy,
     regression_balanced_accuracy,
 )
-from .preds_to_pnl import static_preds_to_pnl
+from .prediction_tools import static_preds_to_pnl, adaptive_preds_to_signal
 
 __all__ = [
+    "adaptive_preds_to_signal",
     "PanelTimeSeriesSplit",
     "panel_cv_scores",
     "LassoSelectorTransformer",
