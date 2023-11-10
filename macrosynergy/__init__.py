@@ -10,9 +10,20 @@ except ModuleNotFoundError:
     __version__ = FULLVERSION
     __git_revision__ = GIT_REVISION
 
-from . import visuals, dataquery, download, panel, pnl, management, signal
+from macrosynergy.backend import set_backend
 
-__all__ = ["visuals", "dataquery", "download", "panel", "pnl", "management", "signal"]
+# from . import visuals, dataquery, download, panel, pnl, management, signal
+
+__all__ = [
+    "set_backend",
+    # "visuals",
+    # "dataquery",
+    # "download",
+    # "panel",
+    # "pnl",
+    # "management",
+    # "signal",
+]
 
 __name__ = ["__version__"]
 
