@@ -69,11 +69,12 @@ class TestAll(unittest.TestCase):
         input_values = filt_df[filt_df['real_date'] == date]
         input_values = input_values[input_values['cid'] == cid]
         if no_xcats > 1:
-            for cat in xcats:
-
-                val = input_values[input_values['xcat'] == cat]['value']
-                values.append(float(val))
+            values = [
+                float(input_values[input_values['xcat'] == cat]['value'].iloc[0])
+                for cat in xcats
+            ]
             return values
+        
         else:
             val = input_values[input_values['xcat'] == xcats[0]]['value']
             return float(val)
