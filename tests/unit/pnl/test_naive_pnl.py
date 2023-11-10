@@ -2,14 +2,16 @@ from tests.simulate import make_qdf
 from macrosynergy.pnl.naive_pnl import NaivePnL
 from macrosynergy.management.utils import reduce_df
 import unittest
+from unittest.mock import patch
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple, Union
 import matplotlib
+from matplotlib import pyplot as plt
 
 
 class TestAll(unittest.TestCase):
-    def dataframe_construction(self):
+    def setUp(self) -> None:
         self.cids: List[str] = ["AUD", "CAD", "GBP", "NZD", "USD", "EUR"]
         self.xcats: List[str] = ["EQXR", "CRY", "GROWTH", "INFL", "DUXR"]
 
@@ -50,6 +52,9 @@ class TestAll(unittest.TestCase):
         # Standard df for tests.
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
         self.dfd: pd.DataFrame = reduce_df(dfd, blacklist=self.blacklist)
+
+    def tearDown(self) -> None:
+        return super().tearDown()
 
     def test_constructor(self):
         # Test NaivePnL's constructor and the instantiation of the respective fields.
@@ -526,7 +531,8 @@ class TestAll(unittest.TestCase):
 
     def test_plotting_methods(self):
         self.dataframe_construction()
-
+        plt.close("all")
+        mock_plt = patch("matplotlib.pyplot.show").start()
         mpl_backend = matplotlib.get_backend()
         matplotlib.use("Agg")
 
@@ -576,6 +582,8 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"agg_signal_bars raised {e} unexpectedly")
 
+        patch.stopall()
+        plt.close("all")
         matplotlib.use(mpl_backend)
 
 
