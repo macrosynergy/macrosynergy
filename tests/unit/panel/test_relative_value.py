@@ -1,14 +1,12 @@
 import unittest
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Tuple, Union, Set
+from typing import List, Dict, Tuple, Set
 
 from tests.simulate import make_qdf
 from macrosynergy.panel.make_relative_value import make_relative_value, _prepare_basket
 from macrosynergy.management.utils import reduce_df
 from random import randint, choice
-import io
-import sys
 import warnings
 
 
@@ -146,19 +144,20 @@ class TestAll(unittest.TestCase):
         # latest date respectively (of the defined cross-sections' realised series). Both
         # the categories are defined over the same time-period, so the cross-sections
         # will delimit the dimensions.
-        dfd_rl: pd.DataFrame = make_relative_value(
-            df=self.dfd,
-            xcats=xcats,
-            cids=cids,
-            start=start,
-            end=end,
-            blacklist=None,
-            basket=None,
-            rel_meth="subtract",
-            rel_xcats=None,
-            postfix="RV",
-        )
-        self.assertEqual(dfx.shape, dfd_rl.shape)
+        with warnings.catch_warnings(record=True) as w:
+            dfd_rl: pd.DataFrame = make_relative_value(
+                df=self.dfd,
+                xcats=xcats,
+                cids=cids,
+                start=start,
+                end=end,
+                blacklist=None,
+                basket=None,
+                rel_meth="subtract",
+                rel_xcats=None,
+                postfix="RV",
+            )
+            self.assertEqual(dfx.shape, dfd_rl.shape)
 
         # Test the proposal that any dates with only a single realised value will be
         # truncated from the DataFrame given understanding the relative value of a single
@@ -191,21 +190,22 @@ class TestAll(unittest.TestCase):
         no_single_values: int = single_value.size
 
         # Apply the function to understand if the logic above holds.
-        dfd_rl: pd.DataFrame = make_relative_value(
-            df=self.dfd,
-            xcats=xcats,
-            cids=cids,
-            start=start,
-            end=end,
-            blacklist=None,
-            basket=None,
-            rel_meth="divide",
-            rel_xcats=None,
-            postfix="RV",
-        )
-        output_rows: int = dfd_rl.shape[0]
+        with warnings.catch_warnings(record=True) as w:
+            dfd_rl: pd.DataFrame = make_relative_value(
+                df=self.dfd,
+                xcats=xcats,
+                cids=cids,
+                start=start,
+                end=end,
+                blacklist=None,
+                basket=None,
+                rel_meth="divide",
+                rel_xcats=None,
+                postfix="RV",
+            )
+            output_rows: int = dfd_rl.shape[0]
 
-        self.assertTrue(output_rows == (input_rows - no_single_values))
+            self.assertTrue(output_rows == (input_rows - no_single_values))
 
         # Test "complete_cross" parameter.
 
@@ -264,19 +264,20 @@ class TestAll(unittest.TestCase):
         # defined over an incomplete set of cross-sections, relative to the basket, will
         # be removed from the output DataFrame.
         rel_xcats: List[str] = ["XR_RelValue", "CRY_RelVal"]
-        dfd_rl: pd.DataFrame = make_relative_value(
-            df=dfdx,
-            xcats=xcats,
-            cids=cids,
-            start=start,
-            end=end,
-            blacklist=None,
-            basket=self.cids,
-            complete_cross=True,
-            rel_meth="subtract",
-            rel_xcats=rel_xcats,
-            postfix=None,
-        )
+        with warnings.catch_warnings(record=True) as w:
+            dfd_rl: pd.DataFrame = make_relative_value(
+                df=dfdx,
+                xcats=xcats,
+                cids=cids,
+                start=start,
+                end=end,
+                blacklist=None,
+                basket=self.cids,
+                complete_cross=True,
+                rel_meth="subtract",
+                rel_xcats=rel_xcats,
+                postfix=None,
+            )
 
         # Assert the DataFrame only contains a single category: the category with a
         # complete set of cross-sections relative to the basket ("CRY_RelVal").
@@ -326,18 +327,20 @@ class TestAll(unittest.TestCase):
         basket: List[str] = self.cids
         dfb: pd.DataFrame
         cids_used: List[str]
-        dfb, cids_used = _prepare_basket(
-            df=dfx, xcat="XR", basket=basket, cids_avl=cids, complete_cross=False
-        )
+        with warnings.catch_warnings(record=True) as w:
+            dfb, cids_used = _prepare_basket(
+                df=dfx, xcat="XR", basket=basket, cids_avl=cids, complete_cross=False
+            )
         self.assertTrue(sorted(cids_used) == cids)
         self.assertTrue(sorted(list(set(dfb["cid"]))) == cids)
 
         # If complete_cross parameter is set to True and the respective category is not
         # defined over all cross-sections defined in the basket, the function should
         # return an empty list and an empty DataFrame.
-        dfb, cids_used = _prepare_basket(
-            df=dfx, xcat="XR", basket=basket, cids_avl=cids, complete_cross=True
-        )
+        with warnings.catch_warnings(record=True) as w:
+            dfb, cids_used = _prepare_basket(
+                df=dfx, xcat="XR", basket=basket, cids_avl=cids, complete_cross=True
+            )
         self.assertTrue(len(cids_used) == 0)
         self.assertTrue(dfb.empty)
 
@@ -352,16 +355,17 @@ class TestAll(unittest.TestCase):
         # cross-section chosen will consequently have a zero value for each output if the
         # logic is correct.
         basket_cid: List[str] = ["AUD"]
-        dfd_2: pd.DataFrame = make_relative_value(
-            df=dfd,
-            xcats=["INFL"],
-            cids=self.cids,
-            blacklist=None,
-            basket=basket_cid,
-            rel_meth="subtract",
-            rel_xcats=None,
-            postfix="RV",
-        )
+        with warnings.catch_warnings(record=True) as w:
+            dfd_2: pd.DataFrame = make_relative_value(
+                df=dfd,
+                xcats=["INFL"],
+                cids=self.cids,
+                blacklist=None,
+                basket=basket_cid,
+                rel_meth="subtract",
+                rel_xcats=None,
+                postfix="RV",
+            )
 
         basket_df: pd.DataFrame = dfd_2[dfd_2["cid"] == basket_cid[0]]
         values: np.ndarray = basket_df["value"].to_numpy()
