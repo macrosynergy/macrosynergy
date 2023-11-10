@@ -48,7 +48,6 @@ class TestAll(unittest.TestCase):
         """
         Used to test the application of pandas in-built back-fill mechanism.
         """
-        self.dataframe_construction()
 
         # Convert to a one-dimensional DataFrame to facilitate pd.apply() method
         # to calculate in-sampling period. The pd.stack() feature removes the
@@ -59,7 +58,6 @@ class TestAll(unittest.TestCase):
         return round(float(iis_val.iloc[0]), 4)
 
     def test_pan_neutral(self):
-        self.dataframe_construction()
         # Panel weight is equated to one, so pass in the entire DataFrame to
         # expanding_stat() method.
         # The default frequency for the iterative dates data structure is daily.
@@ -174,7 +172,6 @@ class TestAll(unittest.TestCase):
         after a number of days have elapsed. Therefore, compute less frequently to
         reflect the above paradigm.
         """
-        self.dataframe_construction()
 
         # --- Down-sampling pan-neutral, monthly.
 
@@ -270,7 +267,6 @@ class TestAll(unittest.TestCase):
             sequentially.
         :param <bool> iis: in-sampling.
         """
-        self.dataframe_construction()
 
         dfw_zns_css = self.dfw * 0
         for i, cid in enumerate(self.cids):
@@ -289,8 +285,6 @@ class TestAll(unittest.TestCase):
         return dfw_zns_css
 
     def test_cross_neutral(self):
-        self.dataframe_construction()
-
         df_neutral = self.cross_neutral("mean", False, iis=False)
         self.assertIsInstance(df_neutral, pd.DataFrame)
 
@@ -361,7 +355,6 @@ class TestAll(unittest.TestCase):
         """
         Neutral level is computed on a cross-sectional basis.
         """
-        self.dataframe_construction()
 
         df = self.dfd
         dfw = self.dfw
@@ -404,8 +397,6 @@ class TestAll(unittest.TestCase):
             self.assertTrue(np.abs(test_value - bm_elem) < 0.001)
 
     def test_zn_scores(self):
-        self.dataframe_construction()
-
         with self.assertRaises(ValueError):
             # Test catching neutral value error.
             df = make_zn_scores(
@@ -498,7 +489,6 @@ class TestAll(unittest.TestCase):
         epsilon = 0.000001
         self.assertTrue(np.all(np.nan_to_num(dif) < epsilon))
 
-        self.dataframe_construction()
         dfd = self.dfd
         # Test weighting function.
         panel_df = make_zn_scores(
@@ -583,8 +573,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(check == 0)
 
     def test_zn_scores_warning(self):
-        self.dataframe_construction()
-
         with self.assertWarns(UserWarning):
             warnings.simplefilter("always")
             r_cid: str = self.cids[0]
