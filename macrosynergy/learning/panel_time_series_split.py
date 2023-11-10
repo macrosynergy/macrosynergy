@@ -21,7 +21,7 @@ from sklearn.model_selection import (
 from sklearn.linear_model import Lasso, LinearRegression
 
 
-class BasePanelTimeSeriesSplit(BaseCrossValidator):
+class BasePanelSplit(BaseCrossValidator):
     """
     Base class for the production of paired training and test splits for panel data.
     """
@@ -203,7 +203,7 @@ class BasePanelTimeSeriesSplit(BaseCrossValidator):
         plt.show()
 
 
-class ExpandingPanelTimeSeriesSplit(BasePanelTimeSeriesSplit):
+class ForwardPanelSplit(BasePanelSplit):
     """
     Class for the production of paired training and test splits of panel data
     for expanding window validation.
@@ -264,7 +264,7 @@ class ExpandingPanelTimeSeriesSplit(BasePanelTimeSeriesSplit):
             yield train_indices, test_indices
 
 
-class RollingPanelTimeSeriesSplit(BasePanelTimeSeriesSplit):
+class KFoldPanelSplit(BasePanelSplit):
     """
     Class for the production of paired training and test splits of panel data
     for rolling window validation.
@@ -322,7 +322,7 @@ class RollingPanelTimeSeriesSplit(BasePanelTimeSeriesSplit):
             yield train_indices, test_indices
 
 
-class IntervalPanelTimeSeriesSplit(BasePanelTimeSeriesSplit):
+class IntervalPanelSplit(BasePanelSplit):
     """
     Class for the production of paired training and test splits for panel data.
 
@@ -526,7 +526,7 @@ if __name__ == "__main__":
     # 1) Demonstration of basic functionality
 
     # a) n_splits = 4, n_split_method = expanding
-    splitter = ExpandingPanelTimeSeriesSplit(n_splits=4)
+    splitter = ForwardPanelSplit(n_splits=4)
     splitter.split(X2, y2)
     cv_results = cross_validate(
         LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
@@ -534,7 +534,7 @@ if __name__ == "__main__":
     splitter.visualise_splits(X2, y2)
 
     # b) n_splits = 4, n_split_method = rolling
-    splitter = RollingPanelTimeSeriesSplit(n_splits=4)
+    splitter = KFoldPanelSplit(n_splits=4)
     splitter.split(X2, y2)
     cv_results = cross_validate(
         LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
@@ -542,7 +542,7 @@ if __name__ == "__main__":
     splitter.visualise_splits(X2, y2)
 
     # c) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4
-    splitter = IntervalPanelTimeSeriesSplit(
+    splitter = IntervalPanelSplit(
         train_intervals=21 * 12, test_size=1, min_periods=21, min_cids=4
     )
     splitter.split(X2, y2)
@@ -552,7 +552,7 @@ if __name__ == "__main__":
     splitter.visualise_splits(X2, y2)
 
     # d) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4, max_periods=12*21
-    splitter = IntervalPanelTimeSeriesSplit(
+    splitter = IntervalPanelSplit(
         train_intervals=21 * 12,
         test_size=21 * 12,
         min_periods=21,
@@ -568,7 +568,7 @@ if __name__ == "__main__":
     # 2) Grid search capabilities
     lasso = Lasso()
     parameters = {"alpha": [0.1, 1, 10]}
-    splitter = IntervalPanelTimeSeriesSplit(
+    splitter = IntervalPanelSplit(
         train_intervals=21 * 12, test_size=1, min_periods=21, min_cids=4
     )
     gs = GridSearchCV(
@@ -612,14 +612,14 @@ if __name__ == "__main__":
     X2 = df.drop(columns=["B"])
     y2 = df["B"]
 
-    # splitter = IntervalPanelTimeSeriesSplit(
+    # splitter = IntervalPanelSplit(
     #     train_intervals=1,
     #     test_size=2,
     #     min_periods=1,
     #     min_cids=2,
     #     max_periods=12 * 21,
     # )
-    splitter = ExpandingPanelTimeSeriesSplit(
+    splitter = ForwardPanelSplit(
         n_splits=4
     )
     splits = splitter.split(X2, y2)

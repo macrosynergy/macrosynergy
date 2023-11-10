@@ -1,4 +1,4 @@
-from .panel_time_series_split import ExpandingPanelTimeSeriesSplit, RollingPanelTimeSeriesSplit, IntervalPanelTimeSeriesSplit
+from .panel_time_series_split import ForwardPanelSplit, KFoldPanelSplit, IntervalPanelSplit
 from .cv_tools import panel_cv_scores
 from .transformers import LassoSelectorTransformer, MapSelectorTransformer, BenchmarkTransformer
 from .metrics import (
@@ -12,9 +12,9 @@ from .prediction_tools import AdaptiveSignalHandler
 
 __all__ = [
     "AdaptiveSignalHandler",
-    "ExpandingPanelTimeSeriesSplit",
-    "RollingPanelTimeSeriesSplit",
-    "IntervalPanelTimeSeriesSplit",
+    "ForwardPanelSplit",
+    "KFoldPanelSplit",
+    "IntervalPanelSplit",
     "panel_cv_scores",
     "LassoSelectorTransformer",
     "MapSelectorTransformer",

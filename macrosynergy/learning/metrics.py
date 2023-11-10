@@ -16,7 +16,7 @@ from sklearn.metrics import make_scorer, accuracy_score, balanced_accuracy_score
 from sklearn.model_selection import cross_val_score
 from sklearn.linear_model import LinearRegression
 
-from macrosynergy.learning.panel_time_series_split import ExpandingPanelTimeSeriesSplit
+from macrosynergy.learning.panel_time_series_split import ForwardPanelSplit
 
 from typing import Union
 
@@ -212,7 +212,7 @@ if __name__ == "__main__":
     X = df.drop(columns="XR")
     y = df["XR"]
 
-    splitter = ExpandingPanelTimeSeriesSplit(n_splits=4)
+    splitter = ForwardPanelSplit(n_splits=4)
     scorer1 = make_scorer(panel_significance_probability, greater_is_better=True)
     scorer2 = make_scorer(sharpe_ratio, greater_is_better=True)
     scorer3 = make_scorer(sortino_ratio, greater_is_better=True)

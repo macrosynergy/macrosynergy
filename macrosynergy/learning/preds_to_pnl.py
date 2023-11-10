@@ -11,7 +11,7 @@ TODO: write adaptive_preds_to_pnl function
 import numpy as np
 import pandas as pd
 
-from macrosynergy.learning.panel_time_series_split import BasePanelTimeSeriesSplit, IntervalPanelTimeSeriesSplit
+from macrosynergy.learning.panel_time_series_split import BasePanelSplit, IntervalPanelSplit
 import macrosynergy.pnl as msn
 
 from sklearn.base import BaseEstimator
@@ -24,7 +24,7 @@ def static_preds_to_pnl(
     models: Dict[str, Union[BaseEstimator, Pipeline]],
     X: pd.DataFrame,
     y: pd.Series,
-    splitter: BasePanelTimeSeriesSplit,
+    splitter: BasePanelSplit,
     daily_return_series: pd.DataFrame,
     sig_mode: str = "binary",
     rebal_freq: str = "monthly",
@@ -42,8 +42,8 @@ def static_preds_to_pnl(
         unit. 
     :param <pd.Series> y: Pandas series of targets corresponding with the features in X.
         This should be the same length as X.
-    :param <BasePanelTimeSeriesSplit> splitter: Panel walk-forward validation splitter inheritting from
-        BasePanelTimeSeriesSplit. Predictions are made for each test sample, created by the splitter,
+    :param <BasePanelSplit> splitter: Panel walk-forward validation splitter inheritting from
+        BasePanelSplit. Predictions are made for each test sample, created by the splitter,
         and subsequently stored in a signal dataframe. 
     :param <pd.DataFrame> daily_return_series: Pandas dataframe of daily returns
         for each cross-section in X. This spans the minimum and maximum dates in X.
@@ -194,7 +194,7 @@ if __name__ == "__main__":
     y_long = pd.melt(
         frame=y.reset_index(), id_vars=["cid", "real_date"], var_name="xcat"
     )
-    splitter = IntervalPanelTimeSeriesSplit(
+    splitter = IntervalPanelSplit(
         train_intervals=1, test_size=1, min_cids=4, min_periods=2
     )
     models = {"ols": LinearRegression(), "knn": KNeighborsRegressor()}
