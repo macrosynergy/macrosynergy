@@ -10,8 +10,6 @@ from macrosynergy.management.utils import categories_df
 from typing import List, Tuple, Dict, Union, Optional
 import warnings
 
-warnings.resetwarnings()
-
 
 class TestAll(unittest.TestCase):
     # Method used to construct the respective DataFrame.
@@ -281,9 +279,11 @@ class TestAll(unittest.TestCase):
         # Broaden the testcase to further test the accuracy.
         self.cidx = ["AUD", "CAD", "GBP", "USD", "EUR", "JPY", "NZD", "CHF"]
         # Print statements will be returned to the console.
-        shared_cids = CategoryRelations.intersection_cids(
-            self.dfdx, ["GROWTH", "INFL"], self.cidx
-        )
+        # need to catch warnings
+        with warnings.catch_warnings(record=True) as w:
+            shared_cids = CategoryRelations.intersection_cids(
+                self.dfdx, ["GROWTH", "INFL"], self.cidx
+            )
 
         self.assertTrue(sorted(shared_cids) == ["CAD", "CHF", "GBP"])
 
