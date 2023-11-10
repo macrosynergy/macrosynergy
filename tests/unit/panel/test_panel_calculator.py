@@ -85,7 +85,7 @@ class TestAll(unittest.TestCase):
             return values
 
         else:
-            val = input_values[input_values["xcat"] == xcats[0]]["value"]
+            val = input_values[input_values["xcat"] == xcats[0]]["value"].iloc[0]
             return float(val)
 
     @staticmethod
