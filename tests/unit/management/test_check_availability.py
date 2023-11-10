@@ -7,6 +7,9 @@ from macrosynergy.management.utils.check_availability import (
     check_enddates,
     business_day_dif,
 )
+import matplotlib
+from unittest.mock import patch
+from matplotlib import pyplot as plt
 
 
 import numpy as np
@@ -14,6 +17,12 @@ from tests.simulate import make_qdf
 
 
 class TestAll(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.mpl_backend: str = matplotlib.get_backend()
+        matplotlib.use("Agg")
+        cls.mock_show = patch("matplotlib.pyplot.show").start()
+
     def setUp(self) -> None:
         self.cids: List[str] = ["AUD", "CAD", "GBP"]
         self.xcats: List[str] = ["CRY", "XR", "GROWTH", "INFL", "GDP"]
@@ -49,7 +58,13 @@ class TestAll(unittest.TestCase):
         self.dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     def tearDown(self) -> None:
-        return super().tearDown()
+        plt.close("all")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        patch.stopall()
+        plt.close("all")
+        matplotlib.use(cls.mpl_backend)
 
     def test_check_startyears(self):
         dfd = self.dfd

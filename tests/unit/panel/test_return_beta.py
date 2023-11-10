@@ -445,7 +445,9 @@ class TestAll(unittest.TestCase):
         # Test on a random date, 2014-02-14. The date should be a Friday.
         date = pd.Timestamp("2014-02-14")
         self.assertTrue(pd.Timestamp(date).dayofweek == 4)
-        df_hedge_INR_val = (df_hedge_INR[df_hedge_INR["real_date"] == date])["value"]
+        df_hedge_INR_val = (df_hedge_INR[df_hedge_INR["real_date"] == date])[
+            "value"
+        ].iloc[0]
         df_hedge_INR_val = float(df_hedge_INR_val)
 
         # Confirm the date in the DataFrame is a Monday and the hedge ratio is

@@ -56,7 +56,7 @@ class TestAll(unittest.TestCase):
         iis_period = pd.DataFrame(dfw.iloc[0 : (min_obs + 1)].stack().to_numpy())
         iis_val = iis_period.apply(self.func_dict[neutral])
 
-        return round(float(iis_val), 4)
+        return round(float(iis_val.iloc[0]), 4)
 
     def test_pan_neutral(self):
         self.dataframe_construction()
@@ -313,7 +313,7 @@ class TestAll(unittest.TestCase):
             # Will exclude NaN values from the calculation.
             dif = np.abs(mean_col - mean)
             # Test if function mean is correct.
-            self.assertTrue(np.nan_to_num(dif[index]) < epsilon)
+            self.assertTrue(np.nan_to_num(dif.iloc[index]) < epsilon)
 
         # --- Cross-neutral median, sequential equal False.
 
@@ -389,8 +389,8 @@ class TestAll(unittest.TestCase):
         test_series = cross_series.loc[:random_date]
         test_value = np.mean(test_series.to_numpy())
 
-        benchmark_value = float(neutral_df.loc[random_date])
-        self.assertTrue(np.abs(test_value - benchmark_value) < 0.001)
+        benchmark_value = float(neutral_df.loc[random_date].iloc[0])
+        self.assertTrue(np.isclose(test_value, benchmark_value, atol=0.001))
 
         # Confirm the dates, over the next quarter, are the same as the value referenced
         # above.

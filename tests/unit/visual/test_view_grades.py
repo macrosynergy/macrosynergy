@@ -4,16 +4,19 @@ from typing import List, Dict, Any
 from macrosynergy.management.simulate import make_qdf
 import macrosynergy.visuals as msv
 import matplotlib
+import warnings
+from unittest.mock import patch
+from matplotlib import pyplot as plt
 
 
 class TestAll(unittest.TestCase):
-
     @classmethod
     def setUpClass(self):
         # Prevents plots from being displayed during tests.
         self.mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
-        
+        self.mock_show = patch("matplotlib.pyplot.show").start()
+
         # Set up test df with grading.
         self.cids: List[str] = ["AUD", "CAD", "GBP", "NZD"]
         self.xcats: List[str] = ["XR", "CRY", "INFL"]
@@ -31,7 +34,14 @@ class TestAll(unittest.TestCase):
 
         df_xcats = pd.DataFrame(
             index=self.xcats,
-            columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+            columns=[
+                "earliest",
+                "latest",
+                "mean_add",
+                "sd_mult",
+                "ar_coef",
+                "back_coef",
+            ],
         )
         df_xcats.loc["XR",] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
         df_xcats.loc["CRY",] = ["2000-01-01", "2020-10-30", 1, 2, 0.95, 1]
@@ -50,11 +60,15 @@ class TestAll(unittest.TestCase):
         filter_xcat = dfd["xcat"] == "XR"
         dfd.loc[filter_xcat, "grading"] = 1
         self.df: pd.DataFrame = dfd
+        warnings.simplefilter("ignore")
 
     @classmethod
     def tearDownClass(self) -> None:
+        patch.stopall()
+        plt.close("all")
         matplotlib.use(self.mpl_backend)
-        
+        warnings.resetwarnings()
+
     def setUp(self):
         self.valid_args: Dict[str, Any] = {
             "df": self.df,
@@ -66,6 +80,9 @@ class TestAll(unittest.TestCase):
             "title": "Test plot",
             "figsize": (10, 10),
         }
+
+    def tearDown(self) -> None:
+        plt.close("all")
 
     def test_view_grades_no_error(self):
         try:
@@ -118,7 +135,7 @@ class TestAll(unittest.TestCase):
         invalid_cases: List[Any] = [
             ["invalid_size", 10],
             (10, "invalid_size"),
-            [None, 10]
+            [None, 10],
         ]
         for case in invalid_cases:
             invalid_args["figsize"] = case

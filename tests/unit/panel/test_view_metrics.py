@@ -1,13 +1,16 @@
 import unittest
 import pandas as pd
 from typing import List, Dict, Any
+from unittest.mock import patch
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.panel import view_metrics
 import matplotlib
+import warnings
+from matplotlib import pyplot as plt
 
 
 class TestAll(unittest.TestCase):
-    def dataframe_construction(self):
+    def setUp(self) -> None:
         self.cids: List[str] = ["AUD", "CAD", "GBP", "NZD"]
         self.xcats: List[str] = ["XR", "CRY", "INFL"]
         self.metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
@@ -26,9 +29,11 @@ class TestAll(unittest.TestCase):
 
         self.df: pd.DataFrame = df
 
-    def test_view_metrics(self):
-        self.dataframe_construction()
+    def tearDown(self) -> None:
+        return super().tearDown()
 
+    @patch("matplotlib.pyplot.show")
+    def test_view_metrics(self, mock_show):
         mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
 
@@ -62,11 +67,12 @@ class TestAll(unittest.TestCase):
         # test bad xcat
         bad_args["xcat"] = "bad_xcat"
         with self.assertRaises(ValueError):
-            try:
-                view_metrics(**bad_args)
-            except Exception as e:
-                self.assertIsInstance(e, ValueError)
-                raise ValueError(e)
+            with warnings.catch_warnings(record=True) as w:
+                try:
+                    view_metrics(**bad_args)
+                except Exception as e:
+                    self.assertIsInstance(e, ValueError)
+                    raise ValueError(e)
 
         # test bad metric
         bad_args = good_args.copy()
@@ -81,9 +87,10 @@ class TestAll(unittest.TestCase):
         bad_args["df"] = pd.DataFrame()
 
         for case in bad_cases:
-            bad_args["df"] = case
-            with self.assertRaises(ValueError):
-                view_metrics(**bad_args)
+            with warnings.catch_warnings(record=True) as w:
+                bad_args["df"] = case
+                with self.assertRaises(ValueError):
+                    view_metrics(**bad_args)
 
         # test cids with empty list and list of int
         bad_args = good_args.copy()
@@ -159,6 +166,7 @@ class TestAll(unittest.TestCase):
             except Exception as e:
                 self.fail(f"view_metrics raised {e} unexpectedly")
 
+        plt.close("all")
         matplotlib.use(mpl_backend)
 
 
