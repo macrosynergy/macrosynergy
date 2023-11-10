@@ -33,7 +33,6 @@ def adaptive_preds_to_signal(
     hparam_type: str = "grid",
 ):
     """
-    TODO: if no hyperparameters, just fit the model and predict.
     Function to create a quantamental trading signal dataframe from the predictions of a
     hyperparameter-adaptive model. For each training and test set pair, a hyperparameter
     search is run over the training set. The model is optimised for each provided metric
@@ -61,9 +60,6 @@ def adaptive_preds_to_signal(
             "lasso" : {"alpha" : [1e-1, 1e-2, 1e-3]},
             "knn" : {"n_neighbors" : [1, 2, 5]}
         }
-
-
-    dictionary of hyperparameter ranges to search over.
     :param <str> hparam_type: Hyperparameter search type. Either "grid", "random" or "bayes".
         Default is "grid".
 
@@ -141,18 +137,36 @@ def adaptive_preds_to_signal(
                 # TODO: parellise outer loop instead of the grid search since that will
                 #       contain more iterations
                 for metric in metrics.keys():
-                    grid_search = GridSearchCV(
-                        estimator=model,
-                        param_grid=hparam_grid[name],
-                        scoring=metrics[metric],
-                        refit=True,
-                        cv=inner_splitter,
-                        n_jobs=-1,
-                    )
+                    if hparam_type == "grid":
+                        search_object = GridSearchCV(
+                            estimator=model,
+                            param_grid=hparam_grid[name],
+                            scoring=metrics[metric],
+                            refit=True,
+                            cv=inner_splitter,
+                            n_jobs=-1,
+                        )
+                    elif hparam_type == "random":
+                        # TODO: make n_iter a parameter.
+                        search_object = RandomizedSearchCV(
+                            estimator=model,
+                            param_distributions=hparam_grid[name],
+                            n_iter = 200,
+                            scoring=metrics[metric],
+                            refit=True,
+                            cv=inner_splitter,
+                            n_jobs=-1,
+                        )
+                    elif hparam_type == "bayes":
+                        raise NotImplementedError("Bayesian optimisation not yet implemented.")
+                    else:
+                        raise ValueError("Invalid hyperparameter search type.")
+                    
                     # Fit the grid search
-                    grid_search.fit(X_train_i, y_train_i)
+                    search_object.fit(X_train_i, y_train_i)
                     # Store the best estimator predictions
-                    preds: np.ndarray = grid_search.predict(X_test_i)
+                    preds: np.ndarray = search_object.predict(X_test_i)
+
                     sig_idxs: pd.MultiIndex = pd.MultiIndex.from_product(
                         [test_xs_levels, test_date_levels]
                     )
