@@ -283,6 +283,7 @@ class TestAll(unittest.TestCase):
 
         # the paranoid programmer's check - to be removed later
         self.assertEqual(loopvar, test_repeats - 1)
+        warnings.resetwarnings()
 
     def test_panel_calculator_time_series(self):
 

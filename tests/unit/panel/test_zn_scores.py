@@ -601,6 +601,7 @@ class TestAll(unittest.TestCase):
             dfr["xcat"]: pd.Series = dfr["xcat"].str.replace("ZN", "")
             self.assertEqual(dfr["xcat"].unique()[0], r_xcat)
             self.assertFalse(r_cid in dfr["cid"].unique())
+            warnings.resetwarnings()
 
         with self.assertRaises(ValueError):
             try:
