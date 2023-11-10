@@ -2,7 +2,8 @@ import unittest
 import random
 import numpy as np
 import pandas as pd
-from tests.simulate import make_qdf
+
+from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import (
     update_df,
     update_tickers,
@@ -254,7 +255,7 @@ class TestAll(unittest.TestCase):
         # the value is not equal to the legacy value.
 
         dfd_add_growth_2 = dfd_add_2[dfd_add_2["xcat"] == "GROWTHRV"]
-        dfd_add_aud_2 = dfd_add_growth_2[dfd_add_growth_2["cid"] == "AUD"]
+        dfd_add_aud_2: pd.DataFrame = dfd_add_growth_2[dfd_add_growth_2["cid"] == "AUD"]
 
         test_1 = dfd_add_aud_2[dfd_add_aud_2["real_date"] == fixed_date]["value"].iloc[
             0
@@ -265,22 +266,26 @@ class TestAll(unittest.TestCase):
         dfd_1_rv_growth = dfd_3[dfd_3["xcat"] == "GROWTHRV"]
         dfd_1_rv_growth_aud = dfd_1_rv_growth[dfd_1_rv_growth["cid"] == "AUD"]
 
-        value = dfd_1_rv_growth_aud[dfd_1_rv_growth_aud["real_date"] == fixed_date]
-        value = value["value"]
-        self.assertTrue(float(test_1) == float(value))
+        value: pd.DataFrame = dfd_1_rv_growth_aud[
+            dfd_1_rv_growth_aud["real_date"] == fixed_date
+        ]
+        value = value["value"].iloc[0]
+        self.assertTrue(test_1 == value)
 
         # Confirm the new category's values are correct, "XRRV".
         dfd_1_rv_xrrv = dfd_3[dfd_3["xcat"] == "XRRV"]
         dfd_1_rv_xrrv_aud = dfd_1_rv_xrrv[dfd_1_rv_xrrv["cid"] == "AUD"]
 
         value = dfd_1_rv_xrrv_aud[dfd_1_rv_xrrv_aud["real_date"] == fixed_date]
-        value = value["value"]
+        value = value["value"].iloc[0]
 
         dfd_add_xrrv_2 = dfd_add_2[dfd_add_2["xcat"] == "XRRV"]
         dfd_add_aud_2 = dfd_add_xrrv_2[dfd_add_xrrv_2["cid"] == "AUD"]
-        test_2 = dfd_add_aud_2[dfd_add_aud_2["real_date"] == fixed_date]["value"]
+        test_2 = dfd_add_aud_2[dfd_add_aud_2["real_date"] == fixed_date]["value"].iloc[
+            0
+        ]
 
-        self.assertTrue(float(test_2) == float(value))
+        self.assertTrue(test_2 == value)
 
     def test_update_df(self):
         self.dataframe_constructor()
@@ -319,8 +324,8 @@ class TestAll(unittest.TestCase):
         # The tests are completed on a panel-level changes.
 
         dfd = self.dfd
-        dfd_growth = dfd[dfd["xcat"] == "GROWTH"]
-        dfd_growth["grading"] = np.ones(dfd_growth.shape[0])
+        dfd_growth = dfd[dfd["xcat"] == "GROWTH"].copy()
+        dfd_growth.loc[:, "grading"] = 1
 
         dfd_1_rv = make_relative_value(
             self.dfd,
@@ -329,7 +334,8 @@ class TestAll(unittest.TestCase):
             rel_meth="subtract",
             postfix="RV",
         )
-        dfd_1_rv["grading"] = np.ones(dfd_1_rv.shape[0])
+        # dfd_1_rv["grading"] = np.ones(dfd_1_rv.shape[0])
+        dfd_1_rv["grading"] = 1
 
         dfd_test = pd.concat([dfd_growth, dfd_1_rv])
         dfd_test = dfd_test.reset_index(drop=True)
@@ -349,7 +355,7 @@ class TestAll(unittest.TestCase):
             rel_meth="divide",
             postfix="RV",
         )
-        dfd_2_rv["grading"] = np.ones(dfd_2_rv.shape[0])
+        dfd_2_rv["grading"] = 1
         dfd_update = update_df(df=dfd_growth, df_add=dfd_2_rv, xcat_replace=True)
 
         dfd_update_rv = dfd_update[
@@ -359,11 +365,13 @@ class TestAll(unittest.TestCase):
         fixed_date = "2011-01-07"
         test_row = dfd_update_rv[
             dfd_update_rv["real_date"] == pd.Timestamp(fixed_date)
-        ]["value"]
+        ]["value"].iloc[0]
         original_data = dfd_2_rv[dfd_2_rv["real_date"] == pd.Timestamp(fixed_date)]
-        original_data_aud = original_data[original_data["cid"] == "AUD"]["value"]
+        original_data_aud = original_data[original_data["cid"] == "AUD"]["value"].iloc[
+            0
+        ]
 
-        self.assertTrue(float(test_row) == float(original_data_aud))
+        self.assertTrue(test_row == original_data_aud)
 
         # Lastly, confirm that if the aggregate DataFrame has been defined on additional
         # metrics than the secondary DataFrame, update_df() function will instate the
@@ -371,8 +379,9 @@ class TestAll(unittest.TestCase):
         # Confirm the logic works.
         dfd = self.dfd
         # Contrived columns for the purpose of testing.
-        dfd["grading"] = np.ones(dfd.shape[0])
-        dfd["mop_lag"] = list(range(dfd.shape[0]))
+        dfd["grading"] = 1
+        # dfd["mop_lag"] = list(range(dfd.shape[0]))
+        dfd["mop_lag"] = np.arange(dfd.shape[0])
 
         dfd_1_rv = make_relative_value(
             self.dfd,
@@ -395,14 +404,14 @@ class TestAll(unittest.TestCase):
         # First, confirm the data in the value column is correct.
         test_value = dfd_update_df[
             dfd_update_df["real_date"] == pd.Timestamp(fixed_date)
-        ]["value"]
+        ]["value"].iloc[0]
 
         dfd_1_rv_aud = dfd_1_rv[
             (dfd_1_rv["cid"] == "AUD")
             & (dfd_1_rv["real_date"] == pd.Timestamp(fixed_date))
-        ]
+        ]["value"].iloc[0]
 
-        self.assertTrue(float(test_value) == float(dfd_1_rv_aud["value"]))
+        self.assertTrue(test_value == dfd_1_rv_aud)
 
         # Secondly, confirm that the two metrics that are not present in dfd_1_rv,
         # ['grading', 'mop_lag'], are present and exclusively contain NaN values.
