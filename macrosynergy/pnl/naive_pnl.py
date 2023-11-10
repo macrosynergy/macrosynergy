@@ -245,7 +245,7 @@ class NaivePnL:
             rebal_merge, how="left", on=["real_date", "cid"]
         )
         rebal_merge["psig"] = (
-            rebal_merge["psig"].fillna(method="ffill").shift(rebal_slip)
+            rebal_merge["psig"].ffill().shift(rebal_slip)
         )
         rebal_merge = rebal_merge.sort_values(["cid", "real_date"])
 

@@ -458,8 +458,13 @@ class TestAll(unittest.TestCase):
             index="real_date", columns="cid", values="value"
         )
 
-        condition = return_calc - float(long_equity_series.loc[random_date])
-        self.assertTrue(abs(condition) < 0.0001)
+        self.assertTrue(
+            np.isclose(
+                return_calc,
+                float(long_equity_series.loc[random_date].iloc[0]),
+                atol=0.0001,
+            )
+        )
 
         # The remaining methods in NaivePnL are graphical plots which display the values
         # computed using the functions above. Therefore, if the functionality is correct
@@ -511,8 +516,13 @@ class TestAll(unittest.TestCase):
             index="real_date", columns="cid", values="value"
         )
 
-        condition = return_calc - float(long_equity_series.loc[random_date])
-        self.assertTrue(abs(condition) < 0.0001)
+        self.assertTrue(
+            np.isclose(
+                return_calc,
+                float(long_equity_series.loc[random_date].iloc[0]),
+                atol=0.0001,
+            )
+        )
 
     def test_plotting_methods(self):
         self.dataframe_construction()
@@ -552,23 +562,17 @@ class TestAll(unittest.TestCase):
         # Confirm the plotting methods do not raise any errors.
 
         try:
-            pnl.plot_pnls(
-                pnl_cats=["PNL_GROWTH", "Unit_Long_EQXR"]
-            )
+            pnl.plot_pnls(pnl_cats=["PNL_GROWTH", "Unit_Long_EQXR"])
         except Exception as e:
             self.fail(f"plot_pnl raised {e} unexpectedly")
 
         try:
-            pnl.signal_heatmap(
-                pnl_name="PNL_GROWTH"
-            )
+            pnl.signal_heatmap(pnl_name="PNL_GROWTH")
         except Exception as e:
             self.fail(f"signal_heatmap raised {e} unexpectedly")
 
         try:
-            pnl.agg_signal_bars(
-                pnl_name="PNL_GROWTH"
-            )
+            pnl.agg_signal_bars(pnl_name="PNL_GROWTH")
         except Exception as e:
             self.fail(f"agg_signal_bars raised {e} unexpectedly")
 
