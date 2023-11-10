@@ -270,8 +270,8 @@ class TestAll(unittest.TestCase):
         last_test_date: str = "2013-03-29"
         # check_date <- one business day after the re-estimation date - 2013-04-01.
         check_date: str = "2013-04-01"
-        test_value = float(df_hr[df_hr["real_date"] == check_date]["value"])
-        result = float(df_hrat[df_hrat["real_date"] == last_test_date]["value"])
+        test_value = float(df_hr[df_hr["real_date"] == check_date]["value"].iloc[0])
+        result = float(df_hrat[df_hrat["real_date"] == last_test_date]["value"].iloc[0])
         self.assertTrue(result == test_value)
 
     def test_adjusted_returns(self):
@@ -329,12 +329,12 @@ class TestAll(unittest.TestCase):
         test_date = df_stack[df_stack["real_date"] == date]
         # Test on the two cross-sections: 'IDR' & 'INR'.
         # Hedge Return.
-        INR_HR = float(test_date[test_date["cid"] == "INR"]["value"])
-        IDR_HR = float(test_date[test_date["cid"] == "IDR"]["value"])
+        INR_HR = float(test_date[test_date["cid"] == "INR"]["value"].iloc[0])
+        IDR_HR = float(test_date[test_date["cid"] == "IDR"]["value"].iloc[0])
 
         hedge_row = df_hedge[df_hedge["real_date"] == date]
-        INR_H = float(hedge_row[hedge_row["cid"] == "INR"]["value"])
-        IDR_H = float(hedge_row[hedge_row["cid"] == "IDR"]["value"])
+        INR_H = float(hedge_row[hedge_row["cid"] == "INR"]["value"].iloc[0])
+        IDR_H = float(hedge_row[hedge_row["cid"] == "IDR"]["value"].iloc[0])
 
         return_row = dfw.loc[date]
         INR_R = return_row["INR"]

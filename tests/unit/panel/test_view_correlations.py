@@ -96,12 +96,12 @@ class TestAll(unittest.TestCase):
         fixed_date = "2013-03-11"
         condition = df_w_lag.index.get_level_values("real_date") == fixed_date
         period_t = df_w_lag[condition]["INFL_L0"]
-        period_t_aud = float(period_t.loc["AUD"])
+        period_t_aud = float(period_t.loc["AUD"].iloc[0])
 
         lagged_date_2 = pd.Timestamp(fixed_date) + pd.DateOffset(2)
         condition_2 = df_w_lag.index.get_level_values("real_date") == lagged_date_2
         period_t_2 = df_w_lag[condition_2]["INFL_L2"]
-        period_t_2_aud = float(period_t_2.loc["AUD"])
+        period_t_2_aud = float(period_t_2.loc["AUD"].iloc[0])
 
         # Confirm that the value at '2013-03-11' has been lagged correctly in INFL_L2 on
         # AUD: the same value should be held at '2013-03-13'.
@@ -118,11 +118,11 @@ class TestAll(unittest.TestCase):
         condition_5 = df_w_lag.index.get_level_values("real_date") == lagged_date_5
 
         period_t_5 = df_w_lag[condition_5]["INFL_L5"]
-        period_t_5_aud = float(period_t_5.loc["AUD"])
+        period_t_5_aud = float(period_t_5.loc["AUD"].iloc[0])
         self.assertEqual(period_t_aud, period_t_5_aud)
 
-        period_t_gbp = float(period_t.loc["GBP"])
-        period_t_2_gbp = float(period_t_2.loc["GBP"])
+        period_t_gbp = float(period_t.loc["GBP"].iloc[0])
+        period_t_2_gbp = float(period_t_2.loc["GBP"].iloc[0])
 
         # Confirm that the value at '2013-03-11' has been lagged correctly in INFL_L2 on
         # GBP: the same value should be held at '2013-03-13'.
