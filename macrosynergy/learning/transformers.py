@@ -84,6 +84,7 @@ class MapSelectorTransformer(BaseEstimator, TransformerMixin):
             with each sample in X. 
         """
         self.ftrs = []
+        self.y_mean = np.mean(y)
         cols = X.columns
 
         for col in cols:
@@ -107,6 +108,10 @@ class MapSelectorTransformer(BaseEstimator, TransformerMixin):
         :return <pd.DataFrame>: Pandas dataframe of input features selected
             based on the Macrosynergy panel test.
         """
+        if self.ftrs == []:
+            # Use historical mean return as a signal if no features are selected
+            return pd.DataFrame(index=X.index, columns=["naive_signal"], data=self.y_mean,dtype=np.float16)
+        
         return X[self.ftrs]
     
 class BenchmarkTransformer(BaseEstimator, TransformerMixin):
