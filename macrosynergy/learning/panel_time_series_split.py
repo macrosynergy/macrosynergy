@@ -65,7 +65,7 @@ class BasePanelSplit(BaseCrossValidator):
 
     def _calculate_xranges(
         self, cs_dates: pd.DatetimeIndex, real_dates: pd.DatetimeIndex
-    ):
+    ) -> List[Tuple[pd.Timestamp, pd.Timedelta]]:
         """
         Helper method to determine the ranges of contiguous dates in each training and test set, for use in visualisation.
 
@@ -253,13 +253,9 @@ class ForwardPanelSplit(BasePanelSplit):
         train_split = np.array([], dtype=np.datetime64)
         for i in range(0, self.n_splits):
             train_split = np.concatenate([train_split, splits[i]])
-            train_indices = np.where(
-                Xy.index.get_level_values(1).isin(train_split)
-            )[0]
+            train_indices = np.where(Xy.index.get_level_values(1).isin(train_split))[0]
 
-            test_indices = np.where(
-                Xy.index.get_level_values(1).isin(splits[i + 1])
-            )[0]
+            test_indices = np.where(Xy.index.get_level_values(1).isin(splits[i + 1]))[0]
 
             yield train_indices, test_indices
 
@@ -374,7 +370,9 @@ class IntervalPanelSplit(BasePanelSplit):
         self.test_size: int = test_size
         self.max_periods: int = max_periods
 
-    def _determine_unique_time_splits(self, X: pd.DataFrame, y: pd.DataFrame):
+    def _determine_unique_time_splits(
+        self, X: pd.DataFrame, y: pd.DataFrame
+    ) -> Tuple[List[pd.DatetimeIndex], pd.DataFrame, int]:
         """
         Helper method to determine the unique dates in each training split. This method is called by self.split().
         It further returns other variables needed for ensuing components of the split method.
@@ -456,7 +454,7 @@ class IntervalPanelSplit(BasePanelSplit):
         ]
         for i in range(1, self.n_splits):
             train_splits.append(np.concatenate([train_splits[i - 1], splits[i]]))
-            
+
             # Drop beginning of training set if it exceeds max_periods.
             if self.max_periods:
                 train_splits[i] = train_splits[i][-self.max_periods :]
@@ -474,7 +472,7 @@ class IntervalPanelSplit(BasePanelSplit):
 
             yield train_indices, test_indices
 
-    def get_n_splits(self, X=None, y=None, groups=None):
+    def get_n_splits(self, X=None, y=None, groups=None) -> int:
         """
         Calculates and returns the number of splits.
 
@@ -584,8 +582,7 @@ if __name__ == "__main__":
     gs.fit(X2, y2)
     print(gs.best_params_)
 
-
-           # Define the cids
+    # Define the cids
     cids = ["cid1", "cid2"]
 
     # Define the dates
