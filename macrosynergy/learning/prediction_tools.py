@@ -301,7 +301,10 @@ if __name__ == "__main__":
         frame=y.reset_index(), id_vars=["cid", "real_date"], var_name="xcat"
     )
 
-    # (1) Example usage for adaptive_preds_to_signal()
+    # (1) Example AdaptiveSignalHandler usage. 
+    #     We get adaptive signals for a linear regression and a KNN regressor, with the
+    #     hyperparameters for the latter optimised across regression balanced accuracy
+    #     and mean absolute error. 
 
     models = {
         "ols": LinearRegression(),
@@ -328,5 +331,39 @@ if __name__ == "__main__":
     df_sig = ash.create_qdf(
         hparam_grid={"ols": {}, "knn": {"n_neighbors": [1, 2, 5]}}, hparam_type="grid"
     )
-
+    
     print(df_sig)
+
+    # (2) Example AdaptiveSignalHandler usage.
+    #     We generate a signal for a standard linear regression, as well as a linear 
+    #     regression with features chosen by the Macrosynergy panel test. 
+
+    models = {
+        "ols" : LinearRegression(),
+        "map_ols" : Pipeline([
+            ("map", MapSelectorTransformer(threshold=0.05)),
+            ("ols", LinearRegression())
+        ])
+    }
+
+    metrics = {
+        "bac": make_scorer(regression_balanced_accuracy, greater_is_better=True),
+        "neg_mae": make_scorer(mean_absolute_error, greater_is_better=False),
+    }
+
+    outer_splitter = PanelTimeSeriesSplit(
+        train_intervals=1, test_size=1, min_cids=4, min_periods=12
+    )
+    inner_splitter = PanelTimeSeriesSplit(n_split_method="rolling", n_splits=4)
+
+    signal_df = AdaptiveSignalHandler(
+        models=models,
+        metrics=metrics,
+        outer_splitter=outer_splitter,
+        inner_splitter=inner_splitter,
+        X=X,
+        y=y,
+    ).create_qdf(
+        hparam_grid={"ols": {}, "map_ols": {}}, hparam_type="grid"
+    )
+    print(signal_df)
