@@ -278,8 +278,10 @@ if __name__ == "__main__":
     dfd2 = make_qdf(df_cids2, df_xcats2, back_ar=0.75)
     dfd2["grading"] = np.ones(dfd2.shape[0])
     black = {"GBP": ["2009-01-01", "2012-06-30"], "CAD": ["2018-01-01", "2100-01-01"]}
-    #dfd2 = msm.reduce_df(df=dfd2, cids=cids, xcats=xcats, blacklist=black)
-    dfd2 = msm.categories_df(df=dfd2,xcats=xcats,cids=cids,val="value",blacklist=black,freq="M", lag=1).dropna()
+    # dfd2 = msm.reduce_df(df=dfd2, cids=cids, xcats=xcats, blacklist=black)
+    dfd2 = msm.categories_df(
+        df=dfd2, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
+    ).dropna()
     X = dfd2.drop(columns=["XR"])
     y = dfd2["XR"]
     y_long = pd.melt(
@@ -308,5 +310,7 @@ if __name__ == "__main__":
         inner_splitter=inner_splitter,
         X=X,
         y=y,
-    ).create_qdf(hparam_grid={"ols" : {}, "knn" : {"n_neighbors" : [1,2,5]}}, hparam_type="grid")
+    ).create_qdf(
+        hparam_grid={"ols": {}, "knn": {"n_neighbors": [1, 2, 5]}}, hparam_type="grid"
+    )
     print(signal_df)
