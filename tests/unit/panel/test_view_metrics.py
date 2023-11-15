@@ -32,7 +32,7 @@ class TestAll(unittest.TestCase):
     def tearDown(self) -> None:
         return super().tearDown()
 
-    def test_view_metrics(self, mock_show):
+    def test_view_metrics(self):
         plt.close("all")
         mock_show = patch("matplotlib.pyplot.show").start()
         mpl_backend: str = matplotlib.get_backend()
