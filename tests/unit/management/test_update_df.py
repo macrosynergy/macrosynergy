@@ -14,7 +14,7 @@ from typing import Union, List, Dict, Tuple, Optional
 
 
 class TestAll(unittest.TestCase):
-    def dataframe_constructor(self):
+    def setUp(self) -> None:
         self.cids: List[str] = ["AUD", "CAD", "GBP", "NZD"]
         self.xcats: List[str] = ["GROWTH", "INFL", "XR"]
 
@@ -51,12 +51,13 @@ class TestAll(unittest.TestCase):
         }
         self.blacklist: Dict[str, List[str]] = black
 
+    def tearDown(self) -> None:
+        return super().tearDown()
+
     def test_update_tickers(self):
         """
         Method used to test updating the DataFrame across on the ticker level.
         """
-
-        self.dataframe_constructor()
 
         # Method used to update the original DataFrame on a ticker level.
         # Original DataFrame will be defined over the categories ['GROWTH', 'INFL',
@@ -127,7 +128,6 @@ class TestAll(unittest.TestCase):
         Method used to test updating the DataFrame across a whole panel.
         """
 
-        self.dataframe_constructor()
         dfd = self.dfd
         dfd_1_rv = make_relative_value(
             self.dfd,
@@ -288,7 +288,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(test_2 == value)
 
     def test_update_df(self):
-        self.dataframe_constructor()
         dfd = self.dfd
         dfd_1_rv = make_relative_value(
             self.dfd,
