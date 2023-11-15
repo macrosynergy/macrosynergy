@@ -43,10 +43,11 @@ def view_metrics(
     :param <Tuple[float]> figsize: Tuple (w, h) of width and height of graph.
         Default is None, meaning it is set in accordance with df.
 
-    :return: None
+    :return <None>: None
 
-    :raises TypeError: if any of the inputs are of the wrong type.
-    :raises ValueError: if any of the inputs are semantically incorrect.
+
+    :raises <TypeError>: if any of the inputs are of the wrong type.
+    :raises <ValueError>: if any of the inputs are semantically incorrect.
     """
     msv.view_metrics(
         df=df,

@@ -443,7 +443,8 @@ class PanelTimeSeriesSplit(BaseCrossValidator):
             (cross-section, date). The dates must be in datetime format.
         :param <Tuple[int,int]> figsize: tuple of integers specifying the splitter visualisation figure size.
 
-        :return None
+        :return <None>: None
+
         """
         sns.set_theme(style="whitegrid", palette="colorblind")
         Xy: pd.DataFrame = pd.concat(

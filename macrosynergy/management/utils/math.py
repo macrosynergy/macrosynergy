@@ -22,7 +22,7 @@ def expanding_mean_with_nan(
     :param <bool> absolute: if True, the rolling mean will be computed on the magnitude
         of each value. Default is False.
 
-    :return <List[float] ret: a list containing the median values. The number of computed
+    :return <List[float]> ret: a list containing the median values. The number of computed
         median values held inside the list will correspond to the number of timestamps
         the series is defined over.
     """

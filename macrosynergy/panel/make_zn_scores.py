@@ -37,7 +37,7 @@ def expanding_stat(
     :param <bool> iis: if set to True, the values of the initial interval determined
         by min_obs will be estimated in-sample, based on the full initial sample.
 
-    :return: Time series dataframe of the chosen statistic across all columns
+    :return <pd.DataFrame>: Time series dataframe of the chosen statistic across all columns
     """
 
     df_out = pd.DataFrame(np.nan, index=df.index, columns=["value"])

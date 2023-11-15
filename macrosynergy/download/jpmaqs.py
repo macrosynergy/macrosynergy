@@ -47,13 +47,6 @@ class JPMaQSDownload(object):
     :param <str> username: username for certificate based authentication.
     :param <str> password : paired with username for certificate.
 
-    When using a config file:
-    :param <str> credentials_config: path to config file.
-
-    The config file should contain the client_id and client_secret for oauth, or the
-    crt, key, username, and password for certificate based authentication.
-    (see macrosynergy.management.utils.JPMaQSAPIConfigObject)
-
     :param <bool> debug: True if debug mode, False if not.
     :param <bool> suppress_warning: True if suppressing warnings, False if not.
     :param <bool> check_connection: True if the interface should check the connection to
@@ -211,8 +204,8 @@ class JPMaQSDownload(object):
 
         :return <list[str]>: list of cid, xcat, and metric.
 
-        :raises TypeError: if `expression` is not a string or a list of strings.
-        :raises ValueError: if `expression` is an empty list.
+        :raises <TypeError>: if `expression` is not a string or a list of strings.
+        :raises <ValueError>: if `expression` is an empty list.
         """
         if not isinstance(expression, (str, list)):
             raise TypeError("`expression` must be a string or a list of strings.")

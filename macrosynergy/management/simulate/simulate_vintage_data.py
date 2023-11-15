@@ -103,7 +103,7 @@ class VintageData:
         :param <List[float> values: existing values that have not been seasonally
             adjusted.
 
-        :return <List[float] values: returns a list of values which have been adjusted
+        :return <List[float]> values: returns a list of values which have been adjusted
             seasonally
         """
         if self.freq == 'W':
