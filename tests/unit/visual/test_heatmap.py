@@ -30,7 +30,7 @@ class TestAll(unittest.TestCase):
     def tearDownClass(self) -> None:
         patch.stopall()
         plt.close("all")
-
+        patch.stopall()
         matplotlib.use(self.mpl_backend)
 
     def tearDown(self) -> None:
@@ -71,6 +71,7 @@ class TestAll(unittest.TestCase):
             "show_annotations": False,
             "show_boundaries": False,
         }
+        plt.close("all")
 
     def test_instantiate_heatmap_no_error(self):
         try:
