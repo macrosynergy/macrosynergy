@@ -12,6 +12,7 @@ class TestAll(unittest.TestCase):
     @classmethod
     def setUpClass(self):
         # Prevents plots from being displayed during tests.
+        plt.close("all")
         self.mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
         self.mock_show = patch("matplotlib.pyplot.show").start()
@@ -71,7 +72,6 @@ class TestAll(unittest.TestCase):
             "show_annotations": False,
             "show_boundaries": False,
         }
-        plt.close("all")
 
     def test_instantiate_heatmap_no_error(self):
         try:
