@@ -32,8 +32,9 @@ class TestAll(unittest.TestCase):
     def tearDown(self) -> None:
         return super().tearDown()
 
-    @patch("matplotlib.pyplot.show")
     def test_view_metrics(self, mock_show):
+        plt.close("all")
+        mock_show = patch("matplotlib.pyplot.show").start()
         mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
 
@@ -168,6 +169,7 @@ class TestAll(unittest.TestCase):
 
         plt.close("all")
         matplotlib.use(mpl_backend)
+        patch.stopall()
 
 
 if __name__ == "__main__":
