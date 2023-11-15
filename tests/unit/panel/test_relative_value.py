@@ -11,7 +11,10 @@ import warnings
 
 
 class TestAll(unittest.TestCase):
-    def dataframe_generator(self):
+    
+    
+    
+    def setUp(self) -> None:
         self.cids: List[str] = ["AUD", "CAD", "GBP", "NZD"]
         self.xcats: List[str] = ["XR", "CRY", "GROWTH", "INFL"]
 
@@ -49,9 +52,11 @@ class TestAll(unittest.TestCase):
         }
 
         self.blacklist: Dict[str, List[str]] = black
+        
+    def tearDown(self) -> None:
+        return super().tearDown()
 
     def test_relative_value_dimensionality(self):
-        self.dataframe_generator()
         dfd: pd.DataFrame = self.dfd.copy()
 
         with self.assertRaises(AssertionError):
@@ -305,7 +310,6 @@ class TestAll(unittest.TestCase):
 
     def test_prepare_basket(self):
         # Explicitly test _prepare_basket() method.
-        self.dataframe_generator()
         dfd: pd.DataFrame = self.dfd
 
         # Set the cids parameter to a reduced subset (a particuliar category is missing
@@ -345,7 +349,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(dfb.empty)
 
     def test_relative_value_logic(self):
-        self.dataframe_generator()
         dfd: pd.DataFrame = self.dfd
 
         # Aim to test the application of the actual relative_value method: subtract or
