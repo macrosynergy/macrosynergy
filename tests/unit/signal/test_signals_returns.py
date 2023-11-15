@@ -9,6 +9,8 @@ import pandas as pd
 import numpy as np
 from typing import List, Dict
 import matplotlib
+from matplotlib import pyplot as plt
+from unittest.mock import patch
 
 
 class TestAll(unittest.TestCase):
@@ -83,7 +85,6 @@ class TestAll(unittest.TestCase):
                 freqs="D",
                 blacklist=self.blacklist,
             )
-        print(self.dfd)
         # Test to confirm the primary signal must be present in the passed Dataframe
         with self.assertRaises(AssertionError):
             sr_sigs = SignalsReturns(
@@ -521,6 +522,8 @@ class TestAll(unittest.TestCase):
         self.assertTrue(sr.get_rowcol(hash, columns) == "mean")
 
     def test_single_statistic_table_show_heatmap(self):
+        plt.close("all")
+        mock_plot = patch("matplotlib.pyplot.show").start()
         self.mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
 
@@ -557,6 +560,10 @@ class TestAll(unittest.TestCase):
             )
         except Exception as e:
             self.fail(f"single_statistic_table raised {e} unexpectedly")
+
+        plt.close("all")
+        matplotlib.use(self.mpl_backend)
+        patch.stopall()
 
 
 if __name__ == "__main__":
