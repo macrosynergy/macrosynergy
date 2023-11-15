@@ -1,7 +1,9 @@
 import unittest
 import warnings
 from tests.simulate import make_qdf
-from macrosynergy.panel.make_zn_scores import *
+from macrosynergy.panel.make_zn_scores import make_zn_scores, expanding_stat
+import pandas as pd
+import numpy as np
 from itertools import groupby
 from typing import List, Dict, Callable
 
@@ -77,18 +79,18 @@ class TestAll(unittest.TestCase):
             self.dfw, dates_iter=self.dates_iter, stat="mean", sequential=False
         )
         # Check first value equal to panel mean.
-        self.assertEqual(float(df_neutral.iloc[0]), self.dfw.stack().mean())
+        self.assertEqual(df_neutral.iloc[0].values[0], self.dfw.stack().mean())
 
         # Check also last value equal to panel mean.
-        last_val = float(df_neutral.iloc[self.dfw.shape[0] - 1])
+        last_val: np.float64 = df_neutral.iloc[self.dfw.shape[0] - 1].values[0]
         self.assertEqual(last_val, self.dfw.stack().mean())
 
         df_neutral = expanding_stat(
             self.dfw, dates_iter=self.dates_iter, stat="median", sequential=False
         )
-        self.assertEqual(float(df_neutral.iloc[0]), self.dfw.stack().median())
+        self.assertEqual(df_neutral.iloc[0].values[0], self.dfw.stack().median())
 
-        last_val = float(df_neutral.iloc[self.dfw.shape[0] - 1])
+        last_val = float(df_neutral.iloc[self.dfw.shape[0] - 1].values[0])
         self.assertEqual(last_val, self.dfw.stack().median())
 
         # --- Sequential equal True, iis = False.
@@ -101,7 +103,7 @@ class TestAll(unittest.TestCase):
             sequential=True,
             iis=False,
         )
-        val = round(float(df_neutral.iloc[999]), 4)
+        val = round(float(df_neutral.iloc[999].values[0]), 4)
         benchmark = self.dfw.iloc[0:1000, :].stack().mean()
         self.assertEqual(val, round(benchmark, 4))
 
@@ -114,7 +116,7 @@ class TestAll(unittest.TestCase):
             min_obs=261,
             iis=False,
         )
-        val = float(df_neutral.iloc[999])
+        val = float(df_neutral.iloc[999].values[0])
         median_benchmark = self.dfw.iloc[0:1000, :].stack().median()
         self.assertEqual(val, median_benchmark)
 
