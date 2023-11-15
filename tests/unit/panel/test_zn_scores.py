@@ -7,7 +7,7 @@ from typing import List, Dict, Callable
 
 
 class TestAll(unittest.TestCase):
-    def dataframe_construction(self):
+    def setUp(self) -> None:
         self.cids: List[str] = ["AUD", "CAD", "GBP"]
         self.xcats: List[str] = ["CRY", "XR"]
 
@@ -40,9 +40,11 @@ class TestAll(unittest.TestCase):
         )
 
         daily_dates = pd.date_range(start="2010-01-01", end="2020-10-30", freq="B")
-        self.__dict__["dates_iter"] = daily_dates
         self.dates_iter: pd.DatetimeIndex = daily_dates
         self.func_dict: Dict[str, Callable] = {"mean": np.mean, "median": np.median}
+
+    def tearDown(self) -> None:
+        return super().tearDown()
 
     def in_sampling(self, dfw: pd.DataFrame, neutral: str, min_obs: int) -> float:
         """
