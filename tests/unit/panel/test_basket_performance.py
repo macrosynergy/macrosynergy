@@ -1,21 +1,15 @@
-from typing import List, Dict, Union, Tuple, Optional
-import os, sys
-
-sys.path.append(os.getcwd())
-
+from typing import List, Dict
 import unittest
 import numpy as np
 import pandas as pd
 import sys
-# from tests.simulate import dataframe_basket, construct_df
+from tests.simulate import dataframe_basket, construct_df, simulate_ar, make_qdf
 from macrosynergy.panel.basket import Basket
 from macrosynergy.management.utils import reduce_df, reduce_df_by_ticker
-from macrosynergy.management.simulate import make_qdf, simulate_ar
 import random
 from macrosynergy.panel.historic_vol import flat_std
 from itertools import chain
 import warnings
-
 
 
 def dataframe_basket(ret="XR_NSA", cry=["CRY_NSA"], start=None, end=None, black=None):
@@ -125,7 +119,6 @@ if __name__ == "__main__":
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
     dfw_ret, dfw_cry, dfd = dataframe_basket()
-
 
 
 class TestAll(unittest.TestCase):
@@ -287,7 +280,7 @@ class TestAll(unittest.TestCase):
         with warnings.catch_warnings(record=True) as w:
             weights = self.basket.values_weight(dfw_ret, w_df, weight_meth="values")
             self.assertTrue(len(w) == 1)
-            
+
         self.assertTrue(weights.shape == dfw_ret.shape)
         weights_inv = self.basket.values_weight(dfw_ret, w_df, weight_meth="inv_values")
         self.assertTrue(weights_inv.shape == dfw_ret.shape)
