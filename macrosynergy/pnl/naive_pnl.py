@@ -7,10 +7,6 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 
-import os, sys
-
-sys.path.append(os.getcwd())
-
 from typing import List, Union, Tuple, Optional
 from itertools import product
 from macrosynergy.management.simulate import make_qdf
