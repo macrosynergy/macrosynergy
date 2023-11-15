@@ -171,7 +171,7 @@ class TestAll(unittest.TestCase):
 
         # Secondly, confirm the DataFrame is defined over the expected columns.
         self.assertTrue(
-            list(srr.df.columns) == ["XR"] + [primary_signal] + rival_signals
+            list(srr.df.columns) == [primary_signal] + rival_signals + ["XR"]
         )
 
         # Test the negative conversion if the parameter 'sig_neg' is set to True. If set
@@ -199,7 +199,7 @@ class TestAll(unittest.TestCase):
         # Secondly, confirm the actual DataFrame's columns have been updated.
         test_columns = list(srr_neg.df.columns)
         # Confirms the update has been made on the DataFrame level.
-        self.assertTrue(test_columns == ["XR"] + srr_neg.signals)
+        self.assertTrue(test_columns == srr_neg.signals + ["XR"])
 
         # Lastly, check the original values have been multiplied by minus one. Therefore,
         # add the two DataFrames which should equate to zero. The multiplication by minus
@@ -727,6 +727,7 @@ class TestAll(unittest.TestCase):
         self.assertTrue(srr.summary_table().shape == (5, 10))
 
     def test_single_relation_table(self):
+        self.dataframe_generator()
         sr = SignalReturnRelations(
             df=self.dfd,
             ret="XR",
@@ -891,6 +892,7 @@ class TestAll(unittest.TestCase):
             self.assertTrue(np.isclose(val1, val2))
 
     def test_multiple_relation_table(self):
+        self.dataframe_generator()
         num_of_acc_cols = 10
 
         sr_unsigned = SignalReturnRelations(
@@ -946,6 +948,7 @@ class TestAll(unittest.TestCase):
         self.assertTrue(mrt.shape == (4, num_of_acc_cols))
 
     def test_single_statistic_table(self):
+        self.dataframe_generator()
         sr = SignalReturnRelations(
             df=self.dfd,
             ret="XR",
@@ -1016,6 +1019,7 @@ class TestAll(unittest.TestCase):
         )
 
     def test_set_df_labels(self):
+        self.dataframe_generator()
         rets = ["XR", "GROWTH"]
         freqs = ["Q", "M"]
         sigs = ["CRY", "INFL"]
@@ -1090,6 +1094,7 @@ class TestAll(unittest.TestCase):
         return 0
 
     def test_get_rowcol(self):
+        self.dataframe_generator()
         rets = ["XR", "GROWTH"]
         freqs = ["Q", "M"]
         sigs = ["CRY", "INFL"]
@@ -1112,6 +1117,7 @@ class TestAll(unittest.TestCase):
         self.assertTrue(sr.get_rowcol(hash, columns) == "mean")
 
     def test_single_statistic_table_show_heatmap(self):
+        self.dataframe_generator()
         self.mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
 

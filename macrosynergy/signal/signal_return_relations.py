@@ -211,7 +211,7 @@ class SignalReturnRelations():
         self.signals = signals
         #self.xcats = self.signals + [self.ret[0]]
 
-        self.manipulate_df(xcat=self.xcats, freq=self.freq[0], agg_sig=self.agg_sig[0], sig=self.sig[0])
+        self.manipulate_df(xcat=self.signals + [self.ret[0]], freq=self.freq[0], agg_sig=self.agg_sig[0], sig=self.sig[0])
 
         if len(self.signals) > 1:
             self.df_sigs = self.__rival_sigs__()
@@ -334,7 +334,7 @@ class SignalReturnRelations():
             refsig = "various signals" if type == "signals" else self.sig
             title = (
                 f"Accuracy for sign prediction of {self.ret} based on {refsig} "
-                f"at {self.dic_freq[self.freq]} frequency."
+                f"at {self.dic_freq[self.freq[0]]} frequency."
             )
         if size is None:
             size = (np.max([dfx.shape[0] / 2, 8]), 6)
@@ -423,7 +423,7 @@ class SignalReturnRelations():
             refsig = "various signals" if type == "signals" else self.sig
             title = (
                 f"Positive correlation probability of {self.ret} "
-                f"and lagged {refsig} at {self.dic_freq[self.freq]} frequency."
+                f"and lagged {refsig} at {self.dic_freq[self.freq[0]]} frequency."
             )
         if size is None:
             size = (np.max([dfx.shape[0] / 2, 8]), 6)
@@ -703,7 +703,7 @@ class SignalReturnRelations():
         if ret is None:
             ret = self.ret if not isinstance(self.ret, list) else self.ret[0]
         if sig is None:
-            sig = self.sig
+            sig = self.sig if not isinstance(self.sig, list) else self.sig[0]
 
         # Analysis completed exclusively on the primary signal.
         r = [ret]
@@ -829,6 +829,11 @@ class SignalReturnRelations():
 
         return dfsum
     
+    def revert_negation(self, sig: str):
+        if sig[-4:] == "_NEG":
+            sig = sig[:-4]
+        return sig
+    
     def single_relation_table(
         self,
         ret: str = None,
@@ -859,7 +864,11 @@ class SignalReturnRelations():
                 self.agg_sig if not isinstance(self.agg_sig, list) else self.agg_sig[0]
             )
         if xcat is None:
-            sig = self.sig if not isinstance(self.sig, list) else self.sig[0]
+            sig = self.revert_negation(self.sig) if not isinstance(self.sig, list) else self.revert_negation(self.sig[0])
+            if isinstance(self.sig, list):
+                self.sig[0] = self.revert_negation(self.sig[0])
+            else:
+                self.sig = self.revert_negation(self.sig)
             xcat = [sig, ret]
         elif isinstance(xcat, list):
             sig = xcat[0]
