@@ -59,8 +59,6 @@ class TestAll(unittest.TestCase):
     def test_constructor(self):
         # Test NaivePnL's constructor and the instantiation of the respective fields.
 
-        self.dataframe_construction()
-
         ret = ["EQXR"]
         sigs = ["CRY", "GROWTH", "INFL"]
         pnl = NaivePnL(
@@ -135,7 +133,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(sorted(bm_tickers) == ["EUR_EQXR"])
 
     def test_make_signal(self):
-        self.dataframe_construction()
         df = self.dfd
 
         ret = "EQXR"
@@ -352,8 +349,6 @@ class TestAll(unittest.TestCase):
             self.assertTrue(round(float(test_data), 4) == round(pnl_return_date, 4))
 
     def test_make_pnl_neg(self):
-        self.dataframe_construction()
-
         # The majority of the logic for make_pnl is tested through the method
         # test_make_pnl(). Therefore, aim to isolate the application of the negative
         # signal through evaluate_pnl() method.
@@ -414,8 +409,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(np.all(bm_correl.sum(axis=1).to_numpy()) == 0)
 
     def test_make_long_pnl(self):
-        self.dataframe_construction()
-
         ret = "EQXR"
         sigs = ["CRY", "GROWTH", "INFL"]
         pnl = NaivePnL(
@@ -478,8 +471,6 @@ class TestAll(unittest.TestCase):
 
         # Another test run with vol_scale=None
 
-        self.dataframe_construction()
-
         ret = "EQXR"
         sigs = ["CRY", "GROWTH", "INFL"]
         pnl = NaivePnL(
@@ -530,7 +521,6 @@ class TestAll(unittest.TestCase):
         )
 
     def test_plotting_methods(self):
-        self.dataframe_construction()
         plt.close("all")
         mock_plt = patch("matplotlib.pyplot.show").start()
         mpl_backend = matplotlib.get_backend()
