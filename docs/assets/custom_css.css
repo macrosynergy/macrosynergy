@@ -9,4 +9,21 @@
     border-radius: 4%;
 }
 
+/* @sandresen1's color rgb(194, 18, 185) */
+code {
+    color: rgb(194, 18, 185)
+}
 
+a>code {
+    color: rgb(194, 18, 185)
+}
+
+
+.bd-container__inner.bd-page-width {
+    max-width: 80%;
+}
+
+.bd-content {
+    width: 100em;
+    text-align: justify;
+} 

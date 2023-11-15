@@ -1,6 +1,7 @@
 config:
   # Book settings
   title: Macrosynergy Package Documentation
+  # logo: 'https://github.com/macrosynergy/macrosynergy/blob/main/docs/assets/MACROSYNERGY_Logo_White.png?raw=true'
   author: "Macrosynergy Ltd."
   copyright: "2023"
 

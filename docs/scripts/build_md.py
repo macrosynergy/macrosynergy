@@ -8,6 +8,10 @@ import glob
 import mdformat
 from functools import wraps
 import fnmatch
+import os, sys
+
+sys.path.append(os.getcwd())
+
 
 SOURCE_DIR = "macrosynergy"
 STATIC_SOURCE_DIR = "docs/static/"
@@ -49,6 +53,18 @@ class DocstringMethods:
         return mdformat.text(docstring, options=options)
 
     @staticmethod
+    def __format_param__(param_str: str, param_type: str) -> str:
+        assert param_str.startswith(
+            param_type
+        ), f"Invalid param_str: {param_str}; param_type: {param_type}"
+        ff: int = param_str.index("<")
+        ll: int = param_str.index(">", ff)
+        type_str: str = param_str[ff + 1 : ll]
+        r_str, rdef = param_str[ll + 1 :].strip().split(":", 1)
+        rdef = " ".join(rdef.split()).strip()
+        return f"**`{r_str}`** (*`{type_str}`*): {rdef}\n"
+
+    @staticmethod
     def format_parameters(docstring: str) -> str:
         """
         Formats the parameters section of a docstring.
@@ -58,21 +74,35 @@ class DocstringMethods:
 
         lines = docstring.split("\n")
         formatted_lines: List[str] = []
+        kw_dict: Dict[str, Any] = {
+            "param": {"field": "Parameters"},
+            "raises": {"field": "Raises"},
+            "return": {"field": "Returns"},
+            "yield": {"field": "Yields"},
+        }
+        for ix, itemx in enumerate(kw_dict.items()):
+            # add an empty field called "entries" to each item
+            kw_dict[itemx[0]]["entries"] = []
 
         for il, line in enumerate(lines):
             try:
-                kws: List[str] = ["param", "raises", "return", "yield"]
-                kw: str = [f":{kw}" for kw in kws if line.startswith(f":{kw}")]
-                if kw:
-                    kw = kw[0]
-                    # get the index of the first colon after the keyword
-                    if ":" in line[len(kw) + 1 :]:
-                        colon_index: int = line.index(":", len(kw))
-                    else:
-                        colon_index: int = len(line)
-                        line += ":"
-                    # insert a '`' before the colon
-                    line = "\n`" + line[:colon_index] + "`" + line[colon_index:]
+                kw: str = [
+                    f":{kw}" for kw in kw_dict.keys() if line.startswith(f":{kw}")
+                ]
+                if kw and kw[0] in line:
+                    line = DocstringMethods.__format_param__(
+                        param_str=line, param_type=kw[0]
+                    )
+                # elif kw:
+                #     kw = kw[0]
+                #     # get the index of the first colon after the keyword
+                #     if ":" in line[len(kw) + 1 :]:
+                #         colon_index: int = line.index(":", len(kw))
+                #     else:
+                #         colon_index: int = len(line)
+                #         line += ":"
+                #     # insert a '`' before the colon
+                #     line = "\n`" + line[:colon_index] + "`" + line[colon_index:]
                 formatted_lines.append(line)
             except Exception as exc:
                 e_str: str = f"Parsing error on line {il}: {line}, {exc}"
