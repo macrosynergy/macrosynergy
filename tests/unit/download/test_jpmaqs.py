@@ -1,4 +1,5 @@
 import unittest
+import warnings
 import pandas as pd
 
 from typing import List, Dict, Any
@@ -144,6 +145,8 @@ class TestJPMaQSDownload(unittest.TestCase):
                 jpmaqs.validate_download_args(**bad_args)
 
     def test_download_func(self):
+        warnings.simplefilter("always")
+
         good_args: Dict[str, Any] = {
             "tickers": ["EUR_FXXR_NSA", "USD_FXXR_NSA"],
             "cids": ["GBP", "EUR"],
@@ -255,6 +258,8 @@ class TestJPMaQSDownload(unittest.TestCase):
             bad_args["start_date"] = "2019-01-31"
             bad_args["end_date"] = "2019-01-01"
             jpmaqs.download(**bad_args)
+
+    warnings.resetwarnings()
 
     def test_validate_downloaded_df(self):
         good_args: Dict[str, Any] = {

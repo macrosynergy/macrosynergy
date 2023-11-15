@@ -138,7 +138,7 @@ def hedge_calculator(
     df_hr = df_ur.merge(df_hrat, on="real_date", how="left")
 
     df_hr = df_hr.drop("returns", axis=1)
-    df_hr = df_hr.fillna(method="ffill")
+    df_hr = df_hr.ffill()
     # Accounts for the application of the minimum number of observations required and
     # merging the two DataFrames. Drop the np.nan values prior to the application of the
     # shift (able to validate the logic).
