@@ -1,13 +1,15 @@
 import unittest
 import warnings
 from tests.simulate import make_qdf
-from macrosynergy.panel.make_zn_scores import *
+from macrosynergy.panel.make_zn_scores import make_zn_scores, expanding_stat
+import pandas as pd
+import numpy as np
 from itertools import groupby
 from typing import List, Dict, Callable
 
 
 class TestAll(unittest.TestCase):
-    def dataframe_construction(self):
+    def setUp(self) -> None:
         self.cids: List[str] = ["AUD", "CAD", "GBP"]
         self.xcats: List[str] = ["CRY", "XR"]
 
@@ -40,15 +42,16 @@ class TestAll(unittest.TestCase):
         )
 
         daily_dates = pd.date_range(start="2010-01-01", end="2020-10-30", freq="B")
-        self.__dict__["dates_iter"] = daily_dates
         self.dates_iter: pd.DatetimeIndex = daily_dates
         self.func_dict: Dict[str, Callable] = {"mean": np.mean, "median": np.median}
+
+    def tearDown(self) -> None:
+        return super().tearDown()
 
     def in_sampling(self, dfw: pd.DataFrame, neutral: str, min_obs: int) -> float:
         """
         Used to test the application of pandas in-built back-fill mechanism.
         """
-        self.dataframe_construction()
 
         # Convert to a one-dimensional DataFrame to facilitate pd.apply() method
         # to calculate in-sampling period. The pd.stack() feature removes the
@@ -56,10 +59,9 @@ class TestAll(unittest.TestCase):
         iis_period = pd.DataFrame(dfw.iloc[0 : (min_obs + 1)].stack().to_numpy())
         iis_val = iis_period.apply(self.func_dict[neutral])
 
-        return round(float(iis_val), 4)
+        return round(float(iis_val.iloc[0]), 4)
 
     def test_pan_neutral(self):
-        self.dataframe_construction()
         # Panel weight is equated to one, so pass in the entire DataFrame to
         # expanding_stat() method.
         # The default frequency for the iterative dates data structure is daily.
@@ -77,18 +79,18 @@ class TestAll(unittest.TestCase):
             self.dfw, dates_iter=self.dates_iter, stat="mean", sequential=False
         )
         # Check first value equal to panel mean.
-        self.assertEqual(float(df_neutral.iloc[0]), self.dfw.stack().mean())
+        self.assertEqual(df_neutral.iloc[0].values[0], self.dfw.stack().mean())
 
         # Check also last value equal to panel mean.
-        last_val = float(df_neutral.iloc[self.dfw.shape[0] - 1])
+        last_val: np.float64 = df_neutral.iloc[self.dfw.shape[0] - 1].values[0]
         self.assertEqual(last_val, self.dfw.stack().mean())
 
         df_neutral = expanding_stat(
             self.dfw, dates_iter=self.dates_iter, stat="median", sequential=False
         )
-        self.assertEqual(float(df_neutral.iloc[0]), self.dfw.stack().median())
+        self.assertEqual(df_neutral.iloc[0].values[0], self.dfw.stack().median())
 
-        last_val = float(df_neutral.iloc[self.dfw.shape[0] - 1])
+        last_val = float(df_neutral.iloc[self.dfw.shape[0] - 1].values[0])
         self.assertEqual(last_val, self.dfw.stack().median())
 
         # --- Sequential equal True, iis = False.
@@ -101,7 +103,7 @@ class TestAll(unittest.TestCase):
             sequential=True,
             iis=False,
         )
-        val = round(float(df_neutral.iloc[999]), 4)
+        val = round(float(df_neutral.iloc[999].values[0]), 4)
         benchmark = self.dfw.iloc[0:1000, :].stack().mean()
         self.assertEqual(val, round(benchmark, 4))
 
@@ -114,7 +116,7 @@ class TestAll(unittest.TestCase):
             min_obs=261,
             iis=False,
         )
-        val = float(df_neutral.iloc[999])
+        val = float(df_neutral.iloc[999].values[0])
         median_benchmark = self.dfw.iloc[0:1000, :].stack().median()
         self.assertEqual(val, median_benchmark)
 
@@ -174,7 +176,6 @@ class TestAll(unittest.TestCase):
         after a number of days have elapsed. Therefore, compute less frequently to
         reflect the above paradigm.
         """
-        self.dataframe_construction()
 
         # --- Down-sampling pan-neutral, monthly.
 
@@ -270,7 +271,6 @@ class TestAll(unittest.TestCase):
             sequentially.
         :param <bool> iis: in-sampling.
         """
-        self.dataframe_construction()
 
         dfw_zns_css = self.dfw * 0
         for i, cid in enumerate(self.cids):
@@ -289,8 +289,6 @@ class TestAll(unittest.TestCase):
         return dfw_zns_css
 
     def test_cross_neutral(self):
-        self.dataframe_construction()
-
         df_neutral = self.cross_neutral("mean", False, iis=False)
         self.assertIsInstance(df_neutral, pd.DataFrame)
 
@@ -313,7 +311,7 @@ class TestAll(unittest.TestCase):
             # Will exclude NaN values from the calculation.
             dif = np.abs(mean_col - mean)
             # Test if function mean is correct.
-            self.assertTrue(np.nan_to_num(dif[index]) < epsilon)
+            self.assertTrue(np.nan_to_num(dif.iloc[index]) < epsilon)
 
         # --- Cross-neutral median, sequential equal False.
 
@@ -361,7 +359,6 @@ class TestAll(unittest.TestCase):
         """
         Neutral level is computed on a cross-sectional basis.
         """
-        self.dataframe_construction()
 
         df = self.dfd
         dfw = self.dfw
@@ -389,8 +386,8 @@ class TestAll(unittest.TestCase):
         test_series = cross_series.loc[:random_date]
         test_value = np.mean(test_series.to_numpy())
 
-        benchmark_value = float(neutral_df.loc[random_date])
-        self.assertTrue(np.abs(test_value - benchmark_value) < 0.001)
+        benchmark_value = float(neutral_df.loc[random_date].iloc[0])
+        self.assertTrue(np.isclose(test_value, benchmark_value, atol=0.001))
 
         # Confirm the dates, over the next quarter, are the same as the value referenced
         # above.
@@ -404,8 +401,6 @@ class TestAll(unittest.TestCase):
             self.assertTrue(np.abs(test_value - bm_elem) < 0.001)
 
     def test_zn_scores(self):
-        self.dataframe_construction()
-
         with self.assertRaises(ValueError):
             # Test catching neutral value error.
             df = make_zn_scores(
@@ -498,7 +493,6 @@ class TestAll(unittest.TestCase):
         epsilon = 0.000001
         self.assertTrue(np.all(np.nan_to_num(dif) < epsilon))
 
-        self.dataframe_construction()
         dfd = self.dfd
         # Test weighting function.
         panel_df = make_zn_scores(
@@ -583,8 +577,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(check == 0)
 
     def test_zn_scores_warning(self):
-        self.dataframe_construction()
-
         with self.assertWarns(UserWarning):
             warnings.simplefilter("always")
             r_cid: str = self.cids[0]
@@ -601,6 +593,7 @@ class TestAll(unittest.TestCase):
             dfr["xcat"]: pd.Series = dfr["xcat"].str.replace("ZN", "")
             self.assertEqual(dfr["xcat"].unique()[0], r_xcat)
             self.assertFalse(r_cid in dfr["cid"].unique())
+            warnings.resetwarnings()
 
         with self.assertRaises(ValueError):
             try:
