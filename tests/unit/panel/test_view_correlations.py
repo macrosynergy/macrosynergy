@@ -14,7 +14,7 @@ from macrosynergy.management.utils import reduce_df
 
 
 class TestAll(unittest.TestCase):
-    def dataframe_construction(self):
+    def setUp(self) -> None:
         self.cids = ["AUD", "CAD", "GBP"]
         self.xcats = ["XR", "CRY", "GROWTH", "INFL"]
 
@@ -45,11 +45,13 @@ class TestAll(unittest.TestCase):
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
         self.dfd = dfd
 
+    def tearDown(self) -> None:
+        return super().tearDown()
+
     def test_lag_series(self):
         """
         Test the method used to lag the categories included
         """
-        self.dataframe_construction()
 
         df_w = self.dfd.pivot(
             index=("cid", "real_date"), columns="xcat", values="value"
@@ -145,8 +147,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(sorted(lagged_columns) == ["GROWTH_L3", "INFL_L0", "INFL_L5"])
 
     def test_correl_matrix(self):
-        self.dataframe_construction()
-
         # Mainly test assertions given the function is used for visualisation. The
         # function can easily be tested through the graph returned.
 
@@ -240,8 +240,6 @@ class TestAll(unittest.TestCase):
             )
 
     def test_transform_df_for_cross_sectional_corr(self):
-        self.dataframe_construction()
-
         df = reduce_df(self.dfd, xcats=["XR"], cids=self.cids)
         df_w = _transform_df_for_cross_sectional_corr(df, val="value")
 
@@ -249,8 +247,6 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df_w.columns.to_list(), self.cids)
 
     def test_transform_df_for_cross_category_corr(self):
-        self.dataframe_construction()
-
         xcats = ["XR", "CRY"]
         df = reduce_df(self.dfd, xcats=xcats, cids=self.cids)
         df_w = _transform_df_for_cross_category_corr(df, xcats=xcats, val="value")
@@ -259,8 +255,6 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df_w.columns.to_list(), xcats)
 
     def test_cluster_correlations(self):
-        self.dataframe_construction()
-
         df = reduce_df(self.dfd, xcats=["XR"], cids=self.cids)
         df_w = _transform_df_for_cross_sectional_corr(df, val="value")
 
