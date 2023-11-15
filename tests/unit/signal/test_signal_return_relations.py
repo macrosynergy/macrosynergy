@@ -1,7 +1,7 @@
 import unittest
 from macrosynergy.signal.signal_return_relations import SignalReturnRelations
 
-from macrosynergy.management.simulate import make_qdf
+from tests.simulate import make_qdf
 from sklearn.metrics import accuracy_score, precision_score
 from scipy import stats
 import random
@@ -305,7 +305,7 @@ class TestAll(unittest.TestCase):
         srr = SignalReturnRelations(
             self.dfd, sig=signal, ret="XR", freq="D", blacklist=self.blacklist
         )
-        df = srr.df.dropna(how="any")
+        df = srr.df.dropna(how="any").copy()
 
         # First, test cross-sectional basis.
         # Choose a "random" cross-section.
@@ -321,7 +321,10 @@ class TestAll(unittest.TestCase):
             self.assertTrue(v - segment_values[c] < 0.0001)
 
         # Test the yearly segmentation.
-        df["year"] = np.array(df.reset_index(level=1)["real_date"].dt.year)
+        df.loc[:, "year"] = np.array(
+            df.reset_index(level=1).loc[:, "real_date"].dt.year
+        )
+
         df_cs = srr.__slice_df__(df=df, cs="2013", cs_type="years")
 
         # Confirm that the year column contains exclusively '2013'. If so, able to deduce
