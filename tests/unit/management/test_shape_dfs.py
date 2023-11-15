@@ -11,7 +11,7 @@ from typing import List, Dict, Tuple, Union, Optional
 
 
 class TestAll(unittest.TestCase):
-    def dataframe_constructor(self):
+    def setUp(self) -> None:
         self.cids: List[str] = ["AUD", "CAD", "GBP"]
         self.xcats: List[str] = ["CRY", "XR", "GROWTH", "INFL", "GDP"]
 
@@ -43,9 +43,10 @@ class TestAll(unittest.TestCase):
         np.random.seed(0)
         self.dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    def test_reduce_df_general(self):
-        self.dataframe_constructor()
+    def tearDown(self) -> None:
+        return super().tearDown()
 
+    def test_reduce_df_general(self):
         dfd_x = reduce_df(
             self.dfd,
             xcats=["CRY"],
@@ -61,8 +62,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(dfd_x["real_date"].max() == pd.to_datetime("2019-01-01"))
 
     def test_reduce_df_intersect(self):
-        self.dataframe_constructor()
-
         filt1 = ~((self.dfd["cid"] == "AUD") & (self.dfd["xcat"] == "XR"))
         dfdx = self.dfd[filt1]  # Simulate missing cross sections.
         dfd_x1, xctx, cidx = reduce_df(
@@ -71,8 +70,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(cidx == ["CAD", "GBP"])
 
     def test_reduce_df_black(self):
-        self.dataframe_constructor()
-
         black = {
             "AUD_1": ["2011-01-01", "2012-12-31"],
             "AUD_2": ["2018-01-01", "2100-01-01"],
@@ -94,8 +91,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(not any(item in black_range_2 for item in dfd_cad["real_date"]))
 
     def test_categories_df_conversion(self):
-        self.dataframe_constructor()
-
         dfc = categories_df(
             self.dfd,
             xcats=["XR", "CRY"],
@@ -129,8 +124,6 @@ class TestAll(unittest.TestCase):
         self.assertAlmostEqual(x1, x2)
 
     def test_categories_df_year(self):
-        self.dataframe_constructor()
-
         # The year aggregation of the data is computed from the specified start date (the
         # parameter received), as opposed to the earliest date in the dataframe.
         # Therefore, if the "years" parameter is not equal to None, the "start" parameter
@@ -243,8 +236,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(cad == cad_xr)
 
     def test_categories_df_lags(self):
-        self.dataframe_constructor()
-
         dfc = categories_df(
             self.dfd,
             xcats=["CRY", "XR"],
@@ -338,8 +329,6 @@ class TestAll(unittest.TestCase):
         # aggregation method will be used for all signals received. Therefore, confirm
         # the logic holds with the addition of further signals: the functionality is
         # preserved as n becomes large.
-
-        self.dataframe_constructor()
 
         extra_signals = ["CRY", "GROWTH", "INFL", "XR"]
         ret = extra_signals[-1]
@@ -435,8 +424,6 @@ class TestAll(unittest.TestCase):
         # converted to zero which misleads analysis.
 
     def test_categories_df_black(self):
-        self.dataframe_constructor()
-
         black = {"CAD": ["2014-01-01", "2014-12-31"]}
 
         dfc = categories_df(
