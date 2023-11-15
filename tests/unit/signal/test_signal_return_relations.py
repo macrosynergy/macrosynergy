@@ -171,7 +171,7 @@ class TestAll(unittest.TestCase):
 
         # Secondly, confirm the DataFrame is defined over the expected columns.
         self.assertTrue(
-            list(srr.df.columns) == [primary_signal] + rival_signals + ["XR"]
+            list(srr.df.columns) == ["XR"] + [primary_signal] + rival_signals
         )
 
         # Test the negative conversion if the parameter 'sig_neg' is set to True. If set
@@ -193,13 +193,13 @@ class TestAll(unittest.TestCase):
             self.assertTrue(s[1] == "NEG")
             self.assertTrue(s[0] == signals[i])
 
-        self.assertEqual(srr_neg.sig[-4:], "_NEG")
-        self.assertEqual(srr_neg.sig[:-4], primary_signal)
+        self.assertEqual(srr_neg.sig[0][-4:], "_NEG")
+        self.assertEqual(srr_neg.sig[0][:-4], primary_signal)
 
         # Secondly, confirm the actual DataFrame's columns have been updated.
         test_columns = list(srr_neg.df.columns)
         # Confirms the update has been made on the DataFrame level.
-        self.assertTrue(test_columns == srr_neg.signals + ["XR"])
+        self.assertTrue(test_columns == ["XR"] + srr_neg.signals)
 
         # Lastly, check the original values have been multiplied by minus one. Therefore,
         # add the two DataFrames which should equate to zero. The multiplication by minus
@@ -725,6 +725,429 @@ class TestAll(unittest.TestCase):
         )
 
         self.assertTrue(srr.summary_table().shape == (5, 10))
+
+    def test_single_relation_table(self):
+        sr = SignalReturnRelations(
+            df=self.dfd,
+            ret="XR",
+            sig="CRY",
+            freq="Q",
+            blacklist=self.blacklist,
+            slip=1,
+        )
+
+        sr_no_slip = SignalReturnRelations(
+            df=self.dfd,
+            ret="XR",
+            sig="CRY",
+            freq="Q",
+            blacklist=self.blacklist,
+            slip=0,
+        )
+
+        # Test that each argument must be of the correct type
+        with self.assertRaises(TypeError):
+            sr.single_relation_table(ret=2)
+
+        with self.assertRaises(TypeError):
+            sr.single_relation_table(xcat=2)
+
+        with self.assertRaises(TypeError):
+            sr.single_relation_table(freq=2)
+
+        with self.assertRaises(TypeError):
+            sr.single_relation_table(agg_sigs=2)
+
+        sr.single_relation_table()
+        sr_no_slip.single_relation_table()
+
+        # Test that dataframe has been reduced to just the relevant columns and has
+        # applied slippage
+
+        self.assertTrue(set(sr.dfd["xcat"]) == set(["XR", "CRY"]))
+
+        self.assertTrue(sr.dfd["value"][0] != sr.df["value"][0])
+
+        self.assertTrue(sr_no_slip.dfd["value"][0] == sr_no_slip.df["value"][0])
+
+        sr.single_relation_table(ret="XR", xcat="CRY", freq="Q", agg_sigs="last")
+
+        self.assertTrue(set(sr.dfd["xcat"]) == set(["XR", "CRY"]))
+
+        self.assertTrue(sr.dfd["value"][0] != sr.df["value"][0])
+
+        # Test Negative signs are correctly handled
+
+        with self.assertRaises(TypeError):
+            sr_sign_fail = SignalReturnRelations(
+                df=self.dfd,
+                ret="XR",
+                sig="CRY",
+                freq="Q",
+                sig_neg=["FAIL"],
+                blacklist=self.blacklist,
+                slip=1,
+            )
+
+        # Ensure that the signs doesn't have a longer length than the number of signals
+        with self.assertRaises(ValueError):
+            sr_long_signs = SignalReturnRelations(
+                df=self.dfd,
+                ret="XR",
+                sig="CRY",
+                freq="Q",
+                sig_neg=[True, True],
+                blacklist=self.blacklist,
+                slip=1,
+            )
+
+        # Test table outputted is correct
+        data = {
+            "cid": [
+                "AUD",
+                "AUD",
+                "AUD",
+                "AUD",
+                "AUD",
+                "AUD",
+                "AUD",
+                "AUD",
+                "AUD",
+                "AUD",
+            ],
+            "xcat": ["XR", "XR", "XR", "XR", "XR", "CRY", "CRY", "CRY", "CRY", "CRY"],
+            "real_date": [
+                "1990-01-01",
+                "1990-01-02",
+                "1990-01-03",
+                "1990-01-04",
+                "1990-01-05",
+                "1990-01-01",
+                "1990-01-02",
+                "1990-01-03",
+                "1990-01-04",
+                "1990-01-05",
+            ],
+            "value": [1.0, 1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0, 1.0],
+        }
+
+        test_df = pd.DataFrame(data)
+
+        sr_correct = SignalReturnRelations(
+            df=test_df,
+            ret="XR",
+            sig="CRY",
+            freq="D",
+            blacklist=None,
+            slip=0,
+        )
+
+        srt = sr_correct.single_relation_table()
+
+        correct_stats = [
+            0.25,
+            0.25,
+            0.5,
+            0.75,
+            0.5,
+            0.0,
+            -0.57735,
+            0.42265,
+            -0.57735,
+            0.31731,
+        ]
+
+        for val1, val2 in zip(srt.iloc[0].values.tolist(), correct_stats):
+            self.assertTrue(np.isclose(val1, val2))
+
+        # Check when signs are negative
+
+        sr_correct_neg = SignalReturnRelations(
+            df=test_df,
+            ret="XR",
+            sig="CRY",
+            freq="D",
+            sig_neg=True,
+            blacklist=None,
+            slip=0,
+        )
+
+        srt = sr_correct_neg.single_relation_table()
+
+        correct_stats = [
+            0.75,
+            0.75,
+            0.5,
+            0.75,
+            1.0,
+            0.5,
+            0.57735,
+            0.42265,
+            0.57735,
+            0.31731,
+        ]
+
+        for val1, val2 in zip(srt.iloc[0].values.tolist(), correct_stats):
+            self.assertTrue(np.isclose(val1, val2))
+
+    def test_multiple_relation_table(self):
+        num_of_acc_cols = 10
+
+        sr_unsigned = SignalReturnRelations(
+            df=self.dfd,
+            ret="XR",
+            sig="CRY",
+            freq="Q",
+            agg_sig="last",
+            blacklist=self.blacklist,
+            slip=1,
+        )
+
+        self.assertTrue(
+            sr_unsigned.multiple_relations_table(rets="XR", xcats="CRY").shape
+            == (1, num_of_acc_cols)
+        )
+
+        sr_mrt = SignalReturnRelations(
+            df=self.dfd,
+            ret=["XR", "GROWTH"],
+            sig=["CRY", "INFL"],
+            freq=["Q", "M"],
+            agg_sig=["last", "mean"],
+            blacklist=self.blacklist,
+        )
+
+        self.assertTrue(
+            sr_mrt.multiple_relations_table().shape == (16, num_of_acc_cols)
+        )
+
+        with self.assertRaises(ValueError):
+            sr_mrt.multiple_relations_table(rets="TEST")
+
+        with self.assertRaises(ValueError):
+            sr_mrt.multiple_relations_table(xcats="TEST")
+
+        with self.assertRaises(ValueError):
+            sr_mrt.multiple_relations_table(freqs="TEST")
+
+        with self.assertRaises(ValueError):
+            sr_mrt.multiple_relations_table(agg_sigs="TEST")
+
+        # Test that the table is inputs can take in both a list of strings and a string
+        # self.assertTrue(sr_mrt.multiple_relations_table(rets="XR", freqs='Q'))
+
+        rets = ["XR", "GROWTH"]
+        xcats = ["INFL"]
+        freqs = ["Q", "M"]
+        agg_sigs = ["mean"]
+        mrt = sr_mrt.multiple_relations_table(
+            rets=rets, xcats=xcats, freqs=freqs, agg_sigs=agg_sigs
+        )
+        self.assertTrue(mrt.shape == (4, num_of_acc_cols))
+
+    def test_single_statistic_table(self):
+        sr = SignalReturnRelations(
+            df=self.dfd,
+            ret="XR",
+            sig="CRY",
+            freq="Q",
+            blacklist=self.blacklist,
+            slip=1,
+        )
+
+        with self.assertRaises(ValueError):
+            sr.single_statistic_table(stat="FAIL")
+
+        with self.assertRaises(ValueError):
+            sr.single_statistic_table(stat="accuracy", type="FAIL")
+
+        with self.assertRaises(TypeError):
+            sr.single_statistic_table(stat="accuracy", rows="FAIL")
+
+        with self.assertRaises(TypeError):
+            sr.single_statistic_table(stat="accuracy", columns="FAIL")
+
+        with self.assertRaises(ValueError):
+            sr.single_statistic_table(stat="accuracy", rows=["FAIL"])
+
+        with self.assertRaises(ValueError):
+            sr.single_statistic_table(stat="accuracy", columns=["FAIL"])
+
+        # Test that table is correctly shaped
+
+        self.assertTrue(sr.single_statistic_table(stat="accuracy").shape == (1, 1))
+
+        sr = SignalReturnRelations(
+            df=self.dfd,
+            ret=["XR", "GROWTH"],
+            sig=["CRY", "INFL"],
+            freq=["Q", "M"],
+            agg_sig=["last", "mean"],
+            blacklist=self.blacklist,
+            slip=1,
+        )
+
+        self.assertTrue(sr.single_statistic_table(stat="accuracy").shape == (4, 4))
+
+        # Test that the table is correctly shaped when rows and columns are specified
+
+        self.assertTrue(
+            sr.single_statistic_table(
+                stat="accuracy", rows=["freq", "xcat", "ret"], columns=["agg_sigs"]
+            ).shape
+            == (8, 2)
+        )
+
+        sr = SignalReturnRelations(
+            df=self.dfd,
+            ret=["XR", "GROWTH"],
+            sig=["CRY", "INFL"],
+            freq=["Q", "M"],
+            agg_sig=["last", "mean"],
+            blacklist=self.blacklist,
+            sig_neg=[False, True],
+        )
+
+        self.assertTrue(
+            sr.single_statistic_table(
+                stat="accuracy", rows=["xcat"], columns=["freq", "agg_sigs", "ret"]
+            ).index[1]
+            == "INFL_NEG"
+        )
+
+    def test_set_df_labels(self):
+        rets = ["XR", "GROWTH"]
+        freqs = ["Q", "M"]
+        sigs = ["CRY", "INFL"]
+        agg_sigs = ["mean", "last"]
+
+        rows_dict = {"xcat": sigs, "ret": rets, "freq": freqs, "agg_sigs": agg_sigs}
+        rows = ["xcat", "ret", "freq"]
+        columns = ["agg_sigs"]
+
+        sr = SignalReturnRelations(
+            df=self.dfd,
+            ret=rets,
+            sig=sigs,
+            freq=freqs,
+            agg_sig=agg_sigs,
+            blacklist=self.blacklist,
+        )
+
+        rows_names, columns_names = sr.set_df_labels(
+            rows_dict=rows_dict, rows=rows, columns=columns
+        )
+        expected_col_names = ["mean", "last"]
+        expected_row_names = [
+            "CRY/XR/Q",
+            "CRY/XR/M",
+            "CRY/GROWTH/Q",
+            "CRY/GROWTH/M",
+            "INFL/XR/Q",
+            "INFL/XR/M",
+            "INFL/GROWTH/Q",
+            "INFL/GROWTH/M",
+        ]
+
+        self.assertTrue(rows_names == expected_row_names)
+        self.assertTrue(columns_names == expected_col_names)
+
+        rows = ["xcat", "ret"]
+        columns = ["agg_sigs", "freq"]
+
+        rows_names, columns_names = sr.set_df_labels(
+            rows_dict=rows_dict, rows=rows, columns=columns
+        )
+
+        expected_col_names = ["mean/Q", "mean/M", "last/Q", "last/M"]
+        expected_row_names = ["CRY/XR", "CRY/GROWTH", "INFL/XR", "INFL/GROWTH"]
+
+        self.assertTrue(rows_names == expected_row_names)
+        self.assertTrue(columns_names == expected_col_names)
+
+        rows = ["xcat"]
+        columns = columns = ["agg_sigs", "ret", "freq"]
+
+        rows_names, columns_names = sr.set_df_labels(
+            rows_dict=rows_dict, rows=rows, columns=columns
+        )
+
+        expected_col_names = [
+            "mean/XR/Q",
+            "mean/XR/M",
+            "mean/GROWTH/Q",
+            "mean/GROWTH/M",
+            "last/XR/Q",
+            "last/XR/M",
+            "last/GROWTH/Q",
+            "last/GROWTH/M",
+        ]
+        expected_row_names = ["CRY", "INFL"]
+
+        self.assertTrue(rows_names == expected_row_names)
+        self.assertTrue(columns_names == expected_col_names)
+
+        return 0
+
+    def test_get_rowcol(self):
+        rets = ["XR", "GROWTH"]
+        freqs = ["Q", "M"]
+        sigs = ["CRY", "INFL"]
+        agg_sigs = ["mean", "last"]
+
+        sr = SignalReturnRelations(
+            df=self.dfd,
+            ret=rets,
+            sig=sigs,
+            freq=freqs,
+            agg_sig=agg_sigs,
+            blacklist=self.blacklist,
+        )
+
+        hash = "XR/CRY/Q/mean"
+        rows = ["xcat", "ret", "freq"]
+        columns = ["agg_sigs"]
+
+        self.assertTrue(sr.get_rowcol(hash, rows) == "CRY/XR/Q")
+        self.assertTrue(sr.get_rowcol(hash, columns) == "mean")
+
+    def test_single_statistic_table_show_heatmap(self):
+        self.mpl_backend: str = matplotlib.get_backend()
+        matplotlib.use("Agg")
+
+        sr = SignalReturnRelations(
+            df=self.dfd,
+            ret="XR",
+            sig="CRY",
+            freq="Q",
+            blacklist=self.blacklist,
+            slip=1,
+        )
+
+        try:
+            sr.single_statistic_table(stat="accuracy", show_heatmap=True)
+        except Exception as e:
+            self.fail(f"single_statistic_table raised {e} unexpectedly")
+
+        try:
+            sr.single_statistic_table(
+                stat="accuracy", show_heatmap=True, row_names=["X"], column_names=["Y"]
+            )
+        except Exception as e:
+            self.fail(f"single_statistic_table raised {e} unexpectedly")
+
+        try:
+            sr.single_statistic_table(
+                stat="accuracy",
+                show_heatmap=True,
+                title="Test",
+                min_color=0,
+                max_color=1,
+                annotate=False,
+                figsize=(10, 10),
+            )
+        except Exception as e:
+            self.fail(f"single_statistic_table raised {e} unexpectedly")
 
 
 if __name__ == "__main__":

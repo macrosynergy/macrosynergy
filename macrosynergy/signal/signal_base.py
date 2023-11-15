@@ -254,9 +254,7 @@ class SignalBase:
         self.df = df
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
 
-        self.new_sig = sig
-
-        if -1 in self.signs and self.signs[self.sig.index(sig)] == -1:
+        if True in self.signs and self.signs[self.sig.index(sig)]:
             index = self.sig.index(sig)
             original_name = sig + "/" + agg_sig
 
@@ -271,6 +269,8 @@ class SignalBase:
             if sst:
                 new_name = sig + "/" + agg_sig
                 df_result.rename(index={original_name: new_name}, inplace=True)
+
+        self.new_sig = [sig]
 
         return df_result
 
