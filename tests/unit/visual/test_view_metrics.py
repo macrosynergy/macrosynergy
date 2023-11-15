@@ -76,7 +76,8 @@ class TestAll(unittest.TestCase):
         invalid_args["xcat"] = "bad_xcat"
         with self.assertRaises(ValueError):
             try:
-                msv.view_metrics(**invalid_args)
+                with warnings.catch_warnings(record=True) as w:
+                    msv.view_metrics(**invalid_args)
             except Exception as e:
                 self.assertIsInstance(e, ValueError)
                 raise ValueError(e)
@@ -96,13 +97,14 @@ class TestAll(unittest.TestCase):
     def test_view_metrics_invalid_cids(self):
         invalid_args = self.valid_args.copy()
         invalid_args["cids"] = [1, 2, 3]
+        # catch warnings from msm.validation.py
+        with warnings.catch_warnings(record=True) as w:
+            with self.assertRaises(TypeError):
+                msv.view_metrics(**invalid_args)
 
-        with self.assertRaises(TypeError):
-            msv.view_metrics(**invalid_args)
-
-        invalid_args["cids"] = ["bad_cid"]
-        with self.assertRaises(ValueError):
-            msv.view_metrics(**invalid_args)
+            invalid_args["cids"] = ["bad_cid"]
+            with self.assertRaises(ValueError):
+                msv.view_metrics(**invalid_args)
 
     def test_view_metrics_invalid_start_and_end(self):
         invalid_args = self.valid_args

@@ -95,7 +95,8 @@ class TestAll(unittest.TestCase):
         invalid_args["xcats"] = ["INVALID_XCAT"]
         with self.assertRaises(ValueError):
             try:
-                msv.view_grades(**invalid_args)
+                with warnings.catch_warnings(record=True) as w:
+                    msv.view_grades(**invalid_args)
             except Exception as e:
                 self.assertIsInstance(e, ValueError)
                 raise ValueError(e)
