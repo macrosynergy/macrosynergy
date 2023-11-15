@@ -40,7 +40,7 @@ def view_metrics(
 
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
         'cid', 'xcat', 'real_date' and 'grading', 'eop_lag' or 'mop_lag'.
-    :param str xcat: extended category whose lags are to be visualized.
+    :param <str> xcat: extended category whose lags are to be visualized.
     :param <List[str]> cids: cross sections to visualize. Default is all in DataFrame.
     :param <str> start: earliest date in ISO format. Default is earliest available.
     :param <str> end: latest date in ISO format. Default is latest available.

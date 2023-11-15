@@ -20,7 +20,7 @@ def heatmap_grades(df: pd.DataFrame, xcats:  List[str],  cids: List[str] = None,
 
     :param <pd.Dataframe> df: standardized DataFrame with the necessary columns:
         'cid', 'xcat', 'real_date' and 'grading'.
-    :param List[str] xcats: extended categorys to be checked on.
+    :param <List[str]> xcats: extended categorys to be checked on.
     :param <List[str]> cids: cross sections to visualize. Default is all in  DataFrame.
     :param <str> start: earliest date in ISO format. Default is earliest available.
     :param <str> end: latest date in ISO format. Default is latest available.

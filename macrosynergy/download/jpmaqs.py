@@ -66,9 +66,9 @@ class JPMaQSDownload(object):
         `calender` and `frequency` for the DataQuery API. For more fine-grained usage,
         initialize the DataQueryInterface object explicitly.
     :param <dict> kwargs: additional arguments to pass to the DataQuery API object such as
-            :param <str> base_url: base url for the DataQuery API.
-            :param <str> calendar: calendar setting to use with the DataQuery API.
-            :param <str> frequency: frequency setting to use with the DataQuery API.
+            - `base_url` : base url for the DataQuery API.
+            - `calendar` : calendar setting to use with the DataQuery API.
+            - `frequency` : frequency setting to use with the DataQuery API.
             ...
         See macrosynergy.download.dataquery.DataQueryInterface for more.
 
@@ -520,7 +520,7 @@ class JPMaQSDownload(object):
     ) -> bool:
         """Validate the arguments passed to the download function.
 
-        :params:  -- see `macrosynergy.download.jpmaqs.JPMaQSDownload.download()`.
+        :param <Args>:  -- see `macrosynergy.download.jpmaqs.JPMaQSDownload.download()`.
 
         :return <bool>: True if valid.
 

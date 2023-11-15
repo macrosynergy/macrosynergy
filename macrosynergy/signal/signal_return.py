@@ -276,9 +276,9 @@ class SignalsReturns(SignalBase):
         Creates a table which shows the specified statistic for each row and
         column specified as arguments:
 
-        :param stat: type of statistic to be displayed (this can be any of
+        :param <str> stat: type of statistic to be displayed (this can be any of
             the column names of summary_table).
-        :param type: type of the statistic displayed. This can be based on
+        :param <str> type: type of the statistic displayed. This can be based on
             the overall panel ("panel", default), an
             average of annual panels (mean_years), an average of cross-sectional
             relations ("mean_cids"), the positive ratio across years("pr_years"),

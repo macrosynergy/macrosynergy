@@ -443,7 +443,7 @@ def validate_download_args(
     """
     Validate the arguments passed to the `download_data()` method.
 
-    :params : -- see `download_data()` method.
+    :param <Args> **args : -- see `download_data()` method.
 
     :return <bool>: True if all arguments are valid.
 

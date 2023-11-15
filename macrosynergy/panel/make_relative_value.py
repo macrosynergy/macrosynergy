@@ -29,7 +29,7 @@ def _prepare_basket(
     :param <str> xcat: respective category for the relative value calculation.
     :param <pd.DataFrame> basket: cross-sections to be used for the relative value
         benchmark if available.
-    :param <List[str] cids_avl: cross-sections available for the category.
+    :param <List[str]> cids_avl: cross-sections available for the category.
     :param <bool> complete_cross: if True, the basket is only calculated if all cross-
         sections, held in the basket, are available for that respective category.
     """
