@@ -188,11 +188,11 @@ class SignalsReturns(SignalBase):
         :param <str, List[str]> rets: target return category
         :param <str, List[str]> xcats: signal categories to be considered
         :param <str, List[str]> freqs: letters denoting frequency at which the series
-        are to be sampled.
-        This must be one of 'D', 'W', 'M', 'Q', 'A'. If not specified uses the freq
-        stored in the class.
+            are to be sampled.
+            This must be one of 'D', 'W', 'M', 'Q', 'A'. If not specified uses the freq
+            stored in the class.
         :param <str, List[str]> agg_sigs: aggregation methods applied to the signal
-        values in down-sampling
+            values in down-sampling.
         """
         if rets is None:
             rets = self.ret
@@ -277,33 +277,33 @@ class SignalsReturns(SignalBase):
         column specified as arguments:
 
         :param stat: type of statistic to be displayed (this can be any of
-        the column names of summary_table).
+            the column names of summary_table).
         :param type: type of the statistic displayed. This can be based on
-        the overall panel ("panel", default), an
-        average of annual panels (mean_years), an average of cross-sectional
-        relations ("mean_cids"), the positive ratio across years("pr_years"),
-        positive ratio across sections ("pr_cids").
+            the overall panel ("panel", default), an
+            average of annual panels (mean_years), an average of cross-sectional
+            relations ("mean_cids"), the positive ratio across years("pr_years"),
+            positive ratio across sections ("pr_cids").
         :param <List[str]> rows: row indices, which can be return categories,
-        feature categories, frequencies and/or aggregations. The choice is
-        made through a list of one or more of "xcat", "ret", "freq" and
-        "agg_sigs". The default is ["xcat", "agg_sigs"] resulting in index
-        strings (<agg_signs>) or if only one aggregation is available.
+            feature categories, frequencies and/or aggregations. The choice is
+            made through a list of one or more of "xcat", "ret", "freq" and
+            "agg_sigs". The default is ["xcat", "agg_sigs"] resulting in index
+            strings (<agg_signs>) or if only one aggregation is available.
         :param <List[str]> columns: column indices, which can be return
-        categories, feature categories, frequencies and/or aggregations. The
-        choice is made through a list of one or more of "xcat", "ret", "freq"
-        and "agg_sigs". The default is ["ret", "freq] resulting in index
-        strings () or if only one frequency is available.
+            categories, feature categories, frequencies and/or aggregations. The
+            choice is made through a list of one or more of "xcat", "ret", "freq"
+            and "agg_sigs". The default is ["ret", "freq] resulting in index
+            strings () or if only one frequency is available.
         :param <bool> show_heatmap: if True, the table is visualized as a
-        heatmap. Default is False.
+            heatmap. Default is False.
         :param <str> title: plot title; if none given default title is shown.
         :param <List[str]> row_names: specifies the labels of rows in the heatmap.
-        If None, the indices of the generated DataFrame are used.
+            If None, the indices of the generated DataFrame are used.
         :param <List[str]> column_names: specifies the labels of columns in the
-        heatmap. If None, the columns of the generated DataFrame are used.
+            heatmap. If None, the columns of the generated DataFrame are used.
         :param <float> min_color: minimum value of the color scale. Default
-        is None, in which case the minimum value of the table is used.
+            is None, in which case the minimum value of the table is used.
         :param <float> max_color: maximum value of the color scale. Default
-        is None, in which case the maximum value of the table is used.
+            is None, in which case the maximum value of the table is used.
         :param <Tuple[float]> figsize: Tuple (w, h) of width and height of graph.
         :param <bool> annotate: if True, the values are annotated in the heatmap.
         """
@@ -452,11 +452,11 @@ class SignalsReturns(SignalBase):
         the resulting dataframe.
 
         :param <dict> rows_dict: dictionary containing the each value for each of the
-        xcat, ret, freq and agg_sigs categories.
+            xcat, ret, freq and agg_sigs categories.
         :param <List[str]> rows: list of strings specifying which of the categories are
-        included in the rows of the dataframe.
+            included in the rows of the dataframe.
         :param <List[str]> columns: list of strings specifying which of the categories
-        are included in the columns of the dataframe.
+            are included in the columns of the dataframe.
         """
         if len(rows) == 2:
             rows_names = [
