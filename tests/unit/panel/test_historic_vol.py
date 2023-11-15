@@ -17,6 +17,12 @@ from macrosynergy.management.utils import reduce_df
 
 
 class TestAll(unittest.TestCase):
+    def setUp(self) -> None:
+        return super().setUp()
+
+    def tearDown(self) -> None:
+        return super().tearDown()
+
     def dataframe_generator(self):
         self.cids: List[str] = ["AUD", "CAD", "GBP"]
         self.xcats: List[str] = ["CRY", "XR"]
