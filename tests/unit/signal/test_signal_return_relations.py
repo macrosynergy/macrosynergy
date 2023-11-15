@@ -9,10 +9,12 @@ import pandas as pd
 import numpy as np
 from typing import List, Dict
 import matplotlib
+from matplotlib import pyplot as plt
+from unittest.mock import patch
 
 
 class TestAll(unittest.TestCase):
-    def dataframe_generator(self):
+    def setUp(self) -> None:
         """
         Create a standardised DataFrame defined over the three categories.
         """
@@ -65,8 +67,10 @@ class TestAll(unittest.TestCase):
             "Instantiation of DataFrame missing from " "field dictionary."
         )
 
+    def tearDown(self) -> None:
+        return super().tearDown()
+
     def test_constructor(self):
-        self.dataframe_generator()
         # Test the Class's constructor.
 
         # First, test the assertions.
@@ -76,7 +80,7 @@ class TestAll(unittest.TestCase):
             srr = SignalReturnRelations(
                 self.dfd, ret="XR", sig="Missing", freq="D", blacklist=self.blacklist
             )
-        
+
         # Test that frequency must be one of the following: 'D', 'W', 'M', 'Q', 'Y'.
         with self.assertRaises(ValueError):
             srr = SignalReturnRelations(
@@ -125,7 +129,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(sorted(self.cids) == sorted(test_index))
 
     def test_constructor_multiple_sigs(self):
-        self.dataframe_generator()
         # The signal return Class allows for additional signals to be passed, upon
         # instantiation, to understand the primary signal's performance relative to other
         # possible signals. The analysis will be completed on the panel level.
@@ -212,8 +215,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(np.all(sum_columns.to_numpy() == 0.0))
 
     def test_constructor_communal(self):
-        self.dataframe_generator()
-
         # Used to test the communal sample period by setting the parameter equal to True.
         # The DataFrame instantiated on the instance is a multi-index DataFrame where the
         # outer index will be qualified by the available cross-sections and the interior
@@ -261,7 +262,7 @@ class TestAll(unittest.TestCase):
         dfd = srr_cosp.dfd
         filt_1 = (dfd["real_date"] == "2011-01-04") & (dfd["xcat"] == "XR")
         dfd_filt = dfd[filt_1]
-        benchmark_value = float(dfd_filt[dfd_filt["cid"] == "AUD"]["value"])
+        benchmark_value = float(dfd_filt[dfd_filt["cid"] == "AUD"]["value"].iloc[0])
         benchmark_value = round(benchmark_value, 5)
 
         test_row = srr_cosp.df.loc["AUD"].loc["2011-01-04"]
@@ -275,7 +276,7 @@ class TestAll(unittest.TestCase):
         signals = [primary_signal] + rival_signals
 
         for s in signals:
-            test_value = float(dfd_filt[dfd_filt["xcat"] == s]["value"])
+            test_value = float(dfd_filt[dfd_filt["xcat"] == s]["value"].iloc[0])
             self.assertTrue(np.isclose(test_value, test_row[s]))
 
         # Confirm the dimensions of the return column remains unchanged - alignment
@@ -296,7 +297,6 @@ class TestAll(unittest.TestCase):
         )
 
     def test__slice_df__(self):
-        self.dataframe_generator()
         # Method used to confirm that the segmentation of the original DataFrame is
         # being applied correctly: either cross-sectional or yearly basis. Therefore, if
         # a specific "cs" is passed, will the DataFrame be reduced correctly ?
@@ -305,7 +305,7 @@ class TestAll(unittest.TestCase):
         srr = SignalReturnRelations(
             self.dfd, sig=signal, ret="XR", freq="D", blacklist=self.blacklist
         )
-        df = srr.df.dropna(how="any")
+        df = srr.df.dropna(how="any").copy()
 
         # First, test cross-sectional basis.
         # Choose a "random" cross-section.
@@ -321,7 +321,10 @@ class TestAll(unittest.TestCase):
             self.assertTrue(v - segment_values[c] < 0.0001)
 
         # Test the yearly segmentation.
-        df["year"] = np.array(df.reset_index(level=1)["real_date"].dt.year)
+        df.loc[:, "year"] = np.array(
+            df.reset_index(level=1).loc[:, "real_date"].dt.year
+        )
+
         df_cs = srr.__slice_df__(df=df, cs="2013", cs_type="years")
 
         # Confirm that the year column contains exclusively '2013'. If so, able to deduce
@@ -331,7 +334,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(np.all(df_cs_year == "2013"))
 
     def test__output_table__(self):
-        self.dataframe_generator()
         # Test the method responsible for producing the table of metrics assessing the
         # signal-return relationship.
 
@@ -429,7 +431,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(condition < 0.00001)
 
     def test__rival_sigs__(self):
-        self.dataframe_generator()
         # Method is used to produce the metric table for the secondary signals. The
         # analysis will be completed on the panel level.
 
@@ -463,7 +464,6 @@ class TestAll(unittest.TestCase):
         self.assertEqual(growth_accuracy, manual_value)
 
     def test_signals_table(self):
-        self.dataframe_generator()
         # If defined, will return the panel-level table for the rival signals. The method
         # receives a single parameter, "sigs", whose default is set to None (all
         # available signals are returned).
@@ -510,8 +510,6 @@ class TestAll(unittest.TestCase):
             df_sigs = srr.signals_table()
 
     def test__yaxis_lim__(self):
-        self.dataframe_generator()
-
         signal = "CRY"
         return_ = "XR"
         srr = SignalReturnRelations(
@@ -535,8 +533,6 @@ class TestAll(unittest.TestCase):
             self.assertTrue(ylim == 0.45)
 
     def test_apply_slip(self):
-        self.dataframe_generator()
-
         # pick 3 random cids
         sel_xcats: List[str] = ["XR", "CRY"]
         sel_cids: List[str] = ["AUD", "CAD", "GBP"]
@@ -563,13 +559,13 @@ class TestAll(unittest.TestCase):
         )
         test_slip: int = 5
         # apply the slip method
-        print(int(min(df["vx"])))
+
         out_df = SignalReturnRelations.apply_slip(
             df=df,
             slip=test_slip,
             xcats=sel_xcats,
             cids=sel_cids,
-            metrics=["value", "vx"]
+            metrics=["value", "vx"],
         )
 
         # NOTE: casting df.vx to int as pandas casts it to float64
@@ -623,7 +619,11 @@ class TestAll(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             SignalReturnRelations.apply_slip(
-                df=df, slip=-1, xcats=sel_xcats, cids=sel_cids, metrics=["value"],
+                df=df,
+                slip=-1,
+                xcats=sel_xcats,
+                cids=sel_cids,
+                metrics=["value"],
             )
 
         with self.assertRaises(ValueError):
@@ -671,7 +671,6 @@ class TestAll(unittest.TestCase):
             self.fail("SignalReturnRelations init failed")
 
     def test_cross_section_and_yearly_table(self):
-        self.dataframe_generator()
         srr = SignalReturnRelations(
             self.dfd,
             ret="XR",
@@ -683,9 +682,10 @@ class TestAll(unittest.TestCase):
         )
         self.assertTrue(srr.cross_section_table().shape == (8, 10))
         self.assertTrue(srr.yearly_table().shape == (16, 10))
-    
+
     def test_accuracy_and_correlation_bars(self):
-        self.dataframe_generator()
+        plt.close("all")
+        mock_plt = patch("matplotlib.pyplot.show").start()
         mpl_backend = matplotlib.get_backend()
         matplotlib.use("Agg")
 
@@ -699,7 +699,7 @@ class TestAll(unittest.TestCase):
             blacklist=self.blacklist,
         )
 
-        #Check that accuracy bars actually outputs an image
+        # Check that accuracy bars actually outputs an image
         try:
             srr.accuracy_bars()
         except Exception as e:
@@ -710,10 +710,11 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"correlation_bars raised {e} unexpectedly")
 
+        plt.close("all")
         matplotlib.use(mpl_backend)
+        patch.stopall()
 
     def test_summary_table(self):
-        self.dataframe_generator()
         srr = SignalReturnRelations(
             self.dfd,
             ret="XR",
