@@ -122,7 +122,8 @@ class TestAll(unittest.TestCase):
 
         invalid_args["cids"] = ["bad_cid"]
         with self.assertRaises(ValueError):
-            msv.view_grades(**invalid_args)
+            with warnings.catch_warnings(record=True) as w:
+                msv.view_grades(**invalid_args)
 
     def test_view_grades_invalid_start_and_end(self):
         invalid_args = self.valid_args
