@@ -9,10 +9,12 @@ import pandas as pd
 import numpy as np
 from typing import List, Dict
 import matplotlib
+from matplotlib import pyplot as plt
+from unittest.mock import patch
 
 
 class TestAll(unittest.TestCase):
-    def dataframe_generator(self):
+    def setUp(self) -> None:
         """
         Create a standardised DataFrame defined over the three categories.
         """
@@ -65,8 +67,10 @@ class TestAll(unittest.TestCase):
             "Instantiation of DataFrame missing from " "field dictionary."
         )
 
+    def tearDown(self) -> None:
+        return super().tearDown()
+
     def test_constructor(self):
-        self.dataframe_generator()
         # Test the Class's constructor.
 
         # First, test the assertions.
@@ -125,7 +129,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(sorted(self.cids) == sorted(test_index))
 
     def test_constructor_multiple_sigs(self):
-        self.dataframe_generator()
         # The signal return Class allows for additional signals to be passed, upon
         # instantiation, to understand the primary signal's performance relative to other
         # possible signals. The analysis will be completed on the panel level.
@@ -212,8 +215,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(np.all(sum_columns.to_numpy() == 0.0))
 
     def test_constructor_communal(self):
-        self.dataframe_generator()
-
         # Used to test the communal sample period by setting the parameter equal to True.
         # The DataFrame instantiated on the instance is a multi-index DataFrame where the
         # outer index will be qualified by the available cross-sections and the interior
@@ -296,7 +297,6 @@ class TestAll(unittest.TestCase):
         )
 
     def test__slice_df__(self):
-        self.dataframe_generator()
         # Method used to confirm that the segmentation of the original DataFrame is
         # being applied correctly: either cross-sectional or yearly basis. Therefore, if
         # a specific "cs" is passed, will the DataFrame be reduced correctly ?
@@ -331,7 +331,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(np.all(df_cs_year == "2013"))
 
     def test__output_table__(self):
-        self.dataframe_generator()
         # Test the method responsible for producing the table of metrics assessing the
         # signal-return relationship.
 
@@ -429,7 +428,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(condition < 0.00001)
 
     def test__rival_sigs__(self):
-        self.dataframe_generator()
         # Method is used to produce the metric table for the secondary signals. The
         # analysis will be completed on the panel level.
 
@@ -463,7 +461,6 @@ class TestAll(unittest.TestCase):
         self.assertEqual(growth_accuracy, manual_value)
 
     def test_signals_table(self):
-        self.dataframe_generator()
         # If defined, will return the panel-level table for the rival signals. The method
         # receives a single parameter, "sigs", whose default is set to None (all
         # available signals are returned).
@@ -510,8 +507,6 @@ class TestAll(unittest.TestCase):
             df_sigs = srr.signals_table()
 
     def test__yaxis_lim__(self):
-        self.dataframe_generator()
-
         signal = "CRY"
         return_ = "XR"
         srr = SignalReturnRelations(
@@ -535,8 +530,6 @@ class TestAll(unittest.TestCase):
             self.assertTrue(ylim == 0.45)
 
     def test_apply_slip(self):
-        self.dataframe_generator()
-
         # pick 3 random cids
         sel_xcats: List[str] = ["XR", "CRY"]
         sel_cids: List[str] = ["AUD", "CAD", "GBP"]
@@ -563,7 +556,7 @@ class TestAll(unittest.TestCase):
         )
         test_slip: int = 5
         # apply the slip method
-        
+
         out_df = SignalReturnRelations.apply_slip(
             df=df,
             slip=test_slip,
@@ -675,7 +668,6 @@ class TestAll(unittest.TestCase):
             self.fail("SignalReturnRelations init failed")
 
     def test_cross_section_and_yearly_table(self):
-        self.dataframe_generator()
         srr = SignalReturnRelations(
             self.dfd,
             ret="XR",
@@ -689,7 +681,8 @@ class TestAll(unittest.TestCase):
         self.assertTrue(srr.yearly_table().shape == (16, 10))
 
     def test_accuracy_and_correlation_bars(self):
-        self.dataframe_generator()
+        plt.close("all")
+        mock_plt = patch("matplotlib.pyplot.show").start()
         mpl_backend = matplotlib.get_backend()
         matplotlib.use("Agg")
 
@@ -714,10 +707,11 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"correlation_bars raised {e} unexpectedly")
 
+        plt.close("all")
         matplotlib.use(mpl_backend)
+        patch.stopall()
 
     def test_summary_table(self):
-        self.dataframe_generator()
         srr = SignalReturnRelations(
             self.dfd,
             ret="XR",
