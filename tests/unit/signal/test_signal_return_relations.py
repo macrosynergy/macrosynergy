@@ -728,7 +728,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(srr.summary_table().shape == (5, 10))
 
     def test_single_relation_table(self):
-        self.dataframe_generator()
         sr = SignalReturnRelations(
             df=self.dfd,
             ret="XR",
@@ -893,7 +892,6 @@ class TestAll(unittest.TestCase):
             self.assertTrue(np.isclose(val1, val2))
 
     def test_multiple_relation_table(self):
-        self.dataframe_generator()
         num_of_acc_cols = 10
 
         sr_unsigned = SignalReturnRelations(
@@ -949,7 +947,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(mrt.shape == (4, num_of_acc_cols))
 
     def test_single_statistic_table(self):
-        self.dataframe_generator()
         sr = SignalReturnRelations(
             df=self.dfd,
             ret="XR",
@@ -1020,7 +1017,6 @@ class TestAll(unittest.TestCase):
         )
 
     def test_set_df_labels(self):
-        self.dataframe_generator()
         rets = ["XR", "GROWTH"]
         freqs = ["Q", "M"]
         sigs = ["CRY", "INFL"]
@@ -1095,7 +1091,6 @@ class TestAll(unittest.TestCase):
         return 0
 
     def test_get_rowcol(self):
-        self.dataframe_generator()
         rets = ["XR", "GROWTH"]
         freqs = ["Q", "M"]
         sigs = ["CRY", "INFL"]
@@ -1118,7 +1113,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(sr.get_rowcol(hash, columns) == "mean")
 
     def test_single_statistic_table_show_heatmap(self):
-        self.dataframe_generator()
         self.mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
 
