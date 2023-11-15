@@ -753,7 +753,7 @@ class NaivePnL:
 
         dfw = dfw.truncate(before=start, after=end)
 
-        dfw = dfw.resample(freq, axis=0).mean()
+        dfw = dfw.resample(freq).mean()
 
         if figsize is None:
             figsize = (14, len(pnl_cids))
