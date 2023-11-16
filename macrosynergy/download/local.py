@@ -371,12 +371,20 @@ class LocalCache(JPMaQSDownload):
 
 
 class DownloadTimeseries(DataQueryInterface):
-    def __init__(self, store_path: str, store_format: str = "pkl", *args, **kwargs):
+    def __init__(
+        self,
+        store_path: str,
+        store_format: str = "pkl",
+        test_mode: bool = False,
+        *args,
+        **kwargs,
+    ):
         if store_format not in ["pkl", "json"]:
             raise ValueError(f"Store format {store_format} not supported.")
 
         self.store_path = os.path.abspath(store_path)
         self.store_format = store_format
+        self.test_mode: bool = test_mode
 
         os.makedirs(self.store_path, exist_ok=True)
         os.makedirs(os.path.join(self.store_path, self.store_format), exist_ok=True)
@@ -606,6 +614,9 @@ class DownloadTimeseries(DataQueryInterface):
         print("Downloading tickers catalogue...")
         tickers: List[str] = self.get_catalogue()
 
+        if self.test_mode:
+            tickers = tickers[:100]
+
         metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
         expressions: List[str] = JPMaQSDownload.construct_expressions(
             tickers=tickers, metrics=metrics
@@ -697,13 +708,18 @@ class DownloadTimeseries(DataQueryInterface):
 
 
 def create_store(
-    store_path: str, client_id: str, client_secret: str, fmt: str = "pkl"
+    store_path: str,
+    client_id: str,
+    client_secret: str,
+    fmt: str = "pkl",
+    test_mode: bool = False,
 ) -> None:
     DownloadTimeseries(
         store_path=store_path,
         client_id=client_id,
         client_secret=client_secret,
         store_format=fmt,
+        test_mode=test_mode,
     ).download_data(
         show_progress=True,
     )
