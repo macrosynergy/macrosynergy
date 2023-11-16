@@ -553,7 +553,7 @@ class DownloadTimeseries(DataQueryInterface):
                 f"Failed to download {len(failed_batches)} batches. Retrying..."
             )
             results += self._download(
-                expressions=itertools.chain(*failed_batches),
+                expressions=list(itertools.chain(*failed_batches)),
                 params=params,
                 url=url,
                 tracking_id=tracking_id,
