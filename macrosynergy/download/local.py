@@ -696,17 +696,20 @@ class DownloadTimeseries(DataQueryInterface):
         )
 
 
-def create_store(store_path: str, client_id: str, client_secret: str) -> None:
+def create_store(
+    store_path: str, client_id: str, client_secret: str, fmt: str = "pkl"
+) -> None:
     DownloadTimeseries(
         store_path=store_path,
         client_id=client_id,
         client_secret=client_secret,
+        store_format=fmt,
     ).download_data(
         show_progress=True,
     )
     total_start_time: float = time.time()
 
-    lc: LocalCache = LocalCache(local_path="./JPMaQSTickers")
+    lc: LocalCache = LocalCache(local_path=store_path, fmt=fmt)
     # get 100 random tickers
     start_time: float = time.time()
     catalogue: List[str] = lc.get_catalogue()
