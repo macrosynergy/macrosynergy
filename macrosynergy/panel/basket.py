@@ -5,6 +5,7 @@ of financial contracts using various weighting methods.
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import warnings
 
 import random
 from typing import List, Union, Tuple
@@ -40,10 +41,18 @@ class Basket(object):
     N.B.: Each instance of the class will update associated standardised DataFrames,
     containing return and carry categories, and external weights.
     """
-    def __init__(self, df: pd.DataFrame, contracts: List[str], ret: str = "XR_NSA",
-                 cry: Union[str, List[str]] = None, start: str = None, end: str = None,
-                 blacklist: dict = None, ewgts: List[str] = None):
 
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        contracts: List[str],
+        ret: str = "XR_NSA",
+        cry: Union[str, List[str]] = None,
+        start: str = None,
+        end: str = None,
+        blacklist: dict = None,
+        ewgts: List[str] = None,
+    ):
         df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
         df = df[["cid", "xcat", "real_date", "value"]]
 
@@ -59,7 +68,7 @@ class Basket(object):
         self.ret = ret
         self.ticks_ret = [con + ret for con in contracts]
         dfw_ret = self.pivot_dataframe(df, self.ticks_ret)
-        self.dfw_ret = dfw_ret.dropna(axis=0, how='all')
+        self.dfw_ret = dfw_ret.dropna(axis=0, how="all")
 
         self.store_attributes(df, cry, "cry")
         self.store_attributes(df, ewgts, "wgt")
@@ -116,7 +125,7 @@ class Basket(object):
         :return <pd.DataFrame> dfw: wide dataframe.
         """
 
-        df['ticker'] = df['cid'] + '_' + df['xcat']
+        df["ticker"] = df["cid"] + "_" + df["xcat"]
         dfx = df[df["ticker"].isin(tick_list)]
         dfw = dfx.pivot(index="real_date", columns="ticker", values="value")
         return dfw
@@ -190,7 +199,7 @@ class Basket(object):
         and subsequently distributes the weights evenly across non-NA cross-sections.
         """
 
-        act_cross = (~df_ret.isnull())
+        act_cross = ~df_ret.isnull()
         uniform = (1 / act_cross.sum(axis=1)).values
         uniform = uniform[:, np.newaxis]
 
@@ -216,7 +225,7 @@ class Basket(object):
         :return <pd.DataFrame>: panel of weights
         """
 
-        act_cross = (~df_ret.isnull())
+        act_cross = ~df_ret.isnull()
 
         weights = np.array(weights, dtype=np.float32)
         rows = act_cross.shape[0]
@@ -234,8 +243,13 @@ class Basket(object):
 
         return weight
 
-    def inverse_weight(self, dfw_ret: pd.DataFrame, lback_meth: str = "xma",
-                       lback_periods: int = 21, remove_zeros: bool = True):
+    def inverse_weight(
+        self,
+        dfw_ret: pd.DataFrame,
+        lback_meth: str = "xma",
+        lback_periods: int = 21,
+        remove_zeros: bool = True,
+    ):
         """
         Calculates weights inversely proportionate to recent return standard deviations.
 
@@ -260,11 +274,11 @@ class Basket(object):
             dfwa *= np.sqrt(252)
 
         else:
-
             half_life = lback_periods
             weights = expo_weights(lback_periods * 2, half_life)
-            dfwa = dfw_ret.rolling(window=lback_periods * 2).agg(expo_std, w=weights,
-                                                                 remove_zeros=remove_zeros)
+            dfwa = dfw_ret.rolling(window=lback_periods * 2).agg(
+                expo_std, w=weights, remove_zeros=remove_zeros
+            )
 
         cols = dfwa.columns
         # Zeroes treated as NaNs.
@@ -276,8 +290,9 @@ class Basket(object):
 
         return df_wgts
 
-    def values_weight(self, dfw_ret: pd.DataFrame, dfw_wgt: pd.DataFrame,
-                      weight_meth: str):
+    def values_weight(
+        self, dfw_ret: pd.DataFrame, dfw_wgt: pd.DataFrame, weight_meth: str
+    ):
         """
         Returns weights based on an external weighting category.
 
@@ -293,7 +308,7 @@ class Basket(object):
         negative_condition = np.any((dfw_wgt < 0).to_numpy())
         if negative_condition:
             dfw_wgt[dfw_wgt < 0] = 0.0
-            print("Negative values in the weight matrix set to zero.")
+            warnings.warn("Negative values in the weight matrix set to zero.")
 
         exo_array = dfw_wgt.to_numpy()
         df_bool = ~dfw_ret.isnull()
@@ -312,10 +327,16 @@ class Basket(object):
 
         return weights
 
-    def make_weights(self, weight_meth: str = "equal", weights: List[float] = None,
-                     lback_meth: str = "xma", lback_periods: int = 21,
-                     ewgt: str = None, max_weight: float = 1.0,
-                     remove_zeros: bool = True):
+    def make_weights(
+        self,
+        weight_meth: str = "equal",
+        weights: List[float] = None,
+        lback_meth: str = "xma",
+        lback_periods: int = 21,
+        ewgt: str = None,
+        max_weight: float = 1.0,
+        remove_zeros: bool = True,
+    ):
         """
         Returns wide dataframe of weights to be used for basket series.
 
@@ -339,7 +360,7 @@ class Basket(object):
         return: <pd.DataFrame>: wide dataframe of contract weights across time.
         """
         assert 0.0 < max_weight <= 1.0
-        assert weight_meth in ['equal', 'fixed', 'values', 'inv_values', 'invsd']
+        assert weight_meth in ["equal", "fixed", "values", "inv_values", "invsd"]
 
         # Apply weight method.
 
@@ -360,12 +381,15 @@ class Basket(object):
             error_message = "Lookback method method must be 'ma' or 'xma'."
             assert lback_meth in ["xma", "ma"], error_message
             assert isinstance(lback_periods, int), "Expects <int>."
-            dfw_wgs = self.inverse_weight(dfw_ret=self.dfw_ret, lback_meth=lback_meth,
-                                          lback_periods=lback_periods,
-                                          remove_zeros=remove_zeros)
+            dfw_wgs = self.inverse_weight(
+                dfw_ret=self.dfw_ret,
+                lback_meth=lback_meth,
+                lback_periods=lback_periods,
+                remove_zeros=remove_zeros,
+            )
 
         elif weight_meth in ["values", "inv_values"]:
-            assert ewgt in self.wgt, f'{ewgt} is not defined on the instance.'
+            assert ewgt in self.wgt, f"{ewgt} is not defined on the instance."
             # Lag by one day to be used as weights.
             try:
                 dfw_wgt = self.dfws_wgt[ewgt].shift(1)
@@ -429,11 +453,11 @@ class Basket(object):
         :return <pd.DataFrame> dfw_wgs: weight dataframe with updated columns names.
         """
 
-        dfw_weight_names = lambda w_name: w_name[:w_name.find(self.w_field)]
+        dfw_weight_names = lambda w_name: w_name[: w_name.find(self.w_field)]
         if self.wgt_flag and self.exo_w_postfix is not None:
-            self.__dict__['w_field'] = self.exo_w_postfix
+            self.__dict__["w_field"] = self.exo_w_postfix
         else:
-            self.__dict__['w_field'] = self.ret
+            self.__dict__["w_field"] = self.ret
 
         cols = list(map(dfw_weight_names, dfw_wgs.columns))
         dfw_wgs.columns = cols
@@ -441,10 +465,17 @@ class Basket(object):
 
         return dfw_wgs
 
-    def make_basket(self, weight_meth: str = "equal", weights: List[float] = None,
-                    lback_meth: str = "xma", lback_periods: int = 21,
-                    ewgt: str = None, max_weight: float = 1.0, remove_zeros: bool = True,
-                    basket_name: str = "GLB_ALL"):
+    def make_basket(
+        self,
+        weight_meth: str = "equal",
+        weights: List[float] = None,
+        lback_meth: str = "xma",
+        lback_periods: int = 21,
+        ewgt: str = None,
+        max_weight: float = 1.0,
+        remove_zeros: bool = True,
+        basket_name: str = "GLB_ALL",
+    ):
         """
         Calculates all basket performance categories.
 
@@ -482,11 +513,16 @@ class Basket(object):
 
         assert isinstance(weight_meth, str), "`weight_meth` must be string"
 
-        self.__dict__['exo_w_postfix'] = ewgt
-        dfw_wgs = self.make_weights(weight_meth=weight_meth, weights=weights,
-                                    lback_meth=lback_meth, lback_periods=lback_periods,
-                                    ewgt=ewgt, max_weight=max_weight,
-                                    remove_zeros=remove_zeros)
+        self.__dict__["exo_w_postfix"] = ewgt
+        dfw_wgs = self.make_weights(
+            weight_meth=weight_meth,
+            weights=weights,
+            lback_meth=lback_meth,
+            lback_periods=lback_periods,
+            ewgt=ewgt,
+            max_weight=max_weight,
+            remove_zeros=remove_zeros,
+        )
         select = ["ticker", "real_date", "value"]
 
         dfw_wgs_copy = self.column_manager(df_cat=self.dfw_ret, dfw_wgs=dfw_wgs)
@@ -500,8 +536,9 @@ class Basket(object):
         if self.cry_flag:
             cry_list = []
             for cr in self.cry:
-                dfw_wgs_copy = self.column_manager(df_cat=self.dfws_cry[cr],
-                                                   dfw_wgs=dfw_wgs)
+                dfw_wgs_copy = self.column_manager(
+                    df_cat=self.dfws_cry[cr], dfw_wgs=dfw_wgs
+                )
                 dfw_bcry = self.dfws_cry[cr].multiply(dfw_wgs_copy).sum(axis=1)
                 dfcry = dfw_bcry.to_frame("value").reset_index()
                 basket_cry = basket_name + "_" + cr
@@ -516,12 +553,19 @@ class Basket(object):
 
         self.dict_wgs[basket_name] = self.column_weights(dfw_wgs)
 
-    def weight_visualiser(self, basket_name, start_date: str = None,
-                          end_date: str = None, subplots: bool = True,
-                          facet_grid: bool = False, scatter: bool = False,
-                          all_tickers: bool = True, single_ticker: str = None,
-                          percentage_change: bool = False, 
-                          size: Tuple[int, int] = (7, 7),):
+    def weight_visualiser(
+        self,
+        basket_name,
+        start_date: str = None,
+        end_date: str = None,
+        subplots: bool = True,
+        facet_grid: bool = False,
+        scatter: bool = False,
+        all_tickers: bool = True,
+        single_ticker: str = None,
+        percentage_change: bool = False,
+        size: Tuple[int, int] = (7, 7),
+    ):
         """
         Method used to visualise the weights associated with each contract in the basket.
 
@@ -581,51 +625,61 @@ class Basket(object):
             if not all_tickers:
                 error_3 = "The parameter, 'single_ticker', must be a <str>."
                 assert isinstance(single_ticker, str), error_3
-                error_4 = f"Ticker not present in the weight dataframe. Available " \
-                          f"tickers: {list(dfw_wgs.columns)}."
+                error_4 = (
+                    f"Ticker not present in the weight dataframe. Available "
+                    f"tickers: {list(dfw_wgs.columns)}."
+                )
                 assert single_ticker in dfw_wgs.columns, error_4
                 dfw_wgs = dfw_wgs[[single_ticker]]
 
             if facet_grid:
                 df_stack = dfw_wgs.stack().to_frame("value").reset_index()
-                df_stack = df_stack.sort_values(['ticker', 'real_date'])
+                df_stack = df_stack.sort_values(["ticker", "real_date"])
                 no_contracts = dfw_wgs.shape[1]
                 facet_cols = 4 if no_contracts >= 8 else 3
-                sns.set(rc={'figure.figsize': size})
-                fg = sns.FacetGrid(df_stack, col="ticker", col_wrap=facet_cols,
-                                   sharey=True)
+                sns.set(rc={"figure.figsize": size})
+                fg = sns.FacetGrid(
+                    df_stack, col="ticker", col_wrap=facet_cols, sharey=True
+                )
 
-                scatter_error = f"Boolean object expected - instead received " \
-                                f"{type(scatter)}."
+                scatter_error = (
+                    f"Boolean object expected - instead received " f"{type(scatter)}."
+                )
                 assert isinstance(scatter, bool), scatter_error
                 if scatter:
-                    fg.map_dataframe(sns.scatterplot, x='real_date',
-                                     y='value')
+                    fg.map_dataframe(sns.scatterplot, x="real_date", y="value")
                 else:
                     # Seaborn will linearly interpolate NaN values which is visually
                     # misleading. Therefore, aim to negate the operation.
-                    fg.map_dataframe(sns.lineplot, x='real_date', y='value',
-                                    hue=df_stack['value'].isna().cumsum(),
-                                    palette=["blue"] *
-                                            df_stack['value'].isna().cumsum().nunique(),
-                                    estimator=None, markers=True)
+                    fg.map_dataframe(
+                        sns.lineplot,
+                        x="real_date",
+                        y="value",
+                        hue=df_stack["value"].isna().cumsum(),
+                        palette=["blue"] * df_stack["value"].isna().cumsum().nunique(),
+                        estimator=None,
+                        markers=True,
+                    )
 
-                equal_value = (1 / no_contracts)
-                fg.map(plt.axhline, y=equal_value, linestyle='--', color='gray', lw=0.5)
+                equal_value = 1 / no_contracts
+                fg.map(plt.axhline, y=equal_value, linestyle="--", color="gray", lw=0.5)
                 # Set axes labels of individual charts.
-                fg.set_axis_labels('', '')
-                fg.set_titles(col_template='{col_name}')
-                fg.fig.suptitle('Contract weights in basket', y=1.02)
+                fg.set_axis_labels("", "")
+                fg.set_titles(col_template="{col_name}")
+                fg.fig.suptitle("Contract weights in basket", y=1.02)
             else:
                 plt.rcParams["figure.figsize"] = size
-                dfw_wgs.plot(subplots=subplots, title="Weight Values Timestamp",
-                             legend=True)
-                plt.xlabel('real_date, years')
+                dfw_wgs.plot(
+                    subplots=subplots, title="Weight Values Timestamp", legend=True
+                )
+                plt.xlabel("real_date, years")
 
             date_func = lambda d: pd.Timestamp(d).strftime("%Y-%m-%d")
             if percentage_change:
-                error_5 = "Percentage change display is applied to a single ticker. Set " \
-                          "the parameter 'all_tickers' to False."
+                error_5 = (
+                    "Percentage change display is applied to a single ticker. Set "
+                    "the parameter 'all_tickers' to False."
+                )
                 assert dfw_wgs.shape[1] == 1, error_5
 
                 plt.rcParams["figure.figsize"] = size
@@ -633,7 +687,7 @@ class Basket(object):
                 dfw_pct = dfw_wgs.pct_change(periods=1) * 100
                 n_index = np.array(list(map(date_func, dfw_pct.index)))
                 dfw_pct = dfw_pct.set_index(keys=n_index)
-                dfw_pct.plot(kind='bar', color='coral', ax=ax)
+                dfw_pct.plot(kind="bar", color="coral", ax=ax)
                 ax.xaxis.set_major_locator(mdates.MonthLocator())
                 plt.xticks(rotation=0)
                 ax.set_ylabel("Percentage Change in weight.")
@@ -654,8 +708,8 @@ class Basket(object):
         """
         select = ["cid", "xcat", "real_date", "value"]
 
-        cid_func = lambda t: t.split('_')[0]
-        xcat_func = lambda t: '_'.join(t.split('_')[1:])
+        cid_func = lambda t: t.split("_")[0]
+        xcat_func = lambda t: "_".join(t.split("_")[1:])
 
         cids_w_df = list(map(cid_func, df["ticker"]))
         df["cid"] = np.array(cids_w_df)
@@ -696,7 +750,7 @@ class Basket(object):
                 print(f"Basket not found - call make_basket() method first: {e}.")
             else:
                 dfw_retcry = self.column_split(dfw_retcry)
-                dfw_retcry = dfw_retcry.sort_values(['xcat', 'real_date'])
+                dfw_retcry = dfw_retcry.sort_values(["xcat", "real_date"])
                 ret_baskets.append(dfw_retcry)
 
         return_df = pd.concat(ret_baskets)
@@ -731,10 +785,9 @@ class Basket(object):
             except KeyError as e:
                 print(f"Basket not found - call make_basket() method first: {e}.")
             else:
-
                 w = dfw_wgs.stack().to_frame("value").reset_index()
                 w = self.column_split(df=w)
-                w = w.sort_values(['cid', 'real_date'])
+                w = w.sort_values(["cid", "real_date"])
 
                 w = w.loc[w.value > 0, select]
                 w["xcat"] += "_" + b + "_" + "WGT"
@@ -745,38 +798,48 @@ class Basket(object):
 
 
 if __name__ == "__main__":
+    cids = ["AUD", "GBP", "NZD", "USD"]
+    xcats = [
+        "FXXR_NSA",
+        "FXCRY_NSA",
+        "FXCRR_NSA",
+        "EQXR_NSA",
+        "EQCRY_NSA",
+        "EQCRR_NSA",
+        "FXWBASE_NSA",
+        "EQWBASE_NSA",
+    ]
 
-    cids = ['AUD', 'GBP', 'NZD', 'USD']
-    xcats = ['FXXR_NSA', 'FXCRY_NSA', 'FXCRR_NSA', 'EQXR_NSA', 'EQCRY_NSA', 'EQCRR_NSA',
-             'FXWBASE_NSA', 'EQWBASE_NSA']
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
 
-    df_cids = pd.DataFrame(index=cids, columns=['earliest', 'latest', 'mean_add',
-                                                'sd_mult'])
+    df_cids.loc["AUD"] = ["2000-01-01", "2022-03-14", 0, 1]
+    df_cids.loc["GBP"] = ["2001-01-01", "2022-03-14", 0, 2]
+    df_cids.loc["NZD"] = ["2002-01-01", "2022-03-14", 0, 3]
+    df_cids.loc["USD"] = ["2000-01-01", "2022-03-14", 0, 4]
 
-    df_cids.loc['AUD'] = ['2000-01-01', '2022-03-14', 0, 1]
-    df_cids.loc['GBP'] = ['2001-01-01', '2022-03-14', 0, 2]
-    df_cids.loc['NZD'] = ['2002-01-01', '2022-03-14', 0, 3]
-    df_cids.loc['USD'] = ['2000-01-01', '2022-03-14', 0, 4]
-
-    df_xcats = pd.DataFrame(index=xcats, columns=['earliest', 'latest', 'mean_add',
-                                                  'sd_mult', 'ar_coef', 'back_coef'])
-    df_xcats.loc['FXXR_NSA'] = ['2010-01-01', '2022-03-14', 0, 1, 0, 0.2]
-    df_xcats.loc['FXCRY_NSA'] = ['2010-01-01', '2022-03-14', 1, 1, 0.9, 0.2]
-    df_xcats.loc['FXCRR_NSA'] = ['2010-01-01', '2022-03-14', 0.5, 0.8, 0.9, 0.2]
-    df_xcats.loc['EQXR_NSA'] = ['2010-01-01', '2022-03-14', 0.5, 2, 0, 0.2]
-    df_xcats.loc['EQCRY_NSA'] = ['2010-01-01', '2022-03-14', 2, 1.5, 0.9, 0.5]
-    df_xcats.loc['EQCRR_NSA'] = ['2010-01-01', '2022-03-14', 1.5, 1.5, 0.9, 0.5]
-    df_xcats.loc['FXWBASE_NSA'] = ['2010-01-01', '2022-02-01', 1, 1.5, 0.8, 0.5]
-    df_xcats.loc['EQWBASE_NSA'] = ['2010-01-01', '2022-02-01', 1, 1.5, 0.9, 0.5]
+    df_xcats = pd.DataFrame(
+        index=xcats,
+        columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+    )
+    df_xcats.loc["FXXR_NSA"] = ["2010-01-01", "2022-03-14", 0, 1, 0, 0.2]
+    df_xcats.loc["FXCRY_NSA"] = ["2010-01-01", "2022-03-14", 1, 1, 0.9, 0.2]
+    df_xcats.loc["FXCRR_NSA"] = ["2010-01-01", "2022-03-14", 0.5, 0.8, 0.9, 0.2]
+    df_xcats.loc["EQXR_NSA"] = ["2010-01-01", "2022-03-14", 0.5, 2, 0, 0.2]
+    df_xcats.loc["EQCRY_NSA"] = ["2010-01-01", "2022-03-14", 2, 1.5, 0.9, 0.5]
+    df_xcats.loc["EQCRR_NSA"] = ["2010-01-01", "2022-03-14", 1.5, 1.5, 0.9, 0.5]
+    df_xcats.loc["FXWBASE_NSA"] = ["2010-01-01", "2022-02-01", 1, 1.5, 0.8, 0.5]
+    df_xcats.loc["EQWBASE_NSA"] = ["2010-01-01", "2022-02-01", 1, 1.5, 0.9, 0.5]
 
     random.seed(2)
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    black = {'AUD': ['2010-01-01', '2013-12-31'], 'GBP': ['2010-01-01', '2013-12-31']}
-    contracts = ['AUD_FX', 'AUD_EQ', 'NZD_FX', 'GBP_EQ', 'USD_EQ']
+    black = {"AUD": ["2010-01-01", "2013-12-31"], "GBP": ["2010-01-01", "2013-12-31"]}
+    contracts = ["AUD_FX", "AUD_EQ", "NZD_FX", "GBP_EQ", "USD_EQ"]
     gdp_figures = [17.0, 17.0, 41.0, 9.0, 250.0]
 
-    contracts_1 = ['AUD_FX', 'GBP_FX', 'NZD_FX', 'USD_EQ']
+    contracts_1 = ["AUD_FX", "GBP_FX", "NZD_FX", "USD_EQ"]
 
     # First test. Multiple carries. Equal weight method.
     # The main aspect to check in the code is that basket performance has been applied to
@@ -784,21 +847,21 @@ if __name__ == "__main__":
     dfd["grading"] = np.ones(dfd.shape[0])
 
     basket_1 = Basket(
-        df=dfd, contracts=contracts_1, ret="XR_NSA", cry=["CRY_NSA", "CRR_NSA"],
-        blacklist=black
+        df=dfd,
+        contracts=contracts_1,
+        ret="XR_NSA",
+        cry=["CRY_NSA", "CRR_NSA"],
+        blacklist=black,
     )
-    basket_1.make_basket(
-        weight_meth="equal", max_weight=0.55, basket_name="GLB_EQUAL"
-    )
+    basket_1.make_basket(weight_meth="equal", max_weight=0.55, basket_name="GLB_EQUAL")
 
     basket_1.make_basket(
-        weight_meth="fixed", max_weight=0.55, weights=[1/6, 1/6, 1/6, 1/2],
-        basket_name="GLB_FIXED"
+        weight_meth="fixed",
+        max_weight=0.55,
+        weights=[1 / 6, 1 / 6, 1 / 6, 1 / 2],
+        basket_name="GLB_FIXED",
     )
 
     # show the weights of the GLB_FIXED basket
 
-    basket_1.weight_visualiser(
-        basket_name="GLB_FIXED",
-        subplots=False, size=(10, 5)
-    )
+    basket_1.weight_visualiser(basket_name="GLB_FIXED", subplots=False, size=(10, 5))
