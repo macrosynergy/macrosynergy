@@ -615,7 +615,10 @@ class DownloadTimeseries(DataQueryInterface):
         tickers: List[str] = self.get_catalogue()
 
         if self.test_mode:
-            tickers = tickers[:100]
+            if isinstance(self.test_mode, int):            
+                tickers = tickers[: self.test_mode]
+            else:
+                tickers = tickers[:100]
 
         metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
         expressions: List[str] = JPMaQSDownload.construct_expressions(
