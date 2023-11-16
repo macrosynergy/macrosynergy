@@ -8,6 +8,7 @@ import glob
 import mdformat
 from functools import wraps
 import fnmatch
+import pandas as pd
 
 
 SOURCE_DIR = "macrosynergy"
@@ -64,7 +65,7 @@ class DocstringMethods:
             r_str = f"**`{r_str}`**"
 
         if type_str:
-            type_str = f"(*`{type_str}`*)"
+            type_str = f": *`{type_str}`* "
 
         if rdef:
             rdef = f": {rdef}"
@@ -102,16 +103,19 @@ class DocstringMethods:
                     line = DocstringMethods.__format_param__(
                         param_str=line, param_type=kw[0]
                     )
-                    if last_kw != kw[0]:
-                        line = f"\n\n**{kw_dict[kw[0][1:]]['field']}:**\n{line}"
-                        last_kw = kw[0]
-
-                formatted_lines.append(line)
+                    # if last_kw != kw[0]:
+                    #     line = f"\n\n**{kw_dict[kw[0][1:]]['field']}:**\n{line}"
+                    #     last_kw = kw[0]
+                    kw_dict[kw[0][1:]]["entries"].append(line)
+                else:
+                    formatted_lines.append(line)
             except Exception as exc:
                 e_str: str = (
                     f"Parsing error on line {il}: {line}, {exc}" + filename + "\n"
                 )
                 raise Exception(e_str) from exc
+            
+            
 
         return DocstringMethods.markdown_format("\n".join(formatted_lines))
 

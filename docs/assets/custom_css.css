@@ -23,7 +23,18 @@ a>code {
     max-width: 80%;
 }
 
+
+.bd-sidebar-primary {
+    flex-basis: content;
+}
+
 .bd-content {
     width: 100em;
     text-align: justify;
 } 
+
+/* class="toctree-toggle" for="toctree-checkbox-1" aria-hidden="true" ← this is the collapsible menu button; make it open by default */
+.toctree-l1.toctree-l1-current > .current > .toctree-toggle {
+    display: block !important;
+    visibility: visible !important;
+}
