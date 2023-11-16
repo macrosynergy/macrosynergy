@@ -212,7 +212,7 @@ class AdaptiveSignalHandler:
                         param_grid=hparam_grid[model_name],
                         scoring=metric,
                         refit=True,
-                        cv=inner_splitter,
+                        cv=self.inner_splitter,
                         n_jobs=-1,
                     )
                 elif hparam_type == "random":
