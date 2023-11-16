@@ -14,10 +14,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 
-from macrosynergy.management import reduce_df
-from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
 from macrosynergy.management.decorators import argcopy, argvalidation
-from macrosynergy.management import validate_and_reduce_qdf
+from macrosynergy.management.validation import validate_and_reduce_qdf
 
 logger = logging.getLogger(__name__)
 

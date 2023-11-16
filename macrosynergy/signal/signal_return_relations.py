@@ -1,18 +1,24 @@
 """
 Module for analysing and visualizing signal and a return series.
 """
-from io import BytesIO
+import warnings
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import List, Union, Tuple
+from sklearn import metrics as skm
+from scipy import stats
+from typing import List, Union, Tuple, Dict, Any, Optional
 
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.signal.signal_base import SignalBase
+from macrosynergy.management.utils import (
+    apply_slip as apply_slip_util,
+    reduce_df,
+    categories_df,
+)
+import macrosynergy.visuals as msv
 
-
-class SignalReturnRelations(SignalBase):
+class SignalReturnRelations():
 
     """
     Class for analysing and visualizing signal and a return series.
@@ -65,7 +71,7 @@ class SignalReturnRelations(SignalBase):
         ret: str,
         sig: str,
         rival_sigs: Union[str, List[str]] = None,
-        cids: List[str] = None,
+        cids: Union[str, List[str]] = None,
         sig_neg: bool = False,
         cosp: bool = False,
         start: str = None,
@@ -76,24 +82,116 @@ class SignalReturnRelations(SignalBase):
         fwin: int = 1,
         slip: int = 0,
     ):
-        super().__init__(
-            df=df,
-            ret=ret,
-            sig=sig,
-            slip=slip,
-            cosp=cosp,
-            start=start,
-            end=end,
-            blacklist=blacklist,
-            freq=freq,
-            agg_sig=agg_sig,
-            fwin=fwin,
-        )
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError(f"DataFrame expected and not {type(df)}.")
+
+        required_columns = ["cid", "xcat", "real_date", "value"]
+
+        if not all(col in df.columns for col in required_columns):
+            raise ValueError(
+                "Dataframe columns must be of value: 'cid', 'xcat','real_date' and  \
+                'value'"
+            )
+
+        df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+
+        self.dic_freq = {
+            "D": "daily",
+            "W": "weekly",
+            "M": "monthly",
+            "Q": "quarterly",
+            "A": "annual",
+        }
+
+        freq_error = f"Frequency parameter must be one of {list(self.dic_freq.keys())}."
+        if isinstance(freq, list):
+            for f in freq:
+                if not f in self.dic_freq.keys():
+                    raise ValueError(freq_error)
+        else:
+            if not freq in self.dic_freq.keys():
+                raise ValueError(freq_error)
+
+        self.metrics = [
+            "accuracy",
+            "bal_accuracy",
+            "pos_sigr",
+            "pos_retr",
+            "pos_prec",
+            "neg_prec",
+            "pearson",
+            "pearson_pval",
+            "kendall",
+            "kendall_pval",
+        ]
+
+        self.ret = ret
+        self.freq = freq
+
+        if not isinstance(cosp, bool):
+            raise TypeError(f"<bool> object expected and not {type(cosp)}.")
+
+        self.cosp = cosp
+        self.start = start
+        self.end = end
+        self.blacklist = blacklist
+        self.fwin = fwin
+
+        if isinstance(cids, str):
+            self.cids = [cids]
+        else:
+            self.cids = cids
+
+        self.sig = sig
+        self.slip = slip
+        self.agg_sig = agg_sig
+        self.xcats = list(df["xcat"].unique())
+        self.df = df
+        self.original_df = df.copy()
+
+        self.df = df.copy()
+
+        if not self.is_list_of_strings(ret):
+            self.ret = [ret]
+
+        if not self.is_list_of_strings(sig):
+            self.sig = [sig]
+
+        if not self.is_list_of_strings(agg_sig):
+            self.agg_sig = [agg_sig]
+
+        if not self.is_list_of_strings(freq):
+            self.freq = [freq]
+
+        for sig in self.sig:
+            assert (
+                sig in self.xcats
+            ), "Primary signal must be available in the DataFrame."
+
+        for ret in self.ret:
+            assert (
+                ret in self.xcats
+            ), "Target return must be available in the DataFrame."
+
+        #self.xcats = self.sig + self.ret
+
+        self.signs = sig_neg if isinstance(sig_neg, list) else [sig_neg]
+        for sign in self.signs:
+            if not sign in [False, True]:
+                raise TypeError("Sign must be either False or True.")
+
+        if len(self.signs) < len(self.sig):
+            self.signs.extend([False] * (len(self.sig) - len(self.signs)))
+
+        if len(self.signs) > len(self.sig):
+            raise ValueError("Signs must have a length less than or equal to signals")
+        self.signals = self.sig
+
         assert (
-            self.sig in self.xcats
+            self.sig[0] in self.xcats
         ), "Primary signal must be available in the DataFrame."
 
-        signals = [self.sig]
+        signals = [self.sig[0]]
         if rival_sigs is not None:
             r_sigs_error = "Signal or list of signals expected."
             assert isinstance(rival_sigs, (str, list)), r_sigs_error
@@ -111,22 +209,17 @@ class SignalReturnRelations(SignalBase):
             signals += r_sigs
 
         self.signals = signals
+        #self.xcats = self.signals + [self.ret[0]]
 
-        self.signs = [-1 if sig_neg else 1]
-
-        self.xcats = self.signals + [self.ret]
-
-        self.cids = cids
-
-        self.manipulate_df(xcat=self.xcats, freq=freq, agg_sig=agg_sig, sig=sig)
+        self.manipulate_df(xcat=self.signals + [self.ret[0]], freq=self.freq[0], agg_sig=self.agg_sig[0], sig=self.sig[0])
 
         if len(self.signals) > 1:
             self.df_sigs = self.__rival_sigs__()
+            
+        self.sig[0] = self.new_sig[0]
 
-        self.sig = self.new_sig
-
-        self.df_cs = self.__output_table__(cs_type="cids", ret=ret, sig=self.sig)
-        self.df_ys = self.__output_table__(cs_type="years", ret=ret, sig=self.sig)
+        self.df_cs = self.__output_table__(cs_type="cids", ret=self.ret[0], sig=self.sig[0])
+        self.df_ys = self.__output_table__(cs_type="years", ret=self.ret[0], sig=self.sig[0])
 
     def __rival_sigs__(self):
         """
@@ -136,7 +229,7 @@ class SignalReturnRelations(SignalBase):
         df_out = pd.DataFrame(index=self.signals, columns=self.metrics)
         df = self.df
 
-        ret: str = self.ret
+        ret: str = self.ret[0]
 
         for s in self.signals:
             # Entire panel will be passed in.
@@ -183,7 +276,6 @@ class SignalReturnRelations(SignalBase):
 
     def cross_section_table(self):
         """Output table on relations across sections and the panel."""
-
         return self.df_cs.round(decimals=3)
 
     def yearly_table(self):
@@ -242,7 +334,7 @@ class SignalReturnRelations(SignalBase):
             refsig = "various signals" if type == "signals" else self.sig
             title = (
                 f"Accuracy for sign prediction of {self.ret} based on {refsig} "
-                f"at {self.dic_freq[self.freq]} frequency."
+                f"at {self.dic_freq[self.freq[0]]} frequency."
             )
         if size is None:
             size = (np.max([dfx.shape[0] / 2, 8]), 6)
@@ -331,7 +423,7 @@ class SignalReturnRelations(SignalBase):
             refsig = "various signals" if type == "signals" else self.sig
             title = (
                 f"Positive correlation probability of {self.ret} "
-                f"and lagged {refsig} at {self.dic_freq[self.freq]} frequency."
+                f"and lagged {refsig} at {self.dic_freq[self.freq[0]]} frequency."
             )
         if size is None:
             size = (np.max([dfx.shape[0] / 2, 8]), 6)
@@ -358,6 +450,320 @@ class SignalReturnRelations(SignalBase):
         plt.title(title)
         plt.legend(loc=legend_pos)
         plt.show()
+
+    @staticmethod
+    def __slice_df__(df: pd.DataFrame, cs: str, cs_type: str):
+        """
+        Slice DataFrame by year, cross-section, or use full panel.
+
+        :param <pd.DataFrame> df: standardised DataFrame.
+        :param <str> cs: individual segment, cross-section or year.
+        :param <str> cs_type: segmentation type.
+        """
+
+        # Row names of cross-sections or years.
+        if cs != "Panel" and cs_type == "cids":
+            df_cs = df.loc[cs]
+        elif cs != "Panel":
+            df_cs = df[df["year"] == float(cs)]
+        else:
+            df_cs = df
+
+        return df_cs
+
+    @staticmethod
+    def apply_slip(
+        df: pd.DataFrame,
+        slip: int,
+        cids: List[str],
+        xcats: List[str],
+        metrics: List[str],
+    ) -> pd.DataFrame:
+        """
+        Function used to call the apply slip method that is defined in
+        management/utils.py
+
+        :param <pd.DataFrame> df: standardised DataFrame.
+        :param <int> slip: slip value to apply to df.
+        :param <List[str]> cids: list of cids in df to apply slip.
+        :param <List[str]> xcats: list of xcats in df to apply slip.
+        :param <List[str]> metrics: list of metrics in df to apply slip.
+        """
+        return apply_slip_util(
+            df=df, slip=slip, cids=cids, xcats=xcats, metrics=metrics, raise_error=False
+        )
+
+    @staticmethod
+    def is_list_of_strings(variable: Any) -> bool:
+        """
+        Function used to test whether a variable is a list of strings, to avoid the
+        compiler saying a string is a list of characters
+        :param <Any> variable: variable to be tested.
+        :return <bool>: True if variable is a list of strings, False otherwise.
+        """
+        return isinstance(variable, list) and all(
+            isinstance(item, str) for item in variable
+        )
+
+    def manipulate_df(
+        self,
+        xcat: str,
+        freq: str,
+        agg_sig: str,
+        sig: str,
+        sst: bool = False,
+        df_result: Optional[pd.DataFrame] = None,
+    ):
+        """
+        Used to manipulate the DataFrame to the desired format for the analysis. Firstly
+        reduces the dataframe to only include data outside of the blacklist and data that
+        is relevant to xcat and sig. Then applies the slip to the dataframe. It then
+        converts the dataframe to the desired format for the analysis and checks whether
+        any negative signs should be introduced.
+
+        :param <str> xcat: xcat to be analysed.
+        :param <str> freq: frequency to be used in analysis.
+        :param <str> agg_sig: aggregation method to be used in analysis.
+        :param <str> sig: signal to be analysed.
+        :param <bool> sst: Boolean that specifies whether this function is to be used for
+            a single statistic table.
+        :param <Optional[pd.DataFrame]> df_result: DataFrame to be used for single statistic
+            table. `None` by default, and when using with `sst` set to `False`.
+        """
+
+        cids = None if self.cids is None else self.cids
+        dfd = reduce_df(
+            self.df,
+            xcats=xcat,
+            cids=cids,
+            start=self.start,
+            end=self.end,
+            blacklist=self.blacklist,
+        )
+        metric_cols: List[str] = list(
+            set(dfd.columns.tolist()) - set(["real_date", "xcat", "cid"])
+        )
+        dfd: pd.DataFrame = self.apply_slip(
+            df=dfd,
+            slip=self.slip,
+            cids=cids,
+            xcats=xcat,
+            metrics=metric_cols,
+        )
+
+        if self.cosp and len(self.signals) > 1:
+            dfd = self.__communal_sample__(df=dfd, signal=xcat[:-1], ret=xcat[-1])
+
+        self.dfd = dfd
+
+        df = categories_df(
+            dfd,
+            xcats=xcat,
+            cids=cids,
+            val="value",
+            start=None,
+            end=None,
+            freq=freq,
+            blacklist=None,
+            lag=1,
+            xcat_aggs=[agg_sig, "sum"],
+        )
+        self.df = df
+        self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
+
+        if True in self.signs and self.signs[self.sig.index(sig)]:
+            index = self.sig.index(sig)
+            original_name = sig + "/" + agg_sig
+
+            self.df.loc[:, self.signals] *= -1
+            s_copy = self.signals.copy()
+
+            self.signals = [s + "_NEG" for s in self.signals]
+            sig += "_NEG"
+            self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
+            self.new_sig = sig
+
+            if sst:
+                new_name = sig + "/" + agg_sig
+                df_result.rename(index={original_name: new_name}, inplace=True)
+
+        self.new_sig = [sig]
+
+        return df_result
+
+    def __communal_sample__(self, df: pd.DataFrame, signal: str, ret: str):
+        """
+        On a multi-index DataFrame, where the outer index are the cross-sections and the
+        inner index are the timestamps, exclude any row where all signals do not have
+        a realised value.
+
+        :param <pd.Dataframe> df: standardized DataFrame with the following necessary
+            columns: 'cid', 'xcat', 'real_date' and 'value'.
+
+        NB.:
+        Remove the return category from establishing the intersection to preserve the
+        maximum amount of signal data available (required because of the applied lag).
+        """
+
+        df_w = df.pivot(index=("cid", "real_date"), columns="xcat", values="value")
+
+        storage = []
+        for c, cid_df in df_w.groupby(level=0):
+            cid_df = cid_df[signal + [ret]]
+
+            final_df = pd.DataFrame(
+                data=np.empty(shape=cid_df.shape),
+                columns=cid_df.columns,
+                index=cid_df.index,
+            )
+            final_df.loc[:, :] = np.NaN
+
+            # Return category is preserved.
+            final_df.loc[:, ret] = cid_df[ret]
+
+            intersection_df = cid_df.loc[:, signal].droplevel(level=0)
+            # Intersection exclusively across the signals.
+            intersection_df = intersection_df.dropna(how="any")
+            s_date = intersection_df.index[0]
+            e_date = intersection_df.index[-1]
+
+            final_df.loc[(c, s_date):(c, e_date), signal] = intersection_df.to_numpy()
+            storage.append(final_df)
+
+        df = pd.concat(storage)
+        df = df.stack().reset_index().sort_values(["cid", "xcat", "real_date"])
+        df.columns = ["cid", "real_date", "xcat", "value"]
+
+        return df[["cid", "xcat", "real_date", "value"]]
+
+    def __table_stats__(
+        self,
+        df_segment: pd.DataFrame,
+        df_out: pd.DataFrame,
+        segment: str,
+        signal: str,
+        ret: str,
+    ):
+        """
+        Method used to compute the evaluation metrics across segments: cross-section,
+        yearly or category level.
+
+        :param <pd.DataFrame> df_segment: segmented DataFrame.
+        :param <pd.DataFrame> df_out: metric DataFrame where the index will be all
+            segments for the respective segmentation type.
+        :param <str> segment: segment which could either be an individual cross-section,
+            year or category. Will form the index of the returned DataFrame.
+        :param <str> signal: signal category.
+        """
+
+        # Account for NaN values between the single respective signal and return. Only
+        # applicable for rival signals panel level calculations.
+
+        df_segment = df_segment.loc[:, [ret, signal]].dropna(axis=0, how="any")
+
+        df_sgs = np.sign(df_segment.loc[:, [ret, signal]])
+        # Exact zeroes are disqualified for sign analysis only.
+        df_sgs = df_sgs[~((df_sgs.iloc[:, 0] == 0) | (df_sgs.iloc[:, 1] == 0))]
+
+        sig_sign = df_sgs[signal]
+        ret_sign = df_sgs[ret]
+
+        df_out.loc[segment, "accuracy"] = skm.accuracy_score(sig_sign, ret_sign)
+        df_out.loc[segment, "bal_accuracy"] = skm.balanced_accuracy_score(
+            sig_sign, ret_sign
+        )
+
+        df_out.loc[segment, "pos_sigr"] = np.mean(sig_sign == 1)
+        df_out.loc[segment, "pos_retr"] = np.mean(ret_sign == 1)
+        df_out.loc[segment, "pos_prec"] = skm.precision_score(
+            ret_sign, sig_sign, pos_label=1
+        )
+        df_out.loc[segment, "neg_prec"] = skm.precision_score(
+            ret_sign, sig_sign, pos_label=-1
+        )
+
+        ret_vals, sig_vals = df_segment[ret], df_segment[signal]
+        df_out.loc[segment, ["kendall", "kendall_pval"]] = stats.kendalltau(
+            ret_vals, sig_vals
+        )
+        corr, corr_pval = stats.pearsonr(ret_vals, sig_vals)
+        df_out.loc[segment, ["pearson", "pearson_pval"]] = np.array([corr, corr_pval])
+
+        return df_out
+
+    def __output_table__(self, cs_type: str = "cids", ret=None, sig=None, srt=False):
+        """
+        Creates a DataFrame with information on the signal-return relation across
+        cross-sections or years and, additionally, the panel.
+
+        :param <str> cs_type: the segmentation type.
+
+        """
+
+        if ret is None:
+            ret = self.ret if not isinstance(self.ret, list) else self.ret[0]
+        if sig is None:
+            sig = self.sig if not isinstance(self.sig, list) else self.sig[0]
+
+        # Analysis completed exclusively on the primary signal.
+        r = [ret]
+        r.append(sig)
+        df = self.df[r]
+
+        # Will remove any timestamps where both the signal & return are not realised.
+        # Applicable even if communal sampling has been applied given the alignment
+        # excludes the return category.
+        df = df.dropna(how="any")
+
+        if cs_type == "cids":
+            css = set(self.cids)
+            unique_cids_df = set(df.index.get_level_values(0).unique())
+
+            if not css.issubset(unique_cids_df):
+                warnings.warn(
+                    f"Cross-sections {css - unique_cids_df} have no corresponding xcats \
+                        in the dataframe."
+                )
+                css = css.intersection(unique_cids_df)
+
+            css = sorted(list(css))
+        else:
+            df["year"] = np.array(df.reset_index(level=1)["real_date"].dt.year)
+            css = [str(y) for y in list(set(df["year"]))]
+            css = sorted(css)
+
+        statms = self.metrics
+        if srt:
+            css = []
+            index = ["Panel"]
+        else:
+            index = ["Panel", "Mean", "PosRatio"] + css
+
+        df_out = pd.DataFrame(index=index, columns=statms)
+
+        for cs in css + ["Panel"]:
+            df_cs = self.__slice_df__(df=df, cs=cs, cs_type=cs_type)
+            df_out = self.__table_stats__(
+                df_segment=df_cs, df_out=df_out, segment=cs, signal=sig, ret=ret
+            )
+        if not srt:
+            df_out.loc["Mean", :] = df_out.loc[css, :].mean()
+
+            above50s = statms[0:6]
+            # Overview of the cross-sectional performance.
+            df_out.loc["PosRatio", above50s] = (df_out.loc[css, above50s] > 0.5).mean()
+
+            above0s = statms[6::2]
+            pos_corr_coefs = df_out.loc[css, above0s] > 0
+            df_out.loc["PosRatio", above0s] = pos_corr_coefs.mean()
+
+            below50s = statms[7::2]
+            pvals_bool = df_out.loc[css, below50s] < 0.5
+            pos_pvals = np.mean(np.array(pvals_bool) * np.array(pos_corr_coefs), axis=0)
+            # Positive correlation with error prob < 50%.
+            df_out.loc["PosRatio", below50s] = pos_pvals
+
+        return df_out.astype("float")
 
     def summary_table(self):
         """
@@ -422,11 +828,414 @@ class SignalReturnRelations(SignalBase):
         ]
 
         return dfsum
+    
+    def revert_negation(self, sig: str):
+        if sig[-4:] == "_NEG":
+            sig = sig[:-4]
+        return sig
+    
+    def single_relation_table(
+        self,
+        ret: str = None,
+        xcat: str = None,
+        freq: str = None,
+        agg_sigs: str = None,
+    ):
+        """
+        Computes all the statistics for one specific signal-return relation:
+
+        :param <str> ret: single target return category. Default is first in target
+            return list of the class.
+        :param <str> xcat: single signal category to be considered. Default is first in
+            feature category list of the class.
+        :param <str> freq: letter denoting single frequency at which the series will
+            be sampled. This must be one of the frequencies selected for the class.
+            If not specified uses the freq stored in the class.
+        :param <str> agg_sigs: aggregation method applied to the signal values in
+            down-sampling.
+        """
+        self.df = self.original_df
+        if ret is None:
+            ret = self.ret if not isinstance(self.ret, list) else self.ret[0]
+        if freq is None:
+            freq = self.freq if not isinstance(self.freq, list) else self.freq[0]
+        if agg_sigs is None:
+            agg_sigs = (
+                self.agg_sig if not isinstance(self.agg_sig, list) else self.agg_sig[0]
+            )
+        if xcat is None:
+            sig = self.revert_negation(self.sig) if not isinstance(self.sig, list) else self.revert_negation(self.sig[0])
+            if isinstance(self.sig, list):
+                self.sig[0] = self.revert_negation(self.sig[0])
+            else:
+                self.sig = self.revert_negation(self.sig)
+            xcat = [sig, ret]
+        elif isinstance(xcat, list):
+            sig = xcat[0]
+        elif not isinstance(xcat, str):
+            raise TypeError("xcat must be a string")
+        else:
+            sig = xcat
+            xcat = [sig, ret]
+
+        if not isinstance(ret, str):
+            raise TypeError("ret must be a string")
+        if not isinstance(freq, str):
+            raise TypeError("freq must be a string")
+        if not isinstance(agg_sigs, str):
+            raise TypeError("agg_sigs must be a string")
+
+        self.signals = [sig]
+
+        self.manipulate_df(xcat=xcat, freq=freq, agg_sig=agg_sigs, sig=sig)
+
+        df_result = self.__output_table__(
+            cs_type="cids", ret=ret, sig=self.new_sig[0], srt=True
+        ).round(decimals=5)
+
+        self.df = self.original_df
+        sig_string = sig + '_NEG' if self.signs[self.sig.index(sig)] else sig
+        index = f"{freq}: {sig_string}/{agg_sigs} => {ret}"
+
+        df_result.rename(index={"Panel": index}, inplace=True)
+
+        return df_result
+
+    def multiple_relations_table(
+        self,
+        rets: Union[str, List[str]] = None,
+        xcats: Union[str, List[str]] = None,
+        freqs: Union[str, List[str]] = None,
+        agg_sigs: Union[str, List[str]] = None,
+    ):
+        """
+        Calculates all the statistics for each return and signal category specified with
+        each frequency and aggregation method, note that if none are defined it does this
+        for all categories, frequencies and aggregation methods that were stored in the
+        class.
+
+        :param <str, List[str]> rets: target return category
+        :param <str, List[str]> xcats: signal categories to be considered
+        :param <str, List[str]> freqs: letters denoting frequency at which the series
+            are to be sampled.
+            This must be one of 'D', 'W', 'M', 'Q', 'A'. If not specified uses the freq
+            stored in the class.
+        :param <str, List[str]> agg_sigs: aggregation methods applied to the signal
+            values in down-sampling.
+        """
+        if rets is None:
+            rets = self.ret
+        if freqs is None:
+            freqs = self.freq
+        if agg_sigs is None:
+            agg_sigs = self.agg_sig
+        if not isinstance(agg_sigs, list):
+            agg_sigs = [agg_sigs]
+        if xcats is None:
+            xcats = self.xcats
+        if not isinstance(xcats, list):
+            xcats = [xcats]
+        if not isinstance(rets, list):
+            rets = [rets]
+        if not isinstance(freqs, list):
+            freqs = [freqs]
+
+        for ret in rets:
+            if not ret in self.xcats:
+                raise ValueError(f"{ret} is not a valid return category")
+
+        for xcat in xcats:
+            if not xcat in self.xcats:
+                raise ValueError(f"{xcat} is not a valid signal category")
+
+        for freq in freqs:
+            if not freq in self.freq:
+                raise ValueError(f"{freq} is not a valid frequency")
+
+        for agg_sig in agg_sigs:
+            if not agg_sig in self.agg_sig:
+                raise ValueError(f"{agg_sig} is not a valid aggregation method")
+
+        xcats = [x for x in xcats if x in self.sig]
+
+        index = [
+            (
+                f"{freq}: "
+                f"{xcat + '_NEG' if self.signs[self.sig.index(xcat)] else xcat}"
+                f"/{agg_sig} => {ret}"
+            )
+            for freq in freqs
+            for agg_sig in agg_sigs
+            for ret in rets
+            for xcat in xcats
+        ]
+
+        df_result = pd.concat(
+            [
+                self.single_relation_table(
+                    ret=ret, xcat=[xcat, ret], freq=freq, agg_sigs=agg_sig
+                )
+                for freq in freqs
+                for agg_sig in agg_sigs
+                for ret in rets
+                for xcat in xcats
+            ],
+            axis=0,
+        )
+        df_result.index = index
+
+        return df_result
+
+    def single_statistic_table(
+        self,
+        stat: str,
+        type: str = "panel",
+        rows: List[str] = ["xcat", "agg_sigs"],
+        columns: List[str] = ["ret", "freq"],
+        show_heatmap: bool = False,
+        title: Optional[str] = None,
+        row_names: Optional[List[str]] = None,
+        column_names: Optional[List[str]] = None,
+        min_color: Optional[float] = None,
+        max_color: Optional[float] = None,
+        figsize: Tuple[float] = (14, 8),
+        annotate: bool = True,
+    ):
+        """
+        Creates a table which shows the specified statistic for each row and
+        column specified as arguments:
+
+        :param stat: type of statistic to be displayed (this can be any of
+            the column names of summary_table).
+        :param type: type of the statistic displayed. This can be based on
+            the overall panel ("panel", default), an
+            average of annual panels (mean_years), an average of cross-sectional
+            relations ("mean_cids"), the positive ratio across years("pr_years"),
+            positive ratio across sections ("pr_cids").
+        :param <List[str]> rows: row indices, which can be return categories,
+            feature categories, frequencies and/or aggregations. The choice is
+            made through a list of one or more of "xcat", "ret", "freq" and
+            "agg_sigs". The default is ["xcat", "agg_sigs"] resulting in index
+            strings (<agg_signs>) or if only one aggregation is available.
+        :param <List[str]> columns: column indices, which can be return
+            categories, feature categories, frequencies and/or aggregations. The
+            choice is made through a list of one or more of "xcat", "ret", "freq"
+            and "agg_sigs". The default is ["ret", "freq] resulting in index
+            strings () or if only one frequency is available.
+        :param <bool> show_heatmap: if True, the table is visualized as a
+            heatmap. Default is False.
+        :param <str> title: plot title; if none given default title is shown.
+        :param <List[str]> row_names: specifies the labels of rows in the heatmap.
+            If None, the indices of the generated DataFrame are used.
+        :param <List[str]> column_names: specifies the labels of columns in the
+            heatmap. If None, the columns of the generated DataFrame are used.
+        :param <float> min_color: minimum value of the color scale. Default
+            is None, in which case the minimum value of the table is used.
+        :param <float> max_color: maximum value of the color scale. Default
+            is None, in which case the maximum value of the table is used.
+        :param <Tuple[float]> figsize: Tuple (w, h) of width and height of graph.
+        :param <bool> annotate: if True, the values are annotated in the heatmap.
+        """
+        self.df = self.original_df
+        stat_values = [
+            "accuracy",
+            "bal_accuracy",
+            "pos_sigr",
+            "pos_retr",
+            "pos_prec",
+            "neg_prec",
+            "kendall",
+            "kendall_pval",
+            "pearson",
+            "pearson_pval",
+        ]
+
+        if not stat in stat_values:
+            raise ValueError(f"Stat must be one of {stat_values}")
+
+        if not isinstance(rows, list):
+            raise TypeError("Rows must be a list")
+        if not isinstance(columns, list):
+            raise TypeError("Columns must be a list")
+
+        if not "agg_sigs" in rows and not "agg_sigs" in columns:
+            agg_sigs = ["last"]
+        if not "freqs" in rows and not "freqs" in columns:
+            freqs = ["Q"]
+
+        if isinstance(self.freq, list):
+            freqs = self.freq
+        else:
+            freqs = [self.freq]
+        if self.is_list_of_strings(self.agg_sig):
+            agg_sigs = self.agg_sig
+        else:
+            agg_sigs = [self.agg_sig]
+
+        type_values = ["panel", "mean_years", "mean_cids", "pr_years", "pr_cids"]
+        rows_values = ["xcat", "ret", "freq", "agg_sigs"]
+
+        if not type in type_values:
+            raise ValueError(f"Type must be one of {type_values}")
+
+        if not all([x in rows_values for x in rows]):
+            raise ValueError(f"Rows must only contain {rows_values}")
+
+        if not all([x in rows_values for x in columns]):
+            raise ValueError(f"Columns must only contain {rows_values}")
+
+        rets = self.ret if isinstance(self.ret, list) else [self.ret]
+        sigs = self.sig if isinstance(self.sig, list) else [self.sig]
+
+        sigs_neg = []
+        for sig in sigs:
+            if self.signs[self.sig.index(sig)]:
+                sigs_neg.append(sig + "_NEG")
+            else:
+                sigs_neg.append(sig)
+
+        rows_dict = {"xcat": sigs_neg, "ret": rets, "freq": freqs, "agg_sigs": agg_sigs}
+
+        df_row_names, df_column_names = self.set_df_labels(rows_dict, rows, columns)
+
+        df_result = pd.DataFrame(
+            columns=df_column_names, index=df_row_names, dtype=np.float64
+        )
+
+        # Define cs_type and type_index mappings
+        cs_type_mapping = {"panel": 0, "mean_years": 1, "pr_years": 2}
+        type_mapping = {
+            "mean_years": "years",
+            "pr_years": "years",
+            "mean_cids": "cids",
+            "pr_cids": "cids",
+        }
+
+        loop_tuples: List[Tuple[str, str, str, str]] = [
+            (ret, sig, freq, agg_sig)
+            for ret in rets
+            for sig in sigs
+            for freq in freqs
+            for agg_sig in agg_sigs
+        ]
+
+        for ret, sig, freq, agg_sig in loop_tuples:
+            sig_original = sig
+            if self.signs[self.sig.index(sig)]:
+                sig += "_NEG"
+            hash = f"{ret}/{sig}/{freq}/{agg_sig}"
+            sig = sig_original
+
+            # Prepare xcat and manipulate DataFrame
+            xcat = [sig, ret]
+            self.signals = [sig]
+            self.manipulate_df(
+                xcat=xcat,
+                freq=freq,
+                agg_sig=agg_sig,
+                sig=sig,
+                sst=True,
+                df_result=df_result,
+            )
+
+            # Determine cs_type and type_index
+            cs_type = type_mapping.get(type, "cids")
+            type_index = cs_type_mapping.get(type, 1)
+
+            # Retrieve output table and update df_result
+            df_out = self.__output_table__(cs_type=cs_type, ret=ret, sig=self.new_sig[0])
+            single_stat = df_out.iloc[type_index][stat]
+            row = self.get_rowcol(hash, rows)
+            column = self.get_rowcol(hash, columns)
+            df_result[column][row] = single_stat
+
+            # Reset self.df and sig to original values
+            self.df = self.original_df
+            sig = sig_original
+
+        if show_heatmap:
+            if not title:
+                title = f"{stat}"
+
+            if min_color is None:
+                min_color = df_result.values.min()
+            if max_color is None:
+                max_color = df_result.values.max()
+
+            msv.view_table(
+                df_result,
+                title=title,
+                min_color=min_color,
+                max_color=max_color,
+                figsize=figsize,
+                annot=annotate,
+                xticklabels=column_names,
+                yticklabels=row_names,
+            )
+
+        return df_result
+
+    def set_df_labels(self, rows_dict: Dict, rows: List[str], columns: List[str]):
+        """
+        Creates two lists of strings that will be used as the row and column labels for
+        the resulting dataframe.
+
+        :param <dict> rows_dict: dictionary containing the each value for each of the
+            xcat, ret, freq and agg_sigs categories.
+        :param <List[str]> rows: list of strings specifying which of the categories are
+            included in the rows of the dataframe.
+        :param <List[str]> columns: list of strings specifying which of the categories
+            are included in the columns of the dataframe.
+        """
+        if len(rows) == 2:
+            rows_names = [
+                a + "/" + b for a in rows_dict[rows[0]] for b in rows_dict[rows[1]]
+            ]
+            columns_names = [
+                a + "/" + b
+                for a in rows_dict[columns[0]]
+                for b in rows_dict[columns[1]]
+            ]
+        elif len(rows) == 1:
+            rows_names = rows_dict[rows[0]]
+            columns_names = [
+                a + "/" + b + "/" + c
+                for a in rows_dict[columns[0]]
+                for b in rows_dict[columns[1]]
+                for c in rows_dict[columns[2]]
+            ]
+        elif len(columns) == 1:
+            rows_names = [
+                a + "/" + b + "/" + c
+                for a in rows_dict[rows[0]]
+                for b in rows_dict[rows[1]]
+                for c in rows_dict[rows[2]]
+            ]
+            columns_names = rows_dict[columns[0]]
+
+        return rows_names, columns_names
+
+    def get_rowcol(self, hash: str, rowcols: List[str]):
+        """
+        Calculates which row/column the hash belongs to.
+
+        :param <str> hash: hash of the statistic.
+        :param <List[str]> rowcols: list of strings specifying which of the categories
+        are in the rows/columns of the dataframe.
+        """
+        result = ""
+        idx: List[str] = ["ret", "xcat", "freq", "agg_sigs"]
+        assert all([x in idx for x in rowcols]), "rowcols must be a subset of idx"
+
+        for rowcol in rowcols:
+            result += hash.split("/")[idx.index(rowcol)] + "/"
+
+        return result[:-1]
 
 
 if __name__ == "__main__":
     cids = ["AUD", "CAD", "GBP", "NZD"]
-    xcats = ["XR", "CRY", "GROWTH", "INFL"]
+    xcats = ["XR", "XRH", "CRY", "GROWTH", "INFL"]
     df_cids = pd.DataFrame(
         index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
     )
@@ -440,6 +1249,7 @@ if __name__ == "__main__":
         columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
     )
     df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["XRH"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
     df_xcats.loc["CRY"] = ["2000-01-01", "2020-10-30", 0, 2, 0.95, 1]
     df_xcats.loc["GROWTH"] = ["2001-01-01", "2020-10-30", 0, 2, 0.9, 1]
     df_xcats.loc["INFL"] = ["2001-01-01", "2020-10-30", 0, 2, 0.8, 0.5]
@@ -484,3 +1294,58 @@ if __name__ == "__main__":
         " and the respective signals, ['CRY', 'INFL'"
         ", 'GROWTH'].",
     )
+
+    sr = SignalReturnRelations(
+        dfd,
+        ret="XR",
+        sig="CRY",
+        freq="M",
+        start="2002-01-01",
+        agg_sig="last",
+    )
+
+    srt = sr.single_relation_table()
+    mrt = sr.multiple_relations_table()
+    sst = sr.single_statistic_table(stat="accuracy")
+
+    print(srt)
+    print(mrt)
+    print(sst)
+
+    # Basic Signal Returns showing for multiple input values
+
+    sr = SignalReturnRelations(
+        dfd,
+        ret=["XR", "XRH"],
+        sig=["CRY", "INFL", "GROWTH"],
+        sig_neg=[False, True],
+        cosp=True,
+        freq=["M", "Q"],
+        agg_sig=["last", "mean"],
+        blacklist=black,
+    )
+
+    srt = sr.single_relation_table()
+    mrt = sr.multiple_relations_table()
+    sst = sr.single_statistic_table(stat="accuracy", show_heatmap=True)
+
+    print(srt)
+    print(mrt)
+    print(sst)
+
+    # Specifying specific arguments for each of the Signal Return Functions
+
+    srt = sr.single_relation_table(ret="XR", xcat="CRY", freq="Q", agg_sigs="last")
+    print(srt)
+
+    mrt = sr.multiple_relations_table(
+        rets=["XR", "GROWTH"], xcats="INFL", freqs=["M", "Q"], agg_sigs=["last", "mean"]
+    )
+    print(mrt)
+
+    sst = sr.single_statistic_table(
+        stat="accuracy",
+        rows=["ret", "xcat", "freq"],
+        columns=["agg_sigs"],
+    )
+    print(sst)

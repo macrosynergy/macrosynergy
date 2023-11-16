@@ -10,9 +10,9 @@ except ModuleNotFoundError:
     __version__ = FULLVERSION
     __git_revision__ = GIT_REVISION
 
-from . import visuals, dataquery, download, panel, pnl, management, signal
+from . import visuals, download, panel, pnl, management, signal, learning
 
-__all__ = ["visuals", "dataquery", "download", "panel", "pnl", "management", "signal"]
+__all__ = ["visuals", "download", "panel", "pnl", "management", "signal", "learning"]
 
 __name__ = ["__version__"]
 
