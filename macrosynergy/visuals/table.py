@@ -3,7 +3,6 @@ from typing import List, Optional, Tuple
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-from macrosynergy.signal.signal_return import SignalsReturns
 from macrosynergy.management.simulate import make_qdf
 
 

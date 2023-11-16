@@ -29,10 +29,10 @@ def weight_dataframes(df: pd.DataFrame, basket_names: Union[str, List[str]] = No
     wgt_indices = lambda index: index.split("_")[-1] == "WGT"
     boolean = list(map(wgt_indices, xcats))
 
-    r_df = df[boolean]
+    r_df = df[boolean].copy()
     b_column = lambda index: "_".join(index.split("_")[1:-1])
 
-    r_df["basket_name"] = np.array(map(b_column, r_df["xcat"]))
+    r_df.loc[:, "basket_name"] = np.array(list(map(b_column, r_df["xcat"])))
 
     df_c_wgts = []
     b_dict = {}
@@ -152,7 +152,7 @@ def cs_unit_returns(
     for i, c_ret in enumerate(contract_returns):
         # Filter the DataFrame 'df' to just c_ret xcats
         df_c_ret = df[df["xcat"] == c_ret]
-        # Reshape the DataFrame by setting 'real_date' as index, 'cid' as columns, and 
+        # Reshape the DataFrame by setting 'real_date' as index, 'cid' as columns, and
         # 'value' as values.
         df_c_ret = df_c_ret.pivot(index="real_date", columns="cid", values="value")
 
@@ -247,10 +247,10 @@ def date_alignment(panel_df: pd.DataFrame, basket_df: pd.DataFrame):
         pass
 
     if p_dates[-1] > b_dates[-1]:
-        index = np.searchsorted(p_dates, b_dates[-1], side='right')
+        index = np.searchsorted(p_dates, b_dates[-1], side="right")
         panel_df = panel_df.iloc[:index, :]
     elif p_dates[-1] < b_dates[-1]:
-        index = np.searchsorted(b_dates, p_dates[-1], side='right')
+        index = np.searchsorted(b_dates, p_dates[-1], side="right")
         basket_df = basket_df.iloc[:index, :]
     else:
         pass
