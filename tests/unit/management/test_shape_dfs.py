@@ -11,7 +11,7 @@ from typing import List, Dict, Tuple, Union, Optional
 
 
 class TestAll(unittest.TestCase):
-    def dataframe_constructor(self):
+    def setUp(self) -> None:
         self.cids: List[str] = ["AUD", "CAD", "GBP"]
         self.xcats: List[str] = ["CRY", "XR", "GROWTH", "INFL", "GDP"]
 
@@ -43,9 +43,10 @@ class TestAll(unittest.TestCase):
         np.random.seed(0)
         self.dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    def test_reduce_df_general(self):
-        self.dataframe_constructor()
+    def tearDown(self) -> None:
+        return super().tearDown()
 
+    def test_reduce_df_general(self):
         dfd_x = reduce_df(
             self.dfd,
             xcats=["CRY"],
@@ -61,8 +62,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(dfd_x["real_date"].max() == pd.to_datetime("2019-01-01"))
 
     def test_reduce_df_intersect(self):
-        self.dataframe_constructor()
-
         filt1 = ~((self.dfd["cid"] == "AUD") & (self.dfd["xcat"] == "XR"))
         dfdx = self.dfd[filt1]  # Simulate missing cross sections.
         dfd_x1, xctx, cidx = reduce_df(
@@ -71,8 +70,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(cidx == ["CAD", "GBP"])
 
     def test_reduce_df_black(self):
-        self.dataframe_constructor()
-
         black = {
             "AUD_1": ["2011-01-01", "2012-12-31"],
             "AUD_2": ["2018-01-01", "2100-01-01"],
@@ -94,8 +91,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(not any(item in black_range_2 for item in dfd_cad["real_date"]))
 
     def test_categories_df_conversion(self):
-        self.dataframe_constructor()
-
         dfc = categories_df(
             self.dfd,
             xcats=["XR", "CRY"],
@@ -129,8 +124,6 @@ class TestAll(unittest.TestCase):
         self.assertAlmostEqual(x1, x2)
 
     def test_categories_df_year(self):
-        self.dataframe_constructor()
-
         # The year aggregation of the data is computed from the specified start date (the
         # parameter received), as opposed to the earliest date in the dataframe.
         # Therefore, if the "years" parameter is not equal to None, the "start" parameter
@@ -237,14 +230,12 @@ class TestAll(unittest.TestCase):
         cad = cad["value"].to_numpy()[0]
 
         # Isolate the first value for both cross-sectional series: '2011 - 2016'.
-        aud_xr = dfc["XR"].loc["AUD"][0]
-        cad_xr = dfc["XR"].loc["CAD"][0]
+        aud_xr = dfc.loc["AUD", "XR"].iloc[0]
+        cad_xr = dfc.loc["CAD", "XR"].iloc[0]
         self.assertTrue(aud == aud_xr)
         self.assertTrue(cad == cad_xr)
 
     def test_categories_df_lags(self):
-        self.dataframe_constructor()
-
         dfc = categories_df(
             self.dfd,
             xcats=["CRY", "XR"],
@@ -304,10 +295,10 @@ class TestAll(unittest.TestCase):
 
         # Isolate a fixed week to test on and a single cross-section. It is the signal
         # that is being lagged, 'CRY'.
-        dfc_aud = dfc.loc["AUD"]
+        dfc_aud: pd.DataFrame = dfc.loc["AUD"]
 
         fixed_date = "2011-02-25"
-        test_value = dfc_aud.loc[fixed_date]["CRY"]
+        test_value = dfc_aud.loc[fixed_date, "CRY"]
 
         # Lagged the arbitrarily chosen date by 3 weeks. The frequency has been reduced
         # to weekly and the applied lag is three.
@@ -325,17 +316,19 @@ class TestAll(unittest.TestCase):
         # Subtract to the previous Sunday to include the entire week's individual series.
         test_week = df_cr_aud.loc[date_lag - timedelta(6) : lagged_date]
         # Compute the average manually and confirm the lag has been applied correctly.
-        manual_calc = test_week.mean()
-        condition = abs(float(test_value) - float(manual_calc))
-        self.assertTrue(condition < 0.00001)
+        manual_calc = test_week.mean().values[0]
+        self.assertTrue(
+            np.isclose(
+                test_value,
+                manual_calc,
+            )
+        )
 
     def test_categories_df_multiple_xcats(self):
         # The method categories_df allows for multiple signals to be passed but the same
         # aggregation method will be used for all signals received. Therefore, confirm
         # the logic holds with the addition of further signals: the functionality is
         # preserved as n becomes large.
-
-        self.dataframe_constructor()
 
         extra_signals = ["CRY", "GROWTH", "INFL", "XR"]
         ret = extra_signals[-1]
@@ -400,13 +393,14 @@ class TestAll(unittest.TestCase):
         dfd_values = dict(zip(dfd_values["xcat"], dfd_values["value"]))
 
         # Isolate the signals.
-        test_values = dfc[dfc.index.get_level_values("real_date") == fixed_date]
-        test_values_sigs = test_values.loc["AUD"][extra_signals[:-1]]
+        test_values: pd.DataFrame = dfc[
+            dfc.index.get_level_values("real_date") == fixed_date
+        ]
+        test_values_sigs: pd.DataFrame = test_values.loc["AUD"][extra_signals[:-1]]
 
         for xcat in test_values_sigs.columns:
-            t_value = float(test_values_sigs[xcat])
-            condition = abs(t_value - dfd_values[xcat])
-            self.assertTrue(condition < 0.00001)
+            t_value = float(test_values_sigs[xcat].values[0])
+            self.assertTrue(np.isclose(t_value, dfd_values[xcat]))
 
         # Test the return category whose summation method is mean.
         df_copy = df.copy()
@@ -419,9 +413,9 @@ class TestAll(unittest.TestCase):
             & (df_copy["cid"] == "AUD")
             & (df_copy["xcat"] == ret)
         )
-        df_copy = df_copy[filt_3]["value"]
+        df_copy: pd.Series = df_copy[filt_3]["value"]
 
-        test_value_ret = test_values.loc["AUD"][ret]
+        test_value_ret = test_values.loc["AUD", ret].iloc[0]
         condition = abs(float(test_value_ret) - df_copy.mean())
 
         self.assertTrue(condition < 0.00001)
@@ -430,8 +424,6 @@ class TestAll(unittest.TestCase):
         # converted to zero which misleads analysis.
 
     def test_categories_df_black(self):
-        self.dataframe_constructor()
-
         black = {"CAD": ["2014-01-01", "2014-12-31"]}
 
         dfc = categories_df(
