@@ -8,9 +8,6 @@ import glob
 import mdformat
 from functools import wraps
 import fnmatch
-import os, sys
-
-sys.path.append(os.getcwd())
 
 
 SOURCE_DIR = "macrosynergy"
