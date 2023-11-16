@@ -68,7 +68,7 @@ class DocstringMethods:
             type_str = f": *`{type_str}`* "
 
         if rdef:
-            rdef = f": {rdef}"
+            rdef = f": \n\t{rdef}"
         return "\n" + " ".join([u for u in [r_str, type_str, rdef] if u]).strip()
 
     @staticmethod
@@ -103,9 +103,6 @@ class DocstringMethods:
                     line = DocstringMethods.__format_param__(
                         param_str=line, param_type=kw[0]
                     )
-                    # if last_kw != kw[0]:
-                    #     line = f"\n\n**{kw_dict[kw[0][1:]]['field']}:**\n{line}"
-                    #     last_kw = kw[0]
                     kw_dict[kw[0][1:]]["entries"].append(line)
                 else:
                     formatted_lines.append(line)
@@ -114,9 +111,23 @@ class DocstringMethods:
                     f"Parsing error on line {il}: {line}, {exc}" + filename + "\n"
                 )
                 raise Exception(e_str) from exc
-            
-            
 
+            # create a new dict with field as key and entries as value
+        kw_dict2: Dict[str, Any] = {}
+        for k, v in kw_dict.items():
+            kw_dict2[v["field"]] = v["entries"]
+        kw_dict = kw_dict2
+        # create a markdown table
+        ptuples: List[Tuple[str, str]] = []
+        for k, v in kw_dict.items():
+            if v:
+                for vv in v:
+                    ptuples.append((k, vv))
+
+        if ptuples:
+            u = pd.DataFrame(ptuples, columns=["Field", "Description"])
+            formatted_lines += DocstringMethods.markdown_format(u.to_markdown())
+            #  print(pd.DataFrame(ptuples, columns=["Field", "Description"]).groupby('Field')["Description"].apply(lambda x: '\n'.join(x)).to_markdown())
         return DocstringMethods.markdown_format("\n".join(formatted_lines))
 
     @staticmethod
