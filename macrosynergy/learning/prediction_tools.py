@@ -1,25 +1,23 @@
 """
-Collection of functions to convert machine learning model predictions into custom PnLs.
-There are two cases that we consider:
-1) Simple cross-validation where hyper-parameters are chosen over an initial training set
-   and then fixed for all hold-out sets (despite retraining).
-2) Nested cross-validation allowing for adaptive hyper-parameter selection at each test
-   time.
-TODO: write adaptive_preds_to_pnl function
+Class to handle the calculation of quantamental predictions based on adaptive
+hyperparameter and model selection.
 """
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 from macrosynergy.learning import PanelTimeSeriesSplit
-import macrosynergy.pnl as msn
 
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.base import BaseEstimator
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, cross_val_score
 
-from typing import List, Union, Dict, Optional, Callable
+from typing import List, Union, Dict, Optional, Callable, Tuple
 from tqdm import tqdm
+
+import logging
 
 from joblib import Parallel, delayed
 
@@ -35,15 +33,17 @@ class AdaptiveSignalHandler:
         Class for the calculation of quantamental predictions based on adaptive
         hyperparameter and model selection. For a given collection of (training, test)
         pairs that expand/roll by a single frequency unit, an optimal model for each
-        training set is chosen based on a grid search over hyperparameters. The nature of
-        the grid search is determined by splitting X and y according to the defined
-        inner_splitter. The optimal model is then used to make test set forecasts.
+        training set is chosen based on a specified hyperparameter search. The nature of
+        the search is determined by splitting X and y according to the defined
+        inner_splitter and the search type.
+        The optimal model is then used to make test set forecasts.
 
         :param <PanelTimeSeriesSplit> inner_splitter: Panel splitter that is used to split
             each training set into smaller (training, test) pairs.
         :param <pd.DataFrame> X: Wide-format pandas dataframe of features over the time
             period for which the signal is to be calculated. These should lag behind
-            returns by a single frequency unit.
+            returns by a single frequency unit. This means that the date refers to the
+            date that the returns are realised, with features lagging behind by a frequency unit.
             The frequency of features (and targets) determines the frequency at which
             model predictions are evaluated. This means that if we have monthly-frequency
             data, the learning process uses the performance of monthly predictions.
@@ -58,27 +58,26 @@ class AdaptiveSignalHandler:
         self.X = X
         self.y = y
 
-        # Create a signal. TODO: possibly change to float32?
+        # Create an initial dataframes to store quantamental predictions and model choices
         self.preds = pd.DataFrame(columns=["cid", "real_date", "xcat", "value"])
-
-        # Create an additional dataframe to store the chosen model type at each time,
-        # for each signal.
-        self.chosen_models = pd.DataFrame(columns=["real_date", "name", "model_type"])
+        self.chosen_models = pd.DataFrame(
+            columns=["real_date", "name", "model_type", "hparams"]
+        )
 
     def calculate_predictions(
         self,
-        name,
-        models,
-        metric,
-        hparam_grid,
-        hparam_type,
-        min_cids=4,
-        min_periods=12 * 3,
-        max_periods=None,
-        n_iter=10,
-    ):
+        name: str,
+        models: Dict[str, Union[BaseEstimator, Pipeline]],
+        metric: Callable,
+        hparam_grid: Dict[str, Dict[str, List]],
+        hparam_type: str,
+        min_cids: int = 4,
+        min_periods: int = 12 * 3,
+        max_periods: Optional[int] = None,
+        n_iter: Optional[int] = 10,
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
-        Private method to return a dataframe of quantamental predictions of financial returns.
+        Method to store & return a dataframe of quantamental predictions for financial returns.
         At each test time, the model that maximises the metric over the respective training
         set is chosen, using the inner splitter specified on class instantiation. The model
         type chosen at each time period is also stored in a separate dataframe.
@@ -108,6 +107,9 @@ class AdaptiveSignalHandler:
             }.
             Distributions must provide a rvs method for sampling (such as those from
             scipy.stats.distributions).
+            See https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GridSearchCV.html
+            and https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.RandomizedSearchCV.html
+            for more details.
         :param <str> hparam_type: Hyperparameter search type.
             This must be either "grid", "random" or "bayes". Default is "grid".
         :param <int> min_cids: Minimum number of cross-sections required for the initial
@@ -119,8 +121,9 @@ class AdaptiveSignalHandler:
             Default is None.
         :param <int> n_iter: Number of iterations to run for random search. Default is 10.
 
-        :return <pd.DataFrame>: Pandas dataframe of working daily signals generated by the
-            machine learning model predictions.
+        :return <Tuple[pd.DataFrame, pd.DataFrame]>: Pandas dataframe of working daily signals generated by the
+            machine learning model predictions, as well as the model choices at each time
+            unit given by the native data frequency.
         """
         if hparam_grid.keys() != models.keys():
             raise ValueError(
@@ -229,6 +232,7 @@ class AdaptiveSignalHandler:
                     optim_score = score
                     optim_name = model_name
                     optim_model = search_object.best_estimator_  # refit = True
+                    optim_params = search_object.best_params_
 
             # Store the best estimator predictions
             preds: np.ndarray = optim_model.predict(X_test_i)
@@ -242,7 +246,9 @@ class AdaptiveSignalHandler:
             )
 
             # Store information about the chosen model at each time.
-            modelchoice_data.append([test_date_levels.date[0], name, optim_name])
+            modelchoice_data.append(
+                [test_date_levels.date[0], name, optim_name, optim_params]
+            )
 
         # Condense the collected data into a single dataframe
         for column_name, xs_levels, date_levels, predictions in prediction_data:
@@ -277,6 +283,7 @@ class AdaptiveSignalHandler:
                 "real_date": "datetime64[ns]",
                 "name": "object",
                 "model_type": "object",
+                "hparams": "object",
             }
         )
 
@@ -285,7 +292,7 @@ class AdaptiveSignalHandler:
             model_df_long[model_df_long.name == name],
         )
 
-    def get_preds(self):
+    def get_all_preds(self) -> pd.DataFrame:
         """
         Return the predictions dataframe for all calculated predictions in the current
         class instantiation.
@@ -295,7 +302,7 @@ class AdaptiveSignalHandler:
         """
         return self.preds
 
-    def get_models(self):
+    def get_all_models(self) -> pd.DataFrame:
         """
         Return the dataframe comprising the selected models at each time for all
         calculated predictions in the current class instantiation.
@@ -304,6 +311,72 @@ class AdaptiveSignalHandler:
             calculated predictions in the current class instantiation.
         """
         return self.chosen_models
+
+    def models_heatmap(self, name: str, cap: int = 5, figsize: Tuple[int,int] = (12, 8)):
+        """
+        Method to visualise the times at which each model in an adaptive machine learning
+        model pipeline is selected, as a binary heatmap. By default, the number of models
+        to be displayed is capped at the 5 most frequently selected.
+
+        :param <str> name: Name of the prediction model.
+        :param <int> cap: Maximum number of models to display. Default (and limit) is 5.
+            The chosen models are the 'cap' most frequently occurring in the pipeline.
+        :param <tuple> figsize: Tuple of integers denoting the figure size. Default is
+            (12, 8).
+        """
+        # Type and value checks
+        if type(name) != str:
+            raise TypeError("The pipeline name must be a string.")
+        if type(cap) != int:
+            raise TypeError("The cap must be an integer.")
+        if name not in self.chosen_models.name.unique():
+            raise ValueError(
+                f"""The pipeline name {name} is not in the list of already-calculated pipelines.
+                Please check the pipeline name carefully. If correct, please run 
+                calculate_predictions() first.
+                """
+            )
+        if cap > 5:
+            logging.warning(
+                f"The maximum number of models to display is 5. The cap has been set to 5."
+            )
+            cap = 5
+        
+        # Get the chosen models for the specified pipeline to visualise selection.
+        chosen_models = self.get_all_models()
+        chosen_models = chosen_models[chosen_models.name == name].sort_values(
+            by="real_date"
+        )
+        chosen_models["model_hparam_id"] = chosen_models.apply(
+            lambda row: row["model_type"]
+            if row["hparams"] == {}
+            else f"{row['model_type']}_"
+            + "_".join([f"{key}={value}" for key, value in row["hparams"].items()]),
+            axis=1,
+        )
+        chosen_models["real_date"] = chosen_models["real_date"].dt.date
+        model_counts = chosen_models.model_hparam_id.value_counts()
+        chosen_models = chosen_models[
+            chosen_models.model_hparam_id.isin(model_counts.index[:cap])
+        ]
+
+        unique_models = chosen_models.model_hparam_id.unique()
+        unique_dates = chosen_models.real_date.unique()
+
+        # Fill in binary matrix denoting the selected model at each time
+        binary_matrix = pd.DataFrame(0, index=unique_models, columns=unique_dates)
+        for _ , row in chosen_models.iterrows():
+            model_id = row["model_hparam_id"]
+            date = row["real_date"]
+            binary_matrix.at[model_id, date] = 1
+
+        # Display the heatmap. 
+        plt.figure(figsize=figsize)
+        sns.heatmap(binary_matrix, cmap="binary")
+        plt.title(f"Model Selection Heatmap for {name}")
+        plt.xlabel("Time")
+        plt.ylabel("Models")
+        plt.show()
 
 
 if __name__ == "__main__":
@@ -372,8 +445,8 @@ if __name__ == "__main__":
         X=X,
         y=y,
     )
-  
-    preds, models =  ash.calculate_predictions(
+
+    preds, models = ash.calculate_predictions(
         name="test",
         models=models,
         metric=metric,
@@ -383,6 +456,13 @@ if __name__ == "__main__":
 
     print(preds, models)
 
+    # (2) Example AdaptiveSignalHandler usage.
+    #     Visualise the model selection heatmap for the two most frequently selected models.
+    ash.models_heatmap(name="test", cap=2)
+
+    # (3) Example AdaptiveSignalHandler usage.
+    #     We get adaptive signals for two KNN regressors. 
+    #     All chosen models are visualised in a heatmap.
     models2 = {
         "KNN1": KNeighborsRegressor(),
         "KNN2": KNeighborsRegressor(),
@@ -392,7 +472,7 @@ if __name__ == "__main__":
         "KNN2": {"n_neighbors": [1, 2]},
     }
 
-    preds2, models2 =  ash.calculate_predictions(
+    preds2, models2 = ash.calculate_predictions(
         name="test2",
         models=models2,
         metric=metric,
@@ -401,6 +481,9 @@ if __name__ == "__main__":
     )
 
     print(preds2, models2)
+    ash.models_heatmap(name="test2", cap=4)
 
-    print(ash.get_preds())
-    print(ash.get_models())
+    # (4) Example AdaptiveSignalHandler usage.
+    #     Print the predictions and model choices for all pipelines.
+    print(ash.get_all_preds())
+    print(ash.get_all_models())
