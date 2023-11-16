@@ -62,10 +62,19 @@ class DocstringMethods:
         type_str: str = param_str[ff + 1 : ll]
         r_str, rdef = param_str[ll + 1 :].strip().split(":", 1)
         rdef = " ".join(rdef.split()).strip()
-        return f"**`{r_str}`** (*`{type_str}`*): {rdef}\n"
+        r_str = r_str.strip()
+        if r_str:
+            r_str = f"**`{r_str}`**"
+
+        if type_str:
+            type_str = f"(*`{type_str}`*)"
+
+        if rdef:
+            rdef = f": {rdef}"
+        return "\n" + " ".join([u for u in [r_str, type_str, rdef] if u]).strip()
 
     @staticmethod
-    def format_parameters(docstring: str) -> str:
+    def format_parameters(docstring: str, filename: str = "") -> str:
         """
         Formats the parameters section of a docstring.
         """
@@ -76,36 +85,35 @@ class DocstringMethods:
         formatted_lines: List[str] = []
         kw_dict: Dict[str, Any] = {
             "param": {"field": "Parameters"},
-            "raises": {"field": "Raises"},
-            "return": {"field": "Returns"},
             "yield": {"field": "Yields"},
+            "return": {"field": "Returns"},
+            "raises": {"field": "Raises"},
         }
         for ix, itemx in enumerate(kw_dict.items()):
             # add an empty field called "entries" to each item
             kw_dict[itemx[0]]["entries"] = []
+
+        last_kw: str = ""
 
         for il, line in enumerate(lines):
             try:
                 kw: str = [
                     f":{kw}" for kw in kw_dict.keys() if line.startswith(f":{kw}")
                 ]
+                line = line.strip()
                 if kw and kw[0] in line:
                     line = DocstringMethods.__format_param__(
                         param_str=line, param_type=kw[0]
                     )
-                # elif kw:
-                #     kw = kw[0]
-                #     # get the index of the first colon after the keyword
-                #     if ":" in line[len(kw) + 1 :]:
-                #         colon_index: int = line.index(":", len(kw))
-                #     else:
-                #         colon_index: int = len(line)
-                #         line += ":"
-                #     # insert a '`' before the colon
-                #     line = "\n`" + line[:colon_index] + "`" + line[colon_index:]
+                    if last_kw != kw[0]:
+                        line = f"\n\n**{kw_dict[kw[0][1:]]['field']}:**\n{line}"
+                        last_kw = kw[0]
+
                 formatted_lines.append(line)
             except Exception as exc:
-                e_str: str = f"Parsing error on line {il}: {line}, {exc}"
+                e_str: str = (
+                    f"Parsing error on line {il}: {line}, {exc}" + filename + "\n"
+                )
                 raise Exception(e_str) from exc
 
         return DocstringMethods.markdown_format("\n".join(formatted_lines))
@@ -302,7 +310,9 @@ def process_file(filepath: str, output_directory: str) -> bool:
             output_str += f"{function_info['doc']}\n\n"
             output_str += LINE_SEPARATOR
 
-        output_str = DocstringMethods.format_parameters(docstring=output_str)
+        output_str = DocstringMethods.format_parameters(
+            docstring=output_str, filename=filepath
+        )
 
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(output_str)
