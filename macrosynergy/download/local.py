@@ -16,6 +16,7 @@ import datetime
 import random
 from macrosynergy.download.jpmaqs import JPMaQSDownload
 from macrosynergy.download.dataquery import (
+    JPMAQS_GROUP_ID,
     DataQueryInterface,
     API_DELAY_PARAM,
     HL_RETRY_COUNT,
@@ -564,6 +565,10 @@ class DownloadTimeseries(DataQueryInterface):
 
         return results
 
+    def get_catalogue(self, group_id: str = ...) -> List[str]:
+        print("Downloading tickers catalogue...")
+        return super().get_catalogue(group_id)
+
     def download_data(
         self,
         expressions: List[str] = None,
@@ -606,24 +611,29 @@ class DownloadTimeseries(DataQueryInterface):
         :raises <Exception>: other exceptions may be raised by underlying functions.
         """
         download_start_time: float = time.time()
+        metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
 
         tracking_id: str = TIMESERIES_TRACKING_ID
         if end_date is None:
             end_date = datetime.datetime.today().strftime("%Y-%m-%d")
 
-        print("Downloading tickers catalogue...")
-        tickers: List[str] = self.get_catalogue()
+        tickers: List[str] = []
+        if expressions is None:
+            tickers: List[str] = self.get_catalogue()
 
         if self.test_mode:
-            if isinstance(self.test_mode, bool):            
+            if isinstance(self.test_mode, bool):
                 tickers = tickers[:100]
             else:
                 tickers = tickers[: self.test_mode]
 
-        metrics: List[str] = ["value", "grading", "eop_lag", "mop_lag"]
-        expressions: List[str] = JPMaQSDownload.construct_expressions(
-            tickers=tickers, metrics=metrics
-        )
+        if tickers:
+            expressions: List[str] = JPMaQSDownload.construct_expressions(
+                tickers=tickers, metrics=metrics
+            )
+
+        if not expressions:
+            raise ValueError("No expressions provided for download.")
 
         if datetime.datetime.strptime(
             end_date, "%Y-%m-%d"
@@ -676,10 +686,11 @@ class DownloadTimeseries(DataQueryInterface):
             delay_param=delay_param,
             show_progress=show_progress,
         )
-        
+
         logger.info(
             "Downloaded %d / %d expressions from DataQuery",
-            sum(final_output), len(expressions),
+            sum(final_output),
+            len(expressions),
         )
 
         download_time_taken: float = time.time() - download_start_time
@@ -693,6 +704,8 @@ class DownloadTimeseries(DataQueryInterface):
         expressions_saved: List[str] = [
             os.path.basename(fx).split(".")[0] for fx in expressions_saved_files
         ]
+        expressions_saved = list(set(expressions_saved) & set(expressions))
+        
         expressions_missing: List[str] = list(set(expressions) - set(expressions_saved))
 
         print(f"Number of expressions requested: {len(expressions)}")
