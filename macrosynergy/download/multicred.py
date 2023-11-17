@@ -51,7 +51,7 @@ def _create_store(
         ).download_data(
             show_progress=True,
             expressions=expressions,
-            delay_param=1.0,
+            # delay_param=1.0,
         )
     except Exception as exc:
         logger.error(f"Error downloading data for {client_id}: {exc}")
