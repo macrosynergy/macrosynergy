@@ -65,8 +65,8 @@ def panel_cv_scores(
         raise TypeError("X must be multi-indexed.")
     if not isinstance(y.index, pd.MultiIndex):
         raise TypeError("y must be multi-indexed.")
-    if not isinstance(splitter, PanelTimeSeriesSplit):
-        raise TypeError("splitter must be an instance of PanelTimeSeriesSplit.")
+    if not isinstance(splitter, BasePanelSplit):
+        raise TypeError("splitter must be an inherit from BasePanelSplit.")
     if not isinstance(estimators, dict):
         raise TypeError("estimators must be a dictionary.")
     if not isinstance(scoring, dict):
@@ -183,7 +183,7 @@ if __name__ == "__main__":
     y2 = dfd2["XR"]
 
     # 1) Demonstration of panel_cv_scores
-    splitex = PanelTimeSeriesSplit(n_splits=100, n_split_method="expanding")
+    splitex = ForwardPanelSplit(n_splits=100)
     models = {"OLS": LinearRegression(), "Lasso": Lasso()}
     metrics = {
         "rmse": make_scorer(
