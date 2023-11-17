@@ -740,7 +740,7 @@ def create_store(
 
     print(f"Time taken: {(time.time() - start_time) * 1000 :.2f} milliseconds")
 
-    tickers: List[str] = random.sample(catalogue, 100)
+    tickers: List[str] = random.sample(catalogue, min(100, len(catalogue)))
 
     start_time: float = time.time()
     df: pd.DataFrame = lc.download(tickers=tickers, start_date="1990-01-01")
