@@ -8,9 +8,9 @@ from sklearn.model_selection import cross_val_score
 from parameterized import parameterized
 
 from macrosynergy.learning import (
-    IntervalPanelSplit,
-    ForwardPanelSplit,
-    KFoldPanelSplit,
+    ExpandingIncrementPanelSplit,
+    ExpandingKFoldPanelSplit,
+    RollingKFoldPanelSplit,
 )
 
 
@@ -58,7 +58,7 @@ class TestAll(unittest.TestCase):
         # models
         lr = LinearRegression()
         knn = KNeighborsRegressor(n_neighbors=1)
-        splitter = IntervalPanelSplit(
+        splitter = ExpandingIncrementPanelSplit(
             train_intervals=1, min_cids=2, min_periods=21 * 12, test_size=1
         )
         lrsplits = cross_val_score(
@@ -81,31 +81,31 @@ class TestAll(unittest.TestCase):
         self.assertLess(np.mean(-lrsplits), np.mean(-knnsplits))
 
     @parameterized.expand([2, 4, 8])
-    def test_forward_n_splits(self, n_splits):
-        splitter = ForwardPanelSplit(n_splits=n_splits)
+    def test_expanding_kfold(self, n_splits):
+        splitter = ExpandingKFoldPanelSplit(n_splits=n_splits)
         splits = list(splitter.split(self.X, self.y))
         self.assertEqual(len(splits), n_splits)
 
     @parameterized.expand([2, 4, 8])
-    def test_kfold_n_splits(self, n_splits):
-        splitter = KFoldPanelSplit(n_splits=n_splits)
+    def test_rolling_kfold(self, n_splits):
+        splitter = RollingKFoldPanelSplit(n_splits=n_splits)
         splits = list(splitter.split(self.X, self.y))
         self.assertEqual(len(splits), n_splits)
 
-    def test_forward_n_splits_too_small(self):
+    def test_expanding_kfold_too_small(self):
         with self.assertRaises(ValueError):
-            ForwardPanelSplit(n_splits=1)
+            ExpandingKFoldPanelSplit(n_splits=1)
 
-    def test_kfold_n_splits_too_small(self):
+    def test_rolling_k_fold_too_small(self):
         with self.assertRaises(ValueError):
-            KFoldPanelSplit(n_splits=1)
+            RollingKFoldPanelSplit(n_splits=1)
 
-    def test_forward_split(self):
+    def test_expanding_kfold_split(self):
         periods1 = 6
         periods2 = 6
         n_splits = 5
         X, y = self.make_simple_df(periods1=periods1, periods2=periods2)
-        splitter = ForwardPanelSplit(n_splits=n_splits)
+        splitter = ExpandingKFoldPanelSplit(n_splits=n_splits)
         for i, split in enumerate(splitter.split(X, y)):
             train_set, test_set = split
 
@@ -123,7 +123,7 @@ class TestAll(unittest.TestCase):
         n_splits = 5
         X, y = self.make_simple_df(periods1=periods1, periods2=periods2)
         indices = np.arange(X.shape[0])
-        splitter = KFoldPanelSplit(n_splits=n_splits)
+        splitter = RollingKFoldPanelSplit(n_splits=n_splits)
         for i, split in enumerate(splitter.split(X, y)):
             train_set, test_set = split
 
@@ -134,11 +134,11 @@ class TestAll(unittest.TestCase):
             # assert train set is indices excluding test set
             self.assertTrue(np.array_equal(np.setdiff1d(indices, test_set), train_set))
 
-    def test_interval_split_basic(self):
+    def test_expanding_increment_split_basic(self):
         periods1 = 6
         periods2 = 6
         X, y = self.make_simple_df(periods1=periods1, periods2=periods2)
-        splitter = IntervalPanelSplit(
+        splitter = ExpandingIncrementPanelSplit(
             train_intervals=1, test_size=1, min_periods=1, min_cids=2, max_periods=None
         )
         for i, split in enumerate(splitter.split(X, y)):
@@ -152,7 +152,7 @@ class TestAll(unittest.TestCase):
             self.assertEqual(test_set[0], i + 1)
             self.assertEqual(test_set[1], i + periods1 + 1)
 
-    def test_interval_split_min_cids(self):
+    def test_expanding_increment_split_min_cids(self):
         periods1 = 6
         periods2 = 5
         X, y = self.make_simple_df(
@@ -161,7 +161,7 @@ class TestAll(unittest.TestCase):
             periods1=periods1,
             periods2=periods2,
         )
-        splitter = IntervalPanelSplit(
+        splitter = ExpandingIncrementPanelSplit(
             train_intervals=1, test_size=1, min_periods=1, min_cids=2, max_periods=None
         )
         for i, split in enumerate(splitter.split(X, y)):
@@ -218,7 +218,7 @@ if __name__ == "__main__":
 
     # test = TestAll()
     # X, y = test.make_simple_df(periods1=5, periods2=5)
-    # splitter = KFoldPanelSplit(n_splits=5)
+    # splitter = RollingKFoldPanelSplit(n_splits=5)
     # splits = list(splitter.split(X, y))
     # print(splits)
     # splitter.visualise_splits(X, y)

@@ -19,7 +19,7 @@ import logging
 
 from joblib import Parallel, delayed
 
-from macrosynergy.learning.panel_time_series_split import BasePanelSplit, IntervalPanelSplit, KFoldPanelSplit
+from macrosynergy.learning.panel_time_series_split import BasePanelSplit, ExpandingIncrementPanelSplit, RollingKFoldPanelSplit
 
 
 class AdaptiveSignalHandler:
@@ -175,7 +175,7 @@ class AdaptiveSignalHandler:
         prediction_data = []
         modelchoice_data = []
 
-        outer_splitter = IntervalPanelSplit(
+        outer_splitter = ExpandingIncrementPanelSplit(
             train_intervals=1,
             test_size=1,
             min_cids=min_cids,
@@ -433,7 +433,7 @@ if __name__ == "__main__":
     }
     metric = make_scorer(regression_balanced_accuracy, greater_is_better=True)
 
-    inner_splitter = KFoldPanelSplit(n_splits=4)
+    inner_splitter = RollingKFoldPanelSplit(n_splits=4)
 
     hparam_grid = {
         "OLS": {},

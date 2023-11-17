@@ -64,13 +64,17 @@ class BasePanelSplit(BaseCrossValidator):
             )
 
     def _calculate_xranges(
-        self, cs_dates: pd.DatetimeIndex, real_dates: pd.DatetimeIndex
+        self,
+        cs_dates: pd.DatetimeIndex,
+        real_dates: pd.DatetimeIndex,
+        freq_offset: pd.DateOffset,
     ) -> List[Tuple[pd.Timestamp, pd.Timedelta]]:
         """
         Helper method to determine the ranges of contiguous dates in each training and test set, for use in visualisation.
 
         :param <pd.DatetimeIndex> cs_dates: DatetimeIndex of dates in a set for a given cross-section.
         :param <pd.DatetimeIndex> real_dates: DatetimeIndex of all dates in the panel.
+        :param <pd.DateOffset> freq_offset: DateOffset object representing the frequency of the dates in the panel.
 
         :return <List[Tuple[pd.Timestamp,pd.Timedelta]]> xranges: list of tuples of the form (start date, length of contiguous dates).
         """
@@ -87,7 +91,7 @@ class BasePanelSplit(BaseCrossValidator):
         # A single contiguous range of dates.
         if len(difference) == 0:
             xranges.append(
-                (cs_dates.min(), cs_dates.max() - cs_dates.min() + pd.Timedelta(days=1))
+                (cs_dates.min(), cs_dates.max() - cs_dates.min() + freq_offset)
             )
             return xranges
 
@@ -99,7 +103,7 @@ class BasePanelSplit(BaseCrossValidator):
                 difference = difference[(difference >= cs_dates.min())]
 
             xranges.append(
-                (cs_dates.min(), cs_dates.max() - cs_dates.min() + pd.Timedelta(days=1))
+                (cs_dates.min(), cs_dates.max() - cs_dates.min() + freq_offset)
             )
             return xranges
 
@@ -124,6 +128,9 @@ class BasePanelSplit(BaseCrossValidator):
             sorted(Xy.index.get_level_values(0).unique())
         )
         real_dates = Xy.index.get_level_values(1).unique().sort_values()
+
+        freq_est = pd.infer_freq(real_dates)
+        freq_offset = pd.tseries.frequencies.to_offset(freq_est)
 
         splits: List[Tuple[np.array[int], np.array[int]]] = list(self.split(X, y))
 
@@ -164,10 +171,10 @@ class BasePanelSplit(BaseCrossValidator):
 
                 xranges_train: List[
                     Tuple[pd.Timestamp, pd.Timedelta]
-                ] = self._calculate_xranges(cs_train_dates, real_dates)
+                ] = self._calculate_xranges(cs_train_dates, real_dates, freq_offset)
                 xranges_test: List[
                     Tuple[pd.Timestamp, pd.Timedelta]
-                ] = self._calculate_xranges(cs_test_dates, real_dates)
+                ] = self._calculate_xranges(cs_test_dates, real_dates, freq_offset)
 
                 if xranges_train:
                     operations.append(
@@ -203,7 +210,7 @@ class BasePanelSplit(BaseCrossValidator):
         plt.show()
 
 
-class ForwardPanelSplit(BasePanelSplit):
+class ExpandingKFoldPanelSplit(BasePanelSplit):
     """
     Class for the production of paired training and test splits of panel data
     for expanding window validation.
@@ -260,7 +267,7 @@ class ForwardPanelSplit(BasePanelSplit):
             yield train_indices, test_indices
 
 
-class KFoldPanelSplit(BasePanelSplit):
+class RollingKFoldPanelSplit(BasePanelSplit):
     """
     Class for the production of paired training and test splits of panel data
     for KFold cross validation.
@@ -318,7 +325,7 @@ class KFoldPanelSplit(BasePanelSplit):
             yield train_indices, test_indices
 
 
-class IntervalPanelSplit(BasePanelSplit):
+class ExpandingIncrementPanelSplit(BasePanelSplit):
     """
     Class for the production of paired training and test splits for panel data.
 
@@ -526,7 +533,7 @@ if __name__ == "__main__":
     # 1) Demonstration of basic functionality
 
     # a) n_splits = 4, n_split_method = expanding
-    splitter = ForwardPanelSplit(n_splits=4)
+    splitter = ExpandingKFoldPanelSplit(n_splits=4)
     splitter.split(X2, y2)
     cv_results = cross_validate(
         LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
@@ -534,7 +541,7 @@ if __name__ == "__main__":
     splitter.visualise_splits(X2, y2)
 
     # b) n_splits = 4, n_split_method = rolling
-    splitter = KFoldPanelSplit(n_splits=4)
+    splitter = RollingKFoldPanelSplit(n_splits=4)
     splitter.split(X2, y2)
     cv_results = cross_validate(
         LinearRegression(), X2, y2, cv=splitter, scoring="neg_root_mean_squared_error"
@@ -542,7 +549,7 @@ if __name__ == "__main__":
     splitter.visualise_splits(X2, y2)
 
     # c) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4
-    splitter = IntervalPanelSplit(
+    splitter = ExpandingIncrementPanelSplit(
         train_intervals=21 * 12, test_size=1, min_periods=21, min_cids=4
     )
     splitter.split(X2, y2)
@@ -552,7 +559,7 @@ if __name__ == "__main__":
     splitter.visualise_splits(X2, y2)
 
     # d) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4, max_periods=12*21
-    splitter = IntervalPanelSplit(
+    splitter = ExpandingIncrementPanelSplit(
         train_intervals=21 * 12,
         test_size=21 * 12,
         min_periods=21,
@@ -568,7 +575,7 @@ if __name__ == "__main__":
     # 2) Grid search capabilities
     lasso = Lasso()
     parameters = {"alpha": [0.1, 1, 10]}
-    splitter = IntervalPanelSplit(
+    splitter = ExpandingIncrementPanelSplit(
         train_intervals=21 * 12, test_size=1, min_periods=21, min_cids=4
     )
     gs = GridSearchCV(
@@ -611,16 +618,14 @@ if __name__ == "__main__":
     X2 = df.drop(columns=["B"])
     y2 = df["B"]
 
-    # splitter = IntervalPanelSplit(
+    # splitter = ExpandingIncrementPanelSplit(
     #     train_intervals=1,
     #     test_size=2,
     #     min_periods=1,
     #     min_cids=2,
     #     max_periods=12 * 21,
     # )
-    splitter = ForwardPanelSplit(
-        n_splits=4
-    )
+    splitter = ExpandingKFoldPanelSplit(n_splits=4)
     splits = splitter.split(X2, y2)
     print(splits)
     splitter.visualise_splits(X2, y2)

@@ -9,7 +9,7 @@ import pandas as pd
 import datetime
 from typing import Union, Optional, Dict
 
-from macrosynergy.learning.panel_time_series_split import BasePanelSplit, ForwardPanelSplit
+from macrosynergy.learning.panel_time_series_split import BasePanelSplit, ExpandingKFoldPanelSplit
 from sklearn.model_selection import cross_validate
 from sklearn.metrics import make_scorer
 
@@ -183,7 +183,7 @@ if __name__ == "__main__":
     y2 = dfd2["XR"]
 
     # 1) Demonstration of panel_cv_scores
-    splitex = ForwardPanelSplit(n_splits=100)
+    splitex = ExpandingKFoldPanelSplit(n_splits=100)
     models = {"OLS": LinearRegression(), "Lasso": Lasso()}
     metrics = {
         "rmse": make_scorer(
