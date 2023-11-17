@@ -64,6 +64,81 @@ class AdaptiveSignalHandler:
             columns=["real_date", "name", "model_type", "hparams"]
         )
 
+    def _worker(
+        self,
+        train_idx,
+        test_idx,
+        name,
+        models,
+        metric,
+        hparam_type,
+        hparam_grid,
+        original_date_levels,
+        n_iter,
+    ):
+        """
+        Private helper function to run the grid search for a single (train, test) pair 
+        and a collection of models. It is used to parallelise the pipeline.
+        """
+        # Set up training and test sets
+        X_train_i: pd.DataFrame = self.X.iloc[train_idx]
+        y_train_i: pd.Series = self.y.iloc[train_idx]
+        X_test_i: pd.DataFrame = self.X.iloc[test_idx]
+        # Get correct indices to match with
+        test_xs_levels: List[str] = X_test_i.index.get_level_values(0).unique()
+        test_date_levels: List[pd.Timestamp] = sorted(
+            X_test_i.index.get_level_values(1).unique()
+        )
+        # Since the features lag behind the targets, the dates need to be adjusted
+        # by a single frequency unit
+        locs: np.ndarray = (
+            np.searchsorted(original_date_levels, test_date_levels, side="left") - 1
+        )
+        test_date_levels: pd.DatetimeIndex = pd.DatetimeIndex(
+            [original_date_levels[i] if i >= 0 else pd.NaT for i in locs]
+        )
+        optim_name = None
+        optim_model = None
+        optim_score = -np.inf
+        # For each model, run a grid search over the hyperparameters to optimise
+        # the provided metric. The best model is then used to make predictions.
+        for model_name, model in models.items():
+            if hparam_type == "grid":
+                search_object = GridSearchCV(
+                    estimator=model,
+                    param_grid=hparam_grid[model_name],
+                    scoring=metric,
+                    refit=True,
+                    cv=self.inner_splitter,
+                    n_jobs=1,
+                )
+            elif hparam_type == "random":
+                search_object = RandomizedSearchCV(
+                    estimator=model,
+                    param_distributions=hparam_grid[model_name],
+                    n_iter=n_iter,
+                    scoring=metric,
+                    refit=True,
+                    cv=self.inner_splitter,
+                    n_jobs=1,
+                )
+            # Run the grid search
+            search_object.fit(X_train_i, y_train_i)
+            score = search_object.best_score_
+            if score > optim_score:
+                optim_score = score
+                optim_name = model_name
+                optim_model = search_object.best_estimator_  # refit = True
+                optim_params = search_object.best_params_
+
+        # Store the best estimator predictions
+        preds: np.ndarray = optim_model.predict(X_test_i)
+        prediction_date = [name, test_xs_levels, test_date_levels, preds]
+        # Store information about the chosen model at each time.
+        modelchoice_data = [test_date_levels.date[0], name, optim_name, optim_params]
+
+        return prediction_date, modelchoice_data
+
     def calculate_predictions(
         self,
         name: str,
@@ -182,73 +257,30 @@ class AdaptiveSignalHandler:
             min_periods=min_periods,
             max_periods=max_periods,
         )
-        for train_idx, test_idx in tqdm(outer_splitter.split(self.X, self.y)):
-            # Set up training and test sets
-            X_train_i: pd.DataFrame = self.X.iloc[train_idx]
-            y_train_i: pd.Series = self.y.iloc[train_idx]
-            X_test_i: pd.DataFrame = self.X.iloc[test_idx]
-            # Get correct indices to match with
-            test_xs_levels: List[str] = X_test_i.index.get_level_values(0).unique()
-            test_date_levels: List[pd.Timestamp] = sorted(
-                X_test_i.index.get_level_values(1).unique()
-            )
-            # Since the features lag behind the targets, the dates need to be adjusted
-            # by a single frequency unit
-            locs: np.ndarray = (
-                np.searchsorted(original_date_levels, test_date_levels, side="left") - 1
-            )
-            test_date_levels: pd.DatetimeIndex = pd.DatetimeIndex(
-                [original_date_levels[i] if i >= 0 else pd.NaT for i in locs]
-            )
-            optim_name = None
-            optim_model = None
-            optim_score = -np.inf
-            # For each model, run a grid search over the hyperparameters to optimise
-            # the provided metric. The best model is then used to make predictions.
-            for model_name, model in models.items():
-                if hparam_type == "grid":
-                    search_object = GridSearchCV(
-                        estimator=model,
-                        param_grid=hparam_grid[model_name],
-                        scoring=metric,
-                        refit=True,
-                        cv=self.inner_splitter,
-                        n_jobs=-1,
-                    )
-                elif hparam_type == "random":
-                    search_object = RandomizedSearchCV(
-                        estimator=model,
-                        param_distributions=hparam_grid[model_name],
-                        n_iter=n_iter,
-                        scoring=metric,
-                        refit=True,
-                        cv=inner_splitter,
-                        n_jobs=-1,
-                    )
-                # Run the grid search
-                search_object.fit(X_train_i, y_train_i)
-                score = search_object.best_score_
-                if score > optim_score:
-                    optim_score = score
-                    optim_name = model_name
-                    optim_model = search_object.best_estimator_  # refit = True
-                    optim_params = search_object.best_params_
 
-            # Store the best estimator predictions
-            preds: np.ndarray = optim_model.predict(X_test_i)
-            prediction_data.append(
-                [
-                    name,
-                    test_xs_levels,
-                    test_date_levels,
-                    preds,
-                ]
+        results = Parallel(n_jobs=-1)(
+            delayed(self._worker)(
+                train_idx=train_idx,
+                test_idx=test_idx,
+                name=name,
+                models=models,
+                metric=metric,
+                original_date_levels=original_date_levels,
+                hparam_type=hparam_type,
+                hparam_grid=hparam_grid,
+                n_iter=n_iter,
             )
+            for train_idx, test_idx in tqdm(
+                outer_splitter.split(X=self.X, y=self.y),
+            )
+        )
 
-            # Store information about the chosen model at each time.
-            modelchoice_data.append(
-                [test_date_levels.date[0], name, optim_name, optim_params]
-            )
+        prediction_data = []
+        modelchoice_data = []
+
+        for pred_data, model_data in results:
+            prediction_data.append(pred_data)
+            modelchoice_data.append(model_data)
 
         # Condense the collected data into a single dataframe
         for column_name, xs_levels, date_levels, predictions in prediction_data:
@@ -312,7 +344,9 @@ class AdaptiveSignalHandler:
         """
         return self.chosen_models
 
-    def models_heatmap(self, name: str, cap: int = 5, figsize: Tuple[int,int] = (12, 8)):
+    def models_heatmap(
+        self, name: str, cap: int = 5, figsize: Tuple[int, int] = (12, 8)
+    ):
         """
         Method to visualise the times at which each model in an adaptive machine learning
         model pipeline is selected, as a binary heatmap. By default, the number of models
@@ -341,7 +375,7 @@ class AdaptiveSignalHandler:
                 f"The maximum number of models to display is 5. The cap has been set to 5."
             )
             cap = 5
-        
+
         # Get the chosen models for the specified pipeline to visualise selection.
         chosen_models = self.get_all_models()
         chosen_models = chosen_models[chosen_models.name == name].sort_values(
@@ -365,12 +399,12 @@ class AdaptiveSignalHandler:
 
         # Fill in binary matrix denoting the selected model at each time
         binary_matrix = pd.DataFrame(0, index=unique_models, columns=unique_dates)
-        for _ , row in chosen_models.iterrows():
+        for _, row in chosen_models.iterrows():
             model_id = row["model_hparam_id"]
             date = row["real_date"]
             binary_matrix.at[model_id, date] = 1
 
-        # Display the heatmap. 
+        # Display the heatmap.
         plt.figure(figsize=figsize)
         sns.heatmap(binary_matrix, cmap="binary")
         plt.title(f"Model Selection Heatmap for {name}")
@@ -461,7 +495,7 @@ if __name__ == "__main__":
     ash.models_heatmap(name="test", cap=2)
 
     # (3) Example AdaptiveSignalHandler usage.
-    #     We get adaptive signals for two KNN regressors. 
+    #     We get adaptive signals for two KNN regressors.
     #     All chosen models are visualised in a heatmap.
     models2 = {
         "KNN1": KNeighborsRegressor(),
