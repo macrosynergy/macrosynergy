@@ -676,6 +676,11 @@ class DownloadTimeseries(DataQueryInterface):
             delay_param=delay_param,
             show_progress=show_progress,
         )
+        
+        logger.info(
+            "Downloaded %d / %d expressions from DataQuery",
+            sum(final_output), len(expressions),
+        )
 
         download_time_taken: float = time.time() - download_start_time
 
