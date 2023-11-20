@@ -243,6 +243,13 @@ class SignalReturnRelations():
 
         signals = [self.sigs[0]]
 
+        if rival_sigs is not None:
+            warnings.warn(
+                    "Parameter 'rival_sigs' is deprecated and will be removed in v0.1.0. Please specify the rival signals as part of the list of feature signals in the argument 'sigs'.",
+                    DeprecationWarning,
+                    stacklevel=2
+                )
+
         if len(self.sigs) > 1:
             rival_sigs = self.sigs[1:]
         if rival_sigs is not None:
