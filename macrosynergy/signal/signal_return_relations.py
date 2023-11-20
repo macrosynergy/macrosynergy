@@ -25,17 +25,11 @@ class SignalReturnRelations():
 
     :param <pd.Dataframe> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcat', 'real_date' and 'value.
-    :param <str> ret: return category.
-    :param <str> sig: primary signal category for which detailed relational statistics
-        can be calculated.
-    :param <str, List[str]> rival_sigs: "rival signals" for which basic relational
-        statistics can be calculated for comparison with the primary signal category. The
-        table, if rival signals are defined, will be generated upon instantiation of the
-        object.
-        N.B.: parameters set for sig, such as sig_neg, freq, and agg_sig are equally
-        applied to all rival signals.
-    :param <bool> sig_neg: if set to True puts the signal in negative terms for all
-        analysis. Default is False.
+    :param <str, List[str]> rets: one or several target return categories.
+    :param <str, List[str]> sigs: list of signal categories to be considered for which 
+        detailed relational statistics can be calculated.
+    :param <bool, List[bool]> sig_neg: if set to True puts the signal in negative terms 
+        for all analysis. Default is False.
     :param <bool> cosp: If True the comparative statistics are calculated only for the
         "communal sample periods", i.e. periods and cross-sections that have values
         for all compared signals. Default is False.
@@ -46,14 +40,14 @@ class SignalReturnRelations():
     :param <dict> blacklist: cross-sections with date ranges that should be excluded from
         the data frame. If one cross-section has several blacklist periods append numbers
         to the cross-section code.
-    :param <str> freq: letter denoting frequency at which the series are to be sampled.
-        This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
-        The return series will always be summed over the sample period.
-        The signal series will be aggregated according to the value of agg_sig.
-    :param <str> agg_sig: aggregation method applied to the signal values in down-
-        sampling. The default is "last".
-        If defined, the additional signals will also use the same aggregation method for
-        any down-sampling.
+    :param <str, List[str]> freqs: letters denoting all frequencies at which the series
+        may be sampled. This must be a selection of 'D', 'W', 'M', 'Q', 'A'. Default is 
+        only 'M'. The return series will always be summed over the sample period. The 
+        signal series will be aggregated according to the values of `agg_sigs`.
+    :param <str, List[str]> agg_sigs: aggregation method applied to the signal values in
+        down-sampling. The default is "last". Alternatives are "mean", "median" and "sum".
+        If a single aggregation type is chosen for multiple signal categories it is
+        applied to all of them.
     :param <int> fwin: forward window of return category in base periods. Default is 1.
         This conceptually corresponds to the holding period of a position in
         accordance with the signal.
@@ -62,26 +56,82 @@ class SignalReturnRelations():
         returns, which is often characterized by a delay due to the setup of of positions.
         Technically, this is a negative lag (early arrival) of the target category
         in working days prior to any frequency conversion. Default is 0.
-
+    <DEPRECATED>
+    :param <str> ret: return category.
+    :param <str> sig: primary signal category for which detailed relational statistics
+        can be calculated.
+    :param <str, List[str]> rival_sigs: "rival signals" for which basic relational
+        statistics can be calculated for comparison with the primary signal category. The
+        table, if rival signals are defined, will be generated upon instantiation of the
+        object.
+        N.B.: parameters set for sig, such as sig_neg, freq, and agg_sig are equally
+        applied to all rival signals.
+    :param <str> freq: letter denoting frequency at which the series are to be sampled.
+        This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
+        The return series will always be summed over the sample period.
+        The signal series will be aggregated according to the value of agg_sig.
+    :param <str> agg_sig: aggregation method applied to the signal values in down-
+        sampling. The default is "last".
+        If defined, the additional signals will also use the same aggregation method for
+        any down-sampling.
     """
 
     def __init__(
         self,
         df: pd.DataFrame,
-        ret: str,
-        sig: str,
+        rets: Union[str, List[str]] = None,
+        sigs: Union[str, List[str]] = None,
+        ret: Union[str, List[str]] = None,
+        sig: Union[str, List[str]] = None,
         rival_sigs: Union[str, List[str]] = None,
         cids: Union[str, List[str]] = None,
-        sig_neg: bool = False,
+        sig_neg: Union[bool, List[bool]] = False,
         cosp: bool = False,
         start: str = None,
         end: str = None,
         blacklist: dict = None,
-        freq: str = "M",
-        agg_sig: str = "last",
+        freqs: Union[str, List[str]] = "M",
+        agg_sigs: Union[str, List[str]] = "last",
+        freq: str = None,
+        agg_sig: str = None,
         fwin: int = 1,
         slip: int = 0,
     ):
+        if rets is None:
+            if ret is None:
+                raise ValueError("Target return must be defined.")
+            else:
+                warnings.warn(
+                    "Parameter 'ret' is deprecated and will be removed in v0.1.0. Please use parameter rets instead.",
+                    DeprecationWarning,
+                    stacklevel=2
+                )
+                rets = ret
+        if sigs is None:
+            if sig is None:
+                raise ValueError("Signal must be defined.")
+            else:
+                warnings.warn(
+                    "Parameter 'sig' is deprecated and will be removed in v0.1.0. Please use parameter sigs instead.",
+                    DeprecationWarning,
+                    stacklevel=2
+                )
+                sigs = sig
+        if freq is not None:
+            warnings.warn(
+                "Parameter 'freq' is deprecated and will be removed in v0.1.0. Please use parameter freqs instead.",
+                DeprecationWarning,
+                stacklevel=2
+            )
+            freqs = freq
+        if agg_sig is not None:
+            warnings.warn(
+                "Parameter 'agg_sig' is deprecated and will be removed in v0.1.0. Please use parameter agg_sigs instead.",
+                DeprecationWarning,
+                stacklevel=2
+            )
+            agg_sigs = agg_sig
+
         if not isinstance(df, pd.DataFrame):
             raise TypeError(f"DataFrame expected and not {type(df)}.")
 
@@ -104,12 +154,12 @@ class SignalReturnRelations():
         }
 
         freq_error = f"Frequency parameter must be one of {list(self.dic_freq.keys())}."
-        if isinstance(freq, list):
-            for f in freq:
+        if isinstance(freqs, list):
+            for f in freqs:
                 if not f in self.dic_freq.keys():
                     raise ValueError(freq_error)
         else:
-            if not freq in self.dic_freq.keys():
+            if not freqs in self.dic_freq.keys():
                 raise ValueError(freq_error)
 
         self.metrics = [
@@ -125,8 +175,8 @@ class SignalReturnRelations():
             "kendall_pval",
         ]
 
-        self.ret = ret
-        self.freq = freq
+        self.rets = rets
+        self.freqs = freqs
 
         if not isinstance(cosp, bool):
             raise TypeError(f"<bool> object expected and not {type(cosp)}.")
@@ -142,33 +192,33 @@ class SignalReturnRelations():
         else:
             self.cids = cids
 
-        self.sig = sig
+        self.sigs = sigs
         self.slip = slip
-        self.agg_sig = agg_sig
+        self.agg_sigs = agg_sigs
         self.xcats = list(df["xcat"].unique())
         self.df = df
         self.original_df = df.copy()
 
         self.df = df.copy()
 
-        if not self.is_list_of_strings(ret):
-            self.ret = [ret]
+        if not self.is_list_of_strings(rets):
+            self.rets = [rets]
 
-        if not self.is_list_of_strings(sig):
-            self.sig = [sig]
+        if not self.is_list_of_strings(sigs):
+            self.sigs = [sigs]
 
-        if not self.is_list_of_strings(agg_sig):
-            self.agg_sig = [agg_sig]
+        if not self.is_list_of_strings(agg_sigs):
+            self.agg_sigs = [agg_sigs]
 
-        if not self.is_list_of_strings(freq):
-            self.freq = [freq]
+        if not self.is_list_of_strings(freqs):
+            self.freqs = [freqs]
 
-        for sig in self.sig:
+        for sig in self.sigs:
             assert (
                 sig in self.xcats
             ), "Primary signal must be available in the DataFrame."
 
-        for ret in self.ret:
+        for ret in self.rets:
             assert (
                 ret in self.xcats
             ), "Target return must be available in the DataFrame."
@@ -180,18 +230,21 @@ class SignalReturnRelations():
             if not sign in [False, True]:
                 raise TypeError("Sign must be either False or True.")
 
-        if len(self.signs) < len(self.sig):
-            self.signs.extend([False] * (len(self.sig) - len(self.signs)))
+        if len(self.signs) < len(self.sigs):
+            self.signs.extend([False] * (len(self.sigs) - len(self.signs)))
 
-        if len(self.signs) > len(self.sig):
+        if len(self.signs) > len(self.sigs):
             raise ValueError("Signs must have a length less than or equal to signals")
-        self.signals = self.sig
+        self.signals = self.sigs
 
         assert (
-            self.sig[0] in self.xcats
+            self.sigs[0] in self.xcats
         ), "Primary signal must be available in the DataFrame."
 
-        signals = [self.sig[0]]
+        signals = [self.sigs[0]]
+
+        if len(self.sigs) > 1:
+            rival_sigs = self.sigs[1:]
         if rival_sigs is not None:
             r_sigs_error = "Signal or list of signals expected."
             assert isinstance(rival_sigs, (str, list)), r_sigs_error
@@ -211,15 +264,15 @@ class SignalReturnRelations():
         self.signals = signals
         #self.xcats = self.signals + [self.ret[0]]
 
-        self.manipulate_df(xcat=self.signals + [self.ret[0]], freq=self.freq[0], agg_sig=self.agg_sig[0], sig=self.sig[0])
+        self.manipulate_df(xcat=self.signals + [self.rets[0]], freq=self.freqs[0], agg_sig=self.agg_sigs[0], sig=self.sigs[0])
 
         if len(self.signals) > 1:
             self.df_sigs = self.__rival_sigs__()
             
-        self.sig[0] = self.new_sig[0]
+        self.sigs[0] = self.new_sig[0]
 
-        self.df_cs = self.__output_table__(cs_type="cids", ret=self.ret[0], sig=self.sig[0])
-        self.df_ys = self.__output_table__(cs_type="years", ret=self.ret[0], sig=self.sig[0])
+        self.df_cs = self.__output_table__(cs_type="cids", ret=self.rets[0], sig=self.sigs[0])
+        self.df_ys = self.__output_table__(cs_type="years", ret=self.rets[0], sig=self.sigs[0])
 
     def __rival_sigs__(self):
         """
@@ -229,7 +282,7 @@ class SignalReturnRelations():
         df_out = pd.DataFrame(index=self.signals, columns=self.metrics)
         df = self.df
 
-        ret: str = self.ret[0]
+        ret: str = self.rets[0]
 
         for s in self.signals:
             # Entire panel will be passed in.
@@ -331,10 +384,10 @@ class SignalReturnRelations():
         dfx = df_xs[~df_xs.index.isin(["PosRatio"])]
 
         if title is None:
-            refsig = "various signals" if type == "signals" else self.sig
+            refsig = "various signals" if type == "signals" else self.sigs
             title = (
-                f"Accuracy for sign prediction of {self.ret} based on {refsig} "
-                f"at {self.dic_freq[self.freq[0]]} frequency."
+                f"Accuracy for sign prediction of {self.rets} based on {refsig} "
+                f"at {self.dic_freq[self.freqs[0]]} frequency."
             )
         if size is None:
             size = (np.max([dfx.shape[0] / 2, 8]), 6)
@@ -420,10 +473,10 @@ class SignalReturnRelations():
         kprobs[kprobs == 0] = 0.01
 
         if title is None:
-            refsig = "various signals" if type == "signals" else self.sig
+            refsig = "various signals" if type == "signals" else self.sigs
             title = (
-                f"Positive correlation probability of {self.ret} "
-                f"and lagged {refsig} at {self.dic_freq[self.freq[0]]} frequency."
+                f"Positive correlation probability of {self.rets} "
+                f"and lagged {refsig} at {self.dic_freq[self.freqs[0]]} frequency."
             )
         if size is None:
             size = (np.max([dfx.shape[0] / 2, 8]), 6)
@@ -571,8 +624,8 @@ class SignalReturnRelations():
         self.df = df
         self.cids = list(np.sort(self.df.index.get_level_values(0).unique()))
 
-        if True in self.signs and self.signs[self.sig.index(sig)]:
-            index = self.sig.index(sig)
+        if True in self.signs and self.signs[self.sigs.index(sig)]:
+            index = self.sigs.index(sig)
             original_name = sig + "/" + agg_sig
 
             self.df.loc[:, self.signals] *= -1
@@ -701,9 +754,9 @@ class SignalReturnRelations():
         """
 
         if ret is None:
-            ret = self.ret if not isinstance(self.ret, list) else self.ret[0]
+            ret = self.rets if not isinstance(self.rets, list) else self.rets[0]
         if sig is None:
-            sig = self.sig if not isinstance(self.sig, list) else self.sig[0]
+            sig = self.sigs if not isinstance(self.sigs, list) else self.sigs[0]
 
         # Analysis completed exclusively on the primary signal.
         r = [ret]
@@ -856,19 +909,19 @@ class SignalReturnRelations():
         """
         self.df = self.original_df
         if ret is None:
-            ret = self.ret if not isinstance(self.ret, list) else self.ret[0]
+            ret = self.rets if not isinstance(self.rets, list) else self.rets[0]
         if freq is None:
-            freq = self.freq if not isinstance(self.freq, list) else self.freq[0]
+            freq = self.freqs if not isinstance(self.freqs, list) else self.freqs[0]
         if agg_sigs is None:
             agg_sigs = (
-                self.agg_sig if not isinstance(self.agg_sig, list) else self.agg_sig[0]
+                self.agg_sigs if not isinstance(self.agg_sigs, list) else self.agg_sigs[0]
             )
         if xcat is None:
-            sig = self.revert_negation(self.sig) if not isinstance(self.sig, list) else self.revert_negation(self.sig[0])
-            if isinstance(self.sig, list):
-                self.sig[0] = self.revert_negation(self.sig[0])
+            sig = self.revert_negation(self.sigs) if not isinstance(self.sigs, list) else self.revert_negation(self.sigs[0])
+            if isinstance(self.sigs, list):
+                self.sigs[0] = self.revert_negation(self.sigs[0])
             else:
-                self.sig = self.revert_negation(self.sig)
+                self.sigs = self.revert_negation(self.sigs)
             xcat = [sig, ret]
         elif isinstance(xcat, list):
             sig = xcat[0]
@@ -894,7 +947,7 @@ class SignalReturnRelations():
         ).round(decimals=5)
 
         self.df = self.original_df
-        sig_string = sig + '_NEG' if self.signs[self.sig.index(sig)] else sig
+        sig_string = sig + '_NEG' if self.signs[self.sigs.index(sig)] else sig
         index = f"{freq}: {sig_string}/{agg_sigs} => {ret}"
 
         df_result.rename(index={"Panel": index}, inplace=True)
@@ -924,11 +977,11 @@ class SignalReturnRelations():
             values in down-sampling.
         """
         if rets is None:
-            rets = self.ret
+            rets = self.rets
         if freqs is None:
-            freqs = self.freq
+            freqs = self.freqs
         if agg_sigs is None:
-            agg_sigs = self.agg_sig
+            agg_sigs = self.agg_sigs
         if not isinstance(agg_sigs, list):
             agg_sigs = [agg_sigs]
         if xcats is None:
@@ -940,28 +993,28 @@ class SignalReturnRelations():
         if not isinstance(freqs, list):
             freqs = [freqs]
 
-        for ret in rets:
-            if not ret in self.xcats:
-                raise ValueError(f"{ret} is not a valid return category")
+        for r in rets:
+            if not r in self.xcats:
+                raise ValueError(f"{r} is not a valid return category")
 
-        for xcat in xcats:
-            if not xcat in self.xcats:
-                raise ValueError(f"{xcat} is not a valid signal category")
+        for x in xcats:
+            if not x in self.xcats:
+                raise ValueError(f"{x} is not a valid signal category")
 
-        for freq in freqs:
-            if not freq in self.freq:
-                raise ValueError(f"{freq} is not a valid frequency")
+        for f in freqs:
+            if not f in self.freqs:
+                raise ValueError(f"{f} is not a valid frequency")
 
-        for agg_sig in agg_sigs:
-            if not agg_sig in self.agg_sig:
-                raise ValueError(f"{agg_sig} is not a valid aggregation method")
+        for ags in agg_sigs:
+            if not ags in self.agg_sigs:
+                raise ValueError(f"{ags} is not a valid aggregation method")
 
-        xcats = [x for x in xcats if x in self.sig]
+        xcats = [x for x in xcats if x in self.sigs]
 
         index = [
             (
                 f"{freq}: "
-                f"{xcat + '_NEG' if self.signs[self.sig.index(xcat)] else xcat}"
+                f"{xcat + '_NEG' if self.signs[self.sigs.index(xcat)] else xcat}"
                 f"/{agg_sig} => {ret}"
             )
             for freq in freqs
@@ -1063,14 +1116,14 @@ class SignalReturnRelations():
         if not "freqs" in rows and not "freqs" in columns:
             freqs = ["Q"]
 
-        if isinstance(self.freq, list):
-            freqs = self.freq
+        if isinstance(self.freqs, list):
+            freqs = self.freqs
         else:
-            freqs = [self.freq]
-        if self.is_list_of_strings(self.agg_sig):
-            agg_sigs = self.agg_sig
+            freqs = [self.freqs]
+        if self.is_list_of_strings(self.agg_sigs):
+            agg_sigs = self.agg_sigs
         else:
-            agg_sigs = [self.agg_sig]
+            agg_sigs = [self.agg_sigs]
 
         type_values = ["panel", "mean_years", "mean_cids", "pr_years", "pr_cids"]
         rows_values = ["xcat", "ret", "freq", "agg_sigs"]
@@ -1084,12 +1137,12 @@ class SignalReturnRelations():
         if not all([x in rows_values for x in columns]):
             raise ValueError(f"Columns must only contain {rows_values}")
 
-        rets = self.ret if isinstance(self.ret, list) else [self.ret]
-        sigs = self.sig if isinstance(self.sig, list) else [self.sig]
+        rets = self.rets if isinstance(self.rets, list) else [self.rets]
+        sigs = self.sigs if isinstance(self.sigs, list) else [self.sigs]
 
         sigs_neg = []
         for sig in sigs:
-            if self.signs[self.sig.index(sig)]:
+            if self.signs[self.sigs.index(sig)]:
                 sigs_neg.append(sig + "_NEG")
             else:
                 sigs_neg.append(sig)
@@ -1121,7 +1174,7 @@ class SignalReturnRelations():
 
         for ret, sig, freq, agg_sig in loop_tuples:
             sig_original = sig
-            if self.signs[self.sig.index(sig)]:
+            if self.signs[self.sigs.index(sig)]:
                 sig += "_NEG"
             hash = f"{ret}/{sig}/{freq}/{agg_sig}"
             sig = sig_original
@@ -1261,32 +1314,36 @@ if __name__ == "__main__":
     # Additional signals.
     srn = SignalReturnRelations(
         dfd,
-        ret="XR",
-        sig="CRY",
+        rets="XR",
+        sigs="CRY",
         rival_sigs=None,
         sig_neg=True,
         cosp=True,
-        freq="M",
+        freqs="M",
         start="2002-01-01",
     )
 
     dfsum = srn.summary_table()
+    print(dfsum)
 
     r_sigs = ["INFL", "GROWTH"]
     srn = SignalReturnRelations(
         dfd,
-        ret="XR",
-        sig="CRY",
+        rets="XR",
+        sigs="CRY",
         rival_sigs=r_sigs,
         sig_neg=True,
         cosp=True,
-        freq="M",
+        freqs="M",
         start="2002-01-01",
     )
     dfsum = srn.summary_table()
+    print(dfsum)
 
     df_sigs = srn.signals_table(sigs=["CRY_NEG", "INFL_NEG"])
     df_sigs_all = srn.signals_table()
+    print(df_sigs)
+    print(df_sigs_all)
 
     srn.accuracy_bars(
         type="signals",
@@ -1297,11 +1354,11 @@ if __name__ == "__main__":
 
     sr = SignalReturnRelations(
         dfd,
-        ret="XR",
-        sig="CRY",
-        freq="M",
+        rets="XR",
+        sigs="CRY",
+        freqs="M",
         start="2002-01-01",
-        agg_sig="last",
+        agg_sigs="last",
     )
 
     srt = sr.single_relation_table()
@@ -1316,12 +1373,12 @@ if __name__ == "__main__":
 
     sr = SignalReturnRelations(
         dfd,
-        ret=["XR", "XRH"],
-        sig=["CRY", "INFL", "GROWTH"],
+        rets=["XR", "XRH"],
+        sigs=["CRY", "INFL", "GROWTH"],
         sig_neg=[False, True],
         cosp=True,
-        freq=["M", "Q"],
-        agg_sig=["last", "mean"],
+        freqs=["M", "Q"],
+        agg_sigs=["last", "mean"],
         blacklist=black,
     )
 
