@@ -1024,21 +1024,21 @@ class SignalReturnRelations:
         if not isinstance(freqs, list):
             freqs = [freqs]
 
-        for r in rets:
-            if not r in self.xcats:
-                raise ValueError(f"{r} is not a valid return category")
+        for rets_elem in rets:
+            if not rets_elem in self.xcats:
+                raise ValueError(f"{rets_elem} is not a valid return category")
 
-        for x in xcats:
-            if not x in self.xcats:
-                raise ValueError(f"{x} is not a valid signal category")
+        for xcats_elem in xcats:
+            if not xcats_elem in self.xcats:
+                raise ValueError(f"{xcats_elem} is not a valid signal category")
 
-        for f in freqs:
-            if not f in self.freqs:
-                raise ValueError(f"{f} is not a valid frequency")
+        for freqs_elem in freqs:
+            if not freqs_elem in self.freqs:
+                raise ValueError(f"{freqs_elem} is not a valid frequency")
 
-        for ags in agg_sigs:
-            if not ags in self.agg_sigs:
-                raise ValueError(f"{ags} is not a valid aggregation method")
+        for agg_sigs_elem in agg_sigs:
+            if not agg_sigs_elem in self.agg_sigs:
+                raise ValueError(f"{agg_sigs_elem} is not a valid aggregation method")
 
         xcats = [x for x in xcats if x in self.sigs]
 
