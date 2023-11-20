@@ -9,7 +9,7 @@ import pandas as pd
 import datetime
 from typing import Union, Optional, Dict
 
-from macrosynergy.learning import PanelTimeSeriesSplit
+from macrosynergy.learning.panel_time_series_split import BasePanelSplit, ExpandingKFoldPanelSplit
 from sklearn.model_selection import cross_validate
 from sklearn.metrics import make_scorer
 
@@ -17,7 +17,7 @@ from sklearn.metrics import make_scorer
 def panel_cv_scores(
     X: pd.DataFrame,
     y: Union[pd.DataFrame, pd.Series],
-    splitter: PanelTimeSeriesSplit,
+    splitter: BasePanelSplit,
     estimators: dict,
     scoring: dict,
     show_longbias: Optional[bool] = True,
@@ -33,8 +33,8 @@ def panel_cv_scores(
         be in datetime format.
     :param <pd.DataFrame> y: Dataframe of the target variable, multi-indexed by
         (cross-section, date). The dates must be in datetime format.
-    :param <PanelTimeSeriesSplit> splitter: splitter object instantiated from
-        PanelTimeSeriesSplit.
+    :param <BasePanelSplit> splitter: splitter object of a class inheriting
+        from BasePanelSplit.
     :param <dict> estimators: dictionary of estimators, where the keys are the estimator
         names and the values are the sklearn estimator objects.
     :param <dict> scoring: dictionary of scoring metrics, where the keys are the metric
@@ -65,8 +65,8 @@ def panel_cv_scores(
         raise TypeError("X must be multi-indexed.")
     if not isinstance(y.index, pd.MultiIndex):
         raise TypeError("y must be multi-indexed.")
-    if not isinstance(splitter, PanelTimeSeriesSplit):
-        raise TypeError("splitter must be an instance of PanelTimeSeriesSplit.")
+    if not isinstance(splitter, BasePanelSplit):
+        raise TypeError("splitter must be an inherit from BasePanelSplit.")
     if not isinstance(estimators, dict):
         raise TypeError("estimators must be a dictionary.")
     if not isinstance(scoring, dict):
@@ -183,7 +183,7 @@ if __name__ == "__main__":
     y2 = dfd2["XR"]
 
     # 1) Demonstration of panel_cv_scores
-    splitex = PanelTimeSeriesSplit(n_splits=100, n_split_method="expanding")
+    splitex = ExpandingKFoldPanelSplit(n_splits=100)
     models = {"OLS": LinearRegression(), "Lasso": Lasso()}
     metrics = {
         "rmse": make_scorer(
