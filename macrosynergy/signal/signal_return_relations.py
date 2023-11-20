@@ -18,7 +18,8 @@ from macrosynergy.management.utils import (
 )
 import macrosynergy.visuals as msv
 
-class SignalReturnRelations():
+
+class SignalReturnRelations:
 
     """
     Class for analysing and visualizing signal and a return series.
@@ -26,9 +27,9 @@ class SignalReturnRelations():
     :param <pd.Dataframe> df: standardized DataFrame with the following necessary
         columns: 'cid', 'xcat', 'real_date' and 'value.
     :param <str, List[str]> rets: one or several target return categories.
-    :param <str, List[str]> sigs: list of signal categories to be considered for which 
+    :param <str, List[str]> sigs: list of signal categories to be considered for which
         detailed relational statistics can be calculated.
-    :param <bool, List[bool]> sig_neg: if set to True puts the signal in negative terms 
+    :param <bool, List[bool]> sig_neg: if set to True puts the signal in negative terms
         for all analysis. Default is False.
     :param <bool> cosp: If True the comparative statistics are calculated only for the
         "communal sample periods", i.e. periods and cross-sections that have values
@@ -41,8 +42,8 @@ class SignalReturnRelations():
         the data frame. If one cross-section has several blacklist periods append numbers
         to the cross-section code.
     :param <str, List[str]> freqs: letters denoting all frequencies at which the series
-        may be sampled. This must be a selection of 'D', 'W', 'M', 'Q', 'A'. Default is 
-        only 'M'. The return series will always be summed over the sample period. The 
+        may be sampled. This must be a selection of 'D', 'W', 'M', 'Q', 'A'. Default is
+        only 'M'. The return series will always be summed over the sample period. The
         signal series will be aggregated according to the values of `agg_sigs`.
     :param <str, List[str]> agg_sigs: aggregation method applied to the signal values in
         down-sampling. The default is "last". Alternatives are "mean", "median" and "sum".
@@ -102,9 +103,10 @@ class SignalReturnRelations():
                 raise ValueError("Target return must be defined.")
             else:
                 warnings.warn(
-                    "Parameter 'ret' is deprecated and will be removed in v0.1.0. Please use parameter rets instead.",
+                    "Parameter 'ret' is deprecated and will be removed in v0.1.0. "
+                    "Please use parameter rets instead.",
                     DeprecationWarning,
-                    stacklevel=2
+                    stacklevel=2,
                 )
                 rets = ret
         if sigs is None:
@@ -112,23 +114,26 @@ class SignalReturnRelations():
                 raise ValueError("Signal must be defined.")
             else:
                 warnings.warn(
-                    "Parameter 'sig' is deprecated and will be removed in v0.1.0. Please use parameter sigs instead.",
+                    "Parameter 'sig' is deprecated and will be removed in v0.1.0. "
+                    "Please use parameter sigs instead.",
                     DeprecationWarning,
-                    stacklevel=2
+                    stacklevel=2,
                 )
                 sigs = sig
         if freq is not None:
             warnings.warn(
-                "Parameter 'freq' is deprecated and will be removed in v0.1.0. Please use parameter freqs instead.",
+                "Parameter 'freq' is deprecated and will be removed in v0.1.0. Please" 
+                "use parameter freqs instead.",
                 DeprecationWarning,
-                stacklevel=2
+                stacklevel=2,
             )
             freqs = freq
         if agg_sig is not None:
             warnings.warn(
-                "Parameter 'agg_sig' is deprecated and will be removed in v0.1.0. Please use parameter agg_sigs instead.",
+                "Parameter 'agg_sig' is deprecated and will be removed in v0.1.0. Please" 
+                "use parameter agg_sigs instead.""",
                 DeprecationWarning,
-                stacklevel=2
+                stacklevel=2,
             )
             agg_sigs = agg_sig
 
@@ -223,7 +228,7 @@ class SignalReturnRelations():
                 ret in self.xcats
             ), "Target return must be available in the DataFrame."
 
-        #self.xcats = self.sig + self.ret
+        # self.xcats = self.sig + self.ret
 
         self.signs = sig_neg if isinstance(sig_neg, list) else [sig_neg]
         for sign in self.signs:
@@ -244,11 +249,15 @@ class SignalReturnRelations():
         signals = [self.sigs[0]]
 
         if rival_sigs is not None:
+            r_sigs_warning = ("Parameter 'rival_sigs' is deprecated and will be removed " 
+            "in v0.1.0. Please specify the rival signals as part of the list of feature "
+            "signals in the argument 'sigs'."
+            )
             warnings.warn(
-                    "Parameter 'rival_sigs' is deprecated and will be removed in v0.1.0. Please specify the rival signals as part of the list of feature signals in the argument 'sigs'.",
-                    DeprecationWarning,
-                    stacklevel=2
-                )
+                r_sigs_warning,
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
         if len(self.sigs) > 1:
             rival_sigs = self.sigs[1:]
@@ -269,17 +278,26 @@ class SignalReturnRelations():
             signals += r_sigs
 
         self.signals = signals
-        #self.xcats = self.signals + [self.ret[0]]
+        # self.xcats = self.signals + [self.ret[0]]
 
-        self.manipulate_df(xcat=self.signals + [self.rets[0]], freq=self.freqs[0], agg_sig=self.agg_sigs[0], sig=self.sigs[0])
+        self.manipulate_df(
+            xcat=self.signals + [self.rets[0]],
+            freq=self.freqs[0],
+            agg_sig=self.agg_sigs[0],
+            sig=self.sigs[0],
+        )
 
         if len(self.signals) > 1:
             self.df_sigs = self.__rival_sigs__()
-            
+
         self.sigs[0] = self.new_sig[0]
 
-        self.df_cs = self.__output_table__(cs_type="cids", ret=self.rets[0], sig=self.sigs[0])
-        self.df_ys = self.__output_table__(cs_type="years", ret=self.rets[0], sig=self.sigs[0])
+        self.df_cs = self.__output_table__(
+            cs_type="cids", ret=self.rets[0], sig=self.sigs[0]
+        )
+        self.df_ys = self.__output_table__(
+            cs_type="years", ret=self.rets[0], sig=self.sigs[0]
+        )
 
     def __rival_sigs__(self):
         """
@@ -587,8 +605,8 @@ class SignalReturnRelations():
         :param <str> sig: signal to be analysed.
         :param <bool> sst: Boolean that specifies whether this function is to be used for
             a single statistic table.
-        :param <Optional[pd.DataFrame]> df_result: DataFrame to be used for single statistic
-            table. `None` by default, and when using with `sst` set to `False`.
+        :param <Optional[pd.DataFrame]> df_result: DataFrame to be used for single 
+            statistic table. `None` by default, and when using with `sst` set to `False`.
         """
 
         cids = None if self.cids is None else self.cids
@@ -888,12 +906,12 @@ class SignalReturnRelations():
         ]
 
         return dfsum
-    
+
     def revert_negation(self, sig: str):
         if sig[-4:] == "_NEG":
             sig = sig[:-4]
         return sig
-    
+
     def single_relation_table(
         self,
         ret: str = None,
@@ -921,10 +939,16 @@ class SignalReturnRelations():
             freq = self.freqs if not isinstance(self.freqs, list) else self.freqs[0]
         if agg_sigs is None:
             agg_sigs = (
-                self.agg_sigs if not isinstance(self.agg_sigs, list) else self.agg_sigs[0]
+                self.agg_sigs
+                if not isinstance(self.agg_sigs, list)
+                else self.agg_sigs[0]
             )
         if xcat is None:
-            sig = self.revert_negation(self.sigs) if not isinstance(self.sigs, list) else self.revert_negation(self.sigs[0])
+            sig = (
+                self.revert_negation(self.sigs)
+                if not isinstance(self.sigs, list)
+                else self.revert_negation(self.sigs[0])
+            )
             if isinstance(self.sigs, list):
                 self.sigs[0] = self.revert_negation(self.sigs[0])
             else:
@@ -954,7 +978,7 @@ class SignalReturnRelations():
         ).round(decimals=5)
 
         self.df = self.original_df
-        sig_string = sig + '_NEG' if self.signs[self.sigs.index(sig)] else sig
+        sig_string = sig + "_NEG" if self.signs[self.sigs.index(sig)] else sig
         index = f"{freq}: {sig_string}/{agg_sigs} => {ret}"
 
         df_result.rename(index={"Panel": index}, inplace=True)
@@ -1203,7 +1227,9 @@ class SignalReturnRelations():
             type_index = cs_type_mapping.get(type, 1)
 
             # Retrieve output table and update df_result
-            df_out = self.__output_table__(cs_type=cs_type, ret=ret, sig=self.new_sig[0])
+            df_out = self.__output_table__(
+                cs_type=cs_type, ret=ret, sig=self.new_sig[0]
+            )
             single_stat = df_out.iloc[type_index][stat]
             row = self.get_rowcol(hash, rows)
             column = self.get_rowcol(hash, columns)
