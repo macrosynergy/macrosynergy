@@ -1,11 +1,11 @@
 from unittest import mock
 import unittest
 import pandas as pd
-import os
 import datetime
 import base64
 import io
-
+import warnings
+import logging
 from typing import List, Dict, Union, Any
 import requests
 
@@ -109,6 +109,9 @@ class TestRequestWrapper(unittest.TestCase):
             )
 
     def test_request_wrapper(self):
+        warnings.filterwarnings("ignore", category=UserWarning, module="logger")
+        curr_logger_level: int = logging.getLogger().getEffectiveLevel()
+        logging.getLogger().setLevel(logging.ERROR)
         user_id: str = f"User_{random_string()}"
 
         with self.assertRaises(ValueError):
@@ -170,6 +173,9 @@ class TestRequestWrapper(unittest.TestCase):
                     method="get",
                     url=OAUTH_BASE_URL + HEARTBEAT_ENDPOINT,
                 )
+
+        warnings.resetwarnings()
+        logging.getLogger().setLevel(curr_logger_level)
 
 
 class TestCertAuth(unittest.TestCase):
@@ -393,7 +399,8 @@ class TestDataQueryInterface(unittest.TestCase):
     def test_check_connection_fail(self, mock_p_fail, mock_p_get_token):
         # Opposite of above method: if the connection to DataQuery fails, the error code
         # will be 400.
-
+        curr_logger_level: int = logging.getLogger().getEffectiveLevel()
+        logging.getLogger().setLevel(logging.ERROR)
         with JPMaQSDownload(
             client_id="client1", client_secret="123", oauth=True, check_connection=False
         ) as jpmaqs_download:
@@ -402,6 +409,7 @@ class TestDataQueryInterface(unittest.TestCase):
             self.assertFalse(jpmaqs_download.check_connection())
         mock_p_fail.assert_called_once()
         mock_p_get_token.assert_called_once()
+        logging.getLogger().setLevel(curr_logger_level)
 
     def test_oauth_condition(self):
         # Accessing DataQuery can be achieved via two methods: OAuth or Certificates /

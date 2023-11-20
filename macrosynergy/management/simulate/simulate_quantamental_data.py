@@ -13,6 +13,7 @@ from statsmodels.tsa.arima_process import ArmaProcess
 from typing import List, Tuple, Dict, Union
 from collections import defaultdict
 import datetime
+import warnings
 
 
 def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float = 0.75):
@@ -35,8 +36,10 @@ def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float =
     ser = ser + mean - np.mean(ser)
     return sd_mult * ser / np.std(ser)
 
-def dataframe_generator(df_cids: pd.DataFrame, df_xcats: pd.DataFrame,
-                        cid: str, xcat: str):
+
+def dataframe_generator(
+    df_cids: pd.DataFrame, df_xcats: pd.DataFrame, cid: str, xcat: str
+):
     """
     Adjacent method used to construct the quantamental DataFrame.
 
@@ -199,7 +202,7 @@ def make_qdf_black(df_cids: pd.DataFrame, df_xcats: pd.DataFrame, blackout: dict
                 # in the dictionary.
                 # Naturally compare against the data-series' formal start & end date.
                 if start < dates[0] or end > dates[-1]:
-                    print("Blackout period date not within data series range.")
+                    warnings.warn("Blackout period date not within data series range.")
                     break
                 # If the date falls on a weekend, change to the following Monday.
                 elif condition_start > 0:
