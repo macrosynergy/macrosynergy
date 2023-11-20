@@ -2,14 +2,16 @@ from tests.simulate import make_qdf
 from macrosynergy.pnl.naive_pnl import NaivePnL
 from macrosynergy.management.utils import reduce_df
 import unittest
+from unittest.mock import patch
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple, Union
 import matplotlib
+from matplotlib import pyplot as plt
 
 
 class TestAll(unittest.TestCase):
-    def dataframe_construction(self):
+    def setUp(self) -> None:
         self.cids: List[str] = ["AUD", "CAD", "GBP", "NZD", "USD", "EUR"]
         self.xcats: List[str] = ["EQXR", "CRY", "GROWTH", "INFL", "DUXR"]
 
@@ -51,10 +53,11 @@ class TestAll(unittest.TestCase):
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
         self.dfd: pd.DataFrame = reduce_df(dfd, blacklist=self.blacklist)
 
+    def tearDown(self) -> None:
+        return super().tearDown()
+
     def test_constructor(self):
         # Test NaivePnL's constructor and the instantiation of the respective fields.
-
-        self.dataframe_construction()
 
         ret = ["EQXR"]
         sigs = ["CRY", "GROWTH", "INFL"]
@@ -130,7 +133,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(sorted(bm_tickers) == ["EUR_EQXR"])
 
     def test_make_signal(self):
-        self.dataframe_construction()
         df = self.dfd
 
         ret = "EQXR"
@@ -347,8 +349,6 @@ class TestAll(unittest.TestCase):
             self.assertTrue(round(float(test_data), 4) == round(pnl_return_date, 4))
 
     def test_make_pnl_neg(self):
-        self.dataframe_construction()
-
         # The majority of the logic for make_pnl is tested through the method
         # test_make_pnl(). Therefore, aim to isolate the application of the negative
         # signal through evaluate_pnl() method.
@@ -409,8 +409,6 @@ class TestAll(unittest.TestCase):
         self.assertTrue(np.all(bm_correl.sum(axis=1).to_numpy()) == 0)
 
     def test_make_long_pnl(self):
-        self.dataframe_construction()
-
         ret = "EQXR"
         sigs = ["CRY", "GROWTH", "INFL"]
         pnl = NaivePnL(
@@ -458,8 +456,13 @@ class TestAll(unittest.TestCase):
             index="real_date", columns="cid", values="value"
         )
 
-        condition = return_calc - float(long_equity_series.loc[random_date])
-        self.assertTrue(abs(condition) < 0.0001)
+        self.assertTrue(
+            np.isclose(
+                return_calc,
+                float(long_equity_series.loc[random_date].iloc[0]),
+                atol=0.0001,
+            )
+        )
 
         # The remaining methods in NaivePnL are graphical plots which display the values
         # computed using the functions above. Therefore, if the functionality is correct
@@ -467,8 +470,6 @@ class TestAll(unittest.TestCase):
         # Test as a visual assessment will be sufficient.
 
         # Another test run with vol_scale=None
-
-        self.dataframe_construction()
 
         ret = "EQXR"
         sigs = ["CRY", "GROWTH", "INFL"]
@@ -511,12 +512,17 @@ class TestAll(unittest.TestCase):
             index="real_date", columns="cid", values="value"
         )
 
-        condition = return_calc - float(long_equity_series.loc[random_date])
-        self.assertTrue(abs(condition) < 0.0001)
+        self.assertTrue(
+            np.isclose(
+                return_calc,
+                float(long_equity_series.loc[random_date].iloc[0]),
+                atol=0.0001,
+            )
+        )
 
     def test_plotting_methods(self):
-        self.dataframe_construction()
-
+        plt.close("all")
+        mock_plt = patch("matplotlib.pyplot.show").start()
         mpl_backend = matplotlib.get_backend()
         matplotlib.use("Agg")
 
@@ -552,26 +558,22 @@ class TestAll(unittest.TestCase):
         # Confirm the plotting methods do not raise any errors.
 
         try:
-            pnl.plot_pnls(
-                pnl_cats=["PNL_GROWTH", "Unit_Long_EQXR"]
-            )
+            pnl.plot_pnls(pnl_cats=["PNL_GROWTH", "Unit_Long_EQXR"])
         except Exception as e:
             self.fail(f"plot_pnl raised {e} unexpectedly")
 
         try:
-            pnl.signal_heatmap(
-                pnl_name="PNL_GROWTH"
-            )
+            pnl.signal_heatmap(pnl_name="PNL_GROWTH")
         except Exception as e:
             self.fail(f"signal_heatmap raised {e} unexpectedly")
 
         try:
-            pnl.agg_signal_bars(
-                pnl_name="PNL_GROWTH"
-            )
+            pnl.agg_signal_bars(pnl_name="PNL_GROWTH")
         except Exception as e:
             self.fail(f"agg_signal_bars raised {e} unexpectedly")
 
+        patch.stopall()
+        plt.close("all")
         matplotlib.use(mpl_backend)
 
 

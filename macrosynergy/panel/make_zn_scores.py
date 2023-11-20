@@ -70,11 +70,12 @@ def expanding_stat(
                 df.loc[first_observation:date].stack().apply(stat)
             )
 
-        df_out = df_out.fillna(method="ffill")
+        df_out = df_out.ffill()
 
         if iis:
             if (est_index - obs_index) > 0:
-                df_out = df_out.fillna(method="bfill", limit=(est_index - obs_index))
+                # df_out = df_out.fillna(method="bfill", limit=(est_index - obs_index))
+                df_out = df_out.bfill(limit=(est_index - obs_index))
 
     df_out.columns.name = "cid"
     return df_out
