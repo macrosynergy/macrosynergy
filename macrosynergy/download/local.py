@@ -733,6 +733,7 @@ def create_store(
     client_id: str,
     client_secret: str,
     fmt: str = "pkl",
+    expressions: List[str] = None,
     test_mode: bool = False,
 ) -> None:
     DownloadTimeseries(
@@ -743,6 +744,7 @@ def create_store(
         test_mode=test_mode,
     ).download_data(
         show_progress=True,
+        expressions=expressions,
     )
     total_start_time: float = time.time()
 
