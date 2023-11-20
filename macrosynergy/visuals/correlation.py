@@ -15,6 +15,7 @@ from collections import defaultdict
 
 from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.utils import _map_to_business_day_frequency
 
 
 def view_correlation(
@@ -90,12 +91,7 @@ def view_correlation(
     df = df[col_names]
 
     if freq is not None:
-        freq_options = ["W", "M", "Q"]
-        error_message = (
-            f"Frequency parameter must be one of the following options:"
-            f"{freq_options}."
-        )
-        assert freq in freq_options, error_message
+        freq = _map_to_business_day_frequency(freq=freq, valid_freqs=["W", "M", "Q"])
 
     xcats = xcats if isinstance(xcats, list) else [xcats]
 
