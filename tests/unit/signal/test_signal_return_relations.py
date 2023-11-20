@@ -144,6 +144,16 @@ class TestAll(unittest.TestCase):
                 freq="D",
                 blacklist=self.blacklist,
             )
+        # Return Signal must be specified
+        with self.assertRaises(ValueError):
+            srr = SignalReturnRelations(
+                self.dfd,
+            )
+        with self.assertRaises(ValueError):
+            srr = SignalReturnRelations(
+                self.dfd,
+                ret="XR",
+            )
         # Signals passed must be a subset of the categories defined in the DataFrame. If
         # not, will raise an assertion.
         with self.assertRaises(AssertionError):
