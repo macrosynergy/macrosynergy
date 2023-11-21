@@ -110,7 +110,7 @@ def _single_calc(
             pd.bdate_range(end=row["real_date"], periods=lback_periods)
         )
     ]
-
+    # TODO: Check this 252 number. @mikiinterfiore says it should be 261
     if weights is None:
         out = np.sqrt(252) * df_wide.agg(roll_func, remove_zeros=remove_zeros)
     else:
