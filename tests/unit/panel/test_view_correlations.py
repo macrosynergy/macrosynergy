@@ -195,7 +195,7 @@ class TestAll(unittest.TestCase):
             self.fail(f"correl_matrix raised {e} unexpectedly")
 
         lag_dict = {"INFL": [0, 1, 2, 5]}
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # Test the frequency options: either ['W', 'M', 'Q'].
             correl_matrix(
                 self.dfd,
