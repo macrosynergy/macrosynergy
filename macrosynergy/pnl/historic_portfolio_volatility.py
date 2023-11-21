@@ -381,6 +381,20 @@ def historic_portfolio_vol(
     )
     
     
+    
+    ## EXPERIMENTING
+
+    n_assets: int = vcv_matrix.shape[0]
+    portfolio_weights = np.ones(n_assets) / n_assets
+
+    portfolio_vol: float = np.sqrt(
+        np.dot(
+            portfolio_weights.T,
+            np.dot(vcv_matrix, portfolio_weights),
+        )
+    )
+
+    return portfolio_vol
 
 
 if __name__ == "__main__":
