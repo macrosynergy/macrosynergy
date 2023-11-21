@@ -103,8 +103,6 @@ def _single_calc(
     remove_zeros: bool,
     weights: Optional[np.ndarray] = None,
 ):
-    # Copied from macrosynergy.panel.historic_vol
-
     df_wide: pd.DataFrame = ticker_df.loc[
         ticker_df.index.isin(
             pd.bdate_range(end=row["real_date"], periods=lback_periods)
@@ -112,10 +110,12 @@ def _single_calc(
     ]
     # TODO: Check this 252 number. @mikiinterfiore says it should be 261
     if weights is None:
-        out = np.sqrt(252) * df_wide.agg(roll_func, remove_zeros=remove_zeros)
+        univariate_vol = np.sqrt(252) * df_wide.agg(
+            roll_func, remove_zeros=remove_zeros
+        )
     else:
         if len(weights) == len(df_wide):
-            out = np.sqrt(252) * df_wide.agg(
+            univariate_vol = np.sqrt(252) * df_wide.agg(
                 roll_func, w=weights, remove_zeros=remove_zeros
             )
         else:
@@ -131,9 +131,17 @@ def _single_calc(
     ) <= nan_tolerance
     # NOTE: dates with NaNs, dates with missing entries, and dates with 0s
     # are all treated as missing data and trigger a NaN in the output
-    out[~mask] = np.nan
+    univariate_vol[~mask] = np.nan
 
-    return out
+    ## inverse volatility -- simply 1/vol
+    inv_univariate_vol = 1 / univariate_vol
+
+    ## variance-covariance matrix for this period
+    d_vcv: pd.DataFrame = df_wide.cov()
+    
+    ## TODO: what now?
+
+    return univariate_vol
 
 
 def _hist_vol(
@@ -225,24 +233,6 @@ def _hist_vol(
     dfw_calc = dfw_calc.reindex(df_wide.index).ffill(limit=fills[est_freq])
 
     return ticker_df_to_qdf(df=dfw_calc)
-
-
-def _var_covar_matrix(
-    df: pd.DataFrame,
-    fids: List[str],
-    sname: str,
-):
-    df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
-    sig_ident: str = f"_CSIG_{sname}"
-
-    _check_conts: List[str] = [f"{contx}{sig_ident}" for contx in fids]
-    if not set(_check_conts).issubset(set(df_wide.columns)):
-        raise ValueError(
-            f"Contract signals for all contracts not in dataframe. \n"
-            f"Missing: {set(_check_conts) - set(df_wide.columns)}"
-        )
-
-    return df_wide[_check_conts].cov()
 
 
 def historic_portfolio_vol(
@@ -374,28 +364,6 @@ def historic_portfolio_vol(
         nan_tolerance=nan_tolerance,
     )
 
-    vcv_matrix: pd.DataFrame = _var_covar_matrix(
-        df=hist_vol,
-        sname=sname,
-        fids=fids,
-    )
-    
-    
-    
-    ## EXPERIMENTING
-
-    n_assets: int = vcv_matrix.shape[0]
-    portfolio_weights = np.ones(n_assets) / n_assets
-
-    portfolio_vol: float = np.sqrt(
-        np.dot(
-            portfolio_weights.T,
-            np.dot(vcv_matrix, portfolio_weights),
-        )
-    )
-
-    return portfolio_vol
-
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_test_df
@@ -440,7 +408,7 @@ if __name__ == "__main__":
         sname="TEST",
         fids=fids,
         est_freq="m",
-        lback_periods=21,
+        lback_periods=60,
         lback_meth="ma",
         half_life=11,
         rstring="XR",
