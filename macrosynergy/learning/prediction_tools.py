@@ -8,8 +8,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from macrosynergy.learning import PanelTimeSeriesSplit
-
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.base import BaseEstimator
 from sklearn.pipeline import Pipeline
@@ -21,11 +19,13 @@ import logging
 
 from joblib import Parallel, delayed
 
+from macrosynergy.learning.panel_time_series_split import BasePanelSplit, ExpandingIncrementPanelSplit, RollingKFoldPanelSplit
+
 
 class AdaptiveSignalHandler:
     def __init__(
         self,
-        inner_splitter: PanelTimeSeriesSplit,
+        inner_splitter: BasePanelSplit,
         X: pd.DataFrame,
         y: pd.Series,
     ):
@@ -38,7 +38,7 @@ class AdaptiveSignalHandler:
         inner_splitter and the search type.
         The optimal model is then used to make test set forecasts.
 
-        :param <PanelTimeSeriesSplit> inner_splitter: Panel splitter that is used to split
+        :param <BasePanelSplit> inner_splitter: Panel splitter that is used to split
             each training set into smaller (training, test) pairs.
         :param <pd.DataFrame> X: Wide-format pandas dataframe of features over the time
             period for which the signal is to be calculated. These should lag behind
@@ -175,7 +175,7 @@ class AdaptiveSignalHandler:
         prediction_data = []
         modelchoice_data = []
 
-        outer_splitter = PanelTimeSeriesSplit(
+        outer_splitter = ExpandingIncrementPanelSplit(
             train_intervals=1,
             test_size=1,
             min_cids=min_cids,
@@ -433,7 +433,7 @@ if __name__ == "__main__":
     }
     metric = make_scorer(regression_balanced_accuracy, greater_is_better=True)
 
-    inner_splitter = PanelTimeSeriesSplit(n_split_method="rolling", n_splits=4)
+    inner_splitter = RollingKFoldPanelSplit(n_splits=4)
 
     hparam_grid = {
         "OLS": {},

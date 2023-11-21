@@ -144,6 +144,16 @@ class TestAll(unittest.TestCase):
                 freq="D",
                 blacklist=self.blacklist,
             )
+        # Return Signal must be specified
+        with self.assertRaises(ValueError):
+            srr = SignalReturnRelations(
+                self.dfd,
+            )
+        with self.assertRaises(ValueError):
+            srr = SignalReturnRelations(
+                self.dfd,
+                ret="XR",
+            )
         # Signals passed must be a subset of the categories defined in the DataFrame. If
         # not, will raise an assertion.
         with self.assertRaises(AssertionError):
@@ -196,8 +206,8 @@ class TestAll(unittest.TestCase):
             self.assertTrue(s[1] == "NEG")
             self.assertTrue(s[0] == signals[i])
 
-        self.assertEqual(srr_neg.sig[0][-4:], "_NEG")
-        self.assertEqual(srr_neg.sig[0][:-4], primary_signal)
+        self.assertEqual(srr_neg.sigs[0][-4:], "_NEG")
+        self.assertEqual(srr_neg.sigs[0][:-4], primary_signal)
 
         # Secondly, confirm the actual DataFrame's columns have been updated.
         test_columns = list(srr_neg.df.columns)
@@ -293,7 +303,7 @@ class TestAll(unittest.TestCase):
             blacklist=None,
         )
         self.assertTrue(
-            srr.df.loc[:, srr.ret].shape == srr_cosp.df.loc[:, srr.ret].shape
+            srr.df.loc[:, srr.rets].shape == srr_cosp.df.loc[:, srr.rets].shape
         )
 
     def test__slice_df__(self):
