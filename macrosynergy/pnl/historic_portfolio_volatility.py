@@ -173,6 +173,12 @@ def _hist_vol(
 
     # Create empty weights dataframe, similar to df_wide
 
+    # NOTE: `get_cycles` helps identify the dates for which the volatility calculation
+    # will be performed. This is done by identifying the last date of each cycle.
+    # We use `get_cycles` primarily because it has a clear and defined behaviour for all frequencies.
+    # It was originally designed as part of the `historic_vol` module, but it is
+    # used here as well.
+    
     trigger_indices = df_wide.index[
         get_cycles(
             pd.DataFrame({"real_date": df_wide.index}),
