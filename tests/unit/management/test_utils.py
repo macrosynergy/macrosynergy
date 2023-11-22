@@ -2,6 +2,7 @@ import unittest
 import pandas as pd
 import warnings
 import datetime
+import numpy as np
 
 from typing import List, Tuple, Dict, Union, Set, Any
 from macrosynergy.management.simulate import make_test_df
@@ -21,6 +22,7 @@ from macrosynergy.management.utils import (
     drop_nan_series,
     ticker_df_to_qdf,
     qdf_to_ticker_df,
+    get_eops,
 )
 from macrosynergy.management.utils.math import expanding_mean_with_nan
 from tests.simulate import make_qdf
@@ -633,6 +635,58 @@ class TestFunctions(unittest.TestCase):
         for i, elem in enumerate(ar_neutral):
             bm_elem_cry = round(benchmark_pandas_cry[i], 4)
             self.assertTrue(round(elem, 4) == bm_elem_cry)
+
+    def test_get_eops(self):
+        daterange1 = pd.bdate_range(start="2023-01-28", end="2023-02-02")
+        test_case_1 = pd.DataFrame({"real_date": pd.Series(daterange1)})
+        # NOTE: get_eops(freq=...) is case insensitive
+        test_result_1 = get_eops(dates=test_case_1, freq="M")
+        # expected results : 2023-01-31 (last of cycle), last index
+
+        expc_vals = set([pd.Timestamp("2023-01-31"), daterange1[-1]])
+        test_vals = set(test_result_1.tolist())
+        self.assertEqual(expc_vals, test_vals)
+
+        daterange2 = pd.bdate_range(start="2023-03-20", end="2023-07-10")
+        test_case_2 = pd.DataFrame({"real_date": pd.Series(daterange2)})
+        test_result_2 = get_eops(dates=test_case_2, freq="q")
+        # expected results : 2023-03-31 (last of cycle), 2023-06-30 (last of cycle), last index
+
+        expc_vals = set(
+            [pd.Timestamp("2023-03-31"), pd.Timestamp("2023-06-30"), daterange2[-1]]
+        )
+        test_vals = set(test_result_2.tolist())
+        self.assertEqual(expc_vals, test_vals)
+
+        daterange3 = pd.bdate_range(start="2000-01-01", end="2023-07-10")
+        test_case_3 = pd.DataFrame({"real_date": pd.Series(daterange3)})
+        test_result_3 = get_eops(dates=test_case_3, freq="m")
+
+        # expc_vals = set(
+        # print(test_case_3[test_result_3]["real_date"].values.tolist())
+        expc_vals = []
+        r_start_date = pd.Timestamp("2000-01-01")
+        r_end_date = pd.Timestamp("2023-07-10")
+
+        expc_no_cycles = (r_end_date.year - r_start_date.year) * 12 + (
+            r_end_date.month - r_start_date.month
+        )
+        self.assertEqual(expc_no_cycles, len(test_result_3) - 1)
+        # -1 as len(test_result_3) includes the last index
+
+        test_vals = [
+            [pd.Timestamp("2023-01-31"), True],
+            [pd.Timestamp("2016-02-29"), True],
+            # [pd.Timestamp("2023-02-29"), False],
+            # this timestamp doesn't exist and will raise an Exception
+            [pd.Timestamp("2023-02-28"), True],
+            [pd.Timestamp("2023-03-20"), False],
+            [pd.Timestamp("2005-12-30"), True],
+            [pd.Timestamp("2000-12-29"), True],
+        ]
+        set_test_result_3 = set(test_result_3)
+        for tval in test_vals:
+            self.assertEqual(tval[0] in set_test_result_3, tval[1])
 
 
 if __name__ == "__main__":
