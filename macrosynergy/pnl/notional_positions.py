@@ -30,7 +30,7 @@ from macrosynergy.management.utils import (
 )
 
 from macrosynergy.management.types import Numeric, NoneType, QuantamentalDataFrame
-
+from macrosynergy.pnl.historic_portfolio_volatility import historic_portfolio_vol
 
 def _apply_slip(
     df: pd.DataFrame,
@@ -98,9 +98,10 @@ def _leverage_positions(
     for ic, contx in enumerate(fids):
         pos_col: str = contx + "_" + pname
         cont_name: str = contx + sig_ident
+        # NOTE: this should be 
+        # dfw_pos = dfw_sigs * aum * leverage / rowsums(dfw_sigs)
         df_wide[pos_col] = df_wide[cont_name] * aum * leverage / rowsums
 
-        # TODO: this should be dfw_pos = dfw_sigs * aum * leverage / rowsums(dfw_sigs)
 
     # filter df to only contain position columns
     df_wide = df_wide.loc[:, [f"{contx}_{pname}" for contx in fids]]
@@ -250,7 +251,7 @@ def notional_positions(
     df["ticker"]: str = df["cid"] + "_" + df["xcat"]
 
     # There must be atleast one contract signal with the strategy name
-    if not any(df["ticker"].str.contains(f"_CSIG_{sname}")):
+    if not any(df["ticker"].str.endswith(f"_CSIG_{sname}")):
         raise ValueError(f"No contract signals for strategy `{sname}` in dataframe.")
 
     # Check that all contract identifiers have at least one signal
