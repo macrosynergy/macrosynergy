@@ -207,7 +207,7 @@ basket_1.return_weights()
 basket_1.weight_visualiser(basket_name="GLB_EQUAL")
 ```
 You can also calculate and visualise the following and more with built-in functions.
-1.  [historic volume](./macrosynergy/panel/historic_vol.py)
+1.  [historic volatility](./macrosynergy/panel/historic_vol.py)
 2.  [z-scores](./macrosynergy/panel/make_zn_scores.py)
 3.  [beta values](./macrosynergy/panel/return_beta.py)
 4.  [timeline](./macrosynergy/panel/view_timelines.py) 
