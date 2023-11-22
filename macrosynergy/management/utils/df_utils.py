@@ -332,7 +332,7 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     df_error = (
         f"The appended DataFrame must be defined over a subset of the columns "
         f"in the returned DataFrame. The undefined column(s): "
-        f"{additional_columns}."
+        f"{list(additional_columns)}."
     )
     assert df_add_cols.issubset(df_cols), df_error
 
