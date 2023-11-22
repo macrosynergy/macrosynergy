@@ -79,15 +79,15 @@ def flat_std(x: np.ndarray, remove_zeros: bool = True):
 
 def get_cycles(
     dates_df: pd.DataFrame,
-    freq: str = "m",
+    freq: str = "M",
 ) -> pd.Series:
     """Returns a DataFrame with values aggregated by the frequency specified.
 
     :param <pd.DataFrame>  dates_df: standardized DataFrame with the following necessary columns:
         'cid', 'xcats', 'real_date' and 'value'. Will contain all of the data across all
         macroeconomic fields.
-    :param <str> freq: Frequency of the data. Options are 'w' (weekly), 'm' (monthly),
-        'q' (quarterly) and 'd' (daily). Default is 'm'.
+    :param <str> freq: Frequency of the data. Options are 'W' (weekly), 'M' (monthly),
+        'Q' (quarterly) and 'D' (daily). Default is 'M'.
 
     :return <pd.Series>: A boolean mask which is True where the calculation is triggered.
     """
@@ -122,7 +122,7 @@ def get_cycles(
     elif freq == "d":
         func = lambda x, y: len(pd.bdate_range(x, y)) - 1
     else:
-        raise ValueError("Frequency parameter must be one of m, w, d or q")
+        raise ValueError("Frequency parameter must be one of D, M, W, or Q")
 
     dfc["cycleCount"] = dfc["real_date"].apply(func, args=(start_date,))
 
@@ -142,7 +142,7 @@ def historic_vol(
     half_life=11,
     start: str = None,
     end: str = None,
-    est_freq: str = "d",
+    est_freq: str = "D",
     blacklist: dict = None,
     remove_zeros: bool = True,
     postfix="ASD",
@@ -170,9 +170,9 @@ def historic_vol(
         df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df is
         used.
-    :param <str> est_freq: Frequency of (re-)estimation of volatility. Options are 'd'
-        for end of each day (default), 'w' for end of each work week, 'm' for end of each month,
-         and 'q' for end of each week.
+    :param <str> est_freq: Frequency of (re-)estimation of volatility. Options are 'D'
+        for end of each day (default), 'W' for end of each work week, 'M' for end of each month,
+         and 'Q' for end of each week.
     :param <dict> blacklist: cross sections with date ranges that should be excluded from
         the data frame. If one cross section has several blacklist periods append numbers
         to the cross section code.
@@ -210,7 +210,7 @@ def historic_vol(
         "w",
         "m",
         "q",
-    ], "Estimation frequency must be one of 'd', 'w', 'm', 'q'."
+    ], "Estimation frequency must be one of 'D', 'W', 'M', or 'Q'."
 
     # assert nan tolerance is an int or float. must be >0. if >1 must be int
     assert isinstance(

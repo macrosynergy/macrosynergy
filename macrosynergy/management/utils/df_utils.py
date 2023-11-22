@@ -5,6 +5,7 @@ Utility functions for working with DataFrames.
 import itertools
 
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.management.constants import FREQUENCY_MAP
 import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload
 
@@ -276,9 +277,7 @@ def downsample_df_on_real_date(
     if not isinstance(freq, str):
         raise TypeError("`freq` must be a string")
     else:
-        freq: str = freq.upper()
-        if freq not in ["D", "W", "M", "Q", "A"]:
-            raise ValueError("`freq` must be one of 'D', 'W', 'M', 'Q' or 'A'")
+        freq: str = _map_to_business_day_frequency(freq)
 
     if not isinstance(agg, str):
         raise TypeError("`agg` must be a string")
@@ -333,7 +332,7 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     df_error = (
         f"The appended DataFrame must be defined over a subset of the columns "
         f"in the returned DataFrame. The undefined column(s): "
-        f"{additional_columns}."
+        f"{list(additional_columns)}."
     )
     assert df_add_cols.issubset(df_cols), df_error
 
@@ -664,10 +663,7 @@ def categories_df(
     columns will reflect the order of the categories list.
     """
 
-    frq_options = ["D", "W", "M", "Q", "A"]
-    frq_error = f"Frequency parameter must be one of the stated options, {frq_options}."
-    assert freq in frq_options, frq_error
-    frq_dict = dict(zip(frq_options, ["B", "W-Fri", "BM", "BQ", "BA"]))
+    freq = _map_to_business_day_frequency(freq)
 
     assert isinstance(xcats, list), f"<list> expected and not {type(xcats)}."
     assert all([isinstance(c, str) for c in xcats]), "List of categories expected."
@@ -728,7 +724,7 @@ def categories_df(
         df_w = df_w.groupby(
             [
                 pd.Grouper(level="cid"),
-                pd.Grouper(level="real_date", freq=frq_dict[freq]),
+                pd.Grouper(level="real_date", freq=freq),
             ]
         )
 
@@ -796,3 +792,23 @@ def categories_df(
     # how is set to "any", a potential unnecessary loss of data on certain categories
     # could arise.
     return dfc.dropna(axis=0, how="all")
+
+
+def _map_to_business_day_frequency(freq: str, valid_freqs: List[str] = None) -> str:
+    """
+    Maps a frequency string to a business frequency string.
+
+    :param <str> freq: The frequency string to be mapped.
+    :param <List[str]> valid_freqs: The valid frequency strings. If None, defaults to
+        ["D", "W". "M", "Q", "A"].
+    """
+    freq = freq.upper()
+
+    if valid_freqs is None:
+        valid_freqs = list(FREQUENCY_MAP.keys())
+
+    if freq not in valid_freqs:
+        raise ValueError(
+            f"Frequency must be one of {valid_freqs}, but received {freq}."
+        )
+    return FREQUENCY_MAP[freq]

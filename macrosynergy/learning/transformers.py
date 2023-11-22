@@ -84,6 +84,7 @@ class MapSelectorTransformer(BaseEstimator, TransformerMixin):
             with each sample in X. 
         """
         self.ftrs = []
+        self.y_mean = np.mean(y)
         cols = X.columns
 
         for col in cols:
@@ -107,10 +108,14 @@ class MapSelectorTransformer(BaseEstimator, TransformerMixin):
         :return <pd.DataFrame>: Pandas dataframe of input features selected
             based on the Macrosynergy panel test.
         """
+        if self.ftrs == []:
+            # Use historical mean return as a signal if no features are selected
+            return pd.DataFrame(index=X.index, columns=["naive_signal"], data=self.y_mean,dtype=np.float16)
+        
         return X[self.ftrs]
     
 class BenchmarkTransformer(BaseEstimator, TransformerMixin):
-    def __init__(self, neutral: str = "zero"):
+    def __init__(self, neutral: str = "zero", use_signs: bool = False):
         """
         Transformer class to combine features into a benchmark signal 
         according to a specified normalisation.
@@ -121,6 +126,8 @@ class BenchmarkTransformer(BaseEstimator, TransformerMixin):
             level is mean, each feature is normalised by subtracting the mean and
             dividing by the standard deviation. Any statistics are computed according
             to a point-in-time principle. Default is 'zero'.
+        :param <bool> use_signs: Boolean to specify whether or not to return the 
+            signs of the benchmark signal instead of the signal itself. Default is False.
         """
         if not isinstance(neutral, str):
             raise TypeError("'neutral' must be a string.")
@@ -128,7 +135,8 @@ class BenchmarkTransformer(BaseEstimator, TransformerMixin):
         if neutral.lower() not in ["zero", "mean"]:
             raise ValueError("neutral must be either 'zero' or 'mean'.")
         
-        self.neutral = neutral 
+        self.neutral = neutral
+        self.use_signs = use_signs
     
     def fit(self, X: pd.DataFrame, y: Any =None):
         """
@@ -166,7 +174,7 @@ class BenchmarkTransformer(BaseEstimator, TransformerMixin):
         :param <Any> y: Placeholder for scikit-learn compatibility.
         """
         unique_dates: List[pd.Timestamp] = sorted(X.index.get_level_values(1).unique())
-        signal_df = pd.DataFrame(index=X.index, columns=["signal"])
+        signal_df = pd.DataFrame(index=X.index, columns=["signal"], dtype="float")
 
         if self.neutral == "zero":
             # Then iteratively compute the MAD
@@ -180,7 +188,7 @@ class BenchmarkTransformer(BaseEstimator, TransformerMixin):
                 updated_n: int = test_n + training_n
                 updated_mads: pd.Series = (test_mads * test_n + training_mads * training_n)/updated_n
                 standardised_X: pd.DataFrame = X_test_date / updated_mads
-                benchmark_signal = pd.DataFrame(np.mean(standardised_X, axis=1), columns=["signal"])
+                benchmark_signal = pd.DataFrame(np.mean(standardised_X, axis=1), columns=["signal"], dtype="float")
                 # store the signal 
                 signal_df.loc[benchmark_signal.index] = benchmark_signal
                 # update metrics for the next iteration
@@ -201,7 +209,7 @@ class BenchmarkTransformer(BaseEstimator, TransformerMixin):
 
                 normalised_X: pd.DataFrame = (X_test_date - updated_means) / updated_stds
                 benchmark_signal: pd.DataFrame = pd.DataFrame(
-                    np.mean(normalised_X, axis=1), columns=["signal"]
+                    np.mean(normalised_X, axis=1), columns=["signal"], dtype="float"
                 )
                 signal_df.loc[benchmark_signal.index] = benchmark_signal
                 # update metrics for the next iteration
@@ -209,6 +217,9 @@ class BenchmarkTransformer(BaseEstimator, TransformerMixin):
                 training_sum_squares = updated_sum_squares
                 training_n = updated_n
 
+        if self.use_signs:
+            return np.sign(signal_df).astype(int)
+        
         return signal_df
     
     def __update_metrics(self, test_means: pd.Series, test_sum_squares: pd.Series, test_n: int, training_means: pd.Series, training_sum_squares: pd.Series, training_n: int):
@@ -286,6 +297,10 @@ if __name__ == "__main__":
     # Split X and y into training and test sets
     X_train, X_test = X[X.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], X[X.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
     y_train, y_test = y[y.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], y[y.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
+
+    selector = BenchmarkTransformer(neutral="mean", use_signs=True)
+    selector.fit(X_train, y_train)
+    print(selector.transform(X_test))
 
     selector = BenchmarkTransformer(neutral="zero")
     selector.fit(X_train, y_train)
