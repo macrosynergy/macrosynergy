@@ -167,7 +167,7 @@ def _hist_vol(
     _fconts: List[str] = [f"{contx}{sig_ident}" for contx in fids]
     if not set(_fconts).issubset(set(df_wide.columns)):
         raise ValueError(
-            f"Contract signals for all contracts not in dataframe. \n"
+            f"Contract signals for contracts not in dataframe. \n"
             f"Missing: {set(_fconts) - set(df_wide.columns)}"
         )
 
@@ -256,12 +256,12 @@ def historic_portfolio_vol(
     nan_tolerance: float = 0.25,
 ):
     """
-    Estimates the annualized standard deviations of portfolio, based on historic
+    Estimates annualized standard deviations of a portfolio, based on historic
     variances and co-variances.
 
     :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
-        This dataframe must contain the contract-specific signals and return series.
+        This dataframe must contain contract-specific signals and return series.
     :param <str> sname: the name of the strategy. It must correspond to contract
         signals in the dataframe, which have the format "<cid>_<ctype>_CSIG_<sname>", and
         which are typically calculated by the function contract_signals().
@@ -273,13 +273,13 @@ def historic_portfolio_vol(
     :param <float> dollar_per_signal: the amount of notional currency (e.g. USD) per
         contract signal value. Default is 1. The default scale has no specific meaning
         and is merely a basis for tryouts.
+        TODO: This argument seems redunant, as PnL volatility should always be calculated
+        on a USD1 per signal basis.
     :param <int> lback_periods: the number of periods to use for the lookback period
-        of the volatility-targeting method. Default is 21. This passed through to
-        the function `historic_portfolio_vol()`.
+        of the volatility-targeting method. Default is 21.
     :param <str> lback_meth: the method to use for the lookback period of the
         volatility-targeting method. Default is 'ma' for moving average. Alternative is
-        "xma", for exponential moving average. Again this is passed through to
-        the function `historic_portfolio_vol()`.
+        "xma", for exponential moving average.
     :param <str> rstring: a general string of the return category. This identifies
         the contract returns that are required for the volatility-targeting method, based
         on the category identifier format <cid>_<ctype><rstring>_<rstring> in accordance
@@ -292,9 +292,12 @@ def historic_portfolio_vol(
         the calculation. Default is None, which means that no contracts are excluded.
     :param <float> nan_tolerance: minimum ratio of NaNs to non-NaNs in a lookback window,
         if exceeded the resulting volatility is set to NaN. Default is 0.25.
+        TODO: Should be a maximum ratio.
 
 
-    :return: <pd.DataFrame> with the annualized standard deviations of the portfolios.
+    :return: <pd.DataFrame> JPMaQS dataframe of annualized standard deviation of 
+        estimated strategy PnL, with category name <sname>_PNL_USD1S_ASD.
+        TODO: check if this is correct.
         The values are in % annualized. Values between estimation points are forward
         filled.
 
