@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from typing import List, Optional, Dict, Any
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils import reduce_df, standardise_dataframe
+from macrosynergy.management.utils import reduce_df, standardise_dataframe, get_eops
 
 
 def expo_weights(lback_periods: int = 21, half_life: int = 11):
@@ -75,62 +75,6 @@ def flat_std(x: np.ndarray, remove_zeros: bool = True):
         x = x[x != 0]
     mabs = np.mean(np.abs(x))
     return mabs
-
-
-def get_cycles(
-    dates_df: pd.DataFrame,
-    freq: str = "M",
-) -> pd.Series:
-    """Returns a DataFrame with values aggregated by the frequency specified.
-
-    :param <pd.DataFrame>  dates_df: standardized DataFrame with the following necessary columns:
-        'cid', 'xcats', 'real_date' and 'value'. Will contain all of the data across all
-        macroeconomic fields.
-    :param <str> freq: Frequency of the data. Options are 'W' (weekly), 'M' (monthly),
-        'Q' (quarterly) and 'D' (daily). Default is 'M'.
-
-    :return <pd.Series>: A boolean mask which is True where the calculation is triggered.
-    """
-
-    def quarters_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp):
-        """Returns the number of quarters between two dates."""
-        return (end_date.year - start_date.year) * 4 + (
-            end_date.quarter - start_date.quarter
-        )
-
-    def months_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp):
-        """Returns the number of months between two dates."""
-        return (end_date.year - start_date.year) * 12 + (
-            end_date.month - start_date.month
-        )
-
-    def weeks_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp):
-        """Returns the number of business weeks between two dates."""
-        next_monday = start_date + pd.offsets.Week(weekday=0)
-        dif = (end_date - next_monday).days // 7 + 1
-        return dif
-
-    freq = freq.lower()
-    dfc = dates_df.copy()
-    start_date = dfc["real_date"].min()
-    if freq == "m":
-        func = months_btwn_dates
-    elif freq == "w":
-        func = weeks_btwn_dates
-    elif freq == "q":
-        func = quarters_btwn_dates
-    elif freq == "d":
-        func = lambda x, y: len(pd.bdate_range(x, y)) - 1
-    else:
-        raise ValueError("Frequency parameter must be one of D, M, W, or Q")
-
-    dfc["cycleCount"] = dfc["real_date"].apply(func, args=(start_date,))
-
-    triggers = dfc["cycleCount"].shift(-1) != dfc["cycleCount"]
-    # triggers is now a boolean mask which is True where the calculation is triggered
-    # ____-____-____-____-_... <-- triggers (_ = False, - = True)
-
-    return triggers
 
 
 def historic_vol(
@@ -226,12 +170,10 @@ def historic_vol(
 
     dfw = df.pivot(index="real_date", columns="cid", values="value")
 
-    trigger_indices = dfw.index[
-        get_cycles(
-            pd.DataFrame({"real_date": dfw.index}),
-            freq=est_freq,
-        )
-    ]
+    trigger_indices = get_eops(
+        dates=pd.DataFrame(dfw.index),
+        freq=est_freq,
+    )
 
     def single_calc(
         row,
