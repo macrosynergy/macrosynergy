@@ -5,6 +5,7 @@ Utility functions for working with DataFrames.
 import itertools
 
 from macrosynergy.management.types import QuantamentalDataFrame
+from macrosynergy.management.constants import FREQUENCY_MAP
 import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Union, overload
 
@@ -276,9 +277,7 @@ def downsample_df_on_real_date(
     if not isinstance(freq, str):
         raise TypeError("`freq` must be a string")
     else:
-        freq: str = freq.upper()
-        if freq not in ["D", "W", "M", "Q", "A"]:
-            raise ValueError("`freq` must be one of 'D', 'W', 'M', 'Q' or 'A'")
+        freq: str = _map_to_business_day_frequency(freq)
 
     if not isinstance(agg, str):
         raise TypeError("`agg` must be a string")
@@ -333,7 +332,7 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     df_error = (
         f"The appended DataFrame must be defined over a subset of the columns "
         f"in the returned DataFrame. The undefined column(s): "
-        f"{additional_columns}."
+        f"{list(additional_columns)}."
     )
     assert df_add_cols.issubset(df_cols), df_error
 
@@ -664,10 +663,7 @@ def categories_df(
     columns will reflect the order of the categories list.
     """
 
-    frq_options = ["D", "W", "M", "Q", "A"]
-    frq_error = f"Frequency parameter must be one of the stated options, {frq_options}."
-    assert freq in frq_options, frq_error
-    frq_dict = dict(zip(frq_options, ["B", "W-Fri", "BM", "BQ", "BA"]))
+    freq = _map_to_business_day_frequency(freq)
 
     assert isinstance(xcats, list), f"<list> expected and not {type(xcats)}."
     assert all([isinstance(c, str) for c in xcats]), "List of categories expected."
@@ -728,7 +724,7 @@ def categories_df(
         df_w = df_w.groupby(
             [
                 pd.Grouper(level="cid"),
-                pd.Grouper(level="real_date", freq=frq_dict[freq]),
+                pd.Grouper(level="real_date", freq=freq),
             ]
         )
 
@@ -796,3 +792,117 @@ def categories_df(
     # how is set to "any", a potential unnecessary loss of data on certain categories
     # could arise.
     return dfc.dropna(axis=0, how="all")
+
+
+def _map_to_business_day_frequency(freq: str, valid_freqs: List[str] = None) -> str:
+    """
+    Maps a frequency string to a business frequency string.
+
+    :param <str> freq: The frequency string to be mapped.
+    :param <List[str]> valid_freqs: The valid frequency strings. If None, defaults to
+        ["D", "W". "M", "Q", "A"].
+    """
+    freq = freq.upper()
+
+    if valid_freqs is None:
+        valid_freqs = list(FREQUENCY_MAP.keys())
+
+    if freq not in valid_freqs:
+        raise ValueError(
+            f"Frequency must be one of {valid_freqs}, but received {freq}."
+        )
+    return FREQUENCY_MAP[freq]
+
+
+def years_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
+    """Returns the number of years between two dates."""
+    return end_date.year - start_date.year
+
+
+def quarters_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
+    """Returns the number of quarters between two dates."""
+    return (end_date.year - start_date.year) * 4 + (
+        end_date.quarter - start_date.quarter
+    )
+
+
+def months_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
+    """Returns the number of months between two dates."""
+    return (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month)
+
+
+def weeks_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
+    """Returns the number of business weeks between two dates."""
+    next_monday = start_date + pd.offsets.Week(weekday=0)
+    dif = (end_date - next_monday).days // 7 + 1
+    return dif
+
+
+def get_eops(
+    dates: Optional[Union[pd.DatetimeIndex, pd.Series, Iterable[pd.Timestamp]]] = None,
+    start_date: Optional[Union[str, pd.Timestamp]] = None,
+    end_date: Optional[Union[str, pd.Timestamp]] = None,
+    freq: str = "M",
+) -> pd.Series:
+    """
+    Returns a series of end-of-period dates for a given frequency.
+    Dates can be passed as a series, index, a generic iterable or as a start and end date.
+
+    :param <str> freq: The frequency string. Must be one of "D", "W", "M", "Q", "A".
+    :param <pd.DatetimeIndex | pd.Series | Iterable[pd.Timestamp]> dates: The dates to
+        be used to generate the end-of-period dates. Can be passed as a series, index, a
+        generic iterable or as a start and end date.
+    :param <str | pd.Timestamp> start_date: The start date. Must be passed if dates is
+        not passed.
+    """
+    if (not isinstance(freq, str)) or (freq.upper() not in FREQUENCY_MAP.keys()):
+        raise ValueError(
+            f"Frequency must be one of {list(FREQUENCY_MAP.keys())}, but received {freq}."
+        )
+    freq: str = freq.upper()
+
+    if bool(start_date) != bool(end_date):
+        raise ValueError(
+            "Both `start_date` and `end_date` must be passed when using "
+            "dates as a start and end date."
+        )
+
+    if bool(start_date) and bool(dates):
+        raise ValueError(
+            "Only one of `dates` or `start_date` and `end_date` must be passed."
+        )
+
+    dts: pd.DataFrame = (
+        pd.DataFrame(dates, columns=["real_date"]).apply(pd.to_datetime, axis=1)
+        if dates is not None
+        else pd.Series(pd.bdate_range(start_date, end_date))
+    )
+    if dates is not None:
+        dts = dts[
+            dts["real_date"].isin(
+                pd.bdate_range(start=dts["real_date"].min(), end=dts["real_date"].max())
+            )
+        ]
+
+    min_date: pd.Timestamp = dts["real_date"].min()
+
+    if freq == "M":
+        func = months_btwn_dates
+    elif freq == "W":
+        func = weeks_btwn_dates
+    elif freq == "Q":
+        func = quarters_btwn_dates
+    elif freq == "A":
+        func = years_btwn_dates
+    elif freq == "D":
+        func = lambda x, y: len(pd.bdate_range(x, y)) - 1
+    else:
+        raise ValueError("Frequency parameter must be one of D, M, W, or Q")
+
+    dts["period"] = dts["real_date"].apply(func, args=(min_date,))
+
+    t_indices: pd.Series = dts["period"].shift(-1) != dts["period"]
+
+    t_dates: pd.Series = dts["real_date"].loc[t_indices].reset_index(drop=True)
+
+    return t_dates
