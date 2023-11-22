@@ -211,55 +211,46 @@ def historic_vol(
 
         return out
 
+    expo_weights_arr: Optional[np.ndarray] = None
+    if lback_meth == "xma":
+        expo_weights_arr = expo_weights(lback_periods, half_life)
+
     if est_freq == "d":
+        _args: Dict[str, Any] = dict(remove_zeros=remove_zeros)
         if lback_meth == "xma":
-            weights = expo_weights(lback_periods, half_life)
-            dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(
-                expo_std, w=weights, remove_zeros=remove_zeros
-            )
+            _args["w"] = expo_weights_arr
+            _args["func"] = expo_std
         else:
-            dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(
-                flat_std, remove_zeros=remove_zeros
-            )
+            _args["func"] = flat_std
+
+        dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(**_args)
     else:
         dfwa = pd.DataFrame(index=dfw.index, columns=dfw.columns)
+        _args: Dict[str, Any] = dict(
+            lback_periods=lback_periods,
+            nan_tolerance=nan_tolerance,
+            remove_zeros=remove_zeros,
+        )
         if lback_meth == "xma":
-            weights = expo_weights(lback_periods, half_life)
-            dfwa.loc[trigger_indices, :] = (
-                dfwa.loc[trigger_indices, :]
-                .reset_index(False)
-                .apply(
-                    lambda row: single_calc(
-                        row=row,
-                        dfw=dfw,
-                        lback_periods=lback_periods,
-                        nan_tolerance=nan_tolerance,
-                        roll_func=expo_std,
-                        remove_zeros=remove_zeros,
-                        weights=weights,
-                    ),
-                    axis=1,
-                )
-                .set_index(trigger_indices)
-            )
+            _args["weights"] = expo_weights_arr
+            _args["roll_func"] = expo_std
 
         else:
-            dfwa.loc[trigger_indices, :] = (
-                dfwa.loc[trigger_indices, :]
-                .reset_index(False)
-                .apply(
-                    lambda row: single_calc(
-                        row=row,
-                        dfw=dfw,
-                        lback_periods=lback_periods,
-                        nan_tolerance=nan_tolerance,
-                        roll_func=flat_std,
-                        remove_zeros=remove_zeros,
-                    ),
-                    axis=1,
-                )
-                .set_index(trigger_indices)
+            _args["roll_func"] = flat_std
+
+        dfwa.loc[trigger_indices, :] = (
+            dfwa.loc[trigger_indices, :]
+            .reset_index(False)
+            .apply(
+                lambda row: single_calc(
+                    row=row,
+                    dfw=dfw,
+                    **_args,
+                ),
+                axis=1,
             )
+            .set_index(trigger_indices)
+        )
 
         fills = {"d": 1, "w": 5, "m": 24, "q": 64}
         dfwa = dfwa.reindex(dfw.index).ffill(limit=fills[est_freq])
