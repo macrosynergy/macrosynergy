@@ -30,6 +30,11 @@ from .df_utils import (
     categories_df_aggregation_helper,
     categories_df_expln_df,
     _map_to_business_day_frequency,
+    weeks_btwn_dates,
+    months_btwn_dates,
+    years_btwn_dates,
+    quarters_btwn_dates,
+    get_eops,
 )
 
 from .math import (
@@ -67,6 +72,11 @@ __all__ = [
     "categories_df",
     "categories_df_aggregation_helper",
     "categories_df_expln_df",
-    "expanding_mean_with_nan",
     "_map_to_business_day_frequency",
+    "weeks_btwn_dates",
+    "months_btwn_dates",
+    "years_btwn_dates",
+    "quarters_btwn_dates",
+    "get_eops",
+    "expanding_mean_with_nan",
 ]
