@@ -14,10 +14,6 @@ import os, sys
 
 sys.path.append(os.getcwd())
 
-import os, sys
-
-sys.path.append(os.getcwd())
-
 
 from macrosynergy.management.types import Numeric, QuantamentalDataFrame
 from macrosynergy.management.utils import reduce_df
@@ -42,7 +38,7 @@ def _linear_composite_backend(
         "xcat_agg",
         "cid_agg",
     ], "`mode` must be either 'xcat_agg' or 'cid_agg'."
-    
+
     XCAT_AGG: bool = mode == "xcat_agg"
 
     if (new_xcat if XCAT_AGG else new_cid) is None:
@@ -62,16 +58,16 @@ def _linear_composite_backend(
     # df.set_index(["cid", "real_date", "xcat"][::-1])["value"].unstack(level=2)
     FLIPPER: int = 1 if XCAT_AGG else -1
     DF_IDX: List[str] = ["cid", "real_date", "xcat"][::FLIPPER]
-    
+
     df_wide: pd.DataFrame = df.set_index(DF_IDX)["value"].unstack(level=2)
 
     if XCAT_AGG:
         ...
-        
+
     else:
         for ix, xcatx in enumerate(xcats):
             df_wide
-            
+
 
 def linear_composite(
     df: pd.DataFrame,
