@@ -8,7 +8,6 @@ from typing import List
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.panel.historic_vol import (
     historic_vol,
-    get_cycles,
     expo_weights,
     expo_std,
     flat_std,
@@ -214,7 +213,7 @@ class TestAll(unittest.TestCase):
             nan_tolerance=0,
         )
 
-        # NOTE: ideally, one would use the get_cycles() function in conjunction with the
+        # NOTE: ideally, one would use the get_eops() function in conjunction with the
         # est_freq behaviour to determine the number of NaN values in the long format.
         # The below approach also works;
 
