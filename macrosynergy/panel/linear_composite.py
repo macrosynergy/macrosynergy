@@ -14,16 +14,15 @@ import os, sys
 
 sys.path.append(os.getcwd())
 
-from macrosynergy.management.shape_dfs import reduce_df
-from macrosynergy.management.simulate_quantamental_data import make_test_df
-from macrosynergy.management.utils import (
-    is_valid_iso_date,
-    ticker_df_to_qdf,
-    qdf_to_ticker_df,
-    get_cid,
-    get_xcat,
-)
+import os, sys
+
+sys.path.append(os.getcwd())
+
+
 from macrosynergy.management.types import Numeric, QuantamentalDataFrame
+from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.simulate import make_test_df
+from macrosynergy.management.utils import is_valid_iso_date
 
 listtypes: Tuple[Type, ...] = (list, np.ndarray, pd.Series, tuple)
 

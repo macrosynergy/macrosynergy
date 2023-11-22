@@ -10,9 +10,12 @@ import pandas as pd
 from typing import List, Union
 import statsmodels.api as sm
 from statsmodels.regression.linear_model import RegressionResults
-from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.shape_dfs import reduce_df
+
+from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.utils import reduce_df
 import matplotlib.pyplot as plt
+
+from macrosynergy.management.utils import _map_to_business_day_frequency
 
 
 def date_alignment(unhedged_return: pd.Series, benchmark_return: pd.Series):
@@ -137,7 +140,7 @@ def hedge_calculator(
     df_hr = df_ur.merge(df_hrat, on="real_date", how="left")
 
     df_hr = df_hr.drop("returns", axis=1)
-    df_hr = df_hr.fillna(method="ffill")
+    df_hr = df_hr.ffill()
     # Accounts for the application of the minimum number of observations required and
     # merging the two DataFrames. Drop the np.nan values prior to the application of the
     # shift (able to validate the logic).
@@ -204,7 +207,7 @@ def return_beta(
     blacklist: dict = None,
     meth: str = "ols",
     oos: bool = True,
-    refreq: str = "m",
+    refreq: str = "M",
     min_obs: int = 24,
     max_obs: int = 1000,
     hedged_returns: bool = False,
@@ -236,7 +239,7 @@ def return_beta(
     :param <str> refreq: re-estimation frequency. This is period after which hedge ratios
         are re-estimated. The re-estimation is conducted at the end of the period and
         used as hedge ratio for all days of the following period. Re-estimation can have
-        weekly, monthly, and quarterly frequency with the notations 'w', 'm', and 'q'
+        weekly, monthly, and quarterly frequency with the notations 'W', 'M', and 'Q'
         respectively. The default frequency is monthly.
     :param <int> min_obs: the minimum number of observations required in order to
         estimate a hedge ratio. The default value is 24 days.
@@ -290,13 +293,6 @@ def return_beta(
     )
     assert xcat in list(available_categories), error_hedging
 
-    refreq_options = ["w", "m", "q"]
-    error_refreq = (
-        f"Re-estimation frequency parameter must be one of the following:"
-        f"{refreq_options}."
-    )
-    assert refreq in refreq_options, error_refreq
-
     min_obs_error = (
         "The number of minimum observations required to compute a hedge "
         "ratio is 10 business days, or two weeks."
@@ -346,12 +342,8 @@ def return_beta(
     dfw = pd.merge(dfp_w, dfh_w, how="inner", on="real_date")
     br = dfw["hedge"]
 
-    rf = {"w": "W", "m": "BM", "q": "BQ"}[refreq]
+    rf = _map_to_business_day_frequency(freq=refreq, valid_freqs=["W", "M", "Q"])
     dates_re = dfw.asfreq(rf).index
-
-    if refreq == "w":  # for weekly frequency use Fridays instead of default Sundays
-        sunday_adjustment = lambda d: d - pd.DateOffset(2)
-        dates_re = list(map(sunday_adjustment, dates_re))
 
     if isinstance(dates_re, pd.DatetimeIndex):
         dates_re: List[str] = dates_re.to_list()

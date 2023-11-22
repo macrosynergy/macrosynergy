@@ -1,26 +1,51 @@
-
 import unittest
 import pandas as pd
-from macrosynergy.management.check_availability import *
+from typing import List
+from macrosynergy.management.utils.check_availability import (
+    check_availability,
+    check_startyears,
+    check_enddates,
+    business_day_dif,
+)
+import matplotlib
+from unittest.mock import patch
+from matplotlib import pyplot as plt
+
+
+import numpy as np
 from tests.simulate import make_qdf
 
+
 class TestAll(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.mpl_backend: str = matplotlib.get_backend()
+        matplotlib.use("Agg")
+        cls.mock_show = patch("matplotlib.pyplot.show").start()
 
-    def dataframe_constructor(self):
-
+    def setUp(self) -> None:
         self.cids: List[str] = ["AUD", "CAD", "GBP"]
         self.xcats: List[str] = ["CRY", "XR", "GROWTH", "INFL", "GDP"]
 
-        df_cids = pd.DataFrame(index=self.cids,
-                               columns=["earliest", "latest", "mean_add", "sd_mult"])
+        df_cids = pd.DataFrame(
+            index=self.cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+        )
 
         df_cids.loc["AUD", :] = ["2011-01-01", "2022-08-10", 0.5, 2]
         df_cids.loc["CAD", :] = ["2011-01-01", "2022-08-24", 0, 1]
         df_cids.loc["GBP", :] = ["2011-01-01", "2022-08-15", -0.2, 0.5]
 
-        df_xcats = pd.DataFrame(index=self.xcats,
-                                columns=["earliest", "latest", "mean_add", "sd_mult",
-                                         "ar_coef", "back_coef"])
+        df_xcats = pd.DataFrame(
+            index=self.xcats,
+            columns=[
+                "earliest",
+                "latest",
+                "mean_add",
+                "sd_mult",
+                "ar_coef",
+                "back_coef",
+            ],
+        )
 
         df_xcats.loc["CRY", :] = ["2011-01-01", "2022-08-25", 1, 2, 0.9, 0.5]
         df_xcats.loc["XR", :] = ["2011-01-01", "2022-08-25", 0, 1, 0, 0.3]
@@ -32,9 +57,16 @@ class TestAll(unittest.TestCase):
 
         self.dfd: pd.DataFrame = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
-    def test_check_startyears(self):
+    def tearDown(self) -> None:
+        plt.close("all")
 
-        self.dataframe_constructor()
+    @classmethod
+    def tearDownClass(cls) -> None:
+        patch.stopall()
+        plt.close("all")
+        matplotlib.use(cls.mpl_backend)
+
+    def test_check_startyears(self):
         dfd = self.dfd
 
         df_sy = check_startyears(self.dfd)
@@ -47,7 +79,6 @@ class TestAll(unittest.TestCase):
 
         for cid in self.cids:
             for xcat in self.xcats:
-
                 # Validate on the DataFrame received by the method.
                 filt_1 = (dfd["xcat"] == xcat) & (dfd["cid"] == cid)
                 dfd_reduced = dfd[filt_1]["real_date"].dt.year
@@ -58,33 +89,30 @@ class TestAll(unittest.TestCase):
         self.assertTrue((df_sy.astype(int)).equals(df_exp.astype(int)))
 
     def test_check_enddates(self):
-
-        self.dataframe_constructor()
         dfd = self.dfd
 
         df_ed = check_enddates(dfd)
+
         # Reorder the categories alphabetically.
         df_ed = df_ed.reindex(sorted(df_ed.columns), axis=1)
 
-        df_exp = pd.DataFrame(
-            data=np.zeros((3, 5)), index=self.cids, columns=self.xcats
+        df_exp: pd.DataFrame = pd.DataFrame(
+            # data=np.zeros((3, 5)),
+            index=self.cids,
+            columns=self.xcats,
         )
 
         for cid in self.cids:
             for xcat in self.xcats:
-
                 # Validate on the DataFrame received by the method.
                 filt_1 = (dfd["xcat"] == xcat) & (dfd["cid"] == cid)
-                dfd_reduced = dfd[filt_1]["real_date"]
-                end_date = max(dfd_reduced)
-                df_exp.loc[cid, xcat] = end_date.strftime("%Y-%m-%d")
+                end_date = dfd[filt_1]["real_date"].max()
+                df_exp.loc[cid, xcat] = pd.Timestamp(end_date).strftime("%Y-%m-%d")
 
         df_exp = df_exp.reindex(sorted(df_exp.columns), axis=1)
         self.assertTrue(df_ed.equals(df_exp))
 
     def test_business_day_dif(self):
-
-        self.dataframe_constructor()
         dfd: pd.DataFrame = self.dfd
 
         dfe: pd.DataFrame = check_enddates(dfd)
@@ -100,6 +128,5 @@ class TestAll(unittest.TestCase):
         self.assertTrue(all(bus_df.loc["GBP", :].values == 7))
 
 
-if __name__ == '__main__':
-
+if __name__ == "__main__":
     unittest.main()

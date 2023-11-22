@@ -1,5 +1,4 @@
-from .shape_dfs import reduce_df, categories_df, reduce_df_by_ticker
-from .check_availability import (
+from .utils.check_availability import (
     check_availability,
     visual_paneldates,
     check_enddates,
@@ -7,29 +6,37 @@ from .check_availability import (
     missing_in_df,
     business_day_dif,
 )
-from .simulate_vintage_data import VintageData
-from .simulate_quantamental_data import make_qdf
-from .update_df import update_df
-from .utils import (
-    common_cids,
-)
-from . import utils, types
+
+from .simulate import simulate_vintage_data, simulate_quantamental_data
+
+from .simulate.simulate_vintage_data import VintageData
+from .simulate.simulate_quantamental_data import make_qdf
+from .utils import common_cids, update_df, reduce_df, categories_df, reduce_df_by_ticker
+from . import utils, types, decorators, simulate
+from .validation import validate_and_reduce_qdf
 
 __all__ = [
-    "check_availability",
+    # METHODS
+    "reduce_df",
+    "categories_df",
+    "reduce_df_by_ticker",
     "visual_paneldates",
     "check_enddates",
     "check_startyears",
-    "reduce_df",
-    "reduce_df_by_ticker",
     "missing_in_df",
+    "business_day_dif",
     "VintageData",
     "make_qdf",
-    "update_df",
-    "business_day_dif",
-    "categories_df",
     "common_cids",
-    "Config",
+    "update_df",
+    # Modules/Subpackages
     "utils",
     "types",
+    "decorators",
+    "simulate",
+    # Module-as-methods
+    "check_availability",
+    "simulate_vintage_data",
+    "simulate_quantamental_data",
+    "validate_and_reduce_qdf",
 ]

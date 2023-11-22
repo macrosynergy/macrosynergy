@@ -1,19 +1,17 @@
 import os
 import sys
-from time import sleep
 from typing import Any, Dict, List, Optional, Callable, Tuple
 
-import requests
 from packaging import version
 
+from gh_api_request import api_request
+
 REPO_OWNER: str = "macrosynergy"
+ORGANIZATION: str = "macrosynergy"
 REPO_NAME: str = "macrosynergy"
 REPO_URL: str = f"github.com/{REPO_OWNER}/{REPO_NAME}"
 
 sys.path.append(os.getcwd())
-
-OAUTH_TOKEN: Optional[str] = os.getenv("GH_TOKEN", None)
-
 
 ACCEPTED_TITLE_PATTERNS: List[str] = [
     "Feature:",
@@ -29,38 +27,6 @@ ACCEPTED_TITLE_PATTERNS: List[str] = [
     "Suggestion:",
     "Suggestions:",
 ]
-
-
-def api_request(
-    url: str,
-    headers: Dict[str, str] = {"Accept": "application/vnd.github.v3+json"},
-    params: Dict[str, Any] = {},
-) -> Any:
-    """
-    Make a request to the GitHub API.
-
-    :param <str> url: The URL to make the request to.
-    :param <Dict[str, str]> headers: The headers to send with the request.
-    :param <Dict[str, Any]> params: The parameters to send with the request.
-    :return <Any>: The response from the API.
-    """
-    retries = 0
-    max_retries = 5
-    while retries < max_retries:
-        try:
-            # Add the OAuth token to the headers if it exists
-            if OAUTH_TOKEN:
-                headers["Authorization"] = f"token {OAUTH_TOKEN}"
-
-            response = requests.get(url, headers=headers, params=params)
-            response.raise_for_status()  # Raise exception for failed requests
-            return response.json()
-        except Exception as exc:
-            print(f"Request failed: {exc}")
-            retries += 1
-            sleep(1)
-    print(f"Request failed after {max_retries} retries. Exiting.")
-    sys.exit(1)
 
 
 def check_title(
@@ -218,10 +184,47 @@ def _check_merge_after(
     return mergable
 
 
-def check_pr_directives(
+def find_previous_at(body: str, idx: int) -> int:
+    i = idx
+
+    while i >= 0:
+        if body[i] == "@":
+            return i + 1
+        i -= 1
+    raise ValueError("NO @ FOUND")
+
+
+def _check_required_reviewers(
     body: str,
-    state: str,
+    pr_info: Dict[str, Any],
 ) -> bool:
+    assert bool(body)
+    RR_STR: str = "-MUST-REVIEW"
+
+    if RR_STR not in body:
+        return True
+
+    last_idx = body.find(RR_STR)
+    first_idx = find_previous_at(body, last_idx)
+
+    required_reviewer: str = body[first_idx:last_idx].strip()
+
+    # check from the PR details if the user has approved the PR
+    # check the reviews
+    pr_reviews: Dict[str, Any] = get_pr_reviews(pr_number=pr_info["number"])
+    # check if the user has approved the PR
+    approved: bool = any(
+        [str(rx).upper() == required_reviewer.upper() for rx in pr_reviews["APPROVED"]]
+    )
+
+    return approved
+
+
+def check_pr_directives(
+    pr_info: Dict[str, Any],
+) -> bool:
+    body: str = pr_info["body"]
+
     if body is None:
         return True
 
@@ -232,6 +235,7 @@ def check_pr_directives(
         _check_do_not_merge(body=body),
         _check_merge_after(body=body),
         _check_merge_w_version(body=body),
+        _check_required_reviewers(body=body, pr_info=pr_info),
     ]
 
     return all(results)
@@ -245,7 +249,7 @@ def test_pr_info(
     if not check_title(title=pr_info["title"]):
         err_msg += f"PR #{pr_info['number']} is not mergable due to invalid title.\n"
 
-    if not check_pr_directives(body=pr_info["body"], state=pr_info["state"]):
+    if not check_pr_directives(pr_info=pr_info):
         err_msg += (
             f"PR #{pr_info['number']} is not mergable due to merge restrictions"
             " specified in the PR body."
@@ -255,6 +259,29 @@ def test_pr_info(
         raise ValueError(err_msg.strip())
 
     return True
+
+
+def get_pr_reviews(
+    pr_number: int,
+):
+    URL: str = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/pulls/{pr_number}/reviews"
+
+    pr_reviews: Dict[str, Any] = api_request(url=URL)
+    results: Dict[str, List[str]] = {
+        "APPROVED": [],
+        "CHANGES_REQUESTED": [],
+        "COMMENTED": [],
+        "DISMISSED": [],
+    }
+
+    for item in pr_reviews:
+        review_name: str = item["user"]["login"]
+        review_state: str = item["state"]
+        if review_state not in results:
+            results[review_state] = []
+        results[review_state].append(review_name)
+
+    return results
 
 
 def get_pr_details(

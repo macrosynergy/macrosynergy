@@ -9,10 +9,9 @@ import matplotlib.ticker as mticker
 
 from typing import List, Union, Tuple, Optional
 from itertools import product
-from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.shape_dfs import reduce_df
+from macrosynergy.management.simulate import make_qdf
 from macrosynergy.panel.make_zn_scores import make_zn_scores
-from macrosynergy.management.update_df import update_df
+from macrosynergy.management.utils import update_df, reduce_df
 
 
 class NaivePnL:
@@ -245,9 +244,7 @@ class NaivePnL:
         rebal_merge = dfw[["real_date", "cid"]].merge(
             rebal_merge, how="left", on=["real_date", "cid"]
         )
-        rebal_merge["psig"] = (
-            rebal_merge["psig"].fillna(method="ffill").shift(rebal_slip)
-        )
+        rebal_merge["psig"] = rebal_merge["psig"].ffill().shift(rebal_slip)
         rebal_merge = rebal_merge.sort_values(["cid", "real_date"])
 
         rebal_merge = rebal_merge.set_index("real_date")
@@ -287,8 +284,8 @@ class NaivePnL:
             sections.
             N.B.: zn-score here means standardized score with zero being the natural
             neutral level and standardization through division by mean absolute value.
-        :param <float> sig_add: add a constant to the signal after initial transformation. 
-            This allows to give PnLs a long or short bias relative to the signal 
+        :param <float> sig_add: add a constant to the signal after initial transformation.
+            This allows to give PnLs a long or short bias relative to the signal
             score. Default is 0.
         :param <str> sig_neg: if True the PnL is based on the negative value of the
             transformed signal. Default is False.
@@ -500,6 +497,7 @@ class NaivePnL:
         ncol: int = 3,
         same_y: bool = True,
         title: str = "Cumulative Naive PnL",
+        title_fontsize: int = 20,
         xcat_labels: List[str] = None,
         xlab: str = "",
         ylab: str = "% of risk capital, no compounding",
@@ -532,6 +530,7 @@ class NaivePnL:
             runtime.
         :param <bool> same_y: if True (default) all plots in facet grid share same y axis.
         :param <str> title: allows entering text for a custom chart header.
+        :param <int> title_fontsize: font size for the title. Default is 20.
         :param <List[str]> xcat_labels: custom labels to be used for the PnLs.
         :param <str> xlab: label for x-axis of the plot (or subplots if faceted),
             default is None (empty string)..
@@ -628,7 +627,7 @@ class NaivePnL:
             )
             fg.fig.suptitle(
                 title,
-                fontsize=20,
+                fontsize=title_fontsize,
             )
 
             fg.fig.subplots_adjust(top=title_adj, bottom=label_adj, left=y_label_adj)
@@ -741,9 +740,9 @@ class NaivePnL:
         assert isinstance(x_label, str), f"<str> expected - received {type(x_label)}."
         assert isinstance(y_label, str), f"<str> expected - received {type(y_label)}."
 
-        dfx = self.signal_df[pnl_name]
-        dfw = dfx.pivot(index="real_date", columns="cid", values="sig")
-        dfw = dfw[pnl_cids]
+        dfx: pd.DataFrame = self.signal_df[pnl_name]
+        dfw: pd.DataFrame = dfx.pivot(index="real_date", columns="cid", values="sig")
+        dfw: pd.DataFrame = dfw[pnl_cids]
 
         if start is None:
             start = dfw.index[0]
@@ -752,7 +751,7 @@ class NaivePnL:
 
         dfw = dfw.truncate(before=start, after=end)
 
-        dfw = dfw.resample(freq, axis=0).mean()
+        dfw = dfw.resample(freq).mean()
 
         if figsize is None:
             figsize = (14, len(pnl_cids))
@@ -812,8 +811,8 @@ class NaivePnL:
         if title is None:
             title = f"Directional Bar Chart of {pnl_name}."
 
-        dfx = self.signal_df[pnl_name]
-        dfw = dfx.pivot(index="real_date", columns="cid", values="sig")
+        dfx: pd.DataFrame = self.signal_df[pnl_name]
+        dfw: pd.DataFrame = dfx.pivot(index="real_date", columns="cid", values="sig")
 
         # The method allows for visually understanding the overall direction of the
         # aggregate signal but also gaining insight into the proportional exposure to the
@@ -822,7 +821,7 @@ class NaivePnL:
         if metric == "strength":
             dfw = dfw.abs()
 
-        dfw = dfw.resample(freq, axis=0).mean()
+        dfw = dfw.resample(freq).mean()
         # Sum across the timestamps to compute the aggregate signal according to the
         # down-sampling frequency.
         df_s = dfw.sum(axis=1)
@@ -1023,7 +1022,7 @@ if __name__ == "__main__":
         sig="GROWTH",
         sig_op="zn_score_pan",
         sig_neg=True,
-        sig_add = 0.5,
+        sig_add=0.5,
         rebal_freq="monthly",
         vol_scale=5,
         rebal_slip=1,

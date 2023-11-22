@@ -8,9 +8,12 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Set
 import warnings
-from macrosynergy.management.shape_dfs import reduce_df
-from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.utils import drop_nan_series
+from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.utils import (
+    drop_nan_series,
+    reduce_df,
+    _map_to_business_day_frequency,
+)
 from macrosynergy.management.types import QuantamentalDataFrame, Numeric
 
 
@@ -71,11 +74,12 @@ def expanding_stat(
                 df.loc[first_observation:date].stack().apply(stat)
             )
 
-        df_out = df_out.fillna(method="ffill")
+        df_out = df_out.ffill()
 
         if iis:
             if (est_index - obs_index) > 0:
-                df_out = df_out.fillna(method="bfill", limit=(est_index - obs_index))
+                # df_out = df_out.fillna(method="bfill", limit=(est_index - obs_index))
+                df_out = df_out.bfill(limit=(est_index - obs_index))
 
     df_out.columns.name = "cid"
     return df_out
@@ -92,7 +96,7 @@ def make_zn_scores(
     min_obs: int = 261,
     iis: bool = True,
     neutral: str = "zero",
-    est_freq: str = "d",
+    est_freq: str = "D",
     thresh: float = None,
     pan_weight: float = 1,
     postfix: str = "ZN",
@@ -130,8 +134,8 @@ def make_zn_scores(
     :param <str> neutral: method to determine neutral level. Default is 'zero'.
         Alternatives are 'mean' and "median".
     :param <str> est_freq: the frequency at which standard deviations or means are
-        are re-estimated. The options are weekly, monthly & quarterly "w", "m", "q".
-        Default is daily, "d". Re-estimation is performed at period end.
+        are re-estimated. The options are daily, weekly, monthly & quarterly: "D", "W", "M", "Q".
+        Default is daily. Re-estimation is performed at period end.
     :param <float> thresh: threshold value beyond which scores are winsorized,
         i.e. contained at that threshold. The threshold is the maximum absolute
         score value that the function is allowed to produce. The minimum threshold is 1
@@ -185,18 +189,7 @@ def make_zn_scores(
     if not isinstance(min_obs, int) or min_obs < 0:
         raise ValueError(error_min)
 
-    frequencies = ["d", "w", "m", "q"]
-    error_freq = (
-        f"String Object required and must be one of the available frequencies: "
-        f"{frequencies}."
-    )
-
-    if not isinstance(est_freq, str):
-        raise TypeError(error_freq)
-    elif est_freq not in frequencies:
-        raise ValueError(error_freq)
-
-    pd_freq = dict(zip(frequencies, ["B", "W-Fri", "BM", "BQ"]))
+    est_freq = _map_to_business_day_frequency(freq=est_freq, valid_freqs=["D", "W", "M", "Q"])
 
     # --- Prepare re-estimation dates and time-series DataFrame.
 
@@ -221,7 +214,7 @@ def make_zn_scores(
 
     s_date = min(df["real_date"])
     e_date = max(df["real_date"])
-    dates_iter = pd.date_range(start=s_date, end=e_date, freq=pd_freq[est_freq])
+    dates_iter = pd.date_range(start=s_date, end=e_date, freq=est_freq)
 
     dfw = df.pivot(index="real_date", columns="cid", values="value")
     cross_sections = dfw.columns

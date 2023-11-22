@@ -10,8 +10,8 @@ from scipy import stats
 import statsmodels.api as sm
 import warnings
 
-from macrosynergy.management.simulate_quantamental_data import make_qdf
-from macrosynergy.management.shape_dfs import categories_df
+from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.utils import categories_df
 from macrosynergy.management.utils import apply_slip as apply_slip_util
 
 
@@ -91,6 +91,9 @@ class CategoryRelations(object):
     ):
         """Initializes CategoryRelations"""
 
+        if not isinstance(freq, str):
+            raise TypeError("freq must be a string.")
+
         self.xcats: List[str] = xcats
         self.cids: List[str] = cids
         self.val: str = val
@@ -103,9 +106,7 @@ class CategoryRelations(object):
         self.xcat_trims: List[float] = xcat_trims
         self.slip: int = slip
 
-        if not isinstance(self.freq, str):
-            raise TypeError("freq must be a string.")
-        elif self.freq not in ["D", "W", "M", "Q", "A"]:
+        if self.freq not in ["D", "W", "M", "Q", "A"]:
             raise ValueError("freq must be one of 'D', 'W', 'M', 'Q', 'A'.")
         if not isinstance(val, str):
             raise TypeError("val must be a string.")
@@ -171,7 +172,7 @@ class CategoryRelations(object):
             val=val,
             start=start,
             end=end,
-            freq=freq,
+            freq=self.freq,
             blacklist=blacklist,
             years=years,
             lag=lag,
@@ -502,7 +503,7 @@ class CategoryRelations(object):
 
         assert prob_est in ["pool", "map"], "prob_est must be 'pool' or 'map'"
 
-        sns.set_theme(style="whitegrid")
+        sns.set_theme(style="whitegrid", palette="colorblind")
         dfx = self.df.copy()
 
         if title is None and (self.years is None):

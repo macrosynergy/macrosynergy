@@ -2,18 +2,20 @@ import unittest
 from matplotlib import pyplot as plt
 import pandas as pd
 from typing import List, Dict, Any
-from macrosynergy.management.simulate_quantamental_data import make_test_df
+from macrosynergy.management.simulate import make_test_df
 from macrosynergy.visuals import Heatmap
 import matplotlib
+from unittest.mock import patch
 
 
 class TestAll(unittest.TestCase):
     @classmethod
     def setUpClass(self):
         # Prevents plots from being displayed during tests.
+        plt.close("all")
         self.mpl_backend: str = matplotlib.get_backend()
         matplotlib.use("Agg")
-
+        self.mock_show = patch("matplotlib.pyplot.show").start()
         self.cids: List[str] = ["AUD", "CAD", "GBP", "NZD"]
         self.xcats: List[str] = ["XR", "CRY", "INFL"]
         self.metric = "value"
@@ -27,7 +29,13 @@ class TestAll(unittest.TestCase):
 
     @classmethod
     def tearDownClass(self) -> None:
+        patch.stopall()
+        plt.close("all")
+        patch.stopall()
         matplotlib.use(self.mpl_backend)
+
+    def tearDown(self) -> None:
+        plt.close("all")
 
     def setUp(self):
         self.constructor_args: Dict[str, Any] = {
@@ -56,6 +64,13 @@ class TestAll(unittest.TestCase):
             "return_figure": False,
             "on_axis": None,
             "max_xticks": 50,
+            "cmap": "vlag",
+            "rotate_xticks": 0,
+            "rotate_yticks": 0,
+            "show_tick_lines": True,
+            "show_colorbar": True,
+            "show_annotations": False,
+            "show_boundaries": False,
         }
 
     def test_instantiate_heatmap_no_error(self):
@@ -70,7 +85,7 @@ class TestAll(unittest.TestCase):
             index="cid", columns="real_date", values=self.metric
         )
         try:
-            heatmap.plot(**self.plot_args)
+            heatmap._plot(heatmap.df, **self.plot_args)
         except Exception as e:
             self.fail(f"Heatmap.plot raised {e} unexpectedly")
 
@@ -85,7 +100,7 @@ class TestAll(unittest.TestCase):
         self.plot_args["return_figure"] = True
 
         try:
-            fig = heatmap.plot(**self.plot_args)
+            fig = heatmap._plot(heatmap.df, **self.plot_args)
         except Exception as e:
             self.fail(f"Heatmap.plot raised {e} unexpectedly")
 

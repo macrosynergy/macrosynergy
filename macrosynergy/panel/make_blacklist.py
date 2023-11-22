@@ -11,8 +11,8 @@ import pandas as pd
 from typing import List
 from itertools import groupby
 import random
-from macrosynergy.management.shape_dfs import reduce_df
-from macrosynergy.management.simulate_quantamental_data import make_qdf_black, make_qdf
+from macrosynergy.management.utils import reduce_df
+from macrosynergy.management.simulate import make_qdf_black, make_qdf
 
 
 def startend(dti, start, length):
