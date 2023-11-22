@@ -16,7 +16,7 @@ from sklearn.metrics import make_scorer, accuracy_score, balanced_accuracy_score
 from sklearn.model_selection import cross_val_score
 from sklearn.linear_model import LinearRegression
 
-from macrosynergy.learning import PanelTimeSeriesSplit
+from macrosynergy.learning.panel_time_series_split import ExpandingKFoldPanelSplit
 
 from typing import Union
 
@@ -130,7 +130,13 @@ def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float
     average_return = np.mean(portfolio_returns)
     std_return = np.std(portfolio_returns)
 
-    sharpe_ratio = average_return / std_return
+    if std_return == 0:
+        # Sklearn averages each metric over the CV splits.
+        # If the standard deviation is zero, the portfolio returns are constant.
+        # So we return zero to ignore this split in the average.
+        sharpe_ratio = 0
+    else:
+        sharpe_ratio = average_return / std_return
 
     return sharpe_ratio
 
@@ -158,8 +164,15 @@ def sortino_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> floa
     portfolio_returns = np.where(y_pred > 0, y_true, -y_true)
     negative_returns = portfolio_returns[portfolio_returns < 0]
     average_return = np.mean(portfolio_returns)
+    denominator = np.sqrt(np.mean(negative_returns**2))
 
-    sortino_ratio = average_return / np.sqrt(np.mean(negative_returns**2))
+    if denominator == 0:
+        # Sklearn averages each metric over the CV splits.
+        # If the denominator is zero, the sortino ratio over this period is invalid.
+        # So we return zero to ignore this split in the average.
+        sortino_ratio = 0
+    else:
+        sortino_ratio = average_return / denominator
 
     return sortino_ratio
 
@@ -199,7 +212,7 @@ if __name__ == "__main__":
     X = df.drop(columns="XR")
     y = df["XR"]
 
-    splitter = PanelTimeSeriesSplit(n_splits=4, n_split_method="expanding")
+    splitter = ExpandingKFoldPanelSplit(n_splits=4)
     scorer1 = make_scorer(panel_significance_probability, greater_is_better=True)
     scorer2 = make_scorer(sharpe_ratio, greater_is_better=True)
     scorer3 = make_scorer(sortino_ratio, greater_is_better=True)
