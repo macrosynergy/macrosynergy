@@ -1,8 +1,8 @@
 """example/macrosynergy/download/dataquery.py"""
+from macrosynergy.download import DataQueryInterface
 
-
-client_id = os.getenv("DQ_CLIENT_ID")
-client_secret = os.getenv("DQ_CLIENT_SECRET")
+client_id = "DQ_CLIENT_ID"
+client_secret = "DQ_CLIENT_SECRET"
 
 expressions = [
     "DB(JPMAQS,USD_EQXR_VT10,value)",
