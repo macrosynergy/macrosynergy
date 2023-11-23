@@ -316,25 +316,26 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
         or newly defined tickers added.
     """
 
-    cols = ["cid", "xcat", "real_date", "value"]
+    # index_cols = ["cid", "xcat", "real_date"]
     # Consider the other possible metrics that the DataFrame could be defined over
 
     df_cols = set(df.columns)
     df_add_cols = set(df_add.columns)
 
-    error_message = f"The base DataFrame must include the necessary columns: {cols}."
-    assert set(cols).issubset(df_cols), error_message
+    error_message = f"The base DataFrame must be a Quantamental Dataframe."
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError(error_message)
 
-    error_message = f"The added DataFrame must include the necessary columns: {cols}."
-    assert set(cols).issubset(df_add_cols), error_message
-
-    additional_columns = filter(lambda c: c in df.columns, list(df_add.columns))
-    df_error = (
-        f"The appended DataFrame must be defined over a subset of the columns "
-        f"in the returned DataFrame. The undefined column(s): "
-        f"{list(additional_columns)}."
-    )
-    assert df_add_cols.issubset(df_cols), df_error
+    error_message = f"The added DataFrame must be a Quantamental Dataframe."
+    if not isinstance(df_add, QuantamentalDataFrame):
+        raise TypeError(error_message)
+    
+    error_message = (
+        f"The union of the dataframe's columns must be equal to one of the dataframe's \
+            columns.")
+    all_cols = df_cols.union(df_add_cols)
+    if all_cols != df_cols and all_cols != df_add_cols:
+        raise ValueError(error_message)
 
     if not xcat_replace:
         df = update_tickers(df, df_add)
