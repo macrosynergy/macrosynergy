@@ -1,7 +1,9 @@
 """example/macrosynergy/visuals/timelines.py"""
+from macrosynergy.management.simulate import make_test_df
+from macrosynergy.visuals import timelines
+import pandas as pd
 
-
-cids: List[str] = [
+cids = [
     "USD",
     "EUR",
     "GBP",
@@ -15,7 +17,9 @@ cids: List[str] = [
     "DKK",
     "INR",
 ]
-xcats: List[str] = [
+
+
+xcats = [
     "FXXR",
     "EQXR",
     "RIR",
@@ -29,34 +33,46 @@ xcats: List[str] = [
     "FXVOL",
     "FX",
 ]
-sel_cids: List[str] = ["USD", "EUR", "GBP"]
-sel_xcats: List[str] = ["FXXR", "EQXR", "RIR", "IR"]
-r_styles: List[str] = [
+
+
+sel_cids = ["USD", "EUR", "GBP"]
+
+
+sel_xcats = ["FXXR", "EQXR", "RIR", "IR"]
+
+
+r_styles = [
     "linear",
     "decreasing-linear",
     "sharp-hill",
     "sine",
     "four-bit-sine",
 ]
-df: pd.DataFrame = make_test_df(
+
+
+df = make_test_df(
     cids=list(set(cids) - set(sel_cids)),
     xcats=xcats,
     start="2000-01-01",
 )
 
+
 for rstyle, xcatx in zip(r_styles, sel_xcats):
-    dfB: pd.DataFrame = make_test_df(
+    dfB = make_test_df(
         cids=sel_cids,
         xcats=[xcatx],
         start="2000-01-01",
         style=rstyle,
     )
-    df: pd.DataFrame = pd.concat([df, dfB], axis=0)
+
+    df = pd.concat([df, dfB], axis=0)
+
 
 for ix, cidx in enumerate(sel_cids):
     df.loc[df["cid"] == cidx, "value"] = (
         ((df[df["cid"] == cidx]["value"]) * (ix + 1)).reset_index(drop=True).copy()
     )
+
 
 for ix, xcatx in enumerate(sel_xcats):
     df.loc[df["xcat"] == xcatx, "value"] = (
@@ -67,6 +83,8 @@ for ix, xcatx in enumerate(sel_xcats):
 
 
 # timer_start: float = time.time()
+
+
 timelines(
     df=df,
     xcats=sel_xcats,
@@ -77,6 +95,7 @@ timelines(
     # single_chart=True,
 )
 
+
 timelines(
     df=df,
     xcats=sel_xcats[0],
@@ -86,6 +105,7 @@ timelines(
     single_chart=True,
     cs_mean=True,
 )
+
 
 timelines(
     df=df,
