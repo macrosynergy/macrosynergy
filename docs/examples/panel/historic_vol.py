@@ -1,5 +1,10 @@
 """example/macrosynergy/panel/historic_vol.py"""
 
+from macrosynergy.management.simulate import make_qdf
+from macrosynergy.panel.historic_vol import historic_vol
+import pandas as pd
+
+
 cids = ["AUD", "CAD", "GBP", "USD"]
 xcats = ["XR", "CRY", "GROWTH", "INFL"]
 
@@ -21,7 +26,7 @@ df_xcats.loc["CRY"] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
 df_xcats.loc["GROWTH"] = ["2012-01-01", "2020-10-30", 1, 2, 0.9, 1]
 df_xcats.loc["INFL"] = ["2013-01-01", "2020-10-30", 1, 2, 0.8, 0.5]
 dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-dfd["grading"] = np.ones(dfd.shape[0])
+dfd["grading"] = 1
 
 print("Calculating historic volatility with the moving average method")
 df = historic_vol(
