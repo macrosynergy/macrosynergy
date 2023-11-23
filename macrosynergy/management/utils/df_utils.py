@@ -303,9 +303,9 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     the intersection.
 
     :param <pd.DataFrame> df: standardised base JPMaQS DataFrame with the following
-        necessary columns: 'cid', 'xcats', 'real_date' and 'value'.
+        necessary columns: 'cid', 'xcat', 'real_date' and 'value'.
     :param <pd.DataFrame> df_add: another standardised JPMaQS DataFrame, with the latest
-        values, to be added with the necessary columns: 'cid', 'xcats', 'real_date', and
+        values, to be added with the necessary columns: 'cid', 'xcat', 'real_date', and
         'value'. Columns that are present in the base DataFrame but not in the appended
         DataFrame will be populated with NaN values.
     :param <bool> xcat_replace: all series belonging to the categories in the added
@@ -330,9 +330,9 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     if not isinstance(df_add, QuantamentalDataFrame):
         raise TypeError(error_message)
     
-    error_message = (
-        f"The union of the dataframe's columns must be equal to one of the dataframe's \
-            columns.")
+    error_message = ("The two Quantamental DataFrames must share at least "
+                    "four columns including than 'real_date', 'cid', and 'xcat'.")
+    
     all_cols = df_cols.union(df_add_cols)
     if all_cols != df_cols and all_cols != df_add_cols:
         raise ValueError(error_message)
