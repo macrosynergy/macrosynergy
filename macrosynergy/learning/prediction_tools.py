@@ -40,38 +40,41 @@ class SignalOptimizer:
         y: pd.Series,
     ):
         """
-        Class for the calculation of quantamental predictions based on adaptive
-        hyperparameter and model selection. For a given collection of (training, test)
-        pairs that expand/roll by a single frequency unit, as determined by the native
-        frequency of the data, an optimal model for each training set is chosen based on a
-        specified hyperparameter search. The nature of the search is determined by splitting
-        X and y according to the defined inner_splitter and the search type.
-        The optimal model is then used to make test set forecasts.
+        Class for sequential optimization of raw signals based on quantamental features
 
         :param <BasePanelSplit> inner_splitter: Panel splitter that is used to split
-            each training set into smaller (training, test) pairs.
-        :param <pd.DataFrame> X: Wide-format pandas dataframe of features over the time
-            period for which the signal is to be calculated. These should lag behind
-            returns by a single frequency unit. This means that the date refers to the
-            date that the paired returns are realised, with features lagging behind by a frequency unit.
+            each training set into smaller (training, test) pairs for cross-validation.
+            At present that splitter has to be an instance of `RollingKFoldPanelSplit`,
+            `ExpandingKFoldPanelSplit` or `ExpandingIncrementPanelSplit`.
+        :param <pd.DataFrame> X: Wide pandas dataframe of features and dat-time indexes 
+            that capture the periods for which the signals are to be calculated. 
+            Since signals must make time seried predictions, the features in `X` must be 
+            lagged by one period, i.e., the values used for the current period must be 
+            those that were originally recorded for the previous period.
             The frequency of features (and targets) determines the frequency at which
-            model predictions are evaluated. This means that if we have monthly-frequency
+            model predictions are made and evaluated. This means that if we have monthly
             data, the learning process uses the performance of monthly predictions.
-        :param <pd.Series> y: Pandas series of targets corresponding to the features in X.
 
-        Note: The ultimate objective is to produce a dataframe of machine learning model
-        predictions, with adaptive hyperparameter and model selection at each test time.
-        Critically, a prediction for a particular cross-section and time period,
-        in units of the native frequency, is recorded at the first time at which all
-        information required to make the forecast is available. If the native frequency
-        is monthly, for instance, each monthly prediction is recorded for the respective
-        cross-section at the end of the previous month.
-        For daily data, each prediction is recorded for the previous
-        business day. Following the real_date adjustment, the predictions are forward-filled
-        to result in a dataframe with a working-daily frequency.
-        The date adjustment step ensures that the point-in-time principle is followed,
-        enabling the usage of SignalReturnRelations, NaivePnL and other macrosynergy
-        package methods and classes.
+        :param <pd.Series> y: Pandas series of targets corresponding with a time
+            index equal to the features in `X`.
+
+        Note: 
+        Optimization is based on expanding time series panels and maximizes a defined 
+        criterion over a grid of sklearn pipelines and hyperparameters of the involved 
+        models. The frequency of the input data sets `X` and `y` determines the frequency 
+        at which the training set is expanded. The training set itself is split into 
+        various (training, test) pairs by the `inner_splitter` argument for cross-
+        validation. Based on inner cross-validation an optimal model is chosen and used
+        for predicting the targets of the next period.
+        A prediction for a particular cross-section and time period is made only if all
+        required information has been available for that point.
+        Optimized signals that are produced by the class are always stored for the
+        end of the original data period that precedes the predicted period. 
+        For example, if the frequency of the input data set is monthly, signals for 
+        a month are recorded at the end of the previous month. If the frequency is working
+        daily, signals for a day are recorded at the end of the previous business day.
+        The date adjustment step ensures that the point-in-time principle is followed, 
+        in the JPMaQS format output of the class. 
 
         # Example use:
 
@@ -89,9 +92,9 @@ class SignalOptimizer:
             models = {"linreg" : LinearRegression()},
             metric = make_scorer(mean_squared_error, greater_is_better=False),
             hparam_grid = {"linreg" : {}},
-        )
-        print(so.get_all_preds("OLS"))
-
+        ) 
+        print(so.get_optimized_signals("OLS"))
+       
         # (2) KNN signal with adaptive hyperparameter optimisation
         so.calculate_predictions(
             name="KNN",
@@ -99,7 +102,7 @@ class SignalOptimizer:
             metric = make_scorer(mean_squared_error, greater_is_better=False),
             hparam_grid = {"knn" : {"n_neighbors" : [1, 2, 5]}},
         )
-        print(so.get_all_preds("KNN"))
+        print(so.get_optimized_signals("KNN"))
 
         # (3) Linear regression & KNN mixture signal with adaptive hyperparameter optimisation
         so.calculate_predictions(
@@ -108,7 +111,7 @@ class SignalOptimizer:
             metric = make_scorer(mean_squared_error, greater_is_better=False),
             hparam_grid = {"linreg" : {}, "knn" : {"n_neighbors" : [1, 2, 5]}},
         )
-        print(so.get_all_preds("MIX"))
+        print(so.get_optimized_signals("MIX"))
 
         # (4) Visualise the models chosen by the adaptive signal algorithm for the
         #     nearest neighbors and mixture signals.
@@ -141,18 +144,16 @@ class SignalOptimizer:
         n_jobs: Optional[int] = -1,
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
-        Method to store & return a dataframe of quantamental predictions for financial returns.
-        At each test time, the model that maximises the metric over the respective training
-        set is chosen, using the inner splitter specified on class instantiation. The model
-        type chosen at each time period is also stored in a separate dataframe.
+        Calculate, store and return sequentially optimized signals for a given process
 
-        :param <str> name: Name of the prediction model.
+        :param <str> name: Label of signal optimization process.
         :param <Dict[str, Union[BaseEstimator,Pipeline]]> models: dictionary of sklearn
-            predictors.
-        :param <Callable> metric: Sklearn scorer object.
-        :param <Dict[str, Dict[str, List]]> hparam_grid: Nested dictionary denoting the
+            predictors or pipelines.
+        :param <Callable> metric: A sklearn scorer object that serves as the criterion
+            for optimization.
+        :param <Dict[str, Dict[str, List]]> hparam_grid: Nested dictionary defining the
             hyperparameters to consider for each model. The outer dictionary needs keys
-            representing the model name and should match with the model keys in models.
+            representing the model name and should match the keys in the `models`.
             dictionary. The inner dictionary depends on the hyperparameter search type.
             If hparam_type is "grid", then the inner dictionary should have keys
             corresponding to the hyperparameter names and values equal to a list
@@ -178,17 +179,27 @@ class SignalOptimizer:
             This must be either "grid", "random" or "bayes". Default is "grid".
         :param <int> min_cids: Minimum number of cross-sections required for the initial
             training set. Default is 4.
-        :param <int> min_periods: minimum number of time periods required for the initial
-            training set. Default is 12.
+        :param <int> min_periods: minimum number of base periods of the input data 
+            frequency required for the initial training set. Default is 12.
         :param <int> max_periods: maximum length of each training set.
             If the maximum is exceeded, the earliest periods are cut off.
             Default is None.
         :param <int> n_iter: Number of iterations to run for random search. Default is 10.
         :param <int> n_jobs: Number of jobs to run in parallel. Default is -1, which uses
             all available cores.
-        :return <Tuple[pd.DataFrame, pd.DataFrame]>: Pandas dataframe of working daily signals generated by the
-            machine learning model predictions, as well as the model choices at each time
+        
+        :return <Tuple[pd.DataFrame, pd.DataFrame]>: (1) dataframe in JPMaQS format of 
+            working daily signals that were sequentially generated by the optimized 
+            model predictions, and (2) a dataframe the model choices at each time
             unit given by the native data frequency.
+
+        Note:
+        The method produces signals for financial contract positions. They are calculated
+        sequentially at the frequency of the input data set. Sequentially here means 
+        that the training set is expanded by one base period of the frequency. 
+        Each time the training set itself is split into  various (training, test) pairs by 
+        the `inner_splitter` argument. Based on inner cross-validation an optimal model 
+        is chosen and used for predicting the targets of the next period.
         """
         if hparam_grid.keys() != models.keys():
             raise ValueError(
@@ -405,45 +416,51 @@ class SignalOptimizer:
 
         return prediction_date, modelchoice_data
 
-    def get_all_preds(self, name: Optional[str] = None) -> pd.DataFrame:
+    def get_optimized_signals(self, name: Optional[str] = None) -> pd.DataFrame:
         """
-        Return a quantamental predictions dataframe for, by default, all calculated
-        predictions in the current class instantiation. If 'name' is specified, then
-        only the predictions for the specified pipeline are returned.
+        Returns optimized signals for one or more processes
 
-        :return <pd.DataFrame>: Pandas dataframe of working daily predictions
-            at the native dataset frequency.
+        :param <str> name: Label of signal optimization process. Default is all
+            stored in the class instance.
+            TODO: allow list 
+
+        :return <pd.DataFrame>: Pandas dataframe in JPMaQS format of working daily 
+            predictions based insequentially optimzed models.
         """
         if name is None:
             return self.preds
         else:
             if type(name) != str:
-                raise TypeError("The pipeline name must be a string.")
+                raise TypeError("The process name must be a string.")
             if name not in self.preds.xcat.unique():
                 raise ValueError(
-                    f"""The pipeline name '{name}' is not in the list of already-run
+                    f"""The process name '{name}' is not in the list of already-run
                     pipelines. Please check the name carefully. If correct, please run 
                     calculate_predictions() first.
                     """
                 )
             return self.preds[self.preds.xcat == name]
 
-    def get_all_models(self, name: Optional[str] = None) -> pd.DataFrame:
+    def get_optimal_models(self, name: Optional[str] = None) -> pd.DataFrame:
         """
-        Return a dataframe comprising the selected models at each time for, by default, all
-        calculated predictions in the current class instantiation. If 'name' is specified,
-        then only the predictions for the specified pipeline are returned.
+        Returns the sequences of optimal models for one or more processes
 
-        :return <pd.DataFrame>: Pandas dataframe of chosen models at each time.
+        :param <str> name: Label of signal optimization process. Default is all
+            stored in the class instance.
+            TODO: allow list 
+
+        :return <pd.DataFrame>: Pandas dataframe of the optimal models or hyperparameters 
+            at the end of the base period in which they were determined (to be applied 
+            in the subsequent period).
         """
         if name is None:
             return self.chosen_models
         else:
             if type(name) != str:
-                raise TypeError("The pipeline name must be a string.")
+                raise TypeError("The process name must be a string.")
             if name not in self.chosen_models.xcat.unique():
                 raise ValueError(
-                    f"""The pipeline name '{name}' is not in the list of already-run
+                    f"""The process name '{name}' is not in the list of already-run
                     pipelines. Please check the name carefully. If correct, please run 
                     calculate_predictions() first.
                     """
@@ -458,17 +475,20 @@ class SignalOptimizer:
         figsize: Optional[Tuple[int, int]] = (12, 8),
     ):
         """
-        Method to visualise the times at which each model in an adaptive machine learning
-        model pipeline is selected, as a binary heatmap. By default, the number of models
-        to be displayed is capped at the 5 most frequently selected.
+        Visualized optimal models used for signal calculation.
 
         :param <str> name: Name of the prediction model.
         :param <Optional[str]> title: Title of the heatmap. Default is None. This creates a figure
             title of the form "Model Selection Heatmap for {name}".
         :param <Optional[int]> cap: Maximum number of models to display. Default (and limit) is 5.
             The chosen models are the 'cap' most frequently occurring in the pipeline.
+            TODO: Allow up to 20 models.
         :param <Optional[tuple]> figsize: Tuple of integers denoting the figure size. Default is
             (12, 8).
+
+        Note:
+        This method displays the times at which each model in a learning process
+        has been optimal and used for signal generation, as a binary heatmap. 
         """
         # Type and value checks
         if type(name) != str:
@@ -494,7 +514,7 @@ class SignalOptimizer:
             raise TypeError("The figure title must be a string.")
 
         # Get the chosen models for the specified pipeline to visualise selection.
-        chosen_models = self.get_all_models()
+        chosen_models = self.get_optimal_models()
         chosen_models = chosen_models[chosen_models.name == name].sort_values(
             by="real_date"
         )
@@ -602,11 +622,11 @@ if __name__ == "__main__":
         hparam_type="grid",
     )
 
-    print(so.get_all_preds("test"))
+    print(so.get_optimized_signals("test"))
 
     # (2) Example SignalOptimizer usage.
     #     Visualise the model selection heatmap for the two most frequently selected models.
-    so.models_heatmap(name="test", cap=2)
+    so.models_heatmap(name="test", cap=5)
 
     # (3) Example SignalOptimizer usage.
     #     We get adaptive signals for two KNN regressors.
@@ -632,5 +652,5 @@ if __name__ == "__main__":
 
     # (4) Example SignalOptimizer usage.
     #     Print the predictions and model choices for all pipelines.
-    print(so.get_all_preds())
-    print(so.get_all_models())
+    print(so.get_optimized_signals())
+    print(so.get_optimal_models())
