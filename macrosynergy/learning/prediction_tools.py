@@ -31,6 +31,7 @@ from macrosynergy.learning.panel_time_series_split import (
     RollingKFoldPanelSplit,
 )
 
+
 class SignalOptimizer:
     def __init__(
         self,
@@ -41,7 +42,7 @@ class SignalOptimizer:
         """
         Class for the calculation of quantamental predictions based on adaptive
         hyperparameter and model selection. For a given collection of (training, test)
-        pairs that expand/roll by a single frequency unit, as determined by the native 
+        pairs that expand/roll by a single frequency unit, as determined by the native
         frequency of the data, an optimal model for each training set is chosen based on a
         specified hyperparameter search. The nature of the search is determined by splitting
         X and y according to the defined inner_splitter and the search type.
@@ -68,9 +69,9 @@ class SignalOptimizer:
         For daily data, each prediction is recorded for the previous
         business day. Following the real_date adjustment, the predictions are forward-filled
         to result in a dataframe with a working-daily frequency.
-        The date adjustment step ensures that the point-in-time principle is followed, 
+        The date adjustment step ensures that the point-in-time principle is followed,
         enabling the usage of SignalReturnRelations, NaivePnL and other macrosynergy
-        package methods and classes. 
+        package methods and classes.
 
         # Example use:
 
@@ -88,9 +89,9 @@ class SignalOptimizer:
             models = {"linreg" : LinearRegression()},
             metric = make_scorer(mean_squared_error, greater_is_better=False),
             hparam_grid = {"linreg" : {}},
-        ) 
+        )
         print(so.get_all_preds("OLS"))
-        
+
         # (2) KNN signal with adaptive hyperparameter optimisation
         so.calculate_predictions(
             name="KNN",
@@ -109,7 +110,7 @@ class SignalOptimizer:
         )
         print(so.get_all_preds("MIX"))
 
-        # (4) Visualise the models chosen by the adaptive signal algorithm for the 
+        # (4) Visualise the models chosen by the adaptive signal algorithm for the
         #     nearest neighbors and mixture signals.
         so.models_heatmap(name="KNN")
         so.models_heatmap(name="MIX")
@@ -450,7 +451,11 @@ class SignalOptimizer:
             return self.chosen_models[self.chosen_models.xcat == name]
 
     def models_heatmap(
-        self, name: str, title: Optional[str] = None, cap: Optional[int] = 5, figsize: Optional[Tuple[int, int]] = (12, 8)
+        self,
+        name: str,
+        title: Optional[str] = None,
+        cap: Optional[int] = 5,
+        figsize: Optional[Tuple[int, int]] = (12, 8),
     ):
         """
         Method to visualise the times at which each model in an adaptive machine learning
@@ -487,7 +492,7 @@ class SignalOptimizer:
             title = f"Model Selection Heatmap for {name}"
         if type(title) != str:
             raise TypeError("The figure title must be a string.")
-        
+
         # Get the chosen models for the specified pipeline to visualise selection.
         chosen_models = self.get_all_models()
         chosen_models = chosen_models[chosen_models.name == name].sort_values(
