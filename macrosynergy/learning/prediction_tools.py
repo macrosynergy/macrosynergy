@@ -1,6 +1,12 @@
 """
 Class to handle the calculation of quantamental predictions based on adaptive
 hyperparameter and model selection.
+
+**NOTE: This module is under development, and is not yet ready for production use.**
+
+TODO: add additional_X, additional_y optional arguments to the constructor to allow for
+      hold-out set predictions as well as walk-forward validation predictions.
+TODO: test and add Bayesian hyperparameter optimisation.
 """
 
 import numpy as np
@@ -25,8 +31,7 @@ from macrosynergy.learning.panel_time_series_split import (
     RollingKFoldPanelSplit,
 )
 
-
-class AdaptiveSignalHandler:
+class SignalOptimizer:
     def __init__(
         self,
         inner_splitter: BasePanelSplit,
@@ -36,10 +41,10 @@ class AdaptiveSignalHandler:
         """
         Class for the calculation of quantamental predictions based on adaptive
         hyperparameter and model selection. For a given collection of (training, test)
-        pairs that expand/roll by a single frequency unit, an optimal model for each
-        training set is chosen based on a specified hyperparameter search. The nature of
-        the search is determined by splitting X and y according to the defined
-        inner_splitter and the search type.
+        pairs that expand/roll by a single frequency unit, as determined by the native 
+        frequency of the data, an optimal model for each training set is chosen based on a
+        specified hyperparameter search. The nature of the search is determined by splitting
+        X and y according to the defined inner_splitter and the search type.
         The optimal model is then used to make test set forecasts.
 
         :param <BasePanelSplit> inner_splitter: Panel splitter that is used to split
@@ -47,15 +52,68 @@ class AdaptiveSignalHandler:
         :param <pd.DataFrame> X: Wide-format pandas dataframe of features over the time
             period for which the signal is to be calculated. These should lag behind
             returns by a single frequency unit. This means that the date refers to the
-            date that the returns are realised, with features lagging behind by a frequency unit.
+            date that the paired returns are realised, with features lagging behind by a frequency unit.
             The frequency of features (and targets) determines the frequency at which
             model predictions are evaluated. This means that if we have monthly-frequency
             data, the learning process uses the performance of monthly predictions.
         :param <pd.Series> y: Pandas series of targets corresponding to the features in X.
 
-        Note: The ultimate objective is to return a dataframe of predictions of a
-        machine learning model with adaptive hyperparameter selection at each test time and
-        to analyse the subsequent signals.
+        Note: The ultimate objective is to produce a dataframe of machine learning model
+        predictions, with adaptive hyperparameter and model selection at each test time.
+        Critically, a prediction for a particular cross-section and time period,
+        in units of the native frequency, is recorded at the first time at which all
+        information required to make the forecast is available. If the native frequency
+        is monthly, for instance, each monthly prediction is recorded for the respective
+        cross-section at the end of the previous month.
+        For daily data, each prediction is recorded for the previous
+        business day. Following the real_date adjustment, the predictions are forward-filled
+        to result in a dataframe with a working-daily frequency.
+        The date adjustment step ensures that the point-in-time principle is followed, 
+        enabling the usage of SignalReturnRelations, NaivePnL and other macrosynergy
+        package methods and classes. 
+
+        # Example use:
+
+        ```python
+        # Suppose X_train and y_train comprise monthly-frequency features and targets
+        so = SignalOptimizer(
+            inner_splitter=RollingKFoldPanelSplit(n_splits=5),
+            X=X_train,
+            y=y_train,
+        )
+
+        # (1) Linear Regression signal with no hyperparameter optimisation
+        so.calculate_predictions(
+            name="OLS",
+            models = {"linreg" : LinearRegression()},
+            metric = make_scorer(mean_squared_error, greater_is_better=False),
+            hparam_grid = {"linreg" : {}},
+        ) 
+        print(so.get_all_preds("OLS"))
+        
+        # (2) KNN signal with adaptive hyperparameter optimisation
+        so.calculate_predictions(
+            name="KNN",
+            models = {"knn" : KNeighborsRegressor()},
+            metric = make_scorer(mean_squared_error, greater_is_better=False),
+            hparam_grid = {"knn" : {"n_neighbors" : [1, 2, 5]}},
+        )
+        print(so.get_all_preds("KNN"))
+
+        # (3) Linear regression & KNN mixture signal with adaptive hyperparameter optimisation
+        so.calculate_predictions(
+            name="MIX",
+            models = {"linreg" : LinearRegression(), "knn" : KNeighborsRegressor()},
+            metric = make_scorer(mean_squared_error, greater_is_better=False),
+            hparam_grid = {"linreg" : {}, "knn" : {"n_neighbors" : [1, 2, 5]}},
+        )
+        print(so.get_all_preds("MIX"))
+
+        # (4) Visualise the models chosen by the adaptive signal algorithm for the 
+        #     nearest neighbors and mixture signals.
+        so.models_heatmap(name="KNN")
+        so.models_heatmap(name="MIX")
+        ```
         """
 
         self.inner_splitter = inner_splitter
@@ -74,7 +132,7 @@ class AdaptiveSignalHandler:
         models: Dict[str, Union[BaseEstimator, Pipeline]],
         metric: Callable,
         hparam_grid: Dict[str, Dict[str, List]],
-        hparam_type: str,
+        hparam_type: str = "grid",
         min_cids: int = 4,
         min_periods: int = 12 * 3,
         max_periods: Optional[int] = None,
@@ -250,10 +308,7 @@ class AdaptiveSignalHandler:
             }
         )
 
-        return (
-            signal_df_long[signal_df_long.xcat == name],
-            model_df_long[model_df_long.name == name],
-        )
+        pass
 
     def _worker(
         self,
@@ -349,28 +404,53 @@ class AdaptiveSignalHandler:
 
         return prediction_date, modelchoice_data
 
-    def get_all_preds(self) -> pd.DataFrame:
+    def get_all_preds(self, name: Optional[str] = None) -> pd.DataFrame:
         """
-        Return the predictions dataframe for all calculated predictions in the current
-        class instantiation.
+        Return a quantamental predictions dataframe for, by default, all calculated
+        predictions in the current class instantiation. If 'name' is specified, then
+        only the predictions for the specified pipeline are returned.
 
-        :return <pd.DataFrame>: Pandas dataframe of working daily predictions generated by
-            the machine learning models at the native dataset frequency.
+        :return <pd.DataFrame>: Pandas dataframe of working daily predictions
+            at the native dataset frequency.
         """
-        return self.preds
+        if name is None:
+            return self.preds
+        else:
+            if type(name) != str:
+                raise TypeError("The pipeline name must be a string.")
+            if name not in self.preds.xcat.unique():
+                raise ValueError(
+                    f"""The pipeline name '{name}' is not in the list of already-run
+                    pipelines. Please check the name carefully. If correct, please run 
+                    calculate_predictions() first.
+                    """
+                )
+            return self.preds[self.preds.xcat == name]
 
-    def get_all_models(self) -> pd.DataFrame:
+    def get_all_models(self, name: Optional[str] = None) -> pd.DataFrame:
         """
-        Return the dataframe comprising the selected models at each time for all
-        calculated predictions in the current class instantiation.
+        Return a dataframe comprising the selected models at each time for, by default, all
+        calculated predictions in the current class instantiation. If 'name' is specified,
+        then only the predictions for the specified pipeline are returned.
 
-        :return <pd.DataFrame>: Pandas dataframe of the chosen models at each time for all
-            calculated predictions in the current class instantiation.
+        :return <pd.DataFrame>: Pandas dataframe of chosen models at each time.
         """
-        return self.chosen_models
+        if name is None:
+            return self.chosen_models
+        else:
+            if type(name) != str:
+                raise TypeError("The pipeline name must be a string.")
+            if name not in self.chosen_models.xcat.unique():
+                raise ValueError(
+                    f"""The pipeline name '{name}' is not in the list of already-run
+                    pipelines. Please check the name carefully. If correct, please run 
+                    calculate_predictions() first.
+                    """
+                )
+            return self.chosen_models[self.chosen_models.xcat == name]
 
     def models_heatmap(
-        self, name: str, cap: int = 5, figsize: Tuple[int, int] = (12, 8)
+        self, name: str, title: Optional[str] = None, cap: Optional[int] = 5, figsize: Optional[Tuple[int, int]] = (12, 8)
     ):
         """
         Method to visualise the times at which each model in an adaptive machine learning
@@ -378,9 +458,11 @@ class AdaptiveSignalHandler:
         to be displayed is capped at the 5 most frequently selected.
 
         :param <str> name: Name of the prediction model.
-        :param <int> cap: Maximum number of models to display. Default (and limit) is 5.
+        :param <Optional[str]> title: Title of the heatmap. Default is None. This creates a figure
+            title of the form "Model Selection Heatmap for {name}".
+        :param <Optional[int]> cap: Maximum number of models to display. Default (and limit) is 5.
             The chosen models are the 'cap' most frequently occurring in the pipeline.
-        :param <tuple> figsize: Tuple of integers denoting the figure size. Default is
+        :param <Optional[tuple]> figsize: Tuple of integers denoting the figure size. Default is
             (12, 8).
         """
         # Type and value checks
@@ -395,12 +477,17 @@ class AdaptiveSignalHandler:
                 calculate_predictions() first.
                 """
             )
-        if cap > 5:
+        if cap > 20:
             logging.warning(
-                f"The maximum number of models to display is 5. The cap has been set to 5."
+                f"The maximum number of models to display is 20. The cap has been set to 20."
             )
-            cap = 5
+            cap = 20
 
+        if title is None:
+            title = f"Model Selection Heatmap for {name}"
+        if type(title) != str:
+            raise TypeError("The figure title must be a string.")
+        
         # Get the chosen models for the specified pipeline to visualise selection.
         chosen_models = self.get_all_models()
         chosen_models = chosen_models[chosen_models.name == name].sort_values(
@@ -431,10 +518,8 @@ class AdaptiveSignalHandler:
 
         # Display the heatmap.
         plt.figure(figsize=figsize)
-        sns.heatmap(binary_matrix, cmap="binary")
+        sns.heatmap(binary_matrix, cmap="binary", cbar=False)
         plt.title(f"Model Selection Heatmap for {name}")
-        plt.xlabel("Time")
-        plt.ylabel("Models")
         plt.show()
 
 
@@ -443,10 +528,9 @@ if __name__ == "__main__":
     import macrosynergy.management as msm
     from sklearn.linear_model import LinearRegression
     from sklearn.neighbors import KNeighborsRegressor
-    from sklearn.metrics import make_scorer, mean_absolute_error
+    from sklearn.metrics import make_scorer
     from macrosynergy.learning import (
         regression_balanced_accuracy,
-        MapSelectorTransformer,
     )
 
     cids = ["AUD", "CAD", "GBP", "USD"]
@@ -472,7 +556,7 @@ if __name__ == "__main__":
     dfd2 = make_qdf(df_cids2, df_xcats2, back_ar=0.75)
     dfd2["grading"] = np.ones(dfd2.shape[0])
     black = {"GBP": ["2009-01-01", "2012-06-30"], "CAD": ["2018-01-01", "2100-01-01"]}
-    # dfd2 = msm.reduce_df(df=dfd2, cids=cids, xcats=xcats, blacklist=black)
+
     dfd2 = msm.categories_df(
         df=dfd2, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
     ).dropna()
@@ -482,7 +566,7 @@ if __name__ == "__main__":
         frame=y.reset_index(), id_vars=["cid", "real_date"], var_name="xcat"
     )
 
-    # (1) Example AdaptiveSignalHandler usage.
+    # (1) Example SignalOptimizer usage.
     #     We get adaptive signals for a linear regression and a KNN regressor, with the
     #     hyperparameters for the latter optimised across regression balanced accuracy.
 
@@ -499,13 +583,13 @@ if __name__ == "__main__":
         "KNN": {"n_neighbors": [1, 2, 5]},
     }
 
-    ash = AdaptiveSignalHandler(
+    so = SignalOptimizer(
         inner_splitter=inner_splitter,
         X=X,
         y=y,
     )
 
-    preds, models = ash.calculate_predictions(
+    so.calculate_predictions(
         name="test",
         models=models,
         metric=metric,
@@ -513,13 +597,13 @@ if __name__ == "__main__":
         hparam_type="grid",
     )
 
-    print(preds, models)
+    print(so.get_all_preds("test"))
 
-    # (2) Example AdaptiveSignalHandler usage.
+    # (2) Example SignalOptimizer usage.
     #     Visualise the model selection heatmap for the two most frequently selected models.
-    ash.models_heatmap(name="test", cap=2)
+    so.models_heatmap(name="test", cap=2)
 
-    # (3) Example AdaptiveSignalHandler usage.
+    # (3) Example SignalOptimizer usage.
     #     We get adaptive signals for two KNN regressors.
     #     All chosen models are visualised in a heatmap.
     models2 = {
@@ -531,7 +615,7 @@ if __name__ == "__main__":
         "KNN2": {"n_neighbors": [1, 2]},
     }
 
-    preds2, models2 = ash.calculate_predictions(
+    so.calculate_predictions(
         name="test2",
         models=models2,
         metric=metric,
@@ -539,10 +623,9 @@ if __name__ == "__main__":
         hparam_type="grid",
     )
 
-    print(preds2, models2)
-    ash.models_heatmap(name="test2", cap=4)
+    so.models_heatmap(name="test2", cap=4)
 
-    # (4) Example AdaptiveSignalHandler usage.
+    # (4) Example SignalOptimizer usage.
     #     Print the predictions and model choices for all pipelines.
-    print(ash.get_all_preds())
-    print(ash.get_all_models())
+    print(so.get_all_preds())
+    print(so.get_all_models())
