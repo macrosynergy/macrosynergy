@@ -497,6 +497,7 @@ class NaivePnL:
         ncol: int = 3,
         same_y: bool = True,
         title: str = "Cumulative Naive PnL",
+        title_fontsize: int = 20,
         xcat_labels: List[str] = None,
         xlab: str = "",
         ylab: str = "% of risk capital, no compounding",
@@ -529,6 +530,7 @@ class NaivePnL:
             runtime.
         :param <bool> same_y: if True (default) all plots in facet grid share same y axis.
         :param <str> title: allows entering text for a custom chart header.
+        :param <int> title_fontsize: font size for the title. Default is 20.
         :param <List[str]> xcat_labels: custom labels to be used for the PnLs.
         :param <str> xlab: label for x-axis of the plot (or subplots if faceted),
             default is None (empty string)..
@@ -625,7 +627,7 @@ class NaivePnL:
             )
             fg.fig.suptitle(
                 title,
-                fontsize=20,
+                fontsize=title_fontsize,
             )
 
             fg.fig.subplots_adjust(top=title_adj, bottom=label_adj, left=y_label_adj)
