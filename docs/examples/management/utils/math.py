@@ -1,5 +1,11 @@
 """example/macrosynergy/management/utils/math.py"""
 
+from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.utils import expanding_mean_with_nan
+
+import pandas as pd
+
+
 cids = ["AUD", "CAD", "GBP", "USD", "NZD"]
 xcats = ["XR", "CRY", "GROWTH", "INFL"]
 
