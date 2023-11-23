@@ -1,5 +1,8 @@
 """example/macrosynergy/panel/make_blacklist.py"""
 
+from macrosynergy.management.simulate import make_qdf, make_qdf_black
+from macrosynergy.panel.make_blacklist import make_blacklist
+import pandas as pd
 
 cids = ["AUD", "GBP", "CAD", "USD"]
 
@@ -11,18 +14,11 @@ df_cid1 = pd.DataFrame(index=cids, columns=cols)
 
 
 df_cid1.loc["AUD"] = ["2010-01-01", "2020-12-31", 0, 1]
-
-
 df_cid1.loc["GBP"] = ["2011-01-01", "2020-11-30", 0, 1]
-
-
 df_cid1.loc["CAD"] = ["2011-01-01", "2021-11-30", 0, 1]
-
-
 df_cid1.loc["USD"] = ["2011-01-01", "2020-12-30", 0, 1]
 
-
-cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
+cols += ["ar_coef", "back_coef"]
 
 
 df_xcat1 = pd.DataFrame(index=["FXXR_NSA", "FXCRY_NSA"], columns=cols)

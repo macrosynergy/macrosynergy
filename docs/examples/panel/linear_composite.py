@@ -1,5 +1,7 @@
 """example/macrosynergy/panel/linear_composite.py"""
-
+import pandas as pd
+from macrosynergy.management.simulate import make_test_df
+from macrosynergy.panel.linear_composite import linear_composite
 
 cids = ["AUD", "CAD", "GBP"]
 
@@ -33,13 +35,13 @@ df = pd.concat(
 df.loc[
     (df["cid"] == "GBP") & (df["xcat"] == "INFL") & (df["real_date"] == "2000-01-17"),
     "value",
-] = np.NaN
+] = pd.NA
 
 
 df.loc[
     (df["cid"] == "AUD") & (df["xcat"] == "CRY") & (df["real_date"] == "2000-01-17"),
     "value",
-] = np.NaN
+] = pd.NA
 
 
 # there are now missing values for AUD-CRY and GBP-INFL on 2000-01-17
