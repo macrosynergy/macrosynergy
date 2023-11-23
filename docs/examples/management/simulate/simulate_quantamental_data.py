@@ -1,11 +1,15 @@
 """example/macrosynergy/management/simulate/simulate_quantamental_data.py"""
+from macrosynergy.management.simulate import make_qdf, simulate_ar
+import pandas as pd
+
 
 ser_ar = simulate_ar(100, mean=0, sd_mult=1, ar_coef=0.75)
 
 cids = ["AUD", "CAD", "GBP"]
 xcats = ["XR", "CRY"]
 df_cids = pd.DataFrame(
-    index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    index=cids,
+    columns=["earliest", "latest", "mean_add", "sd_mult"],
 )
 df_cids.loc["AUD",] = ["2010-01-01", "2020-12-31", 0.5, 2]
 df_cids.loc["CAD",] = ["2011-01-01", "2020-11-30", 0, 1]
