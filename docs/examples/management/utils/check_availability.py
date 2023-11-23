@@ -1,4 +1,10 @@
 """example/macrosynergy/management/utils/check_availability.py"""
+from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.utils import check_availability
+
+import pandas as pd
+
+## Setting up the mock data
 
 cids = ["AUD", "CAD", "GBP"]
 xcats = ["XR", "CRY"]
@@ -17,11 +23,17 @@ df_xcats.loc["CRY",] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
 dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
 filt_na = (dfd["cid"] == "CAD") & (dfd["real_date"] < "2011-01-01")
-dfd.loc[filt_na, "value"] = np.nan
+dfd.loc[filt_na, "value"] = pd.NA
 
 xxcats = xcats + ["TREND"]
 xxcids = cids + ["USD"]
 
+## Checking availability of data
+
 check_availability(
-    df=dfd, xcats=xcats, cids=cids, start_size=(10, 5), end_size=(10, 8)
+    df=dfd,
+    xcats=xcats,
+    cids=cids,
+    start_size=(10, 5),
+    end_size=(10, 8),
 )
