@@ -1,6 +1,12 @@
 """
 Class to handle the calculation of quantamental predictions based on adaptive
 hyperparameter and model selection.
+
+**NOTE: This module is under development, and is not yet ready for production use.**
+
+TODO: add additional_X, additional_y optional arguments to the constructor to allow for
+      hold-out set predictions as well as walk-forward validation predictions.
+TODO: test and add Bayesian hyperparameter optimisation.
 """
 
 import numpy as np
@@ -19,10 +25,14 @@ import logging
 
 from joblib import Parallel, delayed
 
-from macrosynergy.learning.panel_time_series_split import BasePanelSplit, ExpandingIncrementPanelSplit, RollingKFoldPanelSplit
+from macrosynergy.learning.panel_time_series_split import (
+    BasePanelSplit,
+    ExpandingIncrementPanelSplit,
+    RollingKFoldPanelSplit,
+)
 
 
-class AdaptiveSignalHandler:
+class SignalOptimizer:
     def __init__(
         self,
         inner_splitter: BasePanelSplit,
@@ -30,28 +40,84 @@ class AdaptiveSignalHandler:
         y: pd.Series,
     ):
         """
-        Class for the calculation of quantamental predictions based on adaptive
-        hyperparameter and model selection. For a given collection of (training, test)
-        pairs that expand/roll by a single frequency unit, an optimal model for each
-        training set is chosen based on a specified hyperparameter search. The nature of
-        the search is determined by splitting X and y according to the defined
-        inner_splitter and the search type.
-        The optimal model is then used to make test set forecasts.
+        Class for sequential optimization of raw signals based on quantamental features
 
         :param <BasePanelSplit> inner_splitter: Panel splitter that is used to split
-            each training set into smaller (training, test) pairs.
-        :param <pd.DataFrame> X: Wide-format pandas dataframe of features over the time
-            period for which the signal is to be calculated. These should lag behind
-            returns by a single frequency unit. This means that the date refers to the
-            date that the returns are realised, with features lagging behind by a frequency unit.
+            each training set into smaller (training, test) pairs for cross-validation.
+            At present that splitter has to be an instance of `RollingKFoldPanelSplit`,
+            `ExpandingKFoldPanelSplit` or `ExpandingIncrementPanelSplit`.
+        :param <pd.DataFrame> X: Wide pandas dataframe of features and dat-time indexes 
+            that capture the periods for which the signals are to be calculated. 
+            Since signals must make time seried predictions, the features in `X` must be 
+            lagged by one period, i.e., the values used for the current period must be 
+            those that were originally recorded for the previous period.
             The frequency of features (and targets) determines the frequency at which
-            model predictions are evaluated. This means that if we have monthly-frequency
+            model predictions are made and evaluated. This means that if we have monthly
             data, the learning process uses the performance of monthly predictions.
-        :param <pd.Series> y: Pandas series of targets corresponding to the features in X.
 
-        Note: The ultimate objective is to return a dataframe of predictions of a
-        machine learning model with adaptive hyperparameter selection at each test time and
-        to analyse the subsequent signals.
+        :param <pd.Series> y: Pandas series of targets corresponding with a time
+            index equal to the features in `X`.
+
+        Note: 
+        Optimization is based on expanding time series panels and maximizes a defined 
+        criterion over a grid of sklearn pipelines and hyperparameters of the involved 
+        models. The frequency of the input data sets `X` and `y` determines the frequency 
+        at which the training set is expanded. The training set itself is split into 
+        various (training, test) pairs by the `inner_splitter` argument for cross-
+        validation. Based on inner cross-validation an optimal model is chosen and used
+        for predicting the targets of the next period.
+        A prediction for a particular cross-section and time period is made only if all
+        required information has been available for that point.
+        Optimized signals that are produced by the class are always stored for the
+        end of the original data period that precedes the predicted period. 
+        For example, if the frequency of the input data set is monthly, signals for 
+        a month are recorded at the end of the previous month. If the frequency is working
+        daily, signals for a day are recorded at the end of the previous business day.
+        The date adjustment step ensures that the point-in-time principle is followed, 
+        in the JPMaQS format output of the class. 
+
+        # Example use:
+
+        ```python
+        # Suppose X_train and y_train comprise monthly-frequency features and targets
+        so = SignalOptimizer(
+            inner_splitter=RollingKFoldPanelSplit(n_splits=5),
+            X=X_train,
+            y=y_train,
+        )
+
+        # (1) Linear Regression signal with no hyperparameter optimisation
+        so.calculate_predictions(
+            name="OLS",
+            models = {"linreg" : LinearRegression()},
+            metric = make_scorer(mean_squared_error, greater_is_better=False),
+            hparam_grid = {"linreg" : {}},
+        ) 
+        print(so.get_optimized_signals("OLS"))
+       
+        # (2) KNN signal with adaptive hyperparameter optimisation
+        so.calculate_predictions(
+            name="KNN",
+            models = {"knn" : KNeighborsRegressor()},
+            metric = make_scorer(mean_squared_error, greater_is_better=False),
+            hparam_grid = {"knn" : {"n_neighbors" : [1, 2, 5]}},
+        )
+        print(so.get_optimized_signals("KNN"))
+
+        # (3) Linear regression & KNN mixture signal with adaptive hyperparameter optimisation
+        so.calculate_predictions(
+            name="MIX",
+            models = {"linreg" : LinearRegression(), "knn" : KNeighborsRegressor()},
+            metric = make_scorer(mean_squared_error, greater_is_better=False),
+            hparam_grid = {"linreg" : {}, "knn" : {"n_neighbors" : [1, 2, 5]}},
+        )
+        print(so.get_optimized_signals("MIX"))
+
+        # (4) Visualise the models chosen by the adaptive signal algorithm for the
+        #     nearest neighbors and mixture signals.
+        so.models_heatmap(name="KNN")
+        so.models_heatmap(name="MIX")
+        ```
         """
 
         self.inner_splitter = inner_splitter
@@ -70,25 +136,24 @@ class AdaptiveSignalHandler:
         models: Dict[str, Union[BaseEstimator, Pipeline]],
         metric: Callable,
         hparam_grid: Dict[str, Dict[str, List]],
-        hparam_type: str,
+        hparam_type: str = "grid",
         min_cids: int = 4,
         min_periods: int = 12 * 3,
         max_periods: Optional[int] = None,
         n_iter: Optional[int] = 10,
+        n_jobs: Optional[int] = -1,
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
-        Method to store & return a dataframe of quantamental predictions for financial returns.
-        At each test time, the model that maximises the metric over the respective training
-        set is chosen, using the inner splitter specified on class instantiation. The model
-        type chosen at each time period is also stored in a separate dataframe.
+        Calculate, store and return sequentially optimized signals for a given process
 
-        :param <str> name: Name of the prediction model.
+        :param <str> name: Label of signal optimization process.
         :param <Dict[str, Union[BaseEstimator,Pipeline]]> models: dictionary of sklearn
-            predictors.
-        :param <Callable> metric: Sklearn scorer object.
-        :param <Dict[str, Dict[str, List]]> hparam_grid: Nested dictionary denoting the
+            predictors or pipelines.
+        :param <Callable> metric: A sklearn scorer object that serves as the criterion
+            for optimization.
+        :param <Dict[str, Dict[str, List]]> hparam_grid: Nested dictionary defining the
             hyperparameters to consider for each model. The outer dictionary needs keys
-            representing the model name and should match with the model keys in models.
+            representing the model name and should match the keys in the `models`.
             dictionary. The inner dictionary depends on the hyperparameter search type.
             If hparam_type is "grid", then the inner dictionary should have keys
             corresponding to the hyperparameter names and values equal to a list
@@ -114,16 +179,27 @@ class AdaptiveSignalHandler:
             This must be either "grid", "random" or "bayes". Default is "grid".
         :param <int> min_cids: Minimum number of cross-sections required for the initial
             training set. Default is 4.
-        :param <int> min_periods: minimum number of time periods required for the initial
-            training set. Default is 12.
+        :param <int> min_periods: minimum number of base periods of the input data 
+            frequency required for the initial training set. Default is 12.
         :param <int> max_periods: maximum length of each training set.
             If the maximum is exceeded, the earliest periods are cut off.
             Default is None.
         :param <int> n_iter: Number of iterations to run for random search. Default is 10.
-
-        :return <Tuple[pd.DataFrame, pd.DataFrame]>: Pandas dataframe of working daily signals generated by the
-            machine learning model predictions, as well as the model choices at each time
+        :param <int> n_jobs: Number of jobs to run in parallel. Default is -1, which uses
+            all available cores.
+        
+        :return <Tuple[pd.DataFrame, pd.DataFrame]>: (1) dataframe in JPMaQS format of 
+            working daily signals that were sequentially generated by the optimized 
+            model predictions, and (2) a dataframe the model choices at each time
             unit given by the native data frequency.
+
+        Note:
+        The method produces signals for financial contract positions. They are calculated
+        sequentially at the frequency of the input data set. Sequentially here means 
+        that the training set is expanded by one base period of the frequency. 
+        Each time the training set itself is split into  various (training, test) pairs by 
+        the `inner_splitter` argument. Based on inner cross-validation an optimal model 
+        is chosen and used for predicting the targets of the next period.
         """
         if hparam_grid.keys() != models.keys():
             raise ValueError(
@@ -182,73 +258,30 @@ class AdaptiveSignalHandler:
             min_periods=min_periods,
             max_periods=max_periods,
         )
-        for train_idx, test_idx in tqdm(outer_splitter.split(self.X, self.y)):
-            # Set up training and test sets
-            X_train_i: pd.DataFrame = self.X.iloc[train_idx]
-            y_train_i: pd.Series = self.y.iloc[train_idx]
-            X_test_i: pd.DataFrame = self.X.iloc[test_idx]
-            # Get correct indices to match with
-            test_xs_levels: List[str] = X_test_i.index.get_level_values(0).unique()
-            test_date_levels: List[pd.Timestamp] = sorted(
-                X_test_i.index.get_level_values(1).unique()
-            )
-            # Since the features lag behind the targets, the dates need to be adjusted
-            # by a single frequency unit
-            locs: np.ndarray = (
-                np.searchsorted(original_date_levels, test_date_levels, side="left") - 1
-            )
-            test_date_levels: pd.DatetimeIndex = pd.DatetimeIndex(
-                [original_date_levels[i] if i >= 0 else pd.NaT for i in locs]
-            )
-            optim_name = None
-            optim_model = None
-            optim_score = -np.inf
-            # For each model, run a grid search over the hyperparameters to optimise
-            # the provided metric. The best model is then used to make predictions.
-            for model_name, model in models.items():
-                if hparam_type == "grid":
-                    search_object = GridSearchCV(
-                        estimator=model,
-                        param_grid=hparam_grid[model_name],
-                        scoring=metric,
-                        refit=True,
-                        cv=self.inner_splitter,
-                        n_jobs=-1,
-                    )
-                elif hparam_type == "random":
-                    search_object = RandomizedSearchCV(
-                        estimator=model,
-                        param_distributions=hparam_grid[model_name],
-                        n_iter=n_iter,
-                        scoring=metric,
-                        refit=True,
-                        cv=inner_splitter,
-                        n_jobs=-1,
-                    )
-                # Run the grid search
-                search_object.fit(X_train_i, y_train_i)
-                score = search_object.best_score_
-                if score > optim_score:
-                    optim_score = score
-                    optim_name = model_name
-                    optim_model = search_object.best_estimator_  # refit = True
-                    optim_params = search_object.best_params_
 
-            # Store the best estimator predictions
-            preds: np.ndarray = optim_model.predict(X_test_i)
-            prediction_data.append(
-                [
-                    name,
-                    test_xs_levels,
-                    test_date_levels,
-                    preds,
-                ]
+        results = Parallel(n_jobs=n_jobs)(
+            delayed(self._worker)(
+                train_idx=train_idx,
+                test_idx=test_idx,
+                name=name,
+                models=models,
+                metric=metric,
+                original_date_levels=original_date_levels,
+                hparam_type=hparam_type,
+                hparam_grid=hparam_grid,
+                n_iter=n_iter,
             )
+            for train_idx, test_idx in tqdm(
+                outer_splitter.split(X=self.X, y=self.y),
+            )
+        )
 
-            # Store information about the chosen model at each time.
-            modelchoice_data.append(
-                [test_date_levels.date[0], name, optim_name, optim_params]
-            )
+        prediction_data = []
+        modelchoice_data = []
+
+        for pred_data, model_data in results:
+            prediction_data.append(pred_data)
+            modelchoice_data.append(model_data)
 
         # Condense the collected data into a single dataframe
         for column_name, xs_levels, date_levels, predictions in prediction_data:
@@ -287,42 +320,175 @@ class AdaptiveSignalHandler:
             }
         )
 
-        return (
-            signal_df_long[signal_df_long.xcat == name],
-            model_df_long[model_df_long.name == name],
+        pass
+
+    def _worker(
+        self,
+        train_idx: np.array,
+        test_idx: np.array,
+        name: str,
+        models: Dict[str, Union[BaseEstimator, Pipeline]],
+        metric: Callable,
+        original_date_levels: List[pd.Timestamp],
+        hparam_grid: Dict[str, Dict[str, List]],
+        n_iter: int = 10,
+        hparam_type: str = "grid",
+    ):
+        """
+        Private helper function to run the grid search for a single (train, test) pair
+        and a collection of models. It is used to parallelise the pipeline.
+
+        :param <np.array> train_idx: Array of indices corresponding to the training set.
+        :param <np.array> test_idx: Array of indices corresponding to the test set.
+        :param <str> name: Name of the prediction model.
+        :param <Dict[str, Union[BaseEstimator,Pipeline]]> models: dictionary of sklearn
+            predictors.
+        :param <Callable> metric: Sklearn scorer object.
+        :param <List[pd.Timestamp]> original_date_levels: List of dates corresponding to
+            the original dataset.
+        :param <str> hparam_type: Hyperparameter search type.
+            This must be either "grid", "random" or "bayes". Default is "grid".
+        :param <Dict[str, Dict[str, List]]> hparam_grid: Nested dictionary denoting the
+            hyperparameters to consider for each model.
+            See https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GridSearchCV.html
+            and https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.RandomizedSearchCV.html
+            for more details.
+        :param <int> n_iter: Number of iterations to run for random search. Default is 10.
+        :param <str> hparam_type: Hyperparameter search type.
+            This must be either "grid", "random" or "bayes". Default is "grid".
+        """
+        # Set up training and test sets
+        X_train_i: pd.DataFrame = self.X.iloc[train_idx]
+        y_train_i: pd.Series = self.y.iloc[train_idx]
+        X_test_i: pd.DataFrame = self.X.iloc[test_idx]
+        # Get correct indices to match with
+        test_xs_levels: List[str] = X_test_i.index.get_level_values(0).unique()
+        test_date_levels: List[pd.Timestamp] = sorted(
+            X_test_i.index.get_level_values(1).unique()
         )
+        # Since the features lag behind the targets, the dates need to be adjusted
+        # by a single frequency unit
+        locs: np.ndarray = (
+            np.searchsorted(original_date_levels, test_date_levels, side="left") - 1
+        )
+        test_date_levels: pd.DatetimeIndex = pd.DatetimeIndex(
+            [original_date_levels[i] if i >= 0 else pd.NaT for i in locs]
+        )
+        optim_name = None
+        optim_model = None
+        optim_score = -np.inf
+        # For each model, run a grid search over the hyperparameters to optimise
+        # the provided metric. The best model is then used to make predictions.
+        for model_name, model in models.items():
+            if hparam_type == "grid":
+                search_object = GridSearchCV(
+                    estimator=model,
+                    param_grid=hparam_grid[model_name],
+                    scoring=metric,
+                    refit=True,
+                    cv=self.inner_splitter,
+                    n_jobs=1,
+                )
+            elif hparam_type == "random":
+                search_object = RandomizedSearchCV(
+                    estimator=model,
+                    param_distributions=hparam_grid[model_name],
+                    n_iter=n_iter,
+                    scoring=metric,
+                    refit=True,
+                    cv=self.inner_splitter,
+                    n_jobs=1,
+                )
+            # Run the grid search
+            search_object.fit(X_train_i, y_train_i)
+            score = search_object.best_score_
+            if score > optim_score:
+                optim_score = score
+                optim_name = model_name
+                optim_model = search_object.best_estimator_  # refit = True
+                optim_params = search_object.best_params_
 
-    def get_all_preds(self) -> pd.DataFrame:
-        """
-        Return the predictions dataframe for all calculated predictions in the current
-        class instantiation.
+        # Store the best estimator predictions
+        preds: np.ndarray = optim_model.predict(X_test_i)
+        prediction_date = [name, test_xs_levels, test_date_levels, preds]
+        # Store information about the chosen model at each time.
+        modelchoice_data = [test_date_levels.date[0], name, optim_name, optim_params]
 
-        :return <pd.DataFrame>: Pandas dataframe of working daily predictions generated by
-            the machine learning models at the native dataset frequency.
-        """
-        return self.preds
+        return prediction_date, modelchoice_data
 
-    def get_all_models(self) -> pd.DataFrame:
+    def get_optimized_signals(self, name: Optional[str] = None) -> pd.DataFrame:
         """
-        Return the dataframe comprising the selected models at each time for all
-        calculated predictions in the current class instantiation.
+        Returns optimized signals for one or more processes
 
-        :return <pd.DataFrame>: Pandas dataframe of the chosen models at each time for all
-            calculated predictions in the current class instantiation.
-        """
-        return self.chosen_models
+        :param <str> name: Label of signal optimization process. Default is all
+            stored in the class instance.
+            TODO: allow list 
 
-    def models_heatmap(self, name: str, cap: int = 5, figsize: Tuple[int,int] = (12, 8)):
+        :return <pd.DataFrame>: Pandas dataframe in JPMaQS format of working daily 
+            predictions based insequentially optimzed models.
         """
-        Method to visualise the times at which each model in an adaptive machine learning
-        model pipeline is selected, as a binary heatmap. By default, the number of models
-        to be displayed is capped at the 5 most frequently selected.
+        if name is None:
+            return self.preds
+        else:
+            if type(name) != str:
+                raise TypeError("The process name must be a string.")
+            if name not in self.preds.xcat.unique():
+                raise ValueError(
+                    f"""The process name '{name}' is not in the list of already-run
+                    pipelines. Please check the name carefully. If correct, please run 
+                    calculate_predictions() first.
+                    """
+                )
+            return self.preds[self.preds.xcat == name]
+
+    def get_optimal_models(self, name: Optional[str] = None) -> pd.DataFrame:
+        """
+        Returns the sequences of optimal models for one or more processes
+
+        :param <str> name: Label of signal optimization process. Default is all
+            stored in the class instance.
+            TODO: allow list 
+
+        :return <pd.DataFrame>: Pandas dataframe of the optimal models or hyperparameters 
+            at the end of the base period in which they were determined (to be applied 
+            in the subsequent period).
+        """
+        if name is None:
+            return self.chosen_models
+        else:
+            if type(name) != str:
+                raise TypeError("The process name must be a string.")
+            if name not in self.chosen_models.xcat.unique():
+                raise ValueError(
+                    f"""The process name '{name}' is not in the list of already-run
+                    pipelines. Please check the name carefully. If correct, please run 
+                    calculate_predictions() first.
+                    """
+                )
+            return self.chosen_models[self.chosen_models.xcat == name]
+
+    def models_heatmap(
+        self,
+        name: str,
+        title: Optional[str] = None,
+        cap: Optional[int] = 5,
+        figsize: Optional[Tuple[int, int]] = (12, 8),
+    ):
+        """
+        Visualized optimal models used for signal calculation.
 
         :param <str> name: Name of the prediction model.
-        :param <int> cap: Maximum number of models to display. Default (and limit) is 5.
+        :param <Optional[str]> title: Title of the heatmap. Default is None. This creates a figure
+            title of the form "Model Selection Heatmap for {name}".
+        :param <Optional[int]> cap: Maximum number of models to display. Default (and limit) is 5.
             The chosen models are the 'cap' most frequently occurring in the pipeline.
-        :param <tuple> figsize: Tuple of integers denoting the figure size. Default is
+            TODO: Allow up to 20 models.
+        :param <Optional[tuple]> figsize: Tuple of integers denoting the figure size. Default is
             (12, 8).
+
+        Note:
+        This method displays the times at which each model in a learning process
+        has been optimal and used for signal generation, as a binary heatmap. 
         """
         # Type and value checks
         if type(name) != str:
@@ -336,14 +502,19 @@ class AdaptiveSignalHandler:
                 calculate_predictions() first.
                 """
             )
-        if cap > 5:
+        if cap > 20:
             logging.warning(
-                f"The maximum number of models to display is 5. The cap has been set to 5."
+                f"The maximum number of models to display is 20. The cap has been set to 20."
             )
-            cap = 5
-        
+            cap = 20
+
+        if title is None:
+            title = f"Model Selection Heatmap for {name}"
+        if type(title) != str:
+            raise TypeError("The figure title must be a string.")
+
         # Get the chosen models for the specified pipeline to visualise selection.
-        chosen_models = self.get_all_models()
+        chosen_models = self.get_optimal_models()
         chosen_models = chosen_models[chosen_models.name == name].sort_values(
             by="real_date"
         )
@@ -365,17 +536,15 @@ class AdaptiveSignalHandler:
 
         # Fill in binary matrix denoting the selected model at each time
         binary_matrix = pd.DataFrame(0, index=unique_models, columns=unique_dates)
-        for _ , row in chosen_models.iterrows():
+        for _, row in chosen_models.iterrows():
             model_id = row["model_hparam_id"]
             date = row["real_date"]
             binary_matrix.at[model_id, date] = 1
 
-        # Display the heatmap. 
+        # Display the heatmap.
         plt.figure(figsize=figsize)
-        sns.heatmap(binary_matrix, cmap="binary")
+        sns.heatmap(binary_matrix, cmap="binary", cbar=False)
         plt.title(f"Model Selection Heatmap for {name}")
-        plt.xlabel("Time")
-        plt.ylabel("Models")
         plt.show()
 
 
@@ -384,10 +553,9 @@ if __name__ == "__main__":
     import macrosynergy.management as msm
     from sklearn.linear_model import LinearRegression
     from sklearn.neighbors import KNeighborsRegressor
-    from sklearn.metrics import make_scorer, mean_absolute_error
+    from sklearn.metrics import make_scorer
     from macrosynergy.learning import (
         regression_balanced_accuracy,
-        MapSelectorTransformer,
     )
 
     cids = ["AUD", "CAD", "GBP", "USD"]
@@ -413,7 +581,7 @@ if __name__ == "__main__":
     dfd2 = make_qdf(df_cids2, df_xcats2, back_ar=0.75)
     dfd2["grading"] = np.ones(dfd2.shape[0])
     black = {"GBP": ["2009-01-01", "2012-06-30"], "CAD": ["2018-01-01", "2100-01-01"]}
-    # dfd2 = msm.reduce_df(df=dfd2, cids=cids, xcats=xcats, blacklist=black)
+
     dfd2 = msm.categories_df(
         df=dfd2, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
     ).dropna()
@@ -423,7 +591,7 @@ if __name__ == "__main__":
         frame=y.reset_index(), id_vars=["cid", "real_date"], var_name="xcat"
     )
 
-    # (1) Example AdaptiveSignalHandler usage.
+    # (1) Example SignalOptimizer usage.
     #     We get adaptive signals for a linear regression and a KNN regressor, with the
     #     hyperparameters for the latter optimised across regression balanced accuracy.
 
@@ -440,13 +608,13 @@ if __name__ == "__main__":
         "KNN": {"n_neighbors": [1, 2, 5]},
     }
 
-    ash = AdaptiveSignalHandler(
+    so = SignalOptimizer(
         inner_splitter=inner_splitter,
         X=X,
         y=y,
     )
 
-    preds, models = ash.calculate_predictions(
+    so.calculate_predictions(
         name="test",
         models=models,
         metric=metric,
@@ -454,14 +622,14 @@ if __name__ == "__main__":
         hparam_type="grid",
     )
 
-    print(preds, models)
+    print(so.get_optimized_signals("test"))
 
-    # (2) Example AdaptiveSignalHandler usage.
+    # (2) Example SignalOptimizer usage.
     #     Visualise the model selection heatmap for the two most frequently selected models.
-    ash.models_heatmap(name="test", cap=2)
+    so.models_heatmap(name="test", cap=5)
 
-    # (3) Example AdaptiveSignalHandler usage.
-    #     We get adaptive signals for two KNN regressors. 
+    # (3) Example SignalOptimizer usage.
+    #     We get adaptive signals for two KNN regressors.
     #     All chosen models are visualised in a heatmap.
     models2 = {
         "KNN1": KNeighborsRegressor(),
@@ -472,7 +640,7 @@ if __name__ == "__main__":
         "KNN2": {"n_neighbors": [1, 2]},
     }
 
-    preds2, models2 = ash.calculate_predictions(
+    so.calculate_predictions(
         name="test2",
         models=models2,
         metric=metric,
@@ -480,10 +648,9 @@ if __name__ == "__main__":
         hparam_type="grid",
     )
 
-    print(preds2, models2)
-    ash.models_heatmap(name="test2", cap=4)
+    so.models_heatmap(name="test2", cap=4)
 
-    # (4) Example AdaptiveSignalHandler usage.
+    # (4) Example SignalOptimizer usage.
     #     Print the predictions and model choices for all pipelines.
-    print(ash.get_all_preds())
-    print(ash.get_all_models())
+    print(so.get_optimized_signals())
+    print(so.get_optimal_models())

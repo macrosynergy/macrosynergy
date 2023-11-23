@@ -46,16 +46,20 @@ class LassoSelectorTransformer(BaseEstimator, TransformerMixin):
 
         return self
 
-    def transform(self, X: pd.DataFrame):
+    def transform(self, X: Union[pd.DataFrame, np.ndarray]):
         """
         Transform method to return only the selected features of the dataframe.
 
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Union[pd.DataFrame, np.ndarray]> X: Pandas dataframe or numpy array
+            of input features.
         
-        :return <pd.DataFrame>: Pandas dataframe of input features selected
-            based on the Lasso's feature selection capabilities.
+        :return <Union[pd.DataFrame, np.ndarray]>: Pandas dataframe or numpy array
+            of input features selected based on the Lasso's feature selection capabilities.
         """
-        return X.iloc[:,self.selected_ftr_idxs]
+        if type(X) == pd.DataFrame:
+            return X.iloc[:,self.selected_ftr_idxs]
+        
+        return X[:,self.selected_ftr_idxs]
     
 class MapSelectorTransformer(BaseEstimator, TransformerMixin):
     def __init__(self, threshold: float):
