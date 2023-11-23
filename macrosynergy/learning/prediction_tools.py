@@ -31,6 +31,7 @@ from macrosynergy.learning.panel_time_series_split import (
     RollingKFoldPanelSplit,
 )
 
+
 class SignalOptimizer:
     def __init__(
         self,
@@ -53,6 +54,7 @@ class SignalOptimizer:
             The frequency of features (and targets) determines the frequency at which
             model predictions are made and evaluated. This means that if we have monthly
             data, the learning process uses the performance of monthly predictions.
+
         :param <pd.Series> y: Pandas series of targets corresponding with a time
             index equal to the features in `X`.
 
@@ -92,7 +94,7 @@ class SignalOptimizer:
             hparam_grid = {"linreg" : {}},
         ) 
         print(so.get_optimized_signals("OLS"))
-        
+       
         # (2) KNN signal with adaptive hyperparameter optimisation
         so.calculate_predictions(
             name="KNN",
@@ -111,7 +113,7 @@ class SignalOptimizer:
         )
         print(so.get_optimized_signals("MIX"))
 
-        # (4) Visualise the models chosen by the adaptive signal algorithm for the 
+        # (4) Visualise the models chosen by the adaptive signal algorithm for the
         #     nearest neighbors and mixture signals.
         so.models_heatmap(name="KNN")
         so.models_heatmap(name="MIX")
@@ -466,7 +468,11 @@ class SignalOptimizer:
             return self.chosen_models[self.chosen_models.xcat == name]
 
     def models_heatmap(
-        self, name: str, title: Optional[str] = None, cap: Optional[int] = 5, figsize: Optional[Tuple[int, int]] = (12, 8)
+        self,
+        name: str,
+        title: Optional[str] = None,
+        cap: Optional[int] = 5,
+        figsize: Optional[Tuple[int, int]] = (12, 8),
     ):
         """
         Visualized optimal models used for signal calculation.
@@ -506,7 +512,7 @@ class SignalOptimizer:
             title = f"Model Selection Heatmap for {name}"
         if type(title) != str:
             raise TypeError("The figure title must be a string.")
-        
+
         # Get the chosen models for the specified pipeline to visualise selection.
         chosen_models = self.get_optimal_models()
         chosen_models = chosen_models[chosen_models.name == name].sort_values(
