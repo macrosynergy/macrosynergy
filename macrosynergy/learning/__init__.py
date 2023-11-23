@@ -11,7 +11,7 @@ from .metrics import (
 from .prediction_tools import AdaptiveSignalHandler
 
 __all__ = [
-    "AdaptiveSignalHandler",
+    "SignalOptimizer",
     "ExpandingKFoldPanelSplit",
     "RollingKFoldPanelSplit",
     "ExpandingIncrementPanelSplit",
