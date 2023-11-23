@@ -172,7 +172,7 @@ class CategoryRelations(object):
             val=val,
             start=start,
             end=end,
-            freq=freq,
+            freq=self.freq,
             blacklist=blacklist,
             years=years,
             lag=lag,

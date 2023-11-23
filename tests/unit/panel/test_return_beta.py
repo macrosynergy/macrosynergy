@@ -379,7 +379,7 @@ class TestAll(unittest.TestCase):
             )
 
         # Test the re-estimation frequency parameter.
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             # The re-estimation frequency can either be weekly, monthly or quarterly:
             # ['w', 'm', 'q']. Set the 'refreq' parameter to an incorrect value.
             df_hedge = return_beta(
