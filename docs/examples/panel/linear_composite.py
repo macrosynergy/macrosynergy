@@ -1,9 +1,13 @@
 """example/macrosynergy/panel/linear_composite.py"""
 
+
 cids = ["AUD", "CAD", "GBP"]
+
+
 xcats = ["XR", "CRY", "INFL"]
 
-df: pd.DataFrame = pd.concat(
+
+df = pd.concat(
     [
         make_test_df(
             cids=cids,
@@ -22,27 +26,27 @@ df: pd.DataFrame = pd.concat(
     ]
 )
 
+
 # all infls are now decreasing-linear, while everything else is increasing-linear
 
+
 df.loc[
-    (df["cid"] == "GBP")
-    & (df["xcat"] == "INFL")
-    & (df["real_date"] == "2000-01-17"),
+    (df["cid"] == "GBP") & (df["xcat"] == "INFL") & (df["real_date"] == "2000-01-17"),
     "value",
 ] = np.NaN
 
+
 df.loc[
-    (df["cid"] == "AUD")
-    & (df["xcat"] == "CRY")
-    & (df["real_date"] == "2000-01-17"),
+    (df["cid"] == "AUD") & (df["xcat"] == "CRY") & (df["real_date"] == "2000-01-17"),
     "value",
 ] = np.NaN
+
 
 # there are now missing values for AUD-CRY and GBP-INFL on 2000-01-17
 
-lc_cid = linear_composite(
-    df=df, xcats="XR", weights="INFL", normalize_weights=False
-)
+
+lc_cid = linear_composite(df=df, xcats="XR", weights="INFL", normalize_weights=False)
+
 
 lc_xcat = linear_composite(
     df=df,

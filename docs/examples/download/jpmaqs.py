@@ -1,14 +1,29 @@
 """example/macrosynergy/download/jpmaqs.py"""
+
+
 from macrosynergy.download import JPMaQSDownload
 
+
 cids = ["AUD", "BRL", "CAD"]
+
+
 xcats = ["RIR_NSA", "FXXR_NSA", "FXXR_VT10", "DU05YXR_NSA"]
+
+
 metrics = "all"
-start_date: str = "2023-01-01"
-end_date: str = "2023-03-20"
+
+
+start_date = "2023-01-01"
+
+
+end_date = "2023-03-20"
+
 
 client_id = "DQ_CLIENT_ID"
+
+
 client_secret = "DQ_CLIENT_SECRET"
+
 
 with JPMaQSDownload(
     client_id=client_id,
