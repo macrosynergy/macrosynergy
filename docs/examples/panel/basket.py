@@ -1,4 +1,10 @@
 """example/macrosynergy/panel/basket.py"""
+from macrosynergy.panel.basket import Basket
+from macrosynergy.management.simulate import make_qdf
+
+import pandas as pd
+import random
+
 
 cids = ["AUD", "GBP", "NZD", "USD"]
 xcats = [
@@ -46,7 +52,7 @@ contracts_1 = ["AUD_FX", "GBP_FX", "NZD_FX", "USD_EQ"]
 # First test. Multiple carries. Equal weight method.
 # The main aspect to check in the code is that basket performance has been applied to
 # both the return category and the multiple carry categories.
-dfd["grading"] = np.ones(dfd.shape[0])
+dfd["grading"] = 1
 
 basket_1 = Basket(
     df=dfd,
@@ -55,7 +61,11 @@ basket_1 = Basket(
     cry=["CRY_NSA", "CRR_NSA"],
     blacklist=black,
 )
-basket_1.make_basket(weight_meth="equal", max_weight=0.55, basket_name="GLB_EQUAL")
+basket_1.make_basket(
+    weight_meth="equal",
+    max_weight=0.55,
+    basket_name="GLB_EQUAL",
+)
 
 basket_1.make_basket(
     weight_meth="fixed",
