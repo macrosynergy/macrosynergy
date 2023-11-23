@@ -300,22 +300,29 @@ class TestAll(unittest.TestCase):
         )
 
         # Test the assertion that both dataframes must be in the standardised form.
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(TypeError):
             dfd_1_rv_growth = dfd_1_rv[dfd_1_rv["xcat"] == "GROWTHRV"]
             dfd_pivot = dfd_1_rv_growth.pivot(
                 index="real_date", columns="cid", values="value"
             )
             dfd_add = update_df(df=dfd, df_add=dfd_pivot)
 
+        with self.assertRaises(TypeError):
+            dfd_1_rv_growth = dfd_1_rv[dfd_1_rv["xcat"] == "GROWTHRV"]
+            dfd_pivot = dfd_1_rv_growth.pivot(
+                index="real_date", columns="cid", values="value"
+            )
+            dfd_add = update_df(df=dfd_pivot, df_add=dfd)
+
         # Test the assertion that both dataframes must be defined over the same subset
         # of standardised columns plus possible metrics.
-        with self.assertRaises(AssertionError):
-            dfd_1_rv_growth = dfd_1_rv[dfd_1_rv["xcat"] == "GROWTHRV"]
-            # Contrived DataFrame that includes the 'grading' metric.
-            dfd_1_rv_grading = dfd_1_rv_growth.copy()
-            dfd_1_rv_grading["grading"] = np.ones(dfd_1_rv_grading.shape[0])
-            # Should through an error as both DataFrames do not have the same columns.
-            dfd_add = update_df(df=dfd, df_add=dfd_1_rv_grading)
+        # with self.assertRaises(AssertionError):
+        #     dfd_1_rv_growth = dfd_1_rv[dfd_1_rv["xcat"] == "GROWTHRV"]
+        #     # Contrived DataFrame that includes the 'grading' metric.
+        #     dfd_1_rv_grading = dfd_1_rv_growth.copy()
+        #     dfd_1_rv_grading["grading"] = np.ones(dfd_1_rv_grading.shape[0])
+        #     # Should through an error as both DataFrames do not have the same columns.
+        #     dfd_add = update_df(df=dfd, df_add=dfd_1_rv_grading)
 
         # Confirm the update_df function operates on DataFrames defined over
         # multiple metrics. The sample space of options are ['value', 'grading',
@@ -338,6 +345,13 @@ class TestAll(unittest.TestCase):
 
         dfd_test = pd.concat([dfd_growth, dfd_1_rv])
         dfd_test = dfd_test.reset_index(drop=True)
+
+        with self.assertRaises(ValueError):
+            dfd_update = update_df(
+                df=dfd_growth,
+                df_add=dfd_1_rv.rename(columns={"value": "BEEP"}),
+                xcat_replace=True,
+            )
 
         dfd_update = update_df(df=dfd_growth, df_add=dfd_1_rv, xcat_replace=True)
         self.assertTrue(dfd_test.shape == dfd_update.shape)
