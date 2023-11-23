@@ -8,7 +8,7 @@ from .metrics import (
     regression_accuracy,
     regression_balanced_accuracy,
 )
-from .prediction_tools import AdaptiveSignalHandler
+from .prediction_tools import SignalOptimizer
 
 __all__ = [
     "SignalOptimizer",
