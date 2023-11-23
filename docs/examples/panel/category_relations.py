@@ -1,4 +1,9 @@
 """example/macrosynergy/panel/category_relations.py"""
+from macrosynergy.management.simulate import make_qdf
+from macrosynergy.panel.category_relations import CategoryRelations
+
+import pandas as pd
+
 
 cids = ["AUD", "CAD", "GBP", "NZD", "USD"]
 xcats = ["XR", "CRY", "GROWTH", "INFL"]
@@ -20,7 +25,7 @@ df_xcats.loc["GROWTH"] = ["2001-01-01", "2020-10-30", 1, 2, 0.9, 1]
 df_xcats.loc["INFL"] = ["2001-01-01", "2020-10-30", 1, 2, 0.8, 0.5]
 
 dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
-dfd["grading"] = np.ones(dfd.shape[0])
+dfd["grading"] = 1
 black = {"AUD": ["2000-01-01", "2003-12-31"], "GBP": ["2018-01-01", "2100-01-01"]}
 
 # All AUD GROWTH locations.
@@ -55,8 +60,6 @@ cr.reg_scatter(
     coef_box="lower left",
     prob_est="map",
 )
-
-# years parameter
 
 cr = CategoryRelations(
     dfdx,
