@@ -482,7 +482,6 @@ class SignalOptimizer:
             title of the form "Model Selection Heatmap for {name}".
         :param <Optional[int]> cap: Maximum number of models to display. Default (and limit) is 5.
             The chosen models are the 'cap' most frequently occurring in the pipeline.
-            TODO: Allow up to 20 models.
         :param <Optional[tuple]> figsize: Tuple of integers denoting the figure size. Default is
             (12, 8).
 
@@ -544,7 +543,7 @@ class SignalOptimizer:
         # Display the heatmap.
         plt.figure(figsize=figsize)
         sns.heatmap(binary_matrix, cmap="binary", cbar=False)
-        plt.title(f"Model Selection Heatmap for {name}")
+        plt.title(title)
         plt.show()
 
 
