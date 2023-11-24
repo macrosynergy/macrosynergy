@@ -18,8 +18,9 @@ from macrosynergy.management.utils import (
     is_valid_iso_date,
     qdf_to_ticker_df,
     ticker_df_to_qdf,
+    get_eops,
+    get_cid,
 )
-from macrosynergy.panel.historic_vol import get_cycles
 
 
 def expo_weights(lback_periods: int = 21, half_life: int = 11):
@@ -94,7 +95,7 @@ def flat_std(x: np.ndarray, remove_zeros: bool = True) -> float:
     return mabs
 
 
-def _single_calc(
+def _rolling_window_calc(
     row,
     ticker_df: pd.DataFrame,
     lback_periods: int,
@@ -103,13 +104,32 @@ def _single_calc(
     remove_zeros: bool,
     weights: Optional[np.ndarray] = None,
 ):
+    """
+    Runs the volatility calculation for a given row of the dataframe.
+    It needs access to the full 'ticker_df' dataframe to make the lookback possible.
+
+    :param <pd.Series> row: a row of the dataframe, which contains the index, the
+        'real_date' and the 'ticker' of the current calculation.
+    :param <pd.DataFrame> ticker_df: the wide dataframe of all the tickers in the strategy.
+    :param <int> lback_periods: the number of periods to use for the lookback period
+        of the volatility-targeting method. Default is 21.
+    :param <float> nan_tolerance: maximum ratio of NaNs to non-NaNs in a lookback window,
+        if exceeded the resulting volatility is set to NaN. Default is 0.25.
+    :param <callable> roll_func: the function to use for the rolling window calculation.
+        The function must have a signature of (np.ndarray, *, remove_zeros: bool) -> float.
+        See `expo_std` and `flat_std` for examples.
+    :param <bool> remove_zeros: removes zeroes as invalid entries and shortens the
+        effective window.
+    :param <np.ndarray> weights: array of exponential weights for each period in the
+        lookback window. Default is None, which means that the weights are equal.
+    """
+    # use end=row["real_date"] when using apply
     df_wide: pd.DataFrame = ticker_df.loc[
-        ticker_df.index.isin(
-            pd.bdate_range(end=row["real_date"], periods=lback_periods)
-        )
+        ticker_df.index.isin(pd.bdate_range(end=row.name, periods=lback_periods))
     ]
     # TODO: Check this 252 number. @mikiinterfiore says it should be 261
     if weights is None:
+        weights = np.ones(lback_periods) / lback_periods
         univariate_vol = np.sqrt(252) * df_wide.agg(
             roll_func, remove_zeros=remove_zeros
         )
@@ -138,16 +158,25 @@ def _single_calc(
 
     ## variance-covariance matrix for this period
     d_vcv: pd.DataFrame = df_wide.cov()
-    
+
     ## TODO: what now?
 
     return univariate_vol
 
 
+# dfw_calc.loc[trigger_indices, :] = (
+#     dfw_calc.loc[trigger_indices, :]
+#     .reset_index()
+#     .apply(
+#         lambda row: _rolling_window_calc(row=row, ticker_df=df_wide, **_args),
+#         axis=1,
+#     )
+#     .set_index(dfw_calc.index)
+# )
+
+
 def _hist_vol(
     df: pd.DataFrame,
-    sname: str,
-    fids: List[str],
     est_freq: str = "m",
     lback_periods: int = 21,
     lback_meth: str = "ma",
@@ -155,6 +184,27 @@ def _hist_vol(
     nan_tolerance: float = 0.25,
     remove_zeros: bool = True,
 ):
+    """
+    Calculates historic volatility for a given strategy. It assumes that the dataframe
+    is composed solely of the relevant signals and returns for the strategy.
+    :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
+        columns: 'cid', 'xcat', 'real_date' and 'value'.
+    :param <str> est_freq: the frequency of the volatility estimation. Default is 'm'
+        for monthly. Alternatives are 'w' for business weekly, 'd' for daily, and 'q'
+        for quarterly. Estimations are conducted for the end of the period.
+    :param <int> lback_periods: the number of periods to use for the lookback period
+        of the volatility-targeting method. Default is 21.
+    :param <str> lback_meth: the method to use for the lookback period of the
+        volatility-targeting method. Default is 'ma' for moving average. Alternative is
+        "xma", for exponential moving average.
+    :param <int> half_life: Refers to the half-time for "xma" and full lookback period
+        for "ma". Default is 11.
+    :param <float> nan_tolerance: maximum ratio of NaNs to non-NaNs in a lookback window,
+        if exceeded the resulting volatility is set to NaN. Default is 0.25.
+    :param <bool> remove_zeros: removes zeroes as invalid entries and shortens the
+        effective window.
+    """
+
     lback_meth = lback_meth.lower()
     if not lback_meth in ["ma", "xma"]:
         raise NotImplementedError(
@@ -162,29 +212,17 @@ def _hist_vol(
         )
 
     df_wide: pd.DataFrame = qdf_to_ticker_df(df=df)
-    sig_ident: str = f"_CSIG_{sname}"
 
-    _fconts: List[str] = [f"{contx}{sig_ident}" for contx in fids]
-    if not set(_fconts).issubset(set(df_wide.columns)):
-        raise ValueError(
-            f"Contract signals for contracts not in dataframe. \n"
-            f"Missing: {set(_fconts) - set(df_wide.columns)}"
-        )
-
-    # Create empty weights dataframe, similar to df_wide
-
-    # NOTE: `get_cycles` helps identify the dates for which the volatility calculation
+    # NOTE: `get_eops` helps identify the dates for which the volatility calculation
     # will be performed. This is done by identifying the last date of each cycle.
-    # We use `get_cycles` primarily because it has a clear and defined behaviour for all frequencies.
+    # We use `get_eops` primarily because it has a clear and defined behaviour for all frequencies.
     # It was originally designed as part of the `historic_vol` module, but it is
     # used here as well.
-    
-    trigger_indices = df_wide.index[
-        get_cycles(
-            pd.DataFrame({"real_date": df_wide.index}),
-            freq=est_freq,
-        )
-    ]
+
+    trigger_indices = get_eops(
+        dates=df_wide.index,
+        freq=est_freq,
+    )
 
     dfw_calc: pd.DataFrame = pd.DataFrame(
         index=trigger_indices, columns=df_wide.columns, dtype=float
@@ -198,13 +236,11 @@ def _hist_vol(
         )
 
     if est_freq == "d":
-        _args: dict
+        _args: dict = dict(remove_zeros=remove_zeros)
         if lback_meth == "xma":
-            _args = dict(func=expo_std, w=expo_weights_arr, remove_zeros=remove_zeros)
+            _args.update(dict(func=expo_std, w=expo_weights_arr))
         elif lback_meth == "ma":
-            _args = dict(func=flat_std, remove_zeros=remove_zeros)
-
-        dfw_calc = df_wide.rolling(lback_periods).agg(**_args)
+            _args.update(dict(func=flat_std))
 
     else:
         _args = dict(
@@ -213,27 +249,19 @@ def _hist_vol(
             nan_tolerance=nan_tolerance,
         )
         if lback_meth == "xma":
-            _args["roll_func"] = expo_std
-            _args["w"] = expo_weights_arr
+            _args.update(dict(roll_func=expo_std, w=expo_weights_arr))
         elif lback_meth == "ma":
-            _args["roll_func"] = flat_std
+            _args.update(dict(roll_func=flat_std))
 
-        # NOTE
-        # LOC Only rows for dates that are in the trigger_indices:
-        # Reset Index to make real_date accessible to _single_calc
-        # Apply _single_calc to each row
-        # setindex back to dfw_calc's index
-        # Reindex to match the original df_wide index
-
-        dfw_calc.loc[trigger_indices, :] = (
-            dfw_calc.loc[trigger_indices, :]
-            .reset_index()
-            .apply(
-                lambda row: _single_calc(row=row, ticker_df=df_wide, **_args),
-                axis=1,
+    if est_freq == "d":
+        dfw_calc = df_wide.rolling(lback_periods).agg(**_args)
+    else:
+        for r_date in trigger_indices:
+            dfw_calc.loc[r_date, :] = _rolling_window_calc(
+                row=dfw_calc.loc[r_date, :],
+                ticker_df=df_wide,
+                **_args,
             )
-            .set_index(dfw_calc.index)
-        )
 
     fills = {"d": 1, "w": 5, "m": 24, "q": 64}
     dfw_calc = dfw_calc.reindex(df_wide.index).ffill(limit=fills[est_freq])
@@ -254,6 +282,7 @@ def historic_portfolio_vol(
     end: Optional[str] = None,
     blacklist: Optional[dict] = None,
     nan_tolerance: float = 0.25,
+    remove_zeros: bool = True,
 ):
     """
     Estimates annualized standard deviations of a portfolio, based on historic
@@ -270,11 +299,6 @@ def historic_portfolio_vol(
     :param <str> est_freq: the frequency of the volatility estimation. Default is 'm'
         for monthly. Alternatives are 'w' for business weekly, 'd' for daily, and 'q'
         for quarterly. Estimations are conducted for the end of the period.
-    :param <float> dollar_per_signal: the amount of notional currency (e.g. USD) per
-        contract signal value. Default is 1. The default scale has no specific meaning
-        and is merely a basis for tryouts.
-        TODO: This argument seems redunant, as PnL volatility should always be calculated
-        on a USD1 per signal basis.
     :param <int> lback_periods: the number of periods to use for the lookback period
         of the volatility-targeting method. Default is 21.
     :param <str> lback_meth: the method to use for the lookback period of the
@@ -290,12 +314,14 @@ def historic_portfolio_vol(
         the end date is taken from the dataframe.
     :param <dict> blacklist: a dictionary of contract identifiers to exclude from
         the calculation. Default is None, which means that no contracts are excluded.
-    :param <float> nan_tolerance: minimum ratio of NaNs to non-NaNs in a lookback window,
+    :param <float> nan_tolerance: maximum ratio of NaNs to non-NaNs in a lookback window,
         if exceeded the resulting volatility is set to NaN. Default is 0.25.
-        TODO: Should be a maximum ratio.
+    :param <bool> remove_zeros: if True (default) any returns that are exact zeros will
+        not be included in the lookback window and prior non-zero values are added to the
+        window instead.
 
 
-    :return: <pd.DataFrame> JPMaQS dataframe of annualized standard deviation of 
+    :return: <pd.DataFrame> JPMaQS dataframe of annualized standard deviation of
         estimated strategy PnL, with category name <sname>_PNL_USD1S_ASD.
         TODO: check if this is correct.
         The values are in % annualized. Values between estimation points are forward
@@ -350,8 +376,8 @@ def historic_portfolio_vol(
         raise ValueError("`sname` must be a string.")
 
     df["ticker"]: str = df["cid"] + "_" + df["xcat"]
+
     ## Check that there is atleast one contract signal for the strategy
-    # check using endswith
     if not any(df["ticker"].str.endswith(f"_CSIG_{sname}")):
         raise ValueError(f"No contract signals for strategy `{sname}`.")
 
@@ -362,15 +388,35 @@ def historic_portfolio_vol(
         ):
             raise ValueError(f"Contract identifier `{contx}` not in dataframe.")
 
+    ## Filter DF such that all timeseries have the correct return category, strategy name
+    ## and contract identifier
+    _cfids = get_cid(ticker=fids)
+    filt_tickers: List[str] = [
+        tx
+        for tx in u_tickers
+        if (
+            tx.endswith(f"_CSIG_{sname}")
+            and (f"{rstring}_{rstring}" in tx)
+            and (get_cid(tx) in _cfids)
+        )
+    ]
+    df: pd.DataFrame = df.loc[df["ticker"].isin(filt_tickers)]
+
+    if df.empty:
+        raise ValueError(
+            "No data available for the given strategy and contract identifiers."
+            "Please check the inputs. \n"
+            f"Strategy: {sname} ; Contract identifiers: {fids}"
+        )
+
     hist_vol: pd.DataFrame = _hist_vol(
         df=df,
-        sname=sname,
-        fids=fids,
         est_freq=est_freq,
         lback_periods=lback_periods,
         lback_meth=lback_meth,
         half_life=half_life,
         nan_tolerance=nan_tolerance,
+        remove_zeros=remove_zeros,
     )
 
 
@@ -392,11 +438,11 @@ if __name__ == "__main__":
     )
 
     df.loc[(df["cid"] == "USD") & (df["xcat"] == "SIG"), "value"] = 1.0
-    ctypes = ["FX", "IRS", "CDS"]
+    ctypes = ["FXXR_XR", "IRSXR_XR", "CDSXR_XR"]
     cscales = [1.0, 0.5, 0.1]
     csigns = [1, -1, 1]
 
-    hbasket = ["USD_EQ", "EUR_EQ"]
+    hbasket = ["USD_EQXR_XR", "EUR_EQXR_XR"]
     hscales = [0.7, 0.3]
 
     df_cs: pd.DataFrame = contract_signals(
@@ -417,7 +463,7 @@ if __name__ == "__main__":
         sname="TEST",
         fids=fids,
         est_freq="m",
-        lback_periods=60,
+        lback_periods=15,
         lback_meth="ma",
         half_life=11,
         rstring="XR",
