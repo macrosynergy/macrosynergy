@@ -20,7 +20,6 @@ from .metrics import (
 from .prediction_tools import SignalOptimizer
 
 __all__ = [
-    "SignalOptimizer",
     # panel_time_series_split
     "ExpandingKFoldPanelSplit",
     "RollingKFoldPanelSplit",
@@ -39,6 +38,6 @@ __all__ = [
     "regression_accuracy",
     "regression_balanced_accuracy",
     # prediction_tools
-    "AdaptiveSignalHandler",
+    "SignalOptimizer",
 ]
  
