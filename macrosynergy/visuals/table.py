@@ -24,7 +24,7 @@ def view_table(
 
     :param <pd.Dataframe> table: table to be displayed.
     :param <str> title: string of chart title; defaults depend on type of range plot.
-    :param <int> title_fontsize: integer of title font size.
+    :param <int> title_fontsize: font size of chart header. Default is 16.
     :param <Tuple[float]> figsize: Tuple (w, h) of width and height of plot.
     :param <float> min_color: minimum value of colorbar.
     :param <float> max_color: maximum value of colorbar.
