@@ -9,7 +9,6 @@ from macrosynergy.management.simulate import make_qdf
 def view_table(
     df: pd.DataFrame,
     title: Optional[str] = None,
-    title_fontsize: Optional[int] = 16,
     figsize: Optional[Tuple[float]] = (14, 4),
     min_color: float = -1,
     max_color: float = 1,
@@ -24,7 +23,6 @@ def view_table(
 
     :param <pd.Dataframe> table: table to be displayed.
     :param <str> title: string of chart title; defaults depend on type of range plot.
-    :param <int> title_fontsize: integer of title font size.
     :param <Tuple[float]> figsize: Tuple (w, h) of width and height of plot.
     :param <float> min_color: minimum value of colorbar.
     :param <float> max_color: maximum value of colorbar.
@@ -56,7 +54,6 @@ def view_table(
     elif len(yticklabels) != len(df.index):
         raise ValueError("Number of yticklabels must match number of rows")
 
-    ax: plt.Axes
     fig, ax = plt.subplots(figsize=figsize)
     sns.set(style="ticks")
     sns.heatmap(
@@ -73,7 +70,7 @@ def view_table(
     )
 
     ax.set(xlabel=xlabel, ylabel=ylabel)
-    ax.set_title(title, fontsize=title_fontsize)
+    ax.set_title(title, fontsize=14)
 
     plt.show()
 
