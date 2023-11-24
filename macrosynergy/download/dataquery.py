@@ -767,17 +767,10 @@ class DataQueryInterface(object):
 
         :raises <ValueError>: if the response from the server is not valid.
         """
-        old_group_id: str = "CA_QI_MACRO_SYNERGY"
         try:
             response_list: Dict = self._fetch(
                 url=self.base_url + CATALOGUE_ENDPOINT,
                 params={"group-id": group_id},
-                tracking_id=CATALOGUE_TRACKING_ID,
-            )
-        except NoContentError as e:
-            response_list: Dict = self._fetch(
-                url=self.base_url + CATALOGUE_ENDPOINT,
-                params={"group-id": old_group_id},
                 tracking_id=CATALOGUE_TRACKING_ID,
             )
         except Exception as e:
