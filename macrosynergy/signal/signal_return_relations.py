@@ -122,7 +122,7 @@ class SignalReturnRelations:
                 sigs = sig
         if freq is not None:
             warnings.warn(
-                "Parameter 'freq' is deprecated and will be removed in v0.1.0. Please"
+                "Parameter 'freq' is deprecated and will be removed in v0.1.0. Please" 
                 "use parameter freqs instead.",
                 DeprecationWarning,
                 stacklevel=2,
@@ -130,9 +130,8 @@ class SignalReturnRelations:
             freqs = freq
         if agg_sig is not None:
             warnings.warn(
-                "Parameter 'agg_sig' is deprecated and will be removed in v0.1.0. Please"
-                "use parameter agg_sigs instead."
-                "",
+                "Parameter 'agg_sig' is deprecated and will be removed in v0.1.0. Please" 
+                "use parameter agg_sigs instead.""",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -250,10 +249,9 @@ class SignalReturnRelations:
         signals = [self.sigs[0]]
 
         if rival_sigs is not None:
-            r_sigs_warning = (
-                "Parameter 'rival_sigs' is deprecated and will be removed "
-                "in v0.1.0. Please specify the rival signals as part of the list of feature "
-                "signals in the argument 'sigs'."
+            r_sigs_warning = ("Parameter 'rival_sigs' is deprecated and will be removed " 
+            "in v0.1.0. Please specify the rival signals as part of the list of feature "
+            "signals in the argument 'sigs'."
             )
             warnings.warn(
                 r_sigs_warning,
@@ -383,7 +381,6 @@ class SignalReturnRelations:
         self,
         type: str = "cross_section",
         title: str = None,
-        title_fontsize: int = 16,
         size: Tuple[float] = None,
         legend_pos: str = "best",
     ):
@@ -393,7 +390,6 @@ class SignalReturnRelations:
         :param <str> type: type of segment over which bars are drawn. Either
             "cross_section" (default), "years" or "signals".
         :param <str> title: chart header - default will be applied if none is chosen.
-        :param <int> title_fontsize: font size of chart header. Default is 16.
         :param <Tuple[float]> size: 2-tuple of width and height of plot - default will be
             applied if none is chosen.
         :param <str> legend_pos: position of legend box. Default is 'best'.
@@ -450,7 +446,7 @@ class SignalReturnRelations:
 
         plt.ylim(round(y_input, 2))
 
-        plt.title(title, fontsize=title_fontsize)
+        plt.title(title)
         plt.legend(loc=legend_pos)
         plt.show()
 
@@ -458,7 +454,6 @@ class SignalReturnRelations:
         self,
         type: str = "cross_section",
         title: str = None,
-        title_fontsize: int = 16,
         size: Tuple[float] = None,
         legend_pos: str = "best",
     ):
@@ -468,7 +463,6 @@ class SignalReturnRelations:
         :param <str> type: type of segment over which bars are drawn. Either
             "cross_section" (default), "years" or "signals".
         :param <str> title: chart header. Default will be applied if none is chosen.
-        :param <int> title_fontsize: font size of chart header. Default is 16.
         :param <Tuple[float]> size: 2-tuple of width and height of plot.
             Default will be applied if none is chosen.
         :param <str> legend_pos: position of legend box. Default is 'best'.
@@ -531,7 +525,7 @@ class SignalReturnRelations:
             y=0.99, color="red", linestyle="--", linewidth=0.5, label="99% probability"
         )
 
-        plt.title(title, fontsize=title_fontsize)
+        plt.title(title)
         plt.legend(loc=legend_pos)
         plt.show()
 
@@ -611,7 +605,7 @@ class SignalReturnRelations:
         :param <str> sig: signal to be analysed.
         :param <bool> sst: Boolean that specifies whether this function is to be used for
             a single statistic table.
-        :param <Optional[pd.DataFrame]> df_result: DataFrame to be used for single
+        :param <Optional[pd.DataFrame]> df_result: DataFrame to be used for single 
             statistic table. `None` by default, and when using with `sst` set to `False`.
         """
 
@@ -1084,7 +1078,6 @@ class SignalReturnRelations:
         columns: List[str] = ["ret", "freq"],
         show_heatmap: bool = False,
         title: Optional[str] = None,
-        title_fontsize: int = 16,
         row_names: Optional[List[str]] = None,
         column_names: Optional[List[str]] = None,
         min_color: Optional[float] = None,
@@ -1116,7 +1109,6 @@ class SignalReturnRelations:
         :param <bool> show_heatmap: if True, the table is visualized as a
             heatmap. Default is False.
         :param <str> title: plot title; if none given default title is shown.
-        :param <int> title_fontsize: font size of title. Default is 16.
         :param <List[str]> row_names: specifies the labels of rows in the heatmap.
             If None, the indices of the generated DataFrame are used.
         :param <List[str]> column_names: specifies the labels of columns in the
@@ -1259,7 +1251,6 @@ class SignalReturnRelations:
             msv.view_table(
                 df_result,
                 title=title,
-                title_fontsize=title_fontsize,
                 min_color=min_color,
                 max_color=max_color,
                 figsize=figsize,
