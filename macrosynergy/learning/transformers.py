@@ -196,6 +196,15 @@ class MeanNormalTransformer(BaseEstimator, TransformerMixin):
         :param <pd.DataFrame> X: Pandas dataframe of input features.
         :param <Any> y: Placeholder for scikit-learn compatibility.
         """
+        # checks
+        if type(X) != pd.DataFrame:
+            raise TypeError("Input feature matrix for the MeanNormalTransformer must be a pandas dataframe. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe.")
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        
+        # fit
         self.training_n: int = len(X)
 
         if self.neutral == "mean":
@@ -210,7 +219,7 @@ class MeanNormalTransformer(BaseEstimator, TransformerMixin):
 
         return self
 
-    def transform(self, X: pd.DataFrame, y: Any = None):
+    def transform(self, X: pd.DataFrame):
         """
         Transform method to compute an out-of-sample benchmark signal for each unique
         date in the input test dataframe. At a given test time, the relevant statistics
@@ -220,8 +229,16 @@ class MeanNormalTransformer(BaseEstimator, TransformerMixin):
         the returns.
 
         :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Any> y: Placeholder for scikit-learn compatibility.
         """
+        # checks 
+        if type(X) != pd.DataFrame:
+            raise TypeError("Input feature matrix for the MeanNormalTransformer must be a pandas dataframe. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe.")
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        
+        # transform
         unique_dates: List[pd.Timestamp] = sorted(X.index.get_level_values(1).unique())
         signal_df = pd.DataFrame(index=X.index, columns=["signal"], dtype="float")
 
