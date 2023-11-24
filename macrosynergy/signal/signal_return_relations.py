@@ -132,7 +132,6 @@ class SignalReturnRelations:
             warnings.warn(
                 "Parameter 'agg_sig' is deprecated and will be removed in v0.1.0. Please"
                 "use parameter agg_sigs instead."
-                "",
                 DeprecationWarning,
                 stacklevel=2,
             )
