@@ -28,7 +28,7 @@ def correlation(
     lags_secondary: Optional[dict] = None,
 ):
     """
-    Visualize correlation across categories or cross-sections of panels.
+    Calculate correlation across categories or cross-sections of panels.
 
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
