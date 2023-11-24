@@ -160,7 +160,7 @@ class MapSelectorTransformer(BaseEstimator, TransformerMixin):
         
         return X[self.ftrs]
     
-class BenchmarkTransformer(BaseEstimator, TransformerMixin):
+class MeanNormalTransformer(BaseEstimator, TransformerMixin):
     def __init__(self, neutral: str = "zero", use_signs: bool = False):
         """
         Transformer class to combine features into a benchmark signal 
@@ -347,10 +347,10 @@ if __name__ == "__main__":
     X_train, X_test = X[X.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], X[X.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
     y_train, y_test = y[y.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], y[y.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
 
-    selector = BenchmarkTransformer(neutral="mean", use_signs=True)
+    selector = MeanNormalTransformer(neutral="mean", use_signs=True)
     selector.fit(X_train, y_train)
     print(selector.transform(X_test))
 
-    selector = BenchmarkTransformer(neutral="zero")
+    selector = MeanNormalTransformer(neutral="zero")
     selector.fit(X_train, y_train)
     print(selector.transform(X_test))
