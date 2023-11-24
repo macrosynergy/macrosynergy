@@ -707,11 +707,19 @@ class SignalReturnRelations:
             intersection_df = cid_df.loc[:, signal].droplevel(level=0)
             # Intersection exclusively across the signals.
             intersection_df = intersection_df.dropna(how="any")
-            s_date = intersection_df.index[0]
-            e_date = intersection_df.index[-1]
+            if not intersection_df.empty:
+                s_date = intersection_df.index[0]
+                e_date = intersection_df.index[-1]
 
-            final_df.loc[(c, s_date):(c, e_date), signal] = intersection_df.to_numpy()
-            storage.append(final_df)
+                final_df.loc[
+                    (c, s_date):(c, e_date), signal
+                ] = intersection_df.to_numpy()
+                storage.append(final_df)
+            else:
+                warnings.warn(
+                    f"Cross-section {c} has no common sample periods for the signals \
+                    {signal} and return {ret}."
+                )
 
         df = pd.concat(storage)
         df = df.stack().reset_index().sort_values(["cid", "xcat", "real_date"])
