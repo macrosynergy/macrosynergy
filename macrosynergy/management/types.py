@@ -73,7 +73,7 @@ class QuantamentalDataFrameMeta(type):
                 "real_date"
             ].dtype == "datetime64[ns]" or isinstance(
                 instance["real_date"].dtype, pd.DatetimeTZDtype
-            )
+            ) or instance.empty
             result = result and correct_date_type
 
             # # check if the cid col is all str
