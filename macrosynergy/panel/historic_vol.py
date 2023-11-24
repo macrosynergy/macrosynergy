@@ -126,7 +126,7 @@ def historic_vol(
         not be included in the lookback window and prior non-zero values are added to the
         window instead.
     :param <str> postfix: string appended to category name for output; default is "ASD".
-    :param <float> nan_tolerance: minimum ratio of NaNs to non-NaNs in a lookback window,
+    :param <float> nan_tolerance: maximum ratio of NaNs to non-NaNs in a lookback window,
         if exceeded the resulting volatility is set to NaN. Default is 0.25.
 
     :return <pd.DataFrame>: standardized DataFrame with the estimated annualized standard
