@@ -11,7 +11,7 @@ import os, sys
 sys.path.append(os.getcwd())
 
 
-from macrosynergy.management.types import NoneType
+from macrosynergy.management.types import NoneType, QuantamentalDataFrame
 from macrosynergy.management.utils import (
     reduce_df,
     standardise_dataframe,
@@ -21,6 +21,8 @@ from macrosynergy.management.utils import (
     get_eops,
     get_cid,
 )
+
+RETURN_SERIES_XCAT = "_PNL_USD1S_ASD"
 
 
 def expo_weights(lback_periods: int = 21, half_life: int = 11):
@@ -96,7 +98,7 @@ def flat_std(x: np.ndarray, remove_zeros: bool = True) -> float:
 
 
 def _rolling_window_calc(
-    row,
+    real_date_pdt: pd.Timestamp,
     ticker_df: pd.DataFrame,
     lback_periods: int,
     nan_tolerance: float,
@@ -125,22 +127,26 @@ def _rolling_window_calc(
     """
     # use end=row["real_date"] when using apply
     df_wide: pd.DataFrame = ticker_df.loc[
-        ticker_df.index.isin(pd.bdate_range(end=row.name, periods=lback_periods))
+        ticker_df.index.isin(pd.bdate_range(end=real_date_pdt, periods=lback_periods))
     ]
-    # TODO: Check this 252 number. @mikiinterfiore says it should be 261
-    if weights is None:
-        weights = np.ones(lback_periods) / lback_periods
-        univariate_vol = np.sqrt(252) * df_wide.agg(
-            roll_func, remove_zeros=remove_zeros
-        )
-    else:
-        if len(weights) == len(df_wide):
-            univariate_vol = np.sqrt(252) * df_wide.agg(
-                roll_func, w=weights, remove_zeros=remove_zeros
-            )
-        else:
-            return pd.Series(np.nan, index=df_wide.columns)
 
+    ## Calculate univariate volatility
+
+    # # TODO: Check this 252 number. @mikiinterfiore says it should be 261
+    # if weights is None:
+    #     weights = np.ones(lback_periods) / lback_periods
+    #     univariate_vol = np.sqrt(252) * df_wide.agg(
+    #         roll_func, remove_zeros=remove_zeros
+    #     )
+    # else:
+    #     if len(weights) == len(df_wide):
+    #         univariate_vol = np.sqrt(252) * df_wide.agg(
+    #             roll_func, w=weights, remove_zeros=remove_zeros
+    #         )
+    #     else:
+    #         return pd.Series(np.nan, index=df_wide.columns)
+
+    ## Creating a mask to fill series `nan_tolerance`
     mask = (
         (
             df_wide.isna().sum(axis=0)
@@ -149,19 +155,18 @@ def _rolling_window_calc(
         )
         / lback_periods
     ) <= nan_tolerance
-    # NOTE: dates with NaNs, dates with missing entries, and dates with 0s
-    # are all treated as missing data and trigger a NaN in the output
-    univariate_vol[~mask] = np.nan
 
-    ## inverse volatility -- simply 1/vol
-    inv_univariate_vol = 1 / univariate_vol
+    # univariate_vol[~mask] = np.nan
 
-    ## variance-covariance matrix for this period
-    d_vcv: pd.DataFrame = df_wide.cov()
+    ## Inversed univariate volatility
+    # inv_univariate_vol = 1 / univariate_vol
 
-    ## TODO: what now?
+    vcv: pd.DataFrame = df_wide.cov()
+    total_variance: float = vcv.to_numpy().sum()
+    period_volatility: float = np.sqrt(total_variance)
+    annualized_vol: pd.Series = period_volatility * np.sqrt(252)
 
-    return univariate_vol
+    return annualized_vol
 
 
 # dfw_calc.loc[trigger_indices, :] = (
@@ -177,6 +182,7 @@ def _rolling_window_calc(
 
 def _hist_vol(
     df: pd.DataFrame,
+    sname: str,
     est_freq: str = "m",
     lback_periods: int = 21,
     lback_meth: str = "ma",
@@ -223,9 +229,9 @@ def _hist_vol(
         dates=df_wide.index,
         freq=est_freq,
     )
-
+    return_series = f"{sname}{RETURN_SERIES_XCAT}"
     dfw_calc: pd.DataFrame = pd.DataFrame(
-        index=trigger_indices, columns=df_wide.columns, dtype=float
+        index=trigger_indices, columns=[return_series], dtype=float
     )
 
     expo_weights_arr: Optional[np.ndarray] = None
@@ -254,11 +260,12 @@ def _hist_vol(
             _args.update(dict(roll_func=flat_std))
 
     if est_freq == "d":
-        dfw_calc = df_wide.rolling(lback_periods).agg(**_args)
+        # dfw_calc = df_wide.rolling(lback_periods).agg(**_args)
+        raise NotImplementedError("Daily volatility not implemented yet.")
     else:
         for r_date in trigger_indices:
             dfw_calc.loc[r_date, :] = _rolling_window_calc(
-                row=dfw_calc.loc[r_date, :],
+                real_date_pdt=r_date,
                 ticker_df=df_wide,
                 **_args,
             )
@@ -409,8 +416,9 @@ def historic_portfolio_vol(
             f"Strategy: {sname} ; Contract identifiers: {fids}"
         )
 
-    hist_vol: pd.DataFrame = _hist_vol(
+    hist_port_vol: pd.DataFrame = _hist_vol(
         df=df,
+        sname=sname,
         est_freq=est_freq,
         lback_periods=lback_periods,
         lback_meth=lback_meth,
@@ -418,6 +426,10 @@ def historic_portfolio_vol(
         nan_tolerance=nan_tolerance,
         remove_zeros=remove_zeros,
     )
+
+    assert isinstance(hist_port_vol, QuantamentalDataFrame)
+
+    return hist_port_vol
 
 
 if __name__ == "__main__":
@@ -455,12 +467,27 @@ if __name__ == "__main__":
         hbasket=hbasket,
         hscales=hscales,
         hratios="HR",
-        sname="TEST",
+        sname="mySTRAT",
     )
+    ## `df_cs` looks like:
+    #        cid                   xcat  real_date         value
+    # 0      AUD  CDSXR_XR_CSIG_mySTRAT 2000-01-03      0.001825
+    # 1      AUD   FXXR_XR_CSIG_mySTRAT 2000-01-03      0.018252
+    # 2      AUD  IRSXR_XR_CSIG_mySTRAT 2000-01-03     -0.009126
+    # 3      CAD  CDSXR_XR_CSIG_mySTRAT 2000-01-03      5.005734
+    # 4      CAD   FXXR_XR_CSIG_mySTRAT 2000-01-03     50.057339
+    # ...    ...                    ...        ...           ...
+    # 54785  USD   EQXR_XR_CSIG_mySTRAT 2020-12-31  22749.226123
+    # 54786  USD   EQXR_XR_CSIG_mySTRAT 2020-12-31  22749.226123
+    # 54787  USD   EQXR_XR_CSIG_mySTRAT 2020-12-31  22749.226123
+    # 54788  USD   EQXR_XR_CSIG_mySTRAT 2020-12-31  22749.226123
+    # 54789  USD   EQXR_XR_CSIG_mySTRAT 2020-12-31  22749.226123
+    # [136975 rows x 4 columns]
+
     fids: List[str] = [f"{cid}_{ctype}" for cid in cids for ctype in ctypes]
     df_vol: pd.DataFrame = historic_portfolio_vol(
         df=df_cs,
-        sname="TEST",
+        sname="mySTRAT",
         fids=fids,
         est_freq="m",
         lback_periods=15,
@@ -470,3 +497,18 @@ if __name__ == "__main__":
         start=start,
         end=end,
     )
+
+    ## `df_vol` looks like:
+    #         cid           xcat  real_date        value
+    # 0     mySTRAT  PNL_USD1S_ASD 2000-01-31   331.875030
+    # 1     mySTRAT  PNL_USD1S_ASD 2000-02-01   331.875030
+    # 2     mySTRAT  PNL_USD1S_ASD 2000-02-02   331.875030
+    # 3     mySTRAT  PNL_USD1S_ASD 2000-02-03   331.875030
+    # 4     mySTRAT  PNL_USD1S_ASD 2000-02-04   331.875030
+    # ...       ...            ...        ...          ...
+    # 5454  mySTRAT  PNL_USD1S_ASD 2020-12-25  1016.964736
+    # 5455  mySTRAT  PNL_USD1S_ASD 2020-12-28  1016.964736
+    # 5456  mySTRAT  PNL_USD1S_ASD 2020-12-29  1016.964736
+    # 5457  mySTRAT  PNL_USD1S_ASD 2020-12-30  1016.964736
+    # 5458  mySTRAT  PNL_USD1S_ASD 2020-12-31  1000.390667
+    # [5459 rows x 4 columns]
