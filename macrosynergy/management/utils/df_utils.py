@@ -193,6 +193,18 @@ def ticker_df_to_qdf(df: pd.DataFrame) -> QuantamentalDataFrame:
     return standardise_dataframe(df=df)
 
 
+def summary_df(df: QuantamentalDataFrame,
+               return_blacklist: bool = False,
+               ) -> pd.DataFrame:
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError("Argument `df` must be a QuantamentalDataFrame.")
+    
+    columns = ["cid", "xcat", "date_start", "date_end", "missing_dates"]
+    
+    cids: List[str] = df["cid"].unique().tolist()
+
+
+
 def apply_slip(
     df: pd.DataFrame,
     slip: int,
