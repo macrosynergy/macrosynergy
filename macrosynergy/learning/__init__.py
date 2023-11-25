@@ -8,7 +8,7 @@ from .cv_tools import panel_cv_scores
 from .transformers import (
     LassoSelectorTransformer,
     MapSelectorTransformer,
-    MeanNormalTransformer,
+    AvgNormFtrTransformer,
 )
 from .metrics import (
     panel_significance_probability,
@@ -28,9 +28,9 @@ __all__ = [
     # cv_tools
     "panel_cv_scores",
     # transformers
+    "AvgNormFtrTransformer",
     "LassoSelectorTransformer",
     "MapSelectorTransformer",
-    "MeanNormalTransformer",
     # metrics
     "panel_significance_probability",
     "sharpe_ratio",
