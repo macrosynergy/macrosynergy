@@ -14,6 +14,7 @@ from typing import List, Tuple, Dict, Union
 from collections import defaultdict
 import datetime
 import warnings
+from macrosynergy.management.types import QuantamentalDataFrame
 
 
 def simulate_ar(nobs: int, mean: float = 0, sd_mult: float = 1, ar_coef: float = 0.75):
@@ -327,7 +328,7 @@ def make_test_df(
     start: str = "2010-01-01",
     end: str = "2020-12-31",
     style: str = "any",
-):
+) -> QuantamentalDataFrame:
     """
     Generates a test dataframe with pre-defined values.
     These values are meant to be used for testing purposes only.
