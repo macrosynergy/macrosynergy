@@ -10,7 +10,7 @@ import pandas as pd
 import datetime
 
 from sklearn.linear_model import Lasso
-from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
 
 from statsmodels.tools.tools import add_constant
 from statsmodels.regression.mixed_linear_model import MixedLM
@@ -319,6 +319,54 @@ class AvgNormFtrTransformer(BaseEstimator, TransformerMixin):
 
         return updated_means, updated_sum_squares, updated_stds, updated_n
             
+class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
+    def __init__(self, with_mean: bool = True, with_std: bool = True):
+        """
+        Class to extend scikit-learn's StandardScaler() to panel datasets. It is 
+        intended to replicate the aforementioned class, but critically returning 
+        a Pandas dataframe or series instead of a numpy array. This preserves the 
+        multi-indexing in the inputs after transformation, allowing for the passing 
+        of standardised features into transformers that require cross-sectional 
+        and temporal knowledge. 
+
+        NOTE: This class is designed to replicate scikit-learn's StandardScalar() class.
+              It is not designed to perform sequential mean and standard deviation 
+              normalisation like the 'make_zn_scores()' function in 'macrosynergy.panel' 
+              or 'AvgNormFtrTransformer' in 'macrosynergy.learning'. 
+              This class should primarily be used to satisfy the assumptions of various models,
+              for example the Lasso, Ridge or any neural network. 
+
+        TODO: implement panel zero-one scaling too.
+        """
+        self.with_mean = with_mean
+        self.with_std = with_std
+        
+        self.means = None 
+        self.stds = None
+
+    def fit(self, X: Union[pd.DataFrame, pd.Series], y: Any = None):
+        """
+        Fit method to determine means and standard deviations over a training set.
+        """
+        if self.with_mean:
+            self.means = X.mean()
+        if self.with_std:
+            self.stds = X.std()
+
+    def transform(self, X: Union[pd.DataFrame, pd.Series]):
+        """
+        Transform method to standardise a panel based on the means and standard deviations
+        learnt from a training set (and the fit method).
+        """
+        if self.means:
+            calc = X - self.means 
+        else:
+            calc = X 
+        if self.stds:
+            calc = calc / self.stds 
+
+        return calc
+
 if __name__ == "__main__":
     from macrosynergy.management import make_qdf
     import macrosynergy.management as msm
