@@ -565,7 +565,7 @@ class DownloadTimeseries(DataQueryInterface):
 
         return results
 
-    def get_catalogue(self, group_id: str = ...) -> List[str]:
+    def get_catalogue(self, group_id: str = JPMAQS_GROUP_ID) -> List[str]:
         print("Downloading tickers catalogue...")
         return super().get_catalogue(group_id)
 
@@ -705,7 +705,7 @@ class DownloadTimeseries(DataQueryInterface):
             os.path.basename(fx).split(".")[0] for fx in expressions_saved_files
         ]
         expressions_saved = list(set(expressions_saved) & set(expressions))
-        
+
         expressions_missing: List[str] = list(set(expressions) - set(expressions_saved))
 
         print(f"Number of expressions requested: {len(expressions)}")
