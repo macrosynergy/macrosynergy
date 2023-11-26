@@ -337,6 +337,7 @@ class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin)
               for example the Lasso, Ridge or any neural network. 
 
         TODO: implement panel zero-one scaling too.
+        TODO: allow for cross sectional normalisation too.
         """
         self.with_mean = with_mean
         self.with_std = with_std
