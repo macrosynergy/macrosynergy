@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from typing import List, Optional, Dict, Any
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils import reduce_df, standardise_dataframe
+from macrosynergy.management.utils import reduce_df, standardise_dataframe, get_eops
 
 
 def expo_weights(lback_periods: int = 21, half_life: int = 11):
@@ -77,62 +77,6 @@ def flat_std(x: np.ndarray, remove_zeros: bool = True):
     return mabs
 
 
-def get_cycles(
-    dates_df: pd.DataFrame,
-    freq: str = "m",
-) -> pd.Series:
-    """Returns a DataFrame with values aggregated by the frequency specified.
-
-    :param <pd.DataFrame>  dates_df: standardized DataFrame with the following necessary columns:
-        'cid', 'xcats', 'real_date' and 'value'. Will contain all of the data across all
-        macroeconomic fields.
-    :param <str> freq: Frequency of the data. Options are 'w' (weekly), 'm' (monthly),
-        'q' (quarterly) and 'd' (daily). Default is 'm'.
-
-    :return <pd.Series>: A boolean mask which is True where the calculation is triggered.
-    """
-
-    def quarters_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp):
-        """Returns the number of quarters between two dates."""
-        return (end_date.year - start_date.year) * 4 + (
-            end_date.quarter - start_date.quarter
-        )
-
-    def months_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp):
-        """Returns the number of months between two dates."""
-        return (end_date.year - start_date.year) * 12 + (
-            end_date.month - start_date.month
-        )
-
-    def weeks_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp):
-        """Returns the number of business weeks between two dates."""
-        next_monday = start_date + pd.offsets.Week(weekday=0)
-        dif = (end_date - next_monday).days // 7 + 1
-        return dif
-
-    freq = freq.lower()
-    dfc = dates_df.copy()
-    start_date = dfc["real_date"].min()
-    if freq == "m":
-        func = months_btwn_dates
-    elif freq == "w":
-        func = weeks_btwn_dates
-    elif freq == "q":
-        func = quarters_btwn_dates
-    elif freq == "d":
-        func = lambda x, y: len(pd.bdate_range(x, y)) - 1
-    else:
-        raise ValueError("Frequency parameter must be one of m, w, d or q")
-
-    dfc["cycleCount"] = dfc["real_date"].apply(func, args=(start_date,))
-
-    triggers = dfc["cycleCount"].shift(-1) != dfc["cycleCount"]
-    # triggers is now a boolean mask which is True where the calculation is triggered
-    # ____-____-____-____-_... <-- triggers (_ = False, - = True)
-
-    return triggers
-
-
 def historic_vol(
     df: pd.DataFrame,
     xcat: str = None,
@@ -142,7 +86,7 @@ def historic_vol(
     half_life=11,
     start: str = None,
     end: str = None,
-    est_freq: str = "d",
+    est_freq: str = "D",
     blacklist: dict = None,
     remove_zeros: bool = True,
     postfix="ASD",
@@ -170,9 +114,9 @@ def historic_vol(
         df is used.
     :param <str> end: latest date in ISO format. Default is None and latest date in df is
         used.
-    :param <str> est_freq: Frequency of (re-)estimation of volatility. Options are 'd'
-        for end of each day (default), 'w' for end of each work week, 'm' for end of each month,
-         and 'q' for end of each week.
+    :param <str> est_freq: Frequency of (re-)estimation of volatility. Options are 'D'
+        for end of each day (default), 'W' for end of each work week, 'M' for end of each month,
+         and 'Q' for end of each week.
     :param <dict> blacklist: cross sections with date ranges that should be excluded from
         the data frame. If one cross section has several blacklist periods append numbers
         to the cross section code.
@@ -182,7 +126,7 @@ def historic_vol(
         not be included in the lookback window and prior non-zero values are added to the
         window instead.
     :param <str> postfix: string appended to category name for output; default is "ASD".
-    :param <float> nan_tolerance: minimum ratio of NaNs to non-NaNs in a lookback window,
+    :param <float> nan_tolerance: maximum ratio of NaNs to non-NaNs in a lookback window,
         if exceeded the resulting volatility is set to NaN. Default is 0.25.
 
     :return <pd.DataFrame>: standardized DataFrame with the estimated annualized standard
@@ -210,7 +154,7 @@ def historic_vol(
         "w",
         "m",
         "q",
-    ], "Estimation frequency must be one of 'd', 'w', 'm', 'q'."
+    ], "Estimation frequency must be one of 'D', 'W', 'M', or 'Q'."
 
     # assert nan tolerance is an int or float. must be >0. if >1 must be int
     assert isinstance(
@@ -226,12 +170,10 @@ def historic_vol(
 
     dfw = df.pivot(index="real_date", columns="cid", values="value")
 
-    trigger_indices = dfw.index[
-        get_cycles(
-            pd.DataFrame({"real_date": dfw.index}),
-            freq=est_freq,
-        )
-    ]
+    trigger_indices = get_eops(
+        dates=pd.DataFrame(dfw.index),
+        freq=est_freq,
+    )
 
     def single_calc(
         row,
@@ -269,55 +211,46 @@ def historic_vol(
 
         return out
 
+    expo_weights_arr: Optional[np.ndarray] = None
+    if lback_meth == "xma":
+        expo_weights_arr = expo_weights(lback_periods, half_life)
+
     if est_freq == "d":
+        _args: Dict[str, Any] = dict(remove_zeros=remove_zeros)
         if lback_meth == "xma":
-            weights = expo_weights(lback_periods, half_life)
-            dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(
-                expo_std, w=weights, remove_zeros=remove_zeros
-            )
+            _args["w"] = expo_weights_arr
+            _args["func"] = expo_std
         else:
-            dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(
-                flat_std, remove_zeros=remove_zeros
-            )
+            _args["func"] = flat_std
+
+        dfwa = np.sqrt(252) * dfw.rolling(window=lback_periods).agg(**_args)
     else:
         dfwa = pd.DataFrame(index=dfw.index, columns=dfw.columns)
+        _args: Dict[str, Any] = dict(
+            lback_periods=lback_periods,
+            nan_tolerance=nan_tolerance,
+            remove_zeros=remove_zeros,
+        )
         if lback_meth == "xma":
-            weights = expo_weights(lback_periods, half_life)
-            dfwa.loc[trigger_indices, :] = (
-                dfwa.loc[trigger_indices, :]
-                .reset_index(False)
-                .apply(
-                    lambda row: single_calc(
-                        row=row,
-                        dfw=dfw,
-                        lback_periods=lback_periods,
-                        nan_tolerance=nan_tolerance,
-                        roll_func=expo_std,
-                        remove_zeros=remove_zeros,
-                        weights=weights,
-                    ),
-                    axis=1,
-                )
-                .set_index(trigger_indices)
-            )
+            _args["weights"] = expo_weights_arr
+            _args["roll_func"] = expo_std
 
         else:
-            dfwa.loc[trigger_indices, :] = (
-                dfwa.loc[trigger_indices, :]
-                .reset_index(False)
-                .apply(
-                    lambda row: single_calc(
-                        row=row,
-                        dfw=dfw,
-                        lback_periods=lback_periods,
-                        nan_tolerance=nan_tolerance,
-                        roll_func=flat_std,
-                        remove_zeros=remove_zeros,
-                    ),
-                    axis=1,
-                )
-                .set_index(trigger_indices)
+            _args["roll_func"] = flat_std
+
+        dfwa.loc[trigger_indices, :] = (
+            dfwa.loc[trigger_indices, :]
+            .reset_index(False)
+            .apply(
+                lambda row: single_calc(
+                    row=row,
+                    dfw=dfw,
+                    **_args,
+                ),
+                axis=1,
             )
+            .set_index(trigger_indices)
+        )
 
         fills = {"d": 1, "w": 5, "m": 24, "q": 64}
         dfwa = dfwa.reindex(dfw.index).ffill(limit=fills[est_freq])

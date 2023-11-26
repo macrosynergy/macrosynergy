@@ -16,7 +16,7 @@ from sklearn.metrics import make_scorer, accuracy_score, balanced_accuracy_score
 from sklearn.model_selection import cross_val_score
 from sklearn.linear_model import LinearRegression
 
-from macrosynergy.learning import PanelTimeSeriesSplit
+from macrosynergy.learning.panel_time_series_split import ExpandingKFoldPanelSplit
 
 from typing import Union
 
@@ -60,7 +60,7 @@ def panel_significance_probability(
 
     # fit model
     re = MixedLM(y_true, X, groups=groups).fit(reml=False)
-    pval = re.pvalues[1]
+    pval = re.pvalues.iloc[1]
 
     return 1 - pval
 
@@ -212,7 +212,7 @@ if __name__ == "__main__":
     X = df.drop(columns="XR")
     y = df["XR"]
 
-    splitter = PanelTimeSeriesSplit(n_splits=4, n_split_method="expanding")
+    splitter = ExpandingKFoldPanelSplit(n_splits=4)
     scorer1 = make_scorer(panel_significance_probability, greater_is_better=True)
     scorer2 = make_scorer(sharpe_ratio, greater_is_better=True)
     scorer3 = make_scorer(sortino_ratio, greater_is_better=True)
