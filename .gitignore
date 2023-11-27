@@ -177,3 +177,8 @@ macrosynergy/version.py
 
 .vscode/
 .vs/
+
+docs/examples.build/
+
+
+
