@@ -3,31 +3,32 @@
 # Import the JPMaQSDownload class from the macrosynergy package
 from macrosynergy.download import JPMaQSDownload
 
-# Set the currency areas (cross-sectional identifiers) and categories
+## Set the currency areas (cross-sectional identifiers) and categories
+
 cids = ["AUD", "BRL", "CAD"]
 xcats = ["RIR_NSA", "FXXR_NSA", "FXXR_VT10", "DU05YXR_NSA"]
 
 # all metrics - value, grading, eop_lag, mop_lag
 metrics = "all"
 
-# Setting the start and end dates for the data
+## Setting the start and end dates for the data
 start_date = "2023-01-01"
 end_date = "2023-03-20"
 
-# Setting up proxies if needed (for example, if you are behind a firewall)
-# useful for institutional users
+## Setting up proxies if needed (for example, if you are behind a firewall. Useful for institutional users)
 
 proxies = {
     "https": "http://proxy.example.com:8080",
 }
 
+## Setting up the client_id and client_secret
 # Set the client_id and client_secret.
 # Ideally, these should not be stored in the script
 # but rather in a config file or as environment variables
 client_id = "DQ_CLIENT_ID"
 client_secret = "DQ_CLIENT_SECRET"
 
-# Creating an instance of the JPMaQSDownload class
+## Creating an instance of the JPMaQSDownload class
 
 jpmaqs_download = JPMaQSDownload(
     client_id=client_id,
@@ -35,11 +36,11 @@ jpmaqs_download = JPMaQSDownload(
     proxies=proxies,
 )
 
-# Downloading the cataogue as a list
+## Downloading the cataogue as a list
 catalogue = jpmaqs_download.get_catalogue()
 
 
-# Downloading the data - with a context manager
+## Downloading the data - with a context manager
 with JPMaQSDownload(
     client_id=client_id,
     client_secret=client_secret,
