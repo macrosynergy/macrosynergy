@@ -176,12 +176,10 @@ class BasePanelSplit(BaseCrossValidator):
                     Tuple[pd.Timestamp, pd.Timedelta]
                 ] = self._calculate_xranges(cs_test_dates, real_dates, freq_offset)
 
-                if xranges_train:
-                    operations.append(
-                        (cs_idx, idx, xranges_train, "royalblue", "Train")
-                    )
-                if xranges_test:
-                    operations.append((cs_idx, idx, xranges_test, "lightcoral", "Test"))
+                operations.append(
+                    (cs_idx, idx, xranges_train, "royalblue", "Train")
+                )
+                operations.append((cs_idx, idx, xranges_test, "lightcoral", "Test"))
 
         # Calculate the difference between final two dates.
         # This will be added to the x-axis limits to ensure that the final split is visible.
