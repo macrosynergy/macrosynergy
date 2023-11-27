@@ -6,10 +6,8 @@ from macrosynergy.management.simulate import make_qdf
 import pandas as pd
 import random
 
-
+# Set the currency areas (cross-sectional identifiers) and categories
 cids = ["AUD", "GBP", "NZD", "USD"]
-
-
 xcats = [
     "FXXR_NSA",
     "FXCRY_NSA",
@@ -20,6 +18,9 @@ xcats = [
     "FXWBASE_NSA",
 ]
 
+## Creating the mock data
+
+random.seed(42)
 
 df_cids = pd.DataFrame(
     index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
@@ -44,34 +45,23 @@ df_xcats.loc["EQCRR_NSA"] = ["2010-01-01", "2022-03-14", 1.5, 1.5, 0.9, 0.5]
 df_xcats.loc["FXWBASE_NSA"] = ["2010-01-01", "2022-02-01", 1, 1.5, 0.8, 0.5]
 df_xcats.loc["EQWBASE_NSA"] = ["2010-01-01", "2022-02-01", 1, 1.5, 0.9, 0.5]
 
-
-random.seed(2)
-
-
+# Call `make_qdf` to create the mock data
 dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+dfd["grading"] = 1
 
-
+# Create a blacklist
 black = {"AUD": ["2010-01-01", "2013-12-31"], "GBP": ["2010-01-01", "2013-12-31"]}
 
-
+# List of contracts
 contracts = ["AUD_FX", "AUD_EQ", "NZD_FX", "GBP_EQ", "USD_EQ"]
 
-gdp_figures = [17.0, 17.0, 41.0, 9.0, 250.0]
-
+# List of contracts
 contracts_1 = ["AUD_FX", "GBP_FX", "NZD_FX", "USD_EQ"]
 
 
-# First test. Multiple carries. Equal weight method.
-
-
+# Multiple carries. Equal weight method.
 # The main aspect to check in the code is that basket performance has been applied to
-
-
 # both the return category and the multiple carry categories.
-
-
-dfd["grading"] = 1
-
 
 basket_1 = Basket(
     df=dfd,
@@ -81,6 +71,7 @@ basket_1 = Basket(
     blacklist=black,
 )
 
+# Create a basket with equal weights
 
 basket_1.make_basket(
     weight_meth="equal",
@@ -89,15 +80,15 @@ basket_1.make_basket(
 )
 
 
+# show the weights of the GLB_EQUAL basket
+custom_weights = [1 / 6, 1 / 6, 1 / 6, 1 / 2]
+
 basket_1.make_basket(
     weight_meth="fixed",
     max_weight=0.55,
-    weights=[1 / 6, 1 / 6, 1 / 6, 1 / 2],
+    weights=custom_weights,
     basket_name="GLB_FIXED",
 )
 
-
 # show the weights of the GLB_FIXED basket
-
-
 basket_1.weight_visualiser(basket_name="GLB_FIXED", subplots=False, size=(10, 5))
