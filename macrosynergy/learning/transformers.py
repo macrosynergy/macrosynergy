@@ -7,6 +7,8 @@ Collection of scikit-learn transformer classes.
 import numpy as np
 import pandas as pd
 
+import datetime
+
 from sklearn.linear_model import Lasso
 from sklearn.base import BaseEstimator, TransformerMixin
 
@@ -21,20 +23,29 @@ class LassoSelectorTransformer(BaseEstimator, TransformerMixin):
         Transformer class to use the Lasso as a feature selection algorithm.
         Given a hyper-parameter, alpha, the Lasso model is fit and 
         the non-zero coefficients are used to extract features from an input dataframe.
+        The underlying features as input to the Lasso model are expected to be positively
+        correlated with the target variable.
 
         :param <float> alpha: the regularisation imposed by the Lasso.
         :param <bool> restrict: boolean to restrict estimated Lasso coefficients to
             be positive.
         """
+        if type(alpha) != float:
+            raise TypeError("'alpha' must be a float.")
+        if alpha < 0:
+            raise ValueError("'alpha' must be non-negative.")
+        if type(restrict) != bool:
+            raise TypeError("'restrict' must be a boolean.")
+        
         self.alpha = alpha
         self.restrict = restrict
 
-    def fit(self, X: pd.DataFrame, y: pd.Series):
+    def fit(self, X: Union[pd.DataFrame,np.ndarray], y: Union[pd.Series,np.ndarray]):
         """
         Fit method to fit a Lasso regression and obtain the selected features.
 
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <pd.Series> y: Pandas series of targets associated with each
+        :param <pd.DataFrame> X: Pandas dataframe or numpy array of input features.
+        :param <pd.Series> y: Pandas series or numpy array of targets associated with each
             sample in X.
         """
         self.p = X.shape[-1]
@@ -42,6 +53,7 @@ class LassoSelectorTransformer(BaseEstimator, TransformerMixin):
             self.lasso = Lasso(alpha=self.alpha, positive=True).fit(X, y)
         else:
             self.lasso = Lasso(alpha=self.alpha).fit(X, y)
+
         self.selected_ftr_idxs = [i for i in range(self.p) if self.lasso.coef_[i] != 0]
 
         return self
@@ -73,6 +85,9 @@ class MapSelectorTransformer(BaseEstimator, TransformerMixin):
         :param <float> threshold: Significance threshold. This should be in
             the interval (0,1).
         """
+        if type(threshold) != float:
+            raise TypeError("The threshold must be a float.")
+        
         if (threshold <= 0) or (threshold >= 1):
             raise ValueError("The threshold must be in between 0 and 1.")
         
@@ -87,6 +102,24 @@ class MapSelectorTransformer(BaseEstimator, TransformerMixin):
         :param <pd.Series> y: Pandas series of targets associated
             with each sample in X. 
         """
+        # Checks 
+        if type(X) != pd.DataFrame:
+            raise TypeError("Input feature matrix for the MAP selector must be a pandas dataframe. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe.")
+        if type(y) != pd.Series:
+            raise TypeError("Target vector for the MAP selector must be a pandas series. If used as part of an sklearn pipeline, ensure that previous steps return a pandas series.")
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(y.index, pd.MultiIndex):
+            raise ValueError("y must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of y must be datetime.date.")
+        if not X.index.equals(y.index):
+            raise ValueError(
+                "The indices of the input dataframe X and the output dataframe y don't match."
+            )
+        
         self.ftrs = []
         self.y_mean = np.mean(y)
         cols = X.columns
@@ -96,7 +129,7 @@ class MapSelectorTransformer(BaseEstimator, TransformerMixin):
             ftr = add_constant(ftr)
             groups = ftr.reset_index().real_date
             re = MixedLM(y,ftr,groups).fit(reml=False)
-            pval = re.pvalues[1]
+            pval = re.pvalues.iloc[1]
             if pval < self.threshold:
                 self.ftrs.append(col)
 
@@ -112,13 +145,22 @@ class MapSelectorTransformer(BaseEstimator, TransformerMixin):
         :return <pd.DataFrame>: Pandas dataframe of input features selected
             based on the Macrosynergy panel test.
         """
+        # checks
+        if type(X) != pd.DataFrame:
+            raise TypeError("Input feature matrix for the MAP selector must be a pandas dataframe. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe.")
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        
+        # transform
         if self.ftrs == []:
             # Use historical mean return as a signal if no features are selected
             return pd.DataFrame(index=X.index, columns=["naive_signal"], data=self.y_mean,dtype=np.float16)
         
         return X[self.ftrs]
     
-class BenchmarkTransformer(BaseEstimator, TransformerMixin):
+class AvgNormFtrTransformer(BaseEstimator, TransformerMixin):
     def __init__(self, neutral: str = "zero", use_signs: bool = False):
         """
         Transformer class to combine features into a benchmark signal 
@@ -139,6 +181,9 @@ class BenchmarkTransformer(BaseEstimator, TransformerMixin):
         if neutral.lower() not in ["zero", "mean"]:
             raise ValueError("neutral must be either 'zero' or 'mean'.")
         
+        if type(use_signs) != bool:
+            raise TypeError("'use_signs' must be a boolean.")
+        
         self.neutral = neutral
         self.use_signs = use_signs
     
@@ -151,6 +196,15 @@ class BenchmarkTransformer(BaseEstimator, TransformerMixin):
         :param <pd.DataFrame> X: Pandas dataframe of input features.
         :param <Any> y: Placeholder for scikit-learn compatibility.
         """
+        # checks
+        if type(X) != pd.DataFrame:
+            raise TypeError("Input feature matrix for the MeanNormalTransformer must be a pandas dataframe. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe.")
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        
+        # fit
         self.training_n: int = len(X)
 
         if self.neutral == "mean":
@@ -165,7 +219,7 @@ class BenchmarkTransformer(BaseEstimator, TransformerMixin):
 
         return self
 
-    def transform(self, X: pd.DataFrame, y: Any = None):
+    def transform(self, X: pd.DataFrame):
         """
         Transform method to compute an out-of-sample benchmark signal for each unique
         date in the input test dataframe. At a given test time, the relevant statistics
@@ -175,8 +229,16 @@ class BenchmarkTransformer(BaseEstimator, TransformerMixin):
         the returns.
 
         :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Any> y: Placeholder for scikit-learn compatibility.
         """
+        # checks 
+        if type(X) != pd.DataFrame:
+            raise TypeError("Input feature matrix for the MeanNormalTransformer must be a pandas dataframe. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe.")
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        
+        # transform
         unique_dates: List[pd.Timestamp] = sorted(X.index.get_level_values(1).unique())
         signal_df = pd.DataFrame(index=X.index, columns=["signal"], dtype="float")
 
@@ -302,10 +364,10 @@ if __name__ == "__main__":
     X_train, X_test = X[X.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], X[X.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
     y_train, y_test = y[y.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], y[y.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
 
-    selector = BenchmarkTransformer(neutral="mean", use_signs=True)
+    selector = AvgNormFtrTransformer(neutral="mean", use_signs=True)
     selector.fit(X_train, y_train)
     print(selector.transform(X_test))
 
-    selector = BenchmarkTransformer(neutral="zero")
+    selector = AvgNormFtrTransformer(neutral="zero")
     selector.fit(X_train, y_train)
     print(selector.transform(X_test))
