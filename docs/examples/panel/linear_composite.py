@@ -9,6 +9,7 @@ cids = ["AUD", "CAD", "GBP"]
 xcats = ["XR", "CRY", "INFL"]
 
 ## Creating the mock data
+# look at https://docs.macrosynergy.com/macrosynergy/management/simulate/simulate_quantamental_data.html?highlight=make_qdf#make-qdf
 
 df1 = make_test_df(
     cids=cids,
@@ -31,6 +32,7 @@ missing_date = df["real_date"] == "2000-01-17"
 
 df.loc[(df["cid"] == "GBP") & (df["xcat"] == "INFL") & missing_date, "value"] = pd.NA
 df.loc[(df["cid"] == "AUD") & (df["xcat"] == "CRY") & missing_date, "value"] = pd.NA
+
 
 # For this example:
 # - All *_INFL are decreasing-linear (downward sloping)

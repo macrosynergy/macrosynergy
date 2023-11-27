@@ -21,6 +21,7 @@ xcats = [
 ]
 
 ## Creating the mock data
+# look at https://docs.macrosynergy.com/macrosynergy/management/simulate/simulate_quantamental_data.html?highlight=make_qdf#make-qdf
 
 random.seed(42)
 
@@ -90,5 +91,5 @@ basket_1.make_basket(
     basket_name="GLB_FIXED",
 )
 
-# Example 3 - Create a basket with fixed weights
+## Example 3 - Create a basket with fixed weights
 basket_1.weight_visualiser(basket_name="GLB_FIXED", subplots=False, size=(10, 5))

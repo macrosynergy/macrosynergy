@@ -1,30 +1,39 @@
 """example/macrosynergy/download/dataquery.py"""
 
-## Imports
+# ## Imports
+# %%
+
 from macrosynergy.download import DataQueryInterface
 
-## Setting up the client_id and client_secret
+# ## Setting up the client_id and client_secret
+# %%
+
 # Set the client_id and client_secret.
 # Ideally, these should not be stored in the script
 # but rather in a config file or as environment variables
 client_id = "DQ_CLIENT_ID"
 client_secret = "DQ_CLIENT_SECRET"
 
-## Setting up proxies if needed (for example, if you are behind a firewall. Useful for institutional users)
+# ## Setting up proxies 
+# %%
 
+# if needed (for example, if you are behind a firewall. Useful for institutional users)
 proxies = {
     "https": "http://proxy.example.com:8080",
 }
 
 
-## List DataQuery expressions
+# ## List DataQuery expressions
+# %%
 
 expressions = [
     "DB(JPMAQS,USD_EQXR_VT10,value)",
     "DB(JPMAQS,AUD_EXALLOPENNESS_NSA_1YMA,value)",
 ]
 
-## Downloading the data - with a context manager
+# ## Downloading the data - with a context manager
+# %%
+
 with DataQueryInterface(
     client_id=client_id,
     client_secret=client_secret,

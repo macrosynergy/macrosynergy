@@ -1,16 +1,20 @@
 """example/macrosynergy/panel/category_relations.py"""
 
-
+# ## Imports
+# %%
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.panel.category_relations import CategoryRelations
 import pandas as pd
 
-## Set the currency areas (cross-sectional identifiers) and categories
+# ## Set the currency areas (cross-sectional identifiers) and categories
+# %%
 
 cids = ["AUD", "CAD", "GBP", "NZD", "USD"]
 xcats = ["XR", "CRY", "GROWTH", "INFL"]
 
-## Creating the mock data
+# ## Creating the mock data
+# %%
+# look at https://docs.macrosynergy.com/macrosynergy/management/simulate/simulate_quantamental_data.html?highlight=make_qdf#make-qdf
 
 cols = ["earliest", "latest", "mean_add", "sd_mult"]
 
@@ -51,8 +55,8 @@ dfdx["ERA"] = "before 2007"
 dfdx.loc[dfdx["real_date"].dt.year > 2007, "ERA"] = "from 2010"
 
 
-## Example 1
-# A subset of the currency areas
+# ## Example 1 - A subset of the currency areas
+# %%
 cidx = ["AUD", "CAD", "GBP", "USD"]
 
 # Instantiate the CategoryRelations class
@@ -79,8 +83,8 @@ cr.reg_scatter(
     prob_est="map",
 )
 
-## Example 2
-# CatetoryRelations with aggregation methods
+# ## Example 2 - CatetoryRelations with aggregation methods
+# %%
 cr = CategoryRelations(
     dfdx,
     xcats=["CRY", "XR"],
@@ -103,8 +107,8 @@ cr.reg_scatter(
     prob_est="map",
 )
 
-## Example 3
-# "first difference" applied to the first category (CRY)
+# ## Example 3 - "first difference" applied to the first category (CRY)
+# %%
 cr = CategoryRelations(
     dfdx,
     xcats=["CRY", "XR"],
@@ -118,7 +122,8 @@ cr = CategoryRelations(
     years=None,
 )
 
-# Viewing the reg_plot
+# ## Viewing the reg_plot
+# %%
 cr.reg_scatter(
     labels=False,
     separator=cids,
@@ -128,9 +133,10 @@ cr.reg_scatter(
     coef_box="lower left",
 )
 
-## Creating a table of the regression results
-# With an OLS pool
+# ## Creating a table of the regression results - using the Pooled OLS method
+# %%
 cr.ols_table(type="pool")
 
-# With random effects
+# ## Creating a table of the regression results - using the random effects method
+# %%
 cr.ols_table(type="re")
