@@ -1,12 +1,14 @@
 """example/macrosynergy/panel/basket.py"""
 
+## Imports
 
 from macrosynergy.panel.basket import Basket
 from macrosynergy.management.simulate import make_qdf
 import pandas as pd
 import random
 
-# Set the currency areas (cross-sectional identifiers) and categories
+## Set the currency areas (cross-sectional identifiers) and categories
+
 cids = ["AUD", "GBP", "NZD", "USD"]
 xcats = [
     "FXXR_NSA",
@@ -49,8 +51,11 @@ df_xcats.loc["EQWBASE_NSA"] = ["2010-01-01", "2022-02-01", 1, 1.5, 0.9, 0.5]
 dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 dfd["grading"] = 1
 
-# Create a blacklist
-black = {"AUD": ["2010-01-01", "2013-12-31"], "GBP": ["2010-01-01", "2013-12-31"]}
+# Create a blacklist for dates with no/incomplete data
+black = {
+    "AUD": ["2010-01-01", "2013-12-31"],
+    "GBP": ["2010-01-01", "2013-12-31"],
+}
 
 # List of contracts
 contracts = ["AUD_FX", "AUD_EQ", "NZD_FX", "GBP_EQ", "USD_EQ"]
@@ -59,10 +64,7 @@ contracts = ["AUD_FX", "AUD_EQ", "NZD_FX", "GBP_EQ", "USD_EQ"]
 contracts_1 = ["AUD_FX", "GBP_FX", "NZD_FX", "USD_EQ"]
 
 
-# Multiple carries. Equal weight method.
-# The main aspect to check in the code is that basket performance has been applied to
-# both the return category and the multiple carry categories.
-
+## Instantiate the `Basket` class with multiple contracts, a return and two carry categories
 basket_1 = Basket(
     df=dfd,
     contracts=contracts_1,
@@ -71,16 +73,14 @@ basket_1 = Basket(
     blacklist=black,
 )
 
-# Create a basket with equal weights
-
+## Example 1 - Create a basket with equal weights
 basket_1.make_basket(
     weight_meth="equal",
     max_weight=0.55,
     basket_name="GLB_EQUAL",
 )
 
-
-# show the weights of the GLB_EQUAL basket
+## Example 2 - Create a basket with fixed weights
 custom_weights = [1 / 6, 1 / 6, 1 / 6, 1 / 2]
 
 basket_1.make_basket(
@@ -90,5 +90,5 @@ basket_1.make_basket(
     basket_name="GLB_FIXED",
 )
 
-# show the weights of the GLB_FIXED basket
+# Example 3 - Create a basket with fixed weights
 basket_1.weight_visualiser(basket_name="GLB_FIXED", subplots=False, size=(10, 5))
