@@ -16,7 +16,7 @@ import random
 import warnings
 
 
-def time_series_check(formula: str, index: int):
+def time_series_check(formula: str, index: int) -> tuple[int, bool]:
     """
     Determine if the panel has any time-series methods applied. If a time-series
     conversion is applied, the function will return the terminal index of the respective
@@ -38,13 +38,11 @@ def time_series_check(formula: str, index: int):
         if check(f[i], f[i + 1], f[i + 2]):
             clause = True
             break
-        else:
-            continue
 
     return i, clause
 
 
-def xcat_isolator(expression: str, start_index: str, index: int):
+def xcat_isolator(expression: str, start_index: str, index: int) -> tuple[str, int]:
     """
     Split the category from the time-series operation. The function will return the
     respective category.
@@ -54,19 +52,16 @@ def xcat_isolator(expression: str, start_index: str, index: int):
     :param <int> index: defines the end of the search space over the expression.
 
     :return <str>: xcat.
+    :return <int>: new starting index.
     """
 
     op_copy = expression[start_index : index + 1]
 
-    start = 0
-    elem = op_copy[start_index]
-    while not elem.isupper():
-        start += 1
-        elem = op_copy[start]
+    start = next(i for i, elem in enumerate(op_copy) if elem.isupper())
 
-    xcat = op_copy[start : (index + 1)]
+    xcat = op_copy[start: index + 1]
 
-    return xcat, (start_index + start + len(xcat))
+    return xcat, start_index + start + len(xcat)
 
 
 def panel_calculator(
