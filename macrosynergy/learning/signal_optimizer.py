@@ -355,8 +355,8 @@ class SignalOptimizer:
                 )
             )
         else:
-            X = self.X
-            y = self.y
+            X = self.X.copy()
+            y = self.y.copy()
 
             results = Parallel(n_jobs=n_jobs)(
                 delayed(self._worker)(
