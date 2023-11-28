@@ -16,7 +16,7 @@ import random
 import warnings
 
 
-def time_series_check(formula: str, index: int) -> tuple[int, bool]:
+def time_series_check(formula: str, index: int):
     """
     Determine if the panel has any time-series methods applied. If a time-series
     conversion is applied, the function will return the terminal index of the respective
@@ -29,7 +29,9 @@ def time_series_check(formula: str, index: int) -> tuple[int, bool]:
     :return <Tuple[int, bool]>:
     """
 
-    check = lambda a, b, c: ((a.isupper() or a.isnumeric()) and b == "." and c.islower())
+    check = lambda a, b, c: (
+        (a.isupper() or a.isnumeric()) and b == "." and c.islower()
+    )
 
     f = formula
     length = len(f)
@@ -42,7 +44,7 @@ def time_series_check(formula: str, index: int) -> tuple[int, bool]:
     return i, clause
 
 
-def xcat_isolator(expression: str, start_index: str, index: int) -> tuple[str, int]:
+def xcat_isolator(expression: str, start_index: str, index: int):
     """
     Split the category from the time-series operation. The function will return the
     respective category.
@@ -52,19 +54,18 @@ def xcat_isolator(expression: str, start_index: str, index: int) -> tuple[str, i
     :param <int> index: defines the end of the search space over the expression.
 
     :return <str>: xcat.
-    :return <int>: new starting index.
     """
 
     op_copy = expression[start_index : index + 1]
 
     start = next(i for i, elem in enumerate(op_copy) if elem.isupper())
 
-    xcat = op_copy[start: index + 1]
+    xcat = op_copy[start : index + 1]
 
     return xcat, start_index + start + len(xcat)
 
 
-def get_xcats_used(ops):
+def _get_xcats_used(ops):
     xcats_used = []
     singles_used = []
     for op in ops.values():
@@ -85,42 +86,6 @@ def get_xcats_used(ops):
     all_xcats_used = xcats_used + single_xcats
     return all_xcats_used, singles_used
 
-def create_wide_dataframes(dfx, old_xcats_used):
-    for xcat in old_xcats_used:
-        dfxx = dfx[dfx["xcat"] == xcat]
-        dfw = dfxx.pivot(index="real_date", columns="cid", values="value")
-        exec(f"{xcat} = dfw")
-
-def create_single_wide_dataframes(df, singles_used, cidx):
-    for single in singles_used:
-        ticker = single[1:]
-        dfxx = df[(df["cid"] + "_" + df["xcat"]) == ticker]
-        if dfxx.empty:
-            raise ValueError(f"Ticker, {ticker}, missing from the dataframe.")
-        else:
-            dfx1 = dfxx.set_index("real_date")["value"].to_frame()
-            dfx1 = dfx1.truncate(before=start, after=end)
-
-            dfw = pd.concat([dfx1] * len(cidx), axis=1, ignore_index=True)
-            dfw.columns = cidx
-            exec(f"{single} = dfw")
-
-def calculate_panels(ops):
-    cols = ["cid", "xcat", "real_date", "value"]
-    df_out = None
-    for new_xcat, formula in ops.items():
-        dfw_add = eval(formula)
-        df_add = pd.melt(dfw_add.reset_index(), id_vars=["real_date"]).rename({"variable": "cid"}, axis=1)
-        df_add["xcat"] = new_xcat
-        if new_xcat == list(ops.keys())[0]:
-            df_out = df_add[cols]
-        else:
-            df_out = pd.concat([df_out, df_add[cols]], axis=0, ignore_index=True)
-            exec(f"{new_xcat} = dfw_add")
-
-    if df_out.isna().any().any():
-        df_out = drop_nan_series(df=df_out, raise_warning=True)
-    return df_out
 
 def panel_calculator(
     df: pd.DataFrame,
@@ -129,7 +94,7 @@ def panel_calculator(
     start: str = None,
     end: str = None,
     blacklist: dict = None,
-) -> pd.DataFrame:
+):
     """
     Calculates new data panels through operations on existing panels.
 
@@ -194,20 +159,18 @@ def panel_calculator(
 
     # C. Check if all required categories are in the dataframe.
 
-    all_xcats_used, singles_used = get_xcats_used(ops)
+    all_xcats_used, singles_used = _get_xcats_used(ops)
 
-    new_xcats: List[str] = list(ops.keys())
-    old_xcats_used: List[str] = list(set(all_xcats_used) - set(new_xcats))
-    missing: List[str] = sorted(set(old_xcats_used) - set(df["xcat"].unique()))
+    new_xcats = list(ops.keys())
+    old_xcats_used = list(set(all_xcats_used) - set(new_xcats))
+    missing = sorted(set(old_xcats_used) - set(df["xcat"].unique()))
 
     if len(missing) > 0:
         raise ValueError(f"Missing categories: {missing}.")
 
     if len(singles_used) > 0:
         if new_xcats == all_xcats_used:
-            old_xcats_used: List[str] = new_xcats
-            # to prevent reduce_df from dropping cids
-            # when a cid-xcat pair is missing from the dataframe
+            old_xcats_used = new_xcats
 
     # D. Reduce dataframe with intersection requirement.
 
@@ -224,11 +187,40 @@ def panel_calculator(
 
     # E. Create all required wide dataframes with category names.
 
-    create_wide_dataframes(dfx, old_xcats_used)
-    create_single_wide_dataframes(df, singles_used, cidx)
+    for xcat in old_xcats_used:
+        dfxx = dfx[dfx["xcat"] == xcat]
+        dfw = dfxx.pivot(index="real_date", columns="cid", values="value")
+        exec(f"{xcat} = dfw")
+
+    for single in singles_used:
+        ticker = single[1:]
+        dfxx = df[(df["cid"] + "_" + df["xcat"]) == ticker]
+        if dfxx.empty:
+            raise ValueError(f"Ticker, {ticker}, missing from the dataframe.")
+        else:
+            dfx1 = dfxx.set_index("real_date")["value"].to_frame()
+            dfx1 = dfx1.truncate(before=start, after=end)
+
+            dfw = pd.concat([dfx1] * len(cidx), axis=1, ignore_index=True)
+            dfw.columns = cidx
+            exec(f"{single} = dfw")
 
     # F. Calculate the panels and collect.
-    df_out: pd.DataFrame = calculate_panels(ops)
+    df_out: pd.DataFrame
+    for new_xcat, formula in ops.items():
+        dfw_add = eval(formula)
+        df_add = pd.melt(dfw_add.reset_index(), id_vars=["real_date"]).rename(
+            {"variable": "cid"}, axis=1
+        )
+        df_add["xcat"] = new_xcat
+        if new_xcat == list(ops.keys())[0]:
+            df_out = df_add[cols]
+        else:
+            df_out = pd.concat([df_out, df_add[cols]], axis=0, ignore_index=True)
+        exec(f"{new_xcat} = dfw_add")
+
+    if df_out.isna().any().any():
+        df_out = drop_nan_series(df=df_out, raise_warning=True)
 
     return df_out
 
