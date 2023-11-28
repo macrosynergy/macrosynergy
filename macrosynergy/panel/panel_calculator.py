@@ -13,7 +13,6 @@ from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.utils import drop_nan_series
 import re
 import random
-import warnings
 
 
 def time_series_check(formula: str, index: int):
