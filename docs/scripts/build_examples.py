@@ -113,6 +113,9 @@ def convert_all_files(
 
     apply_black(output_dir)
 
+    print("Notebooks built successfully.")
+    print(f"Notebooks are located in : \n\t\t{os.path.abspath(output_dir)}")
+
 
 if __name__ == "__main__":
     convert_all_files(INPUT_DIR, OUTPUT_DIR)
