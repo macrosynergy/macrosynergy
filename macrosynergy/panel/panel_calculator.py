@@ -71,7 +71,7 @@ def panel_calculator(
     start: str = None,
     end: str = None,
     blacklist: dict = None,
-):
+) -> pd.DataFrame:
     """
     Calculates new data panels through operations on existing panels.
 
@@ -158,6 +158,7 @@ def panel_calculator(
     new_xcats: List[str] = list(ops.keys())
     old_xcats_used: List[str] = list(set(all_xcats_used) - set(new_xcats))
     missing: List[str] = sorted(set(old_xcats_used) - set(df["xcat"].unique()))
+
     if len(missing) > 0:
         raise ValueError(f"Missing categories: {missing}.")
 
