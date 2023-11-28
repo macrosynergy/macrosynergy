@@ -65,9 +65,16 @@ def xcat_isolator(expression: str, start_index: str, index: int):
     return xcat, start_index + start + len(xcat)
 
 
-def _get_xcats_used(ops):
-    xcats_used = []
-    singles_used = []
+def _get_xcats_used(ops: dict) -> tuple[List[str], List[str]]:
+    """
+    Collect all categories used in the panel calculation.
+    
+    :param <dict> ops: dictionary of panel calculation formulas.
+
+    :return <Tuple[List[str], List[str]]>: all_xcats_used, singles_used.
+    """
+    xcats_used: List[str] = []
+    singles_used: List[str] = []
     for op in ops.values():
         index, clause = time_series_check(formula=op, index=0)
         start_index = 0
