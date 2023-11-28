@@ -1098,6 +1098,7 @@ class SignalReturnRelations:
         max_color: Optional[float] = None,
         figsize: Tuple[float] = (14, 8),
         annotate: bool = True,
+        round: int = 5,
     ):
         """
         Creates a table which shows the specified statistic for each row and
@@ -1134,6 +1135,8 @@ class SignalReturnRelations:
             is None, in which case the maximum value of the table is used.
         :param <Tuple[float]> figsize: Tuple (w, h) of width and height of graph.
         :param <bool> annotate: if True, the values are annotated in the heatmap.
+        :param <int> round: number of decimals to round the values to on the 
+            heatmap's annotations.
         """
         self.df = self.original_df
         stat_values = [
@@ -1270,6 +1273,7 @@ class SignalReturnRelations:
                 min_color=min_color,
                 max_color=max_color,
                 figsize=figsize,
+                fmt=f".{round}f",
                 annot=annotate,
                 xticklabels=column_names,
                 yticklabels=row_names,
