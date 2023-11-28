@@ -7,8 +7,9 @@ from macrosynergy.management.simulate import make_qdf
 import pandas as pd
 import random
 
-## Set the currency areas (cross-sectional identifiers) and categories
-
+# %% [markdown]
+# ## Set the currency areas (cross-sectional identifiers) and categories
+# %%
 cids = ["AUD", "GBP", "NZD", "USD"]
 xcats = [
     "FXXR_NSA",
@@ -19,10 +20,9 @@ xcats = [
     "EQCRR_NSA",
     "FXWBASE_NSA",
 ]
-
-## Creating the mock data
-# look at https://docs.macrosynergy.com/macrosynergy/management/simulate/simulate_quantamental_data.html?highlight=make_qdf#make-qdf
-
+# %% [markdown]
+# ## Creating the mock data
+# %%
 random.seed(42)
 
 df_cids = pd.DataFrame(
@@ -64,8 +64,9 @@ contracts = ["AUD_FX", "AUD_EQ", "NZD_FX", "GBP_EQ", "USD_EQ"]
 # List of contracts
 contracts_1 = ["AUD_FX", "GBP_FX", "NZD_FX", "USD_EQ"]
 
-
-## Instantiate the `Basket` class with multiple contracts, a return and two carry categories
+# %% [markdown]
+# ## Instantiate the `Basket` class with multiple contracts, a return and two carry categories
+# %%
 basket_1 = Basket(
     df=dfd,
     contracts=contracts_1,
@@ -73,15 +74,17 @@ basket_1 = Basket(
     cry=["CRY_NSA", "CRR_NSA"],
     blacklist=black,
 )
-
-## Example 1 - Create a basket with equal weights
+# %% [markdown]
+# ## Example 1 - Create a basket with equal weights
+# %%
 basket_1.make_basket(
     weight_meth="equal",
     max_weight=0.55,
     basket_name="GLB_EQUAL",
 )
-
-## Example 2 - Create a basket with fixed weights
+# %% [markdown]
+# ## Example 2 - Create a basket with fixed weights
+# %%
 custom_weights = [1 / 6, 1 / 6, 1 / 6, 1 / 2]
 
 basket_1.make_basket(
@@ -90,6 +93,7 @@ basket_1.make_basket(
     weights=custom_weights,
     basket_name="GLB_FIXED",
 )
-
-## Example 3 - Create a basket with fixed weights
+# %% [markdown]
+# ## Example 3 - Create a basket with fixed weights
+# %%
 basket_1.weight_visualiser(basket_name="GLB_FIXED", subplots=False, size=(10, 5))

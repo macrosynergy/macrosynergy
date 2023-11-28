@@ -1,5 +1,6 @@
 """example/macrosynergy/panel/historic_vol.py"""
 
+# %% [markdown]
 # ## Imports
 # %%
 
@@ -7,15 +8,15 @@ from macrosynergy.management.simulate import make_qdf
 from macrosynergy.panel.historic_vol import historic_vol
 import pandas as pd
 
+# %% [markdown]
 # ## Set the currency areas (cross-sectional identifiers) and categories
 # %%
-
 cids = ["AUD", "CAD", "GBP", "USD"]
 xcats = ["XR", "CRY", "GROWTH", "INFL"]
 
+# %% [markdown]
 # ## Creating the mock data
 # %%
-# look at https://docs.macrosynergy.com/macrosynergy/management/simulate/simulate_quantamental_data.html?highlight=make_qdf#make-qdf
 
 cols = ["earliest", "latest", "mean_add", "sd_mult"]
 
@@ -39,6 +40,7 @@ dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 dfd["grading"] = 1
 
 
+# %% [markdown]
 # ## Example 1 - Calculate historic volatility with the moving average method
 # %%
 df = historic_vol(
@@ -54,6 +56,7 @@ df = historic_vol(
 
 print(df.head(10))
 
+# %% [markdown]
 # ## Example 2 - Calculate historic volatility with the exponential moving average method
 # %%
 

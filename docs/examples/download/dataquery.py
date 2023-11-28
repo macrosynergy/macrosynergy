@@ -1,10 +1,12 @@
 """example/macrosynergy/download/dataquery.py"""
 
+# %% [markdown]
 # ## Imports
 # %%
 
 from macrosynergy.download import DataQueryInterface
 
+# %% [markdown]
 # ## Setting up the client_id and client_secret
 # %%
 
@@ -14,6 +16,7 @@ from macrosynergy.download import DataQueryInterface
 client_id = "DQ_CLIENT_ID"
 client_secret = "DQ_CLIENT_SECRET"
 
+# %% [markdown]
 # ## Setting up proxies 
 # %%
 
@@ -23,6 +26,7 @@ proxies = {
 }
 
 
+# %% [markdown]
 # ## List DataQuery expressions
 # %%
 
@@ -31,6 +35,7 @@ expressions = [
     "DB(JPMAQS,AUD_EXALLOPENNESS_NSA_1YMA,value)",
 ]
 
+# %% [markdown]
 # ## Downloading the data - with a context manager
 # %%
 

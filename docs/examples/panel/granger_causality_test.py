@@ -1,24 +1,27 @@
 """example/macrosynergy/panel/granger_causality_test.py"""
 
+# %% [markdown]
 # ## Imports
 # %%
 import pandas as pd
 from macrosynergy.management.simulate import make_test_df
 from macrosynergy.panel.granger_causality_test import granger_causality_test
 
+# %% [markdown]
 # ## Set the currency areas (cross-sectional identifiers) and categories
 # %%
 cids = ["AUD", "CAD"]
 xcats = ["FX", "EQ"]
 
+# %% [markdown]
 # ## Creating the mock data
 # %%
-# look at https://docs.macrosynergy.com/macrosynergy/management/simulate/simulate_quantamental_data.html?highlight=make_qdf#make-qdf
 df = make_test_df(
     cids=cids,
     xcats=xcats,
 )
 
+# %% [markdown]
 # ## Example 1
 # %%
 # Run the test if AUD_FX Granger causes AUD_EQ
@@ -33,6 +36,7 @@ gct = granger_causality_test(
 
 print(gct)
 
+# %% [markdown]
 # ## Example 2
 # %%
 # Run the test if AUD_FX Granger causes CAD_EQ
