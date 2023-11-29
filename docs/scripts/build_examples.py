@@ -124,16 +124,18 @@ def change_heading(
             f"The first line should be a triple quote. File: {py_file}, line: {i}"
         )
 
+    # split the first line by /
+    fname = lines[i].replace('"""', "").strip().split("/")[-1]
+
     # in line, replace example/ with Example for:
-    lines[i] = lines[i].replace("example/", "# %% [markdown]\n# # Example: `")
+    lines[i] = "\n".join(
+        [
+            "# %% [markdown]",
+            f"# # Examples for: `{fname}`",
+            "# %%",
+        ]
+    )
 
-    # replace .py with ''
-    lines[i] = lines[i].replace(".py", "`")
-    # replace / with .
-    lines[i] = lines[i].replace("/", ".")
-
-    # append # %%
-    lines[i] += "\n# %%\n"
     lines[i] = lines[i].replace('"""', "")
     # join and write
     with open(py_file, "w") as f:
@@ -161,6 +163,10 @@ def convert_all_files(
         change_heading(file_path)
 
     print("Converting files to notebooks...")
+    # for file_path in get_files(output_dir):
+    #     convert_to_notebook(file_path=file_path, output_dir=output_dir,
+    #       input_dir=output_dir, output_extension=output_extension)
+
     with ProcessPoolExecutor() as executor:
         futures = [
             executor.submit(
