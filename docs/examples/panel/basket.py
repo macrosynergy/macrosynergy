@@ -1,6 +1,7 @@
 """example/macrosynergy/panel/basket.py"""
-
-## Imports
+# %% [markdown]
+# ## Imports
+# %%
 
 from macrosynergy.panel.basket import Basket
 from macrosynergy.management.simulate import make_qdf
