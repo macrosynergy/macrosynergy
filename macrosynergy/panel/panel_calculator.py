@@ -100,7 +100,7 @@ def panel_calculator(
     start: str = None,
     end: str = None,
     blacklist: dict = None,
-):
+) -> pd.DataFrame:
     """
     Calculates new data panels through operations on existing panels.
 
