@@ -13,6 +13,9 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 INPUT_DIR = "./docs/examples"
 OUTPUT_DIR = "./docs/examples.build"
+JB_TOC = os.path.join(INPUT_DIR, "_toc.yml")
+JB_CONFIG = os.path.join(INPUT_DIR, "_config.yml")
+JB_ENTRYPOINT = os.path.join(INPUT_DIR, "README.md")
 
 
 def get_files(
@@ -75,6 +78,68 @@ def apply_black(output_dir: str) -> None:
     subprocess.run(["black", output_dir], check=True)
 
 
+def create_jupyter_book(
+    output_dir: str,
+    jb_toc: str = JB_TOC,
+    jb_config: str = JB_CONFIG,
+    jb_entrypoint: str = JB_ENTRYPOINT,
+):
+    """Create a jupyter book from a directory of notebooks.
+    :param <str> output_dir: The output directory.
+    :param <str> jb_toc: The jupyter book toc file.
+    """
+    # copy the toc to the output directory
+    shutil.copy(jb_toc, output_dir)
+
+    # copy the config to the output directory
+    shutil.copy(jb_config, output_dir)
+
+    # copy the entrypoint to the output directory
+    shutil.copy(jb_entrypoint, output_dir)
+    # rename the entrypoint to index.md
+    # rpath = os.path.relpath(jb_entrypoint, INPUT_DIR)
+    # os.rename(
+    #     os.path.join(output_dir, rpath),
+    #     os.path.join(output_dir, "index.md"),
+    # )
+
+    # create the jupyter book
+    subprocess.run(["jupyter-book", "build", output_dir], check=True)
+
+
+def change_heading(
+    py_file: str,
+):
+    # look for the first line, it should be a triple quote
+    with open(py_file, "r") as f:
+        lines = f.readlines()
+
+    # find the first line that is not empty
+    for i, line in enumerate(lines):
+        if line.strip():
+            break
+
+    if '"""' not in line:
+        raise ValueError(
+            f"The first line should be a triple quote. File: {py_file}, line: {i}"
+        )
+
+    # in line, replace example/ with Example for:
+    lines[i] = lines[i].replace("example/", "# %% [markdown]\n# # Example: `")
+
+    # replace .py with ''
+    lines[i] = lines[i].replace(".py", "`")
+    # replace / with .
+    lines[i] = lines[i].replace("/", ".")
+
+    # append # %%
+    lines[i] += "\n# %%\n"
+    lines[i] = lines[i].replace('"""', "")
+    # join and write
+    with open(py_file, "w") as f:
+        f.write("".join(lines))
+
+
 def convert_all_files(
     input_dir: str,
     output_dir: str,
@@ -90,31 +155,38 @@ def convert_all_files(
         shutil.rmtree(output_dir)
     os.makedirs(output_dir, exist_ok=True)
 
-    # for file_path in get_files(input_dir):
-    #     convert_to_notebook(
-    #         file_path=file_path,
-    #         output_dir=output_dir,
-    #         input_dir=input_dir,
-    #         output_extension=output_extension,
-    #     )
+    shutil.copytree(input_dir, output_dir, dirs_exist_ok=True)
+
+    for file_path in get_files(output_dir):
+        change_heading(file_path)
+
+    print("Converting files to notebooks...")
     with ProcessPoolExecutor() as executor:
         futures = [
             executor.submit(
                 convert_to_notebook,
                 file_path=file_path,
                 output_dir=output_dir,
-                input_dir=input_dir,
+                input_dir=output_dir,
                 output_extension=output_extension,
             )
-            for file_path in get_files(input_dir)
+            for file_path in get_files(output_dir)
         ]
         for future in as_completed(futures):
             future.result()
 
+    # remvoe the py files
+    for file_path in get_files(output_dir):
+        if file_path.endswith(".py"):
+            os.remove(file_path)
+
+    print("Applying black formatting...")
     apply_black(output_dir)
 
     print("Notebooks built successfully.")
-    print(f"Notebooks are located in : \n\t\t{os.path.abspath(output_dir)}")
+
+    print("Creating jupyter book...")
+    create_jupyter_book(output_dir)
 
 
 if __name__ == "__main__":

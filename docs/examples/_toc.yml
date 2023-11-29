@@ -1,0 +1,79 @@
+format: jb-book
+root: README.md
+parts:
+  - caption: "macrosynergy.download"
+    chapters:
+      - file: download/dataquery.ipynb
+        title: "DataQuery"
+      - file: download/jpmaqs.ipynb
+        title: "JPMaQS"
+  - caption: "macrosynergy.management"
+    chapters:
+      - file: management/simulate/simulate_quantamental_data.ipynb
+        title: "Simulate Quantamental Data"
+      - file: management/simulate/simulate_vintage_data.ipynb
+        title: "Simulate Vintage Data"
+      - file: management/utils/check_availability.ipynb
+        title: "Check Data Availability"
+  - caption: "macrosynergy.panel"
+    chapters:
+      - file: panel/basket.ipynb
+        title: "Basket"
+      - file: panel/category_relations.ipynb
+        title: "Category Relations"
+      - file: panel/granger_causality_test.ipynb
+        title: "Granger Causality Test"
+      - file: panel/historic_vol.ipynb
+        title: "Historic Volatility"
+      - file: panel/linear_composite.ipynb
+        title: "Linear Composite"
+      - file: panel/make_blacklist.ipynb
+        title: "Make Blacklists for Data"
+      - file: panel/make_relative_value.ipynb
+        title: "Make Relative Value"
+      - file: panel/make_zn_scores.ipynb
+        title: "Make ZN Scores"
+      - file: panel/panel_calculator.ipynb
+        title: "Panel Calculator"
+      - file: panel/return_beta.ipynb
+        title: "Return Betas"
+      - file: panel/view_correlations.ipynb
+        title: "View Correlations"
+      - file: panel/view_grades.ipynb
+        title: "View Data Gradings"
+      - file: panel/view_metrics.ipynb
+        title: "View Data Metrics"
+      - file: panel/view_ranges.ipynb
+        title: "View Data Ranges"
+      - file: panel/view_timelines.ipynb
+        title: "View Data as Timelines"
+  - caption: "macrosynergy.pnl"
+    chapters:
+      - file: pnl/naive_pnl.ipynb
+        title: "Naive PnL"
+  - caption: "macrosynergy.signal"
+    chapters:
+      - file: signal/signal_return_relations.ipynb
+        title: "Signal Return Relations"
+      - file: signal/target_positions.ipynb
+        title: "Target Positions"
+  - caption: "macrosynergy.visuals"
+    chapters:
+      - file: visuals/correlation.ipynb
+        title: "Visualise: Correlations"
+      - file: visuals/facetplot.ipynb
+        title: "Visualise: Facet Plot"
+      - file: visuals/grades.ipynb
+        title: "Visualise: Gradings"
+      - file: visuals/heatmap.ipynb
+        title: "Visualise: Heatmap"
+      - file: visuals/lineplot.ipynb
+        title: "Visualise: Line Plot"
+      - file: visuals/metrics.ipynb
+        title: "Visualise: Metrics"
+      - file: visuals/ranges.ipynb
+        title: "Visualise: Ranges"
+      - file: visuals/table.ipynb
+        title: "Visualise: Table"
+      - file: visuals/timelines.ipynb
+        title: "Visualise: Timelines"
