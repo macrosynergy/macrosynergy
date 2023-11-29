@@ -181,7 +181,7 @@ def _rolling_window_calc(
 
 
 def _hist_vol(
-    df: pd.DataFrame,
+    df: pd.DataFrame,   
     sname: str,
     est_freq: str = "m",
     lback_periods: int = 21,
@@ -193,6 +193,7 @@ def _hist_vol(
     """
     Calculates historic volatility for a given strategy. It assumes that the dataframe
     is composed solely of the relevant signals and returns for the strategy.
+
     :param <pd.DataFrame> df:  standardized JPMaQS DataFrame with the necessary
         columns: 'cid', 'xcat', 'real_date' and 'value'.
     :param <str> est_freq: the frequency of the volatility estimation. Default is 'm'
@@ -262,6 +263,8 @@ def _hist_vol(
     if est_freq == "d":
         # dfw_calc = df_wide.rolling(lback_periods).agg(**_args)
         raise NotImplementedError("Daily volatility not implemented yet.")
+        # TODO: Contradiction to other condition above
+
     else:
         for r_date in trigger_indices:
             dfw_calc.loc[r_date, :] = _rolling_window_calc(
