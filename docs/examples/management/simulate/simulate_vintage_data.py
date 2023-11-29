@@ -1,9 +1,7 @@
 """example/macrosynergy/management/simulate/simulate_vintage_data.py"""
-
 # %% [markdown]
 # # Import the VintageData class from macrosynergy.management.simulate
 # %%
-
 from macrosynergy.management.simulate import VintageData
 
 # %% [markdown]
