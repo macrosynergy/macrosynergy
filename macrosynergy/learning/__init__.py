@@ -21,6 +21,8 @@ from .metrics import (
 )
 from .signal_optimizer import SignalOptimizer
 
+from .predictors import NaivePredictor
+
 __all__ = [
     # panel_time_series_split
     "ExpandingKFoldPanelSplit",
@@ -29,8 +31,7 @@ __all__ = [
     "BasePanelSplit",
     # cv_tools
     "panel_cv_scores",
-    # transformers
-    "AvgNormFtrTransformer",
+    # transformers        
     "LassoSelector",
     "MapSelector",
     "PanelMinMaxScaler",
@@ -43,5 +44,7 @@ __all__ = [
     "regression_balanced_accuracy",
     # signal_optimizer
     "SignalOptimizer",
+    # predictors
+    "NaivePredictor",
 ]
  
