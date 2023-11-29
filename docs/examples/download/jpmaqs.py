@@ -1,6 +1,8 @@
 """example/macrosynergy/download/jpmaqs.py"""
 
+# %% [markdown]
 # Import the JPMaQSDownload class from the macrosynergy package
+# %%
 from macrosynergy.download import JPMaQSDownload
 
 # %% [markdown]
