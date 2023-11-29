@@ -197,6 +197,12 @@ class BasePanelSplit(BaseCrossValidator):
             ax[cs_idx, idx].set_yticklabels([cross_sections[cs_idx]])
             ax[cs_idx, idx].tick_params(axis="x", rotation=90)
 
+            # Ensure only the last row has x-axis labels.
+            if cs_idx == len(ax) - 1:
+                ax[cs_idx, idx].tick_params(axis="x", rotation=90)
+            else:
+                ax[cs_idx, idx].tick_params(axis='x', labelbottom=False)
+
             if cs_idx == 0:
                 ax[cs_idx, idx].set_title(f"{split_titles[idx]}")
 
