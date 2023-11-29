@@ -11,17 +11,17 @@ from .correlation import view_correlation
 from .ranges import view_ranges
 from .table import view_table
 
-TYPES = ["NoneType", "Numeric"]
-CLASSES = ["FacetPlot", "LinePlot", "Plotter", "Heatmap"]
-MODULES = []
-FUNCTIONS = [
-    "timelines",
-    "view_metrics",
-    "view_grades",
-    "view_panel_dates",
-    "view_correlation",
-    "view_ranges",
-    "view_table"
-]
 
-__all__ = CLASSES + MODULES
+__all__ = [
+    "view_correlation",
+    "FacetPlot",
+    "view_grades",
+    "Heatmap",
+    "LinePlot",
+    "view_metrics",
+    "Plotter",
+    "view_ranges",
+    "view_table",
+    "timelines",
+    "view_panel_dates",
+]

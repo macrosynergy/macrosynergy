@@ -707,11 +707,19 @@ class SignalReturnRelations:
             intersection_df = cid_df.loc[:, signal].droplevel(level=0)
             # Intersection exclusively across the signals.
             intersection_df = intersection_df.dropna(how="any")
-            s_date = intersection_df.index[0]
-            e_date = intersection_df.index[-1]
+            if not intersection_df.empty:
+                s_date = intersection_df.index[0]
+                e_date = intersection_df.index[-1]
 
-            final_df.loc[(c, s_date):(c, e_date), signal] = intersection_df.to_numpy()
-            storage.append(final_df)
+                final_df.loc[
+                    (c, s_date):(c, e_date), signal
+                ] = intersection_df.to_numpy()
+                storage.append(final_df)
+            else:
+                warnings.warn(
+                    f"Cross-section {c} has no common sample periods for the signals \
+                    {signal} and return {ret}."
+                )
 
         df = pd.concat(storage)
         df = df.stack().reset_index().sort_values(["cid", "xcat", "real_date"])
@@ -1090,6 +1098,7 @@ class SignalReturnRelations:
         max_color: Optional[float] = None,
         figsize: Tuple[float] = (14, 8),
         annotate: bool = True,
+        round: int = 5,
     ):
         """
         Creates a table which shows the specified statistic for each row and
@@ -1126,6 +1135,8 @@ class SignalReturnRelations:
             is None, in which case the maximum value of the table is used.
         :param <Tuple[float]> figsize: Tuple (w, h) of width and height of graph.
         :param <bool> annotate: if True, the values are annotated in the heatmap.
+        :param <int> round: number of decimals to round the values to on the 
+            heatmap's annotations.
         """
         self.df = self.original_df
         stat_values = [
@@ -1262,6 +1273,7 @@ class SignalReturnRelations:
                 min_color=min_color,
                 max_color=max_color,
                 figsize=figsize,
+                fmt=f".{round}f",
                 annot=annotate,
                 xticklabels=column_names,
                 yticklabels=row_names,

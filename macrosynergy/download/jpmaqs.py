@@ -463,7 +463,12 @@ class JPMaQSDownload(object):
         # IMPORTANT NOTE:
         # Drop NA containing rows to be revisited when blacklisting is implemented
 
-        final_df = final_df.dropna(axis=0, how="any").reset_index(drop=True)
+        final_df = final_df.dropna(axis=0, how="any")
+
+        # sort by CID, XCAT, then real_date
+        final_df = final_df.sort_values(["cid", "xcat", "real_date"]).reset_index(
+            drop=True
+        )
 
         if validate_df:
             vdf = self.validate_downloaded_df(

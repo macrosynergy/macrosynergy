@@ -4,8 +4,6 @@ hyperparameter and model selection.
 
 **NOTE: This module is under development, and is not yet ready for production use.**
 
-TODO: add additional_X, additional_y optional arguments to the constructor to allow for
-      hold-out set predictions as well as walk-forward validation predictions.
 TODO: test and add Bayesian hyperparameter optimisation.
 """
 
@@ -13,6 +11,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+import datetime
 
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.base import BaseEstimator
@@ -38,6 +38,8 @@ class SignalOptimizer:
         inner_splitter: BasePanelSplit,
         X: pd.DataFrame,
         y: pd.Series,
+        additional_X: Optional[List[pd.DataFrame]] = None,
+        additional_y: Optional[List[pd.Series]] = None,
     ):
         """
         Class for sequential optimization of raw signals based on quantamental features
@@ -54,9 +56,12 @@ class SignalOptimizer:
             The frequency of features (and targets) determines the frequency at which
             model predictions are made and evaluated. This means that if we have monthly
             data, the learning process uses the performance of monthly predictions.
-
         :param <pd.Series> y: Pandas series of targets corresponding with a time
             index equal to the features in `X`.
+        :param <Optional[List[pd.DataFrame]]> additional_X: Optional additional features.
+            Default is None. 
+        :param <Optional[List[pd.Series]]> additional_y: Optional additional targets.
+            Default is None.
 
         Note: 
         Optimization is based on expanding time series panels and maximizes a defined 
@@ -119,10 +124,68 @@ class SignalOptimizer:
         so.models_heatmap(name="MIX")
         ```
         """
+        # checks 
+        if not isinstance(inner_splitter, BasePanelSplit):
+            raise TypeError(
+                "The inner_splitter argument must be an instance of BasePanelSplit."
+            )
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError("The X argument must be a pandas DataFrame.")
+        if not isinstance(y, pd.Series):
+            raise TypeError("The y argument must be a pandas Series.")
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(y.index, pd.MultiIndex):
+            raise ValueError("y must be multi-indexed.") 
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of y must be datetime.date.")
+        if not X.index.equals(y.index):
+            raise ValueError(
+                "The indices of the input dataframe X and the output dataframe y don't match."
+            )
+        
+        if additional_X is not None:
+            if not isinstance(additional_X, list):
+                raise TypeError("The additional_X argument must be a list.")
+            for add_x in additional_X:
+                if not isinstance(add_x, pd.DataFrame):
+                    raise TypeError(
+                        "The additional_X argument must be a list of pandas DataFrames."
+                    )
+                if not isinstance(add_x.index, pd.MultiIndex):
+                    raise ValueError("All dataframes in additional_X must be multi-indexed.")
+                if not isinstance(add_x.index.get_level_values(1)[0], datetime.date):
+                    raise TypeError("The inner index of each dataframe in additional_X must be datetime.date.") 
+
+        if additional_y is not None:
+            if not isinstance(additional_y, list):
+                raise TypeError("The additional_y argument must be a list.")
+            if len(additional_y) != len(additional_X):
+                raise ValueError(
+                    "The additional_y argument must be a list of the same length as additional_X."
+                )
+            for idx, add_y in enumerate(additional_y):
+                if not isinstance(add_y, pd.Series):
+                    raise TypeError(
+                        "The additional_y argument must be a list of pandas Series."
+                    )
+                if not isinstance(add_y.index, pd.MultiIndex):
+                    raise ValueError("All series in additional_y must be multi-indexed.")
+                if not isinstance(add_y.index.get_level_values(1)[0], datetime.date):
+                    raise TypeError("The inner index of each series in additional_y must be datetime.date.")
+                if not add_y.index.equals(additional_X[idx].index):
+                    raise ValueError(
+                        "The indices of each dataframe in additional_X must match with the corresponding series in additional_y."
+                    )
 
         self.inner_splitter = inner_splitter
+
         self.X = X
         self.y = y
+        self.additional_X = additional_X
+        self.additional_y = additional_y
 
         # Create an initial dataframes to store quantamental predictions and model choices
         self.preds = pd.DataFrame(columns=["cid", "real_date", "xcat", "value"])
@@ -259,22 +322,59 @@ class SignalOptimizer:
             max_periods=max_periods,
         )
 
-        results = Parallel(n_jobs=n_jobs)(
-            delayed(self._worker)(
-                train_idx=train_idx,
-                test_idx=test_idx,
-                name=name,
-                models=models,
-                metric=metric,
-                original_date_levels=original_date_levels,
-                hparam_type=hparam_type,
-                hparam_grid=hparam_grid,
-                n_iter=n_iter,
+        # Now handle possible additional training samples provided in self.additional_X
+        # and self.additional_y. If provided, the handling depends on whether 
+        # max_periods is specified or not.
+        #
+        # If max_periods is specified, append self.X to self.additional_X and self.y to
+        # self.additional_y, and use the resulting dataframes as the training set. This is 
+        # because the outter splitter will automatically truncate the resulting training set
+        # to the correct length.
+        # If max_periods is not specified, then the splitter will expand as opposed to roll. 
+        # Then the additional sets can be added within the private worker.
+
+        if max_periods:
+            X = pd.concat((self.X, *self.additional_X), axis=0)
+            y = pd.concat((self.y, *self.additional_y), axis=0)
+
+            results = Parallel(n_jobs=n_jobs)(
+                delayed(self._worker)(
+                    train_idx=train_idx,
+                    test_idx=test_idx,
+                    name=name,
+                    models=models,
+                    metric=metric,
+                    original_date_levels=original_date_levels,
+                    hparam_type=hparam_type,
+                    hparam_grid=hparam_grid,
+                    n_iter=n_iter,
+                    is_rolling=True,
+                )
+                for train_idx, test_idx in tqdm(
+                    outer_splitter.split(X=X, y=y),
+                )
             )
-            for train_idx, test_idx in tqdm(
-                outer_splitter.split(X=self.X, y=self.y),
+        else:
+            X = self.X.copy()
+            y = self.y.copy()
+
+            results = Parallel(n_jobs=n_jobs)(
+                delayed(self._worker)(
+                    train_idx=train_idx,
+                    test_idx=test_idx,
+                    name=name,
+                    models=models,
+                    metric=metric,
+                    original_date_levels=original_date_levels,
+                    hparam_type=hparam_type,
+                    hparam_grid=hparam_grid,
+                    n_iter=n_iter,
+                    is_rolling=False,
+                )
+                for train_idx, test_idx in tqdm(
+                    outer_splitter.split(X=X, y=y),
+                )
             )
-        )
 
         prediction_data = []
         modelchoice_data = []
@@ -333,6 +433,7 @@ class SignalOptimizer:
         hparam_grid: Dict[str, Dict[str, List]],
         n_iter: int = 10,
         hparam_type: str = "grid",
+        is_rolling: bool = False,
     ):
         """
         Private helper function to run the grid search for a single (train, test) pair
@@ -356,10 +457,17 @@ class SignalOptimizer:
         :param <int> n_iter: Number of iterations to run for random search. Default is 10.
         :param <str> hparam_type: Hyperparameter search type.
             This must be either "grid", "random" or "bayes". Default is "grid".
+        :param <bool> is_rolling: Whether the splitter is rolling or expanding. Default is
+            False.
         """
         # Set up training and test sets
-        X_train_i: pd.DataFrame = self.X.iloc[train_idx]
-        y_train_i: pd.Series = self.y.iloc[train_idx]
+        if self.additional_X and not is_rolling:
+            X_train_i = pd.concat((self.X.iloc[train_idx], *self.additional_X), axis=0)
+            y_train_i = pd.concat((self.y.iloc[train_idx], *self.additional_y), axis=0)
+        else:
+            X_train_i: pd.DataFrame = self.X.iloc[train_idx]
+            y_train_i: pd.Series = self.y.iloc[train_idx]
+
         X_test_i: pd.DataFrame = self.X.iloc[test_idx]
         # Get correct indices to match with
         test_xs_levels: List[str] = X_test_i.index.get_level_values(0).unique()
@@ -416,13 +524,12 @@ class SignalOptimizer:
 
         return prediction_date, modelchoice_data
 
-    def get_optimized_signals(self, name: Optional[str] = None) -> pd.DataFrame:
+    def get_optimized_signals(self, name: Optional[Union[str, List]] = None) -> pd.DataFrame:
         """
         Returns optimized signals for one or more processes
 
-        :param <str> name: Label of signal optimization process. Default is all
+        :param <Optional[Union[str, List]]> name: Label of signal optimization process. Default is all
             stored in the class instance.
-            TODO: allow list 
 
         :return <pd.DataFrame>: Pandas dataframe in JPMaQS format of working daily 
             predictions based insequentially optimzed models.
@@ -430,24 +537,27 @@ class SignalOptimizer:
         if name is None:
             return self.preds
         else:
-            if type(name) != str:
-                raise TypeError("The process name must be a string.")
-            if name not in self.preds.xcat.unique():
-                raise ValueError(
-                    f"""The process name '{name}' is not in the list of already-run
-                    pipelines. Please check the name carefully. If correct, please run 
-                    calculate_predictions() first.
-                    """
-                )
-            return self.preds[self.preds.xcat == name]
+            if type(name) == str:
+                name = []
+            elif type(name) != list:
+                raise TypeError("The process name must be a string or a list of strings.")
+            
+            for n in name:
+                if n not in self.preds.xcat.unique():
+                    raise ValueError(
+                        f"""The process name '{n}' is not in the list of already-run
+                        pipelines. Please check the name carefully. If correct, please run 
+                        calculate_predictions() first.
+                        """
+                    )
+            return self.preds[self.preds.xcat.isin(name)]
 
-    def get_optimal_models(self, name: Optional[str] = None) -> pd.DataFrame:
+    def get_optimal_models(self, name: Optional[Union[str,List]] = None) -> pd.DataFrame:
         """
         Returns the sequences of optimal models for one or more processes
 
         :param <str> name: Label of signal optimization process. Default is all
-            stored in the class instance.
-            TODO: allow list 
+            stored in the class instance. 
 
         :return <pd.DataFrame>: Pandas dataframe of the optimal models or hyperparameters 
             at the end of the base period in which they were determined (to be applied 
@@ -456,16 +566,20 @@ class SignalOptimizer:
         if name is None:
             return self.chosen_models
         else:
-            if type(name) != str:
-                raise TypeError("The process name must be a string.")
-            if name not in self.chosen_models.xcat.unique():
-                raise ValueError(
-                    f"""The process name '{name}' is not in the list of already-run
-                    pipelines. Please check the name carefully. If correct, please run 
-                    calculate_predictions() first.
-                    """
-                )
-            return self.chosen_models[self.chosen_models.xcat == name]
+            if type(name) == str:
+                name = [name]
+            elif type(name) != list:
+                raise TypeError("The process name must be a string or a list of strings.")
+            
+            for n in name:
+                if n not in self.chosen_models.xcat.unique():
+                    raise ValueError(
+                        f"""The process name '{n}' is not in the list of already-run
+                        pipelines. Please check the name carefully. If correct, please run 
+                        calculate_predictions() first.
+                        """
+                    )
+            return self.chosen_models[self.chosen_models.xcat.isin(name)]
 
     def models_heatmap(
         self,
@@ -482,7 +596,6 @@ class SignalOptimizer:
             title of the form "Model Selection Heatmap for {name}".
         :param <Optional[int]> cap: Maximum number of models to display. Default (and limit) is 5.
             The chosen models are the 'cap' most frequently occurring in the pipeline.
-            TODO: Allow up to 20 models.
         :param <Optional[tuple]> figsize: Tuple of integers denoting the figure size. Default is
             (12, 8).
 
@@ -544,7 +657,7 @@ class SignalOptimizer:
         # Display the heatmap.
         plt.figure(figsize=figsize)
         sns.heatmap(binary_matrix, cmap="binary", cbar=False)
-        plt.title(f"Model Selection Heatmap for {name}")
+        plt.title(title)
         plt.show()
 
 
@@ -582,13 +695,26 @@ if __name__ == "__main__":
     dfd2["grading"] = np.ones(dfd2.shape[0])
     black = {"GBP": ["2009-01-01", "2012-06-30"], "CAD": ["2018-01-01", "2100-01-01"]}
 
-    dfd2 = msm.categories_df(
-        df=dfd2, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
+    train = msm.reduce_df(dfd2, end="2016-11-30")
+    test = msm.reduce_df(dfd2, start="2016-11-01")
+
+    train = msm.categories_df(
+        df=train, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
     ).dropna()
-    X = dfd2.drop(columns=["XR"])
-    y = dfd2["XR"]
-    y_long = pd.melt(
-        frame=y.reset_index(), id_vars=["cid", "real_date"], var_name="xcat"
+    test = msm.categories_df(
+        df=test, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
+    ).dropna()
+
+    X_train = train.drop(columns=["XR"])
+    y_train = train["XR"]
+    X_test = test.drop(columns=["XR"])
+    y_test = test["XR"]
+    
+    y_long_train = pd.melt(
+        frame=y_train.reset_index(), id_vars=["cid", "real_date"], var_name="xcat"
+    )
+    y_long_test = pd.melt(
+        frame=y_test.reset_index(), id_vars=["cid", "real_date"], var_name="xcat"
     )
 
     # (1) Example SignalOptimizer usage.
@@ -610,8 +736,8 @@ if __name__ == "__main__":
 
     so = SignalOptimizer(
         inner_splitter=inner_splitter,
-        X=X,
-        y=y,
+        X=X_train,
+        y=y_train,
     )
 
     so.calculate_predictions(
@@ -654,3 +780,26 @@ if __name__ == "__main__":
     #     Print the predictions and model choices for all pipelines.
     print(so.get_optimized_signals())
     print(so.get_optimal_models())
+
+    # Now test the hold-out set functionality
+
+    so = SignalOptimizer(
+        inner_splitter=inner_splitter,
+        X=X_test,
+        y=y_test,
+        additional_X=[X_train],
+        additional_y=[y_train],
+    )
+    
+    so.calculate_predictions(
+        name="test_eval",
+        models=models,
+        metric=metric,
+        hparam_grid=hparam_grid,
+        hparam_type="grid",
+        min_cids = 1,
+        min_periods = 1,
+        n_jobs=1
+    )
+
+    so.models_heatmap(name="test_eval")
