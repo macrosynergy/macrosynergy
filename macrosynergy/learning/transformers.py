@@ -17,6 +17,8 @@ from statsmodels.regression.mixed_linear_model import MixedLM
 
 from typing import Union, Any, List
 
+import logging
+
 class LassoSelector(BaseEstimator, TransformerMixin):
     def __init__(self, alpha: float, positive: bool=True):
         """
@@ -158,8 +160,8 @@ class MapSelector(BaseEstimator, TransformerMixin):
             raise ValueError("The columns of the dataframe to be transformed, X, don't match the columns of the training dataframe.")
         # transform
         if self.ftrs == []:
-            # Use historical mean return as a signal if no features are selected
-            return pd.DataFrame(index=X.index, columns=["naive_signal"], data=self.y_mean,dtype=np.float16)
+            # Then no features were selected
+            return pd.DataFrame(index=X.index, columns=["no_signal"], data=0,dtype=np.float16)
         
         return X[self.ftrs]
         
@@ -256,7 +258,7 @@ class AvgNormFtrTransformer(BaseEstimator, TransformerMixin):
 
                 updated_n: int = test_n + training_n
                 updated_mads: pd.Series = (test_mads * test_n + training_mads * training_n)/updated_n
-                standardised_X: pd.DataFrame = X_test_date / updated_mads
+                standardised_X: pd.DataFrame = (X_test_date / updated_mads).fillna(0)
                 benchmark_signal = pd.DataFrame(np.mean(standardised_X, axis=1), columns=["signal"], dtype="float")
                 # store the signal 
                 signal_df.loc[benchmark_signal.index] = benchmark_signal
