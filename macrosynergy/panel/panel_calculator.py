@@ -7,7 +7,7 @@ The functionality allows applying mathematical operations on time-series data.
 """
 import numpy as np
 import pandas as pd
-from typing import List
+from typing import List, Tuple
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.utils import drop_nan_series
@@ -64,7 +64,7 @@ def xcat_isolator(expression: str, start_index: str, index: int):
     return xcat, start_index + start + len(xcat)
 
 
-def _get_xcats_used(ops: dict) -> tuple[List[str], List[str]]:
+def _get_xcats_used(ops: dict) -> Tuple[List[str], List[str]]:
     """
     Collect all categories used in the panel calculation.
     
