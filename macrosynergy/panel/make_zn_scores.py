@@ -6,15 +6,14 @@ Module for calculating z-scores for a panel around a neutral level ("zn scores")
 """
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Set
-import warnings
+from typing import List
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import (
     drop_nan_series,
     reduce_df,
     _map_to_business_day_frequency,
 )
-from macrosynergy.management.types import QuantamentalDataFrame, Numeric
+from macrosynergy.management.types import Numeric
 
 
 def expanding_stat(
@@ -24,7 +23,7 @@ def expanding_stat(
     sequential: bool = True,
     min_obs: int = 261,
     iis: bool = True,
-):
+) -> pd.DataFrame:
     """
     Compute statistic based on an expanding sample.
 
@@ -41,7 +40,8 @@ def expanding_stat(
     :param <bool> iis: if set to True, the values of the initial interval determined
         by min_obs will be estimated in-sample, based on the full initial sample.
 
-    :return: Time series dataframe of the chosen statistic across all columns
+    :return <pd.DataFrame> df_out: Time series dataframe of the chosen statistic across
+        all columns
     """
 
     df_out = pd.DataFrame(np.nan, index=df.index, columns=["value"])
@@ -76,10 +76,8 @@ def expanding_stat(
 
         df_out = df_out.ffill()
 
-        if iis:
-            if (est_index - obs_index) > 0:
-                # df_out = df_out.fillna(method="bfill", limit=(est_index - obs_index))
-                df_out = df_out.bfill(limit=(est_index - obs_index))
+        if iis and (est_index - obs_index) > 0:
+            df_out = df_out.bfill(limit=(est_index - obs_index))
 
     df_out.columns.name = "cid"
     return df_out
@@ -100,7 +98,7 @@ def make_zn_scores(
     thresh: float = None,
     pan_weight: float = 1,
     postfix: str = "ZN",
-):
+) -> pd.DataFrame:
     """
     Computes z-scores for a panel around a neutral level ("zn scores").
 
@@ -134,8 +132,8 @@ def make_zn_scores(
     :param <str> neutral: method to determine neutral level. Default is 'zero'.
         Alternatives are 'mean' and "median".
     :param <str> est_freq: the frequency at which standard deviations or means are
-        are re-estimated. The options are daily, weekly, monthly & quarterly: "D", "W", "M", "Q".
-        Default is daily. Re-estimation is performed at period end.
+        are re-estimated. The options are daily, weekly, monthly & quarterly: "D", "W",
+        "M", "Q". Default is daily. Re-estimation is performed at period end.
     :param <float> thresh: threshold value beyond which scores are winsorized,
         i.e. contained at that threshold. The threshold is the maximum absolute
         score value that the function is allowed to produce. The minimum threshold is 1
@@ -179,7 +177,10 @@ def make_zn_scores(
     if not isinstance(iis, bool):
         raise TypeError("Parameter `iis` must be a boolean.")
 
-    err = "The `pan_weight` parameter must be a numerical value between 0 and 1 (inclusive)."
+    err = (
+        "The `pan_weight` parameter must be a numerical value between 0 and 1 "
+        "(inclusive)."
+    )
     if not isinstance(pan_weight, Numeric):
         raise TypeError(err)
     elif not (0 <= pan_weight <= 1):
@@ -189,7 +190,9 @@ def make_zn_scores(
     if not isinstance(min_obs, int) or min_obs < 0:
         raise ValueError(error_min)
 
-    est_freq = _map_to_business_day_frequency(freq=est_freq, valid_freqs=["D", "W", "M", "Q"])
+    est_freq = _map_to_business_day_frequency(
+        freq=est_freq, valid_freqs=["D", "W", "M", "Q"]
+    )
 
     # --- Prepare re-estimation dates and time-series DataFrame.
 
