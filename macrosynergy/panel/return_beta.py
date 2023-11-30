@@ -7,7 +7,7 @@ single return.
 import warnings
 import numpy as np
 import pandas as pd
-from typing import List, Union
+from typing import List
 import statsmodels.api as sm
 from statsmodels.regression.linear_model import RegressionResults
 
@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 from macrosynergy.management.utils import _map_to_business_day_frequency
 
 
-def date_alignment(unhedged_return: pd.Series, benchmark_return: pd.Series):
+def date_alignment(unhedged_return: pd.Series, benchmark_return: pd.Series) -> tuple[pd.Timestamp, pd.Timestamp]:
     """
     Method used to align the two Series over the same timestamps: the sample data for the
     endogenous & exogenous variables must match throughout the re-estimation calculation.
@@ -55,7 +55,7 @@ def hedge_calculator(
     meth: str = "ols",
     min_obs: int = 24,
     max_obs: int = 1000,
-):
+) -> pd.DataFrame:
     """
     Calculate the hedge ratios for each cross-section in the panel being hedged. It is
     worth noting that the sample of data used for calculating the hedge ratio will
@@ -160,7 +160,7 @@ def hedge_calculator(
 
 def adjusted_returns(
     benchmark_return: pd.Series, df_hedge: pd.DataFrame, dfw: pd.DataFrame
-):
+) -> pd.DataFrame:
     """
     Method used to compute the hedge ratio returns on the hedging asset which will
     subsequently be subtracted from the returns of the position contracts to calculate
@@ -213,7 +213,7 @@ def return_beta(
     hedged_returns: bool = False,
     ratio_name: str = "_HR",
     hr_name: str = "H",
-):
+) -> pd.DataFrame:
     """
     Estimate sensitivities (betas) of return category with respect to single return.
 
