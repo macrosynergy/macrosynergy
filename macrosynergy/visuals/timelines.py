@@ -188,11 +188,19 @@ def timelines(
 
     if xcat_labels:
         # when `cs_mean` is True, `xcat_labels` may have one extra label
-        if len(xcat_labels) != len(xcats) + int(cs_mean):
+        if len(xcat_labels) != len(xcats) and len(xcat_labels) != len(xcats) + int(
+            cs_mean
+        ):
             raise ValueError(
                 "`xcat_labels` must have same length as `xcats` "
                 "(or one extra label if `cs_mean` is True)."
             )
+
+    if cs_mean:
+        if xcat_labels is None:
+            xcat_labels = [xcats[0]]
+        if len(xcat_labels) == 1:
+            xcat_labels.append("Cross-Sectional Mean")
 
     facet_size: Optional[Tuple[float, float]] = (
         (aspect * height, height)
