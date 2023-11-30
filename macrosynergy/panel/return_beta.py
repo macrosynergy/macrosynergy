@@ -125,7 +125,7 @@ def hedge_calculator(
             # Condition currently redundant but will become relevant.
             if meth == "ols":
                 xvar = sm.add_constant(xvar)
-                results: RegressionResults = sm.OLS(yvar,xvar).fit()
+                results: RegressionResults = sm.OLS(yvar, xvar).fit()
                 results_params: pd.Series = results.params
 
             df_hrat.loc[d] = results_params.loc[cross_section]
@@ -176,7 +176,9 @@ def adjusted_returns(
     index = benchmark_return.index
 
     # Matching the dimensions to the number of assets being hedged.
-    benchmark_return = np.tile(benchmark_return.to_numpy(), (len(hedge_pivot.columns), 1)).T
+    benchmark_return = np.tile(
+        benchmark_return.to_numpy(), (len(hedge_pivot.columns), 1)
+    ).T
     br_df = pd.DataFrame(
         data=benchmark_return, columns=hedge_pivot.columns, index=index
     )
