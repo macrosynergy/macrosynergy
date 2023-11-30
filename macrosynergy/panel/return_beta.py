@@ -10,9 +10,6 @@ import pandas as pd
 from typing import List, Tuple
 import statsmodels.api as sm
 from statsmodels.regression.linear_model import RegressionResults
-import os, sys
-
-sys.path.append(os.getcwd())
 
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df
