@@ -7,7 +7,7 @@ single return.
 import warnings
 import numpy as np
 import pandas as pd
-from typing import List
+from typing import List, Tuple
 import statsmodels.api as sm
 from statsmodels.regression.linear_model import RegressionResults
 
@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 from macrosynergy.management.utils import _map_to_business_day_frequency
 
 
-def date_alignment(unhedged_return: pd.Series, benchmark_return: pd.Series) -> tuple[pd.Timestamp, pd.Timestamp]:
+def date_alignment(unhedged_return: pd.Series, benchmark_return: pd.Series) -> Tuple[pd.Timestamp, pd.Timestamp]:
     """
     Method used to align the two Series over the same timestamps: the sample data for the
     endogenous & exogenous variables must match throughout the re-estimation calculation.
