@@ -16,16 +16,11 @@ Contents
 
 .. toctree::
    :maxdepth: 2
-   :caption:
+   :caption: Contents:
+   
+   modules
 
-   dataquery/index
-   download/index
-   learning/index
-   management/index
-   panel/index
-   pnl/index
-   signal/index
-   visuals/index
+   
    
 Indices and tables
 ==================
