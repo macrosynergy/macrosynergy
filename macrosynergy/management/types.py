@@ -106,3 +106,4 @@ class QuantamentalDataFrame(pd.DataFrame, metaclass=QuantamentalDataFrameMeta):
                 isinstance(df, pd.DataFrame) and isinstance(df, QuantamentalDataFrame)
             ):
                 raise TypeError("Input must be a QuantamentalDataFrame (pd.DataFrame).")
+        super().__init__(df)
