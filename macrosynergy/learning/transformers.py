@@ -7,57 +7,76 @@ Collection of scikit-learn transformer classes.
 import numpy as np
 import pandas as pd
 
+import datetime
+
 from sklearn.linear_model import Lasso
-from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
 
 from statsmodels.tools.tools import add_constant
 from statsmodels.regression.mixed_linear_model import MixedLM
 
 from typing import Union, Any, List
 
-class LassoSelectorTransformer(BaseEstimator, TransformerMixin):
-    def __init__(self, alpha: float, restrict: bool=True):
+import logging
+
+class LassoSelector(BaseEstimator, TransformerMixin):
+    def __init__(self, alpha: float, positive: bool=True):
         """
         Transformer class to use the Lasso as a feature selection algorithm.
         Given a hyper-parameter, alpha, the Lasso model is fit and 
         the non-zero coefficients are used to extract features from an input dataframe.
+        The underlying features as input to the Lasso model are expected to be positively
+        correlated with the target variable.
 
         :param <float> alpha: the regularisation imposed by the Lasso.
-        :param <bool> restrict: boolean to restrict estimated Lasso coefficients to
+        :param <bool> positive: boolean to restrict estimated Lasso coefficients to
             be positive.
         """
+        if type(alpha) != float:
+            raise TypeError("The 'alpha' hyper-parameter must be a float.")
+        if alpha < 0:
+            raise ValueError("The 'alpha' hyper-parameter must be non-negative.")
+        if type(positive) != bool:
+            raise TypeError("The 'positive' hyper-parameter must be a boolean.")
+        
         self.alpha = alpha
-        self.restrict = restrict
+        self.positive = positive
 
-    def fit(self, X: pd.DataFrame, y: pd.Series):
+    def fit(self, X: Union[pd.DataFrame,np.ndarray], y: Union[pd.Series,np.ndarray]):
         """
         Fit method to fit a Lasso regression and obtain the selected features.
 
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <pd.Series> y: Pandas series of targets associated with each
+        :param <Union[pd.DataFrame,np.ndarray]> X: Pandas dataframe or numpy array of input features.
+        :param <Union[pd.Series,np.ndarray]> y: Pandas series or numpy array of targets associated with each
             sample in X.
         """
         self.p = X.shape[-1]
-        if self.restrict:
+        
+        if self.positive:
             self.lasso = Lasso(alpha=self.alpha, positive=True).fit(X, y)
         else:
             self.lasso = Lasso(alpha=self.alpha).fit(X, y)
+
         self.selected_ftr_idxs = [i for i in range(self.p) if self.lasso.coef_[i] != 0]
 
         return self
 
-    def transform(self, X: pd.DataFrame):
+    def transform(self, X: Union[pd.DataFrame, np.ndarray]):
         """
         Transform method to return only the selected features of the dataframe.
 
-        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Union[pd.DataFrame, np.ndarray]> X: Pandas dataframe or numpy array
+            of input features.
         
-        :return <pd.DataFrame>: Pandas dataframe of input features selected
-            based on the Lasso's feature selection capabilities.
+        :return <Union[pd.DataFrame, np.ndarray]>: Pandas dataframe or numpy array
+            of input features selected based on the Lasso's feature selection capabilities.
         """
-        return X.iloc[:,self.selected_ftr_idxs]
+        if type(X) == pd.DataFrame:
+            return X.iloc[:,self.selected_ftr_idxs]
+        
+        return X[:,self.selected_ftr_idxs]
     
-class MapSelectorTransformer(BaseEstimator, TransformerMixin):
+class MapSelector(BaseEstimator, TransformerMixin):
     def __init__(self, threshold: float):
         """
         Transformer class to select features from a training set
@@ -69,6 +88,9 @@ class MapSelectorTransformer(BaseEstimator, TransformerMixin):
         :param <float> threshold: Significance threshold. This should be in
             the interval (0,1).
         """
+        if type(threshold) != float:
+            raise TypeError("The threshold must be a float.")
+        
         if (threshold <= 0) or (threshold >= 1):
             raise ValueError("The threshold must be in between 0 and 1.")
         
@@ -83,17 +105,36 @@ class MapSelectorTransformer(BaseEstimator, TransformerMixin):
         :param <pd.Series> y: Pandas series of targets associated
             with each sample in X. 
         """
+        # Checks 
+        if type(X) != pd.DataFrame:
+            raise TypeError("Input feature matrix for the MAP selector must be a pandas dataframe. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe.")
+        if type(y) != pd.Series:
+            raise TypeError("Target vector for the MAP selector must be a pandas series. If used as part of an sklearn pipeline, ensure that previous steps return a pandas series.")
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(y.index, pd.MultiIndex):
+            raise ValueError("y must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of y must be datetime.date.")
+        if not X.index.equals(y.index):
+            raise ValueError(
+                "The indices of the input dataframe X and the output dataframe y don't match."
+            )
+        
         self.ftrs = []
         self.y_mean = np.mean(y)
-        cols = X.columns
+        self.cols = X.columns
 
-        for col in cols:
+        for col in self.cols:
             ftr = X[col]
             ftr = add_constant(ftr)
-            groups = ftr.reset_index().real_date
-            re = MixedLM(y,ftr,groups).fit(reml=False)
-            pval = re.pvalues[1]
-            if pval < self.threshold:
+            groups = ftr.index.get_level_values(1)
+            model = MixedLM(y,ftr,groups).fit(reml=False)
+            est = model.params.iloc[1]
+            pval = model.pvalues.iloc[1]
+            if (pval < self.threshold) & (est > 0):
                 self.ftrs.append(col)
 
         return self
@@ -108,13 +149,23 @@ class MapSelectorTransformer(BaseEstimator, TransformerMixin):
         :return <pd.DataFrame>: Pandas dataframe of input features selected
             based on the Macrosynergy panel test.
         """
+        # checks
+        if type(X) != pd.DataFrame:
+            raise TypeError("Input feature matrix for the MAP selector must be a pandas dataframe. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe.")
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        if not X.columns.equals(self.cols):
+            raise ValueError("The columns of the dataframe to be transformed, X, don't match the columns of the training dataframe.")
+        # transform
         if self.ftrs == []:
-            # Use historical mean return as a signal if no features are selected
-            return pd.DataFrame(index=X.index, columns=["naive_signal"], data=self.y_mean,dtype=np.float16)
+            # Then no features were selected
+            return pd.DataFrame(index=X.index, columns=["no_signal"], data=0,dtype=np.float16)
         
         return X[self.ftrs]
-    
-class BenchmarkTransformer(BaseEstimator, TransformerMixin):
+        
+class AvgNormFtrTransformer(BaseEstimator, TransformerMixin):
     def __init__(self, neutral: str = "zero", use_signs: bool = False):
         """
         Transformer class to combine features into a benchmark signal 
@@ -135,6 +186,9 @@ class BenchmarkTransformer(BaseEstimator, TransformerMixin):
         if neutral.lower() not in ["zero", "mean"]:
             raise ValueError("neutral must be either 'zero' or 'mean'.")
         
+        if type(use_signs) != bool:
+            raise TypeError("'use_signs' must be a boolean.")
+        
         self.neutral = neutral
         self.use_signs = use_signs
     
@@ -147,6 +201,15 @@ class BenchmarkTransformer(BaseEstimator, TransformerMixin):
         :param <pd.DataFrame> X: Pandas dataframe of input features.
         :param <Any> y: Placeholder for scikit-learn compatibility.
         """
+        # checks
+        if type(X) != pd.DataFrame:
+            raise TypeError("Input feature matrix for the MeanNormalTransformer must be a pandas dataframe. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe.")
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        
+        # fit
         self.training_n: int = len(X)
 
         if self.neutral == "mean":
@@ -161,7 +224,7 @@ class BenchmarkTransformer(BaseEstimator, TransformerMixin):
 
         return self
 
-    def transform(self, X: pd.DataFrame, y: Any = None):
+    def transform(self, X: pd.DataFrame):
         """
         Transform method to compute an out-of-sample benchmark signal for each unique
         date in the input test dataframe. At a given test time, the relevant statistics
@@ -171,8 +234,16 @@ class BenchmarkTransformer(BaseEstimator, TransformerMixin):
         the returns.
 
         :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <Any> y: Placeholder for scikit-learn compatibility.
         """
+        # checks 
+        if type(X) != pd.DataFrame:
+            raise TypeError("Input feature matrix for the MeanNormalTransformer must be a pandas dataframe. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe.")
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        
+        # transform
         unique_dates: List[pd.Timestamp] = sorted(X.index.get_level_values(1).unique())
         signal_df = pd.DataFrame(index=X.index, columns=["signal"], dtype="float")
 
@@ -187,7 +258,7 @@ class BenchmarkTransformer(BaseEstimator, TransformerMixin):
 
                 updated_n: int = test_n + training_n
                 updated_mads: pd.Series = (test_mads * test_n + training_mads * training_n)/updated_n
-                standardised_X: pd.DataFrame = X_test_date / updated_mads
+                standardised_X: pd.DataFrame = (X_test_date / updated_mads).fillna(0)
                 benchmark_signal = pd.DataFrame(np.mean(standardised_X, axis=1), columns=["signal"], dtype="float")
                 # store the signal 
                 signal_df.loc[benchmark_signal.index] = benchmark_signal
@@ -253,6 +324,133 @@ class BenchmarkTransformer(BaseEstimator, TransformerMixin):
 
         return updated_means, updated_sum_squares, updated_stds, updated_n
             
+class PanelMinMaxScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
+    """
+    Transformer class to extend scikit-learn's MinMaxScaler() to panel datasets. It is
+    intended to replicate the aforementioned class, but critically returning
+    a Pandas dataframe or series instead of a numpy array. This preserves the
+    multi-indexing in the inputs after transformation, allowing for the passing
+    of standardised features into transformers that require cross-sectional
+    and temporal knowledge.
+
+    NOTE: This class is designed to replicate scikit-learn's MinMaxScaler() class.
+          It should primarily be used to satisfy the assumptions of various models.
+    """ 
+    def fit(self, X, y = None):
+        """
+        Fit method to determine minimum and maximum values over a training set.
+
+        :param <Union[pd.DataFrame, pd.Series]> X: Pandas dataframe or series.
+        :param <Any> y: Placeholder for scikit-learn compatibility.
+
+        :return <PanelMinMaxScaler>: Fitted PanelMinMaxScaler object.
+        """
+        # checks
+        if type(X) not in [pd.DataFrame, pd.Series]:
+            raise TypeError("'X' must be a pandas dataframe or series. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe or series.")
+
+        # fit
+        self.mins = X.min(axis=0)
+        self.maxs = X.max(axis=0)
+
+        return self
+    
+    def transform(self, X):
+        """
+        Transform method to standardise a panel based on the minimum and maximum values.
+
+        :param <Union[pd.DataFrame, pd.Series]> X: Pandas dataframe or series.
+
+        :return <Union[pd.DataFrame, pd.Series]>: Standardised dataframe or series.
+        """
+        # checks
+        if type(X) not in [pd.DataFrame, pd.Series]:
+            raise TypeError("'X' must be a pandas dataframe or series. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe or series.")
+
+        # transform
+        calc = (X - self.mins) / (self.maxs - self.mins)
+
+        return calc
+    
+class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
+    def __init__(self, with_mean: bool = True, with_std: bool = True):
+        """
+        Transformer class to extend scikit-learn's StandardScaler() to panel datasets. It is 
+        intended to replicate the aforementioned class, but critically returning 
+        a Pandas dataframe or series instead of a numpy array. This preserves the 
+        multi-indexing in the inputs after transformation, allowing for the passing 
+        of standardised features into transformers that require cross-sectional 
+        and temporal knowledge. 
+
+        NOTE: This class is designed to replicate scikit-learn's StandardScalar() class.
+              It is not designed to perform sequential mean and standard deviation 
+              normalisation like the 'make_zn_scores()' function in 'macrosynergy.panel' 
+              or 'AvgNormFtrTransformer' in 'macrosynergy.learning'. 
+              This class should primarily be used to satisfy the assumptions of various models,
+              for example the Lasso, Ridge or any neural network. 
+
+        :param <bool> with_mean: Boolean to specify whether or not to centre the data.
+        :param <bool> with_std: Boolean to specify whether or not to scale the data.
+        """
+        # checks
+        if type(with_mean) != bool:
+            raise TypeError("'with_mean' must be a boolean.")
+        if type(with_std) != bool:
+            raise TypeError("'with_std' must be a boolean.")
+
+        # setup
+        self.with_mean = with_mean
+        self.with_std = with_std
+        
+        self.means = None 
+        self.stds = None
+
+    def fit(self, X: Union[pd.DataFrame, pd.Series], y: Any = None):
+        """
+        Fit method to determine means and standard deviations over a training set.
+
+        :param <Union[pd.DataFrame, pd.Series]> X: Pandas dataframe or series.
+        :param <Any> y: Placeholder for scikit-learn compatibility.
+
+        :return <PanelStandardScaler>: Fitted PanelStandardScaler object.
+        """
+        # checks
+        if type(X) not in [pd.DataFrame, pd.Series]:
+            raise TypeError("'X' must be a pandas dataframe or series. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe or series.")
+
+        # fit
+        if self.with_mean:
+            self.means = X.mean(axis=0)
+
+        if self.with_std:
+            self.stds = X.std(axis=0)
+
+        return self
+
+    def transform(self, X: Union[pd.DataFrame, pd.Series]):
+        """
+        Transform method to standardise a panel based on the means and standard deviations
+        learnt from a training set (and the fit method).
+
+        :param <Union[pd.DataFrame, pd.Series]> X: Pandas dataframe or series.
+
+        :return <Union[pd.DataFrame, pd.Series]>: Standardised dataframe or series.
+        """
+        # checks
+        if type(X) not in [pd.DataFrame, pd.Series]:
+            raise TypeError("'X' must be a pandas dataframe or series. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe or series.")
+        
+        # transform
+        if self.means:
+            calc = X - self.means 
+        else:
+            calc = X
+
+        if self.stds:
+            calc = calc / self.stds 
+
+        return calc
+    
 if __name__ == "__main__":
     from macrosynergy.management import make_qdf
     import macrosynergy.management as msm
@@ -286,11 +484,11 @@ if __name__ == "__main__":
     X = dfd2.drop(columns=["XR"])
     y = dfd2["XR"]
 
-    selector = MapSelectorTransformer(0.05)
+    selector = MapSelector(0.05)
     selector.fit(X, y)
     print(selector.transform(X).columns)
 
-    selector = LassoSelectorTransformer(0.00001)
+    selector = LassoSelector(0.00001)
     selector.fit(X, y)
     print(selector.transform(X).columns)
 
@@ -298,10 +496,10 @@ if __name__ == "__main__":
     X_train, X_test = X[X.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], X[X.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
     y_train, y_test = y[y.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], y[y.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
 
-    selector = BenchmarkTransformer(neutral="mean", use_signs=True)
+    selector = AvgNormFtrTransformer(neutral="mean", use_signs=True)
     selector.fit(X_train, y_train)
     print(selector.transform(X_test))
 
-    selector = BenchmarkTransformer(neutral="zero")
+    selector = AvgNormFtrTransformer(neutral="zero")
     selector.fit(X_train, y_train)
     print(selector.transform(X_test))

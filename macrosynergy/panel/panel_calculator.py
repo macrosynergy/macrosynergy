@@ -7,13 +7,12 @@ The functionality allows applying mathematical operations on time-series data.
 """
 import numpy as np
 import pandas as pd
-from typing import List
+from typing import List, Tuple
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.utils import drop_nan_series
 import re
 import random
-import warnings
 
 
 def time_series_check(formula: str, index: int):
@@ -29,7 +28,9 @@ def time_series_check(formula: str, index: int):
     :return <Tuple[int, bool]>:
     """
 
-    check = lambda a, b, c: ((a.isupper() or a.isnumeric()) and b == "." and c.islower())
+    check = lambda a, b, c: (
+        (a.isupper() or a.isnumeric()) and b == "." and c.islower()
+    )
 
     f = formula
     length = len(f)
@@ -38,8 +39,6 @@ def time_series_check(formula: str, index: int):
         if check(f[i], f[i + 1], f[i + 2]):
             clause = True
             break
-        else:
-            continue
 
     return i, clause
 
@@ -58,15 +57,40 @@ def xcat_isolator(expression: str, start_index: str, index: int):
 
     op_copy = expression[start_index : index + 1]
 
-    start = 0
-    elem = op_copy[start_index]
-    while not elem.isupper():
-        start += 1
-        elem = op_copy[start]
+    start = next(i for i, elem in enumerate(op_copy) if elem.isupper())
 
-    xcat = op_copy[start : (index + 1)]
+    xcat = op_copy[start : index + 1]
 
-    return xcat, (start_index + start + len(xcat))
+    return xcat, start_index + start + len(xcat)
+
+
+def _get_xcats_used(ops: dict) -> Tuple[List[str], List[str]]:
+    """
+    Collect all categories used in the panel calculation.
+    
+    :param <dict> ops: dictionary of panel calculation formulas.
+
+    :return <Tuple[List[str], List[str]]>: all_xcats_used, singles_used.
+    """
+    xcats_used: List[str] = []
+    singles_used: List[str] = []
+    for op in ops.values():
+        index, clause = time_series_check(formula=op, index=0)
+        start_index = 0
+        if clause:
+            while clause:
+                xcat, end_ = xcat_isolator(op, start_index, index)
+                xcats_used.append(xcat)
+                index, clause = time_series_check(op, index=end_)
+                start_index = end_
+        else:
+            op_list = op.split(" ")
+            xcats_used += [x for x in op_list if re.match("^[A-Z]", x)]
+            singles_used += [s for s in op_list if re.match("^i", s)]
+
+    single_xcats = [x[5:] for x in singles_used]
+    all_xcats_used = xcats_used + single_xcats
+    return all_xcats_used, singles_used
 
 
 def panel_calculator(
@@ -76,7 +100,7 @@ def panel_calculator(
     start: str = None,
     end: str = None,
     blacklist: dict = None,
-):
+) -> pd.DataFrame:
     """
     Calculates new data panels through operations on existing panels.
 
@@ -141,36 +165,18 @@ def panel_calculator(
 
     # C. Check if all required categories are in the dataframe.
 
-    xcats_used = []
-    singles_used = []
-    for op in ops.values():
-        index, clause = time_series_check(formula=op, index=0)
-        start_index = 0
-        if clause:
-            while clause:
-                xcat, end_ = xcat_isolator(op, start_index, index)
-                xcats_used.append(xcat)
-                index, clause = time_series_check(op, index=end_)
-                start_index = end_
-        else:
-            op_list = op.split(" ")
-            xcats_used += [x for x in op_list if re.match("^[A-Z]", x)]
-            singles_used += [s for s in op_list if re.match("^i", s)]
+    all_xcats_used, singles_used = _get_xcats_used(ops)
 
-    single_xcats = [x[5:] for x in singles_used]
-    all_xcats_used = xcats_used + single_xcats
+    new_xcats = list(ops.keys())
+    old_xcats_used = list(set(all_xcats_used) - set(new_xcats))
+    missing = sorted(set(old_xcats_used) - set(df["xcat"].unique()))
 
-    new_xcats: List[str] = list(ops.keys())
-    old_xcats_used: List[str] = list(set(all_xcats_used) - set(new_xcats))
-    missing: List[str] = sorted(set(old_xcats_used) - set(df["xcat"].unique()))
     if len(missing) > 0:
         raise ValueError(f"Missing categories: {missing}.")
 
     if len(singles_used) > 0:
         if new_xcats == all_xcats_used:
-            old_xcats_used: List[str] = new_xcats
-            # to prevent reduce_df from dropping cids
-            # when a cid-xcat pair is missing from the dataframe
+            old_xcats_used = new_xcats
 
     # D. Reduce dataframe with intersection requirement.
 

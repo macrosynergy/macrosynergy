@@ -60,7 +60,7 @@ def panel_significance_probability(
 
     # fit model
     re = MixedLM(y_true, X, groups=groups).fit(reml=False)
-    pval = re.pvalues[1]
+    pval = re.pvalues.iloc[1]
 
     return 1 - pval
 

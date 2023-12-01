@@ -1,6 +1,17 @@
-from .panel_time_series_split import ExpandingKFoldPanelSplit, RollingKFoldPanelSplit, ExpandingIncrementPanelSplit
+from .panel_time_series_split import (
+    ExpandingKFoldPanelSplit,
+    RollingKFoldPanelSplit,
+    ExpandingIncrementPanelSplit,
+    BasePanelSplit,
+)
 from .cv_tools import panel_cv_scores
-from .transformers import LassoSelectorTransformer, MapSelectorTransformer, BenchmarkTransformer
+from .transformers import (
+    LassoSelector,
+    MapSelector,
+    AvgNormFtrTransformer,
+    PanelMinMaxScaler,
+    PanelStandardScaler
+)
 from .metrics import (
     panel_significance_probability,
     sharpe_ratio,
@@ -8,20 +19,32 @@ from .metrics import (
     regression_accuracy,
     regression_balanced_accuracy,
 )
-from .prediction_tools import AdaptiveSignalHandler
+from .signal_optimizer import SignalOptimizer
+
+from .predictors import NaivePredictor
 
 __all__ = [
-    "AdaptiveSignalHandler",
+    # panel_time_series_split
     "ExpandingKFoldPanelSplit",
     "RollingKFoldPanelSplit",
     "ExpandingIncrementPanelSplit",
+    "BasePanelSplit",
+    # cv_tools
     "panel_cv_scores",
-    "LassoSelectorTransformer",
-    "MapSelectorTransformer",
-    "BenchmarkTransformer",
+    # transformers        
+    "LassoSelector",
+    "MapSelector",
+    "PanelMinMaxScaler",
+    "PanelStandardScaler",
+    # metrics
     "panel_significance_probability",
-    "regression_accuracy",
-    "regression_balanced_accuracy",
     "sharpe_ratio",
     "sortino_ratio",
+    "regression_accuracy",
+    "regression_balanced_accuracy",
+    # signal_optimizer
+    "SignalOptimizer",
+    # predictors
+    "NaivePredictor",
 ]
+ 
