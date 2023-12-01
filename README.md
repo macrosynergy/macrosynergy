@@ -207,7 +207,7 @@ basket_1.return_weights()
 basket_1.weight_visualiser(basket_name="GLB_EQUAL")
 ```
 You can also calculate and visualise the following and more with built-in functions.
-1.  [historic volume](./macrosynergy/panel/historic_vol.py)
+1.  [historic volatility](./macrosynergy/panel/historic_vol.py)
 2.  [z-scores](./macrosynergy/panel/make_zn_scores.py)
 3.  [beta values](./macrosynergy/panel/return_beta.py)
 4.  [timeline](./macrosynergy/panel/view_timelines.py) 
@@ -307,11 +307,14 @@ If you find that the package raises an `HTTPConnection`/`HTTPSConnectionPool` er
 You would most likely need to pass your proxy settings to the `JPMaQSDownload` object, as shown in the [Connecting via a proxy server](#connecting-via-a-proxy-server) section.
 If you are accessing DataQuery from an institutional/enterprise network, please contact your IT department to ensure that you have the correct proxy settings.
 
-For organizations using ZScaler - you may have to manually add the ZScaler certificates (copy-pasta) to the `certifi` certificate store (typically called `cacert.pem`). You can find the location of the `certifi` certificate store by running the following in your Python environment:
+For organizations using ZScaler - you may have to manually add the ZScaler certificates to the `certifi` certificate store (typically called `cacert.pem`). You can find the location of the `certifi` certificate store by running the following in your Python environment:
 ```python
 import certifi
 print(certifi.where())
 ```
+Here's a link to [ZScaler's official documentation and FAQs](https://help.zscaler.com/zia/adding-custom-certificate-application-specific-trust-store) on how to add certificates to application specific trust stores.
+
+- https://help.zscaler.com/zia/adding-custom-certificate-application-specific-trust-store
 
 ### A function is not working as expected
 

@@ -303,9 +303,9 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     the intersection.
 
     :param <pd.DataFrame> df: standardised base JPMaQS DataFrame with the following
-        necessary columns: 'cid', 'xcats', 'real_date' and 'value'.
+        necessary columns: 'cid', 'xcat', 'real_date' and 'value'.
     :param <pd.DataFrame> df_add: another standardised JPMaQS DataFrame, with the latest
-        values, to be added with the necessary columns: 'cid', 'xcats', 'real_date', and
+        values, to be added with the necessary columns: 'cid', 'xcat', 'real_date', and
         'value'. Columns that are present in the base DataFrame but not in the appended
         DataFrame will be populated with NaN values.
     :param <bool> xcat_replace: all series belonging to the categories in the added
@@ -316,25 +316,26 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
         or newly defined tickers added.
     """
 
-    cols = ["cid", "xcat", "real_date", "value"]
+    # index_cols = ["cid", "xcat", "real_date"]
     # Consider the other possible metrics that the DataFrame could be defined over
 
     df_cols = set(df.columns)
     df_add_cols = set(df_add.columns)
 
-    error_message = f"The base DataFrame must include the necessary columns: {cols}."
-    assert set(cols).issubset(df_cols), error_message
+    error_message = f"The base DataFrame must be a Quantamental Dataframe."
+    if not isinstance(df, QuantamentalDataFrame):
+        raise TypeError(error_message)
 
-    error_message = f"The added DataFrame must include the necessary columns: {cols}."
-    assert set(cols).issubset(df_add_cols), error_message
-
-    additional_columns = filter(lambda c: c in df.columns, list(df_add.columns))
-    df_error = (
-        f"The appended DataFrame must be defined over a subset of the columns "
-        f"in the returned DataFrame. The undefined column(s): "
-        f"{list(additional_columns)}."
-    )
-    assert df_add_cols.issubset(df_cols), df_error
+    error_message = f"The added DataFrame must be a Quantamental Dataframe."
+    if not isinstance(df_add, QuantamentalDataFrame):
+        raise TypeError(error_message)
+    
+    error_message = ("The two Quantamental DataFrames must share at least "
+                    "four columns including than 'real_date', 'cid', and 'xcat'.")
+    
+    all_cols = df_cols.union(df_add_cols)
+    if all_cols != df_cols and all_cols != df_add_cols:
+        raise ValueError(error_message)
 
     if not xcat_replace:
         df = update_tickers(df, df_add)
@@ -812,3 +813,97 @@ def _map_to_business_day_frequency(freq: str, valid_freqs: List[str] = None) -> 
             f"Frequency must be one of {valid_freqs}, but received {freq}."
         )
     return FREQUENCY_MAP[freq]
+
+
+def years_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
+    """Returns the number of years between two dates."""
+    return end_date.year - start_date.year
+
+
+def quarters_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
+    """Returns the number of quarters between two dates."""
+    return (end_date.year - start_date.year) * 4 + (
+        end_date.quarter - start_date.quarter
+    )
+
+
+def months_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
+    """Returns the number of months between two dates."""
+    return (end_date.year - start_date.year) * 12 + (end_date.month - start_date.month)
+
+
+def weeks_btwn_dates(start_date: pd.Timestamp, end_date: pd.Timestamp) -> int:
+    """Returns the number of business weeks between two dates."""
+    next_monday = start_date + pd.offsets.Week(weekday=0)
+    dif = (end_date - next_monday).days // 7 + 1
+    return dif
+
+
+def get_eops(
+    dates: Optional[Union[pd.DatetimeIndex, pd.Series, Iterable[pd.Timestamp]]] = None,
+    start_date: Optional[Union[str, pd.Timestamp]] = None,
+    end_date: Optional[Union[str, pd.Timestamp]] = None,
+    freq: str = "M",
+) -> pd.Series:
+    """
+    Returns a series of end-of-period dates for a given frequency.
+    Dates can be passed as a series, index, a generic iterable or as a start and end date.
+
+    :param <str> freq: The frequency string. Must be one of "D", "W", "M", "Q", "A".
+    :param <pd.DatetimeIndex | pd.Series | Iterable[pd.Timestamp]> dates: The dates to
+        be used to generate the end-of-period dates. Can be passed as a series, index, a
+        generic iterable or as a start and end date.
+    :param <str | pd.Timestamp> start_date: The start date. Must be passed if dates is
+        not passed.
+    """
+    if (not isinstance(freq, str)) or (freq.upper() not in FREQUENCY_MAP.keys()):
+        raise ValueError(
+            f"Frequency must be one of {list(FREQUENCY_MAP.keys())}, but received {freq}."
+        )
+    freq: str = freq.upper()
+
+    if bool(start_date) != bool(end_date):
+        raise ValueError(
+            "Both `start_date` and `end_date` must be passed when using "
+            "dates as a start and end date."
+        )
+
+    if bool(start_date) and bool(dates):
+        raise ValueError(
+            "Only one of `dates` or `start_date` and `end_date` must be passed."
+        )
+
+    dts: pd.DataFrame = (
+        pd.DataFrame(dates, columns=["real_date"]).apply(pd.to_datetime, axis=1)
+        if dates is not None
+        else pd.Series(pd.bdate_range(start_date, end_date))
+    )
+    if dates is not None:
+        dts = dts[
+            dts["real_date"].isin(
+                pd.bdate_range(start=dts["real_date"].min(), end=dts["real_date"].max())
+            )
+        ]
+
+    min_date: pd.Timestamp = dts["real_date"].min()
+
+    if freq == "M":
+        func = months_btwn_dates
+    elif freq == "W":
+        func = weeks_btwn_dates
+    elif freq == "Q":
+        func = quarters_btwn_dates
+    elif freq == "A":
+        func = years_btwn_dates
+    elif freq == "D":
+        func = lambda x, y: len(pd.bdate_range(x, y)) - 1
+    else:
+        raise ValueError("Frequency parameter must be one of D, M, W, or Q")
+
+    dts["period"] = dts["real_date"].apply(func, args=(min_date,))
+
+    t_indices: pd.Series = dts["period"].shift(-1) != dts["period"]
+
+    t_dates: pd.Series = dts["real_date"].loc[t_indices].reset_index(drop=True)
+
+    return t_dates

@@ -91,7 +91,7 @@ class BasePanelSplit(BaseCrossValidator):
         # A single contiguous range of dates.
         if len(difference) == 0:
             xranges.append(
-                (cs_dates.min(), cs_dates.max() - cs_dates.min() + freq_offset)
+                (cs_dates.min(), cs_dates.max() + freq_offset - cs_dates.min())
             )
             return xranges
 
@@ -103,7 +103,7 @@ class BasePanelSplit(BaseCrossValidator):
                 difference = difference[(difference >= cs_dates.min())]
 
             xranges.append(
-                (cs_dates.min(), cs_dates.max() - cs_dates.min() + freq_offset)
+                (cs_dates.min(), cs_dates.max() + freq_offset - cs_dates.min())
             )
             return xranges
 
@@ -176,12 +176,10 @@ class BasePanelSplit(BaseCrossValidator):
                     Tuple[pd.Timestamp, pd.Timedelta]
                 ] = self._calculate_xranges(cs_test_dates, real_dates, freq_offset)
 
-                if xranges_train:
-                    operations.append(
-                        (cs_idx, idx, xranges_train, "royalblue", "Train")
-                    )
-                if xranges_test:
-                    operations.append((cs_idx, idx, xranges_test, "lightcoral", "Test"))
+                operations.append(
+                    (cs_idx, idx, xranges_train, "royalblue", "Train")
+                )
+                operations.append((cs_idx, idx, xranges_test, "lightcoral", "Test"))
 
         # Calculate the difference between final two dates.
         # This will be added to the x-axis limits to ensure that the final split is visible.
@@ -198,6 +196,12 @@ class BasePanelSplit(BaseCrossValidator):
             ax[cs_idx, idx].set_yticks([0])
             ax[cs_idx, idx].set_yticklabels([cross_sections[cs_idx]])
             ax[cs_idx, idx].tick_params(axis="x", rotation=90)
+
+            # Ensure only the last row has x-axis labels.
+            if cs_idx == len(ax) - 1:
+                ax[cs_idx, idx].tick_params(axis="x", rotation=90)
+            else:
+                ax[cs_idx, idx].tick_params(axis='x', labelbottom=False)
 
             if cs_idx == 0:
                 ax[cs_idx, idx].set_title(f"{split_titles[idx]}")
@@ -588,44 +592,4 @@ if __name__ == "__main__":
     )
     gs.fit(X2, y2)
     print(gs.best_params_)
-
-    # Define the cids
-    cids = ["cid1", "cid2"]
-
-    # Define the dates
-    dates_cid1 = pd.date_range(start="2023-01-01", periods=10, freq="D")
-    dates_cid2 = pd.date_range(
-        start="2023-01-02", periods=9, freq="D"
-    )  # only 9 dates for cid2
-
-    # Create a MultiIndex for each cid with the respective dates
-    multiindex_cid1 = pd.MultiIndex.from_product(
-        [["cid1"], dates_cid1], names=["cid", "real_date"]
-    )
-    multiindex_cid2 = pd.MultiIndex.from_product(
-        [["cid2"], dates_cid2], names=["cid", "real_date"]
-    )
-
-    # Concatenate the MultiIndexes
-    multiindex = multiindex_cid1.append(multiindex_cid2)
-
-    # Initialize a DataFrame with the MultiIndex and columns A and B.
-    # Fill in some example data using random numbers.
-    df = pd.DataFrame(
-        np.random.rand(len(multiindex), 2), index=multiindex, columns=["A", "B"]
-    )
-
-    X2 = df.drop(columns=["B"])
-    y2 = df["B"]
-
-    # splitter = ExpandingIncrementPanelSplit(
-    #     train_intervals=1,
-    #     test_size=2,
-    #     min_periods=1,
-    #     min_cids=2,
-    #     max_periods=12 * 21,
-    # )
-    splitter = ExpandingKFoldPanelSplit(n_splits=4)
-    splits = splitter.split(X2, y2)
-    print(splits)
-    splitter.visualise_splits(X2, y2)
+    
