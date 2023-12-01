@@ -5,3 +5,4 @@ pyyaml >= 6.0
 jupyter-book==0.15.1
 sphinx-autodoc-typehints
 sphinx-remove-toctrees
+sphinx-automodapi
