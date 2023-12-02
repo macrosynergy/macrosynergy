@@ -46,6 +46,7 @@ exclude_patterns = ["*/__init__.py"]
 
 # -- Options for HTML output -------------------------------------------------
 html_theme = "pydata_sphinx_theme"
+# html_theme = "sphinx_book_theme"
 html_theme_options = {
     "github_url": "https://github.com/macrosynergy/macrosynergy",
 }
@@ -62,14 +63,16 @@ add_module_names = False  # Do not prepend module names to members
 
 # -- Extension Settings ------------------------------------------------------
 # Add any additional extension specific settings here
+
+
 nav_order = [
-    "Introduction",
+    "index",
+    "Context",
     "Installation",
-    "Tutorial",
-    "Guide",
-    "API Reference",
-    "FAQ",
-    "Contact",
+    "DataQuery",
+    "Academy",
+    "Contribution Guide",
+    "Definitions",
 ]
 
 
