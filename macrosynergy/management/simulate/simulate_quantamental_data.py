@@ -1,11 +1,6 @@
 """
 Module with functionality for generating mock 
 quantamental data for testing purposes.
-
-::docs::make_qdf::sort_first::
-::docs::make_qdf_black::sort_first::
-::docs::make_test_df::sort_first::
-
 """
 import numpy as np
 import pandas as pd

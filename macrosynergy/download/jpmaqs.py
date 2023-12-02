@@ -1,6 +1,4 @@
 """ JPMaQS Download Interface 
-
-::docs::JPMaQSDownload::sort_first::
 """
 
 import datetime

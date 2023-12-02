@@ -1,9 +1,6 @@
 """
 Module with functions for processing "blacklist" data for cross-sections in a quantamental
 DataFrame.
-
-::docs::make_blacklist::sort_first::
-
 """
 
 import numpy as np

@@ -1,8 +1,6 @@
 """
 Functions used to visualize correlations across categories or cross-sections of
 panels.
-
-::docs::correl_matrix::sort_first::
 """
 import itertools
 import pandas as pd

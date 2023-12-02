@@ -4,8 +4,6 @@ designed to render a facet plot containing any number of subplots.
 Given that the class allows returning a `matplotlib.pyplot.Figure`,
 one can easily add any number of subplots, even the FacetPlot itself:
 effectively allowing for a recursive facet plot.
-
-::docs::FacetPlot::sort_first::
 """
 
 from typing import Any, Dict, List, Optional, Tuple, Union

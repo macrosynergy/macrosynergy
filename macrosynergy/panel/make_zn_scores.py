@@ -1,8 +1,5 @@
 """
 Module for calculating z-scores for a panel around a neutral level ("zn scores").
-
-::docs::make_zn_scores::sort_first::
-
 """
 import numpy as np
 import pandas as pd
