@@ -10,16 +10,8 @@ Contents:
    :maxdepth: 2
    :caption: Contents:
 
-   modules
+   rsts/macrosynergy
 
-   macrosynergy.dataquery/modules
-   macrosynergy.download/modules
-   macrosynergy.learning/modules
-   macrosynergy.management/modules
-   macrosynergy.panel/modules
-   macrosynergy.pnl/modules
-   macrosynergy.signal/modules
-   macrosynergy.visuals/modules
 
 Indices and tables
 ==================

@@ -3,7 +3,8 @@
 # -- Path setup --------------------------------------------------------------
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../../'))
+
+sys.path.insert(0, os.path.abspath("../../"))
 
 # -- Project information -----------------------------------------------------
 project = "Macrosynergy"
@@ -40,18 +41,17 @@ intersphinx_mapping = {
     "seaborn": ("https://seaborn.pydata.org/", None),
 }
 
-templates_path = ['_templates']
+templates_path = ["_templates"]
 exclude_patterns = ["*/__init__.py"]
 
 # -- Options for HTML output -------------------------------------------------
 html_theme = "pydata_sphinx_theme"
 html_theme_options = {
-    "show_toc_level": 5,
-    "use_repository_button": True,
-    "navigation_with_keys": False,
+    "github_url": "https://github.com/macrosynergy/macrosynergy",
 }
 
-html_static_path = ['_static']
+
+html_static_path = ["_static"]
 html_css_files = ["style.css"]
 source_suffix = [".rst", ".ipynb", ".md"]
 
@@ -62,3 +62,17 @@ add_module_names = False  # Do not prepend module names to members
 
 # -- Extension Settings ------------------------------------------------------
 # Add any additional extension specific settings here
+nav_order = [
+    "Introduction",
+    "Installation",
+    "Tutorial",
+    "Guide",
+    "API Reference",
+    "FAQ",
+    "Contact",
+]
+
+
+html_sidebars = {
+    "**": ["sidebar-nav-bs.html"],
+}
