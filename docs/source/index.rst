@@ -1,7 +1,6 @@
-Welcome to MyPackage's Documentation!
-======================================
-
-Introduction text goes here.
+Macrosynergy Package Documentation
+========================================
+**Data Science** | **Tradable Economics** | **Investor Value**
 
 Contents:
 ---------
