@@ -7,10 +7,10 @@ import sys
 sys.path.insert(0, os.path.abspath("../../"))
 
 # -- Project information -----------------------------------------------------
-project = "Macrosynergy"
+project = "Macrosynergy Package"
 copyright = "2023, Macrosynergy"
 author = "Macrosynergy"
-
+title = "Macrosynergy Package Documentation"
 # -- General configuration ---------------------------------------------------
 extensions = [
     "sphinx.ext.autodoc",
@@ -63,6 +63,12 @@ add_module_names = False  # Do not prepend module names to members
 
 # -- Extension Settings ------------------------------------------------------
 # Add any additional extension specific settings here
+# always_document_param_types = True
+# napoleon_numpy_docstring = True
+
+# set documentation title to "Macrosynergy Package Documentation"
+#
+
 
 
 nav_order = [
@@ -77,5 +83,5 @@ nav_order = [
 
 
 html_sidebars = {
-    "**": ["sidebar-nav-bs.html"],
+    "**": ["sidebar-nav-bs"],
 }
