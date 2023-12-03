@@ -7,6 +7,7 @@ Introduction
 
    from macrosynergy import (
        download,
+       learning,
        management,
        panel,
        pnl,
