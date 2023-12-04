@@ -1052,6 +1052,8 @@ class SignalReturnRelations:
         for agg_sigs_elem in agg_sigs:
             if not agg_sigs_elem in self.agg_sigs:
                 raise ValueError(f"{agg_sigs_elem} is not a valid aggregation method")
+        
+        self.sigs = [self.revert_negation(sig) for sig in self.sigs]
 
         xcats = [x for x in xcats if x in self.sigs]
 
@@ -1187,6 +1189,7 @@ class SignalReturnRelations:
             raise ValueError(f"Columns must only contain {rows_values}")
 
         rets = self.rets if isinstance(self.rets, list) else [self.rets]
+        self.sigs = [self.revert_negation(sig) for sig in self.sigs]
         sigs = self.sigs if isinstance(self.sigs, list) else [self.sigs]
 
         sigs_neg = []
