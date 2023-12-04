@@ -1,3 +1,5 @@
+.. _06_definitions:
+
 Common Definitions
 ==================
 

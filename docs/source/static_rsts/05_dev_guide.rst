@@ -1,3 +1,5 @@
+.. _05_dev_guide:
+
 Contribution Guide
 ==================
 

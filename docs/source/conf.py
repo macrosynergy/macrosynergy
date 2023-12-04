@@ -48,7 +48,25 @@ exclude_patterns = ["*/__init__.py"]
 html_theme = "pydata_sphinx_theme"
 # html_theme = "sphinx_book_theme"
 html_theme_options = {
+    "show_toc_level": 0,
     "github_url": "https://github.com/macrosynergy/macrosynergy",
+    "logo": {
+        # "image_light": "assets/MACROSYNERGY_Logo_Primary.png",
+        # "image_dark": "assets/MACROSYNERGY_Logo_White.png",
+    },
+    "header_links_before_dropdown": 0,
+    "favicons": [
+        {
+            "rel": "icon",
+            "sizes": "300x300",
+            "href": "https://macrosynergy.com/wp-content/uploads/2022/10/macrosynergy-logo-favicon-300x300.png",
+        },
+        {
+            "rel": "apple-touch-icon",
+            "sizes": "300x300",
+            "href": "https://macrosynergy.com/wp-content/uploads/2022/10/macrosynergy-logo-favicon-300x300.png",
+        },
+    ],
 }
 
 
@@ -68,18 +86,6 @@ add_module_names = False  # Do not prepend module names to members
 
 # set documentation title to "Macrosynergy Package Documentation"
 #
-
-
-
-nav_order = [
-    "index",
-    "Context",
-    "Installation",
-    "DataQuery",
-    "Academy",
-    "Contribution Guide",
-    "Definitions",
-]
 
 
 html_sidebars = {

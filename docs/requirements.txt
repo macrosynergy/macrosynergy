@@ -6,3 +6,4 @@ jupyter-book
 sphinx-autodoc-typehints
 sphinx-remove-toctrees
 sphinx-automodapi
+sphinx-design

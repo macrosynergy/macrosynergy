@@ -17,6 +17,13 @@ parser.add_argument(
     default=False,
 )
 
+parser.add_argument(
+    "--rebuild",
+    action="store_true",
+    help="Rebuild documentation before generation.",
+    default=False,
+)
+
 # remove rst opt
 parser.add_argument(
     "--remove-rst",
@@ -32,6 +39,7 @@ args = parser.parse_args()
 CLEAN_PREVIOUS = args.clean
 REMOVE_RST = args.remove_rst
 SHOW = args.show
+REBUILD = args.rebuild
 
 #####################
 
@@ -47,7 +55,8 @@ makeclean = makescript + " clean"
 rst_gen = f"sphinx-apidoc -o {OUTPUT_DIR} -fMeT macrosynergy"
 
 # generate rst files
-os.system(rst_gen)
+if REBUILD:
+    os.system(rst_gen)
 
 # copy readme to rst
 # shutil.copy(README, OUTPUT_DIR)

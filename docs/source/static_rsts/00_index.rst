@@ -1,3 +1,5 @@
+.. _00_index:
+
 Introduction
 ============
 

@@ -1,3 +1,5 @@
+.. _03_dataquery:
+
 Downloading JPMaQS Data
 =======================
 
