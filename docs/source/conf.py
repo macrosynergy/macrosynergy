@@ -67,11 +67,24 @@ html_theme_options = {
             "href": "https://macrosynergy.com/wp-content/uploads/2022/10/macrosynergy-logo-favicon-300x300.png",
         },
     ],
+    "icon_links": [
+        {
+            "name": "Twitter",
+            "url": "https://twitter.com/macro_synergy",
+            "icon": "fa-brands fa-twitter",
+        },
+        {
+            "name": "PyPI",
+            "url": "https://pypi.org/project/macrosynergy/",
+            "icon": "fa-custom fa-pypi",
+        },
+    ],
 }
 
 
 html_static_path = ["_static"]
 html_css_files = ["style.css"]
+html_js_files = ["custom-icon.js"]
 source_suffix = [".rst", ".ipynb", ".md"]
 
 # -- Autosummary Settings ----------------------------------------------------
