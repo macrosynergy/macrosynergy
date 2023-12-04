@@ -55,7 +55,7 @@ trading or investment value of quantamental strategies.
    
 
 More from Macrosynergy:
-...............
+.......................
 .. card:: Macrosynergy Research
     :link: https://research.macrosynergy.com/
 
@@ -74,11 +74,3 @@ Indices and tables
 
 * :ref:`genindex`
 * :ref:`modindex`
-
-
-.. toctree::
-   :hidden:
-   
-   gen_rsts/macrosynergy
-   gen_rsts/README
-
