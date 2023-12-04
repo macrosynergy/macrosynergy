@@ -7,7 +7,7 @@ Submodules
 ----------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 4
 
    ../gen_rsts/macrosynergy.download.dataquery
    ../gen_rsts/macrosynergy.download.exceptions
