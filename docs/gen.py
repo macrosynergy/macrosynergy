@@ -32,6 +32,13 @@ parser.add_argument(
     default=False,
 )
 
+parser.add_argument(
+    "--no-make",
+    action="store_true",
+    help="Do not run make html after generation.",
+    default=False,
+)
+
 OUTPUT_DIR = "./docs/source/gen_rsts"
 README = "./README.md"
 args = parser.parse_args()
@@ -40,6 +47,7 @@ CLEAN_PREVIOUS = args.clean
 REMOVE_RST = args.remove_rst
 SHOW = args.show
 REBUILD = args.rebuild
+NO_MAKE = args.no_make
 
 #####################
 
@@ -55,11 +63,13 @@ makeclean = makescript + " clean"
 rst_gen = f"sphinx-apidoc -o {OUTPUT_DIR} -fMeT macrosynergy"
 
 # generate rst files
-if REBUILD:
+# if there are any rsts in the output dir, then we assume that the rst files are
+# already generated and we don't need to do it again
+if len(os.listdir(OUTPUT_DIR)) == 0 or REBUILD:
     os.system(rst_gen)
 
 # copy readme to rst
-# shutil.copy(README, OUTPUT_DIR)
+shutil.copy(README, OUTPUT_DIR)
 
 # get current directory
 current_dir = os.getcwd()
@@ -72,7 +82,8 @@ if CLEAN_PREVIOUS:
     os.system(makeclean)
 
 # make html
-os.system(makehtml)
+if not NO_MAKE:
+    os.system(makehtml)
 
 # change directory back to original
 os.chdir(current_dir)
