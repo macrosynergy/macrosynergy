@@ -21,7 +21,7 @@ parser.add_argument(
     "--rebuild",
     action="store_true",
     help="Rebuild documentation before generation.",
-    default=False,
+    default=True,
 )
 
 # remove rst opt
