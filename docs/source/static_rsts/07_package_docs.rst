@@ -78,17 +78,6 @@ Subpackages
 
       Downloading data from JP Morgan DataQuery.
 
-.. grid:: 1
-
-   .. grid-item-card:: Package README (GitHub)
-      :link: https://github.com/macrosynergy/macrosynergy/blob/develop/README.md
-
-      The README file for the package.
-
-
-
-      
-
 Index
 =====
 
