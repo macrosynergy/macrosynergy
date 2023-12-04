@@ -181,7 +181,7 @@ class SignalReturnRelations:
         ]
 
         self.rets = rets
-        self.freqs = freqs
+        self.freqs = list(set(freqs)) # Remove duplicate values from freqs
 
         if not isinstance(cosp, bool):
             raise TypeError(f"<bool> object expected and not {type(cosp)}.")
