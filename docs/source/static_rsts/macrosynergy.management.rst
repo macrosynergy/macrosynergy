@@ -1,3 +1,5 @@
+.. _macrosynergy.management:
+
 macrosynergy.management package
 ===============================
 

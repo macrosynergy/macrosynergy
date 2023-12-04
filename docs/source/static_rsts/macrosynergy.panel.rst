@@ -1,3 +1,5 @@
+.. _macrosynergy.panel:
+
 macrosynergy.panel package
 ==========================
 

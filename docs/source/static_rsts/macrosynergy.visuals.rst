@@ -1,3 +1,5 @@
+.. _macrosynergy.visuals:
+
 macrosynergy.visuals package
 ============================
 

@@ -1,3 +1,5 @@
+.. _macrosynergy.signal:
+
 macrosynergy.signal package
 ===========================
 

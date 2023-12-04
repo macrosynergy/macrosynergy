@@ -1,4 +1,4 @@
-.. _learning:
+.. _macrosynergy.learning:
 
 macrosynergy.learning package
 =============================
