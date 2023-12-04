@@ -41,14 +41,16 @@ trading or investment value of quantamental strategies.
 
 .. grid:: 3
 
-   .. grid-item-card:: Macrosynergy Academy
-      :link: https://academy.macrosynergy.com
+   .. grid-item-card:: Common Definitions
+      :link: 06_definitions
+      :link-type: ref
 
    .. grid-item-card:: User Guide (Jupyter Notebook)
       :link: https://academy.macrosynergy.com/academy/Introductions/Introduction%20to%20Macrosynergy%20package/_build/html/Introduction%20to%20Macrosynergy%20package.php
 
    .. grid-item-card:: Examples and Tutorials
       :link: https://github.com/macrosynergy/macrosynergy/tree/feature/docs_userguide/docs/examples
+
 
 
 More from Macrosynergy:
@@ -73,9 +75,3 @@ More from Macrosynergy:
 
 
 
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
