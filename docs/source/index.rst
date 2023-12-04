@@ -45,11 +45,13 @@ trading or investment value of quantamental strategies.
       :link: 06_definitions
       :link-type: ref
 
-   .. grid-item-card:: User Guide (Jupyter Notebook)
-      :link: https://academy.macrosynergy.com/academy/Introductions/Introduction%20to%20Macrosynergy%20package/_build/html/Introduction%20to%20Macrosynergy%20package.php
+   .. grid-item-card:: Contribution Guide
+      :link: 05_dev_guide
+      :link-type: ref
 
-   .. grid-item-card:: Examples and Tutorials
-      :link: https://github.com/macrosynergy/macrosynergy/tree/feature/docs_userguide/docs/examples
+   .. grid-item-card:: FAQs and Troubleshooting
+      :link: 08_faqs
+      :link-type: ref
 
 
 
