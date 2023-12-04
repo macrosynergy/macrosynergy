@@ -44,7 +44,7 @@ trading or investment value of quantamental strategies.
    .. grid-item-card:: Macrosynergy Academy
       :link: https://academy.macrosynergy.com
 
-   .. grid-item-card:: User Guide as a Jupyter Notebook
+   .. grid-item-card:: User Guide (Jupyter Notebook)
       :link: https://academy.macrosynergy.com/academy/Introductions/Introduction%20to%20Macrosynergy%20package/_build/html/Introduction%20to%20Macrosynergy%20package.php
 
    .. grid-item-card:: Examples and Tutorials
