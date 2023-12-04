@@ -1,3 +1,5 @@
+:html_theme.sidebar_primary.remove: False
+
 .. _07_package_docs:
 
 Macrosynergy Package Documentation
@@ -10,6 +12,10 @@ JPMaQS provides quantitative-fundamental (quantamental) and market data in simpl
 in accordance with the information state of markets. 
 The Macrosynergy package consists of six sub-packages:
 
+**download**: interface for downloading data from JP Morgan DataQuery, with main module jpmaqs.py.
+
+**learning**: creation of machine learning solutions with macro quantamental data.
+
 **management**: simulates, analyses and reshapes standard quantamental dataframes.
 
 **panel**: analyses and visualizes panels of quantamental data.
@@ -18,9 +24,19 @@ The Macrosynergy package consists of six sub-packages:
 
 **pnl**: constructs portfolios based on signals, applies risk management and analyses realistic PnLs.
 
-**download**: interface for downloading data from JP Morgan DataQuery, with main module jpmaqs.py.
-
 **dataquery**: [DEPRECATED] interface for downloading data from JP Morgan DataQuery, with main module api.py.
+
+
+.. toctree::
+   :maxdepth: 5
+   :hidden:
+
+   management
+   panel
+   signal
+   pnl
+   download
+   dataquery
 
 
 .. grid:: 4
@@ -29,33 +45,65 @@ The Macrosynergy package consists of six sub-packages:
       :link: macrosynergy.download
       :link-type: ref
 
-      Downloading data from JP Morgan DataQuery
+      Downloading data from JP Morgan DataQuery.
 
    .. grid-item-card:: learning
       :link: macrosynergy.learning
       :link-type: ref
       
-      Creating ML solutions with quantamental data
+      Creating ML solutions with quantamental data.
 
    .. grid-item-card:: management
       :link: macrosynergy.management
       :link-type: ref
 
-      Managing, reshaping, and analyzing quantamental data
+      Managing, reshaping, and analyzing quantamental data.
 
-   .. grid-item-card:: User Guide as a Jupyter Notebook
-      :link: https://academy.macrosynergy.com/academy/Introductions/Introduction%20to%20Macrosynergy%20package/_build/html/Introduction%20to%20Macrosynergy%20package.php
+   .. grid-item-card:: panel
+      :link: macrosynergy.panel
+      :link-type: ref
+
+      Panel methods for quantamental data.
 
 .. grid:: 4
 
-   .. grid-item-card:: Macrosynergy Academy
-      :link: https://academy.macrosynergy.com
+   .. grid-item-card:: pnl
+      :link: macrosynergy.pnl
+      :link-type: ref
+   
+      Constructing portfolios based on signals and analyzing PnLs.
+
+   .. grid-item-card:: signal
+      :link: macrosynergy.signal
+      :link-type: ref
+
+      Transforming quantamental indicators into trading signals.
+
+   .. grid-item-card:: visuals
+      :link: macrosynergy.visuals
+      :link-type: ref
+
+      Methods for visualizing quantamental data.
+
+   .. grid-item-card:: dataquery [DEPRECATED]
+      :link: macrosynergy.dataquery
+      :link-type: ref
+
+      Downloading data from JP Morgan DataQuery.
+
+.. grid:: 1
+
+   .. grid-item-card:: Package README (GitHub)
+      :link: https://github.com/macrosynergy/macrosynergy/blob/develop/README.md
+
+      The README file for the package.
 
 
-   .. grid-item-card:: Examples and Tutorials
+
       
 
-   .. grid-item-card:: Block 7
-      Content for block 7.
+Module Index
+============
 
-   
+If you are looking for information on a specific function, class or method,
+skip directly to the :ref:`modindex`.
