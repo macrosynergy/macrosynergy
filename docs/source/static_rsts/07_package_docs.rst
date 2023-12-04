@@ -10,22 +10,9 @@ The Macrosynergy package supports financial market research and the development 
 strategies based on formats and conventions of the J.P. Morgan Macrosynergy Quantamental System (JPMaQS).
 JPMaQS provides quantitative-fundamental (quantamental) and market data in simple daily formats
 in accordance with the information state of markets. 
-The Macrosynergy package consists of six sub-packages:
 
-**download**: interface for downloading data from JP Morgan DataQuery, with main module jpmaqs.py.
-
-**learning**: creation of machine learning solutions with macro quantamental data.
-
-**management**: simulates, analyses and reshapes standard quantamental dataframes.
-
-**panel**: analyses and visualizes panels of quantamental data.
-
-**signal**: transforms quantamental indicators into trading signals and does naive analysis.
-
-**pnl**: constructs portfolios based on signals, applies risk management and analyses realistic PnLs.
-
-**dataquery**: [DEPRECATED] interface for downloading data from JP Morgan DataQuery, with main module api.py.
-
+Subpackages
+-----------
 
 .. toctree::
    :maxdepth: 5
@@ -102,8 +89,11 @@ The Macrosynergy package consists of six sub-packages:
 
       
 
-Module Index
-============
+Index
+=====
 
 If you are looking for information on a specific function, class or method,
-skip directly to the :ref:`modindex`.
+skip directly to the module/package indices: 
+
+* :ref:`modindex`
+* :ref:`genindex`
