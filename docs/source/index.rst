@@ -33,10 +33,9 @@ trading or investment value of quantamental strategies.
       :link: 02_installation
       :link-type: ref
 
-   .. grid-item-card:: Block 4
-      Content for block 4.
-
-
+   .. grid-item-card:: Package Documentation
+      :link: 07_package_docs
+      :link-type: ref
 
    .. grid-item-card:: User Guide as a Jupyter Notebook
       :link: https://academy.macrosynergy.com/academy/Introductions/Introduction%20to%20Macrosynergy%20package/_build/html/Introduction%20to%20Macrosynergy%20package.php
@@ -55,40 +54,30 @@ trading or investment value of quantamental strategies.
 
    
 
-.. _cards-clickable:
-
-Cards Clickable
+More from Macrosynergy:
 ...............
-.. card:: Clickable Card (external)
-    :link: https://example.com
+.. card:: Macrosynergy Research
+    :link: https://research.macrosynergy.com/
 
-    The entire card can be clicked to navigate to https://example.com.
+    Macrosynergy Research (formerly Systemic Risk and Systematic Value) 
+    is a free educational site dedicated to responsible macro trading strategies. 
 
-.. card:: Clickable Card (internal)
-    :link: 00_index
-    :link-type: ref
+.. card:: Macrosynergy Academy
+    :link: https://academy.macrosynergy.com/
 
-    The entire card can be clicked to navigate to the ``cards`` reference target.
+    Macrosynergy's Academy explains all the basics and provides helpful resources 
+    to produce strategies and backtests quickly and cost-efficiently.
 
-
-
-Contents:
----------
-
-.. toctree::
-   :maxdepth: 1
-
-   static_rsts/00_index
-   static_rsts/01_context
-   static_rsts/02_installation
-   static_rsts/03_dataquery
-   static_rsts/04_academy
-   static_rsts/05_dev_guide
-   static_rsts/06_definitions
-   gen_rsts/macrosynergy
 
 Indices and tables
 ==================
 
 * :ref:`genindex`
 * :ref:`modindex`
+
+
+.. toctree::
+   :hidden:
+   gen_rsts/macrosynergy
+   gen_rsts/README
+
