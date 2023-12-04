@@ -78,6 +78,7 @@ Indices and tables
 
 .. toctree::
    :hidden:
+   
    gen_rsts/macrosynergy
    gen_rsts/README
 
