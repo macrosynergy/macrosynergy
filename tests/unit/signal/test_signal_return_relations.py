@@ -721,7 +721,7 @@ class TestAll(unittest.TestCase):
             self.fail(f"correlation_bars raised {e} unexpectedly")
 
         try:
-            srr.accuracy_bars(sig="XR")
+            srr.accuracy_bars(sig="CRY")
         except Exception as e:
             self.fail(f"accuracy_bars raised {e} unexpectedly")
 
