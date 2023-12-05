@@ -458,7 +458,7 @@ class TestAll(unittest.TestCase):
             blacklist=self.blacklist,
         )
 
-        df_sigs = srr.__rival_sigs__()
+        df_sigs = srr.__rival_sigs__(ret="XR")
 
         # Firstly, confirm that the index consists of only the primary and rival signals.
         self.assertEqual(list(df_sigs.index), [primary_signal] + rival_signals)
@@ -717,6 +717,21 @@ class TestAll(unittest.TestCase):
 
         try:
             srr.correlation_bars()
+        except Exception as e:
+            self.fail(f"correlation_bars raised {e} unexpectedly")
+
+        try:
+            srr.correlation_bars(sig="CRY")
+        except Exception as e:
+            self.fail(f"correlation_bars raised {e} unexpectedly")
+
+        try:
+            srr.correlation_bars(ret="XR")
+        except Exception as e:
+            self.fail(f"correlation_bars raised {e} unexpectedly")
+
+        try:
+            srr.correlation_bars(ret="XR", sig="CRY")
         except Exception as e:
             self.fail(f"correlation_bars raised {e} unexpectedly")
 
