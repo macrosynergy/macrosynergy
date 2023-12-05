@@ -2,59 +2,69 @@ import os
 import shutil
 import argparse
 
-parser = argparse.ArgumentParser(description="Generate documentation.")
-parser.add_argument(
-    "--show",
-    action="store_true",
-    help="Show documentation in browser after generation.",
-    default=False,
-)
 
-OUTPUT_DIR = "./docs/source/gen_rsts"
-README = "./README.md"
-args = parser.parse_args()
-
-SHOW = args.show
-
-#####################
-
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-# make command for windows or linux
-makescript = "make" + (".bat" if os.name == "nt" else "")
-makehtml = makescript + " html"
-makeclean = makescript + " clean"
+def generate_rsts(output_dir: str, package: str = "macrosynergy"):
+    """
+    Calls `sphinx-apidoc` to generate rst files for all modules in `package`.
+    """
+    rst_gen = f"sphinx-apidoc -o {output_dir} -fMeT {package}"
+    os.system(rst_gen)
 
 
-# command to generate rst files
-rst_gen = f"sphinx-apidoc -o {OUTPUT_DIR} -fMeT macrosynergy"
+def copy_readme(output_dir: str, readme: str):
+    """
+    Copies README.md to `output_dir`.
+    """
+    shutil.copy(readme, output_dir)
 
-os.system(rst_gen)
 
-# copy readme to rst
-shutil.copy(README, OUTPUT_DIR)
+def make_docs(docs_dir: str = "./docs", show: bool = False):
+    """
+    Calls `make html` in `docs_dir` (makefile from sphinx-quickstart).
+    """
+    makescript = "make" + (".bat" if os.name == "nt" else "")
+    makehtml = makescript + " html"
+    makeclean = makescript + " clean"
+    current_dir: str = os.getcwd()
+    os.chdir(docs_dir)
+    os.system(makeclean)
+    os.system(makehtml)
+    os.chdir(current_dir)
+    print(f"Documentation generated successfully.")
+    print(
+        "Paste the following path into your browser to view:\n\t\t "
+        f"file:///{os.path.abspath('docs/build/html/index.html')}"
+    )
 
-# get current directory
-current_dir = os.getcwd()
+    if show:
+        os.system(f"start docs/build/html/index.html")
 
-# change directory to docs
-os.chdir("./docs")
 
-# clean docs
-os.system(makeclean)
-# make html
-os.system(makehtml)
+def main():
+    """
+    Complete build sequence.
+    """
+    parser = argparse.ArgumentParser(description="Generate documentation.")
+    parser.add_argument(
+        "--show",
+        action="store_true",
+        help="Show documentation in browser after generation.",
+        default=False,
+    )
+    args = parser.parse_args()
 
-# change directory back to original
-os.chdir(current_dir)
+    SHOW = args.show
+    OUTPUT_DIR = "./docs/source/gen_rsts"
+    README = "./README.md"
 
-# print success message with path to index.html
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-print(f"Documentation generated successfully.")
-print(
-    "Paste the following path into your browser to view:\n"
-    f"\t\t file:///{os.path.abspath('docs/build/html/index.html')}"
-)
+    generate_rsts(output_dir=OUTPUT_DIR)
 
-if SHOW:
-    os.system(f"start docs/build/html/index.html")
+    copy_readme(output_dir=OUTPUT_DIR, readme=README)
+
+    make_docs(show=SHOW)
+
+
+if __name__ == "__main__":
+    main()
