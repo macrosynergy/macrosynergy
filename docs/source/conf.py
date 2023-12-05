@@ -51,10 +51,11 @@ html_theme_options = {
     "show_toc_level": 1,
     "github_url": "https://github.com/macrosynergy/macrosynergy",
     "logo": {
-        # "image_light": "assets/MACROSYNERGY_Logo_Primary.png",
-        # "image_dark": "assets/MACROSYNERGY_Logo_White.png",
+        "image_light": "_static/MACROSYNERGY_Logo_Primary.png",
+        "image_dark": "_static/MACROSYNERGY_Logo_White.png",
+        "link": "https://macrosynergy.com/",
     },
-    "header_links_before_dropdown": 0,
+    # "header_links_before_dropdown": 0,
     "favicons": [
         {
             "rel": "icon",
