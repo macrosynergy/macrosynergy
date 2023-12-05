@@ -379,6 +379,9 @@ class SignalReturnRelations:
 
     def accuracy_bars(
         self,
+        ret: str = None,
+        sig: str = None,
+        freq: str = None,
         type: str = "cross_section",
         title: str = None,
         title_fontsize: int = 16,
@@ -401,13 +404,37 @@ class SignalReturnRelations:
 
         assert type in ["cross_section", "years", "signals"]
 
+        if freq is None:
+            freq = self.freqs[0]
 
-        if type == "cross_section":
-            df_xs = self.df_cs
-        elif type == "years":
-            df_xs = self.df_ys
-        else:
-            df_xs = self.df_sigs
+        if ret is None and sig is None:
+            ret = self.rets[0]
+            sig = self.sigs[0]
+            if type == "cross_section":
+                df_xs = self.df_cs
+            elif type == "years":
+                df_xs = self.df_ys
+            else:
+                df_xs = self.df_sigs
+        else: 
+            if ret is None:
+                ret = self.rets[0]
+            if sig is None:
+                sig = self.sigs[0]
+            self.df = self.original_df.copy()
+            self.manipulate_df(
+                xcat=[sig, ret],
+                freq=freq,
+                agg_sig=self.agg_sigs[0],
+                sig=sig,
+            )
+            sig = self.new_sig[0]
+            if type == "cross_section":
+                df_xs = self.__output_table__(cs_type="cids", ret=ret, sig=sig)
+            elif type == "years":
+                df_xs = self.__output_table__(cs_type="years", ret=ret, sig=sig)
+            else: 
+                df_xs = self.__rival_sigs__(ret)
 
         dfx = df_xs[~df_xs.index.isin(["PosRatio"])]
 
