@@ -76,4 +76,11 @@ More from Macrosynergy:
    between purely quantitative and fundamental trading styles.
 
 
+.. toctree::
+   :hidden:
+   :maxdepth: 2
 
+   index
+   static_rsts/01_context
+   static_rsts/07_package_docs
+   static_rsts/02_installation
