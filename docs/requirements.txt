@@ -1,4 +1,6 @@
-sphinx-autodoc-typehints
-sphinx-remove-toctrees
-sphinx-automodapi
-sphinx-design
+sphinx-autodoc-typehints==1.19.1
+sphinx-remove-toctrees==0.0.3
+sphinx-automodapi==0.16.0
+sphinx_design==0.3.0
+pydata-sphinx-theme==0.14.1
+Sphinx==7.2.6
