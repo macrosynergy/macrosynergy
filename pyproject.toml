@@ -69,11 +69,12 @@ notebook = [
 format = ["black>=22.1.0"]
 
 docs = [
-  "mdformat-gfm>=0.3.5",
-  "mdformat-frontmatter>=2.0.1",
-  "mdformat-footnote>=0.1.1",
-  "PyYAML>=6.0",
-  "jupyter-book==0.15.1",
+  "sphinx-autodoc-typehints==1.19.1",
+  "sphinx-remove-toctrees==0.0.3",
+  "sphinx-automodapi==0.16.0",
+  "sphinx_design==0.3.0",
+  "pydata-sphinx-theme==0.14.1",
+  "Sphinx==7.2.6",
 ]
 
 all = [
@@ -85,11 +86,12 @@ all = [
   "ipykernel>=6.4.1",
   "jupyterlab>=3.1.12",
   "black>=22.1.0",
-  "mdformat-gfm>=0.3.5",
-  "mdformat-frontmatter>=2.0.1",
-  "mdformat-footnote>=0.1.1",
-  "PyYAML>=6.0",
-  "jupyter-book==0.15.1",
+  "sphinx-autodoc-typehints==1.19.1",
+  "sphinx-remove-toctrees==0.0.3",
+  "sphinx-automodapi==0.16.0",
+  "sphinx_design==0.3.0",
+  "pydata-sphinx-theme==0.14.1",
+  "Sphinx==7.2.6",
   "pytest>=7.0.0",
   "pytest-cov>3.0.0",
   "coverage>=6.0.0",
@@ -143,5 +145,5 @@ exclude_also = [
   "if __name__ == .__main__.:",
   "if 0:",
   "if False:",
-  "if __name__ == __main__:"
-  ]
+  "if __name__ == __main__:",
+]
