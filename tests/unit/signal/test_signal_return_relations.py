@@ -721,9 +721,19 @@ class TestAll(unittest.TestCase):
             self.fail(f"correlation_bars raised {e} unexpectedly")
 
         try:
+            srr.accuracy_bars(sig="XR")
+        except Exception as e:
+            self.fail(f"accuracy_bars raised {e} unexpectedly")
+
+        try:
             srr.correlation_bars(sig="CRY")
         except Exception as e:
             self.fail(f"correlation_bars raised {e} unexpectedly")
+
+        try:
+            srr.accuracy_bars(ret="XR")
+        except Exception as e:
+            self.fail(f"accuracy_bars raised {e} unexpectedly")
 
         try:
             srr.correlation_bars(ret="XR")
@@ -731,7 +741,31 @@ class TestAll(unittest.TestCase):
             self.fail(f"correlation_bars raised {e} unexpectedly")
 
         try:
+            srr.accuracy_bars(ret="XR", sig="CRY")
+        except Exception as e:
+            self.fail(f"accuracy_bars raised {e} unexpectedly")
+
+        try:
             srr.correlation_bars(ret="XR", sig="CRY")
+        except Exception as e:
+            self.fail(f"correlation_bars raised {e} unexpectedly")
+
+        srr = SignalReturnRelations(
+            self.dfd,
+            ret=["XR", "GROWTH"],
+            sig=["CRY", "INFL"],
+            sig_neg=False,
+            freq="M",
+            blacklist=self.blacklist,
+        )
+
+        try:
+            srr.accuracy_bars(ret="GROWTH", sig="INFL")
+        except Exception as e:
+            self.fail(f"accuracy_bars raised {e} unexpectedly")
+
+        try:
+            srr.correlation_bars(ret="GROWTH", sig="INFL")
         except Exception as e:
             self.fail(f"correlation_bars raised {e} unexpectedly")
 
