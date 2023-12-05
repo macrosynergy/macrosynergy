@@ -1,3 +1,5 @@
+.. _08_faqs:
+
 FAQs and Troubleshooting
 ========================
 
