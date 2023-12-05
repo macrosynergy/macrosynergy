@@ -720,6 +720,21 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"correlation_bars raised {e} unexpectedly")
 
+        try:
+            srr.correlation_bars(sig="CRY")
+        except Exception as e:
+            self.fail(f"correlation_bars raised {e} unexpectedly")
+
+        try:
+            srr.correlation_bars(ret="XR")
+        except Exception as e:
+            self.fail(f"correlation_bars raised {e} unexpectedly")
+
+        try:
+            srr.correlation_bars(ret="XR", sig="CRY")
+        except Exception as e:
+            self.fail(f"correlation_bars raised {e} unexpectedly")
+
         plt.close("all")
         matplotlib.use(mpl_backend)
         patch.stopall()
