@@ -467,6 +467,8 @@ class SignalReturnRelations:
         """
         Plot correlation coefficients and significance.
 
+        :param <str> ret: return category. Default is the first return category.
+        :param <str> sig: signal category. Default is the first signal category.
         :param <str> type: type of segment over which bars are drawn. Either
             "cross_section" (default), "years" or "signals".
         :param <str> title: chart header. Default will be applied if none is chosen.
@@ -492,6 +494,10 @@ class SignalReturnRelations:
             else:
                 df_xs = self.df_sigs
         else: 
+            if ret is None:
+                ret = self.rets[0]
+            if sig is None:
+                sig = self.sigs[0]
             self.df = self.original_df.copy()
             self.manipulate_df(
                 xcat=[sig, ret],
