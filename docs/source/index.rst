@@ -25,12 +25,12 @@ trading or investment value of quantamental strategies.
 
 .. grid:: 3
 
-   .. grid-item-card:: Context
-      :link: 00_index
+   .. grid-item-card:: About Macrosynergy
+      :link: 01_about
       :link-type: ref
 
    .. grid-item-card:: Getting Started
-      :link: 02_installation
+      :link: 02_getting_started
       :link-type: ref
 
    .. grid-item-card:: Package Documentation
@@ -60,8 +60,8 @@ More from Macrosynergy:
 .. card:: Macrosynergy Research
     :link: https://research.macrosynergy.com/
 
-    Macrosynergy Research (formerly Systemic Risk and Systematic Value) 
-    is a free educational site dedicated to responsible macro trading strategies. 
+    Macrosynergy Research is a free educational site dedicated to responsible 
+    macro trading strategies. 
 
 .. card:: Macrosynergy Academy
     :link: https://academy.macrosynergy.com/
@@ -81,7 +81,7 @@ More from Macrosynergy:
    :maxdepth: 2
 
    index
-   static_rsts/01_context
-   static_rsts/02_installation
+   static_rsts/01_about
+   static_rsts/02_getting_started
    static_rsts/07_package_docs
-   static_rsts/release_notes
+   gen_rsts/release_notes.md
