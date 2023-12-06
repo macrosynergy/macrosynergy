@@ -19,16 +19,16 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
-    # "matplotlib.sphinxext.plot_directive",
     "sphinx_autodoc_typehints",
     "sphinx_remove_toctrees",
     "sphinx_copybutton",
     "sphinx_design",
+    "sphinx_changelog",
     "myst_parser",
 ]
 
 autodoc_member_order = "bysource"
-numpydoc_show_class_members = False
+numpydoc_show_class_members = True
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3/", None),
@@ -48,12 +48,12 @@ exclude_patterns = ["*/__init__.py"]
 html_theme = "pydata_sphinx_theme"
 # html_theme = "sphinx_book_theme"
 html_theme_options = {
-    "show_toc_level": 1,
+    "show_toc_level": 2,
     "github_url": "https://github.com/macrosynergy/macrosynergy",
     "logo": {
         "image_light": "_static/MACROSYNERGY_Logo_Primary.png",
         "image_dark": "_static/MACROSYNERGY_Logo_White.png",
-        "link": "https://macrosynergy.com/",
+        # "link": "https://macrosynergy.com/",
     },
     # "header_links_before_dropdown": 0,
     "favicons": [
@@ -95,7 +95,7 @@ add_module_names = False  # Do not prepend module names to members
 
 # -- Extension Settings ------------------------------------------------------
 # Add any additional extension specific settings here
-# always_document_param_types = True
+always_document_param_types = True
 # napoleon_numpy_docstring = True
 
 # set documentation title to "Macrosynergy Package Documentation"

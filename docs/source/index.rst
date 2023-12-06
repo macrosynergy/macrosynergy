@@ -82,5 +82,6 @@ More from Macrosynergy:
 
    index
    static_rsts/01_context
-   static_rsts/07_package_docs
    static_rsts/02_installation
+   static_rsts/07_package_docs
+   static_rsts/release_notes

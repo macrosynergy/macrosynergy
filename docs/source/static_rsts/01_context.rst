@@ -23,8 +23,6 @@ strategies.
 Links to Macrosynergy Website and associated pages
 --------------------------------------------------
 
-- `Python 3 documentation <https://docs.python.org/3/>`_
-- `NumPy documentation <https://numpy.org/doc/stable/reference/>`_
 - `Systematic-Risk, Systematic Value. Quantitative Finance Research
   Journal by Macrosynergy's Ralph Sueppel <https://research.macrosynergy.com/>`_
 - `Macrosynergy's website <https://www.macrosynergy.com>`_

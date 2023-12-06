@@ -2,7 +2,7 @@
 
 .. _07_package_docs:
 
-Macrosynergy Package Documentation
+API Reference
 ===================================
 
 
@@ -20,6 +20,7 @@ Subpackages
 
    management
    panel
+   learning
    signal
    pnl
    download
