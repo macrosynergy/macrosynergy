@@ -181,7 +181,7 @@ class SignalReturnRelations:
         ]
 
         self.rets = rets
-        self.freqs = freqs
+        self.freqs = list(set(freqs)) # Remove duplicate values from freqs
 
         if not isinstance(cosp, bool):
             raise TypeError(f"<bool> object expected and not {type(cosp)}.")
@@ -203,6 +203,7 @@ class SignalReturnRelations:
         self.xcats = list(df["xcat"].unique())
         self.df = df
         self.original_df = df.copy()
+        self.rival_sigs = rival_sigs
 
         self.df = df.copy()
 
@@ -289,7 +290,7 @@ class SignalReturnRelations:
         )
 
         if len(self.signals) > 1:
-            self.df_sigs = self.__rival_sigs__()
+            self.df_sigs = self.__rival_sigs__(self.rets[0])
 
         self.sigs[0] = self.new_sig[0]
 
@@ -300,15 +301,13 @@ class SignalReturnRelations:
             cs_type="years", ret=self.rets[0], sig=self.sigs[0]
         )
 
-    def __rival_sigs__(self):
+    def __rival_sigs__(self, ret):
         """
         Produces the panel-level table for the additional signals.
         """
 
         df_out = pd.DataFrame(index=self.signals, columns=self.metrics)
         df = self.df
-
-        ret: str = self.rets[0]
 
         for s in self.signals:
             # Entire panel will be passed in.
@@ -380,6 +379,9 @@ class SignalReturnRelations:
 
     def accuracy_bars(
         self,
+        ret: str = None,
+        sig: str = None,
+        freq: str = None,
         type: str = "cross_section",
         title: str = None,
         title_fontsize: int = 16,
@@ -402,12 +404,37 @@ class SignalReturnRelations:
 
         assert type in ["cross_section", "years", "signals"]
 
-        if type == "cross_section":
-            df_xs = self.df_cs
-        elif type == "years":
-            df_xs = self.df_ys
-        else:
-            df_xs = self.df_sigs
+        if freq is None:
+            freq = self.freqs[0]
+
+        if ret is None and sig is None:
+            ret = self.rets[0]
+            sig = self.sigs[0]
+            if type == "cross_section":
+                df_xs = self.df_cs
+            elif type == "years":
+                df_xs = self.df_ys
+            else:
+                df_xs = self.df_sigs
+        else: 
+            if ret is None:
+                ret = self.rets[0]
+            if sig is None:
+                sig = self.sigs[0]
+            self.df = self.original_df.copy()
+            self.manipulate_df(
+                xcat=[sig, ret],
+                freq=freq,
+                agg_sig=self.agg_sigs[0],
+                sig=sig,
+            )
+            sig = self.new_sig[0]
+            if type == "cross_section":
+                df_xs = self.__output_table__(cs_type="cids", ret=ret, sig=sig)
+            elif type == "years":
+                df_xs = self.__output_table__(cs_type="years", ret=ret, sig=sig)
+            else: 
+                df_xs = self.__rival_sigs__(ret)
 
         dfx = df_xs[~df_xs.index.isin(["PosRatio"])]
 
@@ -455,6 +482,9 @@ class SignalReturnRelations:
 
     def correlation_bars(
         self,
+        ret: str = None,
+        sig: str = None,
+        freq: str = None,
         type: str = "cross_section",
         title: str = None,
         title_fontsize: int = 16,
@@ -464,6 +494,8 @@ class SignalReturnRelations:
         """
         Plot correlation coefficients and significance.
 
+        :param <str> ret: return category. Default is the first return category.
+        :param <str> sig: signal category. Default is the first signal category.
         :param <str> type: type of segment over which bars are drawn. Either
             "cross_section" (default), "years" or "signals".
         :param <str> title: chart header. Default will be applied if none is chosen.
@@ -476,12 +508,37 @@ class SignalReturnRelations:
         """
         assert type in ["cross_section", "years", "signals"]
 
-        if type == "cross_section":
-            df_xs = self.df_cs
-        elif type == "years":
-            df_xs = self.df_ys
-        else:
-            df_xs = self.df_sigs
+        if freq is None:
+            freq = self.freqs[0]
+
+        if ret is None and sig is None:
+            ret = self.rets[0]
+            sig = self.sigs[0]
+            if type == "cross_section":
+                df_xs = self.df_cs
+            elif type == "years":
+                df_xs = self.df_ys
+            else:
+                df_xs = self.df_sigs
+        else: 
+            if ret is None:
+                ret = self.rets[0]
+            if sig is None:
+                sig = self.sigs[0]
+            self.df = self.original_df.copy()
+            self.manipulate_df(
+                xcat=[sig, ret],
+                freq=freq,
+                agg_sig=self.agg_sigs[0],
+                sig=sig,
+            )
+            sig = self.new_sig[0]
+            if type == "cross_section":
+                df_xs = self.__output_table__(cs_type="cids", ret=ret, sig=sig)
+            elif type == "years":
+                df_xs = self.__output_table__(cs_type="years", ret=ret, sig=sig)
+            else: 
+                df_xs = self.__rival_sigs__(ret)
 
         # Panel plus the cs_types.
         dfx = df_xs[~df_xs.index.isin(["PosRatio", "Mean"])]
@@ -503,10 +560,10 @@ class SignalReturnRelations:
         kprobs[kprobs == 0] = 0.01
 
         if title is None:
-            refsig = "various signals" if type == "signals" else self.sigs
+            refsig = "various signals" if type == "signals" else sig
             title = (
-                f"Positive correlation probability of {self.rets} "
-                f"and lagged {refsig} at {self.dic_freq[self.freqs[0]]} frequency."
+                f"Positive correlation probability of {ret} "
+                f"and lagged {refsig} at {self.dic_freq[freq]} frequency."
             )
         if size is None:
             size = (np.max([dfx.shape[0] / 2, 8]), 6)
@@ -656,15 +713,27 @@ class SignalReturnRelations:
 
         if True in self.signs and self.signs[self.sigs.index(sig)]:
             index = self.sigs.index(sig)
-            original_name = sig + "/" + agg_sig
+            if self.rival_sigs is not None:
+            
+                original_name = sig + "/" + agg_sig
 
-            self.df.loc[:, self.signals] *= -1
-            s_copy = self.signals.copy()
+                self.df.loc[:, self.signals] *= -1
+                s_copy = self.signals.copy()
 
-            self.signals = [s + "_NEG" for s in self.signals]
-            sig += "_NEG"
-            self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
-            self.new_sig = sig
+                self.signals = [s + "_NEG" for s in self.signals]
+                sig += "_NEG"
+                self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
+                self.new_sig = sig
+            else:
+                original_name = sig + "/" + agg_sig
+
+                self.df.loc[:, self.sigs[index]] *= -1
+                s_copy = self.signals.copy()
+
+                self.signals[self.signals.index(sig)] += "_NEG"
+                sig += "_NEG"
+                self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
+                self.new_sig = sig
 
             if sst:
                 new_name = sig + "/" + agg_sig
@@ -1052,6 +1121,8 @@ class SignalReturnRelations:
         for agg_sigs_elem in agg_sigs:
             if not agg_sigs_elem in self.agg_sigs:
                 raise ValueError(f"{agg_sigs_elem} is not a valid aggregation method")
+        
+        self.sigs = [self.revert_negation(sig) for sig in self.sigs]
 
         xcats = [x for x in xcats if x in self.sigs]
 
@@ -1187,6 +1258,7 @@ class SignalReturnRelations:
             raise ValueError(f"Columns must only contain {rows_values}")
 
         rets = self.rets if isinstance(self.rets, list) else [self.rets]
+        self.sigs = [self.revert_negation(sig) for sig in self.sigs]
         sigs = self.sigs if isinstance(self.sigs, list) else [self.sigs]
 
         sigs_neg = []
@@ -1434,6 +1506,8 @@ if __name__ == "__main__":
         agg_sigs=["last", "mean"],
         blacklist=black,
     )
+
+    sr.correlation_bars(ret="XRH", sig="INFL", freq="Q")
 
     srt = sr.single_relation_table()
     mrt = sr.multiple_relations_table()
