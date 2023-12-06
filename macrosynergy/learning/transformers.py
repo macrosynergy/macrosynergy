@@ -165,7 +165,7 @@ class MapSelector(BaseEstimator, TransformerMixin):
         
         return X[self.ftrs]
         
-class AvgNormFtrTransformer(BaseEstimator, TransformerMixin):
+class ZnScoreAverager(BaseEstimator, TransformerMixin):
     def __init__(self, neutral: str = "zero", use_signs: bool = False):
         """
         Transformer class to combine features into a benchmark signal 
@@ -496,10 +496,10 @@ if __name__ == "__main__":
     X_train, X_test = X[X.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], X[X.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
     y_train, y_test = y[y.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], y[y.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
 
-    selector = AvgNormFtrTransformer(neutral="mean", use_signs=True)
+    selector = ZnScoreAverager(neutral="mean", use_signs=True)
     selector.fit(X_train, y_train)
     print(selector.transform(X_test))
 
-    selector = AvgNormFtrTransformer(neutral="zero")
+    selector = ZnScoreAverager(neutral="zero")
     selector.fit(X_train, y_train)
     print(selector.transform(X_test))
