@@ -4,3 +4,4 @@ sphinx-autodoc-typehints==1.25.2
 sphinx-automodapi==0.16.0
 sphinx-remove-toctrees==0.0.3
 sphinx_design==0.5.0
+sphinx_github_changelog==1.2.1
