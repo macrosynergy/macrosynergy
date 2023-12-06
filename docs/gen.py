@@ -51,9 +51,18 @@ def main():
         help="Show documentation in browser after generation.",
         default=False,
     )
+    # build
+    parser.add_argument(
+        "--build",
+        action="store_true",
+        help="Build documentation.",
+        default=False,
+    )
+
     args = parser.parse_args()
 
     SHOW = args.show
+    BUILD = args.build
     OUTPUT_DIR = "./docs/source/gen_rsts"
     README = "./README.md"
 
@@ -63,7 +72,8 @@ def main():
 
     copy_readme(output_dir=OUTPUT_DIR, readme=README)
 
-    make_docs(show=SHOW)
+    if BUILD:
+        make_docs(show=SHOW)
 
 
 if __name__ == "__main__":
