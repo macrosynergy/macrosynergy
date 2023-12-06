@@ -1,4 +1,4 @@
-.. _02_installation:
+.. _02_getting_started:
 
 Getting Started
 ===============
