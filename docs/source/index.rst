@@ -33,7 +33,7 @@ trading or investment value of quantamental strategies.
       :link: 02_getting_started
       :link-type: ref
 
-   .. grid-item-card:: Package Documentation
+   .. grid-item-card:: API Reference
       :link: api_reference
       :link-type: ref
 
