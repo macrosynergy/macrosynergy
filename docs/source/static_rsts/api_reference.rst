@@ -1,6 +1,6 @@
 :html_theme.sidebar_primary.remove: False
 
-.. _07_package_docs:
+.. _api_reference:
 
 API Reference
 ===================================

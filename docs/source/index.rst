@@ -34,7 +34,7 @@ trading or investment value of quantamental strategies.
       :link-type: ref
 
    .. grid-item-card:: Package Documentation
-      :link: 07_package_docs
+      :link: api_reference
       :link-type: ref
 
 
@@ -83,5 +83,5 @@ More from Macrosynergy:
    index
    static_rsts/01_about
    static_rsts/02_getting_started
-   static_rsts/07_package_docs
+   static_rsts/api_reference
    gen_rsts/release_notes.md
