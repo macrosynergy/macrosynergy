@@ -42,4 +42,6 @@ If you want to build the package from source, you would need to clone the reposi
 Usage
 -----
 
-The package is designed to be used in conjunction with JPMaQS Quantamental Data from the J.P. Morgan DataQuery API. If you do not have access to the DataQuery API, you can still use the package with simulated data from `macrosynergy.management.simulate <./macrosynergy/management/simulate>`.
+The package is designed to be used in conjunction with JPMaQS Quantamental Data from the 
+J.P. Morgan DataQuery API. If you do not have access to the DataQuery API, you can still 
+use the package with simulated data from `macrosynergy.management.simulate <./macrosynergy/management/simulate>`.
