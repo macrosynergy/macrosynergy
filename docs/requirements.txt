@@ -5,3 +5,4 @@ sphinx-automodapi==0.16.0
 sphinx-remove-toctrees==0.0.3
 sphinx_design==0.5.0
 sphinx_changelog==1.4.1
+sphinx_copybutton==0.5.2
