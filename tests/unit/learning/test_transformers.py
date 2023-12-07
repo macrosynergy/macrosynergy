@@ -7,6 +7,8 @@ from macrosynergy.learning import (
     LassoSelector,
 )
 
+from statsmodels.tools.tools import add_constant
+from statsmodels.regression.mixed_linear_model import MixedLM
 
 class TestLassoSelector(unittest.TestCase):
     def setUp(self):
@@ -144,7 +146,51 @@ class TestLassoSelector(unittest.TestCase):
 
 class TestMapSelector(unittest.TestCase):
     def setUp(self):
-        pass
+        # Generate data with true linear relationship
+        cids = ["AUD", "CAD", "GBP", "USD"]
+        xcats = ["XR", "CPI", "GROWTH", "RIR"]
+
+        df_cids = pd.DataFrame(index=cids, columns=["earliest", "latest"])
+        df_cids.loc["AUD"] = ["2002-01-01", "2020-12-31"]
+        df_cids.loc["CAD"] = ["2003-01-01", "2020-12-31"]
+        df_cids.loc["GBP"] = ["2000-01-01", "2020-12-31"]
+        df_cids.loc["USD"] = ["2000-01-01", "2020-12-31"]
+
+        tuples = []
+
+        for cid in cids:
+            # get list of all elidgible dates
+            sdate = df_cids.loc[cid]["earliest"]
+            edate = df_cids.loc[cid]["latest"]
+            all_days = pd.date_range(sdate, edate)
+            work_days = all_days[all_days.weekday < 5]
+            for work_day in work_days:
+                tuples.append((cid, work_day))
+
+        n_samples = len(tuples)
+        ftrs = np.random.normal(loc=0, scale=1, size=(n_samples, 3))
+        labels = np.matmul(ftrs, [1, 2, -1]) + np.random.normal(0, 0.5, len(ftrs))
+        df = pd.DataFrame(
+            data=np.concatenate((np.reshape(labels, (-1, 1)), ftrs), axis=1),
+            index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
+            columns=xcats,
+            dtype=np.float32,
+        )
+
+        self.X = df.drop(columns="XR")
+        self.y = df["XR"]
+
+        # determine the 95% significant features according to the MAP test
+        self.ftrs = []
+        for col in self.X.columns:
+            ftr = self.X[col]
+            ftr = add_constant(ftr)
+            groups = ftr.index.get_level_values(1)
+            model = MixedLM(y,ftr,groups).fit(reml=False)
+            est = model.params.iloc[1]
+            pval = model.pvalues.iloc[1]
+            if (pval < self.threshold) & (est > 0):
+                self.ftrs.append(col)
 
     @parameterized.expand([0.01, 0.05, 0.1, 1.0])
     def test_valid_init(self, threshold):
@@ -160,3 +206,17 @@ class TestMapSelector(unittest.TestCase):
         # Test that negative thresholds raise ValueError
         with self.assertRaises(ValueError):
             selector = MapSelector(threshold=-1)
+
+    def test_valid_fit(self):
+        # Test that the fit() method works as expected
+        threshold = 0.05
+        selector = MapSelector(threshold=threshold)
+        try:
+            selector.fit(self.X, self.y)
+        except Exception as e:
+            self.fail(f"Fit method for the Map selector raised an exception: {e}")
+        # check that the self.ftrs attribute is a list
+        self.assertIsInstance(selector.ftrs, list)
+        # check that the self.ftrs attribute comprises the correct features
+        self.cols = self.X.columns
+        self.assertTrue(np.all(selector.ftrs == self.ftrs))

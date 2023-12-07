@@ -146,7 +146,6 @@ class MapSelector(BaseEstimator, TransformerMixin):
             )
         
         self.ftrs = []
-        self.y_mean = np.mean(y)
         self.cols = X.columns
 
         for col in self.cols:
