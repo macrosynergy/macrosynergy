@@ -38,6 +38,7 @@ class SignalOptimizer:
         inner_splitter: BasePanelSplit,
         X: pd.DataFrame,
         y: pd.Series,
+        blacklist: dict = None,
         additional_X: Optional[List[pd.DataFrame]] = None,
         additional_y: Optional[List[pd.Series]] = None,
     ):
@@ -58,6 +59,8 @@ class SignalOptimizer:
             data, the learning process uses the performance of monthly predictions.
         :param <pd.Series> y: Pandas series of targets corresponding with a time
             index equal to the features in `X`.
+        :param <dict> blacklist: cross-sections with date ranges that should be excluded from
+            the data frame.
         :param <Optional[List[pd.DataFrame]]> additional_X: Optional additional features.
             Default is None. 
         :param <Optional[List[pd.Series]]> additional_y: Optional additional targets.
@@ -390,6 +393,17 @@ class SignalOptimizer:
 
         # Now convert signal_df into a quantamental dataframe
         signal_df = signal_df.groupby(level=0).ffill()
+
+        # For each blacklisted period, set the signal to NaN
+        if blacklist is not None:
+            for cross_section, periods in blacklist.items():
+                for start_date, end_date in periods:
+                    # Convert from string to datetime
+                    start_date = pd.to_datetime(start_date)
+                    end_date = pd.to_datetime(end_date)
+                    # Set blacklisted periods to NaN
+                    signal_df.loc[(cross_section, slice(start_date, end_date)), :] = np.nan
+
         signal_df_long: pd.DataFrame = pd.melt(
             frame=signal_df.reset_index(), id_vars=["cid", "real_date"], var_name="xcat"
         )
