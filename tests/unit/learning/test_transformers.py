@@ -5,6 +5,7 @@ from parameterized import parameterized
 
 from macrosynergy.learning import (
     LassoSelector,
+    MAPSelector,
 )
 
 from statsmodels.tools.tools import add_constant
