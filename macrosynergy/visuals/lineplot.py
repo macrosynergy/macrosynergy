@@ -141,13 +141,17 @@ class LinePlot(Plotter):
                 .reset_index(drop=True)
             )
 
-        for cid_xcat in dfx[["cid", "xcat"]].drop_duplicates().values.tolist():
-            if "_".join(cid_xcat) == compare_series:
-                continue
-            cid, xcat = cid_xcat
-            _df = dfx.loc[(dfx["cid"] == cid) & (dfx["xcat"] == xcat), :].copy()
-            _df = _df.sort_values(by="real_date", ascending=True).reset_index(drop=True)
-            ax.plot(_df["real_date"], _df[metric], label=f"{cid}_{xcat}")
+        valid_tickers = dfx[["cid", "xcat"]].drop_duplicates().values.tolist()
+
+        for xcat in self.xcats:
+            for cid in self.cids:
+                # Get the unique cid values in dfx for xcat and check if cid is in it
+                if [cid, xcat] in valid_tickers: 
+                    _df = dfx.loc[(dfx["cid"] == cid) & (dfx["xcat"] == xcat), :].copy()
+                    _df = _df.sort_values(by="real_date", ascending=True).reset_index(
+                        drop=True
+                    )
+                    ax.plot(_df["real_date"], _df[metric], label=f"{cid}_{xcat}")
 
         # if there is a compare_series, plot it on the same axis, using a red dashed line
         if compare_series:
