@@ -113,8 +113,8 @@ class MapSelector(BaseEstimator, TransformerMixin):
         if type(threshold) != float:
             raise TypeError("The threshold must be a float.")
         
-        if (threshold <= 0) or (threshold >= 1):
-            raise ValueError("The threshold must be in between 0 and 1.")
+        if (threshold <= 0) or (threshold > 1):
+            raise ValueError("The threshold must be in between 0 (inclusive) and 1 (exclusive).")
         
         self.threshold = threshold
 

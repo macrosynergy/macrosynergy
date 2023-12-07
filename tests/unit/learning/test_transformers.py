@@ -141,3 +141,14 @@ class TestLassoSelector(unittest.TestCase):
         self.assertIsInstance(X_transformed, pd.DataFrame)
         # Check that X_transformed has the same index as X
         self.assertTrue(np.all(X_transformed.index == self.X.index))
+
+class TestMapSelector(unittest.TestCase):
+    def setUp(self):
+        pass
+
+    @parameterized.expand([0.01, 0.05, 0.1, 1.0])
+    def test_valid_init(self, threshold):
+        # Test that the MapSelector class can be instantiated
+        selector = MapSelector(threshold=threshold)
+        self.assertIsInstance(selector, MapSelector)
+        self.assertEqual(selector.threshold, threshold)
