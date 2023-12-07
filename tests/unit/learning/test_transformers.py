@@ -190,7 +190,7 @@ class TestMapSelector(unittest.TestCase):
             model = MixedLM(self.y,ftr,groups).fit(reml=False)
             est = model.params.iloc[1]
             pval = model.pvalues.iloc[1]
-            if (pval < self.threshold) & (est > 0):
+            if (pval < 0.05) & (est > 0):
                 self.ftrs.append(col)
 
     @parameterized.expand([0.01, 0.05, 0.1, 1.0])
@@ -243,3 +243,6 @@ class TestMapSelector(unittest.TestCase):
         with self.assertRaises(ValueError):
             selector = MapSelector(threshold=0.05)
             selector.fit(self.X, self.y.reset_index())
+        
+    def test_valid_transform(self):
+
