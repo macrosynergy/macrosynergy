@@ -8,7 +8,7 @@ from .cv_tools import panel_cv_scores
 from .transformers import (
     LassoSelector,
     MapSelector,
-    AvgNormFtrTransformer,
+    ZnScoreAverager,
     PanelMinMaxScaler,
     PanelStandardScaler
 )
@@ -36,6 +36,7 @@ __all__ = [
     "MapSelector",
     "PanelMinMaxScaler",
     "PanelStandardScaler",
+    "ZnScoreAverager",
     # metrics
     "panel_significance_probability",
     "sharpe_ratio",
