@@ -165,12 +165,10 @@ class SignalOptimizer:
                         "The values of the blacklist argument must be tuples of length two."
                     )
                 # ensure each of the dates in the dictionary are timestamps
-                if isinstance(date, str):
-                    try:
-                        pd.to_datetime(date)
-                    except ValueError:
-                        raise ValueError(
-                            f"Date string {date} in tuple for {key} is not convertible to pd.Timestamp."
+                for date in value:
+                    if not isinstance(date, pd.Timestamp):
+                        raise TypeError(
+                            "The values of the blacklist argument must be tuples of pandas Timestamps."
                         )
              
         if additional_X is not None:
@@ -211,6 +209,7 @@ class SignalOptimizer:
 
         self.X = X
         self.y = y
+        self.blacklist = blacklist
         self.additional_X = additional_X
         self.additional_y = additional_y
 
@@ -419,8 +418,8 @@ class SignalOptimizer:
         signal_df = signal_df.groupby(level=0).ffill()
 
         # For each blacklisted period, set the signal to NaN
-        if blacklist is not None:
-            for cross_section, periods in blacklist.items():
+        if self.blacklist is not None:
+            for cross_section, periods in self.blacklist.items():
                 for start_date, end_date in periods:
                     # Set blacklisted periods to NaN
                     signal_df.loc[(cross_section, slice(start_date, end_date)), :] = np.nan
