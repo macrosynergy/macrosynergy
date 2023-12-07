@@ -152,3 +152,11 @@ class TestMapSelector(unittest.TestCase):
         selector = MapSelector(threshold=threshold)
         self.assertIsInstance(selector, MapSelector)
         self.assertEqual(selector.threshold, threshold)
+
+    def test_types_init(self):
+        # Test that non float/int thresholds raise TypeError
+        with self.assertRaises(TypeError):
+            selector = MapSelector(threshold="1")
+        # Test that negative thresholds raise ValueError
+        with self.assertRaises(ValueError):
+            selector = MapSelector(threshold=-1)
