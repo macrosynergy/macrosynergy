@@ -88,10 +88,10 @@ class TestLassoSelector(unittest.TestCase):
 
         # Test that the selected_ftr_idxs attribute is either empty or a list of integers
         selector_empty_or_ints = not selector.selected_ftr_idxs or all(
-            isinstance(item, int) for item in my_list
+            isinstance(item, int) for item in selector.selected_ftr_idxs
         )
         restrict_empty_or_ints = not selector_restrict.selected_ftr_idxs or all(
-            isinstance(item, int) for item in my_list
+            isinstance(item, int) for item in selector.selected_ftr_idxs
         )
 
         self.assertTrue(

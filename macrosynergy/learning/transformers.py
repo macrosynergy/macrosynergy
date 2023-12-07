@@ -20,7 +20,7 @@ from typing import Union, Any, List
 import logging
 
 class LassoSelector(BaseEstimator, TransformerMixin):
-    def __init__(self, alpha: float, positive: bool=True):
+    def __init__(self, alpha: Union[float, int], positive: bool=True):
         """
         Transformer class to use the Lasso as a feature selection algorithm.
         Given a hyper-parameter, alpha, the Lasso model is fit and 
@@ -28,12 +28,12 @@ class LassoSelector(BaseEstimator, TransformerMixin):
         The underlying features as input to the Lasso model are expected to be positively
         correlated with the target variable.
 
-        :param <float> alpha: the regularisation imposed by the Lasso.
+        :param <Union[float, int]> alpha: the regularisation imposed by the Lasso.
         :param <bool> positive: boolean to restrict estimated Lasso coefficients to
             be positive.
         """
-        if type(alpha) != float:
-            raise TypeError("The 'alpha' hyper-parameter must be a float.")
+        if (type(alpha) != float) and (type(alpha) != int):
+            raise TypeError("The 'alpha' hyper-parameter must be either a float or int.")
         if alpha < 0:
             raise ValueError("The 'alpha' hyper-parameter must be non-negative.")
         if type(positive) != bool:
@@ -47,9 +47,31 @@ class LassoSelector(BaseEstimator, TransformerMixin):
         Fit method to fit a Lasso regression and obtain the selected features.
 
         :param <Union[pd.DataFrame,np.ndarray]> X: Pandas dataframe or numpy array of input features.
+            A Pandas dataframe is prefered 
         :param <Union[pd.Series,np.ndarray]> y: Pandas series or numpy array of targets associated with each
             sample in X.
         """
+        # checks
+        if (type(X) != pd.DataFrame) and (type(X) != np.ndarray):
+            raise TypeError("Input feature matrix for the LASSO selector must be a pandas dataframe or numpy array.")
+        if (type(y) != pd.Series) and (type(y) != np.ndarray):
+            raise TypeError("Target vector for the LASSO selector must be a pandas series or numpy array.")
+        if type(X) == pd.DataFrame:
+            if not isinstance(X.index, pd.MultiIndex):
+                raise ValueError("X must be multi-indexed.")
+            if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+                raise TypeError("The inner index of X must be datetime.date.")
+        if type(y) == pd.Series:
+            if not isinstance(y.index, pd.MultiIndex):
+                raise ValueError("y must be multi-indexed.")
+            if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+                raise TypeError("The inner index of y must be datetime.date.")
+        if (type(X) == pd.DataFrame) and (type(y) == pd.Series):
+            if not X.index.equals(y.index):
+                raise ValueError(
+                    "The indices of the input dataframe X and the output dataframe y don't match."
+                )
+
         self.p = X.shape[-1]
         
         if self.positive:
