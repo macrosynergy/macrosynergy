@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import unittest
+from parameterized import parameterized
 
 from macrosynergy.learning import (
     LassoSelector,
@@ -112,3 +113,33 @@ class TestLassoSelector(unittest.TestCase):
         with self.assertRaises(TypeError):
             selector = LassoSelector(alpha=0.1, positive=True)
             selector.fit(self.X, "y")
+
+    @parameterized.expand([True, False])
+    def test_valid_transform(self, restrict):
+        # sample a potential alpha value between zero and one
+        alpha = np.random.uniform(low=0, high=1)
+        # sample a potential positive value out of True and False
+        positive = np.random.choice(restrict)
+        # instantiate a selector
+        selector = LassoSelector(alpha=alpha, positive=positive)
+        # fit the selector
+        selector.fit(self.X, self.y)
+        # verify that the transform method only selects features that were selected by the fit method
+        X_transformed = selector.transform(self.X)
+        self.assertTrue(
+            np.all(X_transformed.columns == self.X.columns[selector.selected_ftr_idxs])
+        )
+
+    def test_types_transform(self):
+        # Test that non np.ndarray X or dataframe raises TypeError
+        with self.assertRaises(TypeError):
+            selector = LassoSelector(alpha=0.1, positive=False)
+            selector.fit(self.X, self.y)
+            selector.transform("X")
+        # Test that if the input is a dataframe, then so is the output
+        selector = LassoSelector(alpha=0.1, positive=False)
+        selector.fit(self.X, self.y)
+        X_transformed = selector.transform(self.X)
+        self.assertIsInstance(X_transformed, pd.DataFrame)
+        # Check that X_transformed has the same index as X
+        self.assertTrue(np.all(X_transformed.index == self.X.index))
