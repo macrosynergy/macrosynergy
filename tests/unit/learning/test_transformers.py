@@ -115,11 +115,9 @@ class TestLassoSelector(unittest.TestCase):
             selector.fit(self.X, "y")
 
     @parameterized.expand([True, False])
-    def test_valid_transform(self, restrict):
+    def test_valid_transform(self, positive):
         # sample a potential alpha value between zero and one
         alpha = np.random.uniform(low=0, high=1)
-        # sample a potential positive value out of True and False
-        positive = np.random.choice(restrict)
         # instantiate a selector
         selector = LassoSelector(alpha=alpha, positive=positive)
         # fit the selector
