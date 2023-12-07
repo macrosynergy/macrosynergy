@@ -243,6 +243,3 @@ class TestMapSelector(unittest.TestCase):
         with self.assertRaises(ValueError):
             selector = MapSelector(threshold=0.05)
             selector.fit(self.X, self.y.reset_index())
-        
-    def test_valid_transform(self):
-
