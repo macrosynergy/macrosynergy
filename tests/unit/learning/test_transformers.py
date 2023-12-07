@@ -186,7 +186,7 @@ class TestMapSelector(unittest.TestCase):
             ftr = self.X[col]
             ftr = add_constant(ftr)
             groups = ftr.index.get_level_values(1)
-            model = MixedLM(y,ftr,groups).fit(reml=False)
+            model = MixedLM(self.y,ftr,groups).fit(reml=False)
             est = model.params.iloc[1]
             pval = model.pvalues.iloc[1]
             if (pval < self.threshold) & (est > 0):
@@ -220,3 +220,25 @@ class TestMapSelector(unittest.TestCase):
         # check that the self.ftrs attribute comprises the correct features
         self.cols = self.X.columns
         self.assertTrue(np.all(selector.ftrs == self.ftrs))
+
+    def test_types_fit(self):
+        # Test that non dataframe X raises TypeError
+        with self.assertRaises(TypeError):
+            selector = MapSelector(threshold=0.05)
+            selector.fit("X", self.y)
+        # Test that non series y raises TypeError
+        with self.assertRaises(TypeError):
+            selector = MapSelector(threshold=0.05)
+            selector.fit(self.X, "y")
+        # Test that a value error is raised if the X index isn't a multi-index
+        with self.assertRaises(ValueError):
+            selector = MapSelector(threshold=0.05)
+            selector.fit(self.X.reset_index(), self.y)
+        # Test tjat a value error is raised if the y index isn't a multi-index
+        with self.assertRaises(ValueError):
+            selector = MapSelector(threshold=0.05)
+            selector.fit(self.X, self.y.reset_index())
+        # Test that a value error is raised if the X and y indexes don't match
+        with self.assertRaises(ValueError):
+            selector = MapSelector(threshold=0.05)
+            selector.fit(self.X, self.y.reset_index())
