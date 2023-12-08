@@ -420,9 +420,9 @@ class SignalOptimizer:
         # For each blacklisted period, set the signal to NaN
         if self.blacklist is not None:
             for cross_section, periods in self.blacklist.items():
-                for start_date, end_date in periods:
-                    # Set blacklisted periods to NaN
-                    signal_df.loc[(cross_section, slice(start_date, end_date)), :] = np.nan
+                cross_section_key = cross_section.split("_")[0]
+                # Set blacklisted periods to NaN
+                signal_df.loc[(cross_section_key, slice(periods[0], periods[1])), :] = np.nan
 
         signal_df_long: pd.DataFrame = pd.melt(
             frame=signal_df.reset_index(), id_vars=["cid", "real_date"], var_name="xcat"
@@ -727,7 +727,7 @@ if __name__ == "__main__":
 
     dfd2 = make_qdf(df_cids2, df_xcats2, back_ar=0.75)
     dfd2["grading"] = np.ones(dfd2.shape[0])
-    black = {"GBP": ["2009-01-01", "2012-06-30"], "CAD": ["2018-01-01", "2100-01-01"]}
+    black = {"GBP": (pd.Timestamp(year=2009,month=1,day=1), pd.Timestamp(year=2012, month=6, day=30)), "CAD": (pd.Timestamp(year=2015, month=1, day=1), pd.Timestamp(year=2100, month=1, day=1))}
 
     train = msm.reduce_df(dfd2, end="2016-11-30")
     test = msm.reduce_df(dfd2, start="2016-11-01")
@@ -772,6 +772,7 @@ if __name__ == "__main__":
         inner_splitter=inner_splitter,
         X=X_train,
         y=y_train,
+        blacklist=black,
     )
 
     so.calculate_predictions(
