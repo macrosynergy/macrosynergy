@@ -15,7 +15,7 @@ from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
 from statsmodels.tools.tools import add_constant
 from statsmodels.regression.mixed_linear_model import MixedLM
 
-from typing import Union, Any, List
+from typing import Union, Any, List, Optional
 
 import logging
 
@@ -164,8 +164,47 @@ class MapSelector(BaseEstimator, TransformerMixin):
             return pd.DataFrame(index=X.index, columns=["no_signal"], data=0,dtype=np.float16)
         
         return X[self.ftrs]
+
+class FeatureAverager(BaseEstimator, TransformerMixin):
+    def __init__(self, use_signs: Optional[bool] = False):
+        """
+        Transformer class to combine features into a benchmark signal by averaging.
+    
+        :param <Optional[bool]> use_signs: Boolean to specify whether or not to return the
+            signs of the benchmark signal instead of the signal itself. Default is False.
+        """
+        if type(use_signs) != bool:
+            raise TypeError("'use_signs' must be a boolean.")
         
-class AvgNormFtrTransformer(BaseEstimator, TransformerMixin):
+        self.use_signs = use_signs
+
+    def fit(self, X: pd.DataFrame, y: Any = None):
+        """
+        Fit method. Since this transformer is a simple averaging of features,
+        no fitting is required.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Any> y: Placeholder for scikit-learn compatibility.
+        """
+
+        return self
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        """
+        Transform method to average features into a benchmark signal.
+        If use_signs is True, the signs of the benchmark signal are returned.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+
+        :return <pd.DataFrame>: Pandas dataframe of benchmark signal.
+        """
+        signal_df = X.mean(axis=1).to_frame(name="signal")
+        if self.use_signs:
+            return np.sign(signal_df).astype(int)
+
+        return signal_df
+
+class ZnScoreAverager(BaseEstimator, TransformerMixin):
     def __init__(self, neutral: str = "zero", use_signs: bool = False):
         """
         Transformer class to combine features into a benchmark signal 
@@ -496,10 +535,10 @@ if __name__ == "__main__":
     X_train, X_test = X[X.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], X[X.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
     y_train, y_test = y[y.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], y[y.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
 
-    selector = AvgNormFtrTransformer(neutral="mean", use_signs=True)
+    selector = ZnScoreAverager(neutral="mean", use_signs=True)
     selector.fit(X_train, y_train)
     print(selector.transform(X_test))
 
-    selector = AvgNormFtrTransformer(neutral="zero")
+    selector = ZnScoreAverager(neutral="zero")
     selector.fit(X_train, y_train)
     print(selector.transform(X_test))
