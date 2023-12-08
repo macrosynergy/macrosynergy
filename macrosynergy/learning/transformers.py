@@ -15,7 +15,7 @@ from sklearn.base import BaseEstimator, TransformerMixin, OneToOneFeatureMixin
 from statsmodels.tools.tools import add_constant
 from statsmodels.regression.mixed_linear_model import MixedLM
 
-from typing import Union, Any, List
+from typing import Union, Any, List, Optional
 
 import logging
 
@@ -203,7 +203,7 @@ class FeatureAverager(BaseEstimator, TransformerMixin):
             return np.sign(signal_df).astype(int)
 
         return signal_df
-        
+
 class ZnScoreAverager(BaseEstimator, TransformerMixin):
     def __init__(self, neutral: str = "zero", use_signs: bool = False):
         """
