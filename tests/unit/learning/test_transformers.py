@@ -152,10 +152,10 @@ class TestMapSelector(unittest.TestCase):
         xcats = ["XR", "CPI", "GROWTH", "RIR"]
 
         df_cids = pd.DataFrame(index=cids, columns=["earliest", "latest"])
-        df_cids.loc["AUD"] = ["2016-01-01", "2020-12-31"]
-        df_cids.loc["CAD"] = ["2016-01-01", "2020-12-31"]
-        df_cids.loc["GBP"] = ["2016-01-01", "2020-12-31"]
-        df_cids.loc["USD"] = ["2016-01-01", "2020-12-31"]
+        df_cids.loc["AUD"] = ["2019-01-01", "2020-12-31"]
+        df_cids.loc["CAD"] = ["2019-01-01", "2020-12-31"]
+        df_cids.loc["GBP"] = ["2019-01-01", "2020-12-31"]
+        df_cids.loc["USD"] = ["2019-01-01", "2020-12-31"]
 
         tuples = []
 
