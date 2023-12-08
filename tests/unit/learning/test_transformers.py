@@ -243,3 +243,21 @@ class TestMapSelector(unittest.TestCase):
         # check that the transformed dataframe equals self.X[self.ftrs]
         X_transformed = selector.transform(self.X)
         self.assertTrue(np.all(X_transformed.columns == self.X[selector.ftrs].columns))
+        # repeat for when no features are selected
+        selector = MapSelector(threshold=1e-10)
+        selector.fit(self.X, self.y)
+        X_transformed = selector.transform(self.X)
+        self.assertTrue(np.all(X_transformed.columns == []))
+
+    def test_types_transform(self):
+        # Test that non dataframe X raises TypeError
+        with self.assertRaises(TypeError):
+            selector = MapSelector(threshold=0.05)
+            selector.fit(self.X, self.y)
+            selector.transform("X")
+        # Test that value error is raised if the X index isn't a multi-index
+        with self.assertRaises(ValueError):
+            selector.transform(self.X.reset_index())
+        # Test that value error is raised if the columns of X don't match the columns of self.X
+        with self.assertRaises(ValueError):
+            selector.transform(self.X.drop(columns="CPI"))
