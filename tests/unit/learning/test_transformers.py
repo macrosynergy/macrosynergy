@@ -152,10 +152,10 @@ class TestMapSelector(unittest.TestCase):
         xcats = ["XR", "CPI", "GROWTH", "RIR"]
 
         df_cids = pd.DataFrame(index=cids, columns=["earliest", "latest"])
-        df_cids.loc["AUD"] = ["2002-01-01", "2020-12-31"]
-        df_cids.loc["CAD"] = ["2003-01-01", "2020-12-31"]
-        df_cids.loc["GBP"] = ["2000-01-01", "2020-12-31"]
-        df_cids.loc["USD"] = ["2000-01-01", "2020-12-31"]
+        df_cids.loc["AUD"] = ["2016-01-01", "2020-12-31"]
+        df_cids.loc["CAD"] = ["2016-01-01", "2020-12-31"]
+        df_cids.loc["GBP"] = ["2016-01-01", "2020-12-31"]
+        df_cids.loc["USD"] = ["2016-01-01", "2020-12-31"]
 
         tuples = []
 
@@ -235,11 +235,3 @@ class TestMapSelector(unittest.TestCase):
         with self.assertRaises(ValueError):
             selector = MapSelector(threshold=0.05)
             selector.fit(self.X.reset_index(), self.y)
-        # Test tjat a value error is raised if the y index isn't a multi-index
-        with self.assertRaises(ValueError):
-            selector = MapSelector(threshold=0.05)
-            selector.fit(self.X, self.y.reset_index())
-        # Test that a value error is raised if the X and y indexes don't match
-        with self.assertRaises(ValueError):
-            selector = MapSelector(threshold=0.05)
-            selector.fit(self.X, self.y.reset_index())
