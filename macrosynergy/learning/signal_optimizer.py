@@ -38,6 +38,7 @@ class SignalOptimizer:
         inner_splitter: BasePanelSplit,
         X: pd.DataFrame,
         y: pd.Series,
+        blacklist: Dict[str, Tuple[pd.Timestamp, pd.Timestamp]] = None,
         additional_X: Optional[List[pd.DataFrame]] = None,
         additional_y: Optional[List[pd.Series]] = None,
     ):
@@ -58,6 +59,8 @@ class SignalOptimizer:
             data, the learning process uses the performance of monthly predictions.
         :param <pd.Series> y: Pandas series of targets corresponding with a time
             index equal to the features in `X`.
+        :param <Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]> blacklist: cross-sections
+            with date ranges that should be excluded from the data frame.
         :param <Optional[List[pd.DataFrame]]> additional_X: Optional additional features.
             Default is None. 
         :param <Optional[List[pd.Series]]> additional_y: Optional additional targets.
@@ -145,7 +148,29 @@ class SignalOptimizer:
             raise ValueError(
                 "The indices of the input dataframe X and the output dataframe y don't match."
             )
-        
+        if blacklist is not None:
+            if not isinstance(blacklist, dict):
+                raise TypeError("The blacklist argument must be a dictionary.")
+            for key, value in blacklist.items():
+                # check keys are strings
+                if not isinstance(key, str):
+                    raise TypeError("The keys of the blacklist argument must be strings.")
+                # check values of tuples of length two
+                if not isinstance(value, tuple):
+                    raise TypeError(
+                        "The values of the blacklist argument must be tuples."
+                    )
+                if len(value) != 2:
+                    raise ValueError(
+                        "The values of the blacklist argument must be tuples of length two."
+                    )
+                # ensure each of the dates in the dictionary are timestamps
+                for date in value:
+                    if not isinstance(date, pd.Timestamp):
+                        raise TypeError(
+                            "The values of the blacklist argument must be tuples of pandas Timestamps."
+                        )
+             
         if additional_X is not None:
             if not isinstance(additional_X, list):
                 raise TypeError("The additional_X argument must be a list.")
@@ -184,6 +209,7 @@ class SignalOptimizer:
 
         self.X = X
         self.y = y
+        self.blacklist = blacklist
         self.additional_X = additional_X
         self.additional_y = additional_y
 
@@ -390,6 +416,14 @@ class SignalOptimizer:
 
         # Now convert signal_df into a quantamental dataframe
         signal_df = signal_df.groupby(level=0).ffill()
+
+        # For each blacklisted period, set the signal to NaN
+        if self.blacklist is not None:
+            for cross_section, periods in self.blacklist.items():
+                for start_date, end_date in periods:
+                    # Set blacklisted periods to NaN
+                    signal_df.loc[(cross_section, slice(start_date, end_date)), :] = np.nan
+
         signal_df_long: pd.DataFrame = pd.melt(
             frame=signal_df.reset_index(), id_vars=["cid", "real_date"], var_name="xcat"
         )
