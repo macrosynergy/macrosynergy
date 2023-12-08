@@ -206,7 +206,7 @@ class TestMapSelector(unittest.TestCase):
             selector = MapSelector(threshold="1")
         # Test that negative thresholds raise ValueError
         with self.assertRaises(ValueError):
-            selector = MapSelector(threshold=-1)
+            selector = MapSelector(threshold=-1.0)
 
     def test_valid_fit(self):
         # Test that the fit() method works as expected
@@ -243,3 +243,5 @@ class TestMapSelector(unittest.TestCase):
         # check that the transformed dataframe equals self.X[self.ftrs]
         X_transformed = selector.transform(self.X)
         self.assertTrue(np.all(X_transformed.columns == self.X[selector.ftrs].columns))
+
+    def test_types_transform(self):
