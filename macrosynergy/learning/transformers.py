@@ -165,6 +165,45 @@ class MapSelector(BaseEstimator, TransformerMixin):
         
         return X[self.ftrs]
         
+class FeatureAverager(BaseEstimator, TransformerMixin):
+    def __init__(self, use_signs: Optional[bool] = False):
+        """
+        Transformer class to combine features into a benchmark signal by averaging.
+    
+        :param <Optional[bool]> use_signs: Boolean to specify whether or not to return the
+            signs of the benchmark signal instead of the signal itself. Default is False.
+        """
+        if type(use_signs) != bool:
+            raise TypeError("'use_signs' must be a boolean.")
+        
+        self.use_signs = use_signs
+
+    def fit(self, X: pd.DataFrame, y: Any = None):
+        """
+        Fit method. Since this transformer is a simple averaging of features,
+        no fitting is required.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Any> y: Placeholder for scikit-learn compatibility.
+        """
+
+        return self
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        """
+        Transform method to average features into a benchmark signal.
+        If use_signs is True, the signs of the benchmark signal are returned.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+
+        :return <pd.DataFrame>: Pandas dataframe of benchmark signal.
+        """
+        signal_df = X.mean(axis=1).to_frame(name="signal")
+        if self.use_signs:
+            return np.sign(signal_df).astype(int)
+
+        return signal_df
+
 class ZnScoreAverager(BaseEstimator, TransformerMixin):
     def __init__(self, neutral: str = "zero", use_signs: bool = False):
         """
