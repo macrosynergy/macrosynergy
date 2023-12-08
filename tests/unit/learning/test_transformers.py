@@ -243,5 +243,3 @@ class TestMapSelector(unittest.TestCase):
         # check that the transformed dataframe equals self.X[self.ftrs]
         X_transformed = selector.transform(self.X)
         self.assertTrue(np.all(X_transformed.columns == self.X[selector.ftrs].columns))
-
-    def test_types_transform(self):
