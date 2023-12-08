@@ -239,3 +239,7 @@ class TestMapSelector(unittest.TestCase):
     def test_valid_transform(self):
         # Test that the transform() method works as expected
         selector = MapSelector(threshold=0.05)
+        selector.fit(self.X, self.y)
+        # check that the transformed dataframe equals self.X[self.ftrs]
+        X_transformed = selector.transform(self.X)
+        self.assertTrue(np.all(X_transformed.columns == self.X[selector.ftrs].columns))
