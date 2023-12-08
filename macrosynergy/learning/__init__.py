@@ -8,9 +8,10 @@ from .cv_tools import panel_cv_scores
 from .transformers import (
     LassoSelector,
     MapSelector,
-    AvgNormFtrTransformer,
+    ZnScoreAverager,
     PanelMinMaxScaler,
-    PanelStandardScaler
+    PanelStandardScaler,
+    FeatureAverager,
 )
 from .metrics import (
     panel_significance_probability,
@@ -31,11 +32,13 @@ __all__ = [
     "BasePanelSplit",
     # cv_tools
     "panel_cv_scores",
-    # transformers        
+    # transformers   
+    "FeatureAverager",     
     "LassoSelector",
     "MapSelector",
     "PanelMinMaxScaler",
     "PanelStandardScaler",
+    "ZnScoreAverager",
     # metrics
     "panel_significance_probability",
     "sharpe_ratio",
