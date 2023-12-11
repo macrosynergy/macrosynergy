@@ -301,6 +301,8 @@ class SignalReturnRelations:
             cs_type="years", ret=self.rets[0], sig=self.sigs[0]
         )
 
+        self.sigs[0] = self.revert_negation(self.sigs[0])
+
     def __rival_sigs__(self, ret):
         """
         Produces the panel-level table for the additional signals.
@@ -1577,7 +1579,7 @@ if __name__ == "__main__":
         dfd,
         rets=["XR", "XRH"],
         sigs=["CRY", "INFL", "GROWTH"],
-        sig_neg=[False, True],
+        sig_neg=[True, True],
         cosp=True,
         freqs=["M", "Q"],
         agg_sigs=["last", "mean"],
