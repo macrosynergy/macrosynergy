@@ -6,6 +6,7 @@ from parameterized import parameterized
 from macrosynergy.learning import (
     LassoSelector,
     MapSelector,
+    FeatureAverager,
 )
 
 from statsmodels.tools.tools import add_constant
@@ -256,3 +257,88 @@ class TestMapSelector(unittest.TestCase):
         # Test that value error is raised if the columns of X don't match the columns of self.X
         with self.assertRaises(ValueError):
             selector.transform(self.X.drop(columns="CPI"))
+
+class TestFeatureAverager(unittest.TestCase):
+    def setUp(self):
+        # Generate data with true linear relationship
+        cids = ["AUD", "CAD", "GBP", "USD"]
+        xcats = ["XR", "CPI", "GROWTH", "RIR"]
+
+        df_cids = pd.DataFrame(index=cids, columns=["earliest", "latest"])
+        df_cids.loc["AUD"] = ["2019-01-01", "2020-12-31"]
+        df_cids.loc["CAD"] = ["2019-01-01", "2020-12-31"]
+        df_cids.loc["GBP"] = ["2019-01-01", "2020-12-31"]
+        df_cids.loc["USD"] = ["2019-01-01", "2020-12-31"]
+
+        tuples = []
+
+        for cid in cids:
+            # get list of all elidgible dates
+            sdate = df_cids.loc[cid]["earliest"]
+            edate = df_cids.loc[cid]["latest"]
+            all_days = pd.date_range(sdate, edate)
+            work_days = all_days[all_days.weekday < 5]
+            for work_day in work_days:
+                tuples.append((cid, work_day))
+
+        n_samples = len(tuples)
+        ftrs = np.random.normal(loc=0, scale=1, size=(n_samples, 3))
+        labels = np.matmul(ftrs, [1, 2, -1]) + np.random.normal(0, 0.5, len(ftrs))
+        df = pd.DataFrame(
+            data=np.concatenate((np.reshape(labels, (-1, 1)), ftrs), axis=1),
+            index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
+            columns=xcats,
+            dtype=np.float32,
+        )
+
+        self.X = df.drop(columns="XR")
+        self.y = df["XR"]
+
+    def test_valid_init(self):
+        # Test that the FeatureAverager class can be instantiated
+        selector = FeatureAverager()
+        self.assertIsInstance(selector, FeatureAverager)
+        # Test that the use_signs attribute is correctly set
+        selector = FeatureAverager(use_signs=True)
+        self.assertTrue(selector.use_signs)
+        selector = FeatureAverager(use_signs=False)
+        self.assertFalse(selector.use_signs)
+
+    def test_types_init(self):
+        # Test that non bool use_signs raises TypeError
+        with self.assertRaises(TypeError):
+            selector = FeatureAverager(use_signs="True")
+
+    def test_valid_fit(self):
+        # Test that the fit() method works as expected
+        selector = FeatureAverager()
+        try:
+            selector.fit(self.X, self.y)
+        except Exception as e:
+            self.fail(f"Fit method for the FeatureAverager raised an exception: {e}")
+
+    @parameterized.expand([False, True])
+    def test_valid_transform(self, use_signs):
+        # Test that the transform() method works as expected
+        selector = FeatureAverager(use_signs=use_signs)
+        selector.fit(self.X, self.y)
+        X_transformed = selector.transform(self.X)
+        self.assertIsInstance(X_transformed, pd.DataFrame)
+        self.assertTrue(np.all(X_transformed.columns == ["signal"]))
+        self.assertIsInstance(X_transformed.index, pd.MultiIndex)
+        if use_signs:
+            # check that X_transformed is the sign of the mean across columns of X
+            self.assertTrue(np.all(X_transformed == np.sign(self.X.mean(axis=1)).astype(int)))
+        else:
+            # check that X_transformed is the mean across columns of X
+            self.assertTrue(np.all(X_transformed == self.X.mean(axis=1)))
+
+    def test_types_transform(self):
+        selector = FeatureAverager()
+        selector.fit(self.X, self.y)
+        # Test that non dataframe X raises TypeError
+        with self.assertRaises(TypeError):
+            selector.transform("X")
+        # Test that value error is raised if the X index isn't a multi-index
+        with self.assertRaises(ValueError):
+            selector.transform(self.X.reset_index())

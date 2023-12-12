@@ -219,6 +219,15 @@ class FeatureAverager(BaseEstimator, TransformerMixin):
 
         :return <pd.DataFrame>: Pandas dataframe of benchmark signal.
         """
+        # checks
+        if type(X) != pd.DataFrame:
+            raise TypeError("Input feature matrix for the FeatureAverager must be a pandas dataframe. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe.")
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        
+        # transform
         signal_df = X.mean(axis=1).to_frame(name="signal")
         if self.use_signs:
             return np.sign(signal_df).astype(int)
