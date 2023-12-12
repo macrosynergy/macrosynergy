@@ -356,51 +356,17 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
             raise TypeError("The inner index of X must be datetime.date.")
 
         # transform
-        unique_dates: List[pd.Timestamp] = sorted(X.index.get_level_values(1).unique())
         signal_df = pd.DataFrame(index=X.index, columns=["signal"], dtype="float")
 
-        if self.neutral == "zero":
-            # Then iteratively compute the MAD
-            profiler = Profiler()
-            profiler.start()
-            training_mads: pd.Series = self.stats[0]
-            training_n: int = self.training_n
-            for date in unique_dates:
-                X_test_date: pd.DataFrame = X.loc[(slice(None), date), :]
-                test_mads: pd.Series = np.mean(np.abs(X_test_date), axis=0)
-                test_n: int = len(X_test_date)
-
-                updated_n: int = test_n + training_n
-                updated_mads: pd.Series = (
-                    test_mads * test_n + training_mads * training_n
-                ) / updated_n
-                standardised_X: pd.DataFrame = (X_test_date / updated_mads).fillna(0)
-                benchmark_signal = pd.DataFrame(
-                    np.mean(standardised_X, axis=1), columns=["signal"], dtype="float"
-                )
-                # store the signal
-                signal_df.loc[benchmark_signal.index] = benchmark_signal
-                # update metrics for the next iteration
-                training_mads = updated_mads
-                training_n = updated_n
-            
-            profiler.stop()
-            
-            compare_df = signal_df.copy()
-            print(profiler.output_text(unicode=True, color=True))
-            
-            profiler2 = Profiler()
-            profiler2.start()    
+        if self.neutral == "zero": 
             training_mads = self.stats[0]
             training_n: int = self.training_n
             test_n = len(X)
             n_cids = X.index.get_level_values(0).unique().size
             X_abs = X.abs()
 
-            # Applying the expanding mean across the new columns for each original column
             X_test_expanding_mads = X_abs.groupby(level='real_date').mean().expanding().mean()
 
-            # expanding_count = np.expand_dims(np.arange(n_cids, test_n + n_cids, n_cids), 1)
             expanding_count = np.expand_dims(np.arange(n_cids, test_n + n_cids, step=n_cids), 1)
             n_total = training_n + expanding_count
 
@@ -409,95 +375,38 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
             standardised_X: pd.DataFrame = X / X_expanding_mads
             benchmark_signal = pd.DataFrame(np.mean(standardised_X, axis=1), columns=["signal"], dtype="float")
             signal_df.loc[benchmark_signal.index] = benchmark_signal
-            profiler2.stop()
-            print(profiler2.output_text(unicode=True, color=True))
-            expanding_count
-
 
         else:
-            # Then iteratively compute the mean and standard deviation
             training_means: pd.Series = self.stats[0]
             training_sum_squares: pd.Series = self.stats[1]
             training_n: int = self.training_n
-            for date in unique_dates:
-                X_test_date: pd.DataFrame = X.loc[(slice(None), date), :]
-                test_means: pd.Series = X_test_date.mean(axis=0)
-                test_sum_squares: pd.Series = np.sum(np.square(X_test_date), axis=0)
-                test_n: int = len(X_test_date)
-                (
-                    updated_means,
-                    updated_sum_squares,
-                    updated_stds,
-                    updated_n,
-                ) = self.__update_metrics(
-                    test_means,
-                    test_sum_squares,
-                    test_n,
-                    training_means,
-                    training_sum_squares,
-                    training_n,
-                )
+            test_n = len(X)
+            n_cids = X.index.get_level_values(0).unique().size
+            X_square = X ** 2
+            X_test_expanding_sum_squares = X_square.groupby(level='real_date').sum().expanding().sum()
+            X_test_expanding_mean = X.groupby(level='real_date').mean().expanding().mean()
 
-                normalised_X: pd.DataFrame = (
-                    X_test_date - updated_means
-                ) / updated_stds
-                benchmark_signal: pd.DataFrame = pd.DataFrame(
+            expanding_count = np.expand_dims(np.arange(n_cids, test_n + n_cids, step=n_cids), 1)
+            n_total = training_n + expanding_count
+
+            X_expanding_means = (((training_n)*training_means + (expanding_count)*X_test_expanding_mean)/n_total).fillna(0)
+
+            X_expanding_sum_squares = training_sum_squares + X_test_expanding_sum_squares
+            comp1 = (X_expanding_sum_squares) / (n_total - 1)
+            comp2 = 2 * np.square(X_expanding_means) * (n_total) / (n_total - 1)
+            comp3 = (n_total) * np.square(X_expanding_means) / (n_total - 1)
+            X_expanding_std: pd.Series = np.sqrt(comp1 - comp2 + comp3)
+            normalised_X: pd.DataFrame = (X - X_expanding_means) / X_expanding_std
+            
+            benchmark_signal: pd.DataFrame = pd.DataFrame(
                     np.mean(normalised_X, axis=1), columns=["signal"], dtype="float"
                 )
-                signal_df.loc[benchmark_signal.index] = benchmark_signal
-                # update metrics for the next iteration
-                training_means = updated_means
-                training_sum_squares = updated_sum_squares
-                training_n = updated_n
+            signal_df.loc[benchmark_signal.index] = benchmark_signal
 
         if self.use_signs:
             return np.sign(signal_df).astype(int)
 
         return signal_df
-
-    def __update_metrics(
-        self,
-        test_means: pd.Series,
-        test_sum_squares: pd.Series,
-        test_n: int,
-        training_means: pd.Series,
-        training_sum_squares: pd.Series,
-        training_n: int,
-    ):
-        """
-        Private helper method to sequentially update means and standard deviations
-        in light of the mean, standard deviation and sample size of a new,
-        previously unseen, dataset. Only the mean, sample size and sum of squares are
-        needed to update the mean and standard deviation. This function is used only
-        when neutral is set to 'mean'.
-
-        :param <pd.Series> test_means: Mean of each feature in the test set.
-        :param <pd.Series> test_sum_squares: Sum of squares of each feature in the test 
-            set.
-        :param <int> test_n: Sample size of the test set.
-        :param <pd.Series> training_means: Mean of each feature in the training set.
-        :param <pd.Series> training_sum_squares: Sum of squares of each feature in the 
-            training set.
-        :param <int> training_n: Sample size of the training set.
-
-        :return <tuple>: Tuple of updated means, sum of squares, standard deviations and 
-            sample size.
-        """
-        updated_n: int = test_n + training_n
-
-        # First update the means
-        updated_means: pd.Series = (
-            test_means * test_n + training_means * training_n
-        ) / updated_n
-
-        # Then update the standard deviations
-        updated_sum_squares: pd.Series = training_sum_squares + test_sum_squares
-        comp1 = (updated_sum_squares) / (updated_n - 1)
-        comp2 = 2 * np.square(updated_means) * (updated_n) / (updated_n - 1)
-        comp3 = (updated_n) * np.square(updated_means) / (updated_n - 1)
-        updated_stds: pd.Series = np.sqrt(comp1 - comp2 + comp3)
-
-        return updated_means, updated_sum_squares, updated_stds, updated_n
 
 
 class PanelMinMaxScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
@@ -685,13 +594,13 @@ if __name__ == "__main__":
     X = dfd2.drop(columns=["XR"])
     y = dfd2["XR"]
 
-    # selector = MapSelector(0.05)
-    # selector.fit(X, y)
-    # print(selector.transform(X).columns)
+    selector = MapSelector(0.05)
+    selector.fit(X, y)
+    print(selector.transform(X).columns)
 
-    # selector = LassoSelector(0.00001)
-    # selector.fit(X, y)
-    # print(selector.transform(X).columns)
+    selector = LassoSelector(0.00001)
+    selector.fit(X, y)
+    print(selector.transform(X).columns)
 
     # Split X and y into training and test sets
     X_train, X_test = (
@@ -703,10 +612,10 @@ if __name__ == "__main__":
         y[y.index.get_level_values(1) >= pd.Timestamp(day=1, month=1, year=2018)],
     )
 
-    selector = ZnScoreAverager(neutral="zero", use_signs=True)
+    selector = ZnScoreAverager(neutral="mean", use_signs=True)
     selector.fit(X_train, y_train)
     print(selector.transform(X_test))
 
-    # selector = ZnScoreAverager(neutral="zero")
-    # selector.fit(X_train, y_train)
-    # print(selector.transform(X_test))
+    selector = ZnScoreAverager(neutral="zero")
+    selector.fit(X_train, y_train)
+    print(selector.transform(X_test))
