@@ -316,6 +316,8 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
 
         if self.neutral == "zero":
             # Then iteratively compute the MAD
+            profiler = Profiler()
+            profiler.start()
             training_mads: pd.Series = self.stats[0]
             training_n: int = self.training_n
             for date in unique_dates:
@@ -332,6 +334,36 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
                 # update metrics for the next iteration
                 training_mads = updated_mads
                 training_n = updated_n
+            
+            profiler.stop()
+            
+            compare_df = signal_df.copy()
+            print(profiler.output_text(unicode=True, color=True))
+            
+            profiler2 = Profiler()
+            profiler2.start()    
+            training_mads = self.stats[0]
+            training_n: int = self.training_n
+            test_n = len(X)
+            n_cids = X.index.get_level_values(0).unique().size
+            X_abs = X.abs()
+
+            # Applying the expanding mean across the new columns for each original column
+            X_test_expanding_mads = X_abs.groupby(level='real_date').mean().expanding().mean()
+
+            # expanding_count = np.expand_dims(np.arange(n_cids, test_n + n_cids, n_cids), 1)
+            expanding_count = np.expand_dims(np.arange(n_cids, test_n + n_cids, step=n_cids), 1)
+            n_total = training_n + expanding_count
+
+            X_expanding_mads: pd.DataFrame = (((training_n)*training_mads + (expanding_count)*X_test_expanding_mads)/n_total).fillna(0)
+
+            standardised_X: pd.DataFrame = X / X_expanding_mads
+            benchmark_signal = pd.DataFrame(np.mean(standardised_X, axis=1), columns=["signal"], dtype="float")
+            signal_df.loc[benchmark_signal.index] = benchmark_signal
+            profiler2.stop()
+            print(profiler2.output_text(unicode=True, color=True))
+            expanding_count
+
 
         else:
             # Then iteratively compute the mean and standard deviation
@@ -525,6 +557,8 @@ class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin)
 if __name__ == "__main__":
     from macrosynergy.management import make_qdf
     import macrosynergy.management as msm
+    
+    np.random.seed(1)
 
     cids = ["AUD", "CAD", "GBP", "USD"]
     xcats = ["XR", "CRY", "GROWTH", "INFL"]
@@ -555,22 +589,22 @@ if __name__ == "__main__":
     X = dfd2.drop(columns=["XR"])
     y = dfd2["XR"]
 
-    selector = MapSelector(0.05)
-    selector.fit(X, y)
-    print(selector.transform(X).columns)
+    # selector = MapSelector(0.05)
+    # selector.fit(X, y)
+    # print(selector.transform(X).columns)
 
-    selector = LassoSelector(0.00001)
-    selector.fit(X, y)
-    print(selector.transform(X).columns)
+    # selector = LassoSelector(0.00001)
+    # selector.fit(X, y)
+    # print(selector.transform(X).columns)
 
     # Split X and y into training and test sets
     X_train, X_test = X[X.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], X[X.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
     y_train, y_test = y[y.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], y[y.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
 
-    selector = ZnScoreAverager(neutral="mean", use_signs=True)
+    selector = ZnScoreAverager(neutral="zero", use_signs=True)
     selector.fit(X_train, y_train)
     print(selector.transform(X_test))
 
-    selector = ZnScoreAverager(neutral="zero")
-    selector.fit(X_train, y_train)
-    print(selector.transform(X_test))
+    # selector = ZnScoreAverager(neutral="zero")
+    # selector.fit(X_train, y_train)
+    # print(selector.transform(X_test))
