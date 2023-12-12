@@ -272,7 +272,7 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         """
         # checks
         if type(X) != pd.DataFrame:
-            raise TypeError("Input feature matrix for the MeanNormalTransformer must be a pandas dataframe. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe.")
+            raise TypeError("Input feature matrix for the ZnScoreAverager must be a pandas dataframe. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe.")
         if not isinstance(X.index, pd.MultiIndex):
             raise ValueError("X must be multi-indexed.")
         if not isinstance(X.index.get_level_values(1)[0], datetime.date):
@@ -306,7 +306,7 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         """
         # checks 
         if type(X) != pd.DataFrame:
-            raise TypeError("Input feature matrix for the MeanNormalTransformer must be a pandas dataframe. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe.")
+            raise TypeError("Input feature matrix for the ZnScoreAverager must be a pandas dataframe. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe.")
         if not isinstance(X.index, pd.MultiIndex):
             raise ValueError("X must be multi-indexed.")
         if not isinstance(X.index.get_level_values(1)[0], datetime.date):
@@ -418,6 +418,9 @@ class PanelMinMaxScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
         if type(X) not in [pd.DataFrame, pd.Series]:
             raise TypeError("'X' must be a pandas dataframe or series. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe or series.")
 
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        
         # fit
         self.mins = X.min(axis=0)
         self.maxs = X.max(axis=0)
