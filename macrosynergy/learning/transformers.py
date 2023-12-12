@@ -489,7 +489,8 @@ class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin)
         # checks
         if type(X) not in [pd.DataFrame, pd.Series]:
             raise TypeError("'X' must be a pandas dataframe or series. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe or series.")
-
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
         # fit
         if self.with_mean:
             self.means = X.mean(axis=0)
@@ -513,12 +514,12 @@ class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin)
             raise TypeError("'X' must be a pandas dataframe or series. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe or series.")
         
         # transform
-        if self.means:
+        if self.means is not None:
             calc = X - self.means 
         else:
             calc = X
 
-        if self.stds:
+        if self.stds is not None:
             calc = calc / self.stds 
 
         return calc
