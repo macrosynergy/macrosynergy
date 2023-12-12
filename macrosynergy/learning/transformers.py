@@ -454,10 +454,10 @@ class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin)
         of standardised features into transformers that require cross-sectional 
         and temporal knowledge. 
 
-        NOTE: This class is designed to replicate scikit-learn's StandardScalar() class.
+        NOTE: This class is designed to replicate scikit-learn's StandardScaler() class.
               It is not designed to perform sequential mean and standard deviation 
               normalisation like the 'make_zn_scores()' function in 'macrosynergy.panel' 
-              or 'AvgNormFtrTransformer' in 'macrosynergy.learning'. 
+              or 'ZnScoreAverager' in 'macrosynergy.learning'. 
               This class should primarily be used to satisfy the assumptions of various models,
               for example the Lasso, Ridge or any neural network. 
 

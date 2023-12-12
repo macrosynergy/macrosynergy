@@ -8,12 +8,13 @@ from macrosynergy.learning import (
     MapSelector,
     FeatureAverager,
     PanelMinMaxScaler,
+    PanelStandardScaler,
 )
 
 from statsmodels.tools.tools import add_constant
 from statsmodels.regression.mixed_linear_model import MixedLM
 
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 class TestLassoSelector(unittest.TestCase):
     def setUp(self):
@@ -423,6 +424,110 @@ class TestPanelMinMaxScaler(unittest.TestCase):
 
     def test_types_transform(self):
         scaler = PanelMinMaxScaler()
+        scaler.fit(self.X, self.y)
+        X_transformed = scaler.transform(self.X)
+        # check that X_transformed is a dataframe
+        self.assertIsInstance(X_transformed, pd.DataFrame)
+        # check that X_transformed has the same index as X
+        self.assertTrue(np.all(X_transformed.index == self.X.index))
+
+class TestPanelStandardScaler(unittest.TestCase):
+    def setUp(self):
+        # Generate data with true linear relationship
+        cids = ["AUD", "CAD", "GBP", "USD"]
+        xcats = ["XR", "CPI", "GROWTH", "RIR"]
+
+        df_cids = pd.DataFrame(index=cids, columns=["earliest", "latest"])
+        df_cids.loc["AUD"] = ["2019-01-01", "2020-12-31"]
+        df_cids.loc["CAD"] = ["2019-01-01", "2020-12-31"]
+        df_cids.loc["GBP"] = ["2019-01-01", "2020-12-31"]
+        df_cids.loc["USD"] = ["2019-01-01", "2020-12-31"]
+
+        tuples = []
+
+        for cid in cids:
+            # get list of all elidgible dates
+            sdate = df_cids.loc[cid]["earliest"]
+            edate = df_cids.loc[cid]["latest"]
+            all_days = pd.date_range(sdate, edate)
+            work_days = all_days[all_days.weekday < 5]
+            for work_day in work_days:
+                tuples.append((cid, work_day))
+
+        n_samples = len(tuples)
+        ftrs = np.random.normal(loc=0, scale=1, size=(n_samples, 3))
+        labels = np.matmul(ftrs, [1, 2, -1]) + np.random.normal(0, 0.5, len(ftrs))
+        df = pd.DataFrame(
+            data=np.concatenate((np.reshape(labels, (-1, 1)), ftrs), axis=1),
+            index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
+            columns=xcats,
+            dtype=np.float32,
+        )
+
+        self.X = df.drop(columns="XR")
+        self.y = df["XR"]
+
+    @parameterized.expand([False, False], [False, True], [True, False], [True, True])
+    def test_valid_init(self, with_mean, with_std):
+        # Test that the PanelStandardScaler class can be instantiated
+        scaler = PanelStandardScaler(with_mean=with_mean, with_std=with_std)
+        self.assertIsInstance(scaler, PanelStandardScaler)
+        self.assertEqual(scaler.with_mean, with_mean)
+        self.assertEqual(scaler.with_std, with_std)
+        self.assertEqual(scaler.means, None)
+        self.assertEqual(scaler.stds, None)
+
+    @parameterized.expand([False, "True"], ["False", True], ["True", "True"])
+    def test_types_init(self, with_mean, with_std):
+        # Test that each parameter combination results in a TypeError
+        with self.assertRaises(TypeError):
+            scaler = PanelStandardScaler(with_mean=with_mean, with_std=with_std)
+
+    @parameterized.expand([False, False], [False, True], [True, False], [True, True])
+    def test_valid_fit(self, with_mean, with_std):
+        # Test that the fit() method works as expected
+        scaler = PanelStandardScaler(with_mean=with_mean, with_std=with_std)
+        try:
+            scaler.fit(self.X, self.y)
+        except Exception as e:
+            self.fail(f"Fit method for the PanelMinMaxScaler raised an exception: {e}")
+
+        self.assertTrue(np.all(scaler.means == self.X.mean(axis=0)))
+        self.assertTrue(np.all(scaler.stds == self.X.std(axis=0)))
+
+    @parameterized.expand([False, False], [False, True], [True, False], [True, True])
+    def test_types_fit(self, with_mean, with_std):
+        # Test that non dataframe and non series X raises TypeError
+        with self.assertRaises(TypeError):
+            scaler = PanelStandardScaler(with_mean=with_mean, with_std=with_std)
+            scaler.fit("X", self.y)
+
+        # Test that value error is raised if the X index isn't a multi-index
+        with self.assertRaises(ValueError):
+            scaler = PanelStandardScaler(with_mean=with_mean, with_std=with_std)
+            scaler.fit(self.X.reset_index(), self.y)
+
+    @parameterized.expand([False, False], [False, True], [True, False], [True, True])
+    def test_valid_transform(self, with_mean, with_std):
+        # Test that the transform() method works as expected
+        scaler = PanelStandardScaler(with_mean=with_mean, with_std=with_std)
+        scaler.fit(self.X, self.y)
+        X_transformed = scaler.transform(self.X)
+        # check that X_transformed has the same columns as X
+        self.assertTrue(np.all(X_transformed.columns == self.X.columns))
+        # check that X_transformed has values between 0 and 1
+        self.assertTrue(np.all(X_transformed.values >= 0))
+        self.assertTrue(np.all(X_transformed.values <= 1))
+        # check that X_transformed has the same values as the sklearn MinMaxScaler
+        sklearn_scaler = StandardScaler(with_mean=with_mean, with_std=with_std)
+        sklearn_scaler.fit(self.X)
+        sklearn_X_transformed = sklearn_scaler.transform(self.X)
+        # should be minor differences due to floating point precision
+        self.assertTrue(np.all(X_transformed.values.round(3) == sklearn_X_transformed.round(3)))
+
+    @parameterized.expand([False, False], [False, True], [True, False], [True, True])
+    def test_types_transform(self, with_mean, with_std):
+        scaler = PanelStandardScaler(with_mean=with_mean, with_std=with_std)
         scaler.fit(self.X, self.y)
         X_transformed = scaler.transform(self.X)
         # check that X_transformed is a dataframe
