@@ -667,7 +667,7 @@ class NaivePnL:
                 lw=1,
             )
             leg = fg.axes.get_legend()
-            plt.title(title, fontsize=20)
+            plt.title(title, fontsize=title_fontsize)
             plt.legend(
                 labels=labels,
                 title=legend_title,
@@ -1036,47 +1036,47 @@ if __name__ == "__main__":
         pnl_cats=["PNL_GROWTH_NEG"], start="2015-01-01", end="2020-12-31"
     )
 
-    pnl.agg_signal_bars(
-        pnl_name="PNL_GROWTH_NEG",
-        freq="m",
-        metric="direction",
-        title=None,
-    )
+    # pnl.agg_signal_bars(
+    #     pnl_name="PNL_GROWTH_NEG",
+    #     freq="m",
+    #     metric="direction",
+    #     title=None,
+    # )
     pnl.plot_pnls(
         pnl_cats=["PNL_GROWTH_NEG", "Long"],
-        facet=False,
+        title_fontsize=60,
         xlab="date",
         ylab="%",
     )
-    pnl.plot_pnls(
-        pnl_cats=["PNL_GROWTH_NEG", "Long"],
-        facet=False,
-        xcat_labels=["S_1", "S_2"],
-        xlab="date",
-        ylab="%",
-    )
-    pnl.plot_pnls(
-        pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=True, xcat_labels=["S_1", "S_2"]
-    )
-    pnl.plot_pnls(
-        pnl_cats=["PNL_GROWTH_NEG", "Long"],
-        facet=True,
-    )
+    # pnl.plot_pnls(
+    #     pnl_cats=["PNL_GROWTH_NEG", "Long"],
+    #     facet=False,
+    #     xcat_labels=["S_1", "S_2"],
+    #     xlab="date",
+    #     ylab="%",
+    # )
+    # pnl.plot_pnls(
+    #     pnl_cats=["PNL_GROWTH_NEG", "Long"], facet=True, xcat_labels=["S_1", "S_2"]
+    # )
+    # pnl.plot_pnls(
+    #     pnl_cats=["PNL_GROWTH_NEG", "Long"],
+    #     facet=True,
+    # )
 
-    pnl.plot_pnls(pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids, xcat_labels=None)
+    # pnl.plot_pnls(pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids, xcat_labels=None)
 
-    pnl.plot_pnls(
-        pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids, facet=True, xcat_labels=None
-    )
+    # pnl.plot_pnls(
+    #     pnl_cats=["PNL_GROWTH_NEG"], pnl_cids=cids, facet=True, xcat_labels=None
+    # )
 
-    pnl.plot_pnls(
-        pnl_cats=["PNL_GROWTH_NEG"],
-        pnl_cids=cids,
-        same_y=True,
-        facet=True,
-        xcat_labels=None,
-        share_axis_labels=False,
-        xlab="Date",
-        ylab="PnL",
-        y_label_adj=0.1,
-    )
+    # pnl.plot_pnls(
+    #     pnl_cats=["PNL_GROWTH_NEG"],
+    #     pnl_cids=cids,
+    #     same_y=True,
+    #     facet=True,
+    #     xcat_labels=None,
+    #     share_axis_labels=False,
+    #     xlab="Date",
+    #     ylab="PnL",
+    #     y_label_adj=0.1,
+    # )
