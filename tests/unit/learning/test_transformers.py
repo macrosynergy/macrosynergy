@@ -328,10 +328,10 @@ class TestFeatureAverager(unittest.TestCase):
         self.assertIsInstance(X_transformed.index, pd.MultiIndex)
         if use_signs:
             # check that X_transformed is the sign of the mean across columns of X
-            self.assertTrue(np.all(X_transformed == np.sign(self.X.mean(axis=1)).astype(int)))
+            self.assertTrue(np.all(X_transformed.values.reshape(-1) == np.sign(self.X.mean(axis=1)).astype(int).values.reshape(-1)))
         else:
             # check that X_transformed is the mean across columns of X
-            self.assertTrue(np.all(X_transformed == self.X.mean(axis=1)))
+            self.assertTrue(np.all(X_transformed.values.reshape(-1) == self.X.mean(axis=1).values.reshape(-1)))
 
     def test_types_transform(self):
         selector = FeatureAverager()
