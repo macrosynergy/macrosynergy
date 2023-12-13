@@ -250,13 +250,13 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         if not isinstance(neutral, str):
             raise TypeError("'neutral' must be a string.")
 
-        if neutral.lower() not in ["zero", "mean"]:
+        if neutral not in ["zero", "mean"]:
             raise ValueError("neutral must be either 'zero' or 'mean'.")
 
         if not isinstance(use_signs, bool):
             raise TypeError("'use_signs' must be a boolean.")
 
-        self.neutral = neutral.lower()
+        self.neutral = neutral
         self.use_signs = use_signs
 
     def fit(self, X: pd.DataFrame, y: Any = None):
@@ -391,7 +391,7 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
 
     def _get_expanding_count(self, X):
         """
-        Helper method to get the number of values in each expanding window.
+        Helper method to get the number of non-NaN values in each expanding window.
 
         :param <pd.DataFrame> X: Pandas dataframe of input features.
 
@@ -589,4 +589,3 @@ if __name__ == "__main__":
     selector = ZnScoreAverager(neutral="zero")
     selector.fit(X_train, y_train)
     print(selector.transform(X_test))
-    
