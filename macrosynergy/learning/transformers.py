@@ -357,24 +357,26 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
 
         # transform
         signal_df = pd.DataFrame(index=X.index, columns=["signal"], dtype="float")
-
+        # unique_dates: List[pd.Timestamp] = sorted(X.index.get_level_values(1).unique())
         if self.neutral == "zero": 
+            
             training_mads = self.stats[0]
             training_n: int = self.training_n
             test_n = len(X)
-            n_cids = X.index.get_level_values(0).unique().size
             X_abs = X.abs()
 
-            X_test_expanding_mads = X_abs.groupby(level='real_date').mean().expanding().mean()
-
-            expanding_count = np.expand_dims(np.arange(n_cids, test_n + n_cids, step=n_cids), 1)
+            expanding_count = np.expand_dims(X.groupby(level='real_date').count().expanding().sum().to_numpy()[:,0], 1)
+            
+            # We need to divide the expanding sum by the number of cross sections in each expanding window.
+            X_test_expanding_mads = X_abs.groupby(level="real_date").sum().expanding().sum()/expanding_count
             n_total = training_n + expanding_count
 
             X_expanding_mads: pd.DataFrame = (((training_n)*training_mads + (expanding_count)*X_test_expanding_mads)/n_total).fillna(0)
 
             standardised_X: pd.DataFrame = X / X_expanding_mads
             benchmark_signal = pd.DataFrame(np.mean(standardised_X, axis=1), columns=["signal"], dtype="float")
-            signal_df.loc[benchmark_signal.index] = benchmark_signal
+            signal_df.loc[benchmark_signal.index] = benchmark_signal       
+
 
         else:
             training_means: pd.Series = self.stats[0]
@@ -565,57 +567,220 @@ if __name__ == "__main__":
     
     np.random.seed(1)
 
-    cids = ["AUD", "CAD", "GBP", "USD"]
-    xcats = ["XR", "CRY", "GROWTH", "INFL"]
-    cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
+    # cids = ["AUD", "CAD", "GBP", "USD"]
+    # xcats = ["XR", "CRY", "GROWTH", "INFL"]
+    # cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
 
-    """Example 1: Unbalanced panel """
+    # """Example 1: Unbalanced panel """
 
-    df_cids2 = pd.DataFrame(
-        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    # df_cids2 = pd.DataFrame(
+    #     index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    # )
+    # df_cids2.loc["AUD"] = ["2002-01-01", "2020-12-31", 0, 1]
+    # df_cids2.loc["CAD"] = ["2003-01-01", "2020-12-31", 0, 1]
+    # df_cids2.loc["GBP"] = ["2000-01-01", "2020-12-31", 0, 1]
+    # df_cids2.loc["USD"] = ["2000-01-01", "2020-12-31", 0, 1]
+
+    # df_xcats2 = pd.DataFrame(index=xcats, columns=cols)
+    # df_xcats2.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    # df_xcats2.loc["CRY"] = ["2000-01-01", "2020-12-31", 1, 2, 0.95, 1]
+    # df_xcats2.loc["GROWTH"] = ["2000-01-01", "2020-12-31", 1, 2, 0.9, 1]
+    # df_xcats2.loc["INFL"] = ["2000-01-01", "2020-12-31", 1, 2, 0.8, 0.5]
+
+    # dfd2 = make_qdf(df_cids2, df_xcats2, back_ar=0.75)
+    # dfd2["grading"] = np.ones(dfd2.shape[0])
+    # black = {"GBP": ["2009-01-01", "2012-06-30"], "CAD": ["2018-01-01", "2100-01-01"]}
+    # dfd2 = msm.reduce_df(df=dfd2, cids=cids, xcats=xcats, blacklist=black)
+
+    # dfd2 = dfd2.pivot(index=["cid", "real_date"], columns="xcat", values="value")
+    # X = dfd2.drop(columns=["XR"])
+    # y = dfd2["XR"]
+
+    # selector = MapSelector(0.05)
+    # selector.fit(X, y)
+    # print(selector.transform(X).columns)
+
+    # selector = LassoSelector(0.00001)
+    # selector.fit(X, y)
+    # print(selector.transform(X).columns)
+
+    # # Split X and y into training and test sets
+    # X_train, X_test = X[X.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], X[X.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
+    # y_train, y_test = y[y.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], y[y.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
+
+    # selector = ZnScoreAverager(neutral="mean", use_signs=True)
+    # selector.fit(X_train, y_train)
+    # print(selector.transform(X_test))
+
+    # selector = ZnScoreAverager(neutral="zero")
+    # selector.fit(X_train, y_train)
+    # print(selector.transform(X_test))
+    
+    
+    import os
+    import macrosynergy.management as msm
+    import macrosynergy.panel as msp
+    import macrosynergy.pnl as msn
+    import macrosynergy.signal as mss
+    import macrosynergy.learning as msl
+    from macrosynergy.download import JPMaQSDownload
+
+    from sklearn.base import BaseEstimator, RegressorMixin
+    from sklearn.pipeline import Pipeline
+    from sklearn.metrics import make_scorer
+    from sklearn.preprocessing import StandardScaler
+    
+    class NaivePredictor(BaseEstimator, RegressorMixin):
+        def __init__(self):
+            pass
+
+        def fit(self, X, y=None):
+            return self
+
+        def predict(self, X):
+            return np.array(X)
+    
+    cids_dm = [
+        "AUD",
+        "CAD",
+        "CHF",
+        "EUR",
+        "GBP",
+        "JPY",
+        "NOK",
+        "NZD",
+        "SEK",
+        "USD",
+    ]  # DM currency areas
+
+    cids = cids_dm
+    main = [
+        "RYLDIRS05Y_NSA",
+        "INTRGDPv5Y_NSA_P1M1ML12_3MMA",
+        "CPIC_SJA_P6M6ML6AR",
+        "INFTEFF_NSA",
+        "PCREDITBN_SJA_P1M1ML12",
+        "RGDP_SA_P1Q1QL4_20QMA",
+    ]
+    econ = []
+    mark = ["DU05YXR_NSA"]
+
+    xcats = main + econ + mark
+    
+    # Download series from J.P. Morgan DataQuery by tickers
+
+    start_date = "2001-04-01"
+    end_date = "2022-12-31"
+
+    tickers = [cid + "_" + xcat for cid in cids for xcat in xcats]
+    print(f"Maximum number of tickers is {len(tickers)}")
+
+    # Retrieve credentials
+
+    oauth_id = os.getenv("DQ_CLIENT_ID")  # Replace with own client ID
+    oauth_secret = os.getenv("DQ_CLIENT_SECRET")  # Replace with own secret
+
+    # Download from DataQuery
+
+    with JPMaQSDownload(client_id=oauth_id, client_secret=oauth_secret) as downloader:
+        df = downloader.download(
+            tickers=tickers,
+            start_date=start_date,
+            end_date=end_date,
+            metrics=["value"],
+            suppress_warning=True,
+            show_progress=True,
+        )
+
+    dfd = df
+
+    print("Done")
+    
+    xcatx = xcats
+    cidx = cids
+
+    train = msm.reduce_df(df=dfd, xcats=xcatx, cids=cidx, end="2016-11-30")
+    valid = msm.reduce_df(
+        df=dfd,
+        xcats=xcatx,
+        cids=cidx,
+        start="2016-11-01",
+        end="2019-11-30",
     )
-    df_cids2.loc["AUD"] = ["2002-01-01", "2020-12-31", 0, 1]
-    df_cids2.loc["CAD"] = ["2003-01-01", "2020-12-31", 0, 1]
-    df_cids2.loc["GBP"] = ["2000-01-01", "2020-12-31", 0, 1]
-    df_cids2.loc["USD"] = ["2000-01-01", "2020-12-31", 0, 1]
-
-    df_xcats2 = pd.DataFrame(index=xcats, columns=cols)
-    df_xcats2.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-    df_xcats2.loc["CRY"] = ["2000-01-01", "2020-12-31", 1, 2, 0.95, 1]
-    df_xcats2.loc["GROWTH"] = ["2000-01-01", "2020-12-31", 1, 2, 0.9, 1]
-    df_xcats2.loc["INFL"] = ["2000-01-01", "2020-12-31", 1, 2, 0.8, 0.5]
-
-    dfd2 = make_qdf(df_cids2, df_xcats2, back_ar=0.75)
-    dfd2["grading"] = np.ones(dfd2.shape[0])
-    black = {"GBP": ["2009-01-01", "2012-06-30"], "CAD": ["2018-01-01", "2100-01-01"]}
-    dfd2 = msm.reduce_df(df=dfd2, cids=cids, xcats=xcats, blacklist=black)
-
-    dfd2 = dfd2.pivot(index=["cid", "real_date"], columns="xcat", values="value")
-    X = dfd2.drop(columns=["XR"])
-    y = dfd2["XR"]
-
-    selector = MapSelector(0.05)
-    selector.fit(X, y)
-    print(selector.transform(X).columns)
-
-    selector = LassoSelector(0.00001)
-    selector.fit(X, y)
-    print(selector.transform(X).columns)
-
-    # Split X and y into training and test sets
-    X_train, X_test = (
-        X[X.index.get_level_values(1) < pd.Timestamp(day=1, month=1, year=2018)],
-        X[X.index.get_level_values(1) >= pd.Timestamp(day=1, month=1, year=2018)],
+    test = msm.reduce_df(
+        df=dfd, xcats=xcatx, cids=cidx, start="2019-11-01", end="2022-12-31"
     )
-    y_train, y_test = (
-        y[y.index.get_level_values(1) < pd.Timestamp(day=1, month=1, year=2018)],
-        y[y.index.get_level_values(1) >= pd.Timestamp(day=1, month=1, year=2018)],
-    )
+    class preprocess_df:
+        def __init__(self, df):
+            self.df = df
+            self.desired_ftrs = [
+                "XCPIC_SJA_P6M6ML6AR",
+                "XPCREDITBN_SJA_P1M1ML12",
+                "RYLDIRS05Y_NSA",
+                "INTRGDPv5Y_NSA_P1M1ML12_3MMA",
+                "DU05YXR_NSA",
+            ]
+            self.calcs = [
+                "XCPIC_SJA_P6M6ML6AR = CPIC_SJA_P6M6ML6AR - INFTEFF_NSA",
+                "XPCREDITBN_SJA_P1M1ML12 = PCREDITBN_SJA_P1M1ML12 - INFTEFF_NSA - RGDP_SA_P1Q1QL4_20QMA",
+            ]
+            self.response = "DU05YXR_NSA"
 
-    selector = ZnScoreAverager(neutral="mean", use_signs=True)
-    selector.fit(X_train, y_train)
-    print(selector.transform(X_test))
+            self.X_train, self.y_train = self.clean(self.df)
 
-    selector = ZnScoreAverager(neutral="zero")
-    selector.fit(X_train, y_train)
-    print(selector.transform(X_test))
+        def clean(self, df):
+            dfa = msp.panel_calculator(df, calcs=self.calcs, cids=sorted(df.cid.unique()))
+            df = msm.update_df(df, dfa)
+            df = msm.reduce_df(df=df, xcats=self.desired_ftrs, cids=sorted(df.cid.unique()))
+            # convert to wide format df
+            df_wide = msm.categories_df(
+                df=df,
+                xcats=self.desired_ftrs,
+                cids=sorted(df.cid.unique()),
+                freq="M",
+                lag=1,  # for simplicity later on
+                xcat_aggs=["mean", "sum"],
+            )
+            df_wide.dropna(
+                inplace=True
+            )  # drops rows with either a feature or the return missing
+            return df_wide.drop(columns=[self.response]), df_wide[self.response]
+    
+    preprocesser = preprocess_df(train)
+    X_train, y_train = preprocesser.X_train, preprocesser.y_train
+    X_valid, y_valid = preprocesser.clean(valid)
+    X_test, y_test = preprocesser.clean(test)
+    msl.ZnScoreAverager(neutral="zero").fit(X_train, y_train).transform(X_train)
+    # splitter = msl.ExpandingIncrementPanelSplit(
+    #     train_intervals=1, test_size=1, min_cids=10, min_periods=12 * 5
+    # )  # 5 years of history for at least half the cross sections
+
+    # inner_splitter = msl.RollingKFoldPanelSplit()
+    # scorer = make_scorer(msl.sharpe_ratio, greater_is_better=True)
+
+    # so = msl.SignalOptimizer(inner_splitter=inner_splitter, X=X_train, y=y_train)
+    
+    # models = {
+    #     "benchmark": Pipeline(
+    #         [
+    #             ("zscore", msl.ZnScoreAverager(neutral="zero")),
+    #             ("predictor", NaivePredictor()),
+    #         ]
+    #     ),
+    # }
+
+    # hparam_grid = {
+    #     "benchmark": {},
+    # }
+
+    # results = so.calculate_predictions(
+    #     name="ZScore_zero",
+    #     models=models,
+    #     metric=scorer,
+    #     hparam_grid=hparam_grid,
+    #     hparam_type="grid",
+    #     min_cids=10,
+    #     min_periods=12 * 5,
+    #     n_jobs=-1,
+    # )  # At least 5 years of history for all cross sections
+    
