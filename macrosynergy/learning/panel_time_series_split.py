@@ -251,7 +251,8 @@ class ExpandingKFoldPanelSplit(BasePanelSplit):
         """
         Method that produces pairs of training and test indices as intended by the
         ExpandingKFoldPanelSplit class. Wide format Pandas (panel) dataframes are expected,
-        multi-indexed by cross-section and date. 
+        multi-indexed by cross-section and date. It is recommended for the features to lag 
+        behind the associated targets by a single native frequency unit.
 
         :param <pd.DataFrame> X: Pandas dataframe of features,
             multi-indexed by (cross-section, date). The dates must be in datetime format.
@@ -318,7 +319,8 @@ class RollingKFoldPanelSplit(BasePanelSplit):
         """
         Method that produces pairs of training and test indices as intended by the
         RollingKFoldPanelSplit class. Wide format Pandas (panel) dataframes are expected,
-        multi-indexed by cross-section and date. 
+        multi-indexed by cross-section and date. It is recommended for the features to lag 
+        behind the associated targets by a single native frequency unit.
 
         :param <pd.DataFrame> X: Pandas dataframe of features,
             multi-indexed by (cross-section, date). The dates must be in datetime format.
@@ -508,7 +510,8 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
         """
         Method that produces pairs of training and test indices as intended by the
         ExpandingIncrementPanelSplit class. Wide format Pandas (panel) dataframes are expected,
-        multi-indexed by cross-section and date. 
+        multi-indexed by cross-section and date. It is recommended for the features to lag 
+        behind the associated targets by a single native frequency unit.
 
         :param <pd.DataFrame> X: Pandas dataframe of features,
             multi-indexed by (cross-section, date). The dates must be in datetime format.
