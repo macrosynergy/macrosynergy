@@ -290,10 +290,10 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         if neutral.lower() not in ["zero", "mean"]:
             raise ValueError("neutral must be either 'zero' or 'mean'.")
 
-        if type(use_signs) != bool:
+        if not isinstance(use_signs, bool):
             raise TypeError("'use_signs' must be a boolean.")
 
-        self.neutral = neutral
+        self.neutral = neutral.lower()
         self.use_signs = use_signs
 
     def fit(self, X: pd.DataFrame, y: Any = None):
@@ -324,11 +324,12 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
             # calculate the mean and sum of squares of each feature
             means: pd.Series = X.mean(axis=0)
             sum_squares: pd.Series = np.sum(np.square(X), axis=0)
-            self.stats: List[pd.Series] = [means, sum_squares]
+            self.training_means: pd.Series = means
+            self.training_sum_squares: pd.Series = sum_squares
         else:
             # calculate the mean absolute deviation of each feature
             mads: pd.Series = np.mean(np.abs(X), axis=0)
-            self.stats: List[pd.Series] = [mads]
+            self.training_mads: pd.Series = mads
 
         return self
 
@@ -354,56 +355,98 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
             raise ValueError("X must be multi-indexed.")
         if not isinstance(X.index.get_level_values(1)[0], datetime.date):
             raise TypeError("The inner index of X must be datetime.date.")
-        
-        X = X.sort_index(level='real_date')
-        
+
+        X = X.sort_index(level="real_date")
+
         # transform
         signal_df = pd.DataFrame(index=X.index, columns=["signal"], dtype="float")
 
-        if self.neutral == "zero": 
-            
-            training_mads = self.stats[0]
+        if self.neutral == "zero":
+            training_mads: pd.Series = self.training_mads
             training_n: int = self.training_n
             X_abs = X.abs()
 
-            expanding_count = np.expand_dims(X.groupby(level='real_date').count().expanding().sum().to_numpy()[:,0], 1)
-            
-            # We need to divide the expanding sum by the number of values in each expanding window.
-            X_test_expanding_mads = X_abs.groupby(level="real_date").sum().expanding().sum()/expanding_count
+            # We obtain a vector with the number of elements in each expanding window.
+            # The count does not necessarily increase uniformly, since some cross-sections
+            # may be missing for some dates.
+            expanding_count = self._get_expanding_count(X)
+
+            # We divide the expanding sum by the number of elements in each expanding window.
+            X_test_expanding_mads = (
+                X_abs.groupby(level="real_date").sum().expanding().sum()
+                / expanding_count
+            )
             n_total = training_n + expanding_count
 
-            X_expanding_mads: pd.DataFrame = (((training_n)*training_mads + (expanding_count)*X_test_expanding_mads)/n_total).fillna(0)
+            X_expanding_mads: pd.DataFrame = (
+                (
+                    (training_n) * training_mads
+                    + (expanding_count) * X_test_expanding_mads
+                )
+                / n_total
+            )
 
-            standardised_X: pd.DataFrame = X / X_expanding_mads
-            benchmark_signal = pd.DataFrame(np.mean(standardised_X, axis=1), columns=["signal"], dtype="float")
-            signal_df.loc[benchmark_signal.index] = benchmark_signal       
+            standardised_X: pd.DataFrame = (X / X_expanding_mads).fillna(0)
 
-
-        else:
-            training_means: pd.Series = self.stats[0]
-            training_sum_squares: pd.Series = self.stats[1]
+        elif self.neutral == "mean":
+            training_means: pd.Series = self.training_means
+            training_sum_squares: pd.Series = self.training_sum_squares
             training_n: int = self.training_n
 
-            expanding_count = np.expand_dims(X.groupby(level='real_date').count().expanding().sum().to_numpy()[:,0], 1)
+            expanding_count = self._get_expanding_count(X)
             n_total = training_n + expanding_count
-            
-            X_square = X ** 2
-            X_test_expanding_sum_squares = X_square.groupby(level='real_date').sum().expanding().sum()
-            X_test_expanding_mean = X.groupby(level="real_date").sum().expanding().sum()/expanding_count
 
-            X_expanding_means = (((training_n)*training_means + (expanding_count)*X_test_expanding_mean)/n_total).fillna(0)
+            X_square = X**2
+            X_test_expanding_sum_squares = (
+                X_square.groupby(level="real_date").sum().expanding().sum()
+            )
+            X_test_expanding_mean = (
+                X.groupby(level="real_date").sum().expanding().sum() / expanding_count
+            )
 
-            X_expanding_sum_squares = training_sum_squares + X_test_expanding_sum_squares
+            X_expanding_means = (
+                (
+                    (training_n) * training_means
+                    + (expanding_count) * X_test_expanding_mean
+                )
+                / n_total
+            )
+
+            X_expanding_sum_squares = (
+                training_sum_squares + X_test_expanding_sum_squares
+            )
             comp1 = (X_expanding_sum_squares) / (n_total - 1)
             comp2 = 2 * np.square(X_expanding_means) * (n_total) / (n_total - 1)
             comp3 = (n_total) * np.square(X_expanding_means) / (n_total - 1)
             X_expanding_std: pd.Series = np.sqrt(comp1 - comp2 + comp3)
-            normalised_X: pd.DataFrame = (X - X_expanding_means) / X_expanding_std
-            
-            benchmark_signal: pd.DataFrame = pd.DataFrame(
-                    np.mean(normalised_X, axis=1), columns=["signal"], dtype="float"
-                )
-            signal_df.loc[benchmark_signal.index] = benchmark_signal
+            standardised_X: pd.DataFrame = ((X - X_expanding_means) / X_expanding_std).fillna(0)
+
+        else:
+            raise ValueError("neutral must be either 'zero' or 'mean'.")
+        
+        benchmark_signal: pd.DataFrame = pd.DataFrame(
+            np.mean(standardised_X, axis=1), columns=["signal"], dtype="float"
+        )
+        signal_df.loc[benchmark_signal.index] = benchmark_signal
+
+        if self.use_signs:
+            return np.sign(signal_df).astype(int)
+
+        return signal_df
+
+    def _get_expanding_count(self, X):
+        """
+        Helper method to get the number of values in each expanding window.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+
+        :return <np.ndarray>: Numpy array of expanding counts.
+        """
+        return np.expand_dims(
+                X.groupby(level="real_date").count().expanding().sum().to_numpy()[:, 0],
+                1,
+            )
+
 
 
 class PanelMinMaxScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
@@ -603,7 +646,7 @@ if __name__ == "__main__":
     X_train, X_test = X[X.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], X[X.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
     y_train, y_test = y[y.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], y[y.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
 
-    selector = ZnScoreAverager(neutral="mean", use_signs=True)
+    selector = ZnScoreAverager(neutral="mean", use_signs=False)
     selector.fit(X_train, y_train)
     print(selector.transform(X_test))
 
