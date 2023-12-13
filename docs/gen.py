@@ -18,7 +18,7 @@ def process_individual_release(release_dict: Dict) -> str:
     def format_gh_username(strx: str) -> str:
         findstr = "by @"
         lx = strx.rfind("by @")
-        rx = strx.find(" ", lx+len(findstr))
+        rx = strx.find(" ", lx + len(findstr))
         uname = strx[lx + len(findstr) : rx]
         ustr = f"by [@{uname}](https://github.com/{uname})"
         return strx.replace(f"by @{uname}", ustr)
@@ -30,9 +30,14 @@ def process_individual_release(release_dict: Dict) -> str:
         prcom = f"in [PR #{prnum}]({findstr.split(' ')[1]}{prnum})"
         rstr = strx[:lx] + prcom
         return rstr
+    
+    def format_chg_log(strx: str) -> str:
+        findstr = "**Full Changelog**: "
+        lx = strx.rfind(findstr)
+        
 
     release_text: str = release_dict["body"]
-    lines = []    
+    lines = []
     for line in release_text.splitlines():
         linex = line
         if linex.startswith("* "):
@@ -48,19 +53,32 @@ def process_individual_release(release_dict: Dict) -> str:
     return md
 
 
+def _gh_api_call(url: str) -> List[Dict]:
+    response: requests.Response = requests.get(url)
+    response.raise_for_status()
+    # in this case, response.json() is a list of dicts.
+    rlist: List[Dict] = response.json()
+    if hasattr(response, "links"):
+        if "next" in response.links.keys():
+            next_url = response.links["next"]["url"]
+            next_page = _gh_api_call(next_url)
+            rlist.extend(next_page)
+    return rlist
+
+
 def fetch_release_notes(
     release_api_url: str = RELEASES_API_URL,
     output_path: str = PATH_TO_DOCS,
 ):
-    response: requests.Response = requests.get(release_api_url)
-    if response.status_code == 200:
-        releases_json: Dict = response.json()
-    else:
-        raise Exception(f"Request failed: {response.status_code}")
-
-    # sort them by version number using packaging.version, and release['name'] is the version number
-    releases_list = list(releases_json)
-    releases_list.sort(key=lambda x: version.parse(x["name"]), reverse=True)
+    """
+    Fetches release notes from GitHub API and writes them to `output_path`.
+    """
+    releases_list: List[Dict] = _gh_api_call(release_api_url)
+    assert isinstance(releases_list, list)
+    assert all(isinstance(x, dict) for x in releases_list)
+    releases_list.sort(
+        key=lambda x: version.parse(str(x["name"]).split(" ")[-1]), reverse=True
+    )
     release_mds: List[str] = []
     for release in releases_list:
         release_mds.append(process_individual_release(release))

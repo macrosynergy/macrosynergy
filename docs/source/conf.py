@@ -90,7 +90,7 @@ source_suffix = [".rst", ".ipynb", ".md"]
 
 # -- Autosummary Settings ----------------------------------------------------
 autosummary_generate = True  # Turn on sphinx.ext.autosummary
-autosummary_imported_members = True  # Document imported members
+# autosummary_imported_members = True  # Document imported members
 add_module_names = False  # Do not prepend module names to members
 
 # -- Extension Settings ------------------------------------------------------
