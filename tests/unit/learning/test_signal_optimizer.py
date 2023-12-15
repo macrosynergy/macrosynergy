@@ -74,6 +74,6 @@ class TestAll(unittest.TestCase):
             self.fail(f"Instantiation of the SignalOptimizer raised an exception: {e}")
         self.assertIsInstance(so, SignalOptimizer)
         self.assertEqual(so.inner_splitter, inner_splitter)
-        self.assertEqual(so.X, self.X)
-        self.assertEqual(so.y, self.y)
+        pd.testing.assert_frame_equal(so.X, self.X)
+        pd.testing.assert_series_equal(so.y, self.y)
         self.assertEqual(so.blacklist, blacklist)
