@@ -9,6 +9,7 @@ from macrosynergy.learning import (
     FeatureAverager,
     PanelMinMaxScaler,
     PanelStandardScaler,
+    ZnScoreAverager,
 )
 
 from statsmodels.tools.tools import add_constant
@@ -527,3 +528,85 @@ class TestPanelStandardScaler(unittest.TestCase):
         self.assertIsInstance(X_transformed, pd.DataFrame)
         # check that X_transformed has the same index as X
         self.assertTrue(np.all(X_transformed.index == self.X.index))
+
+
+class TestZnScoreAverager(unittest.TestCase):
+    def setUp(self):
+        # Generate data with true linear relationship
+        cids = ["AUD", "CAD", "GBP", "USD"]
+        xcats = ["XR", "CPI", "GROWTH", "RIR"]
+
+        df_cids = pd.DataFrame(index=cids, columns=["earliest", "latest"])
+        df_cids.loc["AUD"] = ["2019-01-01", "2020-12-31"]
+        df_cids.loc["CAD"] = ["2019-01-01", "2020-12-31"]
+        df_cids.loc["GBP"] = ["2019-01-01", "2020-12-31"]
+        df_cids.loc["USD"] = ["2019-01-01", "2020-12-31"]
+
+        tuples = []
+
+        for cid in cids:
+            # get list of all elidgible dates
+            sdate = df_cids.loc[cid]["earliest"]
+            edate = df_cids.loc[cid]["latest"]
+            all_days = pd.date_range(sdate, edate)
+            work_days = all_days[all_days.weekday < 5]
+            for work_day in work_days:
+                tuples.append((cid, work_day))
+
+        n_samples = len(tuples)
+        ftrs = np.random.normal(loc=0, scale=1, size=(n_samples, 3))
+        labels = np.matmul(ftrs, [1, 2, -1]) + np.random.normal(0, 0.5, len(ftrs))
+        df = pd.DataFrame(
+            data=np.concatenate((np.reshape(labels, (-1, 1)), ftrs), axis=1),
+            index=pd.MultiIndex.from_tuples(tuples, names=["cid", "real_date"]),
+            columns=xcats,
+            dtype=np.float32,
+        )
+
+        self.X = df.drop(columns="XR")
+        self.y = df["XR"]
+
+    def test_constructor(self):
+        # Testing the constructor for correct attribute initialization
+        averager = ZnScoreAverager(neutral="mean", use_signs=True)
+        self.assertEqual(averager.neutral, "mean")
+        self.assertTrue(averager.use_signs)
+
+        # Testing the constructor for handling invalid inputs
+        with self.assertRaises(TypeError):
+            ZnScoreAverager(neutral=123)
+        with self.assertRaises(ValueError):
+            ZnScoreAverager(neutral="invalid_value")
+        with self.assertRaises(TypeError):
+            ZnScoreAverager(use_signs="not_a_boolean")
+
+    def test_fit(self):
+        # Testing the fit method
+        averager = ZnScoreAverager()
+        averager.fit(self.X)
+        self.assertIsNotNone(averager.stats)
+        self.assertEqual(averager.training_n, len(self.X))
+
+        # Testing the fit method for invalid input types
+        with self.assertRaises(TypeError):
+            averager.fit("not_a_dataframe")
+            
+        # Testing the fit method for invalid input types
+        with self.assertRaises(ValueError):
+            averager.fit(pd.DataFrame())
+
+    def test_transform(self):
+        # Testing the transform method
+        averager = ZnScoreAverager()
+        averager.fit(self.X)
+        transformed = averager.transform(self.X)
+        self.assertIsInstance(transformed, pd.DataFrame)
+        self.assertEqual(transformed.shape, (self.X.shape[0], 1))
+
+        # Testing the transform method for invalid input types
+        with self.assertRaises(TypeError):
+            averager.transform("not_a_dataframe")
+
+
+if __name__ == "__main__":
+    unittest.main()
