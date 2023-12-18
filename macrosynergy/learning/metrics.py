@@ -1,8 +1,6 @@
 """
 Collection of non-standard scikit-learn performance metrics for evaluation of
 machine learning model predictions.
-
-**NOTE: This module is under development, and is not yet ready for production use.**
 """
 
 import numpy as np

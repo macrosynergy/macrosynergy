@@ -160,12 +160,21 @@ class SignalReturnRelations:
 
         freq_error = f"Frequency parameter must be one of {list(self.dic_freq.keys())}."
         if isinstance(freqs, list):
+            seen = set()
+            self.freqs = []
             for f in freqs:
                 if not f in self.dic_freq.keys():
                     raise ValueError(freq_error)
+                else:
+                    if f not in seen:
+                        seen.add(f)
+                        self.freqs.append(f)
+
         else:
             if not freqs in self.dic_freq.keys():
                 raise ValueError(freq_error)
+            else:
+                self.freqs = [freqs]
 
         self.metrics = [
             "accuracy",
@@ -181,7 +190,7 @@ class SignalReturnRelations:
         ]
 
         self.rets = rets
-        self.freqs = list(set(freqs))  # Remove duplicate values from freqs
+        #self.freqs = list(set(freqs))  # Remove duplicate values from freqs
 
         if not isinstance(cosp, bool):
             raise TypeError(f"<bool> object expected and not {type(cosp)}.")
@@ -300,6 +309,8 @@ class SignalReturnRelations:
         self.df_ys = self.__output_table__(
             cs_type="years", ret=self.rets[0], sig=self.sigs[0]
         )
+
+        self.sigs[0] = self.revert_negation(self.sigs[0])
 
     def __rival_sigs__(self, ret):
         """
@@ -1577,7 +1588,7 @@ if __name__ == "__main__":
         dfd,
         rets=["XR", "XRH"],
         sigs=["CRY", "INFL", "GROWTH"],
-        sig_neg=[False, True],
+        sig_neg=[True, True],
         cosp=True,
         freqs=["M", "Q"],
         agg_sigs=["last", "mean"],
