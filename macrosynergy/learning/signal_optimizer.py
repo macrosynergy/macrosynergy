@@ -1,8 +1,6 @@
 """
 Class to handle the calculation of quantamental predictions based on adaptive
 hyperparameter and model selection.
-
-**NOTE: This module is under development, and is not yet ready for production use.**
 """
 
 import numpy as np
