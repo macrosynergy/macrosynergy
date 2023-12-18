@@ -1,10 +1,6 @@
 """
 Class to handle the calculation of quantamental predictions based on adaptive
 hyperparameter and model selection.
-
-**NOTE: This module is under development, and is not yet ready for production use.**
-
-TODO: test and add Bayesian hyperparameter optimisation.
 """
 
 import numpy as np
@@ -43,13 +39,32 @@ class SignalOptimizer:
         additional_y: Optional[List[pd.Series]] = None,
     ):
         """
-        Class for sequential optimization of raw signals based on quantamental features
+        Class for sequential optimization of raw signals based on quantamental features.
+        Optimization is performed through nested cross-validation, with the outer splitter
+        an instance of `ExpandingIncrementPanelSplit` reflecting a pipeline through time
+        simulating the experience of an investor. In each iteration of the outer splitter,
+        a training and test set are created, and a grid search using the specified 
+        'inner_splitter' is performed to determine an optimal model amongst a set of 
+        candidate models. Once this is selected, the chosen model is used to make the test
+        set forecasts. Lastly, we cast these forecasts back by a frequency period to account
+        for the lagged features, creating point-in-time signals. 
+
+        The features in the dataframe, X, are expected to be lagged quantamental indicators,
+        at a single native frequency unit, with the targets, in y, being the cumulative returns
+        at the native frequency. By providing a blacklisting dictionary, preferably through 
+        macrosynergy.management.make_blacklist, the user can specify time periods to 
+        ignore. 
+
+        Should the signal optimiser be applied to a separate hold-out set, following the time span 
+        of the original feature set, the lagged hold-out features and subsequent cumulative returns
+        can be provided by setting X and y as usual, with the prior training information 
+        passed to the additional_X and additional_y arguments. 
 
         :param <BasePanelSplit> inner_splitter: Panel splitter that is used to split
             each training set into smaller (training, test) pairs for cross-validation.
             At present that splitter has to be an instance of `RollingKFoldPanelSplit`,
             `ExpandingKFoldPanelSplit` or `ExpandingIncrementPanelSplit`.
-        :param <pd.DataFrame> X: Wide pandas dataframe of features and dat-time indexes 
+        :param <pd.DataFrame> X: Wide pandas dataframe of features and date-time indexes 
             that capture the periods for which the signals are to be calculated. 
             Since signals must make time seried predictions, the features in `X` must be 
             lagged by one period, i.e., the values used for the current period must be 
@@ -233,7 +248,10 @@ class SignalOptimizer:
         n_jobs: Optional[int] = -1,
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
-        Calculate, store and return sequentially optimized signals for a given process
+        Calculate, store and return sequentially optimized signals for a given process.
+        This method implements the nested cross-validation and subsequent signal generation.
+        The name of the process, together with models to fit, hyperparameters to search over
+        and a metric to optimize, are provided as compulsory arguments.
 
         :param <str> name: Label of signal optimization process.
         :param <Dict[str, Union[BaseEstimator,Pipeline]]> models: dictionary of sklearn
@@ -290,6 +308,23 @@ class SignalOptimizer:
         the `inner_splitter` argument. Based on inner cross-validation an optimal model 
         is chosen and used for predicting the targets of the next period.
         """
+        if type(name) != str:
+            raise TypeError("The pipeline name must be a string.")
+        if models == {}:
+            raise ValueError("The models dictionary cannot be empty.")
+        if type(models) != dict:
+            raise TypeError("The models argument must be a dictionary.")
+        for key in models.keys():
+            if type(key) != str:
+                raise TypeError("The keys of the models dictionary must be strings.")
+            if not isinstance(models[key], (BaseEstimator, Pipeline)):
+                raise TypeError(
+                    "The values of the models dictionary must be sklearn predictors or pipelines."
+                )
+        if not callable(metric):
+            raise TypeError("The metric argument must be a callable object.")
+        if type(hparam_grid) != dict:
+            raise TypeError("The hparam_grid argument must be a dictionary.")
         if hparam_grid.keys() != models.keys():
             raise ValueError(
                 "The keys in the hyperparameter grid must match those in the models dictionary."
@@ -420,9 +455,9 @@ class SignalOptimizer:
         # For each blacklisted period, set the signal to NaN
         if self.blacklist is not None:
             for cross_section, periods in self.blacklist.items():
-                for start_date, end_date in periods:
-                    # Set blacklisted periods to NaN
-                    signal_df.loc[(cross_section, slice(start_date, end_date)), :] = np.nan
+                cross_section_key = cross_section.split("_")[0]
+                # Set blacklisted periods to NaN
+                signal_df.loc[(cross_section_key, slice(periods[0], periods[1])), :] = np.nan
 
         signal_df_long: pd.DataFrame = pd.melt(
             frame=signal_df.reset_index(), id_vars=["cid", "real_date"], var_name="xcat"
@@ -727,7 +762,7 @@ if __name__ == "__main__":
 
     dfd2 = make_qdf(df_cids2, df_xcats2, back_ar=0.75)
     dfd2["grading"] = np.ones(dfd2.shape[0])
-    black = {"GBP": ["2009-01-01", "2012-06-30"], "CAD": ["2018-01-01", "2100-01-01"]}
+    black = {"GBP": (pd.Timestamp(year=2009,month=1,day=1), pd.Timestamp(year=2012, month=6, day=30)), "CAD": (pd.Timestamp(year=2015, month=1, day=1), pd.Timestamp(year=2100, month=1, day=1))}
 
     train = msm.reduce_df(dfd2, end="2016-11-30")
     test = msm.reduce_df(dfd2, start="2016-11-01")
@@ -772,6 +807,7 @@ if __name__ == "__main__":
         inner_splitter=inner_splitter,
         X=X_train,
         y=y_train,
+        blacklist=black,
     )
 
     so.calculate_predictions(

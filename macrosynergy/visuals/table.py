@@ -76,6 +76,7 @@ def view_table(
 
     ax.set(xlabel=xlabel, ylabel=ylabel)
     ax.set_title(title, fontsize=title_fontsize)
+    plt.tight_layout()
 
     plt.show()
 
