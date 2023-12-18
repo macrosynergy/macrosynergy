@@ -1,7 +1,5 @@
 """
 Tools to produce, visualise and use walk-forward validation splits across panels.
-
-**NOTE: This module is under development, and is not yet ready for production use.**
 """
 
 import datetime

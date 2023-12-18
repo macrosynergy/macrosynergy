@@ -1,7 +1,5 @@
 """
 Collection of scikit-learn transformer classes.
-
-**NOTE: This module is under development, and is not yet ready for production use.**
 """
 
 import numpy as np
