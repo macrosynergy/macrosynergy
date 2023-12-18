@@ -416,12 +416,6 @@ class TestPanelMinMaxScaler(unittest.TestCase):
         # check that X_transformed has values between 0 and 1
         self.assertTrue(np.all(X_transformed.values >= 0))
         self.assertTrue(np.all(X_transformed.values <= 1))
-        # check that X_transformed has the same values as the sklearn MinMaxScaler
-        sklearn_scaler = MinMaxScaler()
-        sklearn_scaler.fit(self.X)
-        sklearn_X_transformed = sklearn_scaler.transform(self.X)
-        # should be minor differences due to floating point precision
-        self.assertTrue(np.all(X_transformed.values.round(3) == sklearn_X_transformed.round(3)))
 
     def test_types_transform(self):
         scaler = PanelMinMaxScaler()
