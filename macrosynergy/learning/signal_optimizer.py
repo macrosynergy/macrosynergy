@@ -310,6 +310,23 @@ class SignalOptimizer:
         the `inner_splitter` argument. Based on inner cross-validation an optimal model 
         is chosen and used for predicting the targets of the next period.
         """
+        if type(name) != str:
+            raise TypeError("The pipeline name must be a string.")
+        if models == {}:
+            raise ValueError("The models dictionary cannot be empty.")
+        if type(models) != dict:
+            raise TypeError("The models argument must be a dictionary.")
+        for key in models.keys():
+            if type(key) != str:
+                raise TypeError("The keys of the models dictionary must be strings.")
+            if not isinstance(models[key], (BaseEstimator, Pipeline)):
+                raise TypeError(
+                    "The values of the models dictionary must be sklearn predictors or pipelines."
+                )
+        if not callable(metric):
+            raise TypeError("The metric argument must be a callable object.")
+        if type(hparam_grid) != dict:
+            raise TypeError("The hparam_grid argument must be a dictionary.")
         if hparam_grid.keys() != models.keys():
             raise ValueError(
                 "The keys in the hyperparameter grid must match those in the models dictionary."
