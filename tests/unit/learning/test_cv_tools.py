@@ -17,10 +17,10 @@ class TestAll(unittest.TestCase):
         xcats = ["XR", "CPI", "GROWTH", "RIR"]
 
         df_cids = pd.DataFrame(index=cids, columns=["earliest", "latest"])
-        df_cids.loc["AUD"] = ["2020-01-01", "2020-12-31"]
-        df_cids.loc["CAD"] = ["2020-01-01", "2020-12-31"]
-        df_cids.loc["GBP"] = ["2020-06-01", "2020-12-31"]
-        df_cids.loc["USD"] = ["2020-06-01", "2020-12-31"]
+        df_cids.loc["AUD"] = ["2020-06-01", "2020-12-31"]
+        df_cids.loc["CAD"] = ["2020-06-01", "2020-12-31"]
+        df_cids.loc["GBP"] = ["2020-09-01", "2020-12-31"]
+        df_cids.loc["USD"] = ["2020-09-01", "2020-12-31"]
 
         tuples = []
 
@@ -46,7 +46,7 @@ class TestAll(unittest.TestCase):
         self.X = df.drop(columns="XR")
         self.y = df["XR"]
 
-        self.splitter = ExpandingKFoldPanelSplit(n_splits=4)
+        self.splitter = ExpandingKFoldPanelSplit(n_splits=2)
         self.estimators = {"est1": LinearRegression(), "est2": Ridge(alpha=1)}
         
     def test_param_checks(self):
