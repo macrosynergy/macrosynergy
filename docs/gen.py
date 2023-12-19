@@ -30,11 +30,14 @@ def process_individual_release(release_dict: Dict) -> str:
         prcom = f"in [PR #{prnum}]({findstr.split(' ')[1]}{prnum})"
         rstr = strx[:lx] + prcom
         return rstr
-    
+
     def format_chg_log(strx: str) -> str:
-        findstr = "**Full Changelog**: "
-        lx = strx.rfind(findstr)
-        
+        findstr = (
+            "**Full Changelog**: https://github.com/macrosynergy/macrosynergy/compare/"
+        )
+        comp_str = strx.replace(findstr, "").replace("...", "←")
+        comp_str = f"**Full Changelog**: [{comp_str}]({strx.split(' ')[-1]})"
+        return comp_str
 
     release_text: str = release_dict["body"]
     lines = []
@@ -43,6 +46,8 @@ def process_individual_release(release_dict: Dict) -> str:
         if linex.startswith("* "):
             linex = format_gh_username(linex)
             linex = format_pr_link(linex)
+        if linex.startswith("**Full Changelog**: https://"):
+            linex = format_chg_log(linex)
         lines.append(linex)
     release_text: str = "\n".join(lines)
     md = (
