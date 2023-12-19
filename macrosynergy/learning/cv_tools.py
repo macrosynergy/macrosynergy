@@ -69,8 +69,24 @@ def panel_cv_scores(
         raise TypeError("splitter must be an inherit from BasePanelSplit.")
     if not isinstance(estimators, dict):
         raise TypeError("estimators must be a dictionary.")
+    if estimators == {}:
+        raise ValueError("estimators must not be an empty dictionary.")
+    if np.any([not isinstance(est_name, str) for est_name in estimators.keys()]):
+        raise TypeError("estimator names must all be strings.")
+    if np.any([not isinstance(est, object) for est in estimators.values()]):
+        raise TypeError("estimators must all be objects.")
     if not isinstance(scoring, dict):
         raise TypeError("scoring must be a dictionary.")
+    if scoring == {}:
+        raise ValueError("scoring must not be an empty dictionary.")
+    if np.any([not isinstance(metric_name, str) for metric_name in scoring.keys()]):
+        raise TypeError("scorer names must all be strings.")
+    if np.any([not isinstance(scorer, object) for scorer in scoring.values()]):
+        raise TypeError("scorers must all be objects.")
+    if not isinstance(show_longbias, bool):
+        raise TypeError("show_longbias must be a boolean.")
+    if not isinstance(show_std, bool):
+        raise TypeError("show_std must be a boolean.")
     if not isinstance(verbose, int):
         raise TypeError("verbose must be an integer.")
     if not isinstance(n_jobs, int):
