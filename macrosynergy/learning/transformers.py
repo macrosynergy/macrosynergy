@@ -397,10 +397,7 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
 
         :return <np.ndarray>: Numpy array of expanding counts.
         """
-        return np.expand_dims(
-                X.groupby(level="real_date").count().expanding().sum().to_numpy()[:, 0],
-                1,
-            )
+        return X.groupby(level="real_date").count().expanding().sum().to_numpy()
 
 
 
@@ -570,19 +567,19 @@ if __name__ == "__main__":
     X = dfd2.drop(columns=["XR"])
     y = dfd2["XR"]
 
-    selector = MapSelector(0.05)
-    selector.fit(X, y)
-    print(selector.transform(X).columns)
+    # selector = MapSelector(0.05)
+    # selector.fit(X, y)
+    # print(selector.transform(X).columns)
 
-    selector = LassoSelector(0.00001)
-    selector.fit(X, y)
-    print(selector.transform(X).columns)
+    # selector = LassoSelector(0.00001)
+    # selector.fit(X, y)
+    # print(selector.transform(X).columns)
 
     # Split X and y into training and test sets
     X_train, X_test = X[X.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], X[X.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
     y_train, y_test = y[y.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], y[y.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
 
-    selector = ZnScoreAverager(neutral="mean", use_signs=False)
+    selector = ZnScoreAverager(neutral="zero", use_signs=False)
     selector.fit(X_train, y_train)
     print(selector.transform(X_test))
 
