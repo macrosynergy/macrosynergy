@@ -667,7 +667,7 @@ class NaivePnL:
                 lw=1,
             )
             leg = fg.axes.get_legend()
-            plt.title(title, fontsize=20)
+            plt.title(title, fontsize=title_fontsize)
             plt.legend(
                 labels=labels,
                 title=legend_title,
@@ -1044,7 +1044,7 @@ if __name__ == "__main__":
     )
     pnl.plot_pnls(
         pnl_cats=["PNL_GROWTH_NEG", "Long"],
-        facet=False,
+        title_fontsize=60,
         xlab="date",
         ylab="%",
     )
