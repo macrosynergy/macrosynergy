@@ -18,14 +18,15 @@ Subpackages
    :hidden:
    :maxdepth: 5
 
+   macrosynergy.dataquery
+   macrosynergy.download
+   macrosynergy.learning
    macrosynergy.management
    macrosynergy.panel
-   macrosynergy.learning
-   macrosynergy.signal
    macrosynergy.pnl
-   macrosynergy.download
-   macrosynergy.dataquery
+   macrosynergy.signal
    macrosynergy.visuals
+
    
 
 
