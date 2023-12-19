@@ -93,15 +93,9 @@ def fetch_release_notes(
 
     release_md: str = "# Release Notes\n\n" + "\n\n".join(release_mds)
 
-    # if it exists, delete it
     if os.path.exists(output_path):
         os.remove(output_path)
-    with open(
-        output_path,
-        "w",
-        encoding="utf8",
-    ) as file:
-        # file.write()
+    with open(output_path, "w", encoding="utf8") as file:
         file.write(release_md)
 
 
@@ -116,8 +110,14 @@ def remove_file_spec(
         if os.path.basename(fname) in static_rsts_basenames:
             os.remove(fname)
 
-    # open every file in gen rsts
-    
+    for fname in glob.glob(os.path.join(gen_dir,"*.rst")):
+        # open the file
+        with open(fname, "r", encoding="utf8") as file:
+            data = file.readlines()
+            data[0] = data[0].split(" ")[0] + "\n"
+
+        with open(fname, "w", encoding="utf8") as file:
+            file.writelines(data)
 
 
 def generate_rsts(output_dir: str, package: str = "macrosynergy"):
@@ -126,6 +126,7 @@ def generate_rsts(output_dir: str, package: str = "macrosynergy"):
     """
     rst_gen = f"sphinx-apidoc -o {output_dir} -fMeT {package}"
     os.system(rst_gen)
+    remove_file_spec(gen_dir=output_dir, static_dir=STATIC_RSTS_DIR)
 
 
 def copy_readme(output_dir: str, readme: str):
@@ -173,7 +174,7 @@ def main():
         "--build",
         action="store_true",
         help="Build documentation.",
-        default=False,
+        default=True,
     )
 
     args = parser.parse_args()
