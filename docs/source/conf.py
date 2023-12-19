@@ -48,7 +48,8 @@ exclude_patterns = ["*/__init__.py"]
 html_theme = "pydata_sphinx_theme"
 # html_theme = "sphinx_book_theme"
 html_theme_options = {
-    "show_toc_level": 2,
+    "show_toc_level": 4,
+    "show_nav_level": 4,
     "github_url": "https://github.com/macrosynergy/macrosynergy",
     "logo": {
         "image_light": "_static/MACROSYNERGY_Logo_Primary.png",
@@ -95,11 +96,8 @@ add_module_names = False  # Do not prepend module names to members
 
 # -- Extension Settings ------------------------------------------------------
 # Add any additional extension specific settings here
-always_document_param_types = True
+# always_document_param_types = True
 # napoleon_numpy_docstring = True
-
-# set documentation title to "Macrosynergy Package Documentation"
-#
 
 
 html_sidebars = {

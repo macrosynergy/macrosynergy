@@ -1,6 +1,4 @@
-:html_theme.sidebar_primary.remove:
-:html_theme.sidebar_secondary.remove:
-:html_theme_options.includehidden: False
+
 
 Macrosynergy Package Documentation
 ========================================

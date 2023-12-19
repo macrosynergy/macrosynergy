@@ -1,4 +1,3 @@
-:html_theme.sidebar_primary.remove: False
 
 .. _api_reference:
 
@@ -16,7 +15,6 @@ Subpackages
 
 .. toctree::
    :maxdepth: 5
-   :hidden:
 
    management
    panel
