@@ -134,7 +134,7 @@ def make_zn_scores(
         sample period defined by min-obs on an in-sample basis to avoid losing history.
         This is irrelevant if sequential is set to False.
     :param <str, Number> neutral: method to determine neutral level. Default is 'zero'.
-        Alternatives are 'mean', 'median' or an integer.
+        Alternatives are 'mean', 'median' or a number.
     :param <str> est_freq: the frequency at which standard deviations or means are
         are re-estimated. The options are daily, weekly, monthly & quarterly: "D", "W",
         "M", "Q". Default is daily. Re-estimation is performed at period end.
@@ -192,7 +192,9 @@ def make_zn_scores(
         raise ValueError(err)
 
     error_min = "Minimum observations must be a non-negative Integer value."
-    if not isinstance(min_obs, int) or min_obs < 0:
+    if not isinstance(min_obs, int):
+        raise TypeError(error_min)
+    if min_obs < 0:
         raise ValueError(error_min)
 
     est_freq = _map_to_business_day_frequency(
@@ -409,7 +411,7 @@ if __name__ == "__main__":
         blacklist=black,
         sequential=False,
         min_obs=0,
-        neutral=7,
+        neutral="zero",
         iis=True,
         thresh=None,
         pan_weight=0.75,
