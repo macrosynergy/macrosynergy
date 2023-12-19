@@ -1,6 +1,6 @@
 .. _macrosynergy.signal:
 
-macrosynergy.signal package
+macrosynergy.signal
 ===========================
 
 Submodules

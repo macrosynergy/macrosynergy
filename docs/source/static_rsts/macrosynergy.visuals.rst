@@ -1,6 +1,6 @@
 .. _macrosynergy.visuals:
 
-macrosynergy.visuals package
+macrosynergy.visuals
 ============================
 
 Submodules

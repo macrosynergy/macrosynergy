@@ -1,6 +1,6 @@
 .. _macrosynergy.learning:
 
-macrosynergy.learning package
+macrosynergy.learning
 =============================
 
 Submodules

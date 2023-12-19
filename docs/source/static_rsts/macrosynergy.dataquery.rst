@@ -1,6 +1,6 @@
 .. _macrosynergy.dataquery:
 
-macrosynergy.dataquery package
+macrosynergy.dataquery
 ==============================
 
 .. automodule:: macrosynergy.dataquery

@@ -1,6 +1,6 @@
 .. _macrosynergy.pnl:
 
-macrosynergy.pnl package
+macrosynergy.pnl
 ========================
 
 Submodules

@@ -1,6 +1,6 @@
 .. _macrosynergy.management:
 
-macrosynergy.management package
+macrosynergy.management
 ===============================
 
 Subpackages

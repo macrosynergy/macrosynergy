@@ -1,6 +1,6 @@
 .. _macrosynergy.download:
 
-macrosynergy.download package
+macrosynergy.download
 =============================
 
 Submodules

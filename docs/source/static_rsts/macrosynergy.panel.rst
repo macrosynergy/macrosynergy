@@ -1,6 +1,6 @@
 .. _macrosynergy.panel:
 
-macrosynergy.panel package
+macrosynergy.panel
 ==========================
 
 Submodules
