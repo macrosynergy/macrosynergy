@@ -574,30 +574,38 @@ class TestZnScoreAverager(unittest.TestCase):
         with self.assertRaises(TypeError):
             ZnScoreAverager(use_signs="not_a_boolean")
 
-    def test_fit(self):
-        # Testing the fit method
-        averager = ZnScoreAverager()
+    def test_fit_neutral_zero(self):
+        averager = ZnScoreAverager(neutral="zero")
         averager.fit(self.X)
-        self.assertIsNotNone(averager.stats)
+        self.assertIsNotNone(averager.training_mads)
         self.assertEqual(averager.training_n, len(self.X))
 
-        # Testing the fit method for invalid input types
         with self.assertRaises(TypeError):
             averager.fit("not_a_dataframe")
             
-        # Testing the fit method for invalid input types
+        with self.assertRaises(ValueError):
+            averager.fit(pd.DataFrame())
+
+    def test_fit_neutral_mean(self):
+        averager = ZnScoreAverager(neutral="mean")
+        averager.fit(self.X)
+        self.assertIsNotNone(averager.training_means)
+        self.assertIsNotNone(averager.training_sum_squares)
+        self.assertEqual(averager.training_n, len(self.X))
+
+        with self.assertRaises(TypeError):
+            averager.fit("not_a_dataframe")
+            
         with self.assertRaises(ValueError):
             averager.fit(pd.DataFrame())
 
     def test_transform(self):
-        # Testing the transform method
         averager = ZnScoreAverager()
         averager.fit(self.X)
         transformed = averager.transform(self.X)
         self.assertIsInstance(transformed, pd.DataFrame)
         self.assertEqual(transformed.shape, (self.X.shape[0], 1))
 
-        # Testing the transform method for invalid input types
         with self.assertRaises(TypeError):
             averager.transform("not_a_dataframe")
 
