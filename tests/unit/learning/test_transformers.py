@@ -32,7 +32,7 @@ class TestLassoSelector(unittest.TestCase):
         tuples = []
 
         for cid in cids:
-            # get list of all elidgible dates
+            # get list of all eligible dates
             sdate = df_cids.loc[cid]["earliest"]
             edate = df_cids.loc[cid]["latest"]
             all_days = pd.date_range(sdate, edate)
@@ -166,7 +166,7 @@ class TestMapSelector(unittest.TestCase):
         tuples = []
 
         for cid in cids:
-            # get list of all elidgible dates
+            # get list of all eligible dates
             sdate = df_cids.loc[cid]["earliest"]
             edate = df_cids.loc[cid]["latest"]
             all_days = pd.date_range(sdate, edate)
@@ -278,7 +278,7 @@ class TestFeatureAverager(unittest.TestCase):
         tuples = []
 
         for cid in cids:
-            # get list of all elidgible dates
+            # get list of all eligible dates
             sdate = df_cids.loc[cid]["earliest"]
             edate = df_cids.loc[cid]["latest"]
             all_days = pd.date_range(sdate, edate)
@@ -363,7 +363,7 @@ class TestPanelMinMaxScaler(unittest.TestCase):
         tuples = []
 
         for cid in cids:
-            # get list of all elidgible dates
+            # get list of all eligible dates
             sdate = df_cids.loc[cid]["earliest"]
             edate = df_cids.loc[cid]["latest"]
             all_days = pd.date_range(sdate, edate)
@@ -441,7 +441,7 @@ class TestPanelStandardScaler(unittest.TestCase):
         tuples = []
 
         for cid in cids:
-            # get list of all elidgible dates
+            # get list of all eligible dates
             sdate = df_cids.loc[cid]["earliest"]
             edate = df_cids.loc[cid]["latest"]
             all_days = pd.date_range(sdate, edate)
@@ -539,7 +539,7 @@ class TestZnScoreAverager(unittest.TestCase):
         tuples = []
 
         for cid in cids:
-            # get list of all elidgible dates
+            # get list of all eligible dates
             sdate = df_cids.loc[cid]["earliest"]
             edate = df_cids.loc[cid]["latest"]
             all_days = pd.date_range(sdate, edate)
@@ -599,8 +599,8 @@ class TestZnScoreAverager(unittest.TestCase):
         with self.assertRaises(ValueError):
             averager.fit(pd.DataFrame())
 
-    def test_transform(self):
-        averager = ZnScoreAverager()
+    def test_transform_types_neutral_zero(self):
+        averager = ZnScoreAverager(neutral="zero")
         averager.fit(self.X)
         transformed = averager.transform(self.X)
         self.assertIsInstance(transformed, pd.DataFrame)
@@ -608,6 +608,28 @@ class TestZnScoreAverager(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             averager.transform("not_a_dataframe")
+
+    def test_transform_types_neutral_mean(self):
+        averager = ZnScoreAverager(neutral="mean")
+        averager.fit(self.X)
+        transformed = averager.transform(self.X)
+        self.assertIsInstance(transformed, pd.DataFrame)
+        self.assertEqual(transformed.shape, (self.X.shape[0], 1))
+
+        with self.assertRaises(TypeError):
+            averager.transform("not_a_dataframe")
+
+    @parameterized.expand([["zero"], ["mean"]])
+    def test_transform_values_use_signs(self, neutral):
+        averager = ZnScoreAverager(neutral=neutral, use_signs=True)
+        averager.fit(self.X)
+        transformed = averager.transform(self.X).abs()
+        transformed_abs = transformed.abs()
+        self.assertTrue(np.all(transformed_abs == 1))
+
+    def test_get_expanding_count(self):
+        averager = ZnScoreAverager(neutral="zero")
+        self.assertTrue(np.all(averager._get_expanding_count(self.X)[-1] == np.array([len(self.X)]*self.X.columns.size)))
 
 
 if __name__ == "__main__":
