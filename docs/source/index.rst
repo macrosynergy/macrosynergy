@@ -1,3 +1,4 @@
+:html_theme.sidebar_secondary.remove:
 
 
 Macrosynergy Package Documentation
@@ -78,7 +79,6 @@ More from Macrosynergy:
    :hidden:
    :maxdepth: 2
 
-   index
    static_rsts/01_about
    static_rsts/02_getting_started
    static_rsts/api_reference

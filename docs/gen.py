@@ -1,4 +1,5 @@
 import os
+import glob
 import shutil
 import argparse
 import requests
@@ -10,7 +11,9 @@ ORGANIZATION: str = "macrosynergy"
 REPO_NAME: str = "macrosynergy"
 REPO_URL: str = f"github.com/{REPO_OWNER}/{REPO_NAME}"
 RELEASES_API_URL = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases"
-PATH_TO_DOCS: str = "./docs/source/gen_rsts/release_notes.md"
+OUTPUT_DIR = "./docs/source/gen_rsts"
+STATIC_RSTS_DIR = "./docs/source/static_rsts"
+PATH_TO_DOCS: str = os.path.join(OUTPUT_DIR, "release_notes.md")
 LINE_SEPARATOR: str = "\n\n____________________\n\n"
 
 
@@ -102,6 +105,21 @@ def fetch_release_notes(
         file.write(release_md)
 
 
+def remove_file_spec(
+    gen_dir: str = OUTPUT_DIR,
+    static_dir: str = "./docs/source/static_rsts",
+):
+    static_rsts_basenames = list(
+        map(os.path.basename, glob.glob(os.path.join(static_dir, "*.rst")))
+    )
+    for fname in glob.glob(os.path.join(gen_dir, "*.rst")):
+        if os.path.basename(fname) in static_rsts_basenames:
+            os.remove(fname)
+
+    # open every file in gen rsts
+    
+
+
 def generate_rsts(output_dir: str, package: str = "macrosynergy"):
     """
     Calls `sphinx-apidoc` to generate rst files for all modules in `package`.
@@ -162,7 +180,6 @@ def main():
 
     SHOW = args.show
     BUILD = args.build
-    OUTPUT_DIR = "./docs/source/gen_rsts"
     README = "./README.md"
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)

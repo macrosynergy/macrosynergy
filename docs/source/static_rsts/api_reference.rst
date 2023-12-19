@@ -1,3 +1,4 @@
+:html_theme.sidebar_secondary.remove:
 
 .. _api_reference:
 
@@ -14,15 +15,18 @@ Subpackages
 -----------
 
 .. toctree::
+   :hidden:
    :maxdepth: 5
 
-   management
-   panel
-   learning
-   signal
-   pnl
-   download
-   dataquery
+   macrosynergy.management
+   macrosynergy.panel
+   macrosynergy.learning
+   macrosynergy.signal
+   macrosynergy.pnl
+   macrosynergy.download
+   macrosynergy.dataquery
+   macrosynergy.visuals
+   
 
 
 .. grid:: 4

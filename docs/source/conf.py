@@ -20,10 +20,10 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
     "sphinx_autodoc_typehints",
-    "sphinx_remove_toctrees",
+    # "sphinx_remove_toctrees",
     "sphinx_copybutton",
     "sphinx_design",
-    "sphinx_changelog",
+    # "sphinx_changelog",
     "myst_parser",
 ]
 
@@ -48,15 +48,13 @@ exclude_patterns = ["*/__init__.py"]
 html_theme = "pydata_sphinx_theme"
 # html_theme = "sphinx_book_theme"
 html_theme_options = {
-    "show_toc_level": 4,
-    "show_nav_level": 4,
+    # "show_toc_level": 4,
+    # "show_nav_level": 4,
     "github_url": "https://github.com/macrosynergy/macrosynergy",
     "logo": {
-        "image_light": "_static/MACROSYNERGY_Logo_Primary.png",
-        "image_dark": "_static/MACROSYNERGY_Logo_White.png",
-        # "link": "https://macrosynergy.com/",
+        "image_light": "MACROSYNERGY_Logo_Primary.png",
+        "image_dark": "MACROSYNERGY_Logo_White.png",
     },
-    # "header_links_before_dropdown": 0,
     "favicons": [
         {
             "rel": "icon",
