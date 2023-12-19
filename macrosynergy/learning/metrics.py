@@ -54,6 +54,11 @@ def panel_significance_probability(
 
     # regress ground truth against predictions
     X = add_constant(y_pred)
+
+    # If XT.X is singular, the model cannot be fit.
+    if np.linalg.det(np.matmul(X.T,X)) == 0:
+        return 0
+    
     groups = y_true.index.get_level_values(1)
 
     # fit model
