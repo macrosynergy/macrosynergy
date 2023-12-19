@@ -52,6 +52,13 @@ def panel_significance_probability(
     if not (len(y_true) == len(y_pred)):
         raise ValueError("y_true and y_pred must have the same length.")
 
+    if np.all(y_true == 0):
+        # Sklearn averages each metric over the CV splits.
+        # If all the ground truth labels are zero, the regression is invalid due to a 
+        # singular matrix. Hence, we return zero in this case.
+        significance_prob = 0
+        return significance_prob
+    
     # regress ground truth against predictions
     X = add_constant(y_pred)
     groups = y_true.index.get_level_values(1)
