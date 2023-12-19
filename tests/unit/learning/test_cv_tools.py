@@ -57,12 +57,12 @@ class TestAll(unittest.TestCase):
         # X 
         with self.assertRaises(TypeError):
             panel_cv_scores(X=1, y=self.y, splitter=self.splitter, estimators=self.estimators, scoring=self.scoring)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             panel_cv_scores(X=self.X.reset_index(), y=self.y, splitter=self.splitter, estimators=self.estimators, scoring=self.scoring)
         # y 
         with self.assertRaises(TypeError):
             panel_cv_scores(X=self.X, y=1, splitter=self.splitter, estimators=self.estimators, scoring=self.scoring)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             panel_cv_scores(X=self.X, y=self.y.reset_index(), splitter=self.splitter, estimators=self.estimators, scoring=self.scoring)
         # splitter
         with self.assertRaises(TypeError):
@@ -70,6 +70,8 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(TypeError):
             panel_cv_scores(X=self.X, y=self.y, splitter=KFold(), estimators=self.estimators, scoring=self.scoring)
         # estimators
+        with self.assertRaises(ValueError):
+            panel_cv_scores(X=self.X, y=self.y, splitter=self.splitter, estimators={}, scoring=self.scoring)
         bad_est_dict = 1
         with self.assertRaises(TypeError):
             panel_cv_scores(X=self.X, y=self.y, splitter=self.splitter, estimators=bad_est_dict, scoring=self.scoring)
@@ -80,6 +82,8 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(TypeError):
             panel_cv_scores(X=self.X, y=self.y, splitter=self.splitter, estimators=bad_est_dict, scoring=self.scoring)
         # scoring
+        with self.assertRaises(ValueError):
+            panel_cv_scores(X=self.X, y=self.y, splitter=self.splitter, estimators=self.estimators, scoring={})
         bad_scoring = "scorer"
         with self.assertRaises(TypeError):
             panel_cv_scores(X=self.X, y=self.y, splitter=self.splitter, estimators=self.estimators, scoring=bad_scoring)
