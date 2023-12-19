@@ -56,7 +56,8 @@ def panel_significance_probability(
     X = add_constant(y_pred)
 
     # If XT.X is singular, the model cannot be fit.
-    if np.linalg.det(np.matmul(X.T,X)) == 0:
+    rank_X = np.linalg.matrix_rank(X)
+    if rank_X < X.shape[1]:
         return 0
     
     groups = y_true.index.get_level_values(1)
