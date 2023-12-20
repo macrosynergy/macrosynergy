@@ -9,7 +9,10 @@ import pandas as pd
 import datetime
 from typing import Union, Optional, Dict
 
-from macrosynergy.learning.panel_time_series_split import BasePanelSplit, ExpandingKFoldPanelSplit
+from macrosynergy.learning.panel_time_series_split import (
+    BasePanelSplit,
+    ExpandingKFoldPanelSplit,
+)
 from sklearn.model_selection import cross_validate
 from sklearn.metrics import make_scorer
 
@@ -49,7 +52,8 @@ def panel_cv_scores(
         Default is -1, which uses all cores.
 
     :return <pd.DataFrame> metrics_df: dataframe comprising means & standard deviations of
-        cross-validation metrics for each sklearn estimator, over the walk-forward history.
+        cross-validation metrics for each sklearn estimator, over the walk-forward 
+        history.
 
     N.B.: The performance metrics dataframe returned is multi-indexed with the outer index
     representing a metric and the inner index representing the mean & standard deviation

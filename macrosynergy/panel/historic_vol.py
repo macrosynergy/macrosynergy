@@ -21,7 +21,7 @@ def expo_weights(lback_periods: int = 21, half_life: int = 11):
         period.
 
     Note: 50% of the weight allocation will be applied to the number of days delimited by
-          the half_life.
+        the half_life.
     """
     decf = 2 ** (-1 / half_life)
     weights = (1 - decf) * np.array(
@@ -113,8 +113,8 @@ def historic_vol(
     :param <str> end: latest date in ISO format. Default is None and latest date in df is
         used.
     :param <str> est_freq: Frequency of (re-)estimation of volatility. Options are 'D'
-        for end of each day (default), 'W' for end of each work week, 'M' for end of each month,
-         and 'Q' for end of each week.
+        for end of each day (default), 'W' for end of each work week, 'M' for end of each
+        month, and 'Q' for end of each week.
     :param <dict> blacklist: cross sections with date ranges that should be excluded from
         the data frame. If one cross section has several blacklist periods append numbers
         to the cross section code.
