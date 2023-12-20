@@ -16,7 +16,7 @@ Subpackages
 
 .. toctree::
    :hidden:
-   :maxdepth: 5
+   :maxdepth: 10
 
    macrosynergy.dataquery
    macrosynergy.download
