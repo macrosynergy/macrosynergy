@@ -65,6 +65,7 @@ debug_stream_handler.setFormatter(
 )
 logger.addHandler(debug_stream_handler)
 
+
 def validate_response(
     response: requests.Response,
     user_id: str,
@@ -908,7 +909,8 @@ class DataQueryInterface(object):
         nan_treatment: str = "NA_NOTHING",
         reference_data: str = "NO_REFERENCE_DATA",
         retry_counter: int = 0,
-        delay_param: float = API_DELAY_PARAM,  # TODO do we want the user to have access to this?
+        delay_param: float = API_DELAY_PARAM,   # TODO do we want the user to have access 
+                                                # to this?
     ) -> List[Dict]:
         """
         Download data from the DataQuery API.

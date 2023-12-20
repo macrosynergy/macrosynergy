@@ -17,11 +17,12 @@ from typing import Union, Any, List, Optional
 
 import logging
 
+
 class LassoSelector(BaseEstimator, TransformerMixin):
-    def __init__(self, alpha: Union[float, int], positive: bool=True):
+    def __init__(self, alpha: Union[float, int], positive: bool = True):
         """
         Transformer class to use the Lasso as a feature selection algorithm.
-        Given a hyper-parameter, alpha, the Lasso model is fit and 
+        Given a hyper-parameter, alpha, the Lasso model is fit and
         the non-zero coefficients are used to extract features from an input dataframe.
         The underlying features as input to the Lasso model are expected to be positively
         correlated with the target variable.
@@ -31,29 +32,37 @@ class LassoSelector(BaseEstimator, TransformerMixin):
             be positive.
         """
         if (type(alpha) != float) and (type(alpha) != int):
-            raise TypeError("The 'alpha' hyper-parameter must be either a float or int.")
+            raise TypeError(
+                "The 'alpha' hyper-parameter must be either a float or int."
+            )
         if alpha < 0:
             raise ValueError("The 'alpha' hyper-parameter must be non-negative.")
         if type(positive) != bool:
             raise TypeError("The 'positive' hyper-parameter must be a boolean.")
-        
+
         self.alpha = alpha
         self.positive = positive
 
-    def fit(self, X: Union[pd.DataFrame,np.ndarray], y: Union[pd.Series,np.ndarray]):
+    def fit(self, X: Union[pd.DataFrame, np.ndarray], y: Union[pd.Series, np.ndarray]):
         """
         Fit method to fit a Lasso regression and obtain the selected features.
 
-        :param <Union[pd.DataFrame,np.ndarray]> X: Pandas dataframe or numpy array of input features.
-            A Pandas dataframe is prefered 
-        :param <Union[pd.Series,np.ndarray]> y: Pandas series or numpy array of targets associated with each
-            sample in X.
+        :param <Union[pd.DataFrame,np.ndarray]> X: Pandas dataframe or numpy array of 
+            input features. A Pandas dataframe is prefered
+        :param <Union[pd.Series,np.ndarray]> y: Pandas series or numpy array of targets 
+            associated with each sample in X.
         """
         # checks
         if (type(X) != pd.DataFrame) and (type(X) != np.ndarray):
-            raise TypeError("Input feature matrix for the LASSO selector must be a pandas dataframe or numpy array.")
+            raise TypeError(
+                "Input feature matrix for the LASSO selector must be a pandas dataframe "
+                "or numpy array."
+            )
         if (type(y) != pd.Series) and (type(y) != np.ndarray):
-            raise TypeError("Target vector for the LASSO selector must be a pandas series or numpy array.")
+            raise TypeError(
+                "Target vector for the LASSO selector must be a pandas series or numpy "
+                "array."
+            )
         if type(X) == pd.DataFrame:
             if not isinstance(X.index, pd.MultiIndex):
                 raise ValueError("X must be multi-indexed.")
@@ -67,11 +76,12 @@ class LassoSelector(BaseEstimator, TransformerMixin):
         if (type(X) == pd.DataFrame) and (type(y) == pd.Series):
             if not X.index.equals(y.index):
                 raise ValueError(
-                    "The indices of the input dataframe X and the output dataframe y don't match."
+                    "The indices of the input dataframe X and the output dataframe y "
+                    "don't match."
                 )
 
         self.p = X.shape[-1]
-        
+
         if self.positive:
             self.lasso = Lasso(alpha=self.alpha, positive=True).fit(X, y)
         else:
@@ -87,21 +97,23 @@ class LassoSelector(BaseEstimator, TransformerMixin):
 
         :param <Union[pd.DataFrame, np.ndarray]> X: Pandas dataframe or numpy array
             of input features.
-        
+
         :return <Union[pd.DataFrame, np.ndarray]>: Pandas dataframe or numpy array
-            of input features selected based on the Lasso's feature selection capabilities.
+            of input features selected based on the Lasso's feature selection 
+            capabilities.
         """
         if type(X) == pd.DataFrame:
-            return X.iloc[:,self.selected_ftr_idxs]
-        
-        return X[:,self.selected_ftr_idxs]
-    
+            return X.iloc[:, self.selected_ftr_idxs]
+
+        return X[:, self.selected_ftr_idxs]
+
+
 class MapSelector(BaseEstimator, TransformerMixin):
     def __init__(self, threshold: float):
         """
         Transformer class to select features from a training set
         based on the Macrosynergy panel test. This test involves creating
-        a linear mixed effects model with period-specific random effects to 
+        a linear mixed effects model with period-specific random effects to
         account for cross-sectional correlations. The p-value for the slope
         parameter is used to perform the significance test.
 
@@ -110,10 +122,12 @@ class MapSelector(BaseEstimator, TransformerMixin):
         """
         if type(threshold) != float:
             raise TypeError("The threshold must be a float.")
-        
+
         if (threshold <= 0) or (threshold > 1):
-            raise ValueError("The threshold must be in between 0 (inclusive) and 1 (exclusive).")
-        
+            raise ValueError(
+                "The threshold must be in between 0 (inclusive) and 1 (exclusive)."
+            )
+
         self.threshold = threshold
 
     def fit(self, X: pd.DataFrame, y: pd.Series):
@@ -123,13 +137,21 @@ class MapSelector(BaseEstimator, TransformerMixin):
 
         :param <pd.DataFrame> X: Pandas dataframe of input features.
         :param <pd.Series> y: Pandas series of targets associated
-            with each sample in X. 
+            with each sample in X.
         """
-        # Checks 
+        # Checks
         if type(X) != pd.DataFrame:
-            raise TypeError("Input feature matrix for the MAP selector must be a pandas dataframe. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe.")
+            raise TypeError(
+                "Input feature matrix for the MAP selector must be a pandas dataframe. "
+                "If used as part of an sklearn pipeline, ensure that previous steps "
+                "return a pandas dataframe."
+            )
         if type(y) != pd.Series:
-            raise TypeError("Target vector for the MAP selector must be a pandas series. If used as part of an sklearn pipeline, ensure that previous steps return a pandas series.")
+            raise TypeError(
+                "Target vector for the MAP selector must be a pandas series. If used as "
+                "part of an sklearn pipeline, ensure that previous steps return a pandas "
+                "series."
+            )
         if not isinstance(X.index, pd.MultiIndex):
             raise ValueError("X must be multi-indexed.")
         if not isinstance(y.index, pd.MultiIndex):
@@ -140,9 +162,10 @@ class MapSelector(BaseEstimator, TransformerMixin):
             raise TypeError("The inner index of y must be datetime.date.")
         if not X.index.equals(y.index):
             raise ValueError(
-                "The indices of the input dataframe X and the output dataframe y don't match."
+                "The indices of the input dataframe X and the output dataframe y don't "
+                "match."
             )
-        
+
         self.ftrs = []
         self.cols = X.columns
 
@@ -150,14 +173,13 @@ class MapSelector(BaseEstimator, TransformerMixin):
             ftr = X[col]
             ftr = add_constant(ftr)
             groups = ftr.index.get_level_values(1)
-            model = MixedLM(y,ftr,groups).fit(reml=False)
+            model = MixedLM(y, ftr, groups).fit(reml=False)
             est = model.params.iloc[1]
             pval = model.pvalues.iloc[1]
             if (pval < self.threshold) & (est > 0):
                 self.ftrs.append(col)
 
         return self
-
 
     def transform(self, X: pd.DataFrame):
         """
@@ -170,31 +192,41 @@ class MapSelector(BaseEstimator, TransformerMixin):
         """
         # checks
         if type(X) != pd.DataFrame:
-            raise TypeError("Input feature matrix for the MAP selector must be a pandas dataframe. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe.")
+            raise TypeError(
+                "Input feature matrix for the MAP selector must be a pandas dataframe. "
+                "If used as part of an sklearn pipeline, ensure that previous steps "
+                "return a pandas dataframe."
+            )
         if not isinstance(X.index, pd.MultiIndex):
             raise ValueError("X must be multi-indexed.")
         if not isinstance(X.index.get_level_values(1)[0], datetime.date):
             raise TypeError("The inner index of X must be datetime.date.")
         if not X.columns.equals(self.cols):
-            raise ValueError("The columns of the dataframe to be transformed, X, don't match the columns of the training dataframe.")
+            raise ValueError(
+                "The columns of the dataframe to be transformed, X, don't match the "
+                "columns of the training dataframe."
+            )
         # transform
         if self.ftrs == []:
             # Then no features were selected
-            return pd.DataFrame(index=X.index, columns=["no_signal"], data=0,dtype=np.float16)
-        
+            return pd.DataFrame(
+                index=X.index, columns=["no_signal"], data=0, dtype=np.float16
+            )
+
         return X[self.ftrs]
+
 
 class FeatureAverager(BaseEstimator, TransformerMixin):
     def __init__(self, use_signs: Optional[bool] = False):
         """
         Transformer class to combine features into a benchmark signal by averaging.
-    
+
         :param <Optional[bool]> use_signs: Boolean to specify whether or not to return the
             signs of the benchmark signal instead of the signal itself. Default is False.
         """
         if type(use_signs) != bool:
             raise TypeError("'use_signs' must be a boolean.")
-        
+
         self.use_signs = use_signs
 
     def fit(self, X: pd.DataFrame, y: Any = None):
@@ -219,12 +251,16 @@ class FeatureAverager(BaseEstimator, TransformerMixin):
         """
         # checks
         if type(X) != pd.DataFrame:
-            raise TypeError("Input feature matrix for the FeatureAverager must be a pandas dataframe. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe.")
+            raise TypeError(
+                "Input feature matrix for the FeatureAverager must be a pandas dataframe." 
+                " If used as part of an sklearn pipeline, ensure that previous steps "
+                "return a pandas dataframe."
+            )
         if not isinstance(X.index, pd.MultiIndex):
             raise ValueError("X must be multi-indexed.")
         if not isinstance(X.index.get_level_values(1)[0], datetime.date):
             raise TypeError("The inner index of X must be datetime.date.")
-        
+
         # transform
         signal_df = X.mean(axis=1).to_frame(name="signal")
         if self.use_signs:
@@ -232,34 +268,35 @@ class FeatureAverager(BaseEstimator, TransformerMixin):
 
         return signal_df
 
+
 class ZnScoreAverager(BaseEstimator, TransformerMixin):
     def __init__(self, neutral: str = "zero", use_signs: bool = False):
         """
-        Transformer class to combine features into a benchmark signal 
+        Transformer class to combine features into a benchmark signal
         according to a specified normalisation.
 
-        :param <str> neutral: Specified neutral value for a normalisation. This can 
-            take either 'zero' or 'mean'. If the neutral level is zero, each feature 
+        :param <str> neutral: Specified neutral value for a normalisation. This can
+            take either 'zero' or 'mean'. If the neutral level is zero, each feature
             is standardised by dividing by the mean absolute deviation. If the neutral
             level is mean, each feature is normalised by subtracting the mean and
             dividing by the standard deviation. Any statistics are computed according
             to a point-in-time principle. Default is 'zero'.
-        :param <bool> use_signs: Boolean to specify whether or not to return the 
+        :param <bool> use_signs: Boolean to specify whether or not to return the
             signs of the benchmark signal instead of the signal itself. Default is False.
         """
         if not isinstance(neutral, str):
             raise TypeError("'neutral' must be a string.")
-        
+
         if neutral.lower() not in ["zero", "mean"]:
             raise ValueError("neutral must be either 'zero' or 'mean'.")
-        
+
         if type(use_signs) != bool:
             raise TypeError("'use_signs' must be a boolean.")
-        
+
         self.neutral = neutral
         self.use_signs = use_signs
-    
-    def fit(self, X: pd.DataFrame, y: Any =None):
+
+    def fit(self, X: pd.DataFrame, y: Any = None):
         """
         Fit method to extract relevant standardisation/normalisation statistics from a
         training set so that PiT statistics can be computed in the transform method for
@@ -270,12 +307,16 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         """
         # checks
         if type(X) != pd.DataFrame:
-            raise TypeError("Input feature matrix for the ZnScoreAverager must be a pandas dataframe. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe.")
+            raise TypeError(
+                "Input feature matrix for the ZnScoreAverager must be a pandas "
+                "dataframe. If used as part of an sklearn pipeline, ensure that previous "
+                "steps return a pandas dataframe."
+            )
         if not isinstance(X.index, pd.MultiIndex):
             raise ValueError("X must be multi-indexed.")
         if not isinstance(X.index.get_level_values(1)[0], datetime.date):
             raise TypeError("The inner index of X must be datetime.date.")
-        
+
         # fit
         self.training_n: int = len(X)
 
@@ -296,20 +337,24 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         Transform method to compute an out-of-sample benchmark signal for each unique
         date in the input test dataframe. At a given test time, the relevant statistics
         (implied by choice of neutral value) are calculated using all training information
-        and test information until (and including) that test time, since the test time 
+        and test information until (and including) that test time, since the test time
         denotes the time at which the return was available and the features lag behind
         the returns.
 
         :param <pd.DataFrame> X: Pandas dataframe of input features.
         """
-        # checks 
+        # checks
         if type(X) != pd.DataFrame:
-            raise TypeError("Input feature matrix for the ZnScoreAverager must be a pandas dataframe. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe.")
+            raise TypeError(
+                "Input feature matrix for the ZnScoreAverager must be a pandas "
+                "dataframe. If used as part of an sklearn pipeline, ensure that previous "
+                "steps return a pandas dataframe."
+            )
         if not isinstance(X.index, pd.MultiIndex):
             raise ValueError("X must be multi-indexed.")
         if not isinstance(X.index.get_level_values(1)[0], datetime.date):
             raise TypeError("The inner index of X must be datetime.date.")
-        
+
         # transform
         unique_dates: List[pd.Timestamp] = sorted(X.index.get_level_values(1).unique())
         signal_df = pd.DataFrame(index=X.index, columns=["signal"], dtype="float")
@@ -324,10 +369,14 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
                 test_n: int = len(X_test_date)
 
                 updated_n: int = test_n + training_n
-                updated_mads: pd.Series = (test_mads * test_n + training_mads * training_n)/updated_n
+                updated_mads: pd.Series = (
+                    test_mads * test_n + training_mads * training_n
+                ) / updated_n
                 standardised_X: pd.DataFrame = (X_test_date / updated_mads).fillna(0)
-                benchmark_signal = pd.DataFrame(np.mean(standardised_X, axis=1), columns=["signal"], dtype="float")
-                # store the signal 
+                benchmark_signal = pd.DataFrame(
+                    np.mean(standardised_X, axis=1), columns=["signal"], dtype="float"
+                )
+                # store the signal
                 signal_df.loc[benchmark_signal.index] = benchmark_signal
                 # update metrics for the next iteration
                 training_mads = updated_mads
@@ -343,9 +392,23 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
                 test_means: pd.Series = X_test_date.mean(axis=0)
                 test_sum_squares: pd.Series = np.sum(np.square(X_test_date), axis=0)
                 test_n: int = len(X_test_date)
-                updated_means, updated_sum_squares, updated_stds, updated_n = self.__update_metrics(test_means, test_sum_squares, test_n, training_means, training_sum_squares, training_n)
+                (
+                    updated_means,
+                    updated_sum_squares,
+                    updated_stds,
+                    updated_n,
+                ) = self.__update_metrics(
+                    test_means,
+                    test_sum_squares,
+                    test_n,
+                    training_means,
+                    training_sum_squares,
+                    training_n,
+                )
 
-                normalised_X: pd.DataFrame = (X_test_date - updated_means) / updated_stds
+                normalised_X: pd.DataFrame = (
+                    X_test_date - updated_means
+                ) / updated_stds
                 benchmark_signal: pd.DataFrame = pd.DataFrame(
                     np.mean(normalised_X, axis=1), columns=["signal"], dtype="float"
                 )
@@ -357,10 +420,18 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
 
         if self.use_signs:
             return np.sign(signal_df).astype(int)
-        
+
         return signal_df
-    
-    def __update_metrics(self, test_means: pd.Series, test_sum_squares: pd.Series, test_n: int, training_means: pd.Series, training_sum_squares: pd.Series, training_n: int):
+
+    def __update_metrics(
+        self,
+        test_means: pd.Series,
+        test_sum_squares: pd.Series,
+        test_n: int,
+        training_means: pd.Series,
+        training_sum_squares: pd.Series,
+        training_n: int,
+    ):
         """
         Private helper method to sequentially update means and standard deviations
         in light of the mean, standard deviation and sample size of a new,
@@ -369,18 +440,23 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         when neutral is set to 'mean'.
 
         :param <pd.Series> test_means: Mean of each feature in the test set.
-        :param <pd.Series> test_sum_squares: Sum of squares of each feature in the test set.
+        :param <pd.Series> test_sum_squares: Sum of squares of each feature in the test 
+            set.
         :param <int> test_n: Sample size of the test set.
         :param <pd.Series> training_means: Mean of each feature in the training set.
-        :param <pd.Series> training_sum_squares: Sum of squares of each feature in the training set.
+        :param <pd.Series> training_sum_squares: Sum of squares of each feature in the 
+            training set.
         :param <int> training_n: Sample size of the training set.
 
-        :return <tuple>: Tuple of updated means, sum of squares, standard deviations and sample size.
+        :return <tuple>: Tuple of updated means, sum of squares, standard deviations and 
+            sample size.
         """
         updated_n: int = test_n + training_n
 
         # First update the means
-        updated_means: pd.Series = (test_means * test_n + training_means * training_n)/updated_n
+        updated_means: pd.Series = (
+            test_means * test_n + training_means * training_n
+        ) / updated_n
 
         # Then update the standard deviations
         updated_sum_squares: pd.Series = training_sum_squares + test_sum_squares
@@ -390,7 +466,8 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         updated_stds: pd.Series = np.sqrt(comp1 - comp2 + comp3)
 
         return updated_means, updated_sum_squares, updated_stds, updated_n
-            
+
+
 class PanelMinMaxScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
     """
     Transformer class to extend scikit-learn's MinMaxScaler() to panel datasets. It is
@@ -401,9 +478,10 @@ class PanelMinMaxScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
     and temporal knowledge.
 
     NOTE: This class is designed to replicate scikit-learn's MinMaxScaler() class.
-          It should primarily be used to satisfy the assumptions of various models.
-    """ 
-    def fit(self, X, y = None):
+            It should primarily be used to satisfy the assumptions of various models.
+    """
+
+    def fit(self, X, y=None):
         """
         Fit method to determine minimum and maximum values over a training set.
 
@@ -414,17 +492,21 @@ class PanelMinMaxScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
         """
         # checks
         if type(X) not in [pd.DataFrame, pd.Series]:
-            raise TypeError("'X' must be a pandas dataframe or series. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe or series.")
+            raise TypeError(
+                "'X' must be a pandas dataframe or series. If used as part of an "
+                "sklearn pipeline, ensure that previous steps return a pandas dataframe "
+                "or series."
+            )
 
         if not isinstance(X.index, pd.MultiIndex):
             raise ValueError("X must be multi-indexed.")
-        
+
         # fit
         self.mins = X.min(axis=0)
         self.maxs = X.max(axis=0)
 
         return self
-    
+
     def transform(self, X):
         """
         Transform method to standardise a panel based on the minimum and maximum values.
@@ -435,29 +517,34 @@ class PanelMinMaxScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
         """
         # checks
         if type(X) not in [pd.DataFrame, pd.Series]:
-            raise TypeError("'X' must be a pandas dataframe or series. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe or series.")
+            raise TypeError(
+                "'X' must be a pandas dataframe or series. If used as part of an "
+                "sklearn pipeline, ensure that previous steps return a pandas dataframe "
+                "or series."
+            )
 
         # transform
         calc = (X - self.mins) / (self.maxs - self.mins)
 
         return calc
-    
+
+
 class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
     def __init__(self, with_mean: bool = True, with_std: bool = True):
         """
-        Transformer class to extend scikit-learn's StandardScaler() to panel datasets. It is 
-        intended to replicate the aforementioned class, but critically returning 
-        a Pandas dataframe or series instead of a numpy array. This preserves the 
-        multi-indexing in the inputs after transformation, allowing for the passing 
-        of standardised features into transformers that require cross-sectional 
-        and temporal knowledge. 
+        Transformer class to extend scikit-learn's StandardScaler() to panel datasets. 
+        It is intended to replicate the aforementioned class, but critically returning
+        a Pandas dataframe or series instead of a numpy array. This preserves the
+        multi-indexing in the inputs after transformation, allowing for the passing
+        of standardised features into transformers that require cross-sectional
+        and temporal knowledge.
 
         NOTE: This class is designed to replicate scikit-learn's StandardScaler() class.
-              It is not designed to perform sequential mean and standard deviation 
-              normalisation like the 'make_zn_scores()' function in 'macrosynergy.panel' 
-              or 'ZnScoreAverager' in 'macrosynergy.learning'. 
-              This class should primarily be used to satisfy the assumptions of various models,
-              for example the Lasso, Ridge or any neural network. 
+                It is not designed to perform sequential mean and standard deviation
+                normalisation like the 'make_zn_scores()' function in 'macrosynergy.panel'
+                or 'ZnScoreAverager' in 'macrosynergy.learning'.
+                This class should primarily be used to satisfy the assumptions of various 
+                models, for example the Lasso, Ridge or any neural network.
 
         :param <bool> with_mean: Boolean to specify whether or not to centre the data.
         :param <bool> with_std: Boolean to specify whether or not to scale the data.
@@ -471,8 +558,8 @@ class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin)
         # setup
         self.with_mean = with_mean
         self.with_std = with_std
-        
-        self.means = None 
+
+        self.means = None
         self.stds = None
 
     def fit(self, X: Union[pd.DataFrame, pd.Series], y: Any = None):
@@ -486,7 +573,11 @@ class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin)
         """
         # checks
         if type(X) not in [pd.DataFrame, pd.Series]:
-            raise TypeError("'X' must be a pandas dataframe or series. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe or series.")
+            raise TypeError(
+                "'X' must be a pandas dataframe or series. If used as part of an sklearn "
+                "pipeline, ensure that previous steps return a pandas dataframe or "
+                "series."
+            )
         if not isinstance(X.index, pd.MultiIndex):
             raise ValueError("X must be multi-indexed.")
         # fit
@@ -509,19 +600,24 @@ class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin)
         """
         # checks
         if type(X) not in [pd.DataFrame, pd.Series]:
-            raise TypeError("'X' must be a pandas dataframe or series. If used as part of an sklearn pipeline, ensure that previous steps return a pandas dataframe or series.")
-        
+            raise TypeError(
+                "'X' must be a pandas dataframe or series. If used as part of an sklearn "
+                "pipeline, ensure that previous steps return a pandas dataframe or "
+                "series."
+            )
+
         # transform
         if self.means is not None:
-            calc = X - self.means 
+            calc = X - self.means
         else:
             calc = X
 
         if self.stds is not None:
-            calc = calc / self.stds 
+            calc = calc / self.stds
 
         return calc
-    
+
+
 if __name__ == "__main__":
     from macrosynergy.management import make_qdf
     import macrosynergy.management as msm
@@ -564,8 +660,14 @@ if __name__ == "__main__":
     print(selector.transform(X).columns)
 
     # Split X and y into training and test sets
-    X_train, X_test = X[X.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], X[X.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
-    y_train, y_test = y[y.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], y[y.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
+    X_train, X_test = (
+        X[X.index.get_level_values(1) < pd.Timestamp(day=1, month=1, year=2018)],
+        X[X.index.get_level_values(1) >= pd.Timestamp(day=1, month=1, year=2018)],
+    )
+    y_train, y_test = (
+        y[y.index.get_level_values(1) < pd.Timestamp(day=1, month=1, year=2018)],
+        y[y.index.get_level_values(1) >= pd.Timestamp(day=1, month=1, year=2018)],
+    )
 
     selector = ZnScoreAverager(neutral="mean", use_signs=True)
     selector.fit(X_train, y_train)

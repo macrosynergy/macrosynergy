@@ -10,13 +10,11 @@ import numpy as np
 import pandas as pd
 from typing import List
 from itertools import groupby
-import random
 from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.simulate import make_qdf_black, make_qdf
 
 
 def startend(dti, start, length):
-
     """Return start and end dates of a sequence as tuple
 
     :param <DateTimeIndex> dti: datetime series of working days
@@ -30,10 +28,14 @@ def startend(dti, start, length):
     return tup
 
 
-def make_blacklist(df: pd.DataFrame, xcat: str, cids: List[str] = None,
-                   start: str = None, end: str = None,
-                   nan_black: bool = False):
-
+def make_blacklist(
+    df: pd.DataFrame,
+    xcat: str,
+    cids: List[str] = None,
+    start: str = None,
+    end: str = None,
+    nan_black: bool = False,
+):
     """
     Converts binary category of standardized dataframe into a standardized dictionary
     that can serve as a blacklist for cross-sections in further analyses
@@ -59,10 +61,11 @@ def make_blacklist(df: pd.DataFrame, xcat: str, cids: List[str] = None,
 
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
     dfd = reduce_df(df=df, xcats=[xcat], cids=cids, start=start, end=end)
-    assert all(np.isin(dfd.value.dropna().unique(), [0, 1])), \
-        "blacklist values must all be 0/1"
+    assert all(
+        np.isin(dfd.value.dropna().unique(), [0, 1])
+    ), "blacklist values must all be 0/1"
 
-    df_pivot = dfd.pivot(index='real_date', columns='cid', values='value')
+    df_pivot = dfd.pivot(index="real_date", columns="cid", values="value")
     dates = df_pivot.index
     cids_df = list(df_pivot.columns)
 
@@ -84,49 +87,51 @@ def make_blacklist(df: pd.DataFrame, xcat: str, cids: List[str] = None,
                     dates_dict[cid] = startend(dates, si, length)
                 elif count == 1:
                     val = dates_dict.pop(cid)
-                    dates_dict[cid + '_1'] = val   # change key if more than 1 per cid
+                    dates_dict[cid + "_1"] = val  # change key if more than 1 per cid
                     count += 1
-                    dates_dict[cid + '_' + str(count)] = startend(dates, si, length)
+                    dates_dict[cid + "_" + str(count)] = startend(dates, si, length)
                 else:
-                    dates_dict[cid + '_' + str(count)] = startend(dates, si, length)
+                    dates_dict[cid + "_" + str(count)] = startend(dates, si, length)
                 count += 1
             si += length
     return dates_dict
 
 
 if __name__ == "__main__":
-
-    cids = ['AUD', 'GBP', 'CAD', 'USD']
-    cols = ['earliest', 'latest', 'mean_add', 'sd_mult']
+    cids = ["AUD", "GBP", "CAD", "USD"]
+    cols = ["earliest", "latest", "mean_add", "sd_mult"]
     df_cid1 = pd.DataFrame(index=cids, columns=cols)
 
-    df_cid1.loc['AUD'] = ['2010-01-01', '2020-12-31', 0, 1]
-    df_cid1.loc['GBP'] = ['2011-01-01', '2020-11-30', 0, 1]
-    df_cid1.loc['CAD'] = ['2011-01-01', '2021-11-30', 0, 1]
-    df_cid1.loc['USD'] = ['2011-01-01', '2020-12-30', 0, 1]
+    df_cid1.loc["AUD"] = ["2010-01-01", "2020-12-31", 0, 1]
+    df_cid1.loc["GBP"] = ["2011-01-01", "2020-11-30", 0, 1]
+    df_cid1.loc["CAD"] = ["2011-01-01", "2021-11-30", 0, 1]
+    df_cid1.loc["USD"] = ["2011-01-01", "2020-12-30", 0, 1]
 
-    cols = ['earliest', 'latest', 'mean_add', 'sd_mult', 'ar_coef', 'back_coef']
-    df_xcat1 = pd.DataFrame(index=['FXXR_NSA', 'FXCRY_NSA'],  columns=cols)
-    df_xcat1.loc['FXXR_NSA'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
-    df_xcat1.loc['FXCRY_NSA'] = ['2010-01-01', '2020-12-31', 0, 1, 0, 0.3]
+    cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
+    df_xcat1 = pd.DataFrame(index=["FXXR_NSA", "FXCRY_NSA"], columns=cols)
+    df_xcat1.loc["FXXR_NSA"] = ["2010-01-01", "2020-12-31", 0, 1, 0, 0.3]
+    df_xcat1.loc["FXCRY_NSA"] = ["2010-01-01", "2020-12-31", 0, 1, 0, 0.3]
     df1 = make_qdf(df_cid1, df_xcat1, back_ar=0.05)
 
-    df_xcat2 = pd.DataFrame(index=['FXNONTRADE_NSA'],  columns=['earliest', 'latest'])
-    df_xcat2.loc['FXNONTRADE_NSA'] = ['2010-01-01', '2021-11-30']
-    black = {'AUD': ('2010-01-12', '2010-06-14'),
-             'USD': ('2011-08-17', '2011-09-20'),
-             'CAD_1': ('2011-01-04', '2011-01-23'),
-             'CAD_2': ('2013-01-09', '2013-04-10'),
-             'CAD_3': ('2015-01-12', '2015-03-12'),
-             'CAD_4': ('2021-11-01', '2021-11-20')}
+    df_xcat2 = pd.DataFrame(index=["FXNONTRADE_NSA"], columns=["earliest", "latest"])
+    df_xcat2.loc["FXNONTRADE_NSA"] = ["2010-01-01", "2021-11-30"]
+    black = {
+        "AUD": ("2010-01-12", "2010-06-14"),
+        "USD": ("2011-08-17", "2011-09-20"),
+        "CAD_1": ("2011-01-04", "2011-01-23"),
+        "CAD_2": ("2013-01-09", "2013-04-10"),
+        "CAD_3": ("2015-01-12", "2015-03-12"),
+        "CAD_4": ("2021-11-01", "2021-11-20"),
+    }
 
     print(black)
     df2 = make_qdf_black(df_cid1, df_xcat2, blackout=black)
 
     df = pd.concat([df1, df2]).reset_index()
 
-    dates_dict = make_blacklist(df, xcat='FXNONTRADE_NSA', cids=None,
-                                start=None, end=None)
+    dates_dict = make_blacklist(
+        df, xcat="FXNONTRADE_NSA", cids=None, start=None, end=None
+    )
 
     # If the output, from the below printed dictionary, differs from the above defined
     # dictionary, it should be by a date or two, as the construction of the dataframe,

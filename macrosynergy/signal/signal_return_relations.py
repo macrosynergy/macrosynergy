@@ -190,7 +190,7 @@ class SignalReturnRelations:
         ]
 
         self.rets = rets
-        #self.freqs = list(set(freqs))  # Remove duplicate values from freqs
+        # self.freqs = list(set(freqs))  # Remove duplicate values from freqs
 
         if not isinstance(cosp, bool):
             raise TypeError(f"<bool> object expected and not {type(cosp)}.")
@@ -261,7 +261,8 @@ class SignalReturnRelations:
         if rival_sigs is not None:
             r_sigs_warning = (
                 "Parameter 'rival_sigs' is deprecated and will be removed "
-                "in v0.1.0. Please specify the rival signals as part of the list of feature "
+                "in v0.1.0. Please specify the rival signals as part of the list of "
+                "feature "
                 "signals in the argument 'sigs'."
             )
             warnings.warn(

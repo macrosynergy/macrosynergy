@@ -67,7 +67,7 @@ def xcat_isolator(expression: str, start_index: str, index: int):
 def _get_xcats_used(ops: dict) -> Tuple[List[str], List[str]]:
     """
     Collect all categories used in the panel calculation.
-    
+
     :param <dict> ops: dictionary of panel calculation formulas.
 
     :return <Tuple[List[str], List[str]]>: all_xcats_used, singles_used.
