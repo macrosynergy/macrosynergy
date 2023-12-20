@@ -1,4 +1,4 @@
-pydata-sphinx-theme==0.12.0
+pydata-sphinx-theme==0.13.0
 Sphinx==4.5.0
 sphinx-autodoc-typehints==1.19.1
 sphinx-automodapi==0.16.0
