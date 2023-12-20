@@ -255,9 +255,10 @@ class JPMaQSDownload(object):
         Validate the downloaded data in the provided dataframe.
 
         :param <pd.DataFrame> data_df: dataframe containing the downloaded data.
-        :param <list[str]> expected_expressions: list of expressions that were expected to be
+        :param <list[str]> expected_expressions: list of expressions that were expected 
+            to be downloaded.
+        :param <list[str]> found_expressions: list of expressions that were actually 
             downloaded.
-        :param <list[str]> found_expressions: list of expressions that were actually downloaded.
         :param <str> start_date: start date of the downloaded data.
         :param <str> end_date: end date of the downloaded data.
         :param <bool> verbose: whether to print the validation results.
@@ -280,14 +281,16 @@ class JPMaQSDownload(object):
         unexpected_exprs = exprs_f - expr_expected
         if unexpected_exprs:
             raise InvalidDataframeError(
-                f"Unexpected expressions were found in the downloaded data: {unexpected_exprs}"
+                f"Unexpected expressions were found in the downloaded data: 
+                {unexpected_exprs}"
             )
 
         if expr_missing:
             log_str = (
                 f"Some expressions are missing from the downloaded data."
                 " Check logger output for complete list. \n"
-                f"{len(expr_missing)} out of {len(expr_expected)} expressions are missing."
+                f"{len(expr_missing)} out of {len(expr_expected)} expressions are 
+                missing."
                 f"To download the catalogue of all available expressions and filter the"
                 " unavailable expressions, set `get_catalogue=True` in the "
                 " call to `JPMaQSDownload.download()`."
@@ -299,8 +302,8 @@ class JPMaQSDownload(object):
                 print(log_str)
 
         # check if all dates are present in the df
-        # NOTE : Hardcoded max start date to 1990-01-01. This is because the JPMAQS database
-        #        does not have data before this date.
+        # NOTE : Hardcoded max start date to 1990-01-01. This is because the JPMAQS 
+        # database does not have data before this date.
         if datetime.datetime.strptime(
             start_date, "%Y-%m-%d"
         ) < datetime.datetime.strptime("1990-01-01", "%Y-%m-%d"):
@@ -434,7 +437,8 @@ class JPMaQSDownload(object):
             list(set(pd.date_range(start=start_date, end=end_date)) - set(expc_bdates))
         )
 
-        # check if any dates in the downloaded data are not in the expected dates (business + non-business)
+        # check if any dates in the downloaded data are not in the expected dates 
+        # (business + non-business)
         dates_bools: pd.Series = final_df["real_date"].isin(expc_bdates) | final_df[
             "real_date"
         ].isin(expc_nbdates)
@@ -453,7 +457,8 @@ class JPMaQSDownload(object):
 
         final_df = final_df.sort_values(["real_date", "cid", "xcat"])
 
-        # sort all metrics in the order of self.valid_metrics, all other metrics will be at the end
+        # sort all metrics in the order of self.valid_metrics, all other metrics will be 
+        # at the end
         found_metrics = [
             metricx for metricx in self.valid_metrics if metricx in final_df.columns
         ]
@@ -715,9 +720,11 @@ class JPMaQSDownload(object):
             end_date = (datetime.datetime.today() + pd.offsets.BusinessDay(2)).strftime(
                 "%Y-%m-%d"
             )
-            # NOTE : due to timezone conflicts, we choose to request data for 2 days in the future.
-            # NOTE : DataQuery specifies YYYYMMDD as the date format, but we use YYYY-MM-DD for consistency.
-            #   This is date is cast to YYYYMMDD in macrosynergy.download.dataquery.py.
+            # NOTE : due to timezone conflicts, we choose to request data for 2 days in 
+            # the future.
+            # NOTE : DataQuery specifies YYYYMMDD as the date format, but we use 
+            # YYYY-MM-DD for consistency.
+            # This is date is cast to YYYYMMDD in macrosynergy.download.dataquery.py.
 
         # Validate arguments.
         if not self.validate_download_args(

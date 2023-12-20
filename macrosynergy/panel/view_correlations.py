@@ -4,14 +4,9 @@ panels.
 
 ::docs::correl_matrix::sort_first::
 """
-import itertools
 import pandas as pd
 import numpy as np
-import seaborn as sns
-import scipy.cluster.hierarchy as sch
-from matplotlib import pyplot as plt
 from typing import List, Union, Tuple, Dict, Optional, Any
-from collections import defaultdict
 from macrosynergy.management.simulate import make_qdf
 
 import macrosynergy.visuals as msv
@@ -85,7 +80,7 @@ def correl_matrix(
     N.B:. The function displays the heatmap of a correlation matrix across categories or
     cross-sections (depending on which parameter has received multiple elements).
     """
-    
+
     msv.view_correlation(
         df=df,
         xcats=xcats,
@@ -104,6 +99,7 @@ def correl_matrix(
         max_color=max_color,
         show=show,
     )
+
 
 if __name__ == "__main__":
     np.random.seed(0)

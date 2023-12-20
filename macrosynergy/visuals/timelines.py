@@ -405,5 +405,8 @@ if __name__ == "__main__":
         same_y=False,
         xcats=sel_xcats[0],
         cids=sel_cids,
-        title="Plotting multiple cross sections for a single category \n with different y-axis!",
+        title=(
+            "Plotting multiple cross sections for a single category \n with different "
+            "y-axis!"
+        ),
     )
