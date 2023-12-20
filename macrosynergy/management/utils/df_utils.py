@@ -231,14 +231,14 @@ def apply_slip(
         if raise_error:
             raise ValueError(
                 "Tickers targetted for applying slip are not present in the DataFrame.\n"
-                f"Missing tickers: 
-                {sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
+                f"Missing tickers: "
+                f"{sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
             )
         else:
             warnings.warn(
                 "Tickers targetted for applying slip are not present in the DataFrame.\n"
-                f"Missing tickers: 
-                {sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
+                f"Missing tickers: " 
+                f"{sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
             )
 
     slip: int = slip.__neg__()

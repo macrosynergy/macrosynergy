@@ -281,16 +281,16 @@ class JPMaQSDownload(object):
         unexpected_exprs = exprs_f - expr_expected
         if unexpected_exprs:
             raise InvalidDataframeError(
-                f"Unexpected expressions were found in the downloaded data: 
-                {unexpected_exprs}"
+                f"Unexpected expressions were found in the downloaded data: "
+                f"{unexpected_exprs}"
             )
 
         if expr_missing:
             log_str = (
                 f"Some expressions are missing from the downloaded data."
                 " Check logger output for complete list. \n"
-                f"{len(expr_missing)} out of {len(expr_expected)} expressions are 
-                missing."
+                f"{len(expr_missing)} out of {len(expr_expected)} expressions are "
+                "missing."
                 f"To download the catalogue of all available expressions and filter the"
                 " unavailable expressions, set `get_catalogue=True` in the "
                 " call to `JPMaQSDownload.download()`."

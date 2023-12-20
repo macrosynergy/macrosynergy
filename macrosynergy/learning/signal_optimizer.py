@@ -361,16 +361,16 @@ class SignalOptimizer:
                         for p in param:
                             if not hasattr(p, "rvs"):
                                 raise ValueError(
-                                    f"Invalid random hyperparameter search dictionary for 
-                                    parameter {param}. The value for the dictionary  
-                                    Must be a scipy.stats distribution."
+                                    f"Invalid random hyperparameter search dictionary for" 
+                                    f" parameter {param}. The value for the dictionary "  
+                                    "Must be a scipy.stats distribution."
                                 )
                     else:
                         if not hasattr(param, "rvs"):
                             raise ValueError(
-                                f"Invalid random hyperparameter search dictionary for 
-                                parameter {param}. The value for the dictionary  
-                                Must be a scipy.stats distribution."
+                                f"Invalid random hyperparameter search dictionary for "
+                                f"parameter {param}. The value for the dictionary " 
+                                "Must be a scipy.stats distribution."
                             )
 
         elif hparam_type == "bayes":
@@ -721,8 +721,8 @@ class SignalOptimizer:
             )
         if cap > 20:
             logging.warning(
-                f"The maximum number of models to display is 20. The cap has been set to 
-                20."
+                f"The maximum number of models to display is 20. The cap has been set to "
+                "20."
             )
             cap = 20
 
