@@ -25,6 +25,14 @@ def process_individual_release(release_dict: Dict) -> str:
         uname = strx[lx + len(findstr) : rx]
         ustr = f"by [@{uname}](https://github.com/{uname})"
         return strx.replace(f"by @{uname}", ustr)
+    
+    def format_new_contributors(strx: str) -> str:
+        findstr = "* @"
+        lx = strx.rfind(findstr)
+        rx = strx.find(" ", lx + len(findstr))
+        uname = strx[lx + len(findstr) : rx]
+        ustr = f"* [@{uname}](https://github.com/{uname})"
+        return strx.replace(f"* @{uname}", ustr)
 
     def format_pr_link(strx: str) -> str:
         findstr = "in https://github.com/macrosynergy/macrosynergy/pull/"
@@ -51,6 +59,10 @@ def process_individual_release(release_dict: Dict) -> str:
             linex = format_pr_link(linex)
         if linex.startswith("**Full Changelog**: https://"):
             linex = format_chg_log(linex)
+        if "## New Contributors" in linex:
+            linex = "#" + linex
+        if line.startswith("* @"):
+            linex = format_new_contributors(linex)
         lines.append(linex)
     release_text: str = "\n".join(lines)
     md = (
