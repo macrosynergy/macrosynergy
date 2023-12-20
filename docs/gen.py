@@ -141,13 +141,6 @@ def generate_rsts(output_dir: str, package: str = "macrosynergy"):
     remove_file_spec(gen_dir=output_dir, static_dir=STATIC_RSTS_DIR)
 
 
-def copy_readme(output_dir: str, readme: str):
-    """
-    Copies README.md to `output_dir`.
-    """
-    shutil.copy(readme, output_dir)
-
-
 def make_docs(docs_dir: str = "./docs", show: bool = False):
     """
     Calls `make html` in `docs_dir` (makefile from sphinx-quickstart).
@@ -200,7 +193,6 @@ def main():
     generate_rsts(output_dir=OUTPUT_DIR)
 
     fetch_release_notes()
-    # copy_readme(output_dir=OUTPUT_DIR, readme=README)
 
     if BUILD:
         make_docs(show=SHOW)
