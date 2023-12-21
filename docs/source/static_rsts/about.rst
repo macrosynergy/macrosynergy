@@ -1,4 +1,4 @@
-.. _01_about:
+.. _about:
 
 
 About Macrosynergy
