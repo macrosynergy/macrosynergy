@@ -7,7 +7,7 @@ Submodules
 ----------
 
 .. toctree::
-   :maxdepth: 10
+   :maxdepth: 2
 
    ../gen_rsts/macrosynergy.signal.signal_return_relations
    ../gen_rsts/macrosynergy.signal.target_positions

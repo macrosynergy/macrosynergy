@@ -7,7 +7,7 @@ Submodules
 ----------
 
 .. toctree::
-   :maxdepth: 10
+   :maxdepth: 2
 
    ../gen_rsts/macrosynergy.visuals.correlation
    ../gen_rsts/macrosynergy.visuals.facetplot

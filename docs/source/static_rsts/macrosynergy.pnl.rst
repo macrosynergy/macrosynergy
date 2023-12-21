@@ -7,6 +7,6 @@ Submodules
 ----------
 
 .. toctree::
-   :maxdepth: 10
+   :maxdepth: 2
 
    ../gen_rsts/macrosynergy.pnl.naive_pnl

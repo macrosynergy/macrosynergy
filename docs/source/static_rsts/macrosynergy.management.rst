@@ -7,7 +7,7 @@ Subpackages
 -----------
 
 .. toctree::
-   :maxdepth: 10
+   :maxdepth: 2
 
    ../gen_rsts/macrosynergy.management.simulate
    ../gen_rsts/macrosynergy.management.utils
@@ -16,7 +16,7 @@ Submodules
 ----------
 
 .. toctree::
-   :maxdepth: 10
+   :maxdepth: 2
 
    ../gen_rsts/macrosynergy.management.constants
    ../gen_rsts/macrosynergy.management.decorators

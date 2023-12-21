@@ -7,7 +7,7 @@ Submodules
 ----------
 
 .. toctree::
-   :maxdepth: 10
+   :maxdepth: 2
 
    ../gen_rsts/macrosynergy.panel.basket
    ../gen_rsts/macrosynergy.panel.category_relations

@@ -7,8 +7,8 @@ Submodules
 ----------
 
 .. toctree::
-   :maxdepth: 10
-
+   :maxdepth: 2
+   
    ../gen_rsts/macrosynergy.learning.cv_tools
    ../gen_rsts/macrosynergy.learning.metrics
    ../gen_rsts/macrosynergy.learning.panel_time_series_split
