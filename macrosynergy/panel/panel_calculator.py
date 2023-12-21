@@ -2,8 +2,6 @@
 Implementation of panel calculation functions for quantamental data.
 The functionality allows applying mathematical operations on time-series data.
 
-::docs::panel_calculator::sort_first::
-
 """
 import numpy as np
 import pandas as pd

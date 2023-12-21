@@ -1,8 +1,5 @@
 """
 Implementation of linear_composite() function as a module.
-
-::docs::linear_composite::sort_first::
-
 """
 
 import numpy as np

@@ -4,8 +4,6 @@ This module is not intended to be used directly, but rather through
 macrosynergy.download.jpmaqs.py. However, for a use cases independent
 of JPMaQS, this module can be used directly to download data from the
 JPMorgan DataQuery API.
-
-::docs::DataQueryInterface::sort_first::
 """
 import concurrent.futures
 import time

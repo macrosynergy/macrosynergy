@@ -177,3 +177,6 @@ macrosynergy/version.py
 
 .vscode/
 .vs/
+
+# RST files for documentation
+docs/source/gen_rsts/

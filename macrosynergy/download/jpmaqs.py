@@ -1,6 +1,4 @@
 """ JPMaQS Download Interface 
-
-::docs::JPMaQSDownload::sort_first::
 """
 
 import datetime
@@ -36,41 +34,23 @@ class JPMaQSDownload(object):
     It can be extended to include the use of proxies, and even request generic DataQuery expressions.
 
     :param <bool> oauth: True if using oauth, False if using username/password with crt/key.
-
-    When using oauth:
-    :param <str> client_id: oauth client_id, required if oauth=True.
-    :param <str> client_secret: oauth client_secret, required if oauth=True.
-
-    When using username/password with crt/key:
-    :param <str> crt: path to crt file.
-    :param <str> key: path to key file.
-    :param <str> username: username for certificate based authentication.
-    :param <str> password : paired with username for certificate.
-
-    When using a config file:
-    :param <str> credentials_config: path to config file.
-
-    The config file should contain the client_id and client_secret for oauth, or the
-    crt, key, username, and password for certificate based authentication.
-    (see macrosynergy.management.utils.JPMaQSAPIConfigObject)
-
+    :param <Optional[str]> client_id: oauth client_id, required if oauth=True.
+    :param <Optional[str]> client_secret: oauth client_secret, required if oauth=True.
+    :param <Optional[str]> crt: path to crt file.
+    :param <Optional[str]> key: path to key file.
+    :param <Optional[str]> username: username for certificate based authentication.
+    :param <Optional[str]> password: paired with username for certificate
     :param <bool> debug: True if debug mode, False if not.
     :param <bool> suppress_warning: True if suppressing warnings, False if not.
     :param <bool> check_connection: True if the interface should check the connection to
         the server before sending requests, False if not. False by default.
-
-    :param <dict> proxy: proxy to use for requests, None if not using proxy (default).
+    :param <Optional[dict]> proxy: proxy to use for requests, None if not using proxy (default).
     :param <bool> print_debug_data: True if debug data should be printed, False if not
         (default).
     :param <dict> dq_kwargs: additional arguments to pass to the DataQuery API object such
         `calender` and `frequency` for the DataQuery API. For more fine-grained usage,
         initialize the DataQueryInterface object explicitly.
-    :param <dict> kwargs: additional arguments to pass to the DataQuery API object such as
-            :param <str> base_url: base url for the DataQuery API.
-            :param <str> calendar: calendar setting to use with the DataQuery API.
-            :param <str> frequency: frequency setting to use with the DataQuery API.
-            ...
-        See macrosynergy.download.dataquery.DataQueryInterface for more.
+    :param <dict> kwargs: any other keyword arguments.
 
     :return <JPMaQSDownload>: JPMaQSDownload object
 
