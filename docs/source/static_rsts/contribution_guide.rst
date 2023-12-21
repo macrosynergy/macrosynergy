@@ -1,4 +1,4 @@
-.. _05_dev_guide:
+.. _contribution_guide:
 
 Contribution Guide
 ==================
