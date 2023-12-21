@@ -48,8 +48,8 @@ exclude_patterns = ["*/__init__.py"]
 html_theme = "pydata_sphinx_theme"
 # html_theme = "sphinx_book_theme"
 html_theme_options = {
-    # "show_toc_level": 4,
-    # "show_nav_level": 4,
+    "show_toc_level": 5,
+    # "show_nav_level": 10,
     "github_url": "https://github.com/macrosynergy/macrosynergy",
     "logo": {
         "image_light": "MACROSYNERGY_Logo_Primary.png",
