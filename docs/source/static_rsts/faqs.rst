@@ -1,4 +1,4 @@
-.. _08_faqs:
+.. _faqs:
 
 FAQs and Troubleshooting
 ========================
