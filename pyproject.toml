@@ -75,8 +75,9 @@ docs = [
   "sphinx-automodapi==0.16.0",
   "sphinx-remove-toctrees==0.0.3",
   "sphinx_design==0.5.0",
-  "sphinx_copybutton==0.5.2",
   "myst_parser==2.0.0",
+  "sphinx-copybutton==0.5.0",
+  "requests>=2.27.1",
 ]
 
 all = [
@@ -94,8 +95,9 @@ all = [
   "sphinx-automodapi==0.16.0",
   "sphinx-remove-toctrees==0.0.3",
   "sphinx_design==0.5.0",
-  "sphinx_copybutton==0.5.2",
   "myst_parser==2.0.0",
+  "sphinx-copybutton==0.5.0",
+  "requests>=2.27.1",
   "pytest>=7.0.0",
   "pytest-cov>3.0.0",
   "coverage>=6.0.0",

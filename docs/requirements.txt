@@ -4,6 +4,6 @@ sphinx-autodoc-typehints==1.19.1
 sphinx-automodapi==0.16.0
 sphinx-remove-toctrees==0.0.3
 sphinx_design==0.5.0
-sphinx_copybutton==0.5.2
 myst_parser==2.0.0
+sphinx-copybutton==0.5.2
 requests >= 2.27.1
