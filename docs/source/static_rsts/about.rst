@@ -2,7 +2,7 @@
 
 
 About Macrosynergy
-=======
+==================
 
 Macrosynergy
 ------------
