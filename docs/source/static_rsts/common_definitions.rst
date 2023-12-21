@@ -1,4 +1,4 @@
-.. _06_definitions:
+.. _common_definitions:
 
 Common Definitions
 ==================
