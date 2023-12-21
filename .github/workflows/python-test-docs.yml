@@ -30,7 +30,5 @@ jobs:
       - name: Build docs
         run: |
           python docs/gen.py
-          cd docs
-          make html
-          cd ..
+
 
