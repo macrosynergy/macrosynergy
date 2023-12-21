@@ -25,11 +25,11 @@ trading or investment value of quantamental strategies.
 .. grid:: 3
 
    .. grid-item-card:: About Macrosynergy
-      :link: 01_about
+      :link: about
       :link-type: ref
 
    .. grid-item-card:: Getting Started
-      :link: 02_getting_started
+      :link: getting_started
       :link-type: ref
 
    .. grid-item-card:: API Reference
@@ -41,15 +41,15 @@ trading or investment value of quantamental strategies.
 .. grid:: 3
 
    .. grid-item-card:: Common Definitions
-      :link: 06_definitions
+      :link: common_definitions
       :link-type: ref
 
    .. grid-item-card:: Contribution Guide
-      :link: 05_dev_guide
+      :link: contribution_guide
       :link-type: ref
 
    .. grid-item-card:: FAQs and Troubleshooting
-      :link: 08_faqs
+      :link: faqs
       :link-type: ref
 
 
@@ -79,7 +79,9 @@ More from Macrosynergy:
    :hidden:
    :maxdepth: 2
 
-   static_rsts/01_about
-   static_rsts/02_getting_started
+   static_rsts/about
+   static_rsts/getting_started
    static_rsts/api_reference
+   static_rsts/usage_examples.md
    gen_rsts/release_notes.md
+
