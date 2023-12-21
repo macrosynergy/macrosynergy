@@ -4,8 +4,6 @@ This module is not intended to be used directly, but rather through
 macrosynergy.download.jpmaqs.py. However, for a use cases independent
 of JPMaQS, this module can be used directly to download data from the
 JPMorgan DataQuery API.
-
-::docs::DataQueryInterface::sort_first::
 """
 import concurrent.futures
 import time
@@ -64,6 +62,7 @@ debug_stream_handler.setFormatter(
     )
 )
 logger.addHandler(debug_stream_handler)
+
 
 def validate_response(
     response: requests.Response,
@@ -908,7 +907,8 @@ class DataQueryInterface(object):
         nan_treatment: str = "NA_NOTHING",
         reference_data: str = "NO_REFERENCE_DATA",
         retry_counter: int = 0,
-        delay_param: float = API_DELAY_PARAM,  # TODO do we want the user to have access to this?
+        delay_param: float = API_DELAY_PARAM,   # TODO do we want the user to have access 
+                                                # to this?
     ) -> List[Dict]:
         """
         Download data from the DataQuery API.

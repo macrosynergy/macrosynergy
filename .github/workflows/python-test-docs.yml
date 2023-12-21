@@ -29,4 +29,6 @@ jobs:
 
       - name: Build docs
         run: |
-          bash docs/scripts/build.sh
+          python docs/gen.py
+
+

@@ -1,11 +1,6 @@
 """
 Module with functionality for generating mock 
 quantamental data for testing purposes.
-
-::docs::make_qdf::sort_first::
-::docs::make_qdf_black::sort_first::
-::docs::make_test_df::sort_first::
-
 """
 import numpy as np
 import pandas as pd
@@ -344,8 +339,8 @@ def make_test_df(
     :param <str> end_date: An ISO-formatted date string.
     :param <str> style: A string that specifies the type of line to generate.
         Current choices are: 'linear', 'decreasing-linear', 'sharp-hill',
-        'four-bit-sine', 'sine', 'cosine', 'sawtooth', 'any'.
-        See `macrosynergy.management.simulate.simulate_quantamental_data.generate_lines()`.
+        'four-bit-sine', 'sine', 'cosine', 'sawtooth', 'any'. See 
+        `macrosynergy.management.simulate.simulate_quantamental_data.generate_lines()`.
     """
 
     if isinstance(cids, str):

@@ -1,0 +1,9 @@
+/* .navbar-brand img -- override this over all other css */
+.navbar-brand img {
+    height: auto;
+    width: 400px;
+    margin-top: -15px;
+    margin-bottom: -15px;
+    /* right padding 100px */
+    padding-right: 100px;
+}

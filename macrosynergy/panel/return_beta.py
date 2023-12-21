@@ -1,8 +1,6 @@
 """
 Functions for calculating the hedge ratios of a panel of returns with respect to a
 single return. 
-
-::docs::return_beta::sort_first::
 """
 import warnings
 import numpy as np
