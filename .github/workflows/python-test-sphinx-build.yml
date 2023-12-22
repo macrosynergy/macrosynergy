@@ -1,4 +1,4 @@
-name: Package documentation - check build
+name: Sphinx documentation - check build
 
 on:
   # Runs on pushes targeting the default branch
@@ -16,10 +16,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore caches
-        uses: ./.github/actions/restore-pip-cache
+      - name: Install Python
+        uses: actions/setup-python@v5
         with:
           python-version: 3.11
+
+      - name: Install dependencies
+        run: |
+          pip install flake8
+          pip install .[docs]
 
       - name: Run Flake8
         run: |
@@ -29,4 +34,4 @@ jobs:
 
       - name: Build docs
         run: |
-          bash docs.old/scripts/build.sh
+          python docs/gen.py
