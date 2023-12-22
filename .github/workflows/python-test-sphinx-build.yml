@@ -16,8 +16,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore caches
-        uses: ./.github/actions/restore-pip-cache
+      - name: Install Python
+        uses: actions/setup-python@v5
         with:
           python-version: 3.11
 
