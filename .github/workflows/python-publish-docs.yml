@@ -25,14 +25,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python 3.11
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: 3.11
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install .[docs]
+          pip install -r docs.old/requirements.txt
           pip install flake8
 
       - name: Lint with flake8
@@ -41,9 +41,9 @@ jobs:
           flake8 --count --select=E9,F63,F7,F82 --show-source --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
           flake8 --count --exit-zero --max-complexity=10 --max-line-length=127 --exclude=./docs/**,./.github/scripts/*,./build/** --statistics
 
-      - name: Run Sphinx build
+      - name: Run jupyterbook build of documentation
         run: |
-          python docs/gen.py
+          bash docs.old/scripts/build.sh
 
       - name: Setup Pages
         uses: actions/configure-pages@v3
@@ -51,7 +51,7 @@ jobs:
         uses: actions/upload-pages-artifact@v2
         with:
           # Upload entire repository
-          path: "./docs/build/html"
+          path: "./docs.old/_build/html"
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v2
