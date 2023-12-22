@@ -95,7 +95,7 @@ def regression_balanced_accuracy(
     y_true: pd.Series, y_pred: Union[pd.Series, np.array]
 ) -> float:
     """
-    Function to return the balancedaccuracy between the signs
+    Function to return the balanced accuracy between the signs
     of the predictions and targets.
     """
 
@@ -117,7 +117,6 @@ def regression_balanced_accuracy(
 
 def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float:
     """
-    NOTE: This function is experimental.
     Function to return a Sharpe ratio for a strategy where we go long if the predictions
     are positive and short if the predictions are negative.
     """
@@ -152,7 +151,6 @@ def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float
 
 def sortino_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float:
     """
-    NOTE: This function is experimental.
     Function to return a Sortino ratio for a strategy where we go long if the predictions
     are positive and short if the predictions are negative.
     """

@@ -456,6 +456,7 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
         Private helper method to determine the unique dates in each training split. This 
         method is called by self.split(). It further returns other variables needed for 
         ensuing components of the split method.
+        
         :param <pd.DataFrame> X: Pandas dataframe of features
             multi-indexed by (cross-section, date). The dates must be in datetime format.
             The dataframe must be in wide format: each feature is a column.
