@@ -71,6 +71,8 @@ instance/
 # Sphinx documentation
 docs.old/_build/
 
+docs/source/gen_rsts/
+
 # PyBuilder
 target/
 
