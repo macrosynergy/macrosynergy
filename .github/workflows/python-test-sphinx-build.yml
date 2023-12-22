@@ -23,6 +23,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          pip install flake8
           pip install .[docs]
 
       - name: Run Flake8
