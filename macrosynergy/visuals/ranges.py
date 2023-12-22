@@ -54,7 +54,8 @@ def view_ranges(
     :param <Tuple[float]> legend_bbox_to_anchor: passed to matplotlib.pyplot.legend() as
         `bbox_to_anchor`. Default is None.
 
-    Please see [Matplotlib's Legend Documentation](https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.legend.html)
+    Please see [Matplotlib's Legend Documentation]:
+    (https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.legend.html)
     for more information on the legend parameters `loc` and `bbox_to_anchor`.
     """
 

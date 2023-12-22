@@ -2,8 +2,6 @@
 Module for checking the availability of data availabity from a 
 Quantamental DataFrame. Includes functions for checking start years
 and end dates of a DataFrame, as well as visualizing the results.
-
-::docs::check_availability::sort_first::
 """
 
 import numpy as np
