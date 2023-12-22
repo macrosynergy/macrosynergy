@@ -10,12 +10,12 @@ import glob
 import mdformat
 import yaml
 
-SOURCE_DIR = "./docs/build/"
-BUILD_DIR = "./docs/build/"
-OUTPUT_DIR = "./docs/build/html/"
+SOURCE_DIR = "./docs.old/build/"
+BUILD_DIR = "./docs.old/build/"
+OUTPUT_DIR = "./docs.old/build/html/"
 
-BUILD_CONFIG = "./docs/assets/jpb-config.yml"
-SITE_WIDE_CSS = "./docs/assets/custom_css.css"
+BUILD_CONFIG = "./docs.old/assets/jpb-config.yml"
+SITE_WIDE_CSS = "./docs.old/assets/custom_css.css"
 
 
 def get_config() -> Dict[str, Any]:

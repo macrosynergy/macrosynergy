@@ -1,5 +1,5 @@
-python docs/scripts/build_md.py
-python docs/scripts/build_jpb.py
-jupyter-book build ./docs/build/
-python docs/scripts/post_build.py
+python docs.old/scripts/build_md.py
+python docs.old/scripts/build_jpb.py
+jupyter-book build ./docs.old/build/
+python docs.old/scripts/post_build.py
 
