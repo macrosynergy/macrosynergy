@@ -10,8 +10,8 @@ from functools import wraps
 import fnmatch
 
 SOURCE_DIR = "macrosynergy"
-STATIC_SOURCE_DIR = "docs/static/"
-OUTPUT_DIR = "docs/build/"
+STATIC_SOURCE_DIR = "docs.old/static/"
+OUTPUT_DIR = "docs.old/build/"
 
 
 class DocstringMethods:

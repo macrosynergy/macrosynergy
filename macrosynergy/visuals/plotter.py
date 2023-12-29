@@ -47,9 +47,9 @@ class Plotter(metaclass=PlotterMetaClass):
     Base class for a DataFrame Plotter. The inherited meta class automatically wraps all
     methods of the Plotter class and any subclasses with the `argvalidation` and `argcopy`
     decorators, so that all methods of the class are automatically validated and copied.
-    This class does not implement any plotting functionality, but provides a shared interface
-    for the plotter classes, and some common functionality - currently just the filtering
-    of the DataFrame.
+    This class does not implement any plotting functionality, but provides a shared
+    interface for the plotter classes, and some common functionality - currently just the
+    filtering of the DataFrame.
     Parameters
     :param <pd.DataFrame> df: A DataFrame with the following columns:
         'cid', 'xcat', 'real_date', and at least one metric from -

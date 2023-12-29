@@ -69,7 +69,9 @@ instance/
 .scrapy
 
 # Sphinx documentation
-docs/_build/
+docs.old/_build/
+
+docs/source/gen_rsts/
 
 # PyBuilder
 target/
@@ -177,3 +179,6 @@ macrosynergy/version.py
 
 .vscode/
 .vs/
+
+# RST files for documentation
+docs/source/gen_rsts/

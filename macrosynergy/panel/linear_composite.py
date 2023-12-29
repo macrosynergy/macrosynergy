@@ -1,8 +1,5 @@
 """
 Implementation of linear_composite() function as a module.
-
-::docs::linear_composite::sort_first::
-
 """
 
 import numpy as np
@@ -104,7 +101,8 @@ def linear_composite_cid_agg(
         .unstack(level=1)
     )
     # aligning the index of weights_df to the data one
-    # so that we have the same set of dates and same set of CIDs -- thank you @mikiinterfiore
+    # so that we have the same set of dates and same set of CIDs -- thank you
+    # @mikiinterfiore
     weights_df = (
         weights_df.stack(dropna=False)
         .reindex(data_df.stack(dropna=False).index)
@@ -359,7 +357,8 @@ def linear_composite(
     df: pd.DataFrame
     remaining_xcats: List[str]
     remaining_cids: List[str]
-    # NOTE: the "remaining_*" variables will not be in the same order as the input cids/xcats.
+    # NOTE: the "remaining_*" variables will not be in the same order as the input
+    # cids/xcats.
     # Do not used these for index based lookups/operations.
     df, remaining_xcats, remaining_cids = reduce_df(
         df=df,
@@ -387,7 +386,8 @@ def linear_composite(
             if missing_xcats:
                 # warn the user, and put in the dates with NaNs
                 warnings.warn(
-                    f"`cid` {cidx} does not have complete `xcat` data for {missing_xcats}."
+                    f"`cid` {cidx} does not have complete `xcat` data for "
+                    f"{missing_xcats}."
                     " These will be filled with NaNs for the calculation."
                 )
                 # artificially add the missing xcats
@@ -420,7 +420,8 @@ def linear_composite(
         found_cids: List[str] = df["cid"].unique().tolist()
         found_xcats: List[str] = df["xcat"].unique().tolist()
         if isinstance(weights, str):
-            # one of the found_xcats must be the weights, and there should be only one more
+            # one of the found_xcats must be the weights, and there should be only one
+            # more
             assert (weights in found_xcats) and len(
                 (set(found_xcats) - {weights})
             ) == 1, (
@@ -442,7 +443,8 @@ def linear_composite(
                 # drop from df
                 df = df.loc[df["cid"] != cidx, :]
                 warnings.warn(
-                    f"`cid` {cidx} does not have complete `xcat` data for {missing_xcats}."
+                    f"`cid` {cidx} does not have complete `xcat` data for "
+                    f"{missing_xcats}."
                     " It will be dropped from dataframe."
                 )
 

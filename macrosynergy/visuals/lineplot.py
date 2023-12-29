@@ -130,7 +130,8 @@ class LinePlot(Plotter):
             _cid, _xcat = compare_series.split("_", 1)
             if _cid not in dfx["cid"].unique() or _xcat not in dfx["xcat"].unique():
                 raise ValueError(
-                    f"Series `{compare_series}` not in DataFrame - used as `compare_series`."
+                    f"Series `{compare_series}` not in DataFrame - used as "
+                    "`compare_series`."
                 )
 
             comp_df = (
@@ -146,7 +147,7 @@ class LinePlot(Plotter):
         for xcat in self.xcats:
             for cid in self.cids:
                 # Get the unique cid values in dfx for xcat and check if cid is in it
-                if [cid, xcat] in valid_tickers: 
+                if [cid, xcat] in valid_tickers:
                     _df = dfx.loc[(dfx["cid"] == cid) & (dfx["xcat"] == xcat), :].copy()
                     _df = _df.sort_values(by="real_date", ascending=True).reset_index(
                         drop=True
@@ -204,7 +205,7 @@ class LinePlot(Plotter):
 
 if __name__ == "__main__":
     from macrosynergy.management.simulate import make_test_df
-    from macrosynergy.dev.local import LocalCache as JPMaQSDownload
+    from macrosynergy.download import LocalCache as JPMaQSDownload
 
     cids: List[str] = [
         "USD",
@@ -261,7 +262,10 @@ if __name__ == "__main__":
     timer_start: float = time.time()
 
     LinePlot(df, cids=cids, xcats=xcats).plot(
-        title="Test Title with a very long title to see how it looks, \n and a new line - why not?",
+        title=(
+            "Test Title with a very long title to see how it looks, \n and a new "
+            "line - why not?"
+        ),
         legend_fontsize=8,
         compare_series="USD_RIR_NSA",
     )

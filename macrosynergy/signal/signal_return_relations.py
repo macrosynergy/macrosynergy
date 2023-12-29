@@ -57,24 +57,24 @@ class SignalReturnRelations:
         returns, which is often characterized by a delay due to the setup of of positions.
         Technically, this is a negative lag (early arrival) of the target category
         in working days prior to any frequency conversion. Default is 0.
-    <DEPRECATED>
-    :param <str> ret: return category.
+    :param <str> ret: return category. (Argument is deprecated)
     :param <str> sig: primary signal category for which detailed relational statistics
-        can be calculated.
+        can be calculated. (Argument is deprecated)
     :param <str, List[str]> rival_sigs: "rival signals" for which basic relational
         statistics can be calculated for comparison with the primary signal category. The
         table, if rival signals are defined, will be generated upon instantiation of the
-        object.
+        object. (Argument is deprecated)
         N.B.: parameters set for sig, such as sig_neg, freq, and agg_sig are equally
         applied to all rival signals.
     :param <str> freq: letter denoting frequency at which the series are to be sampled.
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
         The return series will always be summed over the sample period.
         The signal series will be aggregated according to the value of agg_sig.
+        (Argument is deprecated)
     :param <str> agg_sig: aggregation method applied to the signal values in down-
         sampling. The default is "last".
         If defined, the additional signals will also use the same aggregation method for
-        any down-sampling.
+        any down-sampling. (Argument is deprecated)
     """
 
     def __init__(
@@ -190,7 +190,7 @@ class SignalReturnRelations:
         ]
 
         self.rets = rets
-        #self.freqs = list(set(freqs))  # Remove duplicate values from freqs
+        # self.freqs = list(set(freqs))  # Remove duplicate values from freqs
 
         if not isinstance(cosp, bool):
             raise TypeError(f"<bool> object expected and not {type(cosp)}.")
@@ -261,7 +261,8 @@ class SignalReturnRelations:
         if rival_sigs is not None:
             r_sigs_warning = (
                 "Parameter 'rival_sigs' is deprecated and will be removed "
-                "in v0.1.0. Please specify the rival signals as part of the list of feature "
+                "in v0.1.0. Please specify the rival signals as part of the list of "
+                "feature "
                 "signals in the argument 'sigs'."
             )
             warnings.warn(

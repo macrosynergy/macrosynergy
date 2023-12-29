@@ -32,9 +32,12 @@ class BasePanelSplit(BaseCrossValidator):
     def get_n_splits(self, X=None, y=None, groups=None) -> int:
         """Returns the number of splits in the cross-validator.
 
-        :param <pd.DataFrame> X: Always ignored, exists for compatibility with scikit-learn.
-        :param <pd.DataFrame> y: Always ignored, exists for compatibility with scikit-learn.
-        :param <pd.DataFrame> groups: Always ignored, exists for compatibility with scikit-learn.
+        :param <pd.DataFrame> X: Always ignored, exists for compatibility with 
+            scikit-learn.
+        :param <pd.DataFrame> y: Always ignored, exists for compatibility with 
+            scikit-learn.
+        :param <pd.DataFrame> groups: Always ignored, exists for compatibility with 
+            scikit-learn.
 
         :return <int> n_splits: Returns the number of splits.
         """
@@ -63,7 +66,8 @@ class BasePanelSplit(BaseCrossValidator):
         # Check that X and y are indexed in the same order
         if not X.index.equals(y.index):
             raise ValueError(
-                "The indices of the input dataframe X and the output dataframe y don't match."
+                "The indices of the input dataframe X and the output dataframe y don't" 
+                "match."
             )
 
     def _calculate_xranges(
@@ -76,11 +80,14 @@ class BasePanelSplit(BaseCrossValidator):
         Private helper method to determine the ranges of contiguous dates in each training
         and test set, for use in visualisation.
 
-        :param <pd.DatetimeIndex> cs_dates: DatetimeIndex of dates in a set for a given cross-section.
+        :param <pd.DatetimeIndex> cs_dates: DatetimeIndex of dates in a set for a given 
+            cross-section.
         :param <pd.DatetimeIndex> real_dates: DatetimeIndex of all dates in the panel.
-        :param <pd.DateOffset> freq_offset: DateOffset object representing the frequency of the dates in the panel.
+        :param <pd.DateOffset> freq_offset: DateOffset object representing the frequency 
+            of the dates in the panel.
 
-        :return <List[Tuple[pd.Timestamp,pd.Timedelta]]> xranges: list of tuples of the form (start date, length of contiguous dates).
+        :return <List[Tuple[pd.Timestamp,pd.Timedelta]]> xranges: list of tuples of the 
+            form (start date, length of contiguous dates).
         """
 
         xranges: List[Tuple[pd.Timestamp, pd.Timedelta]] = []
@@ -123,7 +130,8 @@ class BasePanelSplit(BaseCrossValidator):
             Otherwise the dataframe must be in wide format: each feature is a column.
         :param <pd.DataFrame> y: Pandas dataframe of target variable, multi-indexed by
             (cross-section, date). The dates must be in datetime format.
-        :param <Tuple[int,int]> figsize: tuple of integers specifying the splitter visualisation figure size.
+        :param <Tuple[int,int]> figsize: tuple of integers specifying the splitter 
+            visualisation figure size.
 
         :return None
         """
@@ -181,13 +189,12 @@ class BasePanelSplit(BaseCrossValidator):
                     Tuple[pd.Timestamp, pd.Timedelta]
                 ] = self._calculate_xranges(cs_test_dates, real_dates, freq_offset)
 
-                operations.append(
-                    (cs_idx, idx, xranges_train, "royalblue", "Train")
-                )
+                operations.append((cs_idx, idx, xranges_train, "royalblue", "Train"))
                 operations.append((cs_idx, idx, xranges_test, "lightcoral", "Test"))
 
         # Calculate the difference between final two dates.
-        # This will be added to the x-axis limits to ensure that the final split is visible.
+        # This will be added to the x-axis limits to ensure that the final split is 
+        # visible.
         last_date = real_dates[-1]  # Get the last date
         second_to_last_date = real_dates[-2]  # Get the second-to-last date
         difference = last_date - second_to_last_date
@@ -206,7 +213,7 @@ class BasePanelSplit(BaseCrossValidator):
             if cs_idx == len(ax) - 1:
                 ax[cs_idx, idx].tick_params(axis="x", rotation=90)
             else:
-                ax[cs_idx, idx].tick_params(axis='x', labelbottom=False)
+                ax[cs_idx, idx].tick_params(axis="x", labelbottom=False)
 
             if cs_idx == 0:
                 ax[cs_idx, idx].set_title(f"{split_titles[idx]}")
@@ -222,12 +229,12 @@ class BasePanelSplit(BaseCrossValidator):
 class ExpandingKFoldPanelSplit(BasePanelSplit):
     """
     Class for the production of paired training and test splits, created over a panel
-    of countries. ExpandingKFoldPanelSplit operates similarly to sklearn's `TimeSeriesSplit`
-    class, but is designed to handle panels of data, as opposed to single time series'.
-    To create the splits, the sorted, unique dates in the panel are divided into 'n_splits + 1'
-    sequential and non-overlapping intervals. This results in 'n_splits' pairs of 
-    training and test sets, where the 'i'th training set is the union of the first 'i'
-    intervals, and the 'i'th test set is the 'i+1'th interval.
+    of countries. ExpandingKFoldPanelSplit operates similarly to sklearn's 
+    `TimeSeriesSplit` class, but is designed to handle panels of data, as opposed to 
+    single time series'. To create the splits, the sorted, unique dates in the panel are 
+    divided into 'n_splits + 1' sequential and non-overlapping intervals. This results in 
+    'n_splits' pairs of training and test sets, where the 'i'th training set is the union 
+    of the first 'i' intervals, and the 'i'th test set is the 'i+1'th interval.
 
     :param <int> n_splits: number of splits. Must be at least 2.
     """
@@ -235,7 +242,7 @@ class ExpandingKFoldPanelSplit(BasePanelSplit):
     def __init__(self, n_splits: int = 5):
         if type(n_splits) != int:
             raise TypeError(f"n_splits must be an integer. Got {type(n_splits)}.")
-        
+
         if n_splits < 2:
             raise ValueError(
                 f"Cannot have number of splits less than 2. Got n_splits={n_splits}."
@@ -248,9 +255,9 @@ class ExpandingKFoldPanelSplit(BasePanelSplit):
     ) -> Iterator[Tuple[np.array, np.array]]:
         """
         Method that produces pairs of training and test indices as intended by the
-        ExpandingKFoldPanelSplit class. Wide format Pandas (panel) dataframes are expected,
-        multi-indexed by cross-section and date. It is recommended for the features to lag 
-        behind the associated targets by a single native frequency unit.
+        ExpandingKFoldPanelSplit class. Wide format Pandas (panel) dataframes are 
+        expected, multi-indexed by cross-section and date. It is recommended for the 
+        features to lag behind the associated targets by a single native frequency unit.
 
         :param <pd.DataFrame> X: Pandas dataframe of features,
             multi-indexed by (cross-section, date). The dates must be in datetime format.
@@ -291,11 +298,11 @@ class ExpandingKFoldPanelSplit(BasePanelSplit):
 class RollingKFoldPanelSplit(BasePanelSplit):
     """
     Class for the production of paired training and test splits, created over a panel
-    of countries. RollingKFoldPanelSplit operates similarly to sklearn's `KFold` class 
+    of countries. RollingKFoldPanelSplit operates similarly to sklearn's `KFold` class
     (without shuffle enabled), but is designed to handle panels of data, as opposed to
     single time series'. To create the splits, the sorted, unique dates in the panel are
     divided into 'n_splits' sequential and non-overlapping intervals. This results in
-    'n_splits' pairs of training and test sets, where the 'i'th training set is the 'i'th 
+    'n_splits' pairs of training and test sets, where the 'i'th training set is the 'i'th
     interval, and the 'i'th test set are all other intervals. This gives the effect of the
     test set "rolling" forward in time.
 
@@ -317,7 +324,7 @@ class RollingKFoldPanelSplit(BasePanelSplit):
         """
         Method that produces pairs of training and test indices as intended by the
         RollingKFoldPanelSplit class. Wide format Pandas (panel) dataframes are expected,
-        multi-indexed by cross-section and date. It is recommended for the features to lag 
+        multi-indexed by cross-section and date. It is recommended for the features to lag
         behind the associated targets by a single native frequency unit.
 
         :param <pd.DataFrame> X: Pandas dataframe of features,
@@ -327,7 +334,8 @@ class RollingKFoldPanelSplit(BasePanelSplit):
             (cross-section, date). The dates must be in datetime format.
         :param <int> groups: Always ignored, exists for compatibility with scikit-learn.
 
-        :return <Iterator[Tuple[np.array[int],np.array[int]]]> splits: iterator of (train,test) indices.
+        :return <Iterator[Tuple[np.array[int],np.array[int]]]> splits: iterator of 
+            (train,test) indices.
         """
         self._validate_Xy(X, y)
 
@@ -360,23 +368,23 @@ class RollingKFoldPanelSplit(BasePanelSplit):
 class ExpandingIncrementPanelSplit(BasePanelSplit):
     """
     Class for the production of paired training and test splits, created over a panel
-    of countries. ExpandingIncrementPanelSplit differs from ExpandingKFoldPanelSplit by specifying the 
-    structure of an initial training and test set, as well as the number of time periods to expand 
-    both the initial and subsequent training and test sets by. This is a flexible alternative 
-    to defining the number of splits to make. 
+    of countries. ExpandingIncrementPanelSplit differs from ExpandingKFoldPanelSplit by 
+    specifying the structure of an initial training and test set, as well as the number 
+    of time periods to expand both the initial and subsequent training and test sets by. 
+    This is a flexible alternative to defining the number of splits to make.
 
     The first training set is determined by the parameters 'min_cids' and 'min_periods',
-    defined below. This set comprises at least 'min_periods' time periods for at least 
-    'min_cids' cross-sections. Its associated test set immediately follows the training set,
-    and is of length 'test_size'. Subsequent training sets are created by expanding the
-    previous training set by 'train_intervals' time periods, in the native frequency of 
-    the concerned datasets. As before, each test set immediately follows its associated
+    defined below. This set comprises at least 'min_periods' time periods for at least
+    'min_cids' cross-sections. Its associated test set immediately follows the training 
+    set, and is of length 'test_size'. Subsequent training sets are created by expanding 
+    the previous training set by 'train_intervals' time periods, in the native frequency 
+    of the concerned datasets. As before, each test set immediately follows its associated
     training set, and is of length 'test_size'. We also provide a parameter 'max_periods',
     which allows the user to roll the training set forward as opposed to expanding it.
     If the number of time periods in the training set exceeds 'max_periods', the earliest
-    time periods are truncated.  
+    time periods are truncated.
 
-    This splitter can be employed, in addition to standard use, to reflect a pipeline 
+    This splitter can be employed, in addition to standard use, to reflect a pipeline
     through time in a real-world setting. This is especially the case when
     'test_size' is set to 1.
 
@@ -409,9 +417,7 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
         if type(min_cids) != int:
             raise TypeError(f"min_cids must be an integer. Got {type(min_cids)}.")
         if type(min_periods) != int:
-            raise TypeError(
-                f"min_periods must be an integer. Got {type(min_periods)}."
-            )
+            raise TypeError(f"min_periods must be an integer. Got {type(min_periods)}.")
         if type(test_size) != int:
             raise TypeError(f"test_size must be an integer. Got {type(test_size)}.")
         if max_periods is not None:
@@ -436,7 +442,7 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
                 raise ValueError(
                     f"max_periods must be an integer greater than 0. Got {max_periods}."
                 )
-            
+
         self.train_intervals: int = train_intervals
         self.min_cids: int = min_cids
         self.min_periods: int = min_periods
@@ -447,16 +453,20 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
         self, X: pd.DataFrame, y: pd.DataFrame
     ) -> Tuple[List[pd.DatetimeIndex], pd.DataFrame, int]:
         """
-        Private helper method to determine the unique dates in each training split. This method is called by self.split().
-        It further returns other variables needed for ensuing components of the split method.
+        Private helper method to determine the unique dates in each training split. This 
+        method is called by self.split(). It further returns other variables needed for 
+        ensuing components of the split method.
+        
         :param <pd.DataFrame> X: Pandas dataframe of features
             multi-indexed by (cross-section, date). The dates must be in datetime format.
             The dataframe must be in wide format: each feature is a column.
         :param <pd.DataFrame> y: Pandas dataframe of the target variable, multi-indexed by
             (cross-section, date). The dates must be in datetime format.
 
-        :return <Tuple[List[pd.DatetimeIndex],pd.DataFrame,int]> (train_splits_basic, Xy, n_splits):
-            Tuple comprising the unique dates in each training split, the concatenated dataframe of X and y, and the number of splits.
+        :return <Tuple[List[pd.DatetimeIndex],pd.DataFrame,int]> 
+            (train_splits_basic, Xy, n_splits):
+            Tuple comprising the unique dates in each training split, the concatenated 
+            dataframe of X and y, and the number of splits.
         """
 
         self._validate_Xy(X, y)
@@ -466,21 +476,27 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
         self.unique_dates: pd.DatetimeIndex = (
             Xy.index.get_level_values(1).unique().sort_values()
         )
-        # First determine the dates for the first training set, determined by 'min_cids' and 'min_periods'.
-        # (a) obtain a boolean mask of dates for which at least 'min_cids' cross-sections are available over the panel
+        # First determine the dates for the first training set, determined by 'min_cids' 
+        # and 'min_periods'. (a) obtain a boolean mask of dates for which at least 
+        # 'min_cids' cross-sections are available over the panel
         init_mask: pd.Series = Xy.groupby(level=1).size().sort_index() >= self.min_cids
-        # (b) obtain the earliest date for which the mask is true i.e. the earliest date with 'min_cids' cross-sections available
+        # (b) obtain the earliest date for which the mask is true i.e. the earliest date 
+        # with 'min_cids' cross-sections available
         date_first_min_cids: pd.Timestamp = (
             init_mask[init_mask == True].reset_index().real_date.min()
         )
-        # (c) find the last valid date in the first training set, which is the date 'min_periods' - 1 after date_first_min_cids
+        # (c) find the last valid date in the first training set, which is the date 
+        # 'min_periods' - 1 after date_first_min_cids
         date_last_train: pd.Timestamp = self.unique_dates[
             self.unique_dates.get_loc(date_first_min_cids) + self.min_periods - 1
         ]
         # (d) determine the unique dates in the training sets after the first.
-        # This is done by collecting all dates in the panel after the last date in the first training set and before the last 'self.test_size' dates,
-        # calculating the number of splits ('self.n_splits') required to split these dates into distinct training intervals of length 'self.train_intervals' (where possible)
-        # and finally splitting the mentioned dates into 'self.n_splits' splits (post the first split, determined by 'self.min_cids' and 'self.min_periods').
+        # This is done by collecting all dates in the panel after the last date in the 
+        # first training set and before the last 'self.test_size' dates, calculating the
+        # number of splits ('self.n_splits') required to split these dates into distinct 
+        # training intervals of length 'self.train_intervals' (where possible) and finally 
+        # splitting the mentioned dates into 'self.n_splits' splits (post the first split, 
+        # determined by 'self.min_cids' and 'self.min_periods').
         unique_dates_train: pd.arrays.DatetimeArray = self.unique_dates[
             self.unique_dates.get_loc(date_last_train) + 1 : -self.test_size
         ]
@@ -488,7 +504,8 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
             np.ceil(len(unique_dates_train) / self.train_intervals)
         )
         splits: List = np.array_split(unique_dates_train, self.n_splits)
-        # (e) add the first training set to the list of training splits, so that the dates that constitute each training split are together.
+        # (e) add the first training set to the list of training splits, so that the dates
+        # that constitute each training split are together.
         splits.insert(
             0,
             Xy.index.get_level_values(1)[
@@ -507,9 +524,9 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
     ) -> Iterator[Tuple[np.array, np.array]]:
         """
         Method that produces pairs of training and test indices as intended by the
-        ExpandingIncrementPanelSplit class. Wide format Pandas (panel) dataframes are expected,
-        multi-indexed by cross-section and date. It is recommended for the features to lag 
-        behind the associated targets by a single native frequency unit.
+        ExpandingIncrementPanelSplit class. Wide format Pandas (panel) dataframes are 
+        expected, multi-indexed by cross-section and date. It is recommended for the 
+        features to lag behind the associated targets by a single native frequency unit.
 
         :param <pd.DataFrame> X: Pandas dataframe of features,
             multi-indexed by (cross-section, date). The dates must be in datetime format.
@@ -518,7 +535,8 @@ class ExpandingIncrementPanelSplit(BasePanelSplit):
             (cross-section, date). The dates must be in datetime format.
         :param <int> groups: Always ignored, exists for compatibility with scikit-learn.
 
-        :return <Iterator[Tuple[np.array[int],np.array[int]]]> splits: iterator of (train,test) indices.
+        :return <Iterator[Tuple[np.array[int],np.array[int]]]> splits: iterator of 
+            (train,test) indices.
         """
         train_indices: List[int] = []
         test_indices: List[int] = []
@@ -627,7 +645,8 @@ if __name__ == "__main__":
     )
     splitter.visualise_splits(X2, y2)
 
-    # d) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4, max_periods=12*21
+    # d) train_intervals = 21*12, test_size = 21*12, min_periods = 21 , min_cids = 4, 
+    # max_periods=12*21
     splitter = ExpandingIncrementPanelSplit(
         train_intervals=21 * 12,
         test_size=21 * 12,
@@ -657,4 +676,3 @@ if __name__ == "__main__":
     )
     gs.fit(X2, y2)
     print(gs.best_params_)
-    

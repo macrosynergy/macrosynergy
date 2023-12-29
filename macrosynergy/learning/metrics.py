@@ -52,6 +52,13 @@ def panel_significance_probability(
     if not (len(y_true) == len(y_pred)):
         raise ValueError("y_true and y_pred must have the same length.")
 
+    if np.all(y_true == 0):
+        # Sklearn averages each metric over the CV splits.
+        # If all the ground truth labels are zero, the regression is invalid due to a
+        # singular matrix. Hence, we return zero in this case.
+        significance_prob = 0
+        return significance_prob
+
     # regress ground truth against predictions
     X = add_constant(y_pred)
     groups = y_true.index.get_level_values(1)
@@ -61,6 +68,7 @@ def panel_significance_probability(
     pval = re.pvalues.iloc[1]
 
     return 1 - pval
+
 
 def regression_accuracy(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float:
     """
@@ -79,12 +87,15 @@ def regression_accuracy(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -
 
     if not (len(y_true) == len(y_pred)):
         raise ValueError("y_true and y_pred must have the same length.")
-    
+
     return accuracy_score(y_true < 0, y_pred < 0)
 
-def regression_balanced_accuracy(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float:
+
+def regression_balanced_accuracy(
+    y_true: pd.Series, y_pred: Union[pd.Series, np.array]
+) -> float:
     """
-    Function to return the balancedaccuracy between the signs
+    Function to return the balanced accuracy between the signs
     of the predictions and targets.
     """
 
@@ -100,13 +111,12 @@ def regression_balanced_accuracy(y_true: pd.Series, y_pred: Union[pd.Series, np.
 
     if not (len(y_true) == len(y_pred)):
         raise ValueError("y_true and y_pred must have the same length.")
-    
+
     return balanced_accuracy_score(y_true < 0, y_pred < 0)
-    
+
 
 def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float:
     """
-    NOTE: This function is experimental.
     Function to return a Sharpe ratio for a strategy where we go long if the predictions
     are positive and short if the predictions are negative.
     """
@@ -141,7 +151,6 @@ def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float
 
 def sortino_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float:
     """
-    NOTE: This function is experimental.
     Function to return a Sortino ratio for a strategy where we go long if the predictions
     are positive and short if the predictions are negative.
     """
@@ -176,7 +185,6 @@ def sortino_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> floa
 
 
 if __name__ == "__main__":
-
     cids = ["AUD", "CAD", "GBP", "USD"]
     xcats = ["XR", "CPI", "GROWTH", "RIR"]
 
