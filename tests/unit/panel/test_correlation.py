@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 from unittest.mock import patch
 from tests.simulate import make_qdf
 from macrosynergy.panel.correlation import (
-    correl_matrix,
+    correlation,
     lag_series,
     _transform_df_for_cross_sectional_corr,
     _transform_df_for_cross_category_corr,
@@ -166,14 +166,14 @@ class TestAll(unittest.TestCase):
         # function can easily be tested through the graph returned.
 
         try:
-            correl_matrix(
+            correlation(
                 self.dfd, xcats=["XR"], cids=self.cids, max_color=0.1, plot=False
             )
         except Exception as e:
             self.fail(f"correl_matrix raised {e} unexpectedly")
 
         try:
-            correl_matrix(
+            correlation(
                 self.dfd,
                 xcats=["XR"],
                 xcats_secondary=["CRY"],
@@ -185,7 +185,7 @@ class TestAll(unittest.TestCase):
             self.fail(f"correl_matrix raised {e} unexpectedly")
 
         try:
-            correl_matrix(
+            correlation(
                 self.dfd,
                 xcats=["XR"],
                 xcats_secondary=["CRY"],
@@ -198,7 +198,7 @@ class TestAll(unittest.TestCase):
             self.fail(f"correl_matrix raised {e} unexpectedly")
 
         try:
-            correl_matrix(
+            correlation(
                 self.dfd,
                 xcats=["XR"],
                 cids=["AUD"],
@@ -212,7 +212,7 @@ class TestAll(unittest.TestCase):
         lag_dict = {"INFL": [0, 1, 2, 5]}
         with self.assertRaises(ValueError):
             # Test the frequency options: either ['W', 'M', 'Q'].
-            correl_matrix(
+            correlation(
                 self.dfd,
                 xcats=["XR", "CRY"],
                 cids=self.cids,
@@ -223,7 +223,7 @@ class TestAll(unittest.TestCase):
 
         with self.assertRaises(AssertionError):
             # Test the max_color value. Expects a floating point value.
-            correl_matrix(
+            correlation(
                 self.dfd,
                 xcats=["XR", "CRY"],
                 cids=self.cids,
@@ -234,7 +234,7 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(AssertionError):
             # Test the received lag data structure. Dictionary expected.
             lag_list = [0, 60]
-            correl_matrix(
+            correlation(
                 self.dfd,
                 xcats=["XR", "CRY"],
                 cids=self.cids,
@@ -246,7 +246,7 @@ class TestAll(unittest.TestCase):
             # Test that the lagged categories are present in the received DataFrame.
             # The category, GROWTH, is not in the received categories.
             lag_dict = {"GROWTH": [0, 1, 2, 5]}
-            correl_matrix(
+            correlation(
                 self.dfd,
                 xcats=["XR", "CRY"],
                 cids=self.cids,

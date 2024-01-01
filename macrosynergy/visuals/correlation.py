@@ -9,14 +9,29 @@ import scipy.cluster.hierarchy as sch
 from matplotlib import pyplot as plt
 from typing import Tuple
 from macrosynergy.management.types import Numeric
+import pandas as pd
+import numpy as np
+from typing import List, Union, Tuple, Dict, Optional, Any
 
+from macrosynergy.management.types import Numeric
 from macrosynergy.management.simulate import make_qdf
+from macrosynergy.management.utils import _map_to_business_day_frequency
+from macrosynergy.panel.correlation import _corr, _cross_corr, _preprocess_for_corr, _preprocess_for_cross_corr
 
 
 def view_correlation(
-    corr: pd.DataFrame,
-    mask: bool = True,
-    cluster: bool = False,
+    df: pd.DataFrame,
+    xcats: Union[str, List[str]] = None,
+    cids: List[str] = None,
+    xcats_secondary: Optional[Union[str, List[str]]] = None,
+    cids_secondary: Optional[List[str]] = None,
+    start: str = "2000-01-01",
+    end: str = None,
+    val: str = "value",
+    freq: str = None,
+    cluster: bool = True,
+    lags: dict = None,
+    lags_secondary: Optional[dict] = None,
     title: str = "",
     size: Tuple[float] = (14, 8),
     max_color: Numeric = None,
@@ -24,13 +39,44 @@ def view_correlation(
     ylabel: str = "",
 ):
     """
-    Visualize correlation across categories or cross-sections of panels.
+    Calculate and visualize correlation across categories or cross-sections of panels.
 
-    :param <pd.Dataframe> corr: dataframe representing a correlation matrix.
-    :param <bool> mask: if True, the upper triangle of the correlation matrix is
-        masked.
+    :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
+        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+    :param <List[str]> xcats: extended categories to be correlated. Default is all in the
+        DataFrame. If xcats contains only one category the correlation coefficients
+        across cross sections are displayed. If xcats contains more than one category,
+        the correlation coefficients across categories are displayed. Additionally, the
+        order of the xcats received will be mirrored in the correlation matrix.
+    :param <List[str]> cids: cross sections to be correlated. Default is all in the
+        DataFrame.
+    :param <List[str]> xcats_secondary: an optional second set of extended categories.
+        If xcats_secondary is provided, correlations will be calculated between the
+        categories in xcats and xcats_secondary.
+    :param <List[str]> cids_secondary: an optional second list of cross sections. If
+        cids_secondary is provided correlations will be calculated and visualized between
+        these two sets.
+    :param <str> start: earliest date in ISO format. Default is None and earliest date
+        in df is used.
+    :param <str> end: latest date in ISO format. Default is None and latest date in df
+        is used.
+    :param <str> val: name of column that contains the values of interest. Default is
+        'value'.
+    :param <str> freq: frequency option. Per default the correlations are calculated
+        based on the native frequency of the datetimes in 'real_date', which is business
+        daily. Down-sampling options include weekly ('W'), monthly ('M'), or quarterly
+        ('Q') mean.
     :param <bool> cluster: if True the series in the correlation matrix are reordered
         by hierarchical clustering. Default is False.
+    :param <dict> lags: optional dictionary of lags applied to respective categories.
+        The key will be the category and the value is the lag or lags. If a
+        category has multiple lags applied, pass in a list of lag values. The lag factor
+        will be appended to the category name in the correlation matrix.
+        If xcats_secondary is not none, this parameter will specify lags for the
+        categories in xcats.
+        N.B.: Lags can include a 0 if the original should also be correlated.
+    :param <dict> lags_secondary: optional dictionary of lags applied to the second set of
+        categories if xcats_secondary is provided.
     :param <str> title: chart heading. If none is given, a default title is used.
     :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default
         is (14, 8).
@@ -42,11 +88,8 @@ def view_correlation(
     N.B:. The function displays the heatmap of a correlation matrix across categories or
     cross-sections (depending on which parameter has received multiple elements).
     """
-
-    if not isinstance(corr, pd.DataFrame):
-        raise TypeError("The corr argument must be a pandas DataFrame.")
-    if not isinstance(mask, bool):
-        raise TypeError("The mask argument must be a boolean.")
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError("The df argument must be a pandas DataFrane.")
     if not isinstance(cluster, bool):
         raise TypeError("The cluster argument must be a boolean.")
     if not isinstance(title, str):
@@ -59,6 +102,59 @@ def view_correlation(
         raise TypeError("The xlabel argument must be a string.")
     if not isinstance(ylabel, str):
         raise TypeError("The ylabel argument must be a string.")
+    
+    df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
+    col_names = ["cid", "xcat", "real_date", val]
+    df = df[col_names]
+
+    if freq is not None:
+        freq = _map_to_business_day_frequency(freq=freq, valid_freqs=["W", "M", "Q"])
+
+    xcats = xcats if isinstance(xcats, list) else [xcats]
+
+    if max_color is not None and not isinstance(max_color, Numeric):
+        raise TypeError("Parameter max_color must be numeric.")
+
+    mask = False
+    xlabel = ""
+    ylabel = ""
+
+    # If more than one set of xcats or cids have been supplied.
+    if xcats_secondary or cids_secondary:
+        (
+            xcats,
+            cids,
+            xcats_secondary,
+            cids_secondary,
+            df_w1,
+            df_w2,
+        ) = _preprocess_for_cross_corr(
+            df,
+            xcats,
+            cids,
+            xcats_secondary,
+            cids_secondary,
+            start,
+            end,
+            val,
+            freq,
+            lags,
+            lags_secondary,
+        )
+        
+        title = _get_cross_corr_title(xcats, xcats_secondary, title, df_w1, df_w2)
+
+        corr = _cross_corr(df_w1, df_w2)
+
+    # If there is only one set of xcats and cids.
+    else:
+        df, xcats, cids, df_w = _preprocess_for_corr(df, xcats, cids, start, end, val, freq, lags)
+
+        title = _get_corr_title(df_w, xcats, title)
+
+        corr = _corr(df_w)
+
+        mask: bool = True
     
     min_color = None if max_color is None else -max_color
 
@@ -132,9 +228,45 @@ def _cluster_correlations(
     return corr
 
 
+def _get_corr_title(df, xcats, title):
+    s_date: str = df.index.min().strftime("%Y-%m-%d")
+    e_date: str = df.index.max().strftime("%Y-%m-%d")
+
+    if len(xcats) == 1:
+        if title is None:
+            title = (
+                    f"Cross-sectional correlation of {xcats[0]} from {s_date} to "
+                    f"{e_date}"
+                )
+    else:
+        if title is None:
+            title = f"Cross-category correlation from {s_date} to {e_date}"
+
+    return title
+
+def _get_cross_corr_title(xcats, xcats_secondary, title, df_w1, df_w2):
+    s_date = min(df_w1.index.min(), df_w2.index.min()).strftime(
+            "%Y-%m-%d"
+        )
+    e_date = max(df_w1.index.max(), df_w2.index.max()).strftime(
+            "%Y-%m-%d"
+        )
+    if len(xcats) == 1 and len(xcats_secondary) == 1:
+        if title is None:
+            title = (
+                        f"Cross-sectional correlation of {xcats[0]} and {xcats_secondary[0]} "
+                        f"from {s_date} to "
+                        f"{e_date}"
+                    )
+
+        if title is None:
+            title = f"Cross-category correlation from {s_date} to {e_date}"
+    return title
+
+
 if __name__ == "__main__":
 
-    from macrosynergy.panel.correlation import correl_matrix
+    from macrosynergy.panel.correlation import correlation
 
     np.random.seed(0)
 
@@ -181,7 +313,7 @@ if __name__ == "__main__":
     lag_dict = {"XR": [0, 2, 5]}
 
     # Clustered correlation matrices. Test hierarchical clustering.
-    corr = correl_matrix(
+    view_correlation(
         df=dfd,
         xcats=["XR"],
         xcats_secondary=None,
@@ -193,14 +325,6 @@ if __name__ == "__main__":
         freq=None,
         lags=None,
         lags_secondary=None,
-        plot=False,
-    )
-
-    view_correlation(
-        corr=corr, 
-        mask=True, 
-        cluster=True, 
-        title="Clustered Correlation", 
-        size=(14, 8)
+        cluster=True,
     )
 

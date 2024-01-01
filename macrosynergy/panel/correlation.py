@@ -15,7 +15,7 @@ from macrosynergy.management.utils import _map_to_business_day_frequency
 import macrosynergy.visuals as msv
 
 
-def correl_matrix(
+def correlation(
     df: pd.DataFrame,
     xcats: Union[str, List[str]] = None,
     cids: List[str] = None,
@@ -25,16 +25,11 @@ def correl_matrix(
     end: str = None,
     val: str = "value",
     freq: str = None,
-    cluster: bool = False,
     lags: dict = None,
     lags_secondary: Optional[dict] = None,
-    title: str = None,
-    size: Tuple[float] = (14, 8),
-    max_color: Numeric = None,
-    plot: bool = True,
 ):
     """
-    Calculate and visualize correlation across categories or cross-sections of panels.
+    Calculate correlation across categories or cross-sections of panels.
 
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
@@ -72,16 +67,6 @@ def correl_matrix(
         N.B.: Lags can include a 0 if the original should also be correlated.
     :param <dict> lags_secondary: optional dictionary of lags applied to the second set of
         categories if xcats_secondary is provided.
-    :param <str> title: chart heading. If none is given, a default title is used.
-    :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default
-        is (14, 8).
-    :param <Numeric> max_color: maximum values of positive/negative correlation
-        coefficients for color scale. Default is none. If a value is given it applies
-        symmetrically to positive and negative values.
-    :param <bool> show: if True the figure will be displayed. Default is True.
-
-    N.B:. The function displays the heatmap of a correlation matrix across categories or
-    cross-sections (depending on which parameter has received multiple elements).
     """
 
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
@@ -93,108 +78,106 @@ def correl_matrix(
 
     xcats = xcats if isinstance(xcats, list) else [xcats]
 
-    if max_color is not None and not isinstance(max_color, Numeric):
-        raise TypeError("Parameter max_color must be numeric.")
-
-    mask = False
-    xlabel = ""
-    ylabel = ""
-
     # If more than one set of xcats or cids have been supplied.
     if xcats_secondary or cids_secondary:
-        xcats_secondary, cids_secondary = _handle_secondary_args(
-            xcats, cids, xcats_secondary, cids_secondary
+        (
+            xcats,
+            cids,
+            xcats_secondary,
+            cids_secondary,
+            df_w1,
+            df_w2,
+        ) = _preprocess_for_cross_corr(
+            df,
+            xcats,
+            cids,
+            xcats_secondary,
+            cids_secondary,
+            start,
+            end,
+            val,
+            freq,
+            lags,
+            lags_secondary,
         )
+        
+        corr = _cross_corr(df_w1, df_w2)
 
-        df1, xcats, cids = reduce_df(df.copy(), xcats, cids, start, end, out_all=True)
-        df2, xcats_secondary, cids_secondary = reduce_df(
-            df.copy(), xcats_secondary, cids_secondary, start, end, out_all=True
-        )
+    # If there is only one set of xcats and cids.
+    else:
+        df, xcats, cids, df_w = _preprocess_for_corr(df, xcats, cids, start, end, val, freq, lags)
 
-        s_date = min(df1["real_date"].min(), df2["real_date"].min()).strftime(
-            "%Y-%m-%d"
-        )
-        e_date = max(df1["real_date"].max(), df2["real_date"].max()).strftime(
-            "%Y-%m-%d"
-        )
+        corr = _corr(df_w)
 
-        # If only one xcat, we will compute cross sectional correlation.
-        if len(xcats) == 1 and len(xcats_secondary) == 1:
-            df_w1: pd.DataFrame = _transform_df_for_cross_sectional_corr(
-                df=df1, val=val, freq=freq
+    return corr
+
+def _preprocess_for_corr(df, xcats, cids, start, end, val, freq, lags):
+    df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
+
+    if len(xcats) == 1:
+        df_w = _transform_df_for_cross_sectional_corr(df=df, val=val, freq=freq)
+    else:
+        df_w = _transform_df_for_cross_category_corr(
+                df=df, xcats=xcats, val=val, freq=freq, lags=lags
             )
-            df_w2: pd.DataFrame = _transform_df_for_cross_sectional_corr(
-                df=df2, val=val, freq=freq
-            )
+        
+    return df,xcats,cids,df_w
 
-            if title is None:
-                title = (
-                    f"Cross-sectional correlation of {xcats[0]} and {xcats_secondary[0]} "
-                    f"from {s_date} to "
-                    f"{e_date}"
-                )
-            xlabel = f"{xcats[0]} cross-sections"
-            ylabel = f"{xcats_secondary[0]} cross-sections"
+def _corr(df_w):
+    return df_w.corr(method="pearson")
 
-        # If more than one xcat in at least one set, we will compute cross category
-        # correlation.
-        else:
-            df_w1: pd.DataFrame = _transform_df_for_cross_category_corr(
-                df=df1, xcats=xcats, val=val, freq=freq, lags=lags
-            )
-            df_w2: pd.DataFrame = _transform_df_for_cross_category_corr(
-                df=df2, xcats=xcats_secondary, val=val, freq=freq, lags=lags_secondary
-            )
 
-            if title is None:
-                title = f"Cross-category correlation from {s_date} to " f"{e_date}"
-        corr = (
+def _cross_corr(df_w1, df_w2):
+    corr = (
             pd.concat([df_w1, df_w2], axis=1, keys=["df_w1", "df_w2"])
             .corr()
             .loc["df_w2", "df_w1"]
         )
+    return corr
 
-    # If there is only one set of xcats and cids.
-    else:
-        df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
 
-        s_date: str = df["real_date"].min().strftime("%Y-%m-%d")
-        e_date: str = df["real_date"].max().strftime("%Y-%m-%d")
+def _preprocess_for_cross_corr(
+    df,
+    xcats,
+    cids,
+    xcats_secondary,
+    cids_secondary,
+    start,
+    end,
+    val,
+    freq,
+    lags,
+    lags_secondary,
+):
+    xcats_secondary, cids_secondary = _handle_secondary_args(
+        xcats, cids, xcats_secondary, cids_secondary
+    )
 
-        if len(xcats) == 1:
-            df_w = _transform_df_for_cross_sectional_corr(df=df, val=val, freq=freq)
+    df1, xcats, cids = reduce_df(df.copy(), xcats, cids, start, end, out_all=True)
+    df2, xcats_secondary, cids_secondary = reduce_df(
+        df.copy(), xcats_secondary, cids_secondary, start, end, out_all=True
+    )
 
-            if title is None:
-                title = (
-                    f"Cross-sectional correlation of {xcats[0]} from {s_date} to "
-                    f"{e_date}"
-                )
-
-        else:
-            df_w = _transform_df_for_cross_category_corr(
-                df=df, xcats=xcats, val=val, freq=freq, lags=lags
-            )
-
-            if title is None:
-                title = f"Cross-category correlation from {s_date} to {e_date}"
-
-        corr = df_w.corr(method="pearson")
-
-        mask: bool = True
-
-    if plot:
-        msv.view_correlation(
-            corr=corr,
-            mask=mask,
-            cluster=cluster,
-            title=title,
-            size=size,
-            max_color=max_color,
-            xlabel=xlabel,
-            ylabel=ylabel,
+    # If only one xcat, we will compute cross sectional correlation.
+    if len(xcats) == 1 and len(xcats_secondary) == 1:
+        df_w1: pd.DataFrame = _transform_df_for_cross_sectional_corr(
+            df=df1, val=val, freq=freq
         )
+        df_w2: pd.DataFrame = _transform_df_for_cross_sectional_corr(
+            df=df2, val=val, freq=freq
+        )
+
+    # If more than one xcat in at least one set, we will compute cross category
+    # correlation.
     else:
-        return corr
+        df_w1: pd.DataFrame = _transform_df_for_cross_category_corr(
+            df=df1, xcats=xcats, val=val, freq=freq, lags=lags
+        )
+        df_w2: pd.DataFrame = _transform_df_for_cross_category_corr(
+            df=df2, xcats=xcats_secondary, val=val, freq=freq, lags=lags_secondary
+        )
+
+    return xcats, cids, xcats_secondary, cids_secondary, df_w1, df_w2
 
 
 def _handle_secondary_args(
@@ -384,10 +367,10 @@ if __name__ == "__main__":
     lag_dict = {"XR": [0, 2, 5]}
 
     # Clustered correlation matrices. Test hierarchical clustering.
-    correl_matrix(
+    correlation(
         df=dfd,
         xcats=["XR"],
-        xcats_secondary=None,
+        # xcats_secondary=["CRY"],
         cids=cids,
         cids_secondary=None,
         start=start,
@@ -395,7 +378,7 @@ if __name__ == "__main__":
         val="value",
         freq=None,
         cluster=True,
-        title="Correlation Matrix",
+        # title="Correlation Matrix",
         size=(14, 8),
         max_color=None,
         lags=None,

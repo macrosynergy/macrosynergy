@@ -8,7 +8,7 @@ from .make_blacklist import make_blacklist
 from .make_relative_value import make_relative_value
 from .make_zn_scores import make_zn_scores
 from .panel_calculator import panel_calculator
-from .correlation import correl_matrix
+from .correlation import correlation
 from .view_grades import heatmap_grades
 from .view_ranges import view_ranges
 from .view_timelines import view_timelines
@@ -26,7 +26,7 @@ __all__ = [
     "make_relative_value",
     "make_zn_scores",
     "panel_calculator",
-    "correl_matrix",
+    "correlation",
     "heatmap_grades",
     "view_ranges",
     "view_timelines",

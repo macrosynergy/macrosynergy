@@ -3,7 +3,7 @@ import pandas as pd
 from pandas.testing import assert_frame_equal
 from tests.simulate import make_qdf
 from macrosynergy.visuals.correlation import view_correlation, _cluster_correlations
-from macrosynergy.panel.correlation import correl_matrix, _transform_df_for_cross_sectional_corr
+from macrosynergy.panel.correlation import correlation, _transform_df_for_cross_sectional_corr
 from macrosynergy.management.utils import reduce_df
 
 from matplotlib import pyplot as plt
@@ -56,7 +56,7 @@ class TestAll(unittest.TestCase):
         # Standard df for tests.
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
         self.dfd = dfd
-        self.corr = correl_matrix(
+        self.corr = correlation(
                 df=self.dfd,
                 xcats=["XR"],
                 xcats_secondary=["CRY"],
