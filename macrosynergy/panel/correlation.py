@@ -12,10 +12,9 @@ from macrosynergy.management.types import Numeric
 from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import _map_to_business_day_frequency
-import macrosynergy.visuals as msv
 
 
-def correlation(
+def corr(
     df: pd.DataFrame,
     xcats: Union[str, List[str]] = None,
     cids: List[str] = None,
@@ -27,6 +26,7 @@ def correlation(
     freq: str = None,
     lags: dict = None,
     lags_secondary: Optional[dict] = None,
+    return_dates: bool = False,
 ):
     """
     Calculate correlation across categories or cross-sections of panels.
@@ -67,6 +67,8 @@ def correlation(
         N.B.: Lags can include a 0 if the original should also be correlated.
     :param <dict> lags_secondary: optional dictionary of lags applied to the second set of
         categories if xcats_secondary is provided.
+    :param <bool> return_dates: if True, the earliest and latest dates of the reduced
+        DataFrame are returned.
     """
 
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
@@ -87,7 +89,7 @@ def correlation(
             cids_secondary,
             df_w1,
             df_w2,
-        ) = _preprocess_for_cross_corr(
+        ) = _preprocess_for_two_set_corr(
             df,
             xcats,
             cids,
@@ -100,43 +102,96 @@ def correlation(
             lags,
             lags_secondary,
         )
-        
-        corr = _cross_corr(df_w1, df_w2)
+
+        s_date1, e_date1 = _get_dates(df_w1)
+        s_date2, e_date2 = _get_dates(df_w2)
+        s_date = min(s_date1, s_date2).strftime("%Y-%m-%d")
+        e_date = max(e_date1, e_date2).strftime("%Y-%m-%d")
+
+        corr_df = _two_set_corr(df_w1, df_w2)
 
     # If there is only one set of xcats and cids.
     else:
-        df, xcats, cids, df_w = _preprocess_for_corr(df, xcats, cids, start, end, val, freq, lags)
+        df, xcats, cids, df_w = _preprocess_for_corr(
+            df, xcats, cids, start, end, val, freq, lags
+        )
+        s_date, e_date = _get_dates(df_w)
+        s_date = s_date.strftime("%Y-%m-%d")
+        e_date = e_date.strftime("%Y-%m-%d")
 
-        corr = _corr(df_w)
+        corr_df = _corr(df_w)
 
-    return corr
+    if return_dates:
+        return corr_df, s_date, e_date
+    else:
+        return corr_df
 
-def _preprocess_for_corr(df, xcats, cids, start, end, val, freq, lags):
+
+def _preprocess_for_corr(
+    df: pd.DataFrame,
+    xcats: List[str],
+    cids: List[str],
+    start: str,
+    end: str,
+    val: str,
+    freq: str,
+    lags: dict,
+):
+    """
+    Method used to preprocess the DataFrame for computing correlation.
+
+    :param <pd.Dataframe> df: standardized JPMaQS DataFrame.
+    :param <List[str]> xcats: extended categories to be correlated.
+    :param <List[str]> cids: cross sections to be correlated.
+    :param <str> start: earliest date in ISO format.
+    :param <str> end: latest date in ISO format.
+    :param <str> val: name of column that contains the values of interest. Default is
+        'value'.
+    :param <str> freq: Down-sampling frequency option. By default values are not
+        down-sampled.
+    :param <dict> lags: optional dictionary of lags applied to respective categories.
+    """
     df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
 
     if len(xcats) == 1:
         df_w = _transform_df_for_cross_sectional_corr(df=df, val=val, freq=freq)
     else:
         df_w = _transform_df_for_cross_category_corr(
-                df=df, xcats=xcats, val=val, freq=freq, lags=lags
-            )
-        
-    return df,xcats,cids,df_w
-
-def _corr(df_w):
-    return df_w.corr(method="pearson")
-
-
-def _cross_corr(df_w1, df_w2):
-    corr = (
-            pd.concat([df_w1, df_w2], axis=1, keys=["df_w1", "df_w2"])
-            .corr()
-            .loc["df_w2", "df_w1"]
+            df=df, xcats=xcats, val=val, freq=freq, lags=lags
         )
+
+    return df, xcats, cids, df_w
+
+
+def _corr(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate correlation of a DataFrame.
+
+    :param <pd.Dataframe> df: a pandas DataFrame.
+
+    :return <pd.Dataframe>: The correlation DataFrame.
+    """
+    return df.corr(method="pearson")
+
+
+def _two_set_corr(df: pd.DataFrame, df_secondary: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate correlation between two DataFrames.
+
+    :param <pd.Dataframe> df: a pandas DataFrame.
+    :param <pd.Dataframe> df_secondary: a pandas DataFrame.
+
+    :return <pd.Dataframe>: The correlation DataFrame.
+    """
+    corr = (
+        pd.concat([df, df_secondary], axis=1, keys=["df_w1", "df_w2"])
+        .corr()
+        .loc["df_w2", "df_w1"]
+    )
     return corr
 
 
-def _preprocess_for_cross_corr(
+def _preprocess_for_two_set_corr(
     df,
     xcats,
     cids,
@@ -149,10 +204,33 @@ def _preprocess_for_cross_corr(
     lags,
     lags_secondary,
 ):
+    """
+    Method used to preprocess the DataFrame for correlation between two sets of xcats or cids.
+
+    :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
+        'cid', 'xcats', 'real_date' and at least one column with values of interest.
+    :param <List[str]> xcats: extended categories to be correlated.
+    :param <List[str]> cids: cross sections to be correlated.
+    :param <List[str]> xcats_secondary: an optional second set of extended categories.
+    :param <List[str]> cids_secondary: an optional second list of cross sections.
+    :param <str> start: earliest date in ISO format.
+    :param <str> end: latest date in ISO format.
+    :param <str> val: name of column that contains the values of interest.
+    :param <str> freq: frequency option.
+    :param <dict> lags: optional dictionary of lags applied to respective categories.
+    :param <dict> lags_secondary: optional dictionary of lags applied to the second set of
+        categories if xcats_secondary is provided.
+
+    :return <Tuple[List, List, List, List, pd.DataFrame, pd.DataFrame]>:
+        The updated xcats, cids, xcats_secondary, cids_secondary, df_w1, df_w2.
+    """
+
     xcats_secondary, cids_secondary = _handle_secondary_args(
         xcats, cids, xcats_secondary, cids_secondary
     )
 
+    # Todo: ensure secondary cids and xcats are present in the DataFrame.
+    
     df1, xcats, cids = reduce_df(df.copy(), xcats, cids, start, end, out_all=True)
     df2, xcats_secondary, cids_secondary = reduce_df(
         df.copy(), xcats_secondary, cids_secondary, start, end, out_all=True
@@ -186,6 +264,17 @@ def _handle_secondary_args(
     xcats_secondary: Union[str, List[str]],
     cids_secondary: List,
 ) -> Tuple[List, List]:
+    """
+    Method used to handle the secondary arguments passed to the correlation function.
+
+    :param <Union[str, List[str]]> xcats: extended categories to be correlated.
+    :param <List[str]> cids: cross sections to be correlated.
+    :param <Union[str, List[str]]> xcats_secondary: an optional second set of extended
+        categories.
+    :param <List[str]> cids_secondary: an optional second list of cross sections.
+
+    :return <Tuple[List, List]>: The updated secondary xcats and cids.
+    """
     if xcats_secondary:
         xcats_secondary = (
             xcats_secondary if isinstance(xcats_secondary, list) else [xcats_secondary]
@@ -320,6 +409,23 @@ def lag_series(
 
     return df_w, xcat_tracker
 
+def _get_dates(df: pd.DataFrame) -> Tuple[str, str]:
+    """
+    Get earliest and latest date in DataFrame.
+    
+    :param <pd.DataFrame> df: pandas DataFrame either indexed by date
+        or multi-indexed by cross-section and date.
+        
+    :return <Tuple[str, str]>: earliest and latest date in DataFrame.
+    """
+    if isinstance(df.index, pd.MultiIndex):
+        s_date: str = df.index.get_level_values(1).min()
+        e_date: str = df.index.get_level_values(1).max()
+    else:
+        s_date: str = df.index.min()
+        e_date: str = df.index.max()
+    return s_date, e_date
+
 
 if __name__ == "__main__":
     np.random.seed(0)
@@ -367,7 +473,7 @@ if __name__ == "__main__":
     lag_dict = {"XR": [0, 2, 5]}
 
     # Clustered correlation matrices. Test hierarchical clustering.
-    correlation(
+    corr_df = corr(
         df=dfd,
         xcats=["XR"],
         # xcats_secondary=["CRY"],
@@ -377,10 +483,8 @@ if __name__ == "__main__":
         end=end,
         val="value",
         freq=None,
-        cluster=True,
         # title="Correlation Matrix",
-        size=(14, 8),
-        max_color=None,
         lags=None,
         lags_secondary=None,
     )
+    corr_df

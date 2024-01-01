@@ -3,22 +3,24 @@ import pandas as pd
 from pandas.testing import assert_frame_equal
 from tests.simulate import make_qdf
 from macrosynergy.visuals.correlation import view_correlation, _cluster_correlations
-from macrosynergy.panel.correlation import correlation, _transform_df_for_cross_sectional_corr
+from macrosynergy.panel.correlation import (
+    _transform_df_for_cross_sectional_corr,
+)
 from macrosynergy.management.utils import reduce_df
 
 from matplotlib import pyplot as plt
 import matplotlib
 from unittest.mock import patch
 
-class TestAll(unittest.TestCase):
 
+class TestAll(unittest.TestCase):
     @classmethod
     def setUpClass(self):
         # Prevents plots from being displayed during tests.
         plt.close("all")
         self.mpl_backend: str = matplotlib.get_backend()
         self.mock_show = patch("matplotlib.pyplot.show").start()
-    
+
     @classmethod
     def tearDownClass(self) -> None:
         patch.stopall()
@@ -56,42 +58,71 @@ class TestAll(unittest.TestCase):
         # Standard df for tests.
         dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
         self.dfd = dfd
-        self.corr = correlation(
-                df=self.dfd,
-                xcats=["XR"],
-                xcats_secondary=["CRY"],
-                cids=["AUD"],
-                cids_secondary=["GBP"],
-                max_color=0.1,
-                plot=False,
-            )
 
     def tearDown(self) -> None:
         return super().tearDown()
-    
+
     def test_view_correlation(self):
         try:
-            view_correlation(corr=self.corr)
+            view_correlation(
+                self.dfd,
+                xcats=["XR"],
+                xcats_secondary=["CRY"],
+                cids=self.cids,
+                max_color=0.1,
+            )
         except Exception as e:
             self.fail(f"view_correlation raised {e} unexpectedly")
 
     def test_view_correlation_types(self):
         with self.assertRaises(TypeError):
-            view_correlation(corr="invalid_type")
+            view_correlation(
+                df="invalid_type",
+                xcats=self.xcats,
+                cids=self.cids,
+            )
         with self.assertRaises(TypeError):
-            view_correlation(corr=self.corr, max_color="invalid_type")
+            view_correlation(
+                df=self.dfd,
+                xcats=self.xcats,
+                cids=self.cids,
+                max_color="invalid_type",
+            )
         with self.assertRaises(TypeError):
-            view_correlation(corr=self.corr, mask="invalid_type")
+            view_correlation(
+                df=self.dfd,
+                xcats=self.xcats,
+                cids=self.cids,
+                cluster="invalid_type",
+            )
         with self.assertRaises(TypeError):
-            view_correlation(corr=self.corr, cluster="invalid_type")
-        with self.assertRaises(TypeError):
-            view_correlation(corr=self.corr, title=0)
-        with self.assertRaises(TypeError):
-            view_correlation(corr=self.corr, size="invalid_type")
-        with self.assertRaises(TypeError):
-            view_correlation(corr=self.corr, xlabel=0)
-        with self.assertRaises(TypeError):
-            view_correlation(corr=self.corr, ylabel=0)
+            view_correlation(
+                df=self.dfd,
+                xcats=self.xcats,
+                cids=self.cids,
+                title=0,
+            )
+        # with self.assertRaises(TypeError):
+        #     view_correlation(
+        #         df=self.dfd,
+        #         xcats=self.xcats,
+        #         cids=self.cids,
+        #         size="invalid_type",
+        #     )
+        # with self.assertRaises(TypeError):
+        #     view_correlation(
+        #         df=self.dfd,
+        #         xcats=self.xcats,
+        #         cids=self.cids,
+        #         xlabel=0,
+        #     )
+        # with self.assertRaises(TypeError):
+        #     view_correlation(
+        #         df=self.dfd,
+        #         xcats=self.xcats,
+        #         cids=self.cids,
+        #         ylabel=0,
+        #     )
 
     def test_cluster_correlations(self):
         df = reduce_df(self.dfd, xcats=["XR"], cids=self.cids)

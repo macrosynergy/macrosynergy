@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 from unittest.mock import patch
 from tests.simulate import make_qdf
 from macrosynergy.panel.correlation import (
-    correlation,
+    corr,
     lag_series,
     _transform_df_for_cross_sectional_corr,
     _transform_df_for_cross_category_corr,
@@ -161,50 +161,41 @@ class TestAll(unittest.TestCase):
         lagged_columns = [xcat for xcat in test_columns if xcat not in self.xcats]
         self.assertTrue(sorted(lagged_columns) == ["GROWTH_L3", "INFL_L0", "INFL_L5"])
 
-    def test_correl_matrix(self):
-        # Mainly test assertions given the function is used for visualisation. The
-        # function can easily be tested through the graph returned.
-
+    def test_corr(self):
         try:
-            correlation(
-                self.dfd, xcats=["XR"], cids=self.cids, max_color=0.1, plot=False
+            corr(
+                self.dfd, xcats=["XR"], cids=self.cids
             )
         except Exception as e:
             self.fail(f"correl_matrix raised {e} unexpectedly")
 
         try:
-            correlation(
+            corr(
                 self.dfd,
                 xcats=["XR"],
                 xcats_secondary=["CRY"],
                 cids=self.cids,
-                max_color=0.1,
-                plot=False,
             )
         except Exception as e:
             self.fail(f"correl_matrix raised {e} unexpectedly")
 
         try:
-            correlation(
+            corr(
                 self.dfd,
                 xcats=["XR"],
                 xcats_secondary=["CRY"],
                 cids=["AUD"],
                 cids_secondary=["GBP"],
-                max_color=0.1,
-                plot=True,
             )
         except Exception as e:
             self.fail(f"correl_matrix raised {e} unexpectedly")
 
         try:
-            correlation(
+            corr(
                 self.dfd,
                 xcats=["XR"],
                 cids=["AUD"],
                 cids_secondary=["GBP"],
-                max_color=0.1,
-                plot=False,
             )
         except Exception as e:
             self.fail(f"correl_matrix raised {e} unexpectedly")
@@ -212,46 +203,42 @@ class TestAll(unittest.TestCase):
         lag_dict = {"INFL": [0, 1, 2, 5]}
         with self.assertRaises(ValueError):
             # Test the frequency options: either ['W', 'M', 'Q'].
-            correlation(
+            corr(
                 self.dfd,
                 xcats=["XR", "CRY"],
                 cids=self.cids,
                 freq="BW",
                 lags=lag_dict,
-                max_color=0.1,
             )
 
         with self.assertRaises(AssertionError):
             # Test the max_color value. Expects a floating point value.
-            correlation(
+            corr(
                 self.dfd,
                 xcats=["XR", "CRY"],
                 cids=self.cids,
                 lags=lag_dict,
-                max_color=1,
             )
 
         with self.assertRaises(AssertionError):
             # Test the received lag data structure. Dictionary expected.
             lag_list = [0, 60]
-            correlation(
+            corr(
                 self.dfd,
                 xcats=["XR", "CRY"],
                 cids=self.cids,
                 lags=lag_list,
-                max_color=1,
             )
 
         with self.assertRaises(AssertionError):
             # Test that the lagged categories are present in the received DataFrame.
             # The category, GROWTH, is not in the received categories.
             lag_dict = {"GROWTH": [0, 1, 2, 5]}
-            correlation(
+            corr(
                 self.dfd,
                 xcats=["XR", "CRY"],
                 cids=self.cids,
                 lags=lag_dict,
-                max_color=1,
             )
 
     def test_transform_df_for_cross_sectional_corr(self):

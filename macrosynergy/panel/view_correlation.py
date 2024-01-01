@@ -23,10 +23,12 @@ def correl_matrix(
     cluster: bool = False,
     lags: dict = None,
     lags_secondary: Optional[dict] = None,
-    title: str = None,
+    title: Optional[str] = None,
     size: Tuple[float] = (14, 8),
     max_color: float = None,
-    show: bool = True,
+    xlabel: str = "",
+    ylabel: str = "",
+    return_values: bool = False,
 ):
     """
     Visualize correlation across categories or cross-sections of panels.
@@ -73,13 +75,15 @@ def correl_matrix(
     :param <float> max_color: maximum values of positive/negative correlation
         coefficients for color scale. Default is none. If a value is given it applies
         symmetrically to positive and negative values.
-    :param <bool> show: if True the figure will be displayed. Default is True.
+    :param <str> xlabel: x-axis label. Default is an empty string.
+    :param <str> ylabel: y-axis label. Default is an empty string.
+    :param <bool> return_values: if True the correlation matrix will be returned.
 
     N.B:. The function displays the heatmap of a correlation matrix across categories or
     cross-sections (depending on which parameter has received multiple elements).
     """
 
-    msv.view_correlation(
+    return msv.view_correlation(
         df=df,
         xcats=xcats,
         cids=cids,
@@ -95,6 +99,9 @@ def correl_matrix(
         title=title,
         size=size,
         max_color=max_color,
+        xlabel=xlabel,
+        ylabel=ylabel,
+        return_values=return_values,
     )
 
 
@@ -144,7 +151,7 @@ if __name__ == "__main__":
     lag_dict = {"XR": [0, 2, 5]}
 
     # Clustered correlation matrices. Test hierarchical clustering.
-    correl_matrix(
+    corr = correl_matrix(
         df=dfd,
         xcats=["XR"],
         xcats_secondary=None,
@@ -160,4 +167,6 @@ if __name__ == "__main__":
         max_color=None,
         lags=None,
         lags_secondary=None,
+        return_values=True
     )
+    print(corr)
