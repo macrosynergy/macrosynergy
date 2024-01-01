@@ -167,7 +167,7 @@ class TestAll(unittest.TestCase):
 
         try:
             correl_matrix(
-                self.dfd, xcats=["XR"], cids=self.cids, max_color=0.1, show=False
+                self.dfd, xcats=["XR"], cids=self.cids, max_color=0.1, plot=False
             )
         except Exception as e:
             self.fail(f"correl_matrix raised {e} unexpectedly")
@@ -179,7 +179,7 @@ class TestAll(unittest.TestCase):
                 xcats_secondary=["CRY"],
                 cids=self.cids,
                 max_color=0.1,
-                show=False,
+                plot=False,
             )
         except Exception as e:
             self.fail(f"correl_matrix raised {e} unexpectedly")
@@ -192,7 +192,7 @@ class TestAll(unittest.TestCase):
                 cids=["AUD"],
                 cids_secondary=["GBP"],
                 max_color=0.1,
-                show=True,
+                plot=True,
             )
         except Exception as e:
             self.fail(f"correl_matrix raised {e} unexpectedly")
@@ -204,7 +204,7 @@ class TestAll(unittest.TestCase):
                 cids=["AUD"],
                 cids_secondary=["GBP"],
                 max_color=0.1,
-                show=False,
+                plot=False,
             )
         except Exception as e:
             self.fail(f"correl_matrix raised {e} unexpectedly")

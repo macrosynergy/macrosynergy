@@ -193,7 +193,7 @@ if __name__ == "__main__":
         freq=None,
         lags=None,
         lags_secondary=None,
-        show=False,
+        plot=False,
     )
 
     view_correlation(

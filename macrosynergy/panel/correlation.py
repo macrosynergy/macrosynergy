@@ -31,7 +31,7 @@ def correl_matrix(
     title: str = None,
     size: Tuple[float] = (14, 8),
     max_color: Numeric = None,
-    show: bool = True,
+    plot: bool = True,
 ):
     """
     Calculate and visualize correlation across categories or cross-sections of panels.
@@ -102,17 +102,9 @@ def correl_matrix(
 
     # If more than one set of xcats or cids have been supplied.
     if xcats_secondary or cids_secondary:
-        if xcats_secondary:
-            xcats_secondary = (
-                xcats_secondary
-                if isinstance(xcats_secondary, list)
-                else [xcats_secondary]
-            )
-        else:
-            xcats_secondary = xcats
-
-        if not cids_secondary:
-            cids_secondary = cids
+        xcats_secondary, cids_secondary = _handle_secondary_args(
+            xcats, cids, xcats_secondary, cids_secondary
+        )
 
         df1, xcats, cids = reduce_df(df.copy(), xcats, cids, start, end, out_all=True)
         df2, xcats_secondary, cids_secondary = reduce_df(
@@ -190,7 +182,7 @@ def correl_matrix(
 
         mask: bool = True
 
-    if show:
+    if plot:
         msv.view_correlation(
             corr=corr,
             mask=mask,
@@ -203,6 +195,25 @@ def correl_matrix(
         )
     else:
         return corr
+
+
+def _handle_secondary_args(
+    xcats: Union[str, List[str]],
+    cids: List,
+    xcats_secondary: Union[str, List[str]],
+    cids_secondary: List,
+) -> Tuple[List, List]:
+    if xcats_secondary:
+        xcats_secondary = (
+            xcats_secondary if isinstance(xcats_secondary, list) else [xcats_secondary]
+        )
+    else:
+        xcats_secondary = xcats
+
+    if not cids_secondary:
+        cids_secondary = cids
+
+    return xcats_secondary, cids_secondary
 
 
 def _transform_df_for_cross_sectional_corr(

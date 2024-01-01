@@ -63,7 +63,7 @@ class TestAll(unittest.TestCase):
                 cids=["AUD"],
                 cids_secondary=["GBP"],
                 max_color=0.1,
-                show=False,
+                plot=False,
             )
 
     def tearDown(self) -> None:
