@@ -1,20 +1,21 @@
 """
 Functions used to visualize correlations across categories or cross-sections of
 panels.
-
-::docs::correl_matrix::sort_first::
 """
 import itertools
 import pandas as pd
+import numpy as np
 from typing import List, Union, Tuple, Dict, Optional, Any
 from collections import defaultdict
 
+from macrosynergy.management.types import Numeric
 from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.simulate import make_qdf
-from macrosynergy.management.utils.df_utils import _map_to_business_day_frequency
+from macrosynergy.management.utils import _map_to_business_day_frequency
+import macrosynergy.visuals as msv
 
 
-def correlation(
+def correl_matrix(
     df: pd.DataFrame,
     xcats: Union[str, List[str]] = None,
     cids: List[str] = None,
@@ -24,11 +25,16 @@ def correlation(
     end: str = None,
     val: str = "value",
     freq: str = None,
+    cluster: bool = False,
     lags: dict = None,
     lags_secondary: Optional[dict] = None,
+    title: str = None,
+    size: Tuple[float] = (14, 8),
+    max_color: Numeric = None,
+    show: bool = True,
 ):
     """
-    Calculate correlation across categories or cross-sections of panels.
+    Calculate and visualize correlation across categories or cross-sections of panels.
 
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
         'cid', 'xcats', 'real_date' and at least one column with values of interest.
@@ -55,6 +61,8 @@ def correlation(
         based on the native frequency of the datetimes in 'real_date', which is business
         daily. Down-sampling options include weekly ('W'), monthly ('M'), or quarterly
         ('Q') mean.
+    :param <bool> cluster: if True the series in the correlation matrix are reordered
+        by hierarchical clustering. Default is False.
     :param <dict> lags: optional dictionary of lags applied to respective categories.
         The key will be the category and the value is the lag or lags. If a
         category has multiple lags applied, pass in a list of lag values. The lag factor
@@ -64,15 +72,33 @@ def correlation(
         N.B.: Lags can include a 0 if the original should also be correlated.
     :param <dict> lags_secondary: optional dictionary of lags applied to the second set of
         categories if xcats_secondary is provided.
+    :param <str> title: chart heading. If none is given, a default title is used.
+    :param <Tuple[float]> size: two-element tuple setting width/height of figure. Default
+        is (14, 8).
+    :param <Numeric> max_color: maximum values of positive/negative correlation
+        coefficients for color scale. Default is none. If a value is given it applies
+        symmetrically to positive and negative values.
+    :param <bool> show: if True the figure will be displayed. Default is True.
+
+    N.B:. The function displays the heatmap of a correlation matrix across categories or
+    cross-sections (depending on which parameter has received multiple elements).
     """
+
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
     col_names = ["cid", "xcat", "real_date", val]
     df = df[col_names]
 
     if freq is not None:
-        _map_to_business_day_frequency(freq=freq, valid_freqs=["W", "M", "Q"])
+        freq = _map_to_business_day_frequency(freq=freq, valid_freqs=["W", "M", "Q"])
 
     xcats = xcats if isinstance(xcats, list) else [xcats]
+
+    if max_color is not None and not isinstance(max_color, Numeric):
+        raise TypeError("Parameter max_color must be numeric.")
+
+    mask = False
+    xlabel = ""
+    ylabel = ""
 
     # If more than one set of xcats or cids have been supplied.
     if xcats_secondary or cids_secondary:
@@ -93,6 +119,13 @@ def correlation(
             df.copy(), xcats_secondary, cids_secondary, start, end, out_all=True
         )
 
+        s_date = min(df1["real_date"].min(), df2["real_date"].min()).strftime(
+            "%Y-%m-%d"
+        )
+        e_date = max(df1["real_date"].max(), df2["real_date"].max()).strftime(
+            "%Y-%m-%d"
+        )
+
         # If only one xcat, we will compute cross sectional correlation.
         if len(xcats) == 1 and len(xcats_secondary) == 1:
             df_w1: pd.DataFrame = _transform_df_for_cross_sectional_corr(
@@ -101,6 +134,15 @@ def correlation(
             df_w2: pd.DataFrame = _transform_df_for_cross_sectional_corr(
                 df=df2, val=val, freq=freq
             )
+
+            if title is None:
+                title = (
+                    f"Cross-sectional correlation of {xcats[0]} and {xcats_secondary[0]} "
+                    f"from {s_date} to "
+                    f"{e_date}"
+                )
+            xlabel = f"{xcats[0]} cross-sections"
+            ylabel = f"{xcats_secondary[0]} cross-sections"
 
         # If more than one xcat in at least one set, we will compute cross category
         # correlation.
@@ -112,6 +154,8 @@ def correlation(
                 df=df2, xcats=xcats_secondary, val=val, freq=freq, lags=lags_secondary
             )
 
+            if title is None:
+                title = f"Cross-category correlation from {s_date} to " f"{e_date}"
         corr = (
             pd.concat([df_w1, df_w2], axis=1, keys=["df_w1", "df_w2"])
             .corr()
@@ -122,17 +166,43 @@ def correlation(
     else:
         df, xcats, cids = reduce_df(df, xcats, cids, start, end, out_all=True)
 
+        s_date: str = df["real_date"].min().strftime("%Y-%m-%d")
+        e_date: str = df["real_date"].max().strftime("%Y-%m-%d")
+
         if len(xcats) == 1:
             df_w = _transform_df_for_cross_sectional_corr(df=df, val=val, freq=freq)
+
+            if title is None:
+                title = (
+                    f"Cross-sectional correlation of {xcats[0]} from {s_date} to "
+                    f"{e_date}"
+                )
 
         else:
             df_w = _transform_df_for_cross_category_corr(
                 df=df, xcats=xcats, val=val, freq=freq, lags=lags
             )
 
+            if title is None:
+                title = f"Cross-category correlation from {s_date} to {e_date}"
+
         corr = df_w.corr(method="pearson")
 
-    return corr
+        mask: bool = True
+
+    if show:
+        msv.view_correlation(
+            corr=corr,
+            mask=mask,
+            cluster=cluster,
+            title=title,
+            size=size,
+            max_color=max_color,
+            xlabel=xlabel,
+            ylabel=ylabel,
+        )
+    else:
+        return corr
 
 
 def _transform_df_for_cross_sectional_corr(
@@ -145,7 +215,8 @@ def _transform_df_for_cross_sectional_corr(
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame.
     :param <str> val: name of column that contains the values of interest. Default is
         'value'.
-    :param <str> freq: Down-sampling frequency option. By default values are not down-sampled.
+    :param <str> freq: Down-sampling frequency option. By default values are not
+        down-sampled.
 
     :return <pd.Dataframe>: The transformed dataframe.
     """
@@ -254,3 +325,68 @@ def lag_series(
         df_w[xcat] = df_w.groupby(level=0)[xcat].shift(shift)
 
     return df_w, xcat_tracker
+
+
+if __name__ == "__main__":
+    np.random.seed(0)
+
+    # Un-clustered correlation matrices.
+
+    cids = ["AUD", "CAD", "GBP", "USD", "NZD", "EUR"]
+    cids_dmsc = ["CHF", "NOK", "SEK"]
+    cids_dmec = ["DEM", "ESP", "FRF", "ITL", "NLG"]
+    cids += cids_dmec
+    cids += cids_dmsc
+    xcats = ["XR", "CRY"]
+
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+
+    df_cids.loc["AUD"] = ["2010-01-01", "2020-12-31", 0.5, 2]
+    df_cids.loc["CAD"] = ["2011-01-01", "2020-11-30", 0, 1]
+    df_cids.loc["GBP"] = ["2012-01-01", "2020-11-30", -0.2, 0.5]
+    df_cids.loc["USD"] = ["2010-01-01", "2020-12-30", -0.2, 0.5]
+    df_cids.loc["NZD"] = ["2002-01-01", "2020-09-30", -0.1, 2]
+    df_cids.loc["EUR"] = ["2002-01-01", "2020-09-30", -0.2, 2]
+    df_cids.loc["DEM"] = ["2003-01-01", "2020-09-30", -0.3, 2]
+    df_cids.loc["ESP"] = ["2003-01-01", "2020-09-30", -0.1, 2]
+    df_cids.loc["FRF"] = ["2003-01-01", "2020-09-30", -0.2, 2]
+    df_cids.loc["ITL"] = ["2004-01-01", "2020-09-30", -0.2, 0.5]
+    df_cids.loc["NLG"] = ["2003-01-01", "2020-12-30", -0.1, 0.5]
+    df_cids.loc["CHF"] = ["2003-01-01", "2020-12-30", -0.3, 2.5]
+    df_cids.loc["NOK"] = ["2010-01-01", "2020-12-30", -0.1, 0.5]
+    df_cids.loc["SEK"] = ["2010-01-01", "2020-09-30", -0.1, 0.5]
+
+    df_xcats = pd.DataFrame(
+        index=xcats,
+        columns=["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"],
+    )
+    df_xcats.loc["XR",] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY",] = ["2010-01-01", "2020-10-30", 1, 2, 0.95, 0.5]
+
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+
+    start = "2012-01-01"
+    end = "2020-09-30"
+
+    lag_dict = {"XR": [0, 2, 5]}
+
+    # Clustered correlation matrices. Test hierarchical clustering.
+    correl_matrix(
+        df=dfd,
+        xcats=["XR"],
+        xcats_secondary=None,
+        cids=cids,
+        cids_secondary=None,
+        start=start,
+        end=end,
+        val="value",
+        freq=None,
+        cluster=True,
+        title="Correlation Matrix",
+        size=(14, 8),
+        max_color=None,
+        lags=None,
+        lags_secondary=None,
+    )

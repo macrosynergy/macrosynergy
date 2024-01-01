@@ -1,19 +1,34 @@
 import unittest
 import pandas as pd
-from pandas.testing import assert_frame_equal
+import matplotlib
+from matplotlib import pyplot as plt
+from unittest.mock import patch
 from tests.simulate import make_qdf
-from macrosynergy.panel.view_correlations import correl_matrix
-from macrosynergy.visuals.correlation import (
+from macrosynergy.panel.correlation import (
+    correl_matrix,
     lag_series,
     _transform_df_for_cross_sectional_corr,
     _transform_df_for_cross_category_corr,
-    _cluster_correlations,
 )
 
 from macrosynergy.management.utils import reduce_df
 
 
 class TestAll(unittest.TestCase):
+    @classmethod
+    def setUpClass(self):
+        # Prevents plots from being displayed during tests.
+        plt.close("all")
+        self.mpl_backend: str = matplotlib.get_backend()
+        self.mock_show = patch("matplotlib.pyplot.show").start()
+    
+    @classmethod
+    def tearDownClass(self) -> None:
+        patch.stopall()
+        plt.close("all")
+        patch.stopall()
+        matplotlib.use(self.mpl_backend)
+
     def setUp(self) -> None:
         self.cids = ["AUD", "CAD", "GBP"]
         self.xcats = ["XR", "CRY", "GROWTH", "INFL"]
@@ -177,7 +192,7 @@ class TestAll(unittest.TestCase):
                 cids=["AUD"],
                 cids_secondary=["GBP"],
                 max_color=0.1,
-                show=False,
+                show=True,
             )
         except Exception as e:
             self.fail(f"correl_matrix raised {e} unexpectedly")
@@ -253,21 +268,6 @@ class TestAll(unittest.TestCase):
 
         # Test that columns are now the xcats.
         self.assertEqual(df_w.columns.to_list(), xcats)
-
-    def test_cluster_correlations(self):
-        df = reduce_df(self.dfd, xcats=["XR"], cids=self.cids)
-        df_w = _transform_df_for_cross_sectional_corr(df, val="value")
-
-        corr1 = df_w.corr(method="pearson")
-        corr2 = corr1.copy()
-
-        # Clustering rows and columns separately should provide the same outcome
-        # for a symmetric dataframe.
-        corr1 = _cluster_correlations(corr1, is_symmetric=True)
-        corr2 = _cluster_correlations(corr2, is_symmetric=False)
-        corr2 = _cluster_correlations(corr2.T, is_symmetric=False).T
-
-        assert_frame_equal(corr1, corr2)
 
 
 if __name__ == "__main__":
