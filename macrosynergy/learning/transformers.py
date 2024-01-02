@@ -47,9 +47,9 @@ class LassoSelector(BaseEstimator, TransformerMixin):
         """
         Fit method to fit a Lasso regression and obtain the selected features.
 
-        :param <Union[pd.DataFrame,np.ndarray]> X: Pandas dataframe or numpy array of 
+        :param <Union[pd.DataFrame,np.ndarray]> X: Pandas dataframe or numpy array of
             input features. A Pandas dataframe is prefered
-        :param <Union[pd.Series,np.ndarray]> y: Pandas series or numpy array of targets 
+        :param <Union[pd.Series,np.ndarray]> y: Pandas series or numpy array of targets
             associated with each sample in X.
         """
         # checks
@@ -99,7 +99,7 @@ class LassoSelector(BaseEstimator, TransformerMixin):
             of input features.
 
         :return <Union[pd.DataFrame, np.ndarray]>: Pandas dataframe or numpy array
-            of input features selected based on the Lasso's feature selection 
+            of input features selected based on the Lasso's feature selection
             capabilities.
         """
         if type(X) == pd.DataFrame:
@@ -252,7 +252,7 @@ class FeatureAverager(BaseEstimator, TransformerMixin):
         # checks
         if type(X) != pd.DataFrame:
             raise TypeError(
-                "Input feature matrix for the FeatureAverager must be a pandas dataframe." 
+                "Input feature matrix for the FeatureAverager must be a pandas dataframe."
                 " If used as part of an sklearn pipeline, ensure that previous steps "
                 "return a pandas dataframe."
             )
@@ -379,12 +379,8 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
             n_total = training_n + expanding_count
 
             X_expanding_mads: pd.DataFrame = (
-                (
-                    (training_n) * training_mads
-                    + (expanding_count) * X_test_expanding_mads
-                )
-                / n_total
-            )
+                (training_n) * training_mads + (expanding_count) * X_test_expanding_mads
+            ) / n_total
 
             standardised_X: pd.DataFrame = (X / X_expanding_mads).fillna(0)
 
@@ -405,12 +401,9 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
             )
 
             X_expanding_means = (
-                (
-                    (training_n) * training_means
-                    + (expanding_count) * X_test_expanding_mean
-                )
-                / n_total
-            )
+                (training_n) * training_means
+                + (expanding_count) * X_test_expanding_mean
+            ) / n_total
 
             X_expanding_sum_squares = (
                 training_sum_squares + X_test_expanding_sum_squares
@@ -419,11 +412,13 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
             comp2 = 2 * np.square(X_expanding_means) * (n_total) / (n_total - 1)
             comp3 = (n_total) * np.square(X_expanding_means) / (n_total - 1)
             X_expanding_std: pd.Series = np.sqrt(comp1 - comp2 + comp3)
-            standardised_X: pd.DataFrame = ((X - X_expanding_means) / X_expanding_std).fillna(0)
+            standardised_X: pd.DataFrame = (
+                (X - X_expanding_means) / X_expanding_std
+            ).fillna(0)
 
         else:
             raise ValueError("neutral must be either 'zero' or 'mean'.")
-        
+
         benchmark_signal: pd.DataFrame = pd.DataFrame(
             np.mean(standardised_X, axis=1), columns=["signal"], dtype="float"
         )
@@ -443,7 +438,6 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         :return <np.ndarray>: Numpy array of expanding counts.
         """
         return X.groupby(level="real_date").count().expanding().sum().to_numpy()
-
 
 
 class PanelMinMaxScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
@@ -510,7 +504,7 @@ class PanelMinMaxScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
 class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
     def __init__(self, with_mean: bool = True, with_std: bool = True):
         """
-        Transformer class to extend scikit-learn's StandardScaler() to panel datasets. 
+        Transformer class to extend scikit-learn's StandardScaler() to panel datasets.
         It is intended to replicate the aforementioned class, but critically returning
         a Pandas dataframe or series instead of a numpy array. This preserves the
         multi-indexing in the inputs after transformation, allowing for the passing
@@ -521,7 +515,7 @@ class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin)
                 It is not designed to perform sequential mean and standard deviation
                 normalisation like the 'make_zn_scores()' function in 'macrosynergy.panel'
                 or 'ZnScoreAverager' in 'macrosynergy.learning'.
-                This class should primarily be used to satisfy the assumptions of various 
+                This class should primarily be used to satisfy the assumptions of various
                 models, for example the Lasso, Ridge or any neural network.
 
         :param <bool> with_mean: Boolean to specify whether or not to centre the data.
@@ -599,7 +593,7 @@ class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin)
 if __name__ == "__main__":
     from macrosynergy.management import make_qdf
     import macrosynergy.management as msm
-    
+
     np.random.seed(1)
 
     cids = ["AUD", "CAD", "GBP", "USD"]
@@ -640,8 +634,14 @@ if __name__ == "__main__":
     print(selector.transform(X).columns)
 
     # Split X and y into training and test sets
-    X_train, X_test = X[X.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], X[X.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
-    y_train, y_test = y[y.index.get_level_values(1) < pd.Timestamp(day=1,month=1,year=2018)], y[y.index.get_level_values(1) >= pd.Timestamp(day=1,month=1,year=2018)]
+    X_train, X_test = (
+        X[X.index.get_level_values(1) < pd.Timestamp(day=1, month=1, year=2018)],
+        X[X.index.get_level_values(1) >= pd.Timestamp(day=1, month=1, year=2018)],
+    )
+    y_train, y_test = (
+        y[y.index.get_level_values(1) < pd.Timestamp(day=1, month=1, year=2018)],
+        y[y.index.get_level_values(1) >= pd.Timestamp(day=1, month=1, year=2018)],
+    )
 
     selector = ZnScoreAverager(neutral="zero", use_signs=False)
     selector.fit(X_train, y_train)
