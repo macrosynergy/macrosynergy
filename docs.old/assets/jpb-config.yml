@@ -22,7 +22,7 @@ config:
     baseurl: "https://docs.macrosynergy.com/"
     announcement: |
       <p class='heading-banner'>
-        <img src='https://github.com/macrosynergy/macrosynergy/blob/main/docs/assets/MACROSYNERGY_Logo_White.png?raw=true'
+        <img src='https://github.com/macrosynergy/macrosynergy/blob/main/docs.old/assets/MACROSYNERGY_Logo_White.png?raw=true'
             width='35%' height='auto' style='display: block; margin-left: auto ; margin-right: auto ; ' class='bd-header-announcement-img'
             onclick="window.location.href='https://macrosynergy.com/'">
       </p>
