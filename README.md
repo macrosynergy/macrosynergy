@@ -1,4 +1,4 @@
-![Macrosynergy](https://raw.githubusercontent.com/macrosynergy/macrosynergy/develop/docs/source/_static/MACROSYNERGY_Logo_Primary.png)
+![Macrosynergy](https://raw.githubusercontent.com/macrosynergy/macrosynergy/main/docs/source/_static/MACROSYNERGY_Logo_Primary.png?raw=True)
 
 # Macrosynergy Quant Research
 [![PyPI Latest Release](https://img.shields.io/pypi/v/macrosynergy.svg)](https://pypi.org/project/macrosynergy/)
