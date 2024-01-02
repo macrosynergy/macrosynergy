@@ -103,9 +103,9 @@ def view_timelines(
         aspect=aspect,
         title_adj=title_adj,
         height=height,
-        # size=size,
-        # label_adj=label_adj,
-        # title_xadj=title_xadj,
+        size=size,
+        label_adj=label_adj,
+        title_xadj=title_xadj,
     )
 
 
