@@ -18,7 +18,8 @@ from statsmodels.regression.mixed_linear_model import MixedLM
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 class TestLassoSelector(unittest.TestCase):
-    def setUp(self):
+    @classmethod
+    def setUpClass(self):
         # Generate data with true linear relationship
         cids = ["AUD", "CAD", "GBP", "USD"]
         xcats = ["XR", "CPI", "GROWTH", "RIR"]
@@ -123,6 +124,7 @@ class TestLassoSelector(unittest.TestCase):
             selector = LassoSelector(alpha=0.1, positive=True)
             selector.fit(self.X, "y")
 
+
     @parameterized.expand([True, False])
     def test_valid_transform(self, positive):
         # sample a potential alpha value between zero and one
@@ -152,7 +154,8 @@ class TestLassoSelector(unittest.TestCase):
         self.assertTrue(np.all(X_transformed.index == self.X.index))
 
 class TestMapSelector(unittest.TestCase):
-    def setUp(self):
+    @classmethod
+    def setUpClass(self):
         # Generate data with true linear relationship
         cids = ["AUD", "CAD", "GBP", "USD"]
         xcats = ["XR", "CPI", "GROWTH", "RIR"]
@@ -264,7 +267,8 @@ class TestMapSelector(unittest.TestCase):
             selector.transform(self.X.drop(columns="CPI"))
 
 class TestFeatureAverager(unittest.TestCase):
-    def setUp(self):
+    @classmethod
+    def setUpClass(self):
         # Generate data with true linear relationship
         cids = ["AUD", "CAD", "GBP", "USD"]
         xcats = ["XR", "CPI", "GROWTH", "RIR"]
@@ -349,7 +353,8 @@ class TestFeatureAverager(unittest.TestCase):
             selector.transform(self.X.reset_index())
 
 class TestPanelMinMaxScaler(unittest.TestCase):
-    def setUp(self):
+    @classmethod
+    def setUpClass(self):
         # Generate data with true linear relationship
         cids = ["AUD", "CAD", "GBP", "USD"]
         xcats = ["XR", "CPI", "GROWTH", "RIR"]
@@ -427,7 +432,8 @@ class TestPanelMinMaxScaler(unittest.TestCase):
         self.assertTrue(np.all(X_transformed.index == self.X.index))
 
 class TestPanelStandardScaler(unittest.TestCase):
-    def setUp(self):
+    @classmethod
+    def setUpClass(self):
         # Generate data with true linear relationship
         cids = ["AUD", "CAD", "GBP", "USD"]
         xcats = ["XR", "CPI", "GROWTH", "RIR"]
@@ -525,7 +531,8 @@ class TestPanelStandardScaler(unittest.TestCase):
 
 
 class TestZnScoreAverager(unittest.TestCase):
-    def setUp(self):
+    @classmethod
+    def setUpClass(self):
         # Generate data with true linear relationship
         cids = ["AUD", "CAD", "GBP", "USD"]
         xcats = ["XR", "CPI", "GROWTH", "RIR"]
