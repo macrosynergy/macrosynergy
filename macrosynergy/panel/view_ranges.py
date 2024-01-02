@@ -25,8 +25,8 @@ def view_ranges(
     ylab: Optional[str] = None,
     size: Tuple[float] = (16, 8),
     xcat_labels: Optional[List[str]] = None,
-    legend_loc: str = "center right",
-    legend_bbox_to_anchor: Tuple[float] = (1.2, 0.5),
+    legend_loc: str = None,
+    legend_bbox_to_anchor: Tuple[float] = None,
 ):
     """Plots averages and various ranges across sections for one or more categories.
 
@@ -49,11 +49,18 @@ def view_ranges(
     :param <Tuple[float]> size: Tuple of width and height of graph. Default is (16, 8).
     :param <List[str]> xcat_labels: custom labels to be used for the ranges.
     :param <str> legend_loc: location of legend; passed to matplotlib.pyplot.legend().
-        Default is 'center right'.
+        Default is 'lower center'.
     :param <Tuple[float]> legend_bbox_to_anchor: passed to matplotlib.pyplot.legend().
-        Default is (1.2, 0.5).
+        Default is (0.5, -0.15).
 
     """
+    if legend_bbox_to_anchor is None and legend_loc is None:
+        legend_bbox_to_anchor = (0.5, -0.15)
+        legend_loc = 'lower center'
+
+    if legend_loc is None:
+        legend_loc = 'lower center'
+    
     msv.view_ranges(
         df=df,
         xcats=xcats,

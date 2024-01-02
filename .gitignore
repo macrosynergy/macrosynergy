@@ -182,3 +182,5 @@ macrosynergy/version.py
 
 # RST files for documentation
 docs/source/gen_rsts/
+
+docs/_build/
