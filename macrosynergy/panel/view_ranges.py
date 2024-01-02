@@ -25,8 +25,8 @@ def view_ranges(
     ylab: Optional[str] = None,
     size: Tuple[float] = (16, 8),
     xcat_labels: Optional[List[str]] = None,
-    legend_loc: str = "center right",
-    legend_bbox_to_anchor: Tuple[float] = (1.2, 0.5),
+    legend_loc: str = None,
+    legend_bbox_to_anchor: Tuple[float] = None,
 ):
     """Plots averages and various ranges across sections for one or more categories.
 
@@ -54,6 +54,13 @@ def view_ranges(
         Default is (1.2, 0.5).
 
     """
+    if legend_bbox_to_anchor is None and legend_loc is None:
+        legend_bbox_to_anchor = (0.5, -0.15)
+        legend_loc = 'lower center'
+
+    if legend_loc is None:
+        legend_loc = 'lower center'
+    
     msv.view_ranges(
         df=df,
         xcats=xcats,
