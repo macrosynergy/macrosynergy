@@ -1,5 +1,5 @@
 """
-Collection of scikit-learn transformer classes.
+Collection of custom scikit-learn transformer classes.
 """
 
 import numpy as np
@@ -102,6 +102,12 @@ class LassoSelector(BaseEstimator, TransformerMixin):
             of input features selected based on the Lasso's feature selection
             capabilities.
         """
+        if self.selected_ftr_idxs == []:
+            # Then no features were selected
+            return pd.DataFrame(
+                index=X.index, columns=["no_signal"], data=0, dtype=np.float16
+            )
+        
         if type(X) == pd.DataFrame:
             return X.iloc[:, self.selected_ftr_idxs]
 
@@ -629,7 +635,7 @@ if __name__ == "__main__":
     selector.fit(X, y)
     print(selector.transform(X).columns)
 
-    selector = LassoSelector(0.00001)
+    selector = LassoSelector(10000)
     selector.fit(X, y)
     print(selector.transform(X).columns)
 
