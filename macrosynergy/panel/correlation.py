@@ -1,14 +1,13 @@
 """
-Functions used to visualize correlations across categories or cross-sections of
+Functions used to calculate correlation across categories or cross-sections of
 panels.
 """
 import itertools
 import pandas as pd
 import numpy as np
-from typing import List, Union, Tuple, Dict, Optional, Any
+from typing import List, Union, Tuple, Dict, Optional
 from collections import defaultdict
 
-from macrosynergy.management.types import Numeric
 from macrosynergy.management.utils import reduce_df
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import _map_to_business_day_frequency
@@ -27,7 +26,7 @@ def corr(
     lags: dict = None,
     lags_secondary: Optional[dict] = None,
     return_dates: bool = False,
-):
+) -> Union[pd.DataFrame, Tuple[pd.DataFrame, str, str]]:
     """
     Calculate correlation across categories or cross-sections of panels.
 
@@ -69,6 +68,10 @@ def corr(
         categories if xcats_secondary is provided.
     :param <bool> return_dates: if True, the earliest and latest dates of the reduced
         DataFrame are returned.
+
+    :return <Union[pd.DataFrame, Tuple[pd.DataFrame, str, str]]>: Returns either the
+        correlation DataFrame or a Tuple containing the correlation DataFrame, along
+        with the start and end dates of the reduced input DataFrame.
     """
 
     df["real_date"] = pd.to_datetime(df["real_date"], format="%Y-%m-%d")
@@ -230,7 +233,7 @@ def _preprocess_for_two_set_corr(
     )
 
     # Todo: ensure secondary cids and xcats are present in the DataFrame.
-    
+
     df1, xcats, cids = reduce_df(df.copy(), xcats, cids, start, end, out_all=True)
     df2, xcats_secondary, cids_secondary = reduce_df(
         df.copy(), xcats_secondary, cids_secondary, start, end, out_all=True
@@ -265,7 +268,7 @@ def _handle_secondary_args(
     cids_secondary: List,
 ) -> Tuple[List, List]:
     """
-    Method used to handle the secondary arguments passed to the correlation function.
+    Method used to handle the optional secondary arguments passed to the correlation function.
 
     :param <Union[str, List[str]]> xcats: extended categories to be correlated.
     :param <List[str]> cids: cross sections to be correlated.
@@ -409,14 +412,15 @@ def lag_series(
 
     return df_w, xcat_tracker
 
-def _get_dates(df: pd.DataFrame) -> Tuple[str, str]:
+
+def _get_dates(df: pd.DataFrame) -> Tuple[pd.Timestamp, pd.Timestamp]:
     """
     Get earliest and latest date in DataFrame.
-    
+
     :param <pd.DataFrame> df: pandas DataFrame either indexed by date
         or multi-indexed by cross-section and date.
-        
-    :return <Tuple[str, str]>: earliest and latest date in DataFrame.
+
+    :return <Tuple[pd.Timestamp, pd.Timestamp]>: earliest and latest date in DataFrame.
     """
     if isinstance(df.index, pd.MultiIndex):
         s_date: str = df.index.get_level_values(1).min()
@@ -478,7 +482,7 @@ if __name__ == "__main__":
         xcats=["XR"],
         # xcats_secondary=["CRY"],
         cids=cids,
-        cids_secondary=None,
+        # cids_secondary=cids[:2],
         start=start,
         end=end,
         val="value",
@@ -487,4 +491,4 @@ if __name__ == "__main__":
         lags=None,
         lags_secondary=None,
     )
-    corr_df
+    print(corr_df)

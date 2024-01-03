@@ -102,27 +102,27 @@ class TestAll(unittest.TestCase):
                 cids=self.cids,
                 title=0,
             )
-        # with self.assertRaises(TypeError):
-        #     view_correlation(
-        #         df=self.dfd,
-        #         xcats=self.xcats,
-        #         cids=self.cids,
-        #         size="invalid_type",
-        #     )
-        # with self.assertRaises(TypeError):
-        #     view_correlation(
-        #         df=self.dfd,
-        #         xcats=self.xcats,
-        #         cids=self.cids,
-        #         xlabel=0,
-        #     )
-        # with self.assertRaises(TypeError):
-        #     view_correlation(
-        #         df=self.dfd,
-        #         xcats=self.xcats,
-        #         cids=self.cids,
-        #         ylabel=0,
-        #     )
+        with self.assertRaises(TypeError):
+            view_correlation(
+                df=self.dfd,
+                xcats=self.xcats,
+                cids=self.cids,
+                size="invalid_type",
+            )
+        with self.assertRaises(TypeError):
+            view_correlation(
+                df=self.dfd,
+                xcats=self.xcats,
+                cids=self.cids,
+                xlabel=0,
+            )
+        with self.assertRaises(TypeError):
+            view_correlation(
+                df=self.dfd,
+                xcats=self.xcats,
+                cids=self.cids,
+                ylabel=0,
+            )
 
     def test_cluster_correlations(self):
         df = reduce_df(self.dfd, xcats=["XR"], cids=self.cids)

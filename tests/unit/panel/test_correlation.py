@@ -5,6 +5,8 @@ from matplotlib import pyplot as plt
 from unittest.mock import patch
 from tests.simulate import make_qdf
 from macrosynergy.panel.correlation import (
+    _get_dates,
+    _handle_secondary_args,
     corr,
     lag_series,
     _transform_df_for_cross_sectional_corr,
@@ -21,7 +23,7 @@ class TestAll(unittest.TestCase):
         plt.close("all")
         self.mpl_backend: str = matplotlib.get_backend()
         self.mock_show = patch("matplotlib.pyplot.show").start()
-    
+
     @classmethod
     def tearDownClass(self) -> None:
         patch.stopall()
@@ -32,6 +34,8 @@ class TestAll(unittest.TestCase):
     def setUp(self) -> None:
         self.cids = ["AUD", "CAD", "GBP"]
         self.xcats = ["XR", "CRY", "GROWTH", "INFL"]
+        self.val = "value"
+        self.freq = "D"
 
         df_cids = pd.DataFrame(
             index=self.cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
@@ -62,6 +66,74 @@ class TestAll(unittest.TestCase):
 
     def tearDown(self) -> None:
         return super().tearDown()
+    
+    def test_cross_category_corr(self):
+        corr_df = corr(
+            self.dfd,
+            xcats=self.xcats,
+        )
+        self.assertEqual(corr_df.shape, (len(self.xcats), len(self.xcats)))
+        self.assertEqual(corr_df.columns.to_list(), self.xcats)
+        self.assertEqual(corr_df.index.to_list(), self.xcats)
+
+    def test_cross_sectional_corr(self):
+        corr_df = corr(
+            self.dfd,
+            xcats=["XR"],
+            cids=self.cids,
+        )
+        self.assertEqual(corr_df.shape, (len(self.cids), len(self.cids)))
+        self.assertEqual(corr_df.columns.to_list(), self.cids)
+        self.assertEqual(corr_df.index.to_list(), self.cids)
+
+    def test_cross_category_corr_with_xcats_secondary(self):
+        xcats_secondary = ["XR"]
+        corr_df = corr(
+            self.dfd,
+            xcats=self.xcats,
+            xcats_secondary=xcats_secondary,
+        )
+        self.assertEqual(corr_df.shape, (len(xcats_secondary), len(self.xcats)))
+        self.assertEqual(corr_df.columns.to_list(), self.xcats)
+        self.assertEqual(corr_df.index.to_list(), xcats_secondary)
+
+    def test_cross_sectional_corr_with_cids_secondary(self):
+        cids_secondary = ["AUD"]
+        corr_df = corr(
+            self.dfd,
+            xcats=["XR"],
+            cids=self.cids,
+            cids_secondary=cids_secondary,
+        )
+        self.assertEqual(corr_df.shape, (len(cids_secondary), len(self.cids)))
+        self.assertEqual(corr_df.columns.to_list(), self.cids)
+        self.assertEqual(corr_df.index.to_list(), cids_secondary)
+
+    def test_cross_category_corr_with_both_secondary(self):
+        xcats_secondary = ["XR"]
+        corr_df = corr(
+            self.dfd,
+            xcats=self.xcats,
+            xcats_secondary=xcats_secondary,
+            cids=self.cids,
+            cids_secondary=self.cids[:2],
+        )
+        self.assertEqual(corr_df.shape, (len(xcats_secondary), len(self.xcats)))
+        self.assertEqual(corr_df.columns.to_list(), self.xcats)
+        self.assertEqual(corr_df.index.to_list(), xcats_secondary)
+
+    def test_cross_sectional_corr_with_both_secondary(self):
+        cids_secondary = ["AUD"]
+        corr_df = corr(
+            self.dfd,
+            xcats=["XR"],
+            xcats_secondary=["CRY"],
+            cids=self.cids,
+            cids_secondary=cids_secondary,
+        )
+        self.assertEqual(corr_df.shape, (len(cids_secondary), len(self.cids)))
+        self.assertEqual(corr_df.columns.to_list(), self.cids)
+        self.assertEqual(corr_df.index.to_list(), cids_secondary)
 
     def test_lag_series(self):
         """
@@ -163,11 +235,9 @@ class TestAll(unittest.TestCase):
 
     def test_corr(self):
         try:
-            corr(
-                self.dfd, xcats=["XR"], cids=self.cids
-            )
+            corr(self.dfd, xcats=["XR"], cids=self.cids)
         except Exception as e:
-            self.fail(f"correl_matrix raised {e} unexpectedly")
+            self.fail(f"corr raised {e} unexpectedly")
 
         try:
             corr(
@@ -177,7 +247,7 @@ class TestAll(unittest.TestCase):
                 cids=self.cids,
             )
         except Exception as e:
-            self.fail(f"correl_matrix raised {e} unexpectedly")
+            self.fail(f"corr raised {e} unexpectedly")
 
         try:
             corr(
@@ -188,7 +258,7 @@ class TestAll(unittest.TestCase):
                 cids_secondary=["GBP"],
             )
         except Exception as e:
-            self.fail(f"correl_matrix raised {e} unexpectedly")
+            self.fail(f"corr raised {e} unexpectedly")
 
         try:
             corr(
@@ -198,7 +268,7 @@ class TestAll(unittest.TestCase):
                 cids_secondary=["GBP"],
             )
         except Exception as e:
-            self.fail(f"correl_matrix raised {e} unexpectedly")
+            self.fail(f"corr raised {e} unexpectedly")
 
         lag_dict = {"INFL": [0, 1, 2, 5]}
         with self.assertRaises(ValueError):
@@ -255,6 +325,76 @@ class TestAll(unittest.TestCase):
 
         # Test that columns are now the xcats.
         self.assertEqual(df_w.columns.to_list(), xcats)
+
+    def test_get_dates(self):
+        df = reduce_df(self.dfd, xcats=["XR"])
+
+        min_date = df["real_date"].min()
+        max_date = df["real_date"].max()
+
+        df_w = _transform_df_for_cross_sectional_corr(
+            df=df, val=self.val, freq=self.freq
+        )
+        start_date, end_date = _get_dates(df_w)
+
+        self.assertEqual(start_date, min_date)
+        self.assertEqual(end_date, max_date)
+
+    def test_get_dates_multiindexed(self):
+        xcats = ["XR", "CRY"]
+        df = reduce_df(self.dfd, xcats=xcats)
+
+        min_date = df["real_date"].min()
+        max_date = df["real_date"].max()
+
+        df_w = _transform_df_for_cross_category_corr(
+            df=df, xcats=xcats, val=self.val, freq=self.freq
+        )
+        start_date, end_date = _get_dates(df_w)
+
+        self.assertEqual(start_date, min_date)
+        self.assertEqual(end_date, max_date)
+
+    def test_with_secondary_args(self):
+        # Test with both secondary arguments provided
+        xcats = ["xcat1", "xcat2"]
+        cids = ["cid1", "cid2"]
+        xcats_secondary = ["xcat3", "xcat4"]
+        cids_secondary = ["cid3", "cid4"]
+        result = _handle_secondary_args(xcats, cids, xcats_secondary, cids_secondary)
+        self.assertEqual(result, (xcats_secondary, cids_secondary))
+
+    def test_with_secondary_arg_as_string(self):
+        # Test with secondary xcat argument provided as single strings
+        xcats = ["xcat1", "xcat2"]
+        cids = ["cid1", "cid2"]
+        xcats_secondary = "xcat3"
+        cids_secondary = ["cid3"]
+        result = _handle_secondary_args(xcats, cids, xcats_secondary, cids_secondary)
+        self.assertEqual(result, (["xcat3"], ["cid3"]))
+
+    def test_without_secondary_xcats(self):
+        # Test without secondary xcats provided
+        xcats = ["xcat1", "xcat2"]
+        cids = ["cid1", "cid2"]
+        cids_secondary = ["cid3", "cid4"]
+        result = _handle_secondary_args(xcats, cids, None, cids_secondary)
+        self.assertEqual(result, (xcats, cids_secondary))
+
+    def test_without_secondary_cids(self):
+        # Test without secondary cids provided
+        xcats = ["xcat1", "xcat2"]
+        cids = ["cid1", "cid2"]
+        xcats_secondary = ["xcat3", "xcat4"]
+        result = _handle_secondary_args(xcats, cids, xcats_secondary, None)
+        self.assertEqual(result, (xcats_secondary, cids))
+
+    def test_without_any_secondary_args(self):
+        # Test without any secondary arguments provided
+        xcats = ["xcat1", "xcat2"]
+        cids = ["cid1", "cid2"]
+        result = _handle_secondary_args(xcats, cids, None, None)
+        self.assertEqual(result, (xcats, cids))
 
 
 if __name__ == "__main__":

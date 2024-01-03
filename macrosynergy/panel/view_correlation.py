@@ -4,7 +4,7 @@ panels.
 """
 import pandas as pd
 import numpy as np
-from typing import List, Union, Tuple, Dict, Optional, Any
+from typing import List, Union, Tuple, Optional
 from macrosynergy.management.simulate import make_qdf
 
 import macrosynergy.visuals as msv
@@ -167,6 +167,6 @@ if __name__ == "__main__":
         max_color=None,
         lags=None,
         lags_secondary=None,
-        return_values=True
+        return_values=True,
     )
     print(corr)

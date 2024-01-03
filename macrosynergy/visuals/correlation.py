@@ -11,18 +11,12 @@ from typing import Tuple
 from macrosynergy.management.types import Numeric
 import pandas as pd
 import numpy as np
-from typing import List, Union, Tuple, Dict, Optional, Any
+from typing import List, Union, Tuple, Optional
 
 from macrosynergy.management.types import Numeric
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import _map_to_business_day_frequency
-from macrosynergy.panel.correlation import (
-    _corr,
-    _two_set_corr,
-    _preprocess_for_corr,
-    _preprocess_for_two_set_corr,
-    corr,
-)
+from macrosynergy.panel.correlation import corr
 
 
 def view_correlation(
@@ -162,10 +156,10 @@ def view_correlation(
         # Since the correlation matrix is not necessarily symmetric, clustering is
         # done in two stages.
         if corr_df.shape[0] > 1:
-            corr_df = _cluster_correlations(corr=corr_df, is_symmetric=False)
+            corr_df = _cluster_correlations(corr_df=corr_df, is_symmetric=False)
 
         if corr_df.shape[1] > 1:
-            corr_df = _cluster_correlations(corr=corr_df.T, is_symmetric=False).T
+            corr_df = _cluster_correlations(corr_df=corr_df.T, is_symmetric=False).T
 
     mask_array: np.ndarray = (
         np.triu(np.ones_like(corr_df, dtype=bool)) if mask else None
@@ -198,19 +192,19 @@ def view_correlation(
 
 
 def _cluster_correlations(
-    corr: pd.DataFrame, is_symmetric: bool = False
+    corr_df: pd.DataFrame, is_symmetric: bool = False
 ) -> pd.DataFrame:
     """
     Rearrange a correlation dataframe so that more similar values are clustered.
 
-    :param <pd.Dataframe> corr: dataframe representing a correlation matrix.
+    :param <pd.Dataframe> corr_df: dataframe representing a correlation matrix.
     :param <bool> is_symmetric: if True, rows and columns are rearranged identically.
         If False, only rows are reordered.
 
     :return <pd.Dataframe>: The sorted correlation dataframe.
     """
     # Get pairwise distances of the dataframe's rows.
-    d = sch.distance.pdist(corr)
+    d = sch.distance.pdist(corr_df)
 
     # Perform hierarchical / agglomerative clustering. The clustering method used is
     # Farthest Point Algorithm.
@@ -223,14 +217,14 @@ def _cluster_correlations(
     # adjacent.
     ind = sch.fcluster(L, 0.5 * d.max(), "distance")
 
-    indices = [corr.index.tolist()[i] for i in list((np.argsort(ind)))]
+    indices = [corr_df.index.tolist()[i] for i in list((np.argsort(ind)))]
 
     if is_symmetric:
-        corr = corr.loc[indices, indices]
+        corr_df = corr_df.loc[indices, indices]
     else:
-        corr = corr.loc[indices, :]
+        corr_df = corr_df.loc[indices, :]
 
-    return corr
+    return corr_df
 
 
 def _get_corr_title(xcats: List[str], s_date: str, e_date: str) -> str:
@@ -238,6 +232,8 @@ def _get_corr_title(xcats: List[str], s_date: str, e_date: str) -> str:
     Get default title for correlation matrix.
 
     :param <List[str]> xcats: list of extended categories.
+    :param <str> s_date: start date.
+    :param <str> e_date: end date.
 
     :return <str>: default title.
     """
@@ -262,6 +258,8 @@ def _get_two_set_corr_title(
 
     :param <List[str]> xcats: list of extended categories for first set.
     :param <List[str]> xcats_secondary: list of extended categories for second set.
+    :param <str> s_date: start date.
+    :param <str> e_date: end date.
 
     :return <str>: default title.
     """
@@ -326,9 +324,9 @@ if __name__ == "__main__":
     view_correlation(
         df=dfd,
         xcats=["XR"],
-        xcats_secondary=["CRY"],
+        # xcats_secondary=["CRY"],
         cids=cids,
-        cids_secondary=None,
+        cids_secondary=cids[:2],
         start=start,
         end=end,
         val="value",
