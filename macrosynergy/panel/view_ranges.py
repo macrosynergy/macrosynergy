@@ -55,7 +55,7 @@ def view_ranges(
 
     """
     if legend_bbox_to_anchor is None and legend_loc is None:
-        legend_bbox_to_anchor = (0.5, -0.15)
+        legend_bbox_to_anchor = (0.5, -0.15 - 0.05 * (len(xcats) - 2))
         legend_loc = 'lower center'
 
     if legend_loc is None:
@@ -81,7 +81,7 @@ def view_ranges(
 
 if __name__ == "__main__":
     cids = ["AUD", "CAD", "GBP", "USD"]
-    xcats = ["XR", "CRY"]
+    xcats = ["XR", "CRY", "EQXR", "BIGGY", "IGGY", "GY", "Y"]
     df_cids = pd.DataFrame(
         index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
     )
@@ -96,6 +96,11 @@ if __name__ == "__main__":
     )
     df_xcats.loc["XR",] = ["2010-01-01", "2020-12-31", 0, 1, 0, 0.3]
     df_xcats.loc["CRY",] = ["2011-01-01", "2020-10-30", 1, 2, 0.9, 0.5]
+    df_xcats.loc["EQXR",] = ["2010-01-01", "2020-12-31", 0, 0.1, 0.7, 0.3]
+    df_xcats.loc["BIGGY",] = ["2011-01-01", "2020-10-30", 0.5, 0.2, 0.6, 0.5]
+    df_xcats.loc["IGGY",] = ["2011-01-01", "2020-10-30", 0.5, 0.2, 0.6, 0.5]
+    df_xcats.loc["GY",] = ["2011-01-01", "2020-10-30", 0.5, 0.2, 0.6, 0.5]
+    df_xcats.loc["Y",] = ["2011-01-01", "2020-10-30", 0.5, 0.2, 0.6, 0.5]
 
     dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
 
@@ -120,4 +125,26 @@ if __name__ == "__main__":
         end="2018-01-01",
         sort_cids_by=None,
         xcat_labels=["EQXR_NSA", "CRY_NSA"],
+    )
+
+    view_ranges(
+        dfd,
+        xcats=["XR", "CRY", "EQXR", "BIGGY"],
+        cids=cids,
+        kind="box",
+        start="2012-01-01",
+        end="2018-01-01",
+        sort_cids_by=None,
+        xcat_labels=["EQXR_NSA", "CRY_NSA", "EQXR", "BIGGY"],
+    )
+
+    view_ranges(
+        dfd,
+        xcats=["XR", "CRY", "EQXR", "BIGGY", "IGGY", "GY", "Y"],
+        cids=cids,
+        kind="box",
+        start="2012-01-01",
+        end="2018-01-01",
+        sort_cids_by=None,
+        xcat_labels=["EQXR_NSA", "CRY_NSA", "EQXR", "BIGGY", "IGGY", "GY", "Y"],
     )
