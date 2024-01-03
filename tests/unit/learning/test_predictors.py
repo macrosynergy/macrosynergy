@@ -11,7 +11,7 @@ from macrosynergy.learning import (
 
 from sklearn.linear_model import (
     LinearRegression,
-    Ridge
+    Ridge,
 )
 
 class TestSWRegressor(unittest.TestCase):
