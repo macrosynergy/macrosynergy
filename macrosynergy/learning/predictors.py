@@ -1,3 +1,5 @@
+import inspect
+
 import numpy as np
 from sklearn.base import BaseEstimator, RegressorMixin
 
@@ -26,7 +28,14 @@ class SignWeightedRegressor(BaseEstimator, RegressorMixin):
         are emphasized due to the higher weight they receive. By weighting based on inverse
         frequency, the model is encouraged to  equally learn from both positive and negative
         return samples. 
-        """ 
+        """
+        if not callable(regressor) or not inspect.isclass(regressor):
+            raise TypeError("Regressor must be a class, such as 'LinearRegression'. Please check it isn't an instantiation of a class, such as 'LinearRegression()'.")
+
+        fit_params = inspect.signature(regressor.fit).parameters
+        if 'sample_weight' not in fit_params:
+            raise ValueError(f"The underlying scikit-learn regressor {regressor} must have a 'sample_weight' parameter in its 'fit' method.")
+        
         self.model = regressor(**init_kwargs)
 
     def __calculate_sample_weights(self, targets):

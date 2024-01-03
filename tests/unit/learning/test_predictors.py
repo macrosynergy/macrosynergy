@@ -78,3 +78,5 @@ class TestSWRegressor(unittest.TestCase):
         # Check that incorrectly specified arguments raise exceptions
         with self.assertRaises(TypeError):
             model = SignWeightedRegressor(LinearRegression())
+        with self.assertRaises(ValueError):
+            model = SignWeightedRegressor(NaivePredictor)
