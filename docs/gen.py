@@ -35,6 +35,17 @@ def format_new_contributors(strx: str) -> str:
     return strx.replace(f"* @{uname}", ustr)
 
 
+def _get_prnum_from_prlink(strx: str, as_int: bool = True) -> str:
+    findstr = "in https://github.com/macrosynergy/macrosynergy/pull/"
+    lx = strx.rfind(findstr)
+    prnum = strx[lx + len(findstr) :]
+    try:
+        int(prnum)
+    except ValueError:
+        raise ValueError(f"Could not parse PR number from {strx}")
+    return int(prnum) if as_int else prnum
+
+
 def format_pr_link(strx: str) -> str:
     findstr = "in https://github.com/macrosynergy/macrosynergy/pull/"
     lx = strx.rfind(findstr)
@@ -53,9 +64,52 @@ def format_chg_log(strx: str) -> str:
     return comp_str
 
 
+def clean_features_bugfixes(release_text: str) -> str:
+    """
+    Get a list of all features and bugfixes in the release,
+    and format them as markdown lists.
+    """
+    ACCEPTED_PREFIXES = ["* Feature: ", "* Bugfix: ", "* Hotfix: "]
+    return_str: List[str] = []
+    features: List[str] = []
+    fixes: List[str] = []
+    for line in release_text.splitlines():
+        if not line.startswith("* "):
+            continue
+        if not any(line.startswith(prefix) for prefix in ACCEPTED_PREFIXES):
+            continue
+        if line.startswith("* Feature: "):
+            features.append(line)
+        elif line.startswith("* Bugfix: ") or line.startswith("* Hotfix: "):
+            fixes.append(line)
+
+    # sort each list by pr number
+    try:
+        features.sort(key=lambda x: _get_prnum_from_prlink(x))
+        fixes.sort(key=lambda x: _get_prnum_from_prlink(x))
+    except Exception as exc:
+        raise ValueError(
+            "Could not parse release notes, please update manually."
+        ) from exc
+    if (len(features) + len(fixes)) == 0:
+        return "#" + release_text
+
+    if features:
+        return_str += ["### New Features"]
+        return_str += features
+    if fixes:
+        return_str += ["### Bugfixes"]
+        return_str += fixes
+    return_str += ["\n"]
+    return_str += [release_text.splitlines()[-1]]
+
+    return "\n".join(return_str)
+
+
 def process_individual_release(release_dict: Dict) -> str:
     release_text: str = release_dict["body"]
     lines = []
+    release_text = clean_features_bugfixes(release_text)
     for line in release_text.splitlines():
         linex = line
         if linex.startswith("* "):
@@ -71,9 +125,11 @@ def process_individual_release(release_dict: Dict) -> str:
     release_text: str = "\n".join(lines)
     md = (
         f"## Release {release_dict['name']}\n\n"
-        f"#{release_text.strip()}"  # add one level of header
-        f"\n\n[View on GitHub]({release_dict['html_url']})" + LINE_SEPARATOR
+        f"{release_text.strip()}"  # add one level of header
+        f"\n\n[View complete release notes on GitHub]({release_dict['html_url']})"
+        + LINE_SEPARATOR
     )
+
     return md
 
 
@@ -187,7 +243,7 @@ def main():
         "--build",
         action="store_true",
         help="Build documentation.",
-        default=True,
+        default=False,
     )
 
     args = parser.parse_args()
