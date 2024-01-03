@@ -1,9 +1,12 @@
 # Usage Examples
 
 ## DataQuery Download Interface
+
 ### Downlading using OAuth credentials
-To download data from JP Morgan DataQuery, you can use the [JPMaQSDownload Object](./macrosynergy/download/jpmaqs.py)
+
+To download data from JP Morgan DataQuery, you can use the [JPMaQSDownload Object](../gen_rsts/macrosynergy.download.jpmaqs.rst)
 together with your OAuth authentication credentials (default):
+
 ```python
 import pandas as pd
 from macrosynergy.download import JPMaQSDownload
@@ -12,7 +15,7 @@ with JPMaQSDownload(
         client_id="<dq_client_id>",
         client_secret="<dq_client_secret>"
 ) as downloader:
-    data = downloader.download(tickers="EUR_FXXR_NSA", 
+    data = downloader.download(tickers="EUR_FXXR_NSA",
                                 start_date="2022-01-01")
 
 assert isinstance(data, pd.DataFrame) and not data.empty
@@ -20,8 +23,11 @@ assert isinstance(data, pd.DataFrame) and not data.empty
 assert data.shape[0] > 0
 data.info()
 ```
+
 ### Downloading using Certificate and Private Key Pair
+
 Alternatively, you can also the certificate and private key pair, to access DataQuery as:
+
 ```python
 import pandas as pd
 from macrosynergy.download import JPMaQSDownload
@@ -33,7 +39,7 @@ with JPMaQSDownload(
         crt="<path_to_dq_certificate>",
         key="<path_to_dq_key>"
 ) as downloader:
-    data = downloader.download(tickers="EUR_FXXR_NSA", 
+    data = downloader.download(tickers="EUR_FXXR_NSA",
                                 start_date="2022-01-01")
 
 assert isinstance(data, pd.DataFrame) and not data.empty
@@ -46,6 +52,7 @@ Both of the above example will download a snippet of example data from the premi
 of the daily timeseries of EUR FX excess returns.
 
 Using the API you can also access a panel of tickers from different countries like so.
+
 ```python
 import pandas as pd
 from macrosynergy.download import JPMaQSDownload
@@ -69,9 +76,10 @@ data.info()
 
 ### Connecting via a proxy server
 
-Since a lot of institutions use a proxy server to connect to the internet; the `JPMaQSDownload` object can be configured to use a proxy server. 
+Since a lot of institutions use a proxy server to connect to the internet; the `JPMaQSDownload` object can be configured to use a proxy server.
 
 It is also possible to use a proxy server with the Dataquery interface. Here's an example:
+
 ```python
 import pandas as pd
 from macrosynergy.download import JPMaQSDownload
@@ -92,7 +100,9 @@ with JPMaQSDownload(
 
 assert isinstance(data, pd.DataFrame) and not df.empty
 ```
-or, 
+
+or,
+
 ```python
 ...
 proxies = {
@@ -108,8 +118,10 @@ with JPMaQSDownload(
 ...
 ```
 
-## Simulated/Mock Data 
-In order to use the rest of the package without access to the API you can [simulate](./macrosynergy/management/simulate/README.md) quantamental data using the management sub-package. 
+## Simulated/Mock Data
+
+In order to use the rest of the package without access to the API you can [simulate](../gen_rsts/macrosynergy.management.simulate.rst) quantamental data using the management sub-package.
+
 ```python
 from macrosynergy.management.simulate import make_qdf
 
@@ -137,9 +149,9 @@ df_xcats.loc['FXWBASE_NSA'] = ['2010-01-01', '2022-02-01', 1, 1.5, 0.8, 0.5]
 df_xcats.loc['EQWBASE_NSA'] = ['2010-01-01', '2022-02-01', 1, 1.5, 0.9, 0.5]
 data = make_qdf(df_cids, df_xcats, back_ar=0.75)
 ```
-The management sub-package can also be used to [check](./macrosynergy/management/utils/check_availability.py) which data is available
-in the dataframe.
 
+The management sub-package can also be used to [check](../gen_rsts/macrosynergy.management.utils.check_availability.rst) which data is available
+in the dataframe.
 
 ```python
 from macrosynergy.management import check_availability
@@ -147,18 +159,22 @@ filt_na = (data['cid'] == 'USD') & (data['real_date'] < '2015-01-01')
 data_filt.loc[filt_na, 'value'] = np.nan
 check_availability(df=data_filt, xcats=xcats, cids=cids)
 ```
-You can also use the built-in function to [reshape](./macrosynergy/management/shape_dfs.py) the data depending on
+
+You can also use the built-in utility functions to [reshape](../gen_rsts/macrosynergy.management.utils.df_utils.rst) the data depending on
 the dates or tickers of your choice.
 
 ```python
+from macrosynergy.management import reduce_df
 data_reduced = reduce_df(data, xcats=xcats[:-1], cids=cids[0],
                        start='2012-01-01', end='2018-01-31')
 ```
 
 ## Panel
+
 ### Basket
+
 The basket class is used to calculate the returns and carries of financial contracts using various methods,
-a [basket](./macrosynergy/panel/basket.py) is created as so.
+a [basket](../gen_rsts/macrosynergy.panel.basket.rst) is created as so.
 
 ```python
 from macrosynergy.panel.basket import Basket
@@ -172,18 +188,23 @@ basket_1 = Basket(
 )
 basket_1.make_basket(weight_meth="equal", max_weight=0.55, basket_name="GLB_EQUAL")
 ```
+
 Using the basket class you have access to the methods such as visulasing the weights associated with each contract,
 or returning the weight or basket.
+
 ```python
 basket_1.return_basket()
 basket_1.return_weights()
 basket_1.weight_visualiser(basket_name="GLB_EQUAL")
 ```
+
 You can also calculate and visualise the following and more with built-in functions.
-1.  [historic volatility](./macrosynergy/panel/historic_vol.py)
-2.  [z-scores](./macrosynergy/panel/make_zn_scores.py)
-3.  [beta values](./macrosynergy/panel/return_beta.py)
-4.  [timeline](./macrosynergy/panel/view_timelines.py) 
+
+1.  [historic volatility](../gen_rsts/macrosynergy.panel.historic_vol.rst)
+2.  [z-scores](../gen_rsts/macrosynergy.panel.make_zn_scores.rst)
+3.  [beta values](../gen_rsts/macrosynergy.panel.return_beta.rst)
+4.  [timeline](../gen_rsts/macrosynergy.panel.view_timelines.rst)
+
 ```python
 from macrosynergy.panel.historic_vol import historic_vol
 data_historic = historic_vol(
@@ -217,10 +238,14 @@ beta_display(df_hedge=df_hedge, subplots=False)
 view_timelines(data, xcats=['FXXR_NSA','FXCRY_NSA'], cids=cids[0],
                    size=(10, 5), title='AUD Return and Carry')
 ```
+
 ## Signal
+
 ### Signal Return Relations
-The [SignalReturnRelations](./macrosynergy/signal/signal_return.py) class analyses and visualises signal and
+
+The [SignalReturnRelations](../gen_rsts/macrosynergy.signal.signal_return_relations.rst) class analyses and visualises signal and
 return series.
+
 ```python
 from macrosynergy.signal.signal_return import SignalReturnRelations
 
@@ -228,7 +253,9 @@ srn = SignalReturnRelations(data, ret="EQXR_NSA", sig="EQCRY_NSA", rival_sigs=No
                                 sig_neg=True, cosp=True, freq="M", start="2002-01-01")
 srn.summary_table()
 ```
+
 In the creation of the class you can also indicate rival signals for basic relational statistics.
+
 ```python
 r_sigs = [ "EQCRR_NSA"]
 srn = SignalReturnRelations(data, "EQXR_NSA", sig="EQCRY_NSA", rival_sigs=r_sigs,
@@ -237,22 +264,30 @@ df_sigs = srn.signals_table(sigs=['EQCRY_NSA_NEG', 'EQCRR_NSA_NEG'])
 
 df_sigs_all = srn.signals_table()
 ```
+
 Using the class you can plot accuracy bars between returns and signals.
+
 ```python
 srn.accuracy_bars(type="signals", title="Accuracy measure between target return, EQXR_NSA,"
                                         " and the respective signals, ['EQCRY_NSA_NEG', "
                                         " 'EQCRR_NSA_NEG'].")
 ```
+
 ## PnL
+
 ### Naive pnl
-The [NaivePnL](./macrosynergy/pnl/naive_pnl.py) class computes Pnls with limited signal options and 
+
+The [NaivePnL](../gen_rsts/macrosynergy.pnl.naive_pnl.rst) class computes Pnls with limited signal options and
 disregarding transaction costs.
+
 ```python
 from macrosynergy.pnl.naive_pnl import NaivePnL
 pnl = NaivePnL(data, ret="EQXR_NSA", sigs=["CRY", "GROWTH"], cids=cids,
         start="2000-01-01", bms=["EUR_EQXR_NSA", "USD_EQXR_NSA"])
 ```
+
 You can then make the pnl and see a list of key pnl statistics.
+
 ```python
 pnl.make_pnl(
         sig="GROWTH", sig_op="zn_score_pan", sig_neg=True, rebal_freq="monthly",
@@ -260,4 +295,3 @@ pnl.make_pnl(
 df_eval = pnl.evaluate_pnls(
         pnl_cats=["PNL_GROWTH_NEG"], start="2015-01-01", end="2020-12-31")
 ```
-
