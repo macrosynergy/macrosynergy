@@ -285,6 +285,14 @@ class TestMapSelector(unittest.TestCase):
         with self.assertRaises(ValueError):
             selector = MapSelector(threshold=0.05)
             selector.fit(self.X.reset_index(), self.y)
+        # Test that a value error is raised if the y index isn't a multi-index
+        with self.assertRaises(ValueError):
+            selector = MapSelector(threshold=0.05)
+            selector.fit(self.y.reset_index(), self.y)
+        # Test that a dataframe of targets with multiple columns raises ValueError
+        with self.assertRaises(ValueError):
+            selector = MapSelector(threshold=0.05)
+            selector.fit(self.X, self.X)
 
     def test_valid_transform(self):
         # Test that the transform() method works as expected
