@@ -3,7 +3,6 @@ Classes and functions for analyzing and visualizing the relations of two panel c
 """
 import numpy as np
 import pandas as pd
-from pandas import Timestamp
 import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import List, Union, Tuple
@@ -14,7 +13,6 @@ import warnings
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import categories_df
 from macrosynergy.management.utils import apply_slip as apply_slip_util
-from macrosynergy.panel import make_blacklist
 
 
 class CategoryRelations(object):
@@ -824,7 +822,7 @@ if __name__ == "__main__":
 
     cr.reg_scatter(
         labels=False,
-        separator=2016,
+        separator=cids,
         title="Carry and Return",
         xlab="Carry",
         ylab="Return",
