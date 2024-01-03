@@ -1,5 +1,5 @@
 """
-Collection of scikit-learn transformer classes.
+Collection of custom scikit-learn transformer classes.
 """
 
 import numpy as np
@@ -43,42 +43,48 @@ class LassoSelector(BaseEstimator, TransformerMixin):
         self.alpha = alpha
         self.positive = positive
 
-    def fit(self, X: Union[pd.DataFrame, np.ndarray], y: Union[pd.Series, np.ndarray]):
+    def fit(self, X: pd.DataFrame, y: Union[pd.Series, pd.DataFrame]):
         """
         Fit method to fit a Lasso regression and obtain the selected features.
 
-        :param <Union[pd.DataFrame,np.ndarray]> X: Pandas dataframe or numpy array of
-            input features. A Pandas dataframe is prefered
-        :param <Union[pd.Series,np.ndarray]> y: Pandas series or numpy array of targets
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Union[pd.Series,pd.DataFrame]> y: Pandas series or dataframe of targets
             associated with each sample in X.
         """
         # checks
-        if (type(X) != pd.DataFrame) and (type(X) != np.ndarray):
+        if type(X) != pd.DataFrame:
             raise TypeError(
-                "Input feature matrix for the LASSO selector must be a pandas dataframe "
-                "or numpy array."
+                "Input feature matrix for the LASSO selector must be a pandas dataframe. "
+                "If used as part of an sklearn pipeline, ensure that previous steps "
+                "return a pandas dataframe."
             )
-        if (type(y) != pd.Series) and (type(y) != np.ndarray):
+        if (type(y) != pd.Series) and (type(y) != pd.DataFrame):
             raise TypeError(
-                "Target vector for the LASSO selector must be a pandas series or numpy "
-                "array."
+                "Target vector for the LASSO selector must be a pandas series or dataframe. "
+                "If used as part of an sklearn pipeline, ensure that previous steps "
+                "return a pandas series or dataframe."
             )
-        if type(X) == pd.DataFrame:
-            if not isinstance(X.index, pd.MultiIndex):
-                raise ValueError("X must be multi-indexed.")
-            if not isinstance(X.index.get_level_values(1)[0], datetime.date):
-                raise TypeError("The inner index of X must be datetime.date.")
-        if type(y) == pd.Series:
-            if not isinstance(y.index, pd.MultiIndex):
-                raise ValueError("y must be multi-indexed.")
-            if not isinstance(y.index.get_level_values(1)[0], datetime.date):
-                raise TypeError("The inner index of y must be datetime.date.")
-        if (type(X) == pd.DataFrame) and (type(y) == pd.Series):
-            if not X.index.equals(y.index):
+        if type(y) == pd.DataFrame:
+            if y.shape[1] != 1:
                 raise ValueError(
-                    "The indices of the input dataframe X and the output dataframe y "
-                    "don't match."
+                    "The target dataframe must have only one column. If used as part of "
+                    "an sklearn pipeline, ensure that previous steps return a pandas "
+                    "series or dataframe."
                 )
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(y.index, pd.MultiIndex):
+            raise ValueError("y must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of y must be datetime.date.")
+    
+        if not X.index.equals(y.index):
+            raise ValueError(
+                "The indices of the input dataframe X and the output dataframe y "
+                "don't match as input to the LASSO selector."
+            )
 
         self.p = X.shape[-1]
 
@@ -91,21 +97,40 @@ class LassoSelector(BaseEstimator, TransformerMixin):
 
         return self
 
-    def transform(self, X: Union[pd.DataFrame, np.ndarray]):
+    def transform(self, X: pd.DataFrame):
         """
         Transform method to return only the selected features of the dataframe.
 
-        :param <Union[pd.DataFrame, np.ndarray]> X: Pandas dataframe or numpy array
-            of input features.
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
 
-        :return <Union[pd.DataFrame, np.ndarray]>: Pandas dataframe or numpy array
-            of input features selected based on the Lasso's feature selection
-            capabilities.
+        :return <pd.DataFrame>: Pandas dataframe of input features selected based
+            on the Lasso's feature selection capabilities.
         """
-        if type(X) == pd.DataFrame:
-            return X.iloc[:, self.selected_ftr_idxs]
-
-        return X[:, self.selected_ftr_idxs]
+        # checks
+        if type(X) != pd.DataFrame:
+            raise TypeError(
+                "Input feature matrix for the LASSO selector must be a pandas dataframe. "
+                "If used as part of an sklearn pipeline, ensure that previous steps "
+                "return a pandas dataframe."
+            )
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        if not X.shape[-1] == self.p:
+            raise ValueError(
+                "The number of columns of the dataframe to be transformed, X, doesn't "
+                "match the number of columns of the training dataframe."
+            )
+        if len(self.selected_ftr_idxs) == 0:
+            # Then no features were selected
+            # Then at the given time, no trading decisions can be made based on these features
+            # Hence, we return a dataframe of zeros
+            return pd.DataFrame(
+                index=X.index, columns=["no_signal"], data=0, dtype=np.float16
+            )
+        
+        return X.iloc[:, self.selected_ftr_idxs]
 
 
 class MapSelector(BaseEstimator, TransformerMixin):
@@ -130,14 +155,14 @@ class MapSelector(BaseEstimator, TransformerMixin):
 
         self.threshold = threshold
 
-    def fit(self, X: pd.DataFrame, y: pd.Series):
+    def fit(self, X: pd.DataFrame, y: Union[pd.Series, pd.DataFrame]):
         """
         Fit method to assess significance of each feature using
         the Macrosynergy panel test.
 
         :param <pd.DataFrame> X: Pandas dataframe of input features.
-        :param <pd.Series> y: Pandas series of targets associated
-            with each sample in X.
+        :param <Union[pd.Series, pd.DataFrame]> Pandas series or dataframe of targets
+            associated with each sample in X.
         """
         # Checks
         if type(X) != pd.DataFrame:
@@ -146,12 +171,19 @@ class MapSelector(BaseEstimator, TransformerMixin):
                 "If used as part of an sklearn pipeline, ensure that previous steps "
                 "return a pandas dataframe."
             )
-        if type(y) != pd.Series:
+        if (type(y) != pd.Series) and (type(y) != pd.DataFrame):
             raise TypeError(
-                "Target vector for the MAP selector must be a pandas series. If used as "
-                "part of an sklearn pipeline, ensure that previous steps return a pandas "
-                "series."
+                "Target vector for the MAP selector must be a pandas series or dataframe. "
+                "If used as part of an sklearn pipeline, ensure that previous steps "
+                "return a pandas series or dataframe."
             )
+        if type(y) == pd.DataFrame:
+            if y.shape[1] != 1:
+                raise ValueError(
+                    "The target dataframe must have only one column. If used as part of "
+                    "an sklearn pipeline, ensure that previous steps return a pandas "
+                    "series or dataframe."
+                )
         if not isinstance(X.index, pd.MultiIndex):
             raise ValueError("X must be multi-indexed.")
         if not isinstance(y.index, pd.MultiIndex):
@@ -173,7 +205,7 @@ class MapSelector(BaseEstimator, TransformerMixin):
             ftr = X[col]
             ftr = add_constant(ftr)
             groups = ftr.index.get_level_values(1)
-            model = MixedLM(y, ftr, groups).fit(reml=False)
+            model = MixedLM(y.values, ftr, groups).fit(reml=False)
             est = model.params.iloc[1]
             pval = model.pvalues.iloc[1]
             if (pval < self.threshold) & (est > 0):
@@ -209,6 +241,8 @@ class MapSelector(BaseEstimator, TransformerMixin):
         # transform
         if self.ftrs == []:
             # Then no features were selected
+            # Then at the given time, no trading decisions can be made based on these features
+            # Hence, we return a dataframe of zeros
             return pd.DataFrame(
                 index=X.index, columns=["no_signal"], data=0, dtype=np.float16
             )
@@ -600,21 +634,21 @@ if __name__ == "__main__":
     xcats = ["XR", "CRY", "GROWTH", "INFL"]
     cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
 
-    """Example 1: Unbalanced panel """
+    """Example: Unbalanced panel """
 
     df_cids2 = pd.DataFrame(
         index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
     )
-    df_cids2.loc["AUD"] = ["2002-01-01", "2020-12-31", 0, 1]
-    df_cids2.loc["CAD"] = ["2003-01-01", "2020-12-31", 0, 1]
-    df_cids2.loc["GBP"] = ["2000-01-01", "2020-12-31", 0, 1]
-    df_cids2.loc["USD"] = ["2000-01-01", "2020-12-31", 0, 1]
+    df_cids2.loc["AUD"] = ["2012-01-01", "2020-12-31", 0, 1]
+    df_cids2.loc["CAD"] = ["2013-01-01", "2020-12-31", 0, 1]
+    df_cids2.loc["GBP"] = ["2010-01-01", "2020-12-31", 0, 1]
+    df_cids2.loc["USD"] = ["2010-01-01", "2020-12-31", 0, 1]
 
     df_xcats2 = pd.DataFrame(index=xcats, columns=cols)
-    df_xcats2.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-    df_xcats2.loc["CRY"] = ["2000-01-01", "2020-12-31", 1, 2, 0.95, 1]
-    df_xcats2.loc["GROWTH"] = ["2000-01-01", "2020-12-31", 1, 2, 0.9, 1]
-    df_xcats2.loc["INFL"] = ["2000-01-01", "2020-12-31", 1, 2, 0.8, 0.5]
+    df_xcats2.loc["XR"] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats2.loc["CRY"] = ["2010-01-01", "2020-12-31", 1, 2, 0.95, 1]
+    df_xcats2.loc["GROWTH"] = ["2010-01-01", "2020-12-31", 1, 2, 0.9, 1]
+    df_xcats2.loc["INFL"] = ["2010-01-01", "2020-12-31", 1, 2, 0.8, 0.5]
 
     dfd2 = make_qdf(df_cids2, df_xcats2, back_ar=0.75)
     dfd2["grading"] = np.ones(dfd2.shape[0])
@@ -629,7 +663,7 @@ if __name__ == "__main__":
     selector.fit(X, y)
     print(selector.transform(X).columns)
 
-    selector = LassoSelector(0.00001)
+    selector = LassoSelector(10000)
     selector.fit(X, y)
     print(selector.transform(X).columns)
 
