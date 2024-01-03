@@ -119,6 +119,10 @@ def remove_file_spec(
     gen_dir: str = OUTPUT_DIR,
     static_dir: str = "./docs/source/static_rsts",
 ):
+    """
+    Removes '... module'/'... package' from the first line of each rst file.
+    Also removes any rst files that have manually been added to the static_rsts folder.
+    """
     static_rsts_basenames = list(
         map(os.path.basename, glob.glob(os.path.join(static_dir, "*.rst")))
     )
