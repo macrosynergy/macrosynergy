@@ -130,7 +130,7 @@ def remove_file_spec(
         if os.path.basename(fname) in static_rsts_basenames:
             os.remove(fname)
 
-    for fname in glob.glob(os.path.join(gen_dir,"*.rst")):
+    for fname in glob.glob(os.path.join(gen_dir, "*.rst")):
         # open the file
         with open(fname, "r", encoding="utf8") as file:
             data = file.readlines()
@@ -198,7 +198,8 @@ def main():
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    generate_rsts(output_dir=OUTPUT_DIR)
+    if BUILD:
+        generate_rsts(output_dir=OUTPUT_DIR)
 
     fetch_release_notes()
 
