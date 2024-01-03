@@ -47,9 +47,9 @@ class LassoSelector(BaseEstimator, TransformerMixin):
         """
         Fit method to fit a Lasso regression and obtain the selected features.
 
-        :param <Union[pd.DataFrame,np.ndarray]> X: Pandas dataframe or numpy array of 
+        :param <Union[pd.DataFrame,np.ndarray]> X: Pandas dataframe or numpy array of
             input features. A Pandas dataframe is prefered
-        :param <Union[pd.Series,np.ndarray]> y: Pandas series or numpy array of targets 
+        :param <Union[pd.Series,np.ndarray]> y: Pandas series or numpy array of targets
             associated with each sample in X.
         """
         # checks
@@ -99,7 +99,7 @@ class LassoSelector(BaseEstimator, TransformerMixin):
             of input features.
 
         :return <Union[pd.DataFrame, np.ndarray]>: Pandas dataframe or numpy array
-            of input features selected based on the Lasso's feature selection 
+            of input features selected based on the Lasso's feature selection
             capabilities.
         """
         if type(X) == pd.DataFrame:
@@ -252,7 +252,7 @@ class FeatureAverager(BaseEstimator, TransformerMixin):
         # checks
         if type(X) != pd.DataFrame:
             raise TypeError(
-                "Input feature matrix for the FeatureAverager must be a pandas dataframe." 
+                "Input feature matrix for the FeatureAverager must be a pandas dataframe."
                 " If used as part of an sklearn pipeline, ensure that previous steps "
                 "return a pandas dataframe."
             )
@@ -287,10 +287,10 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         if not isinstance(neutral, str):
             raise TypeError("'neutral' must be a string.")
 
-        if neutral.lower() not in ["zero", "mean"]:
+        if neutral not in ["zero", "mean"]:
             raise ValueError("neutral must be either 'zero' or 'mean'.")
 
-        if type(use_signs) != bool:
+        if not isinstance(use_signs, bool):
             raise TypeError("'use_signs' must be a boolean.")
 
         self.neutral = neutral
@@ -324,11 +324,12 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
             # calculate the mean and sum of squares of each feature
             means: pd.Series = X.mean(axis=0)
             sum_squares: pd.Series = np.sum(np.square(X), axis=0)
-            self.stats: List[pd.Series] = [means, sum_squares]
+            self.training_means: pd.Series = means
+            self.training_sum_squares: pd.Series = sum_squares
         else:
             # calculate the mean absolute deviation of each feature
             mads: pd.Series = np.mean(np.abs(X), axis=0)
-            self.stats: List[pd.Series] = [mads]
+            self.training_mads: pd.Series = mads
 
         return self
 
@@ -355,117 +356,88 @@ class ZnScoreAverager(BaseEstimator, TransformerMixin):
         if not isinstance(X.index.get_level_values(1)[0], datetime.date):
             raise TypeError("The inner index of X must be datetime.date.")
 
+        X = X.sort_index(level="real_date")
+
         # transform
-        unique_dates: List[pd.Timestamp] = sorted(X.index.get_level_values(1).unique())
         signal_df = pd.DataFrame(index=X.index, columns=["signal"], dtype="float")
 
         if self.neutral == "zero":
-            # Then iteratively compute the MAD
-            training_mads: pd.Series = self.stats[0]
+            training_mads: pd.Series = self.training_mads
             training_n: int = self.training_n
-            for date in unique_dates:
-                X_test_date: pd.DataFrame = X.loc[(slice(None), date), :]
-                test_mads: pd.Series = np.mean(np.abs(X_test_date), axis=0)
-                test_n: int = len(X_test_date)
+            X_abs = X.abs()
 
-                updated_n: int = test_n + training_n
-                updated_mads: pd.Series = (
-                    test_mads * test_n + training_mads * training_n
-                ) / updated_n
-                standardised_X: pd.DataFrame = (X_test_date / updated_mads).fillna(0)
-                benchmark_signal = pd.DataFrame(
-                    np.mean(standardised_X, axis=1), columns=["signal"], dtype="float"
-                )
-                # store the signal
-                signal_df.loc[benchmark_signal.index] = benchmark_signal
-                # update metrics for the next iteration
-                training_mads = updated_mads
-                training_n = updated_n
+            # We obtain a vector with the number of elements in each expanding window.
+            # The count does not necessarily increase uniformly, since some cross-sections
+            # may be missing for some dates.
+            expanding_count = self._get_expanding_count(X)
+
+            # We divide the expanding sum by the number of elements in each expanding window.
+            X_test_expanding_mads = (
+                X_abs.groupby(level="real_date").sum().expanding().sum()
+                / expanding_count
+            )
+            n_total = training_n + expanding_count
+
+            X_expanding_mads: pd.DataFrame = (
+                (training_n) * training_mads + (expanding_count) * X_test_expanding_mads
+            ) / n_total
+
+            standardised_X: pd.DataFrame = (X / X_expanding_mads).fillna(0)
+
+        elif self.neutral == "mean":
+            training_means: pd.Series = self.training_means
+            training_sum_squares: pd.Series = self.training_sum_squares
+            training_n: int = self.training_n
+
+            expanding_count = self._get_expanding_count(X)
+            n_total = training_n + expanding_count
+
+            X_square = X**2
+            X_test_expanding_sum_squares = (
+                X_square.groupby(level="real_date").sum().expanding().sum()
+            )
+            X_test_expanding_mean = (
+                X.groupby(level="real_date").sum().expanding().sum() / expanding_count
+            )
+
+            X_expanding_means = (
+                (training_n) * training_means
+                + (expanding_count) * X_test_expanding_mean
+            ) / n_total
+
+            X_expanding_sum_squares = (
+                training_sum_squares + X_test_expanding_sum_squares
+            )
+            comp1 = (X_expanding_sum_squares) / (n_total - 1)
+            comp2 = 2 * np.square(X_expanding_means) * (n_total) / (n_total - 1)
+            comp3 = (n_total) * np.square(X_expanding_means) / (n_total - 1)
+            X_expanding_std: pd.Series = np.sqrt(comp1 - comp2 + comp3)
+            standardised_X: pd.DataFrame = (
+                (X - X_expanding_means) / X_expanding_std
+            ).fillna(0)
 
         else:
-            # Then iteratively compute the mean and standard deviation
-            training_means: pd.Series = self.stats[0]
-            training_sum_squares: pd.Series = self.stats[1]
-            training_n: int = self.training_n
-            for date in unique_dates:
-                X_test_date: pd.DataFrame = X.loc[(slice(None), date), :]
-                test_means: pd.Series = X_test_date.mean(axis=0)
-                test_sum_squares: pd.Series = np.sum(np.square(X_test_date), axis=0)
-                test_n: int = len(X_test_date)
-                (
-                    updated_means,
-                    updated_sum_squares,
-                    updated_stds,
-                    updated_n,
-                ) = self.__update_metrics(
-                    test_means,
-                    test_sum_squares,
-                    test_n,
-                    training_means,
-                    training_sum_squares,
-                    training_n,
-                )
+            raise ValueError("neutral must be either 'zero' or 'mean'.")
 
-                normalised_X: pd.DataFrame = (
-                    X_test_date - updated_means
-                ) / updated_stds
-                benchmark_signal: pd.DataFrame = pd.DataFrame(
-                    np.mean(normalised_X, axis=1), columns=["signal"], dtype="float"
-                )
-                signal_df.loc[benchmark_signal.index] = benchmark_signal
-                # update metrics for the next iteration
-                training_means = updated_means
-                training_sum_squares = updated_sum_squares
-                training_n = updated_n
+        benchmark_signal: pd.DataFrame = pd.DataFrame(
+            np.mean(standardised_X, axis=1), columns=["signal"], dtype="float"
+        )
+        signal_df.loc[benchmark_signal.index] = benchmark_signal
 
         if self.use_signs:
             return np.sign(signal_df).astype(int)
 
         return signal_df
 
-    def __update_metrics(
-        self,
-        test_means: pd.Series,
-        test_sum_squares: pd.Series,
-        test_n: int,
-        training_means: pd.Series,
-        training_sum_squares: pd.Series,
-        training_n: int,
-    ):
+    def _get_expanding_count(self, X):
         """
-        Private helper method to sequentially update means and standard deviations
-        in light of the mean, standard deviation and sample size of a new,
-        previously unseen, dataset. Only the mean, sample size and sum of squares are
-        needed to update the mean and standard deviation. This function is used only
-        when neutral is set to 'mean'.
+        Helper method to get the number of non-NaN values in each expanding window.
 
-        :param <pd.Series> test_means: Mean of each feature in the test set.
-        :param <pd.Series> test_sum_squares: Sum of squares of each feature in the test 
-            set.
-        :param <int> test_n: Sample size of the test set.
-        :param <pd.Series> training_means: Mean of each feature in the training set.
-        :param <pd.Series> training_sum_squares: Sum of squares of each feature in the 
-            training set.
-        :param <int> training_n: Sample size of the training set.
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
 
-        :return <tuple>: Tuple of updated means, sum of squares, standard deviations and 
-            sample size.
+        :return <np.ndarray>: Numpy array of expanding counts.
         """
-        updated_n: int = test_n + training_n
-
-        # First update the means
-        updated_means: pd.Series = (
-            test_means * test_n + training_means * training_n
-        ) / updated_n
-
-        # Then update the standard deviations
-        updated_sum_squares: pd.Series = training_sum_squares + test_sum_squares
-        comp1 = (updated_sum_squares) / (updated_n - 1)
-        comp2 = 2 * np.square(updated_means) * (updated_n) / (updated_n - 1)
-        comp3 = (updated_n) * np.square(updated_means) / (updated_n - 1)
-        updated_stds: pd.Series = np.sqrt(comp1 - comp2 + comp3)
-
-        return updated_means, updated_sum_squares, updated_stds, updated_n
+        return X.groupby(level="real_date").count().expanding().sum().to_numpy()
 
 
 class PanelMinMaxScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
@@ -532,7 +504,7 @@ class PanelMinMaxScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
 class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin):
     def __init__(self, with_mean: bool = True, with_std: bool = True):
         """
-        Transformer class to extend scikit-learn's StandardScaler() to panel datasets. 
+        Transformer class to extend scikit-learn's StandardScaler() to panel datasets.
         It is intended to replicate the aforementioned class, but critically returning
         a Pandas dataframe or series instead of a numpy array. This preserves the
         multi-indexing in the inputs after transformation, allowing for the passing
@@ -543,7 +515,7 @@ class PanelStandardScaler(BaseEstimator, TransformerMixin, OneToOneFeatureMixin)
                 It is not designed to perform sequential mean and standard deviation
                 normalisation like the 'make_zn_scores()' function in 'macrosynergy.panel'
                 or 'ZnScoreAverager' in 'macrosynergy.learning'.
-                This class should primarily be used to satisfy the assumptions of various 
+                This class should primarily be used to satisfy the assumptions of various
                 models, for example the Lasso, Ridge or any neural network.
 
         :param <bool> with_mean: Boolean to specify whether or not to centre the data.
@@ -622,6 +594,8 @@ if __name__ == "__main__":
     from macrosynergy.management import make_qdf
     import macrosynergy.management as msm
 
+    np.random.seed(1)
+
     cids = ["AUD", "CAD", "GBP", "USD"]
     xcats = ["XR", "CRY", "GROWTH", "INFL"]
     cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
@@ -669,7 +643,7 @@ if __name__ == "__main__":
         y[y.index.get_level_values(1) >= pd.Timestamp(day=1, month=1, year=2018)],
     )
 
-    selector = ZnScoreAverager(neutral="mean", use_signs=True)
+    selector = ZnScoreAverager(neutral="zero", use_signs=False)
     selector.fit(X_train, y_train)
     print(selector.transform(X_test))
 
