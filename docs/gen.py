@@ -17,39 +17,43 @@ PATH_TO_DOCS: str = os.path.join(OUTPUT_DIR, "release_notes.md")
 LINE_SEPARATOR: str = "\n\n____________________\n\n"
 
 
+def format_gh_username(strx: str) -> str:
+    findstr = "by @"
+    lx = strx.rfind("by @")
+    rx = strx.find(" ", lx + len(findstr))
+    uname = strx[lx + len(findstr) : rx]
+    ustr = f"by [@{uname}](https://github.com/{uname})"
+    return strx.replace(f"by @{uname}", ustr)
+
+
+def format_new_contributors(strx: str) -> str:
+    findstr = "* @"
+    lx = strx.rfind(findstr)
+    rx = strx.find(" ", lx + len(findstr))
+    uname = strx[lx + len(findstr) : rx]
+    ustr = f"* [@{uname}](https://github.com/{uname})"
+    return strx.replace(f"* @{uname}", ustr)
+
+
+def format_pr_link(strx: str) -> str:
+    findstr = "in https://github.com/macrosynergy/macrosynergy/pull/"
+    lx = strx.rfind(findstr)
+    prnum = strx[lx + len(findstr) :]
+    prcom = f"in [PR #{prnum}]({findstr.split(' ')[1]}{prnum})"
+    rstr = strx[:lx] + prcom
+    return rstr
+
+
+def format_chg_log(strx: str) -> str:
+    findstr = (
+        "**Full Changelog**: https://github.com/macrosynergy/macrosynergy/compare/"
+    )
+    comp_str = strx.replace(findstr, "").replace("...", "←")
+    comp_str = f"**Full Changelog**: [{comp_str}]({strx.split(' ')[-1]})"
+    return comp_str
+
+
 def process_individual_release(release_dict: Dict) -> str:
-    def format_gh_username(strx: str) -> str:
-        findstr = "by @"
-        lx = strx.rfind("by @")
-        rx = strx.find(" ", lx + len(findstr))
-        uname = strx[lx + len(findstr) : rx]
-        ustr = f"by [@{uname}](https://github.com/{uname})"
-        return strx.replace(f"by @{uname}", ustr)
-    
-    def format_new_contributors(strx: str) -> str:
-        findstr = "* @"
-        lx = strx.rfind(findstr)
-        rx = strx.find(" ", lx + len(findstr))
-        uname = strx[lx + len(findstr) : rx]
-        ustr = f"* [@{uname}](https://github.com/{uname})"
-        return strx.replace(f"* @{uname}", ustr)
-
-    def format_pr_link(strx: str) -> str:
-        findstr = "in https://github.com/macrosynergy/macrosynergy/pull/"
-        lx = strx.rfind(findstr)
-        prnum = strx[lx + len(findstr) :]
-        prcom = f"in [PR #{prnum}]({findstr.split(' ')[1]}{prnum})"
-        rstr = strx[:lx] + prcom
-        return rstr
-
-    def format_chg_log(strx: str) -> str:
-        findstr = (
-            "**Full Changelog**: https://github.com/macrosynergy/macrosynergy/compare/"
-        )
-        comp_str = strx.replace(findstr, "").replace("...", "←")
-        comp_str = f"**Full Changelog**: [{comp_str}]({strx.split(' ')[-1]})"
-        return comp_str
-
     release_text: str = release_dict["body"]
     lines = []
     for line in release_text.splitlines():
