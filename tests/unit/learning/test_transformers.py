@@ -133,6 +133,18 @@ class TestLassoSelector(unittest.TestCase):
         with self.assertRaises(TypeError):
             selector = LassoSelector(alpha=0.1, positive=True)
             selector.fit(self.X, "y")
+        # Test that a dataframe of targets with multiple columns raises ValueError
+        with self.assertRaises(ValueError):
+            selector = LassoSelector(alpha=0.1, positive=True)
+            selector.fit(self.X, self.X)
+        # Test that a value error is raised if the X index isn't a multi-index
+        with self.assertRaises(ValueError):
+            selector = LassoSelector(alpha=0.1, positive=True)
+            selector.fit(self.X.reset_index(), self.y)
+        # Test that a value error is raised if the y index isn't a multi-index
+        with self.assertRaises(ValueError):
+            selector = LassoSelector(alpha=0.1, positive=True)
+            selector.fit(self.X, self.y.reset_index())
 
 
     @parameterized.expand([True, False])
@@ -168,6 +180,13 @@ class TestLassoSelector(unittest.TestCase):
         self.assertIsInstance(X_transformed, pd.DataFrame)
         # Check that X_transformed has the same index as X
         self.assertTrue(np.all(X_transformed.index == self.X.index))
+        # Test that value error is raised if the X index isn't a multi-index
+        with self.assertRaises(ValueError):
+            selector.transform(self.X.reset_index())
+        # Test that a value error is raised if the number of columns in X doesn't match
+        # the number of columns in the seen training dataframe
+        with self.assertRaises(ValueError):
+            selector.transform(self.X.drop(columns="CPI"))
 
 class TestMapSelector(unittest.TestCase):
     @classmethod
