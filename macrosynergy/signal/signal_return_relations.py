@@ -544,7 +544,7 @@ class SignalReturnRelations:
                 agg_sig=self.agg_sigs[0],
                 sig=sig,
             )
-            sig = self.new_sig[0]
+            #sig = self.new_sig[0]
             if type == "cross_section":
                 df_xs = self.__output_table__(cs_type="cids", ret=ret, sig=sig)
             elif type == "years":
@@ -741,7 +741,9 @@ class SignalReturnRelations:
                 self.df.loc[:, self.sigs[index]] *= -1
                 s_copy = self.signals.copy()
 
-                self.signals[self.signals.index(sig)] += "_NEG"
+                for s in self.signals:
+                    if self.signs[self.signals.index(s)]:  # If the signal is negative
+                        self.signals[self.signals.index(s)] += "_NEG"
                 sig += "_NEG"
                 self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
                 self.new_sig = sig
@@ -1596,7 +1598,7 @@ if __name__ == "__main__":
         blacklist=black,
     )
 
-    sr.correlation_bars(ret="XRH", sig="INFL", freq="Q")
+    sr.correlation_bars(type="signals", title="Correlation between signals and returns")
 
     srt = sr.single_relation_table()
     mrt = sr.multiple_relations_table()
