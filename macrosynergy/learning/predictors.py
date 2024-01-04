@@ -316,3 +316,76 @@ class TimeWeightedRegressor(BaseEstimator, RegressorMixin):
         
         # Predict
         return self.model.predict(X)
+
+if __name__ == "__main__":
+    from macrosynergy.management import make_qdf
+    import macrosynergy.management as msm
+    import matplotlib.pyplot as plt
+
+    from sklearn.linear_model import LinearRegression
+
+    np.random.seed(1)
+
+    cids = ["AUD", "CAD", "GBP", "USD"]
+    xcats = ["XR", "CRY", "GROWTH", "INFL"]
+    cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
+
+    """Example: Unbalanced panel """
+
+    df_cids = pd.DataFrame(
+        index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
+    )
+    df_cids.loc["AUD"] = ["2012-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["CAD"] = ["2013-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["GBP"] = ["2010-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["USD"] = ["2010-01-01", "2020-12-31", 0, 1]
+
+    df_xcats = pd.DataFrame(index=xcats, columns=cols)
+    df_xcats.loc["XR"] = ["2010-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY"] = ["2010-01-01", "2020-12-31", 1, 2, 0.95, 1]
+    df_xcats.loc["GROWTH"] = ["2010-01-01", "2020-12-31", 1, 2, 0.9, 1]
+    df_xcats.loc["INFL"] = ["2010-01-01", "2020-12-31", 1, 2, 0.8, 0.5]
+
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    dfd["grading"] = np.ones(dfd.shape[0])
+    black = {"GBP": ["2009-01-01", "2012-06-30"], "CAD": ["2018-01-01", "2100-01-01"]}
+    dfd = msm.reduce_df(df=dfd, cids=cids, xcats=xcats, blacklist=black)
+
+    dfd = dfd.pivot(index=["cid", "real_date"], columns="xcat", values="value")
+    X = dfd.drop(columns=["XR"])
+    y = dfd["XR"]
+    
+    # OLS Linear Regression
+    lm = LinearRegression()
+    lm.fit(X, y)
+    lm_preds = lm.predict(X)
+    # Sign-Weighted Linear Regression
+    swlm = SignWeightedRegressor(LinearRegression)
+    swlm.fit(X, y)
+    swlm_preds = swlm.predict(X)
+    # Time-Weighted Linear Regression
+    twlm = TimeWeightedRegressor(LinearRegression, half_life=12*21) # One year half life
+    twlm.fit(X, y)
+    twlm_preds = twlm.predict(X)
+
+    # Plot results
+    plt.title("OLS vs Sign-Weighted vs Time-Weighted Linear Regression on mock random data")
+    plt.plot(lm_preds, label="OLS", color="tab:blue",alpha=0.5)
+    plt.plot(swlm_preds, label="Sign-Weighted", color="tab:orange", alpha=0.5)
+    plt.plot(twlm_preds, label="Time-Weighted", color="tab:green", alpha=0.5)
+
+    plt.legend()
+    plt.show()
+    
+    # Plot histogram of predictions
+    fig, ax = plt.subplots(ncols=3)
+    ax[0].hist(lm_preds, bins=200, color="tab:blue")
+    ax[0].set_title("OLS")
+    ax[1].hist(swlm_preds, bins=200, color="tab:orange")
+    ax[1].set_title("Sign-Weighted")
+    ax[2].hist(twlm_preds, bins=200, color="tab:green")
+    ax[2].set_title("Time-Weighted")
+
+    plt.suptitle("Histograms of predictions")
+    plt.tight_layout()
+    plt.show()
