@@ -1,7 +1,7 @@
-import numpy as np 
+import numpy as np
 import pandas as pd
 
-import unittest 
+import unittest
 
 from macrosynergy.learning import (
     NaivePredictor,
@@ -15,6 +15,7 @@ from sklearn.linear_model import (
     Ridge,
     LogisticRegression,
 )
+
 
 class TestSWRegressor(unittest.TestCase):
     @classmethod
@@ -59,23 +60,27 @@ class TestSWRegressor(unittest.TestCase):
             model = SignWeightedRegressor(LinearRegression)
         except Exception as e:
             self.fail(
-                "SignWeightedRegressor constructor with a LinearRegression object raised an exception: {}".format(e)
+                "SignWeightedRegressor constructor with a LinearRegression object raised an exception: {}".format(
+                    e
+                )
             )
         self.assertIsInstance(model, SignWeightedRegressor)
         self.assertIsInstance(model.model, LinearRegression)
-        
+
         # Test that a sign weighted ridge model is successfully instantiated
         try:
             model = SignWeightedRegressor(Ridge, fit_intercept=False, alpha=0.1)
         except Exception as e:
             self.fail(
-                "SignWeightedRegressor constructor with a Ridge object raised an exception: {}".format(e)
+                "SignWeightedRegressor constructor with a Ridge object raised an exception: {}".format(
+                    e
+                )
             )
         self.assertIsInstance(model, SignWeightedRegressor)
         self.assertIsInstance(model.model, Ridge)
         self.assertEqual(model.model.fit_intercept, False)
         self.assertEqual(model.model.alpha, 0.1)
-        
+
     def test_types_init(self):
         # Check that incorrectly specified arguments raise exceptions
         with self.assertRaises(TypeError):
@@ -90,9 +95,11 @@ class TestSWRegressor(unittest.TestCase):
         # The weights function is designed to return the same weights that a classifier with
         # balanced class weights would return in scikit-learn. Test that this is the case.
         model = SignWeightedRegressor(LinearRegression)
-        sample_weights, pos_weight, neg_weight = model.__calculate_sample_weights(self.y)
-        correct_pos_weight = len(self.y)/(2*np.sum(self.y >= 0)) 
-        correct_neg_weight = len(self.y)/(2*np.sum(self.y < 0))
+        sample_weights, pos_weight, neg_weight = model.__calculate_sample_weights(
+            self.y
+        )
+        correct_pos_weight = len(self.y) / (2 * np.sum(self.y >= 0))
+        correct_neg_weight = len(self.y) / (2 * np.sum(self.y < 0))
         self.assertEqual(pos_weight, correct_pos_weight)
         self.assertEqual(neg_weight, correct_neg_weight)
 
