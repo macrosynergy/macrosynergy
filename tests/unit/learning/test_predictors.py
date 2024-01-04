@@ -7,11 +7,13 @@ from macrosynergy.learning import (
     NaivePredictor,
     SignWeightedRegressor,
     TimeWeightedRegressor,
+    LassoSelector,
 )
 
 from sklearn.linear_model import (
     LinearRegression,
     Ridge,
+    LogisticRegression,
 )
 
 class TestSWRegressor(unittest.TestCase):
@@ -80,3 +82,97 @@ class TestSWRegressor(unittest.TestCase):
             model = SignWeightedRegressor(LinearRegression())
         with self.assertRaises(ValueError):
             model = SignWeightedRegressor(NaivePredictor)
+        # check that a TypeError is raised if regressor doesn't inherit from RegressorMixin
+        with self.assertRaises(TypeError):
+            model = SignWeightedRegressor(LassoSelector, alpha=1)
+
+    def test_valid_weightsfunc(self):
+        # The weights function is designed to return the same weights that a classifier with
+        # balanced class weights would return in scikit-learn. Test that this is the case.
+        model = SignWeightedRegressor(LinearRegression)
+        sample_weights, pos_weight, neg_weight = model.__calculate_sample_weights(self.y)
+        correct_pos_weight = len(self.y)/(2*np.sum(self.y >= 0)) 
+        correct_neg_weight = len(self.y)/(2*np.sum(self.y < 0))
+        self.assertEqual(pos_weight, correct_pos_weight)
+        self.assertEqual(neg_weight, correct_neg_weight)
+
+    def test_valid_fit(self):
+        # Check that the SignWeightedRegressor fit is equivalent to using LR with sample weights
+        model = SignWeightedRegressor(LinearRegression)
+        model.fit(self.X, self.y)
+        self.assertIsInstance(model.model, LinearRegression)
+        model_check = LinearRegression()
+        model_check.fit(self.X, self.y, sample_weight=model.sample_weights)
+        self.assertTrue(np.all(model.model.coef_ == model_check.coef_))
+        self.assertEqual(model.model.intercept_, model_check.intercept_)
+        # check fit with dataframe targets
+        model_check.fit(self.X, self.y.to_frame(), sample_weight=model.sample_weights)
+        self.assertTrue(np.all(model.model.coef_ == model_check.coef_))
+        self.assertEqual(model.model.intercept_, model_check.intercept_)
+        # Check that the SignWeightedRegressor fit is equivalent to using Ridge with sample weights
+        model = SignWeightedRegressor(Ridge, fit_intercept=False, alpha=0.1)
+        model.fit(self.X, self.y)
+        self.assertIsInstance(model.model, Ridge)
+        model_check = Ridge(fit_intercept=False, alpha=0.1)
+        model_check.fit(self.X, self.y, sample_weight=model.sample_weights)
+        self.assertTrue(np.all(model.model.coef_ == model_check.coef_))
+        self.assertEqual(model.model.intercept_, model_check.intercept_)
+        # check fit with dataframe targets
+        model_check.fit(self.X, self.y.to_frame(), sample_weight=model.sample_weights)
+        self.assertTrue(np.all(model.model.coef_ == model_check.coef_))
+        self.assertEqual(model.model.intercept_, model_check.intercept_)
+
+    def test_types_fit(self):
+        # Test that non dataframe X returns a TypeError
+        with self.assertRaises(TypeError):
+            model = SignWeightedRegressor(LinearRegression)
+            model.fit(self.X.values, self.y)
+        # Test that non dataframe and non series y returns a TypeError
+        with self.assertRaises(TypeError):
+            model = SignWeightedRegressor(LinearRegression)
+            model.fit(self.X, self.y.values)
+        # Test that a ValueError is raised if y is a dataframe with more than one column
+        with self.assertRaises(ValueError):
+            model = SignWeightedRegressor(LinearRegression)
+            model.fit(self.X, self.X)
+        # Test that a ValueError is raised if X and y are not multi-indexed
+        with self.assertRaises(ValueError):
+            model = SignWeightedRegressor(LinearRegression)
+            model.fit(self.X.reset_index(), self.y)
+        with self.assertRaises(ValueError):
+            model = SignWeightedRegressor(LinearRegression)
+            model.fit(self.X, self.y.reset_index())
+        # Test that a valueerror is raised if the multi-indices of X and y don't match
+        with self.assertRaises(ValueError):
+            model = SignWeightedRegressor(LinearRegression)
+            model.fit(self.X, self.y.iloc[1:])
+
+    def test_valid_predict(self):
+        # Check that the SignWeightedRegressor predict is equivalent to using LR with sample weights
+        model = SignWeightedRegressor(LinearRegression)
+        model.fit(self.X, self.y)
+        y_pred = model.predict(self.X)
+        model_check = LinearRegression()
+        model_check.fit(self.X, self.y, sample_weight=model.sample_weights)
+        y_pred_check = model_check.predict(self.X)
+        self.assertTrue(np.all(y_pred == y_pred_check))
+        # Check that the SignWeightedRegressor predict is equivalent to using Ridge with sample weights
+        model = SignWeightedRegressor(Ridge, fit_intercept=False, alpha=0.1)
+        model.fit(self.X, self.y)
+        y_pred = model.predict(self.X)
+        model_check = Ridge(fit_intercept=False, alpha=0.1)
+        model_check.fit(self.X, self.y, sample_weight=model.sample_weights)
+        y_pred_check = model_check.predict(self.X)
+        self.assertTrue(np.all(y_pred == y_pred_check))
+
+    def test_types_predict(self):
+        # Test that non dataframe X returns a TypeError
+        with self.assertRaises(TypeError):
+            model = SignWeightedRegressor(LinearRegression)
+            model.fit(self.X, self.y)
+            model.predict(self.X.values)
+        # Test that a ValueError is raised if X is not multi-indexed
+        with self.assertRaises(ValueError):
+            model = SignWeightedRegressor(LinearRegression)
+            model.fit(self.X, self.y)
+            model.predict(self.X.reset_index())
