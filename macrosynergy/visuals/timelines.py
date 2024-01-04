@@ -162,7 +162,7 @@ def timelines(
     if cids is None:
         cids: List[str] = df["cid"].unique().tolist()
     else:
-        df = reduce_df(df, cids)
+        df = reduce_df(df, cids=cids)
 
     if cumsum:
         df[val] = (
