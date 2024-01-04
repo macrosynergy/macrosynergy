@@ -34,6 +34,9 @@ class SignWeightedRegressor(BaseEstimator, RegressorMixin):
         negative target samples are given a higher weight in the model training process.
         The opposite is true if there are more negative targets than positive targets.
 
+        :param <RegressorMixin> regressor: Scikit-learn regressor class to be used as the
+            underlying model for which a sign-weighted fit is to be performed.
+
         NOTE: This class is specifically tailored for compatibility with any scikit-learn
         regressor that supports a 'sample_weight' parameter in its 'fit' method. Each
         training sample receives a weight inversely proportional to the frequency of its
@@ -158,40 +161,158 @@ class SignWeightedRegressor(BaseEstimator, RegressorMixin):
         if not isinstance(X.index.get_level_values(1)[0], datetime.date):
             raise TypeError("The inner index of X must be datetime.date.")
 
-        # Logic
+        # Predict
         return self.model.predict(X)
 
 
 class TimeWeightedRegressor(BaseEstimator, RegressorMixin):
-    def __init__(self, regressor, half_life, **init_kwargs):
+    def __init__(self, regressor: RegressorMixin, half_life: Union[float,int], **init_kwargs):
         """
-        Custom predictor class to create a time-weighted regression model. This class is
-        specifically tailored for compatibility with any scikit-learn regressor that supports
-        a 'sample_weight' parameter in its 'fit' method. Each training sample receives a weight
-        based on the date attributed to the sample. The weights are calculated as an exponentially
-        decaying function of the date, with the half-life of the decay specified by the user.
+        Custom predictor class to create a regression model where different training samples
+        are weighted differently depending on recency of the samples. 
+
+        :param <RegressorMixin> regressor: Scikit-learn regressor class to be used as the
+            underlying model for which a time-weighted fit is to be performed.
+        :param <Union[float,int]> half_life: Half-life of an exponential decay function used to
+            calculate the sample weights. The half-life is the number of time units for
+            the weight to decay to half its original value. The greater the half-life, the
+            greater that more historical samples are weighted in the model.
+
+        NOTE: This class is specifically tailored for compatibility with any
+        scikit-learn regressor that supports a 'sample_weight' parameter in its 'fit'
+        method. Each training sample receives a weight based on the date attributed to
+        the sample. The weights are calculated as an exponentially decaying function of
+        the date, with the half-life of the decay specified by the user.
         Consequently, during the model training process, more recent samples
         are emphasized due to the higher weight they receive. By weighting based on
         recency, the model is encouraged to prioritise newer information.
         """
+        # Checks
+        if not callable(regressor) or not inspect.isclass(regressor):
+            raise TypeError(
+                "Regressor must be a class, such as 'LinearRegression'. Please check it isn't an instantiation of a class, such as 'LinearRegression()'."
+            )
+
+        if not issubclass(regressor, RegressorMixin) or not issubclass(
+            regressor, BaseEstimator
+        ):
+            raise TypeError(
+                "Regressor must be a subclass of both BaseEstimator and RegressorMixin."
+            )
+
+        if not hasattr(regressor, "fit") or not callable(getattr(regressor, "fit")):
+            raise TypeError("Regressor must have a callable 'fit' method.")
+
+        if not hasattr(regressor, "predict") or not callable(
+            getattr(regressor, "predict")
+        ):
+            raise TypeError("Regressor must have a callable 'predict' method.")
+
+        fit_params = inspect.signature(regressor.fit).parameters
+        if "sample_weight" not in fit_params:
+            raise ValueError(
+                f"The underlying scikit-learn regressor {regressor} must have a 'sample_weight' parameter in its 'fit' method."
+            )
+        if type(half_life) != float and type(half_life) != int:
+            raise TypeError("The half-life must be either a float or an integer.")
+        if half_life <= 0:
+            raise ValueError("The half-life must be greater than zero.")
+        
+        # Init
         self.model = regressor(**init_kwargs)
         self.half_life = half_life
 
-    def __calculate_sample_weights(self, targets):
+    def __calculate_sample_weights(self, targets: Union[pd.DataFrame, pd.Series]):
+        """
+        Private helper method to calculate the sample weights, chosen by an exponentially
+        decaying function of the sample recency. 
+
+        :param <Union[pd.DataFrame, pd.Series]> targets: Pandas series or dataframe of targets.
+
+        :return <np.ndarray>: Numpy array of sample weights.
+        """
+
         dates = sorted(targets.index.get_level_values(1).unique(), reverse=True)
         num_dates = len(dates)
         weights = np.exp(-np.log(2) * np.arange(num_dates) / self.half_life)
-        weights = weights / np.sum()
+        weights = weights / np.sum(weights)
 
         weight_map = dict(zip(dates, weights))
-        sample_weights = targets.index.get_level_values(1).map(weight_map)
+        self.sample_weights = targets.index.get_level_values(1).map(weight_map)
 
-        return sample_weights
+        return self.sample_weights
 
-    def fit(self, X, y):
+    def fit(self, X: pd.DataFrame, y: Union[pd.DataFrame, pd.Series]):
+        """
+        Fit method to fit the underlying model with time-weighted samples, as passed
+        into the constructor.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+        :param <Union[pd.DataFrame, pd.Series]> y: Pandas series or dataframe of targets
+            associated with each sample in X.
+
+        :return <TimeWeightedRegressor>
+        """
+        # Checks 
+        if type(X) != pd.DataFrame:
+            raise TypeError(
+                "Input feature matrix for the TimeWeightedRegressor must be a pandas dataframe. "
+                "If used as part of an sklearn pipeline, ensure that previous steps "
+                "return a pandas dataframe."
+            )
+        if (type(y) != pd.Series) and (type(y) != pd.DataFrame):
+            raise TypeError(
+                "Target vector for the TimeWeightedRegressor must be a pandas series or dataframe. "
+                "If used as part of an sklearn pipeline, ensure that previous steps "
+                "return a pandas series or dataframe."
+            )
+        if type(y) == pd.DataFrame:
+            if y.shape[1] != 1:
+                raise ValueError(
+                    "The target dataframe must have only one column. If used as part of "
+                    "an sklearn pipeline, ensure that previous steps return a pandas "
+                    "series or dataframe."
+                )
+            
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(y.index, pd.MultiIndex):
+            raise ValueError("y must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        if not isinstance(y.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of y must be datetime.date.")
+        if not X.index.equals(y.index):
+            raise ValueError(
+                "The indices of the input dataframe X and the output dataframe y don't "
+                "match."
+            )
+        
+        # fit
         sample_weights = self.__calculate_sample_weights(y)
         self.model.fit(X, y, sample_weight=sample_weights)
         return self
 
-    def predict(self, X):
+    def predict(self, X: pd.DataFrame):
+        """
+        Predict method to make model predictions on the input feature matrix X based on
+        the previously fit model.
+
+        :param <pd.DataFrame> X: Pandas dataframe of input features.
+
+        :return <np.ndarray>: Numpy array of predictions.
+        """
+        # Checks
+        if type(X) != pd.DataFrame:
+            raise TypeError(
+                "Input feature matrix for the TimeWeightedRegressor must be a pandas dataframe. "
+                "If used as part of an sklearn pipeline, ensure that previous steps "
+                "return a pandas dataframe."
+            )
+        if not isinstance(X.index, pd.MultiIndex):
+            raise ValueError("X must be multi-indexed.")
+        if not isinstance(X.index.get_level_values(1)[0], datetime.date):
+            raise TypeError("The inner index of X must be datetime.date.")
+        
+        # Predict
         return self.model.predict(X)
