@@ -311,13 +311,13 @@ def make_zn_scores(
     return df_out[df.columns].reset_index(drop=True)
 
 
-def _get_expanding_count(X, min_periods=1):
+def _get_expanding_count(X: pd.DataFrame, min_periods: int = 1):
     """
     Helper method to get the number of non-NaN values in each expanding window.
 
     :param <pd.DataFrame> X: Pandas dataframe of input features.
     :param <int> min_periods: Minimum number of observations in window required to have
-        a value (otherwise result is NaN).
+        a value (otherwise result is 0.).
 
     :return <np.ndarray>: Numpy array of expanding counts.
     """
