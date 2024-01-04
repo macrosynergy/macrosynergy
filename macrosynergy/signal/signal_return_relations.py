@@ -9,6 +9,9 @@ import seaborn as sns
 from sklearn import metrics as skm
 from scipy import stats
 from typing import List, Union, Tuple, Dict, Any, Optional
+import statsmodels.api as sm
+from statsmodels.tools.sm_exceptions import ConvergenceWarning
+warnings.simplefilter('ignore', ConvergenceWarning)
 
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import (
@@ -17,6 +20,7 @@ from macrosynergy.management.utils import (
     categories_df,
 )
 import macrosynergy.visuals as msv
+np.seterr(divide='ignore')
 
 
 class SignalReturnRelations:
@@ -187,6 +191,8 @@ class SignalReturnRelations:
             "pearson_pval",
             "kendall",
             "kendall_pval",
+            "map_pval",
+            "auc"
         ]
 
         self.rets = rets
@@ -860,7 +866,22 @@ class SignalReturnRelations:
         corr, corr_pval = stats.pearsonr(ret_vals, sig_vals)
         df_out.loc[segment, ["pearson", "pearson_pval"]] = np.array([corr, corr_pval])
 
+        df_out.loc[segment, "map_pval"] = self.map_pval(ret_vals, sig_vals)
+        df_out.loc[segment, "auc"] = skm.roc_auc_score(ret_sign, sig_sign)
+
         return df_out
+
+    def map_pval(self, ret_vals, sig_vals):
+
+        X = sm.add_constant(ret_vals)
+        y = sig_vals.copy()
+        groups = ret_vals.index
+        mlm = sm.MixedLM(y, X, groups=groups)
+        re = mlm.fit(reml=False)
+        pval = float(re.summary().tables[1].iloc[1, 3])
+
+        return pval
+
 
     def __output_table__(self, cs_type: str = "cids", ret=None, sig=None, srt=False):
         """
@@ -920,15 +941,15 @@ class SignalReturnRelations:
         if not srt:
             df_out.loc["Mean", :] = df_out.loc[css, :].mean()
 
-            above50s = statms[0:6]
+            above50s = statms[0:6] + [statms[-1]]
             # Overview of the cross-sectional performance.
             df_out.loc["PosRatio", above50s] = (df_out.loc[css, above50s] > 0.5).mean()
 
-            above0s = statms[6::2]
+            above0s = statms[6:9:2]
             pos_corr_coefs = df_out.loc[css, above0s] > 0
             df_out.loc["PosRatio", above0s] = pos_corr_coefs.mean()
 
-            below50s = statms[7::2]
+            below50s = statms[7:10:2]
             pvals_bool = df_out.loc[css, below50s] < 0.5
             pos_pvals = np.mean(np.array(pvals_bool) * np.array(pos_corr_coefs), axis=0)
             # Positive correlation with error prob < 50%.
@@ -1015,6 +1036,8 @@ class SignalReturnRelations:
             elif stat == "pearson_pval":
                 ret_vals, sig_vals = df_segment[ret], df_segment[sig]
                 list_of_results.append(stats.pearsonr(ret_vals, sig_vals)[1])
+            elif stat == "auc":
+                list_of_results.append(skm.roc_auc_score(ret_sign, sig_sign))
             else:
                 raise ValueError("Invalid statistic.")
 
@@ -1023,14 +1046,14 @@ class SignalReturnRelations:
         elif type == "mean_years" or type == "mean_cids":
             return np.mean(np.array(list_of_results))
         elif type == "pr_years" or type == "pr_cids":
-            if stat in self.metrics[0:6]:
+            if stat in self.metrics[0:6] + [self.metrics[-1]]:
                 return np.mean(np.array(list_of_results) > 0.5)
-            elif stat in self.metrics[6::2]:
+            elif stat in self.metrics[6:9:2]:
                 return np.mean(np.array(list_of_results) > 0)
-            elif stat in self.metrics[7::2]:
+            elif stat in self.metrics[7:10:2]:
                 return np.mean(np.array(list_of_results) < 0.5)
 
-    def summary_table(self):
+    def summary_table(self, cross_section: bool = False, years: bool = False):
         """
         Return summary output table of signal-return relations.
 
@@ -1079,20 +1102,24 @@ class SignalReturnRelations:
             ratios and positive correlation probabilities, and above 0 for the
             correlation coefficients.
         """
-
         dfys = self.df_ys.round(decimals=5)
         dfcs = self.df_cs.round(decimals=5)
-        dfsum = pd.concat([dfys.iloc[:3,], dfcs.iloc[1:3,]], axis=0)
+        if cross_section:
+            return dfcs
+        elif years:
+            return dfys
+        else:
+            dfsum = pd.concat([dfys.iloc[:3,], dfcs.iloc[1:3,]], axis=0)
 
-        dfsum.index = [
-            "Panel",
-            "Mean years",
-            "Positive ratio",
-            "Mean cids",
-            "Positive ratio",
-        ]
+            dfsum.index = [
+                "Panel",
+                "Mean years",
+                "Positive ratio",
+                "Mean cids",
+                "Positive ratio",
+            ]
 
-        return dfsum
+            return dfsum
 
     def revert_negation(self, sig: str):
         if sig[-4:] == "_NEG":
@@ -1315,21 +1342,9 @@ class SignalReturnRelations:
             heatmap's annotations.
         """
         self.df = self.original_df
-        stat_values = [
-            "accuracy",
-            "bal_accuracy",
-            "pos_sigr",
-            "pos_retr",
-            "pos_prec",
-            "neg_prec",
-            "kendall",
-            "kendall_pval",
-            "pearson",
-            "pearson_pval",
-        ]
 
-        if not stat in stat_values:
-            raise ValueError(f"Stat must be one of {stat_values}")
+        if not stat in self.metrics:
+            raise ValueError(f"Stat must be one of {self.metrics}")
 
         if not isinstance(rows, list):
             raise TypeError("Rows must be a list")
@@ -1596,7 +1611,8 @@ if __name__ == "__main__":
         blacklist=black,
     )
 
-    sr.correlation_bars(ret="XRH", sig="INFL", freq="Q")
+    sr.accuracy_bars(type="signals")
+    sr.correlation_bars(type="signals")
 
     srt = sr.single_relation_table()
     mrt = sr.multiple_relations_table()
@@ -1617,7 +1633,7 @@ if __name__ == "__main__":
     print(mrt)
 
     sst = sr.single_statistic_table(
-        stat="accuracy",
+        stat="auc",
         rows=["ret", "xcat", "freq"],
         columns=["agg_sigs"],
         type="mean_cids",
