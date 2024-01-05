@@ -78,23 +78,23 @@ class TestAll(unittest.TestCase):
         # DataFrame.
         with self.assertRaises(AssertionError):
             srr = SignalReturnRelations(
-                self.dfd, ret="XR", sig="Missing", freq="D", blacklist=self.blacklist
+                self.dfd, rets="XR", sigs="Missing", freqs="D", blacklist=self.blacklist
             )
 
         # Test that frequency must be one of the following: 'D', 'W', 'M', 'Q', 'Y'.
         with self.assertRaises(ValueError):
             srr = SignalReturnRelations(
                 self.dfd,
-                ret="XR",
-                sig="CRY",
-                freq="S",
+                rets="XR",
+                sigs="CRY",
+                freqs="S",
                 blacklist=self.blacklist,
                 sig_neg=True,
             )
 
         signal = "CRY"
         srr: SignalReturnRelations = SignalReturnRelations(
-            self.dfd, ret="XR", sig=signal, freq="D", blacklist=self.blacklist
+            self.dfd, rets="XR", sigs=signal, freqs="D", blacklist=self.blacklist
         )
 
         # The signal will invariably be used as the explanatory variable and the return
@@ -138,10 +138,9 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(AssertionError):
             srr = SignalReturnRelations(
                 self.dfd,
-                ret="XR",
-                sig="CRY",
-                rival_sigs=set(["GROWTH", "INFL"]),
-                freq="D",
+                rets="XR",
+                sigs=set(["CRY", "GROWTH", "INFL"]),
+                freqs="D",
                 blacklist=self.blacklist,
             )
         # Return Signal must be specified
@@ -152,7 +151,7 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(ValueError):
             srr = SignalReturnRelations(
                 self.dfd,
-                ret="XR",
+                rets="XR",
             )
         # Signals passed must be a subset of the categories defined in the DataFrame. If
         # not, will raise an assertion.
@@ -160,10 +159,9 @@ class TestAll(unittest.TestCase):
             # GDP is not a defined category.
             srr = SignalReturnRelations(
                 self.dfd,
-                ret="XR",
-                sig="CRY",
-                rival_sigs=["GROWTH", "INFL", "GDP"],
-                freq="D",
+                rets="XR",
+                sigs=["CRY", "GROWTH", "INFL", "GDP"],
+                freqs="D",
                 blacklist=self.blacklist,
             )
 
@@ -171,11 +169,9 @@ class TestAll(unittest.TestCase):
         rival_signals = ["GROWTH", "INFL"]
         srr = SignalReturnRelations(
             self.dfd,
-            ret="XR",
-            sig=primary_signal,
-            rival_sigs=rival_signals,
-            sig_neg=False,
-            freq="D",
+            rets="XR",
+            sigs=[primary_signal] + rival_signals,
+            freqs="D",
             blacklist=self.blacklist,
         )
         # First, confirm the signal list stored on the instance comprises both the
@@ -191,12 +187,11 @@ class TestAll(unittest.TestCase):
         # to True, the signal fields will have a postfix, '_NEG', appended.
         srr_neg = SignalReturnRelations(
             self.dfd,
-            ret="XR",
-            sig=primary_signal,
-            rival_sigs=rival_signals,
-            sig_neg=True,
+            rets="XR",
+            sigs=[primary_signal] + rival_signals,
+            sig_neg=[True, True, True],
             blacklist=self.blacklist,
-            freq="D",
+            freqs="D",
         )
 
         # Firstly, confirm the signal names have been updated correctly.
@@ -240,12 +235,10 @@ class TestAll(unittest.TestCase):
         # Set "cosp" equal to True.
         srr_cosp = SignalReturnRelations(
             self.dfd,
-            ret="XR",
-            sig=primary_signal,
-            rival_sigs=rival_signals,
-            sig_neg=False,
+            rets="XR",
+            sigs=[primary_signal] + rival_signals,
             cosp=True,
-            freq="D",
+            freqs="D",
             blacklist=None,
         )
 
@@ -294,12 +287,10 @@ class TestAll(unittest.TestCase):
         # regardless of whether communal sampling is applied.
         srr = SignalReturnRelations(
             self.dfd,
-            ret="XR",
-            sig=primary_signal,
-            rival_sigs=rival_signals,
-            sig_neg=False,
+            rets="XR",
+            sigs=[primary_signal] + rival_signals,
             cosp=False,
-            freq="D",
+            freqs="D",
             blacklist=None,
         )
         self.assertTrue(
@@ -313,7 +304,7 @@ class TestAll(unittest.TestCase):
 
         signal = "CRY"
         srr = SignalReturnRelations(
-            self.dfd, sig=signal, ret="XR", freq="D", blacklist=self.blacklist
+            self.dfd, sigs=signal, rets="XR", freqs="D", blacklist=self.blacklist
         )
         df = srr.df.dropna(how="any").copy()
 
@@ -353,7 +344,7 @@ class TestAll(unittest.TestCase):
         signal = "CRY"
         return_ = "XR"
         srr = SignalReturnRelations(
-            self.dfd, sig=signal, ret=return_, freq="D", blacklist=self.blacklist
+            self.dfd, sigs=signal, rets=return_, freqs="D", blacklist=self.blacklist
         )
         df_cs = srr.__output_table__(cs_type="cids")
 
@@ -450,11 +441,9 @@ class TestAll(unittest.TestCase):
         rival_signals = ["GROWTH", "INFL"]
         srr = SignalReturnRelations(
             self.dfd,
-            ret="XR",
-            sig=primary_signal,
-            rival_sigs=rival_signals,
-            sig_neg=False,
-            freq="D",
+            rets="XR",
+            sigs=[primary_signal] + rival_signals,
+            freqs="D",
             blacklist=self.blacklist,
         )
 
@@ -482,11 +471,9 @@ class TestAll(unittest.TestCase):
         rival_signals = ["GROWTH", "INFL"]
         srr = SignalReturnRelations(
             self.dfd,
-            ret="XR",
-            sig=primary_signal,
-            rival_sigs=rival_signals,
-            sig_neg=False,
-            freq="M",
+            rets="XR",
+            sigs=[primary_signal] + rival_signals,
+            freqs="M",
             blacklist=self.blacklist,
         )
         # Firstly, confirm that if the parameter 'sigs' is left undefined, all signals
@@ -509,11 +496,10 @@ class TestAll(unittest.TestCase):
         # but additional signals have not been passed to the instance.
         srr = SignalReturnRelations(
             self.dfd,
-            ret="XR",
-            sig=primary_signal,
-            rival_sigs=None,
+            rets="XR",
+            sigs=primary_signal,
             sig_neg=False,
-            freq="M",
+            freqs="M",
             blacklist=self.blacklist,
         )
         with self.assertRaises(AttributeError):
@@ -523,7 +509,7 @@ class TestAll(unittest.TestCase):
         signal = "CRY"
         return_ = "XR"
         srr = SignalReturnRelations(
-            self.dfd, sig=signal, ret=return_, freq="D", blacklist=self.blacklist
+            self.dfd, sigs=signal, rets=return_, freqs="D", blacklist=self.blacklist
         )
         df_cs = srr.__output_table__(cs_type="cids")
         dfx = df_cs[~df_cs.index.isin(["PosRatio"])]
@@ -669,11 +655,9 @@ class TestAll(unittest.TestCase):
             primary_signal: str = "CRY"
             srr = SignalReturnRelations(
                 self.dfd,
-                ret="XR",
-                sig=primary_signal,
-                rival_sigs=rival_signals,
-                sig_neg=False,
-                freq="M",
+                rets="XR",
+                sigs=[primary_signal] + rival_signals,
+                freqs="M",
                 blacklist=self.blacklist,
                 slip=100,
             )
@@ -683,11 +667,9 @@ class TestAll(unittest.TestCase):
     def test_cross_section_and_yearly_table(self):
         srr = SignalReturnRelations(
             self.dfd,
-            ret="XR",
-            sig="CRY",
-            rival_sigs=["GROWTH", "INFL"],
-            sig_neg=False,
-            freq="M",
+            rets="XR",
+            sigs=["CRY"] + ["GROWTH", "INFL"],
+            freqs="M",
             blacklist=self.blacklist,
         )
         self.assertTrue(srr.cross_section_table().shape == (8, 10))
@@ -701,11 +683,9 @@ class TestAll(unittest.TestCase):
 
         srr = SignalReturnRelations(
             self.dfd,
-            ret="XR",
-            sig="CRY",
-            rival_sigs=["GROWTH", "INFL"],
-            sig_neg=False,
-            freq="M",
+            rets="XR",
+            sigs=["CRY"] + ["GROWTH", "INFL"],
+            freqs="M",
             blacklist=self.blacklist,
         )
 
@@ -721,12 +701,12 @@ class TestAll(unittest.TestCase):
             self.fail(f"correlation_bars raised {e} unexpectedly")
 
         try:
-            srr.accuracy_bars(sig="CRY")
+            srr.accuracy_bars(sigs="CRY")
         except Exception as e:
             self.fail(f"accuracy_bars raised {e} unexpectedly")
 
         try:
-            srr.correlation_bars(sig="CRY")
+            srr.correlation_bars(sigs="CRY")
         except Exception as e:
             self.fail(f"correlation_bars raised {e} unexpectedly")
 
@@ -741,31 +721,31 @@ class TestAll(unittest.TestCase):
             self.fail(f"correlation_bars raised {e} unexpectedly")
 
         try:
-            srr.accuracy_bars(ret="XR", sig="CRY")
+            srr.accuracy_bars(ret="XR", sigs="CRY")
         except Exception as e:
             self.fail(f"accuracy_bars raised {e} unexpectedly")
 
         try:
-            srr.correlation_bars(ret="XR", sig="CRY")
+            srr.correlation_bars(ret="XR", sigs="CRY")
         except Exception as e:
             self.fail(f"correlation_bars raised {e} unexpectedly")
 
         srr = SignalReturnRelations(
             self.dfd,
-            ret=["XR", "GROWTH"],
-            sig=["CRY", "INFL"],
+            rets=["XR", "GROWTH"],
+            sigs=["CRY", "INFL"],
             sig_neg=False,
-            freq="M",
+            freqs="M",
             blacklist=self.blacklist,
         )
 
         try:
-            srr.accuracy_bars(ret="GROWTH", sig="INFL")
+            srr.accuracy_bars(ret="GROWTH", sigs="INFL")
         except Exception as e:
             self.fail(f"accuracy_bars raised {e} unexpectedly")
 
         try:
-            srr.correlation_bars(ret="GROWTH", sig="INFL")
+            srr.correlation_bars(ret="GROWTH", sigs="INFL")
         except Exception as e:
             self.fail(f"correlation_bars raised {e} unexpectedly")
 
@@ -776,31 +756,29 @@ class TestAll(unittest.TestCase):
     def test_summary_table(self):
         srr = SignalReturnRelations(
             self.dfd,
-            ret="XR",
-            sig="CRY",
-            rival_sigs=["GROWTH", "INFL"],
-            sig_neg=False,
-            freq="M",
+            rets="XR",
+            sigs=["CRY", "GROWTH", "INFL"],
+            freqs="M",
             blacklist=self.blacklist,
         )
 
-        self.assertTrue(srr.summary_table().shape == (5, 10))
+        self.assertTrue(srr.summary_table().shape == (5, 12))
 
     def test_single_relation_table(self):
         sr = SignalReturnRelations(
             df=self.dfd,
-            ret="XR",
-            sig="CRY",
-            freq="Q",
+            rets="XR",
+            sigs="CRY",
+            freqs="Q",
             blacklist=self.blacklist,
             slip=1,
         )
 
         sr_no_slip = SignalReturnRelations(
             df=self.dfd,
-            ret="XR",
-            sig="CRY",
-            freq="Q",
+            rets="XR",
+            sigs="CRY",
+            freqs="Q",
             blacklist=self.blacklist,
             slip=0,
         )
@@ -841,9 +819,9 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(TypeError):
             sr_sign_fail = SignalReturnRelations(
                 df=self.dfd,
-                ret="XR",
-                sig="CRY",
-                freq="Q",
+                rets="XR",
+                sigs="CRY",
+                freqs="Q",
                 sig_neg=["FAIL"],
                 blacklist=self.blacklist,
                 slip=1,
@@ -853,9 +831,9 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(ValueError):
             sr_long_signs = SignalReturnRelations(
                 df=self.dfd,
-                ret="XR",
-                sig="CRY",
-                freq="Q",
+                rets="XR",
+                sigs="CRY",
+                freqs="Q",
                 sig_neg=[True, True],
                 blacklist=self.blacklist,
                 slip=1,
@@ -895,9 +873,9 @@ class TestAll(unittest.TestCase):
 
         sr_correct = SignalReturnRelations(
             df=test_df,
-            ret="XR",
-            sig="CRY",
-            freq="D",
+            rets="XR",
+            sigs="CRY",
+            freqs="D",
             blacklist=None,
             slip=0,
         )
@@ -924,9 +902,9 @@ class TestAll(unittest.TestCase):
 
         sr_correct_neg = SignalReturnRelations(
             df=test_df,
-            ret="XR",
-            sig="CRY",
-            freq="D",
+            rets="XR",
+            sigs="CRY",
+            freqs="D",
             sig_neg=True,
             blacklist=None,
             slip=0,
@@ -955,10 +933,10 @@ class TestAll(unittest.TestCase):
 
         sr_unsigned = SignalReturnRelations(
             df=self.dfd,
-            ret="XR",
-            sig="CRY",
-            freq="Q",
-            agg_sig="last",
+            rets="XR",
+            sigs="CRY",
+            freqs="Q",
+            agg_sigs="last",
             blacklist=self.blacklist,
             slip=1,
         )
@@ -970,10 +948,10 @@ class TestAll(unittest.TestCase):
 
         sr_mrt = SignalReturnRelations(
             df=self.dfd,
-            ret=["XR", "GROWTH"],
-            sig=["CRY", "INFL"],
-            freq=["Q", "M"],
-            agg_sig=["last", "mean"],
+            rets=["XR", "GROWTH"],
+            sigs=["CRY", "INFL"],
+            freqs=["Q", "M"],
+            agg_sigs=["last", "mean"],
             blacklist=self.blacklist,
         )
 
@@ -1008,9 +986,9 @@ class TestAll(unittest.TestCase):
     def test_single_statistic_table(self):
         sr = SignalReturnRelations(
             df=self.dfd,
-            ret="XR",
-            sig="CRY",
-            freq="Q",
+            rets="XR",
+            sigs="CRY",
+            freqs="Q",
             blacklist=self.blacklist,
             slip=1,
         )
@@ -1039,10 +1017,10 @@ class TestAll(unittest.TestCase):
 
         sr = SignalReturnRelations(
             df=self.dfd,
-            ret=["XR", "GROWTH"],
-            sig=["CRY", "INFL"],
-            freq=["Q", "M"],
-            agg_sig=["last", "mean"],
+            rets=["XR", "GROWTH"],
+            sigs=["CRY", "INFL"],
+            freqs=["Q", "M"],
+            agg_sigs=["last", "mean"],
             blacklist=self.blacklist,
             slip=1,
         )
@@ -1060,10 +1038,10 @@ class TestAll(unittest.TestCase):
 
         sr = SignalReturnRelations(
             df=self.dfd,
-            ret=["XR", "GROWTH"],
-            sig=["CRY", "INFL"],
-            freq=["Q", "M"],
-            agg_sig=["last", "mean"],
+            rets=["XR", "GROWTH"],
+            sigs=["CRY", "INFL"],
+            freqs=["Q", "M"],
+            agg_sigs=["last", "mean"],
             blacklist=self.blacklist,
             sig_neg=[False, True],
         )
@@ -1087,10 +1065,10 @@ class TestAll(unittest.TestCase):
 
         sr = SignalReturnRelations(
             df=self.dfd,
-            ret=rets,
-            sig=sigs,
-            freq=freqs,
-            agg_sig=agg_sigs,
+            rets=rets,
+            sigs=sigs,
+            freqs=freqs,
+            agg_sigs=agg_sigs,
             blacklist=self.blacklist,
         )
 
@@ -1157,10 +1135,10 @@ class TestAll(unittest.TestCase):
 
         sr = SignalReturnRelations(
             df=self.dfd,
-            ret=rets,
-            sig=sigs,
-            freq=freqs,
-            agg_sig=agg_sigs,
+            rets=rets,
+            sigs=sigs,
+            freqs=freqs,
+            agg_sigs=agg_sigs,
             blacklist=self.blacklist,
         )
 
@@ -1177,9 +1155,9 @@ class TestAll(unittest.TestCase):
 
         sr = SignalReturnRelations(
             df=self.dfd,
-            ret="XR",
-            sig="CRY",
-            freq="Q",
+            rets="XR",
+            sigs="CRY",
+            freqs="Q",
             blacklist=self.blacklist,
             slip=1,
         )
