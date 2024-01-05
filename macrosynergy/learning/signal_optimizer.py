@@ -33,7 +33,7 @@ class SignalOptimizer:
         self,
         inner_splitter: BasePanelSplit,
         X: pd.DataFrame,
-        y: pd.Series,
+        y: Union[pd.DataFrame,pd.Series],
         blacklist: Dict[str, Tuple[pd.Timestamp, pd.Timestamp]] = None,
         additional_X: Optional[List[pd.DataFrame]] = None,
         additional_y: Optional[List[pd.Series]] = None,
@@ -72,8 +72,8 @@ class SignalOptimizer:
             The frequency of features (and targets) determines the frequency at which
             model predictions are made and evaluated. This means that if we have monthly
             data, the learning process uses the performance of monthly predictions.
-        :param <pd.Series> y: Pandas series of targets corresponding with a time
-            index equal to the features in `X`.
+        :param <Union[pd.DataFrame,pd.Series]> y: Pandas dataframe or series of targets
+            corresponding with a time index equal to the features in `X`.
         :param <Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]> blacklist: cross-sections
             with date ranges that should be excluded from the data frame.
         :param <Optional[List[pd.DataFrame]]> additional_X: Optional additional features.
