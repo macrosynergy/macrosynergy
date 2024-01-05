@@ -4,8 +4,8 @@
 name: Package documentation - publish to GitHub Pages
 
 on:
-  push:
-    branches: [main]
+  # push:
+  #   branches: [main]
 
   workflow_dispatch:
 
@@ -54,4 +54,4 @@ jobs:
           path: "./docs.old/_build/html"
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v2
+        uses: actions/deploy-pages@v4
