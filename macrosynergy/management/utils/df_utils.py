@@ -231,12 +231,14 @@ def apply_slip(
         if raise_error:
             raise ValueError(
                 "Tickers targetted for applying slip are not present in the DataFrame.\n"
-                f"Missing tickers: {sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
+                f"Missing tickers: "
+                f"{sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
             )
         else:
             warnings.warn(
                 "Tickers targetted for applying slip are not present in the DataFrame.\n"
-                f"Missing tickers: {sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
+                f"Missing tickers: "
+                f"{sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
             )
 
     slip: int = slip.__neg__()
@@ -329,10 +331,12 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     error_message = f"The added DataFrame must be a Quantamental Dataframe."
     if not isinstance(df_add, QuantamentalDataFrame):
         raise TypeError(error_message)
-    
-    error_message = ("The two Quantamental DataFrames must share at least "
-                    "four columns including than 'real_date', 'cid', and 'xcat'.")
-    
+
+    error_message = (
+        "The two Quantamental DataFrames must share at least "
+        "four columns including than 'real_date', 'cid', and 'xcat'."
+    )
+
     all_cols = df_cols.union(df_add_cols)
     if all_cols != df_cols and all_cols != df_add_cols:
         raise ValueError(error_message)
@@ -413,7 +417,7 @@ def update_categories(df: pd.DataFrame, df_add):
 
 def reduce_df(
     df: pd.DataFrame,
-    xcats: List[str] = None,
+    xcats: Union[str, List[str]] = None,
     cids: List[str] = None,
     start: str = None,
     end: str = None,
@@ -426,8 +430,8 @@ def reduce_df(
 
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
         'cid', 'xcats', 'real_date' and 'value'.
-    :param <List[str]> xcats: extended categories to be filtered on. Default is all in
-        the DataFrame.
+    :param <Union[str, List[str]]> xcats: extended categories to be filtered on. Default is
+        all in the DataFrame.
     :param <List[str]> cids: cross sections to be checked on. Default is all in the
         dataframe.
     :param <str> start: string representing the earliest date. Default is None.
@@ -446,6 +450,10 @@ def reduce_df(
     """
 
     dfx = df.copy()
+
+    if xcats is not None:
+        if not isinstance(xcats, list):
+            xcats = [xcats]
 
     if start is not None:
         dfx = dfx[dfx["real_date"] >= pd.to_datetime(start)]

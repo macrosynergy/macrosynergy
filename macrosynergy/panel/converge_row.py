@@ -17,7 +17,13 @@ class ConvergeRow(object):
         likely the maximum number of loops permitted will be exceeded.
     """
 
-    def __init__(self, row: np.ndarray, max_weight: float, margin: float = 0.001, max_loops: int = 25):
+    def __init__(
+        self,
+        row: np.ndarray,
+        max_weight: float,
+        margin: float = 0.001,
+        max_loops: int = 25,
+    ):
         self.row = row
         self.max_weight = max_weight
         self.flag = (1 / np.sum(self.row > 0)) <= self.max_weight

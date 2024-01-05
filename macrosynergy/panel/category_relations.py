@@ -272,7 +272,8 @@ class CategoryRelations(object):
             column represents the explanatory variable; second column hosts the dependent
             variable. The DataFrame's index is the real-date and cross-section.
         :param <str> change: type of change to be applied
-        :param <int> n_periods: number of base periods in df over which the change is applied.
+        :param <int> n_periods: number of base periods in df over which the change is 
+            applied.
         :param <List[str]> shared_cids: shared cross-sections across the two categories
             and the received list.
         :param <str> expln_var: only the explanatory variable's data series will be
@@ -503,7 +504,7 @@ class CategoryRelations(object):
 
         assert prob_est in ["pool", "map"], "prob_est must be 'pool' or 'map'"
 
-        sns.set_theme(style="whitegrid", palette="colorblind")
+        sns.set_theme(style="whitegrid")
         dfx = self.df.copy()
 
         if title is None and (self.years is None):

@@ -91,7 +91,8 @@ def deprecate(
 
             if version.parse(deprecate_version) < version.parse(remove_after):
                 raise ValueError(
-                    f"The version in which the old function will be removed ({remove_after}) "
+                    f"The version in which the old function will be removed "
+                    f"({remove_after}) "
                     f"must be greater than the version in which it is deprecated "
                     f"({deprecate_version})."
                 )
@@ -144,7 +145,8 @@ def is_matching_subscripted_type(value: Any, type_hint: Type[Any]) -> bool:
     if origin in [tuple, Tuple]:
         if not isinstance(value, tuple) or len(value) != len(args):
             return False
-        # don't switch order of get_origin and is_matching_subscripted_type, is short-circuiting
+        # don't switch order of get_origin and is_matching_subscripted_type, is 
+        # short-circuiting
         return all(
             [
                 (get_origin(expected) and is_matching_subscripted_type(item, expected))
@@ -235,12 +237,16 @@ def argvalidation(func: Callable[..., Any]) -> Callable[..., Any]:
             if et is NoneType:
                 expected_types[i] = "None"
 
+        ret_string = (
+            f"{', '.join([f'`{t}`' for t in expected_types[:-1]])}, "
+            f"or `{expected_types[-1]}`"
+        )
         if len(expected_types) == 1:
             return f"`{expected_types[0]}`"
         elif len(expected_types) == 2:
             return f"`{expected_types[0]}` or `{expected_types[1]}`"
         else:
-            return f"{', '.join([f'`{t}`' for t in expected_types[:-1]])}, or `{expected_types[-1]}`"
+            return ret_string
 
     @wraps(func)
     def validation_wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -261,13 +267,15 @@ def argvalidation(func: Callable[..., Any]) -> Callable[..., Any]:
                             exp_types: str = format_expected_type(get_args(arg_type))
                             raise TypeError(
                                 f"Argument `{arg_name}` must be of type {exp_types}, "
-                                f"not `{type(arg_value).__name__}` (with value `{arg_value}`)."
+                                f"not `{type(arg_value).__name__}` (with value "
+                                f"`{arg_value}`)."
                             )
                     else:  # For simple, non-generic types
                         if not isinstance(arg_value, arg_type):
                             raise TypeError(
                                 f"Argument `{arg_name}` must be of type `{arg_type}`, "
-                                f"not `{type(arg_value).__name__}` (with value `{arg_value}`)."
+                                f"not `{type(arg_value).__name__}` (with value "
+                                f"`{arg_value}`)."
                             )
 
         # validate the return value

@@ -179,7 +179,8 @@ def _type_checks(
             )
         if not set(tks).issubset(set(found_tickers)):
             raise ValueError(
-                "All combinations of `cids` & `xcats` (i.e. tickers) specified must be in `df`."
+                "All combinations of `cids` & `xcats` (i.e. tickers) specified must "
+                "be in `df`."
                 f"Missing tickers: {set(tks) - set(found_tickers)}"
             )
 
@@ -228,8 +229,8 @@ def granger_causality_test(
         xcats are specified, then only one cid can be specified. If one xcat is specified,
         then two cids can be specified.
     :param <Union[int, List[int]]> max_lag: If `max_lag` is an integer, then the function
-        computes the test for all lags up to `max_lag`. If `max_lag` is a list of integers,
-        then the function computes the test only for lags specified in the list.
+        computes the test for all lags up to `max_lag`. If `max_lag` is a list of
+        integers, then the function computes the test only for lags specified in the list.
     :param <bool> add_constant: Whether to add a constant to the regression.
     :param <str> freq: The frequency to downsample the data to. Must be one of "D", "W",
         "M", "Q", "A". Default is "M".
@@ -292,7 +293,8 @@ def granger_causality_test(
         df_wide.columns[1],
     )
     # NOTE: Since no NANs are allowed in the input data, we must drop them here
-    # This may yield unexpected/unreliable results for tickers with large periods of missing data
+    # This may yield unexpected/unreliable results for tickers with large periods of
+    # missing data
 
     # drop any rows with NANs
     df_wide = df_wide.dropna(how="any", axis=0)
