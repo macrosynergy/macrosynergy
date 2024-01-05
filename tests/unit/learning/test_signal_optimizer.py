@@ -156,8 +156,24 @@ class TestAll(unittest.TestCase):
         with self.assertRaises(TypeError):
             so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X="additional_x", additional_y=[self.y_train])
         with self.assertRaises(TypeError):
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=["additional_x"], additional_y=[self.y_train])
+        with self.assertRaises(ValueError):
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=[self.X_train.reset_index()], additional_y=[self.y_train])
+        with self.assertRaises(ValueError):
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=[self.X_train])
+        with self.assertRaises(ValueError):
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=[self.X_train, self.X_train], additional_y=[self.y_train])
+        with self.assertRaises(TypeError):
             so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=[self.X_train], additional_y="additional_y")
-        
+        with self.assertRaises(TypeError):
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=[self.X_train], additional_y=["additional_y"])
+        with self.assertRaises(ValueError):
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=[self.X_train], additional_y=[self.y_train.reset_index()])
+        with self.assertRaises(ValueError):
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_y=[self.y_train])
+        with self.assertRaises(ValueError):
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=[self.X_train], additional_y=[self.y_train, self.y_train])
+    
     def test_valid_calculate_predictions(self):
         so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train)
         # check a correct optimisation runs

@@ -193,6 +193,10 @@ class SignalOptimizer:
                         )
 
         if additional_X is not None:
+            if additional_y is None:
+                raise ValueError(
+                    "If additional_X is provided, additional_y must also be provided."
+                )
             if not isinstance(additional_X, list):
                 raise TypeError("The additional_X argument must be a list.")
             for add_x in additional_X:
@@ -211,6 +215,10 @@ class SignalOptimizer:
                     )
 
         if additional_y is not None:
+            if additional_X is None:
+                raise ValueError(
+                    "If additional_y is provided, additional_X must also be provided."
+                )
             if not isinstance(additional_y, list):
                 raise TypeError("The additional_y argument must be a list.")
             if len(additional_y) != len(additional_X):
