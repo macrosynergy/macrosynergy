@@ -122,7 +122,7 @@ class TestAll(unittest.TestCase):
         self.assertIsInstance(so, SignalOptimizer)
         self.assertEqual(so.inner_splitter, inner_splitter)
         pd.testing.assert_frame_equal(so.X, self.X_test)
-        pd.testing.assert_frame_equal(so.y, self.y_test)
+        pd.testing.assert_series_equal(so.y, self.y_test)
         self.assertEqual(so.blacklist, blacklist)
         self.assertTrue(hasattr(so, "additional_X"))
         self.assertTrue(hasattr(so, "additional_y"))
