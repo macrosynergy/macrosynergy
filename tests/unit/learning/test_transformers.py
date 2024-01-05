@@ -78,18 +78,28 @@ class TestLassoSelector(unittest.TestCase):
             selector = LassoSelector(alpha=-1, positive=False)
 
     def test_valid_fit(self):
-        # Test that the fit() method works as expected
         # positive = False
         selector = LassoSelector(alpha=0.1, positive=False)
+        # Test that fitting with a pandas target series works
         try:
             selector.fit(self.X, self.y)
         except Exception as e:
             self.fail(f"Fit method for the Lasso selector raised an exception: {e}")
-
+        # Test that fitting with a pandas target dataframe works
+        try:
+            selector.fit(self.X, self.y.to_frame())
+        except Exception as e:
+            self.fail(f"Fit method for the Lasso selector raised an exception: {e}")
         # positive = True
         selector_restrict = LassoSelector(alpha=0.1, positive=True)
+        # Test that fitting with a pandas target series works
         try:
             selector_restrict.fit(self.X, self.y)
+        except Exception as e:
+            self.fail(f"Fit method for the Lasso selector raised an exception: {e}")
+        # Test that fitting with a pandas target dataframe works
+        try:
+            selector_restrict.fit(self.X, self.y.to_frame())
         except Exception as e:
             self.fail(f"Fit method for the Lasso selector raised an exception: {e}")
 
@@ -115,14 +125,26 @@ class TestLassoSelector(unittest.TestCase):
         )
 
     def test_types_fit(self):
-        # Test that non np.ndarray X or dataframe raises TypeError
+        # Test that non dataframe X raises TypeError
         with self.assertRaises(TypeError):
             selector = LassoSelector(alpha=0.1, positive=False)
             selector.fit("X", self.y)
-        # Test that non np.ndarray or series y raises TypeError
+        # Test that non dataframe or series y raises TypeError
         with self.assertRaises(TypeError):
             selector = LassoSelector(alpha=0.1, positive=True)
             selector.fit(self.X, "y")
+        # Test that a dataframe of targets with multiple columns raises ValueError
+        with self.assertRaises(ValueError):
+            selector = LassoSelector(alpha=0.1, positive=True)
+            selector.fit(self.X, self.X)
+        # Test that a value error is raised if the X index isn't a multi-index
+        with self.assertRaises(ValueError):
+            selector = LassoSelector(alpha=0.1, positive=True)
+            selector.fit(self.X.reset_index(), self.y)
+        # Test that a value error is raised if the y index isn't a multi-index
+        with self.assertRaises(ValueError):
+            selector = LassoSelector(alpha=0.1, positive=True)
+            selector.fit(self.X, self.y.reset_index())
 
 
     @parameterized.expand([True, False])
@@ -138,6 +160,12 @@ class TestLassoSelector(unittest.TestCase):
         self.assertTrue(
             np.all(X_transformed.columns == self.X.columns[selector.selected_ftr_idxs])
         )
+        # Test that if no features were selected, a dataframe with a zeros column is returned
+        selector = LassoSelector(alpha=1e6, positive=positive)
+        selector.fit(self.X, self.y)
+        X_transformed = selector.transform(self.X)
+        self.assertTrue(np.all(X_transformed.columns == ["no_signal"]))
+        self.assertTrue(np.all(X_transformed.values == 0))
 
     def test_types_transform(self):
         # Test that non np.ndarray X or dataframe raises TypeError
@@ -152,6 +180,13 @@ class TestLassoSelector(unittest.TestCase):
         self.assertIsInstance(X_transformed, pd.DataFrame)
         # Check that X_transformed has the same index as X
         self.assertTrue(np.all(X_transformed.index == self.X.index))
+        # Test that value error is raised if the X index isn't a multi-index
+        with self.assertRaises(ValueError):
+            selector.transform(self.X.reset_index())
+        # Test that a value error is raised if the number of columns in X doesn't match
+        # the number of columns in the seen training dataframe
+        with self.assertRaises(ValueError):
+            selector.transform(self.X.drop(columns="CPI"))
 
 class TestMapSelector(unittest.TestCase):
     @classmethod
@@ -221,8 +256,14 @@ class TestMapSelector(unittest.TestCase):
         # Test that the fit() method works as expected
         threshold = 0.05
         selector = MapSelector(threshold=threshold)
+        # Test that fitting with a pandas target series works
         try:
             selector.fit(self.X, self.y)
+        except Exception as e:
+            self.fail(f"Fit method for the Map selector raised an exception: {e}")
+        # Test that fitting with a pandas target dataframe works
+        try:
+            selector.fit(self.X, self.y.to_frame())
         except Exception as e:
             self.fail(f"Fit method for the Map selector raised an exception: {e}")
         # check that the self.ftrs attribute is a list
@@ -244,6 +285,14 @@ class TestMapSelector(unittest.TestCase):
         with self.assertRaises(ValueError):
             selector = MapSelector(threshold=0.05)
             selector.fit(self.X.reset_index(), self.y)
+        # Test that a value error is raised if the y index isn't a multi-index
+        with self.assertRaises(ValueError):
+            selector = MapSelector(threshold=0.05)
+            selector.fit(self.y.reset_index(), self.y)
+        # Test that a dataframe of targets with multiple columns raises ValueError
+        with self.assertRaises(ValueError):
+            selector = MapSelector(threshold=0.05)
+            selector.fit(self.X, self.X)
 
     def test_valid_transform(self):
         # Test that the transform() method works as expected
