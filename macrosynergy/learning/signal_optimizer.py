@@ -227,7 +227,7 @@ class SignalOptimizer:
                     "additional_X."
                 )
             for idx, add_y in enumerate(additional_y):
-                if not isinstance(add_y, pd.Series):
+                if not isinstance(add_y, pd.Series) and not isinstance(add_y, pd.DataFrame):
                     raise TypeError(
                         "The additional_y argument must be a list of pandas Series."
                     )
