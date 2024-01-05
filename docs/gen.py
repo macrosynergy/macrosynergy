@@ -17,41 +17,99 @@ PATH_TO_DOCS: str = os.path.join(OUTPUT_DIR, "release_notes.md")
 LINE_SEPARATOR: str = "\n\n____________________\n\n"
 
 
+def format_gh_username(strx: str) -> str:
+    findstr = "by @"
+    lx = strx.rfind("by @")
+    rx = strx.find(" ", lx + len(findstr))
+    uname = strx[lx + len(findstr) : rx]
+    ustr = f"by [@{uname}](https://github.com/{uname})"
+    return strx.replace(f"by @{uname}", ustr)
+
+
+def format_new_contributors(strx: str) -> str:
+    findstr = "* @"
+    lx = strx.rfind(findstr)
+    rx = strx.find(" ", lx + len(findstr))
+    uname = strx[lx + len(findstr) : rx]
+    ustr = f"* [@{uname}](https://github.com/{uname})"
+    return strx.replace(f"* @{uname}", ustr)
+
+
+def _get_prnum_from_prlink(strx: str, as_int: bool = True) -> str:
+    findstr = "in https://github.com/macrosynergy/macrosynergy/pull/"
+    lx = strx.rfind(findstr)
+    prnum = strx[lx + len(findstr) :]
+    try:
+        int(prnum)
+    except ValueError:
+        raise ValueError(f"Could not parse PR number from {strx}")
+    return int(prnum) if as_int else prnum
+
+
+def format_pr_link(strx: str) -> str:
+    findstr = "in https://github.com/macrosynergy/macrosynergy/pull/"
+    lx = strx.rfind(findstr)
+    prnum = strx[lx + len(findstr) :]
+    prcom = f"in [PR #{prnum}]({findstr.split(' ')[1]}{prnum})"
+    rstr = strx[:lx] + prcom
+    return rstr
+
+
+def format_chg_log(strx: str) -> str:
+    findstr = (
+        "**Full Changelog**: https://github.com/macrosynergy/macrosynergy/compare/"
+    )
+    comp_str = strx.replace(findstr, "").replace("...", "←")
+    comp_str = f"**Full Changelog**: [{comp_str}]({strx.split(' ')[-1]})"
+    return comp_str
+
+
+def clean_features_bugfixes(release_text: str) -> str:
+    """
+    Get a list of all features and bugfixes in the release,
+    and format them as markdown lists.
+    """
+    ACCEPTED_PREFIXES = ["* Feature: ", "* Bugfix: ", "* Hotfix: "]
+    return_str: List[str] = []
+    features: List[str] = []
+    fixes: List[str] = []
+    for line in release_text.splitlines():
+        if not line.startswith("* "):
+            continue
+        if not any(line.startswith(prefix) for prefix in ACCEPTED_PREFIXES):
+            continue
+        if line.startswith("* Feature: "):
+            features.append(line)
+        elif line.startswith("* Bugfix: ") or line.startswith("* Hotfix: "):
+            fixes.append(line)
+
+    # sort each list by pr number
+    try:
+        features.sort(key=lambda x: _get_prnum_from_prlink(x))
+        fixes.sort(key=lambda x: _get_prnum_from_prlink(x))
+    except Exception as exc:
+        raise ValueError(
+            "Could not parse release notes, please update manually."
+        ) from exc
+    if (len(features) + len(fixes)) == 0:
+        return "#" + release_text
+
+    if features:
+        return_str += ["### New Features"]
+        return_str += features
+    if fixes:
+        return_str += ["### Bugfixes"]
+        return_str += fixes
+    return_str += ["\n"]
+    return_str += [release_text.splitlines()[-1]]
+
+    return "\n".join(return_str)
+
+
 def process_individual_release(release_dict: Dict) -> str:
-    def format_gh_username(strx: str) -> str:
-        findstr = "by @"
-        lx = strx.rfind("by @")
-        rx = strx.find(" ", lx + len(findstr))
-        uname = strx[lx + len(findstr) : rx]
-        ustr = f"by [@{uname}](https://github.com/{uname})"
-        return strx.replace(f"by @{uname}", ustr)
-    
-    def format_new_contributors(strx: str) -> str:
-        findstr = "* @"
-        lx = strx.rfind(findstr)
-        rx = strx.find(" ", lx + len(findstr))
-        uname = strx[lx + len(findstr) : rx]
-        ustr = f"* [@{uname}](https://github.com/{uname})"
-        return strx.replace(f"* @{uname}", ustr)
-
-    def format_pr_link(strx: str) -> str:
-        findstr = "in https://github.com/macrosynergy/macrosynergy/pull/"
-        lx = strx.rfind(findstr)
-        prnum = strx[lx + len(findstr) :]
-        prcom = f"in [PR #{prnum}]({findstr.split(' ')[1]}{prnum})"
-        rstr = strx[:lx] + prcom
-        return rstr
-
-    def format_chg_log(strx: str) -> str:
-        findstr = (
-            "**Full Changelog**: https://github.com/macrosynergy/macrosynergy/compare/"
-        )
-        comp_str = strx.replace(findstr, "").replace("...", "←")
-        comp_str = f"**Full Changelog**: [{comp_str}]({strx.split(' ')[-1]})"
-        return comp_str
-
     release_text: str = release_dict["body"]
     lines = []
+    release_text = clean_features_bugfixes(release_text)
     for line in release_text.splitlines():
         linex = line
         if linex.startswith("* "):
@@ -67,9 +125,11 @@ def process_individual_release(release_dict: Dict) -> str:
     release_text: str = "\n".join(lines)
     md = (
         f"## Release {release_dict['name']}\n\n"
-        f"#{release_text.strip()}"  # add one level of header
-        f"\n\n[View on GitHub]({release_dict['html_url']})" + LINE_SEPARATOR
+        f"{release_text.strip()}"  # add one level of header
+        f"\n\n[View complete release notes on GitHub]({release_dict['html_url']})"
+        + LINE_SEPARATOR
     )
+
     return md
 
 
@@ -115,6 +175,10 @@ def remove_file_spec(
     gen_dir: str = OUTPUT_DIR,
     static_dir: str = "./docs/source/static_rsts",
 ):
+    """
+    Removes '... module'/'... package' from the first line of each rst file.
+    Also removes any rst files that have manually been added to the static_rsts folder.
+    """
     static_rsts_basenames = list(
         map(os.path.basename, glob.glob(os.path.join(static_dir, "*.rst")))
     )
@@ -122,7 +186,7 @@ def remove_file_spec(
         if os.path.basename(fname) in static_rsts_basenames:
             os.remove(fname)
 
-    for fname in glob.glob(os.path.join(gen_dir,"*.rst")):
+    for fname in glob.glob(os.path.join(gen_dir, "*.rst")):
         # open the file
         with open(fname, "r", encoding="utf8") as file:
             data = file.readlines()
@@ -179,7 +243,7 @@ def main():
         "--build",
         action="store_true",
         help="Build documentation.",
-        default=True,
+        default=False,
     )
 
     args = parser.parse_args()
@@ -190,7 +254,8 @@ def main():
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    generate_rsts(output_dir=OUTPUT_DIR)
+    if BUILD:
+        generate_rsts(output_dir=OUTPUT_DIR)
 
     fetch_release_notes()
 
