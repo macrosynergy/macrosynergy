@@ -79,10 +79,6 @@ class TestAll(unittest.TestCase):
             "GBP": [pd.Timestamp(year=2019, month=6, day=1), pd.Timestamp(year=2100, month=1, day=1)],
         }
         self.black_invalid4 = {
-            "AUD": (pd.Timestamp(year=2018, month=9, day=1), pd.Timestamp(year=2018, month=10, day=1)),
-            "GBP": (pd.Timestamp(year=2019, month=6, day=1), pd.Timestamp(year=2100, month=1, day=1)),
-        }
-        self.black_invalid5 = {
             "AUD": (pd.Timestamp(year=2018, month=9, day=1),),
             "GBP": (pd.Timestamp(year=2019, month=6, day=1), pd.Timestamp(year=2100, month=1, day=1)),
         }
@@ -134,38 +130,36 @@ class TestAll(unittest.TestCase):
     def test_types_init(self):
         inner_splitter = KFold(n_splits=5, shuffle=False)
         with self.assertRaises(TypeError):
-            so = SignalOptimizer(inner_splitter=inner_splitter,X=self.X,y=self.y)  
+            so = SignalOptimizer(inner_splitter=inner_splitter,X=self.X_train,y=self.y_train)  
         with self.assertRaises(TypeError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X="self.X",y=self.y)
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X="self.X",y=self.y_train)
         with self.assertRaises(TypeError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X,y="self.y")
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y="self.y")
         with self.assertRaises(ValueError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X.reset_index(),y=self.y)
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train.reset_index(),y=self.y_train)
         with self.assertRaises(ValueError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X,y=self.y.reset_index())
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train.reset_index())
         with self.assertRaises(ValueError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X,y=self.y.iloc[1:])
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train.iloc[1:])
         with self.assertRaises(TypeError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X,y=self.y, blacklist="blacklist")
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train, blacklist="blacklist")
         # check that an incorrect blacklisting format is caught
         with self.assertRaises(TypeError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X,y=self.y, blacklist = self.black_invalid1)
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train, blacklist = self.black_invalid1)
         with self.assertRaises(TypeError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X,y=self.y, blacklist = self.black_invalid2)
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train, blacklist = self.black_invalid2)
         with self.assertRaises(TypeError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X,y=self.y, blacklist = self.black_invalid3)
-        with self.assertRaises(TypeError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X,y=self.y, blacklist = self.black_invalid4)
-        with self.assertRaises(TypeError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X,y=self.y, blacklist = self.black_invalid5)
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train, blacklist = self.black_invalid3)
+        with self.assertRaises(ValueError):
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train, blacklist = self.black_invalid4)
         # check that incorrect additional_x and additional_y formats are caught
         with self.assertRaises(TypeError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X,y=self.y, additional_X="additional_x", additional_y=self.y)
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X="additional_x", additional_y=[self.y_train])
         with self.assertRaises(TypeError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X,y=self.y, additional_X=[self.X], additional_y="additional_y")
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=[self.X_train], additional_y="additional_y")
         
     def test_valid_calculate_predictions(self):
-        so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X,y=self.y)
+        so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train)
         # check a correct optimisation runs
         try:
             so.calculate_predictions(

@@ -150,8 +150,8 @@ class SignalOptimizer:
             )
         if not isinstance(X, pd.DataFrame):
             raise TypeError("The X argument must be a pandas DataFrame.")
-        if not isinstance(y, pd.Series):
-            raise TypeError("The y argument must be a pandas Series.")
+        if not isinstance(y, pd.Series) and not isinstance(y, pd.DataFrame):
+            raise TypeError("The y argument must be a pandas Series or DataFrame.")
         if not isinstance(X.index, pd.MultiIndex):
             raise ValueError("X must be multi-indexed.")
         if not isinstance(y.index, pd.MultiIndex):
