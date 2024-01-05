@@ -176,7 +176,7 @@ class TestAll(unittest.TestCase):
         )
         # First, confirm the signal list stored on the instance comprises both the
         # primary signal and the rival signals.
-        self.assertTrue([primary_signal] + rival_signals == srr.signals)
+        self.assertTrue([primary_signal] + rival_signals == srr.sigs)
 
         # Secondly, confirm the DataFrame is defined over the expected columns.
         self.assertTrue(
@@ -195,27 +195,27 @@ class TestAll(unittest.TestCase):
         )
 
         # Firstly, confirm the signal names have been updated correctly.
-        srr_signals = list(map(lambda s: s.split("_"), srr_neg.signals))
+        srr_signals = list(map(lambda s: s.split("_"), srr_neg.sigs))
         signals = [primary_signal] + rival_signals
         for i, s in enumerate(srr_signals):
             self.assertTrue(s[1] == "NEG")
             self.assertTrue(s[0] == signals[i])
 
-        self.assertEqual(srr_neg.signals[0][-4:], "_NEG")
-        self.assertEqual(srr_neg.signals[0][:-4], primary_signal)
+        self.assertEqual(srr_neg.sigs[0][-4:], "_NEG")
+        self.assertEqual(srr_neg.sigs[0][:-4], primary_signal)
 
         # Secondly, confirm the actual DataFrame's columns have been updated.
         test_columns = list(srr_neg.df.columns)
         # Confirms the update has been made on the DataFrame level.
-        self.assertTrue(test_columns == srr_neg.signals + ["XR"])
+        self.assertTrue(test_columns == srr_neg.sigs + ["XR"])
 
         # Lastly, check the original values have been multiplied by minus one. Therefore,
         # add the two DataFrames which should equate to zero. The multiplication by minus
         # one only occurs on the signals.
 
-        srr_neg.df.rename(columns=dict(zip(srr_neg.signals, srr.signals)), inplace=True)
+        srr_neg.df.rename(columns=dict(zip(srr_neg.sigs, srr.sigs)), inplace=True)
         zero_df = srr.df + srr_neg.df
-        zero_df_sigs = zero_df.loc[:, srr.signals]
+        zero_df_sigs = zero_df.loc[:, srr.sigs]
         sum_columns = zero_df_sigs.sum(axis=0)
         self.assertTrue(np.all(sum_columns.to_numpy() == 0.0))
 
@@ -672,8 +672,8 @@ class TestAll(unittest.TestCase):
             freqs="M",
             blacklist=self.blacklist,
         )
-        self.assertTrue(srr.cross_section_table().shape == (8, 10))
-        self.assertTrue(srr.yearly_table().shape == (16, 10))
+        self.assertTrue(srr.cross_section_table().shape == (8, 12))
+        self.assertTrue(srr.yearly_table().shape == (16, 12))
 
     def test_accuracy_and_correlation_bars(self):
         plt.close("all")

@@ -88,7 +88,7 @@ class SignalReturnRelations:
         rets: Union[str, List[str]] = None,
         sigs: Union[str, List[str]] = None,
         cids: Union[str, List[str]] = None,
-        sig_neg: Union[bool, List[bool]] = False,
+        sig_neg: Union[bool, List[bool]] = None,
         cosp: bool = False,
         start: str = None,
         end: str = None,
@@ -216,8 +216,8 @@ class SignalReturnRelations:
             freq=self.freqs[0],
             agg_sig=self.agg_sigs[0],
         )
-
-        self.df_sigs = self.__rival_sigs__(self.rets[0])
+        if len(self.sigs) > 1:
+            self.df_sigs = self.__rival_sigs__(self.rets[0])
 
         self.df_cs = self.__output_table__(
             cs_type="cids", ret=self.rets[0], sig=self.sigs[0]
