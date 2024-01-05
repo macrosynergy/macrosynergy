@@ -82,6 +82,10 @@ class TestAll(unittest.TestCase):
             "AUD": (pd.Timestamp(year=2018, month=9, day=1),),
             "GBP": (pd.Timestamp(year=2019, month=6, day=1), pd.Timestamp(year=2100, month=1, day=1)),
         }
+        self.black_invalid5 = {
+            1: (pd.Timestamp(year=2018, month=9, day=1), pd.Timestamp(year=2018, month=10, day=1)),
+            2: (pd.Timestamp(year=2019, month=6, day=1), pd.Timestamp(year=2100, month=1, day=1))
+        }
 
         # models dictionary
         self.models = {
