@@ -332,7 +332,7 @@ class TestAll(unittest.TestCase):
                 hparam_grid = {"ols": [1,2]},
                 hparam_type="random",
             )
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             so.calculate_predictions(
                 name="test",
                 models = self.models,
