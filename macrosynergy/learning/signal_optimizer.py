@@ -533,6 +533,7 @@ class SignalOptimizer:
             signal_df.loc[idx, column_name] = predictions
 
         # Now convert signal_df into a quantamental dataframe
+        # This will also ffill the last date of each cross-section as this will be an NA.
         signal_df = signal_df.groupby(level=0).ffill()
 
         # For each blacklisted period, set the signal to NaN

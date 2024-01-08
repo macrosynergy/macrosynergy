@@ -64,8 +64,8 @@ class TestAll(unittest.TestCase):
 
         # create blacklist dictionary 
         self.black_valid = {
-            "AUD": (pd.Timestamp(year=2018, month=9, day=1), pd.Timestamp(year=2018, month=10, day=1)),
-            "GBP": (pd.Timestamp(year=2019, month=6, day=1), pd.Timestamp(year=2100, month=1, day=1))
+            "AUD": (pd.Timestamp(year=2018, month=9, day=1), pd.Timestamp(year=2020, month=4, day=1)),
+            "GBP": (pd.Timestamp(year=2019, month=6, day=1), pd.Timestamp(year=2020, month=2, day=1))
         }
         self.black_invalid1 = {
             "AUD": ["2018-09-01", "2018-10-01"],
@@ -239,7 +239,43 @@ class TestAll(unittest.TestCase):
             self.fail("The signal dataframe should only contain two xcat")
         self.assertEqual(sorted(df3.xcat.unique()), ["test", "test2", "test3"])
         self.assertTrue(np.all(df3[df3.xcat=="test3"].dropna().value == df3[df3.xcat=="test"].dropna().value))
+        # Test validity of the class if additional_X and additional_y are passed in
+        try:
+            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=[self.X_train], additional_y=[self.y_train])
+            so.calculate_predictions(
+                name="test",
+                models=self.models,
+                metric=self.metric,
+                hparam_grid=self.hparam_grid,
+                hparam_type="random",
+                min_cids=1,
+                min_periods = 1
+            )
+        except Exception as e:
+            self.fail(f"calculate_predictions raised an exception: {e}")
 
+        df = so.preds.copy()
+        self.assertIsInstance(df, pd.DataFrame)
+        self.assertTrue(df.real_date.min() == self.X_test.index.get_level_values(1).min())
+        self.assertTrue(df.real_date.max() == self.X_test.index.get_level_values(1).max())
+        # Test that blacklisting works as expected
+        so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train, blacklist=self.black_valid)
+        try:
+            so.calculate_predictions(
+                name="test",
+                models=self.models,
+                metric=self.metric,
+                hparam_grid=self.hparam_grid,
+                hparam_type="random",
+            )
+        except Exception as e:
+            self.fail(f"calculate_predictions raised an exception: {e}")
+        df = so.preds.copy()
+        self.assertIsInstance(df, pd.DataFrame)
+        for cross_section, periods in self.black_valid.items():
+            cross_section_key = cross_section.split("_")[0]
+            self.assertTrue(len(df[(df.cid==cross_section_key) & (df.real_date >= periods[0]) & (df.real_date <= periods[1])].dropna())==0)
+               
     def test_types_calculate_predictions(self):
         # Training set only
         so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train)
