@@ -774,7 +774,7 @@ class SignalReturnRelations:
         groups = ret_vals.index
         mlm = sm.MixedLM(y, X, groups=groups)
         try:
-            re = mlm.fit(reml=False)
+            re = mlm.fit(reml=False, method='bfgs')
         except np.linalg.LinAlgError:
             warnings.warn(
                 "Singular matrix encountered, so p-value could not be calculated."
