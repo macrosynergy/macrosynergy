@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import scipy.stats as stats
 
 import unittest 
 import itertools
@@ -202,3 +203,268 @@ class TestAll(unittest.TestCase):
         if len(df.xcat.unique()) != 1:
             self.fail("The signal dataframe should only contain one xcat")
         self.assertEqual(df.xcat.unique()[0], "test")
+
+    def test_types_calculate_predictions(self):
+        # Training set only
+        so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train)
+        # name
+        with self.assertRaises(TypeError):
+            so.calculate_predictions(
+                name=1,
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+            )
+        # models 
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models = {},
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+            )
+        with self.assertRaises(TypeError):
+            so.calculate_predictions(
+                name="test",
+                models = [LinearRegression()],
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+            )
+        with self.assertRaises(TypeError):
+            so.calculate_predictions(
+                name="test",
+                models = {1: LinearRegression()},
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+            )
+        with self.assertRaises(TypeError):
+            so.calculate_predictions(
+                name="test",
+                models = {"ols": 1},
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+            )
+        # metric
+        with self.assertRaises(TypeError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = "metric",
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+            )
+        # hparam_grid - grid search
+        with self.assertRaises(TypeError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = [1,2],
+                hparam_type="grid",
+            )
+        with self.assertRaises(TypeError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = {"ols": [1,2]},
+                hparam_type="grid",
+            )
+        with self.assertRaises(TypeError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = {"ols": {"alpha": 1}},
+                hparam_type="grid",
+            )
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = {"linreg": {}},
+                hparam_type="grid",
+            )
+        # hparam_grid - random search
+        with self.assertRaises(TypeError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = [1,2],
+                hparam_type="random",
+            )
+        with self.assertRaises(TypeError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = {"ols": [1,2]},
+                hparam_type="random",
+            )
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = {"ols": {"alpha": 1}},
+                hparam_type="random",
+            )
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = {"ridge": {"alpha": stats.expon()}},
+                hparam_type="random",
+            )
+        # hparam_type
+        with self.assertRaises(TypeError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type=1,
+            )
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="somethingelse",
+            )
+        # min_cids 
+        with self.assertRaises(TypeError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+                min_cids="min_cids",
+            )
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+                min_cids=-1,
+            )
+        # min_periods
+        with self.assertRaises(TypeError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+                min_periods="min_periods",
+            )
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+                min_periods=-1,
+            )
+        # max_periods 
+        with self.assertRaises(TypeError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+                max_periods="max_periods",
+            )
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+                max_periods=-1,
+            )
+        # n_iter 
+        with self.assertRaises(TypeError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = {"linreg": {}, "ridge": {"alpha": stats.expon()}},
+                hparam_type="random",
+                n_iter="n_iter",
+            )
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = {"linreg": {}, "ridge": {"alpha": stats.expon()}},
+                hparam_type="random",
+                n_iter=-1,
+            )
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = {"linreg": {}, "ridge": {"alpha": stats.expon()}},
+                hparam_type="random",
+                n_iter=0,
+            )
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = {"linreg": {}, "ridge": {"alpha": stats.expon()}},
+                hparam_type="random",
+                n_iter=2.3,
+            )
+        # n_jobs 
+        with self.assertRaises(TypeError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+                n_jobs="n_jobs",
+            )
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+                n_jobs=0,
+            )
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+                n_jobs=1.3,
+            )
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+                n_jobs=-3,
+            )

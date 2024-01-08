@@ -284,6 +284,8 @@ class SignalOptimizer:
             predictors or pipelines.
         :param <Callable> metric: A sklearn scorer object that serves as the criterion
             for optimization.
+        :param <str> hparam_type: Hyperparameter search type.
+            This must be either "grid", "random" or "bayes". Default is "grid".
         :param <Dict[str, Dict[str, List]]> hparam_grid: Nested dictionary defining the
             hyperparameters to consider for each model. The outer dictionary needs keys
             representing the model name and should match the keys in the `models`.
@@ -308,8 +310,6 @@ class SignalOptimizer:
             See https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GridSearchCV.html
             and https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.RandomizedSearchCV.html
             for more details.
-        :param <str> hparam_type: Hyperparameter search type.
-            This must be either "grid", "random" or "bayes". Default is "grid".
         :param <int> min_cids: Minimum number of cross-sections required for the initial
             training set. Default is 4.
         :param <int> min_periods: minimum number of base periods of the input data
@@ -350,40 +350,87 @@ class SignalOptimizer:
                 )
         if not callable(metric):
             raise TypeError("The metric argument must be a callable object.")
-        if type(hparam_grid) != dict:
-            raise TypeError("The hparam_grid argument must be a dictionary.")
-        if hparam_grid.keys() != models.keys():
-            raise ValueError(
-                "The keys in the hyperparameter grid must match those in the models "
-                "dictionary."
-            )
+        if type(hparam_type) != str:
+            raise TypeError("The hparam_type argument must be a string.")
         if hparam_type not in ["grid", "random", "bayes"]:
             raise ValueError(
                 "Invalid hyperparameter search type. Must be 'grid', 'random' or 'bayes'."
             )
-        if hparam_type == "random":
-            for param_dict in hparam_grid.values():
-                # Allow for list of dictionaries
-                for param in param_dict.values():
-                    if isinstance(param, list):
-                        for p in param:
-                            if not hasattr(p, "rvs"):
-                                raise ValueError(
-                                    f"Invalid random hyperparameter search dictionary for" 
-                                    f" parameter {param}. The value for the dictionary "  
-                                    "Must be a scipy.stats distribution."
-                                )
-                    else:
-                        if not hasattr(param, "rvs"):
-                            raise ValueError(
-                                f"Invalid random hyperparameter search dictionary for "
-                                f"parameter {param}. The value for the dictionary " 
-                                "Must be a scipy.stats distribution."
-                            )
-
-        elif hparam_type == "bayes":
+        if hparam_type == "bayes":
             raise NotImplementedError("Bayesian optimisation not yet implemented.")
-
+        if type(hparam_grid) != dict:
+            raise TypeError("The hparam_grid argument must be a dictionary.")
+        if hparam_grid == {}:
+            raise ValueError("The hparam_grid dictionary cannot be empty.")
+        for pipe_name, pipe_params in hparam_grid.items():
+            if type(pipe_name) != str:
+                raise TypeError("The keys of the hparam_grid dictionary must be strings.")
+            if type(pipe_params) != dict:
+                raise TypeError(
+                    "The values of the hparam_grid dictionary must be dictionaries."
+                )
+            if pipe_params != {}:
+                for hparam_key, hparam_values in pipe_params.items():
+                    if type(hparam_key) != str:
+                        raise TypeError(
+                            "The keys of the inner hparam_grid dictionaries must be "
+                            "strings."
+                        )
+                    if hparam_type == "grid":
+                        if type(hparam_values) != list:
+                            raise TypeError(
+                                "The values of the inner hparam_grid dictionaries must be "
+                                "lists if hparam_type is 'grid'."
+                            )
+                        if len(hparam_values) == 0:
+                            raise ValueError(
+                                "The values of the inner hparam_grid dictionaries cannot be "
+                                "empty lists."
+                            )
+                    elif hparam_type == "random":
+                        # hparam_values must either be a list or a scipy.stats distribution
+                        # create typeerror
+                        if isinstance(hparam_values, list):
+                            if len(hparam_values) == 0:
+                                raise ValueError(
+                                    "The values of the inner hparam_grid dictionaries cannot "
+                                    "be empty lists."
+                                )
+                        else:
+                            if not hasattr(hparam_values, "rvs"):
+                                raise ValueError(
+                                    "Invalid random hyperparameter search dictionary element "
+                                    f"for hyperparameter {hparam_key}. The dictionary values "
+                                    "must be scipy.stats distributions."
+                                )
+        if sorted(hparam_grid.keys()) != sorted(models.keys()):
+            raise ValueError(
+                "The keys in the hyperparameter grid must match those in the models "
+                "dictionary."
+            )
+        if type(min_cids) != int:
+            raise TypeError("The min_cids argument must be an integer.")
+        if min_cids < 1:
+            raise ValueError("The min_cids argument must be greater than zero.")
+        if type(min_periods) != int:
+            raise TypeError("The min_periods argument must be an integer.")
+        if min_periods < 1:
+            raise ValueError("The min_periods argument must be greater than zero.")
+        if max_periods is not None:
+            if type(max_periods) != int:
+                raise TypeError("The max_periods argument must be an integer.")
+            if max_periods < 1:
+                raise ValueError("The max_periods argument must be greater than zero.")
+        if hparam_type == "random":
+            if type(n_iter) != int:
+                raise TypeError("The n_iter argument must be an integer.")
+            if n_iter < 1:
+                raise ValueError("The n_iter argument must be greater than zero.")
+        if type(n_jobs) != int:
+            raise TypeError("The n_jobs argument must be an integer.")
+        if ((n_jobs <= 0) and (n_jobs != -1)):
+            raise ValueError("The n_jobs argument must be greater than zero or -1.")
+        
         # (1) Create a dataframe to store the signals induced by each model.
         #     The index should be a multi-index with cross-sections equal to those in X 
         #     and business-day dates spanning the range of dates in X.
