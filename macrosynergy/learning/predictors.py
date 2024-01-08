@@ -28,11 +28,7 @@ class NaivePredictor(BaseEstimator, RegressorMixin):
 class SignWeightedRegressor(BaseEstimator, RegressorMixin):
     def __init__(self, regressor: RegressorMixin, **init_kwargs):
         """
-        Custom predictor class to create a regression model where different training samples
-        are weighted differently depending on the sign of their associated targets. If there
-        are more positive targets than negative targets in the training set, then the
-        negative target samples are given a higher weight in the model training process.
-        The opposite is true if there are more negative targets than positive targets.
+        Custom class to create regressions with sign-weighted training samples.
 
         :param <RegressorMixin> regressor: Scikit-learn regressor class to be used as the
             underlying model for which a sign-weighted fit is to be performed.
@@ -41,7 +37,12 @@ class SignWeightedRegressor(BaseEstimator, RegressorMixin):
         regressor that supports a 'sample_weight' parameter in its 'fit' method. Each
         training sample receives a weight inversely proportional to the frequency of its
         label's sign in the training set. Thus, the model is encouraged to learn equally
-        from both positive and negative return samples.
+        from both positive and negative return samples. If there
+        are more positive targets than negative targets in the training set, then the
+        negative target samples are given a higher weight in the model training process.
+        The opposite is true if there are more negative targets than positive targets.
+
+
         """
         if not callable(regressor) or not inspect.isclass(regressor):
             raise TypeError(
@@ -168,8 +169,7 @@ class SignWeightedRegressor(BaseEstimator, RegressorMixin):
 class TimeWeightedRegressor(BaseEstimator, RegressorMixin):
     def __init__(self, regressor: RegressorMixin, half_life: Union[float,int], **init_kwargs):
         """
-        Custom predictor class to create a regression model where different training samples
-        are weighted differently depending on recency of the samples. 
+        Custom class to create regressions with exponentially-weighted training samples.
 
         :param <RegressorMixin> regressor: Scikit-learn regressor class to be used as the
             underlying model for which a time-weighted fit is to be performed.
@@ -234,7 +234,7 @@ class TimeWeightedRegressor(BaseEstimator, RegressorMixin):
 
         dates = sorted(targets.index.get_level_values(1).unique(), reverse=True)
         num_dates = len(dates)
-        weights = np.exp(-np.log(2) * np.arange(num_dates) / self.half_life)
+        weights = [2 ** (-t / self.half_life) for t in np.arange(num_dates)]
         weights = weights / np.sum(weights)
 
         weight_map = dict(zip(dates, weights))
