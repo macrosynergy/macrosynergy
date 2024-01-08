@@ -928,7 +928,7 @@ class TestAll(unittest.TestCase):
             self.assertTrue(np.isclose(val1, val2))
 
     def test_multiple_relation_table(self):
-        num_of_acc_cols = 10
+        num_of_acc_cols = 12
 
         sr_unsigned = SignalReturnRelations(
             df=self.dfd,

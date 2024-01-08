@@ -24,6 +24,7 @@ import macrosynergy.visuals as msv
 
 np.seterr(divide="ignore")
 
+
 class SignalReturnRelations:
 
     """
@@ -320,8 +321,8 @@ class SignalReturnRelations:
         legend_pos: str = "best",
     ):
         """
-        Plot bar chart for the overall and balanced accuracy metrics. For types: 
-        cross_section and yearsIf sigs is not specified, then the first signal in the 
+        Plot bar chart for the overall and balanced accuracy metrics. For types:
+        cross_section and yearsIf sigs is not specified, then the first signal in the
         list of signals will be used.
 
         :param <str> type: type of segment over which bars are drawn. Either
@@ -760,7 +761,10 @@ class SignalReturnRelations:
         df_out.loc[segment, ["pearson", "pearson_pval"]] = np.array([corr, corr_pval])
 
         df_out.loc[segment, "map_pval"] = self.map_pval(ret_vals, sig_vals)
-        df_out.loc[segment, "auc"] = skm.roc_auc_score(ret_sign, sig_sign)
+        if (ret_sign == -1.0).all() or (ret_sign == 1.0).all():
+            df_out.loc[segment, "auc"] = np.NaN
+        else:
+            df_out.loc[segment, "auc"] = skm.roc_auc_score(ret_sign, sig_sign)
 
         return df_out
 
@@ -769,14 +773,20 @@ class SignalReturnRelations:
         y = sig_vals.copy()
         groups = ret_vals.index
         mlm = sm.MixedLM(y, X, groups=groups)
-        re = mlm.fit(reml=False)
+        try:
+            re = mlm.fit(reml=False)
+        except np.linalg.LinAlgError:
+            warnings.warn(
+                "Singular matrix encountered, so p-value could not be calculated."
+            )
+            return np.NaN
+        if re.summary().tables[1].iloc[1, 3] == "":
+            warnings.warn(
+                "P-value could not be calculated, since there wasn't enough datapoints."
+            )
+            return np.NaN
         pval_string = re.summary().tables[1].iloc[1, 3]
-        if pval_string == "":
-            print("######################FAILURE######################")
-            print(re.summary())
-            raise ValueError("No p-value found.")
-        else:
-            return float(pval_string)
+        return float(pval_string)
 
     def __output_table__(self, cs_type: str = "cids", ret=None, sig=None, srt=False):
         """
@@ -932,7 +942,10 @@ class SignalReturnRelations:
                 ret_vals, sig_vals = df_segment[ret], df_segment[sig]
                 list_of_results.append(stats.pearsonr(ret_vals, sig_vals)[1])
             elif stat == "auc":
-                list_of_results.append(skm.roc_auc_score(ret_sign, sig_sign))
+                if (ret_sign == -1.0).all() or (ret_sign == 1.0).all():
+                    list_of_results.append(np.NaN)
+                else:
+                    list_of_results.append(skm.roc_auc_score(ret_sign, sig_sign))
             else:
                 raise ValueError("Invalid statistic.")
 
@@ -1425,11 +1438,11 @@ if __name__ == "__main__":
         sigs="CRY",
         sig_neg=True,
         cosp=True,
-        freqs="M",
+        freqs="A",
         start="2002-01-01",
     )
 
-    dfsum = srn.summary_table()
+    dfsum = srn.summary_table(years=True)
     print(dfsum)
 
     srn = SignalReturnRelations(
