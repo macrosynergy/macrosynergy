@@ -332,6 +332,14 @@ class TestAll(unittest.TestCase):
                 hparam_grid = {"ols": [1,2]},
                 hparam_type="random",
             )
+        with self.assertRaises(TypeError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = {"ols": {}, "ridge": {"alpha": []}},
+                hparam_type="random",
+            )
         with self.assertRaises(ValueError):
             so.calculate_predictions(
                 name="test",
