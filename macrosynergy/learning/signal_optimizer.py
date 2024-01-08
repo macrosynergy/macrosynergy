@@ -360,8 +360,6 @@ class SignalOptimizer:
             raise NotImplementedError("Bayesian optimisation not yet implemented.")
         if type(hparam_grid) != dict:
             raise TypeError("The hparam_grid argument must be a dictionary.")
-        if hparam_grid == {}:
-            raise ValueError("The hparam_grid dictionary cannot be empty.")
         for pipe_name, pipe_params in hparam_grid.items():
             if type(pipe_name) != str:
                 raise TypeError("The keys of the hparam_grid dictionary must be strings.")

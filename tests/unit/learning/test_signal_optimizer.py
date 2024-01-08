@@ -280,7 +280,31 @@ class TestAll(unittest.TestCase):
                 name="test",
                 models = self.models,
                 metric = self.metric,
+                hparam_grid = {1: [1,2]},
+                hparam_type="grid",
+            )
+        with self.assertRaises(TypeError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
                 hparam_grid = {"ols": {"alpha": 1}},
+                hparam_type="grid",
+            )
+        with self.assertRaises(TypeError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = {"ols": {1: 1}, "ridge": {"alpha": [1,2,3]}},
+                hparam_type="grid",
+            )
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = {"ols": {}, "ridge": {"alpha": []}},
                 hparam_type="grid",
             )
         with self.assertRaises(ValueError):
@@ -325,6 +349,14 @@ class TestAll(unittest.TestCase):
                 hparam_type="random",
             )
         # hparam_type
+        with self.assertRaises(NotImplementedError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = {"linreg": {}, "ridge": {"alpha": stats.expon()}},
+                hparam_type="bayes",
+            )
         with self.assertRaises(TypeError):
             so.calculate_predictions(
                 name="test",
