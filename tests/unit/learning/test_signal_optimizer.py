@@ -198,11 +198,11 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"calculate_predictions raised an exception: {e}")
         # checkout the output is a dataframe
-        df = so.preds.copy()
-        self.assertIsInstance(df, pd.DataFrame)
-        if len(df.xcat.unique()) != 1:
+        df1 = so.preds.copy()
+        self.assertIsInstance(df1, pd.DataFrame)
+        if len(df1.xcat.unique()) != 1:
             self.fail("The signal dataframe should only contain one xcat")
-        self.assertEqual(df.xcat.unique()[0], "test")
+        self.assertEqual(df1.xcat.unique()[0], "test")
         # Repeat the same check but with max_periods set
         try:
             so.calculate_predictions(
@@ -216,11 +216,29 @@ class TestAll(unittest.TestCase):
         except Exception as e:
             self.fail(f"calculate_predictions raised an exception: {e}")
         # check that the output is a dataframe
-        df = so.preds.copy()
-        self.assertIsInstance(df, pd.DataFrame)
-        if len(df.xcat.unique()) != 2:
+        df2 = so.preds.copy()
+        self.assertIsInstance(df2, pd.DataFrame)
+        if len(df2.xcat.unique()) != 2:
             self.fail("The signal dataframe should only contain two xcat")
-        self.assertEqual(sorted(df.xcat.unique()), ["test", "test2"])
+        self.assertEqual(sorted(df2.xcat.unique()), ["test", "test2"])
+        # Now set an unreasonably large lookback and check it matches with the test1 scores
+        try:
+            so.calculate_predictions(
+                name="test3",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+                max_periods=1000000, # one million day lookback
+            )
+        except Exception as e:
+            self.fail(f"calculate_predictions raised an exception: {e}")
+        df3 = so.preds.copy()
+        self.assertIsInstance(df3, pd.DataFrame)
+        if len(df3.xcat.unique()) != 3:
+            self.fail("The signal dataframe should only contain two xcat")
+        self.assertEqual(sorted(df3.xcat.unique()), ["test", "test2", "test3"])
+        self.assertTrue(np.all(df3[df3.xcat=="test3"].dropna().value == df3[df3.xcat=="test"].dropna().value))
 
     def test_types_calculate_predictions(self):
         # Training set only
