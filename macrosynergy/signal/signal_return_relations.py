@@ -320,7 +320,9 @@ class SignalReturnRelations:
         legend_pos: str = "best",
     ):
         """
-        Plot bar chart for the overall and balanced accuracy metrics.
+        Plot bar chart for the overall and balanced accuracy metrics. For types: 
+        cross_section and yearsIf sigs is not specified, then the first signal in the 
+        list of signals will be used.
 
         :param <str> type: type of segment over which bars are drawn. Either
             "cross_section" (default), "years" or "signals".
@@ -364,9 +366,9 @@ class SignalReturnRelations:
                 sigs[i] = sigs[i] + "_NEG"
 
         if type == "cross_section":
-            df_xs = self.__output_table__(cs_type="cids", ret=ret, sig=sigs)
+            df_xs = self.__output_table__(cs_type="cids", ret=ret, sig=sigs[0])
         elif type == "years":
-            df_xs = self.__output_table__(cs_type="years", ret=ret, sig=sigs)
+            df_xs = self.__output_table__(cs_type="years", ret=ret, sig=sigs[0])
         else:
             df_xs = self.__rival_sigs__(ret, sigs)
 
@@ -417,7 +419,7 @@ class SignalReturnRelations:
     def correlation_bars(
         self,
         ret: str = None,
-        sig: str = None,
+        sigs: Union[str, List[str]] = None,
         freq: str = None,
         type: str = "cross_section",
         title: str = None,
@@ -441,13 +443,14 @@ class SignalReturnRelations:
 
         """
         assert type in ["cross_section", "years", "signals"]
+        self.sigs = [self.revert_negation(s) for s in self.sigs]
 
         if freq is None:
             freq = self.freqs[0]
 
-        if ret is None and sig is None:
+        if ret is None and sigs is None:
             ret = self.rets[0]
-            sig = self.sigs[0]
+            sigs = self.sigs
             if type == "cross_section":
                 df_xs = self.df_cs
             elif type == "years":
@@ -457,22 +460,27 @@ class SignalReturnRelations:
         else:
             if ret is None:
                 ret = self.rets[0]
-            if sig is None:
-                sig = self.sigs[0]
+            if sigs is None:
+                sigs = self.sigs
             self.df = self.original_df.copy()
-            self.manipulate_df(
-                xcat=[sig, ret],
-                freq=freq,
-                agg_sig=self.agg_sigs[0],
-                sig=sig,
-            )
-            sig = self.new_sig[0]
-            if type == "cross_section":
-                df_xs = self.__output_table__(cs_type="cids", ret=ret, sig=sig)
-            elif type == "years":
-                df_xs = self.__output_table__(cs_type="years", ret=ret, sig=sig)
-            else:
-                df_xs = self.__rival_sigs__(ret)
+
+        if isinstance(sigs, str):
+            sigs = [sigs]
+
+        self.manipulate_df(
+            xcat=sigs + [ret],
+            freq=freq,
+            agg_sig=self.agg_sigs[0],
+        )
+        for i in range(len(sigs)):
+            if not sigs[i] in self.sigs:
+                sigs[i] = sigs[i] + "_NEG"
+        if type == "cross_section":
+            df_xs = self.__output_table__(cs_type="cids", ret=ret, sig=sigs[0])
+        elif type == "years":
+            df_xs = self.__output_table__(cs_type="years", ret=ret, sig=sigs[0])
+        else:
+            df_xs = self.__rival_sigs__(ret, sigs)
 
         # Panel plus the cs_types.
         dfx = df_xs[~df_xs.index.isin(["PosRatio", "Mean"])]
@@ -494,7 +502,7 @@ class SignalReturnRelations:
         kprobs[kprobs == 0] = 0.01
 
         if title is None:
-            refsig = "various signals" if type == "signals" else sig
+            refsig = "various signals" if type == "signals" else sigs
             title = (
                 f"Positive correlation probability of {ret} "
                 f"and lagged {refsig} at {self.dic_freq[freq]} frequency."
@@ -596,6 +604,7 @@ class SignalReturnRelations:
         :param <Optional[pd.DataFrame]> df_result: DataFrame to be used for single
             statistic table. `None` by default, and when using with `sst` set to `False`.
         """
+        self.df = self.original_df.copy()
         self.sigs = [self.revert_negation(sig) for sig in self.sigs]
 
         cids = None if self.cids is None else self.cids

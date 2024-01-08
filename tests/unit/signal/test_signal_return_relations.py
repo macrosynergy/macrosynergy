@@ -734,7 +734,6 @@ class TestAll(unittest.TestCase):
             self.dfd,
             rets=["XR", "GROWTH"],
             sigs=["CRY", "INFL"],
-            sig_neg=False,
             freqs="M",
             blacklist=self.blacklist,
         )
