@@ -203,6 +203,24 @@ class TestAll(unittest.TestCase):
         if len(df.xcat.unique()) != 1:
             self.fail("The signal dataframe should only contain one xcat")
         self.assertEqual(df.xcat.unique()[0], "test")
+        # Repeat the same check but with max_periods set
+        try:
+            so.calculate_predictions(
+                name="test2",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+                max_periods=21, # one month lookback
+            )
+        except Exception as e:
+            self.fail(f"calculate_predictions raised an exception: {e}")
+        # check that the output is a dataframe
+        df = so.preds.copy()
+        self.assertIsInstance(df, pd.DataFrame)
+        if len(df.xcat.unique()) != 2:
+            self.fail("The signal dataframe should only contain two xcat")
+        self.assertEqual(sorted(df.xcat.unique()), ["test", "test2"])
 
     def test_types_calculate_predictions(self):
         # Training set only

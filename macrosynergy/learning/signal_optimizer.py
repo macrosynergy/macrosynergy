@@ -35,8 +35,8 @@ class SignalOptimizer:
         X: pd.DataFrame,
         y: Union[pd.DataFrame,pd.Series],
         blacklist: Dict[str, Tuple[pd.Timestamp, pd.Timestamp]] = None,
-        additional_X: Optional[List[pd.DataFrame]] = None,
-        additional_y: Optional[List[pd.Series]] = None,
+        additional_X: Optional[List[pd.DataFrame]] = [],
+        additional_y: Optional[List[pd.Series]] = [],
     ):
         """
         Class for sequential optimization of raw signals based on quantamental features.
@@ -77,9 +77,9 @@ class SignalOptimizer:
         :param <Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]> blacklist: cross-sections
             with date ranges that should be excluded from the data frame.
         :param <Optional[List[pd.DataFrame]]> additional_X: Optional additional features.
-            Default is None.
+            Default is [].
         :param <Optional[List[pd.Series]]> additional_y: Optional additional targets.
-            Default is None.
+            Default is [].
 
         Note:
         Optimization is based on expanding time series panels and maximizes a defined
@@ -334,6 +334,7 @@ class SignalOptimizer:
         the `inner_splitter` argument. Based on inner cross-validation an optimal model
         is chosen and used for predicting the targets of the next period.
         """
+        # Checks
         if type(name) != str:
             raise TypeError("The pipeline name must be a string.")
         if models == {}:
@@ -429,6 +430,7 @@ class SignalOptimizer:
         if ((n_jobs <= 0) and (n_jobs != -1)):
             raise ValueError("The n_jobs argument must be greater than zero or -1.")
         
+        # Calculate predictions
         # (1) Create a dataframe to store the signals induced by each model.
         #     The index should be a multi-index with cross-sections equal to those in X 
         #     and business-day dates spanning the range of dates in X.
