@@ -35,8 +35,8 @@ class SignalOptimizer:
         X: pd.DataFrame,
         y: Union[pd.DataFrame,pd.Series],
         blacklist: Dict[str, Tuple[pd.Timestamp, pd.Timestamp]] = None,
-        additional_X: Optional[List[pd.DataFrame]] = [],
-        additional_y: Optional[List[pd.Series]] = [],
+        additional_X: Optional[List[pd.DataFrame]] = None,
+        additional_y: Optional[List[pd.Series]] = None,
     ):
         """
         Class for sequential optimization of raw signals based on quantamental features.
@@ -77,9 +77,9 @@ class SignalOptimizer:
         :param <Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]> blacklist: cross-sections
             with date ranges that should be excluded from the data frame.
         :param <Optional[List[pd.DataFrame]]> additional_X: Optional additional features.
-            Default is [].
+            Default is None.
         :param <Optional[List[pd.Series]]> additional_y: Optional additional targets.
-            Default is [].
+            Default is None.
 
         Note:
         Optimization is based on expanding time series panels and maximizes a defined
@@ -474,8 +474,12 @@ class SignalOptimizer:
         # roll. Then the additional sets can be added within the private worker.
 
         if max_periods:
-            X = pd.concat((self.X, *self.additional_X), axis=0)
-            y = pd.concat((self.y, *self.additional_y), axis=0)
+            if self.additional_X is not None:
+                X = pd.concat((self.X, *self.additional_X), axis=0)
+                y = pd.concat((self.y, *self.additional_y), axis=0)
+            else:
+                X = self.X
+                y = self.y
 
             results = Parallel(n_jobs=n_jobs)(
                 delayed(self._worker)(
