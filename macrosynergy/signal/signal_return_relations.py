@@ -9,10 +9,15 @@ import seaborn as sns
 from sklearn import metrics as skm
 from scipy import stats
 from typing import List, Union, Tuple, Dict, Any, Optional
+from sklearn.exceptions import UndefinedMetricWarning
 import statsmodels.api as sm
 from statsmodels.tools.sm_exceptions import ConvergenceWarning
 
 warnings.simplefilter("ignore", ConvergenceWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
+
 
 from macrosynergy.management.simulate import make_qdf
 from macrosynergy.management.utils import (
@@ -21,8 +26,6 @@ from macrosynergy.management.utils import (
     categories_df,
 )
 import macrosynergy.visuals as msv
-
-np.seterr(divide="ignore")
 
 
 class SignalReturnRelations:
