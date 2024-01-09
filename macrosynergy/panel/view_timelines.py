@@ -147,25 +147,25 @@ if __name__ == "__main__":
 
     dfdx = dfd[~((dfd["cid"] == "AUD") & (dfd["xcat"] == "XR"))]
 
-    # view_timelines(
-    #     dfd,
-    #     xcats=["XR", "CRY"],
-    #     cids=cids[0],
-    #     size=(10, 5),
-    #     title="AUD Return and Carry",
-    #     aspect=3
-    # )
+    view_timelines(
+        dfd,
+        xcats=["XR", "CRY"],
+        cids=cids[0],
+        size=(10, 5),
+        title="AUD Return and Carry",
+        aspect=3
+    )
 
-    # view_timelines(
-    #     dfd,
-    #     xcats=["XR", "CRY", "INFL"],
-    #     cids=cids[0],
-    #     xcat_grid=True,
-    #     title_adj=0.8,
-    #     xcat_labels=["Return", "Carry", "Inflation"],
-    #     title="AUD Return, Carry & Inflation",
-    #     aspect=3
-    # )
+    view_timelines(
+        dfd,
+        xcats=["XR", "CRY", "INFL"],
+        cids=cids[0],
+        xcat_grid=True,
+        title_adj=0.8,
+        xcat_labels=["Return", "Carry", "Inflation"],
+        title="AUD Return, Carry & Inflation",
+        aspect=3
+    )
 
     view_timelines(dfd, xcats=["CRY"], cids=cids, ncol=4, title="Carry", cs_mean=True)
 
