@@ -757,7 +757,10 @@ class SignalReturnRelations:
         df_out.loc[segment, ["kendall", "kendall_pval"]] = stats.kendalltau(
             ret_vals, sig_vals
         )
-        corr, corr_pval = stats.pearsonr(ret_vals, sig_vals)
+        if len(ret_sign) <= 1:
+            corr, corr_pval = np.NaN, np.NaN
+        else:
+            corr, corr_pval = stats.pearsonr(ret_vals, sig_vals)
         df_out.loc[segment, ["pearson", "pearson_pval"]] = np.array([corr, corr_pval])
 
         df_out.loc[segment, "map_pval"] = self.map_pval(ret_vals, sig_vals)
@@ -859,6 +862,10 @@ class SignalReturnRelations:
             pos_pvals = np.mean(np.array(pvals_bool) * np.array(pos_corr_coefs), axis=0)
             # Positive correlation with error prob < 50%.
             df_out.loc["PosRatio", below50s] = pos_pvals
+            pos_pearson = pos_corr_coefs["pearson"]
+            map_pval_bool = df_out.loc[css, "map_pval"] < 0.5
+            pos_map_pval = np.mean(np.array(map_pval_bool) * np.array(pos_pearson))
+            df_out.loc["PosRatio", "map_pval"] = pos_map_pval
 
         return df_out.astype("float")
 
