@@ -114,23 +114,6 @@ class TestAll(unittest.TestCase):
         pd.testing.assert_frame_equal(so.X, self.X_train)
         pd.testing.assert_series_equal(so.y, self.y_train)
         self.assertEqual(so.blacklist, blacklist)
-        # Test that instantiation when using out of sample data works as expected
-        try:
-            blacklist = self.black_valid if use_blacklist else None
-            so = SignalOptimizer(inner_splitter=inner_splitter,X=self.X_test,y=self.y_test, blacklist=blacklist, additional_X=[self.X_train], additional_y=[self.y_train])
-        except Exception as e:
-            self.fail(f"Instantiation of the SignalOptimizer raised an exception: {e}")
-        self.assertIsInstance(so, SignalOptimizer)
-        self.assertEqual(so.inner_splitter, inner_splitter)
-        pd.testing.assert_frame_equal(so.X, self.X_test)
-        pd.testing.assert_series_equal(so.y, self.y_test)
-        self.assertEqual(so.blacklist, blacklist)
-        self.assertTrue(hasattr(so, "additional_X"))
-        self.assertTrue(hasattr(so, "additional_y"))
-        self.assertEqual(len(so.additional_X), 1)
-        self.assertEqual(len(so.additional_y), 1)
-        pd.testing.assert_frame_equal(so.additional_X[0], self.X_train)
-        pd.testing.assert_series_equal(so.additional_y[0], self.y_train)
 
     def test_types_init(self):
         inner_splitter = KFold(n_splits=5, shuffle=False)
@@ -157,32 +140,7 @@ class TestAll(unittest.TestCase):
             so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train, blacklist = self.black_invalid3)
         with self.assertRaises(ValueError):
             so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train, blacklist = self.black_invalid4)
-        # check that incorrect additional_x formats are caught
-        with self.assertRaises(TypeError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X="additional_x", additional_y=[self.y_train])
-        with self.assertRaises(TypeError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=["additional_x"], additional_y=[self.y_train])
-        with self.assertRaises(ValueError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=[self.X_train.reset_index()], additional_y=[self.y_train])
-        with self.assertRaises(ValueError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=[self.X_train])
-        with self.assertRaises(ValueError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=[self.X_train, self.X_train], additional_y=[self.y_train])
-        with self.assertRaises(ValueError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=[self.X_train.iloc[1:]], additional_y=[self.y_train])
-        # check that incorrect additional_y formats are caught
-        with self.assertRaises(TypeError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=[self.X_train], additional_y="additional_y")
-        with self.assertRaises(TypeError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=[self.X_train], additional_y=["additional_y"])
-        with self.assertRaises(ValueError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=[self.X_train], additional_y=[self.y_train.reset_index()])
-        with self.assertRaises(ValueError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_y=[self.y_train])
-        with self.assertRaises(ValueError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=[self.X_train], additional_y=[self.y_train, self.y_train])
-        with self.assertRaises(ValueError):
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=[self.X_train], additional_y=[self.y_train.iloc[1:]])
+
 
     def test_valid_calculate_predictions(self):
         so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train)
@@ -203,61 +161,6 @@ class TestAll(unittest.TestCase):
         if len(df1.xcat.unique()) != 1:
             self.fail("The signal dataframe should only contain one xcat")
         self.assertEqual(df1.xcat.unique()[0], "test")
-        # Repeat the same check but with max_periods set
-        try:
-            so.calculate_predictions(
-                name="test2",
-                models = self.models,
-                metric = self.metric,
-                hparam_grid = self.hparam_grid,
-                hparam_type="grid",
-                max_periods=21, # one month lookback
-            )
-        except Exception as e:
-            self.fail(f"calculate_predictions raised an exception: {e}")
-        # check that the output is a dataframe
-        df2 = so.preds.copy()
-        self.assertIsInstance(df2, pd.DataFrame)
-        if len(df2.xcat.unique()) != 2:
-            self.fail("The signal dataframe should only contain two xcat")
-        self.assertEqual(sorted(df2.xcat.unique()), ["test", "test2"])
-        # Now set an unreasonably large lookback and check it matches with the test1 scores
-        try:
-            so.calculate_predictions(
-                name="test3",
-                models = self.models,
-                metric = self.metric,
-                hparam_grid = self.hparam_grid,
-                hparam_type="grid",
-                max_periods=1000000, # one million day lookback
-            )
-        except Exception as e:
-            self.fail(f"calculate_predictions raised an exception: {e}")
-        df3 = so.preds.copy()
-        self.assertIsInstance(df3, pd.DataFrame)
-        if len(df3.xcat.unique()) != 3:
-            self.fail("The signal dataframe should only contain two xcat")
-        self.assertEqual(sorted(df3.xcat.unique()), ["test", "test2", "test3"])
-        self.assertTrue(np.all(df3[df3.xcat=="test3"].dropna().value == df3[df3.xcat=="test"].dropna().value))
-        # Test validity of the class if additional_X and additional_y are passed in
-        try:
-            so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_test,y=self.y_test, additional_X=[self.X_train], additional_y=[self.y_train])
-            so.calculate_predictions(
-                name="test",
-                models=self.models,
-                metric=self.metric,
-                hparam_grid=self.hparam_grid,
-                hparam_type="random",
-                min_cids=1,
-                min_periods = 1
-            )
-        except Exception as e:
-            self.fail(f"calculate_predictions raised an exception: {e}")
-
-        df = so.preds.copy()
-        self.assertIsInstance(df, pd.DataFrame)
-        self.assertTrue(df.real_date.min() == self.X_test.index.get_level_values(1).min())
-        self.assertTrue(df.real_date.max() == self.X_test.index.get_level_values(1).max())
         # Test that blacklisting works as expected
         so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train, blacklist=self.black_valid)
         try:
@@ -270,12 +173,12 @@ class TestAll(unittest.TestCase):
             )
         except Exception as e:
             self.fail(f"calculate_predictions raised an exception: {e}")
-        df = so.preds.copy()
-        self.assertIsInstance(df, pd.DataFrame)
+        df3 = so.preds.copy()
+        self.assertIsInstance(df3, pd.DataFrame)
         for cross_section, periods in self.black_valid.items():
             cross_section_key = cross_section.split("_")[0]
-            self.assertTrue(len(df[(df.cid==cross_section_key) & (df.real_date >= periods[0]) & (df.real_date <= periods[1])].dropna())==0)
-               
+            self.assertTrue(len(df3[(df3.cid==cross_section_key) & (df3.real_date >= periods[0]) & (df3.real_date <= periods[1])].dropna())==0)
+
     def test_types_calculate_predictions(self):
         # Training set only
         so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train)
@@ -490,25 +393,6 @@ class TestAll(unittest.TestCase):
                 hparam_grid = self.hparam_grid,
                 hparam_type="grid",
                 min_periods=-1,
-            )
-        # max_periods 
-        with self.assertRaises(TypeError):
-            so.calculate_predictions(
-                name="test",
-                models = self.models,
-                metric = self.metric,
-                hparam_grid = self.hparam_grid,
-                hparam_type="grid",
-                max_periods="max_periods",
-            )
-        with self.assertRaises(ValueError):
-            so.calculate_predictions(
-                name="test",
-                models = self.models,
-                metric = self.metric,
-                hparam_grid = self.hparam_grid,
-                hparam_type="grid",
-                max_periods=-1,
             )
         # n_iter 
         with self.assertRaises(TypeError):

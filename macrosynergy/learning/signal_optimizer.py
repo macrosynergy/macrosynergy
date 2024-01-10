@@ -35,8 +35,6 @@ class SignalOptimizer:
         X: pd.DataFrame,
         y: Union[pd.DataFrame,pd.Series],
         blacklist: Dict[str, Tuple[pd.Timestamp, pd.Timestamp]] = None,
-        additional_X: Optional[List[pd.DataFrame]] = None,
-        additional_y: Optional[List[pd.Series]] = None,
     ):
         """
         Class for sequential optimization of raw signals based on quantamental features.
@@ -55,11 +53,6 @@ class SignalOptimizer:
         dictionary, preferably through macrosynergy.management.make_blacklist, the user 
         can specify time periods to ignore.
 
-        Should the signal optimiser be applied to a separate hold-out set, following the 
-        time span of the original feature set, the lagged hold-out features and subsequent 
-        cumulative returns can be provided by setting X and y as usual, with the prior 
-        training information passed to the additional_X and additional_y arguments.
-
         :param <BasePanelSplit> inner_splitter: Panel splitter that is used to split
             each training set into smaller (training, test) pairs for cross-validation.
             At present that splitter has to be an instance of `RollingKFoldPanelSplit`,
@@ -76,10 +69,6 @@ class SignalOptimizer:
             corresponding with a time index equal to the features in `X`.
         :param <Dict[str, Tuple[pd.Timestamp, pd.Timestamp]]> blacklist: cross-sections
             with date ranges that should be excluded from the data frame.
-        :param <Optional[List[pd.DataFrame]]> additional_X: Optional additional features.
-            Default is None.
-        :param <Optional[List[pd.Series]]> additional_y: Optional additional targets.
-            Default is None.
 
         Note:
         Optimization is based on expanding time series panels and maximizes a defined
@@ -143,7 +132,7 @@ class SignalOptimizer:
         so.models_heatmap(name="MIX")
         ```
         """
-        # checks
+        # Checks
         if not isinstance(inner_splitter, BasePanelSplit):
             raise TypeError(
                 "The inner_splitter argument must be an instance of BasePanelSplit."
@@ -192,67 +181,11 @@ class SignalOptimizer:
                             "pandas Timestamps."
                         )
 
-        if additional_X is not None:
-            if additional_y is None:
-                raise ValueError(
-                    "If additional_X is provided, additional_y must also be provided."
-                )
-            if not isinstance(additional_X, list):
-                raise TypeError("The additional_X argument must be a list.")
-            for add_x in additional_X:
-                if not isinstance(add_x, pd.DataFrame):
-                    raise TypeError(
-                        "The additional_X argument must be a list of pandas DataFrames."
-                    )
-                if not isinstance(add_x.index, pd.MultiIndex):
-                    raise ValueError(
-                        "All dataframes in additional_X must be multi-indexed."
-                    )
-                if not isinstance(add_x.index.get_level_values(1)[0], datetime.date):
-                    raise TypeError(
-                        "The inner index of each dataframe in additional_X must be "
-                        "datetime.date."
-                    )
-
-        if additional_y is not None:
-            if additional_X is None:
-                raise ValueError(
-                    "If additional_y is provided, additional_X must also be provided."
-                )
-            if not isinstance(additional_y, list):
-                raise TypeError("The additional_y argument must be a list.")
-            if len(additional_y) != len(additional_X):
-                raise ValueError(
-                    "The additional_y argument must be a list of the same length as "
-                    "additional_X."
-                )
-            for idx, add_y in enumerate(additional_y):
-                if not isinstance(add_y, pd.Series) and not isinstance(add_y, pd.DataFrame):
-                    raise TypeError(
-                        "The additional_y argument must be a list of pandas Series."
-                    )
-                if not isinstance(add_y.index, pd.MultiIndex):
-                    raise ValueError(
-                        "All series in additional_y must be multi-indexed."
-                    )
-                if not isinstance(add_y.index.get_level_values(1)[0], datetime.date):
-                    raise TypeError(
-                        "The inner index of each series in additional_y must be "
-                        "datetime.date."
-                    )
-                if not add_y.index.equals(additional_X[idx].index):
-                    raise ValueError(
-                        "The indices of each dataframe in additional_X must match with "
-                        "the corresponding series in additional_y."
-                    )
-
         self.inner_splitter = inner_splitter
 
         self.X = X
         self.y = y
         self.blacklist = blacklist
-        self.additional_X = additional_X
-        self.additional_y = additional_y
 
         # Create an initial dataframes to store quantamental predictions and model choices
         self.preds = pd.DataFrame(columns=["cid", "real_date", "xcat", "value"])
@@ -269,7 +202,6 @@ class SignalOptimizer:
         hparam_type: str = "grid",
         min_cids: int = 4,
         min_periods: int = 12 * 3,
-        max_periods: Optional[int] = None,
         n_iter: Optional[int] = 10,
         n_jobs: Optional[int] = -1,
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -314,9 +246,6 @@ class SignalOptimizer:
             training set. Default is 4.
         :param <int> min_periods: minimum number of base periods of the input data
             frequency required for the initial training set. Default is 12.
-        :param <int> max_periods: maximum length of each training set.
-            If the maximum is exceeded, the earliest periods are cut off.
-            Default is None.
         :param <int> n_iter: Number of iterations to run for random search. Default is 10.
         :param <int> n_jobs: Number of jobs to run in parallel. Default is -1, which uses
             all available cores.
@@ -415,11 +344,6 @@ class SignalOptimizer:
             raise TypeError("The min_periods argument must be an integer.")
         if min_periods < 1:
             raise ValueError("The min_periods argument must be greater than zero.")
-        if max_periods is not None:
-            if type(max_periods) != int:
-                raise TypeError("The max_periods argument must be an integer.")
-            if max_periods < 1:
-                raise ValueError("The max_periods argument must be greater than zero.")
         if hparam_type == "random":
             if type(n_iter) != int:
                 raise TypeError("The n_iter argument must be an integer.")
@@ -459,66 +383,27 @@ class SignalOptimizer:
             test_size=1,
             min_cids=min_cids,
             min_periods=min_periods,
-            max_periods=max_periods,
         )
 
-        # Now handle possible additional training samples provided in self.additional_X
-        # and self.additional_y. If provided, the handling depends on whether
-        # max_periods is specified or not.
-        #
-        # If max_periods is specified, append self.X to self.additional_X and self.y to
-        # self.additional_y, and use the resulting dataframes as the training set. This is
-        # because the outter splitter will automatically truncate the resulting training 
-        # set to the correct length.
-        # If max_periods is not specified, then the splitter will expand as opposed to 
-        # roll. Then the additional sets can be added within the private worker.
+        X = self.X.copy()
+        y = self.y.copy()
 
-        if max_periods:
-            if self.additional_X is not None:
-                X = pd.concat((self.X, *self.additional_X), axis=0)
-                y = pd.concat((self.y, *self.additional_y), axis=0)
-            else:
-                X = self.X
-                y = self.y
-
-            results = Parallel(n_jobs=n_jobs)(
-                delayed(self._worker)(
-                    train_idx=train_idx,
-                    test_idx=test_idx,
-                    name=name,
-                    models=models,
-                    metric=metric,
-                    original_date_levels=original_date_levels,
-                    hparam_type=hparam_type,
-                    hparam_grid=hparam_grid,
-                    n_iter=n_iter,
-                    is_rolling=True,
-                )
-                for train_idx, test_idx in tqdm(
-                    outer_splitter.split(X=X, y=y),
-                )
+        results = Parallel(n_jobs=n_jobs)(
+            delayed(self._worker)(
+                train_idx=train_idx,
+                test_idx=test_idx,
+                name=name,
+                models=models,
+                metric=metric,
+                original_date_levels=original_date_levels,
+                hparam_type=hparam_type,
+                hparam_grid=hparam_grid,
+                n_iter=n_iter,
             )
-        else:
-            X = self.X.copy()
-            y = self.y.copy()
-
-            results = Parallel(n_jobs=n_jobs)(
-                delayed(self._worker)(
-                    train_idx=train_idx,
-                    test_idx=test_idx,
-                    name=name,
-                    models=models,
-                    metric=metric,
-                    original_date_levels=original_date_levels,
-                    hparam_type=hparam_type,
-                    hparam_grid=hparam_grid,
-                    n_iter=n_iter,
-                    is_rolling=False,
-                )
-                for train_idx, test_idx in tqdm(
-                    outer_splitter.split(X=X, y=y),
-                )
+            for train_idx, test_idx in tqdm(
+                outer_splitter.split(X=X, y=y),
             )
+        )
 
         prediction_data = []
         modelchoice_data = []
@@ -588,7 +473,6 @@ class SignalOptimizer:
         hparam_grid: Dict[str, Dict[str, List]],
         n_iter: int = 10,
         hparam_type: str = "grid",
-        is_rolling: bool = False,
     ):
         """
         Private helper function to run the grid search for a single (train, test) pair
@@ -612,16 +496,10 @@ class SignalOptimizer:
         :param <int> n_iter: Number of iterations to run for random search. Default is 10.
         :param <str> hparam_type: Hyperparameter search type.
             This must be either "grid", "random" or "bayes". Default is "grid".
-        :param <bool> is_rolling: Whether the splitter is rolling or expanding. Default is
-            False.
         """
         # Set up training and test sets
-        if self.additional_X and not is_rolling:
-            X_train_i = pd.concat((self.X.iloc[train_idx], *self.additional_X), axis=0)
-            y_train_i = pd.concat((self.y.iloc[train_idx], *self.additional_y), axis=0)
-        else:
-            X_train_i: pd.DataFrame = self.X.iloc[train_idx]
-            y_train_i: pd.Series = self.y.iloc[train_idx]
+        X_train_i: pd.DataFrame = self.X.iloc[train_idx]
+        y_train_i: pd.Series = self.y.iloc[train_idx]
 
         X_test_i: pd.DataFrame = self.X.iloc[test_idx]
         # Get correct indices to match with
@@ -840,24 +718,24 @@ if __name__ == "__main__":
     xcats = ["XR", "CRY", "GROWTH", "INFL"]
     cols = ["earliest", "latest", "mean_add", "sd_mult", "ar_coef", "back_coef"]
 
-    """Example 1: Unbalanced panel """
+    """Example: Unbalanced panel """
 
-    df_cids2 = pd.DataFrame(
+    df_cids = pd.DataFrame(
         index=cids, columns=["earliest", "latest", "mean_add", "sd_mult"]
     )
-    df_cids2.loc["AUD"] = ["2002-01-01", "2020-12-31", 0, 1]
-    df_cids2.loc["CAD"] = ["2003-01-01", "2020-12-31", 0, 1]
-    df_cids2.loc["GBP"] = ["2000-01-01", "2020-12-31", 0, 1]
-    df_cids2.loc["USD"] = ["2000-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["AUD"] = ["2002-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["CAD"] = ["2003-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["GBP"] = ["2000-01-01", "2020-12-31", 0, 1]
+    df_cids.loc["USD"] = ["2000-01-01", "2020-12-31", 0, 1]
 
-    df_xcats2 = pd.DataFrame(index=xcats, columns=cols)
-    df_xcats2.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
-    df_xcats2.loc["CRY"] = ["2000-01-01", "2020-12-31", 1, 2, 0.95, 1]
-    df_xcats2.loc["GROWTH"] = ["2000-01-01", "2020-12-31", 1, 2, 0.9, 1]
-    df_xcats2.loc["INFL"] = ["2000-01-01", "2020-12-31", 1, 2, 0.8, 0.5]
+    df_xcats = pd.DataFrame(index=xcats, columns=cols)
+    df_xcats.loc["XR"] = ["2000-01-01", "2020-12-31", 0.1, 1, 0, 0.3]
+    df_xcats.loc["CRY"] = ["2000-01-01", "2020-12-31", 1, 2, 0.95, 1]
+    df_xcats.loc["GROWTH"] = ["2000-01-01", "2020-12-31", 1, 2, 0.9, 1]
+    df_xcats.loc["INFL"] = ["2000-01-01", "2020-12-31", 1, 2, 0.8, 0.5]
 
-    dfd2 = make_qdf(df_cids2, df_xcats2, back_ar=0.75)
-    dfd2["grading"] = np.ones(dfd2.shape[0])
+    dfd = make_qdf(df_cids, df_xcats, back_ar=0.75)
+    dfd["grading"] = np.ones(dfd.shape[0])
     black = {
         "GBP": (
             pd.Timestamp(year=2009, month=1, day=1),
@@ -869,26 +747,15 @@ if __name__ == "__main__":
         ),
     }
 
-    train = msm.reduce_df(dfd2, end="2016-11-30")
-    test = msm.reduce_df(dfd2, start="2016-11-01")
-
     train = msm.categories_df(
-        df=train, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
-    ).dropna()
-    test = msm.categories_df(
-        df=test, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
+        df=dfd, xcats=xcats, cids=cids, val="value", blacklist=black, freq="M", lag=1
     ).dropna()
 
     X_train = train.drop(columns=["XR"])
     y_train = train["XR"]
-    X_test = test.drop(columns=["XR"])
-    y_test = test["XR"]
 
     y_long_train = pd.melt(
         frame=y_train.reset_index(), id_vars=["cid", "real_date"], var_name="xcat"
-    )
-    y_long_test = pd.melt(
-        frame=y_test.reset_index(), id_vars=["cid", "real_date"], var_name="xcat"
     )
 
     # (1) Example SignalOptimizer usage.
@@ -956,26 +823,3 @@ if __name__ == "__main__":
     #     Print the predictions and model choices for all pipelines.
     print(so.get_optimized_signals())
     print(so.get_optimal_models())
-
-    # Now test the hold-out set functionality
-
-    so = SignalOptimizer(
-        inner_splitter=inner_splitter,
-        X=X_test,
-        y=y_test,
-        additional_X=[X_train],
-        additional_y=[y_train],
-    )
-
-    so.calculate_predictions(
-        name="test_eval",
-        models=models,
-        metric=metric,
-        hparam_grid=hparam_grid,
-        hparam_type="grid",
-        min_cids=1,
-        min_periods=1,
-        n_jobs=1,
-    )
-
-    so.models_heatmap(name="test_eval")
