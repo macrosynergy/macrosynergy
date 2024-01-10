@@ -20,6 +20,7 @@ dependencies = [
   "numpy>=1.21.6",
   "requests>=2.27.1",
   "tqdm>=4.62",
+  "boto3>=1.18.62",
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
