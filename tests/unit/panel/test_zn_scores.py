@@ -1,7 +1,11 @@
 import unittest
 import warnings
 from tests.simulate import make_qdf
-from macrosynergy.panel.make_zn_scores import make_zn_scores, expanding_stat
+from macrosynergy.panel.make_zn_scores import (
+    _get_expanding_count,
+    make_zn_scores,
+    expanding_stat,
+)
 import pandas as pd
 import numpy as np
 from itertools import groupby
@@ -622,6 +626,41 @@ class TestAll(unittest.TestCase):
             except ValueError as e:
                 self.assertTrue("unknown_xcat" in str(e))
                 raise ValueError(e)
+
+    def test_get_expanding_count(self):
+        data = {
+            "AUD": [float("nan"), float("nan"), float("nan"), float("nan")],
+            "CAD": [0.350685, 0.983600, -0.636405, 0.526873],
+            "GBP": [0.099416, 0.329336, -0.491647, -0.494627],
+            "NZD": [-0.253184, 0.201844, 3.495799, 2.372900],
+            "USD": [-0.179115, -0.381266, -0.038212, -1.034298],
+        }
+        index = ["2008-01-01", "2008-01-02", "2008-01-03", "2008-01-04"]
+
+        df = pd.DataFrame(data, index=index)
+        df.index.name = "real_date"
+
+        expanding_count = _get_expanding_count(df, 1)
+        self.assertTrue(np.allclose(expanding_count, np.array([4, 8, 12, 16])))
+
+        expanding_count = _get_expanding_count(df, 2)
+        self.assertTrue(np.allclose(expanding_count, np.array([0, 8, 12, 16])))
+
+        expanding_count = _get_expanding_count(df, 3)
+        self.assertTrue(np.allclose(expanding_count, np.array([0, 0, 12, 16])))
+
+        expanding_count = _get_expanding_count(df, 4)
+        self.assertTrue(np.allclose(expanding_count, np.array([0, 0, 0, 16])))
+
+    def test_get_expanding_count_nans(self):
+        n_rows = np.random.randint(10, 100)
+        n_cols = np.random.randint(10, 100)
+        data = np.random.randn(n_rows, n_cols)
+
+        df = pd.DataFrame(data)
+
+        expanding_count = _get_expanding_count(df, 1)
+        self.assertTrue(np.isclose(expanding_count[-1], n_rows * n_cols))
 
 
 if __name__ == "__main__":
