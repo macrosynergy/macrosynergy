@@ -620,7 +620,7 @@ class SignalOptimizer:
                         calculate_predictions() first.
                         """
                     )
-            return self.chosen_models[self.chosen_models.xcat.isin(name)]
+            return self.chosen_models[self.chosen_models.name.isin(name)]
 
     def models_heatmap(
         self,
