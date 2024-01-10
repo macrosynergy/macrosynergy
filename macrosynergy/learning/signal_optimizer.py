@@ -573,7 +573,7 @@ class SignalOptimizer:
             return self.preds
         else:
             if type(name) == str:
-                name = []
+                name = [name]
             elif type(name) != list:
                 raise TypeError(
                     "The process name must be a string or a list of strings."
@@ -613,7 +613,7 @@ class SignalOptimizer:
                 )
 
             for n in name:
-                if n not in self.chosen_models.xcat.unique():
+                if n not in self.chosen_models.name.unique():
                     raise ValueError(
                         f"""The process name '{n}' is not in the list of already-run
                         pipelines. Please check the name carefully. If correct, please run 

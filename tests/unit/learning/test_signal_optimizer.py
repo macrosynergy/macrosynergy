@@ -464,3 +464,93 @@ class TestAll(unittest.TestCase):
                 hparam_type="grid",
                 n_jobs=-3,
             )
+    def test_types_get_optimized_signals(
+            self,
+    ):
+        # Test that invalid names are caught 
+        so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train)
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+        )
+        with self.assertRaises(TypeError):
+            so.get_optimized_signals(name=1)
+        with self.assertRaises(TypeError):
+            so.get_optimized_signals(name={})
+        with self.assertRaises(ValueError):
+            so.get_optimized_signals(name=["test", "test2"])
+        with self.assertRaises(ValueError):
+            so.get_optimized_signals(name="test2")
+
+    def test_valid_get_optimized_signals(self):
+        # Test that the output is a dataframe
+        so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train)
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+        )
+        df1 = so.get_optimized_signals(name="test")
+        self.assertIsInstance(df1, pd.DataFrame)
+        self.assertEqual(df1.shape[1], 4)
+        self.assertEqual(df1.columns[0], "cid")
+        self.assertEqual(df1.columns[1], "real_date")
+        self.assertEqual(df1.columns[2], "xcat")
+        self.assertEqual(df1.columns[3], "value")
+        self.assertEqual(df1.xcat.unique()[0], "test")
+        # Add a second signal and check that the output is a dataframe
+        so.calculate_predictions(
+            name="test2",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+        )
+        df2 = so.get_optimized_signals(name="test2")
+        self.assertIsInstance(df2, pd.DataFrame)
+        self.assertEqual(df2.shape[1], 4)
+        self.assertEqual(df2.columns[0], "cid")
+        self.assertEqual(df2.columns[1], "real_date")
+        self.assertEqual(df2.columns[2], "xcat")
+        self.assertEqual(df2.columns[3], "value")
+        self.assertEqual(df2.xcat.unique()[0], "test2")
+        df3 = so.get_optimized_signals()
+        self.assertIsInstance(df3, pd.DataFrame)
+        self.assertEqual(df3.shape[1], 4)
+        self.assertEqual(df3.columns[0], "cid")
+        self.assertEqual(df3.columns[1], "real_date")
+        self.assertEqual(df3.columns[2], "xcat")
+        self.assertEqual(df3.columns[3], "value")
+        self.assertEqual(len(df3.xcat.unique()), 2)
+        df4 = so.get_optimized_signals(name=["test", "test2"])
+        self.assertIsInstance(df4, pd.DataFrame)
+        self.assertEqual(df4.shape[1], 4)
+        self.assertEqual(df4.columns[0], "cid")
+        self.assertEqual(df4.columns[1], "real_date")
+        self.assertEqual(df4.columns[2], "xcat")
+        self.assertEqual(df4.columns[3], "value")
+        self.assertEqual(len(df4.xcat.unique()), 2)
+
+    def test_types_get_optimal_models(self):
+        # Test that invalid names are caught 
+        so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train)
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+        )
+        with self.assertRaises(TypeError):
+            so.get_optimal_models(name=1)
+        with self.assertRaises(TypeError):
+            so.get_optimal_models(name={})
+        with self.assertRaises(ValueError):
+            so.get_optimal_models(name=["test", "test2"])
+        with self.assertRaises(ValueError):
+            so.get_optimal_models(name="test2")
