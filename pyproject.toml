@@ -21,6 +21,7 @@ dependencies = [
   "requests>=2.27.1",
   "tqdm>=4.62",
   "boto3>=1.18.62",
+  "PyGithub>=1.58",
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
