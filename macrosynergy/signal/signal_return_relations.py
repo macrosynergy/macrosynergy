@@ -942,7 +942,13 @@ class SignalReturnRelations:
 
     def summary_table(self, cross_section: bool = False, years: bool = False):
         """
-        Return summary output table of signal-return relations.
+        Summary of signal-return relations for panel, or across years or cross sections.
+
+        :param <bool> cross_section: If True, returns the cross-sectional summary table.
+            Default is False.
+        :param <bool> years: If True, returns the yearly summary table. Default is False.
+
+        returns <pd.DataFrame>: summary table.
 
         N.B.: The interpretation of the columns is generally as follows:
 
@@ -1444,9 +1450,7 @@ if __name__ == "__main__":
 
     srn.accuracy_bars(
         type="signals",
-        title="Accuracy measure between target return, XR,"
-        " and the respective signals, ['CRY', 'INFL'"
-        ", 'GROWTH'].",
+        title="Accuracy",
     )
 
     sr = SignalReturnRelations(
@@ -1479,12 +1483,12 @@ if __name__ == "__main__":
         blacklist=black,
     )
 
-    sr.accuracy_bars(type="signals")
-    sr.correlation_bars(type="signals")
+    sr.accuracy_bars(type="signals", title="Accuracy")
+    sr.correlation_bars(type="signals", title="Correlation")
 
-    srt = sr.single_relation_table()
+    srt = sr.single_relation_table(ret="XRH", xcat="INFL", freq="Q", agg_sigs="last")
     mrt = sr.multiple_relations_table()
-    sst = sr.single_statistic_table(stat="auc", show_heatmap=True)
+    sst = sr.single_statistic_table(stat="pearson", show_heatmap=True)
 
     print(srt)
     print(mrt)
