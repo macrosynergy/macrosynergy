@@ -143,10 +143,10 @@ class TestAll(unittest.TestCase):
 
 
     def test_valid_calculate_predictions(self):
-        so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train)
+        so1 = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train)
         # check a correct optimisation runs
         try:
-            so.calculate_predictions(
+            so1.calculate_predictions(
                 name="test",
                 models = self.models,
                 metric = self.metric,
@@ -155,16 +155,15 @@ class TestAll(unittest.TestCase):
             )
         except Exception as e:
             self.fail(f"calculate_predictions raised an exception: {e}")
-        # checkout the output is a dataframe
-        df1 = so.preds.copy()
+        df1 = so1.preds.copy()
         self.assertIsInstance(df1, pd.DataFrame)
         if len(df1.xcat.unique()) != 1:
             self.fail("The signal dataframe should only contain one xcat")
         self.assertEqual(df1.xcat.unique()[0], "test")
         # Test that blacklisting works as expected
-        so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train, blacklist=self.black_valid)
+        so2 = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train, blacklist=self.black_valid)
         try:
-            so.calculate_predictions(
+            so2.calculate_predictions(
                 name="test",
                 models=self.models,
                 metric=self.metric,
@@ -173,11 +172,49 @@ class TestAll(unittest.TestCase):
             )
         except Exception as e:
             self.fail(f"calculate_predictions raised an exception: {e}")
-        df3 = so.preds.copy()
-        self.assertIsInstance(df3, pd.DataFrame)
+        df2 = so2.preds.copy()
+        self.assertIsInstance(df2, pd.DataFrame)
         for cross_section, periods in self.black_valid.items():
             cross_section_key = cross_section.split("_")[0]
-            self.assertTrue(len(df3[(df3.cid==cross_section_key) & (df3.real_date >= periods[0]) & (df3.real_date <= periods[1])].dropna())==0)
+            self.assertTrue(len(df2[(df2.cid==cross_section_key) & (df2.real_date >= periods[0]) & (df2.real_date <= periods[1])].dropna())==0)
+        # Test that rolling models work as expected
+        so3 = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train)
+        try:
+            so3.calculate_predictions(
+                name="test",
+                models=self.models,
+                metric=self.metric,
+                hparam_grid=self.hparam_grid,
+                hparam_type="grid",
+                max_periods=21, # monthly roll
+            )
+        except Exception as e:
+            self.fail(f"calculate_predictions raised an exception: {e}")
+        df3 = so3.preds.copy()
+        self.assertIsInstance(df3, pd.DataFrame)
+        if len(df3.xcat.unique()) != 1:
+            self.fail("The signal dataframe should only contain one xcat")
+        self.assertEqual(df3.xcat.unique()[0], "test")
+        # Test that an unreasonably large roll is equivalent to no roll 
+        so4 = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train)
+        try:
+            so4.calculate_predictions(
+                name="test",
+                models=self.models,
+                metric=self.metric,
+                hparam_grid=self.hparam_grid,
+                hparam_type="grid",
+                max_periods=int(1e6), # million days roll
+            )
+        except Exception as e:
+            self.fail(f"calculate_predictions raised an exception: {e}")
+        df4 = so4.preds.copy()
+        self.assertIsInstance(df4, pd.DataFrame)
+        if len(df4.xcat.unique()) != 1:
+            self.fail("The signal dataframe should only contain one xcat")
+        self.assertEqual(df4.xcat.unique()[0], "test")
+        self.assertTrue(df1.equals(df4))
+        self.assertFalse(df3.equals(df4))
 
     def test_types_calculate_predictions(self):
         # Training set only
@@ -393,6 +430,34 @@ class TestAll(unittest.TestCase):
                 hparam_grid = self.hparam_grid,
                 hparam_type="grid",
                 min_periods=-1,
+            )
+        # max_periods
+        with self.assertRaises(TypeError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+                max_periods="max_periods",
+            )
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+                max_periods=0,
+            )
+        with self.assertRaises(ValueError):
+            so.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+                max_periods=-1,
             )
         # n_iter 
         with self.assertRaises(TypeError):

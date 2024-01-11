@@ -202,6 +202,7 @@ class SignalOptimizer:
         hparam_type: str = "grid",
         min_cids: int = 4,
         min_periods: int = 12 * 3,
+        max_periods: Optional[int] = None,
         n_iter: Optional[int] = 10,
         n_jobs: Optional[int] = -1,
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -246,6 +247,10 @@ class SignalOptimizer:
             training set. Default is 4.
         :param <int> min_periods: minimum number of base periods of the input data
             frequency required for the initial training set. Default is 12.
+        :param <Optional[int]> max_periods: maximum length of each training set in units
+            of the input data frequency. If this maximum is exceeded, the earliest periods
+            are cut off. Default is None, which means that the full training history is
+            considered in each iteration. 
         :param <int> n_iter: Number of iterations to run for random search. Default is 10.
         :param <int> n_jobs: Number of jobs to run in parallel. Default is -1, which uses
             all available cores.
@@ -344,6 +349,11 @@ class SignalOptimizer:
             raise TypeError("The min_periods argument must be an integer.")
         if min_periods < 1:
             raise ValueError("The min_periods argument must be greater than zero.")
+        if max_periods is not None:
+            if type(max_periods) != int:
+                raise TypeError("The max_periods argument must be an integer.")
+            if max_periods < 1:
+                raise ValueError("The max_periods argument must be greater than zero.")
         if hparam_type == "random":
             if type(n_iter) != int:
                 raise TypeError("The n_iter argument must be an integer.")
@@ -383,6 +393,7 @@ class SignalOptimizer:
             test_size=1,
             min_cids=min_cids,
             min_periods=min_periods,
+            max_periods=max_periods,
         )
 
         X = self.X.copy()
