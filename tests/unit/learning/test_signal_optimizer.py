@@ -216,6 +216,22 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df4.xcat.unique()[0], "test")
         self.assertTrue(df1.equals(df4))
         self.assertFalse(df3.equals(df4))
+        # Test that the signal optimiser works with dataframe targets as well as series targets
+        so5 = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train.to_frame())
+        # check a correct optimisation runs
+        try:
+            so5.calculate_predictions(
+                name="test",
+                models = self.models,
+                metric = self.metric,
+                hparam_grid = self.hparam_grid,
+                hparam_type="grid",
+            )
+        except Exception as e:
+            self.fail(f"calculate_predictions raised an exception: {e}")
+        df5 = so5.preds.copy()
+        self.assertIsInstance(df5, pd.DataFrame)
+        pd.testing.assert_frame_equal(df1, df5)
 
     def test_types_calculate_predictions(self):
         # Training set only
