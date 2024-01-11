@@ -655,6 +655,8 @@ class TestAll(unittest.TestCase):
             so.models_heatmap(name="test", figsize=1)
         with self.assertRaises(TypeError):
             so.models_heatmap(name="test", figsize=[1.5,2]) # needs to be a tuple!
+        with self.assertRaises(TypeError):
+            so.models_heatmap(name="test", figsize=(1.5,"e"))
         with self.assertRaises(ValueError):
             so.models_heatmap(name="test", figsize=(0,))
         with self.assertRaises(ValueError):
@@ -673,5 +675,10 @@ class TestAll(unittest.TestCase):
         )
         try:
             so.models_heatmap(name="test")
+        except Exception as e:
+            self.fail(f"models_heatmap raised an exception: {e}")
+        # Repeat but for when cap > 20
+        try:
+            so.models_heatmap(name="test", cap=21)
         except Exception as e:
             self.fail(f"models_heatmap raised an exception: {e}")
