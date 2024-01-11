@@ -1418,7 +1418,7 @@ if __name__ == "__main__":
         sigs="CRY",
         sig_neg=True,
         cosp=True,
-        freqs="A",
+        freqs="Q",
         start="2002-01-01",
     )
 
