@@ -613,3 +613,65 @@ class TestAll(unittest.TestCase):
         self.assertEqual(df4.columns[2], "model_type")
         self.assertEqual(df4.columns[3], "hparams")
         self.assertEqual(len(df4.name.unique()), 2)
+
+    def test_types_models_heatmap(self):
+        so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train)
+        # Test that invalid names are caught
+        with self.assertRaises(TypeError):
+            so.models_heatmap(name=1)
+        with self.assertRaises(TypeError):
+            so.models_heatmap(name=[1,2,3])
+        with self.assertRaises(ValueError):
+            so.models_heatmap(name="test")
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+        )
+        with self.assertRaises(TypeError):
+            so.models_heatmap(name=1)
+        with self.assertRaises(TypeError):
+            so.models_heatmap(name=["test"])
+        with self.assertRaises(ValueError):
+            so.models_heatmap(name="test2")
+        # title
+        with self.assertRaises(TypeError):
+            so.models_heatmap(name="test", title=1)
+        # cap 
+        with self.assertRaises(TypeError):
+            so.models_heatmap(name="test", cap="cap")
+        with self.assertRaises(TypeError):
+            so.models_heatmap(name="test", cap=1.3)
+        with self.assertRaises(ValueError):
+            so.models_heatmap(name="test", cap=-1)
+        with self.assertRaises(ValueError):
+            so.models_heatmap(name="test", cap=0)
+        # figsize
+        with self.assertRaises(TypeError):
+            so.models_heatmap(name="test", figsize="figsize")
+        with self.assertRaises(TypeError):
+            so.models_heatmap(name="test", figsize=1)
+        with self.assertRaises(TypeError):
+            so.models_heatmap(name="test", figsize=[1.5,2]) # needs to be a tuple!
+        with self.assertRaises(ValueError):
+            so.models_heatmap(name="test", figsize=(0,))
+        with self.assertRaises(ValueError):
+            so.models_heatmap(name="test", figsize=(0, 1, 2))
+        with self.assertRaises(ValueError):
+            so.models_heatmap(name="test", figsize=(2, -1))
+
+    def test_valid_models_heatmap(self):
+        so = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train)
+        so.calculate_predictions(
+            name="test",
+            models=self.models,
+            metric=self.metric,
+            hparam_grid=self.hparam_grid,
+            hparam_type="grid",
+        )
+        try:
+            so.models_heatmap(name="test")
+        except Exception as e:
+            self.fail(f"models_heatmap raised an exception: {e}")

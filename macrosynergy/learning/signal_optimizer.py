@@ -627,7 +627,7 @@ class SignalOptimizer:
         name: str,
         title: Optional[str] = None,
         cap: Optional[int] = 5,
-        figsize: Optional[Tuple[int, int]] = (12, 8),
+        figsize: Optional[Tuple[Union[int, float], Union[int, float]]] = (12, 8),
     ):
         """
         Visualized optimal models used for signal calculation.
@@ -638,18 +638,16 @@ class SignalOptimizer:
         :param <Optional[int]> cap: Maximum number of models to display. Default 
             (and limit) is 5. The chosen models are the 'cap' most frequently occurring 
             in the pipeline.
-        :param <Optional[tuple]> figsize: Tuple of integers denoting the figure size. 
-            Default is (12, 8).
+        :param <Optional[Tuple[Union[int, float], Union[int, float]]]> figsize: Tuple of
+            floats or ints denoting the figure size. Default is (12, 8).
 
         Note:
         This method displays the times at which each model in a learning process
         has been optimal and used for signal generation, as a binary heatmap.
         """
-        # Type and value checks
+        # Checks
         if type(name) != str:
             raise TypeError("The pipeline name must be a string.")
-        if type(cap) != int:
-            raise TypeError("The cap must be an integer.")
         if name not in self.chosen_models.name.unique():
             raise ValueError(
                 f"""The pipeline name {name} is not in the list of already-calculated 
@@ -657,6 +655,10 @@ class SignalOptimizer:
                 run calculate_predictions() first.
                 """
             )
+        if type(cap) != int:
+            raise TypeError("The cap must be an integer.")
+        if cap <= 0:
+            raise ValueError("The cap must be greater than zero.")
         if cap > 20:
             logging.warning(
                 f"The maximum number of models to display is 20. The cap has been set to "
@@ -668,7 +670,15 @@ class SignalOptimizer:
             title = f"Model Selection Heatmap for {name}"
         if type(title) != str:
             raise TypeError("The figure title must be a string.")
-
+        
+        if type(figsize) != tuple:
+            raise TypeError("The figsize argument must be a tuple.")
+        if len(figsize) != 2:
+            raise ValueError("The figsize argument must be a tuple of length 2.")
+        for element in figsize:
+            if type(element) != float and type(element) != int:
+                raise TypeError("The elements of the figsize tuple must be floats or ints.")
+            
         # Get the chosen models for the specified pipeline to visualise selection.
         chosen_models = self.get_optimal_models()
         chosen_models = chosen_models[chosen_models.name == name].sort_values(
