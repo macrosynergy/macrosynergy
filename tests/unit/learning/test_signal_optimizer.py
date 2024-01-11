@@ -4,6 +4,7 @@ import scipy.stats as stats
 
 import unittest 
 import itertools
+import datetime
 
 from parameterized import parameterized
 
@@ -747,3 +748,74 @@ class TestAll(unittest.TestCase):
             so.models_heatmap(name="test", cap=21)
         except Exception as e:
             self.fail(f"models_heatmap raised an exception: {e}")
+
+    def test_valid__worker(self):
+        # Check that the worker private method works as expected for a grid search
+        so1 = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train)
+        outer_splitter = ExpandingIncrementPanelSplit(
+            train_intervals=1,
+            test_size=1,
+            min_cids=4,
+            min_periods=36,
+            max_periods=None,
+        )
+        for train_idx, test_idx in outer_splitter.split(X=self.X_train, y=self.y_train):
+            try:
+                prediction_date, modelchoice_data = so1._worker(
+                    train_idx=train_idx,
+                    test_idx=test_idx,
+                    name="test",
+                    models=self.models,
+                    metric=self.metric,
+                    original_date_levels=sorted(self.X_train.index.get_level_values(1).unique()),
+                    hparam_grid=self.hparam_grid,
+                    hparam_type="grid",
+                )
+            except Exception as e:
+                self.fail(f"_worker raised an exception: {e}")
+            self.assertIsInstance(prediction_date, list)
+            self.assertTrue(prediction_date[0]=="test")
+            self.assertIsInstance(prediction_date[1], pd.Index)
+            self.assertIsInstance(prediction_date[2], pd.DatetimeIndex)
+            self.assertIsInstance(prediction_date[3], np.ndarray)
+            self.assertIsInstance(modelchoice_data, list)
+            self.assertIsInstance(modelchoice_data[0], datetime.date)
+            self.assertTrue(modelchoice_data[1] == "test")
+            self.assertIsInstance(modelchoice_data[2], str)
+            self.assertTrue(modelchoice_data[2] in ["linreg", "ridge"])
+            self.assertIsInstance(modelchoice_data[3], dict)
+        # Check that the worker private method works as expected for a random search
+        so2 = SignalOptimizer(inner_splitter=self.splitters[1],X=self.X_train,y=self.y_train)
+        outer_splitter = ExpandingIncrementPanelSplit(
+            train_intervals=1,
+            test_size=1,
+            min_cids=4,
+            min_periods=36,
+            max_periods=None,
+        )
+        for train_idx, test_idx in outer_splitter.split(X=self.X_train, y=self.y_train):
+            try:
+                prediction_date, modelchoice_data = so2._worker(
+                    train_idx=train_idx,
+                    test_idx=test_idx,
+                    name="test",
+                    models=self.models,
+                    metric=self.metric,
+                    original_date_levels=sorted(self.X_train.index.get_level_values(1).unique()),
+                    hparam_grid={"linreg": {}, "ridge": {"alpha": stats.expon()}},
+                    hparam_type="random",
+                    n_iter=1,
+                )
+            except Exception as e:
+                self.fail(f"_worker raised an exception: {e}")
+            self.assertIsInstance(prediction_date, list)
+            self.assertTrue(prediction_date[0]=="test")
+            self.assertIsInstance(prediction_date[1], pd.Index)
+            self.assertIsInstance(prediction_date[2], pd.DatetimeIndex)
+            self.assertIsInstance(prediction_date[3], np.ndarray)
+            self.assertIsInstance(modelchoice_data, list)
+            self.assertIsInstance(modelchoice_data[0], datetime.date)
+            self.assertTrue(modelchoice_data[1] == "test")
+            self.assertIsInstance(modelchoice_data[2], str)
+            self.assertTrue(modelchoice_data[2] in ["linreg", "ridge"])
+            self.assertIsInstance(modelchoice_data[3], dict)
