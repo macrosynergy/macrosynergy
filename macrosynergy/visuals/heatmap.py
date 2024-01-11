@@ -97,7 +97,8 @@ class Heatmap(Plotter):
         rows along the y-axis.
 
         Parameters
-        :param <Tuple> figsize: tuple specifying the size of the figure. Default is (12, 8).
+        :param <Tuple> figsize: tuple specifying the size of the figure. Default is
+            (12, 8).
         :param <str> x_axis_label: label for x-axis.
         :param <str> y_axis_label: label for y-axis.
         :param <int> axis_fontsize: the font size for the axis labels.
@@ -297,7 +298,8 @@ class Heatmap(Plotter):
             agg: str = agg.lower()
             if agg not in ["mean", "median", "min", "max", "first", "last"]:
                 raise ValueError(
-                    "`agg` must be one of 'mean', 'median', 'min', 'max', 'first' or 'last'"
+                    "`agg` must be one of 'mean', 'median', 'min', 'max', 'first' or "
+                    "'last'"
                 )
 
         df = df[["xcat", "cid", "real_date", metric]]

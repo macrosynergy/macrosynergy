@@ -164,16 +164,16 @@ def form_full_url(url: str, params: Dict = {}) -> str:
 
 def common_cids(df: pd.DataFrame, xcats: List[str]):
     """
-    Returns a list of cross-sectional identifiers (cids) for which the specified categories
-       (xcats) are available.
+    Returns a list of cross-sectional identifiers (cids) for which the specified 
+        categories (xcats) are available.
 
     :param <pd.Dataframe> df: Standardized JPMaQS DataFrame with necessary columns:
         'cid', 'xcat', 'real_date' and 'value'.
     :param <List[str]> xcats: A list with least two categories whose cross-sectional
         identifiers are being considered.
 
-    return <List[str]>: List of cross-sectional identifiers for which all categories in `xcats`
-        are available.
+    return <List[str]>: List of cross-sectional identifiers for which all categories in 
+        `xcats` are available.
     """
 
     if not isinstance(df, pd.DataFrame):
