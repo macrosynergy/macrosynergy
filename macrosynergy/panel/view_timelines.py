@@ -167,7 +167,7 @@ if __name__ == "__main__":
         aspect=3
     )
 
-    view_timelines(dfd, xcats=["CRY"], cids=cids, ncol=2, title="Carry", cs_mean=True)
+    view_timelines(dfd, xcats=["CRY"], cids=cids, ncol=4, title="Carry", cs_mean=True)
 
     view_timelines(
         dfd, xcats=["XR"], cids=cids[:2], ncol=2, cumsum=True, same_y=False, aspect=2

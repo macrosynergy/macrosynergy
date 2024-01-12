@@ -73,6 +73,13 @@ def panel_significance_probability(
 def regression_accuracy(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float:
     """
     Function to return the accuracy between the signs of the predictions and targets.
+
+    :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
+        multi-indexed by cross-section and date. The dates must be in datetime format.
+    :param <Union[pd.Series,np.array]> y_pred: Either a pandas series or numpy array
+        of predicted targets. This must have the same length as y_true.
+
+    :return <float>: Accuracy between the signs of the predictions and targets.
     """
 
     # checks
@@ -97,6 +104,13 @@ def regression_balanced_accuracy(
     """
     Function to return the balanced accuracy between the signs
     of the predictions and targets.
+
+    :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
+        multi-indexed by cross-section and date. The dates must be in datetime format.
+    :param <Union[pd.Series,np.array]> y_pred: Either a pandas series or numpy array
+        of predicted targets. This must have the same length as y_true.
+
+    :return <float>: Balanced accuracy between the signs of the predictions and targets.
     """
 
     # checks
@@ -119,6 +133,13 @@ def sharpe_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> float
     """
     Function to return a Sharpe ratio for a strategy where we go long if the predictions
     are positive and short if the predictions are negative.
+
+    :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
+        multi-indexed by cross-section and date. The dates must be in datetime format.
+    :param <Union[pd.Series,np.array]> y_pred: Either a pandas series or numpy array
+        of predicted targets. This must have the same length as y_true.
+
+    :return <float>: Sharpe ratio for the binary strategy.
     """
 
     # checks
@@ -153,6 +174,13 @@ def sortino_ratio(y_true: pd.Series, y_pred: Union[pd.Series, np.array]) -> floa
     """
     Function to return a Sortino ratio for a strategy where we go long if the predictions
     are positive and short if the predictions are negative.
+
+    :param <pd.Series> y_true: Pandas series of ground truth labels. These must be
+        multi-indexed by cross-section and date. The dates must be in datetime format.
+    :param <Union[pd.Series,np.array]> y_pred: Either a pandas series or numpy array
+        of predicted targets. This must have the same length as y_true.
+
+    :return <float>: Sortino ratio for the binary strategy.
     """
 
     # checks
