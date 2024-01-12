@@ -449,6 +449,7 @@ class CategoryRelations(object):
         separator: Union[str, int] = None,
         title_adj: float = 1,
         single_chart: bool = False,
+        ncol: int = None,
     ):
         """
         Display scatter-plot and regression line.
@@ -493,6 +494,8 @@ class CategoryRelations(object):
             are numerous charts, and the labels are excessively long). The default is
             False, and the names of the axis will be displayed on each grid if not
             conflicting with the label for each variable.
+        :param <int> ncol: number of columns in the facet grid. Default is None, in which
+            case the number of columns is determined by the number of cross-sections.
         """
 
         coef_box_loc_error = (
@@ -584,7 +587,7 @@ class CategoryRelations(object):
 
         elif separator == "cids":
             assert isinstance(single_chart, bool)
-
+            
             dfx_copy = dfx.reset_index()
             n_cids = len(dfx_copy["cid"].unique())
 
@@ -600,13 +603,16 @@ class CategoryRelations(object):
 
             keys_ar = np.array(list(dict_coln.keys()))
             key = keys_ar[keys_ar <= n_cids][-1]
-            col_number = dict_coln[key]
+            if ncol is None:
+                ncol = dict_coln[key]
+            if ncol > len(xcats):
+                ncol = len(xcats)
 
             # The DataFrame is already a standardised DataFrame. Three columns: two
             # categories (dependent & explanatory variable) and the respective
             # cross-sections. The index will be the date timestamp.
 
-            fg = sns.FacetGrid(data=dfx_copy, col="cid", col_wrap=col_number)
+            fg = sns.FacetGrid(data=dfx_copy, col="cid", col_wrap=ncol)
             fg.map(
                 sns.regplot,
                 self.xcats[0],
@@ -761,51 +767,51 @@ if __name__ == "__main__":
 
     cidx = ["AUD", "CAD", "GBP", "USD"]
 
-    cr = CategoryRelations(
-        dfdx,
-        xcats=["CRY", "XR"],
-        freq="M",
-        lag=1,
-        cids=cidx,
-        xcat_aggs=["mean", "sum"],
-        start="2001-01-01",
-        blacklist=black,
-        years=None,
-    )
+    # cr = CategoryRelations(
+    #     dfdx,
+    #     xcats=["CRY", "XR"],
+    #     freq="M",
+    #     lag=1,
+    #     cids=cidx,
+    #     xcat_aggs=["mean", "sum"],
+    #     start="2001-01-01",
+    #     blacklist=black,
+    #     years=None,
+    # )
 
-    cr.reg_scatter(
-        labels=False,
-        separator=None,
-        title="Carry and Return",
-        xlab="Carry",
-        ylab="Return",
-        coef_box="lower left",
-        prob_est="map",
-    )
+    # cr.reg_scatter(
+    #     labels=False,
+    #     separator=None,
+    #     title="Carry and Return",
+    #     xlab="Carry",
+    #     ylab="Return",
+    #     coef_box="lower left",
+    #     prob_est="map",
+    # )
 
-    # years parameter
+    # # years parameter
 
-    cr = CategoryRelations(
-        dfdx,
-        xcats=["CRY", "XR"],
-        freq="M",
-        years=5,
-        lag=0,
-        cids=cidx,
-        xcat_aggs=["mean", "sum"],
-        start="2001-01-01",
-        blacklist=black,
-    )
+    # cr = CategoryRelations(
+    #     dfdx,
+    #     xcats=["CRY", "XR"],
+    #     freq="M",
+    #     years=5,
+    #     lag=0,
+    #     cids=cidx,
+    #     xcat_aggs=["mean", "sum"],
+    #     start="2001-01-01",
+    #     blacklist=black,
+    # )
 
-    cr.reg_scatter(
-        labels=False,
-        separator=None,
-        title="Carry and Return, 5-year periods",
-        xlab="Carry",
-        ylab="Return",
-        coef_box="lower left",
-        prob_est="map",
-    )
+    # cr.reg_scatter(
+    #     labels=False,
+    #     separator=None,
+    #     title="Carry and Return, 5-year periods",
+    #     xlab="Carry",
+    #     ylab="Return",
+    #     coef_box="lower left",
+    #     prob_est="map",
+    # )
 
     cr = CategoryRelations(
         dfdx,
@@ -822,11 +828,12 @@ if __name__ == "__main__":
 
     cr.reg_scatter(
         labels=False,
-        separator=cids,
+        separator="cids",
         title="Carry and Return",
         xlab="Carry",
         ylab="Return",
         coef_box="lower left",
+        ncol=5,
     )
 
     cr.ols_table(type="pool")
