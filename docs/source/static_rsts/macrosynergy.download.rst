@@ -3,7 +3,7 @@
 macrosynergy.download
 =============================
 
-.. include:: ../gen_rsts/download.README.md
+.. include:: ../../../macrosynergy/download/README.md
    :parser: myst_parser.sphinx_
 
 Submodules
