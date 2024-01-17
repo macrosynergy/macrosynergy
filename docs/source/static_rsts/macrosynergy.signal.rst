@@ -3,7 +3,7 @@
 macrosynergy.signal
 ===========================
 
-.. include:: ../gen_rsts/signal.README.md
+.. include:: ../../../macrosynergy/signal/README.md
    :parser: myst_parser.sphinx_
 
 Submodules
