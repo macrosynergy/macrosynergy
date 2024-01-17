@@ -3,7 +3,7 @@
 macrosynergy.pnl
 ========================
 
-.. include:: ../../../macrosynergy/pnl/README.md
+.. include:: ../gen_rsts/pnl.README.md
    :parser: myst_parser.sphinx_
 
 Submodules

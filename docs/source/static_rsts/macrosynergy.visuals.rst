@@ -3,7 +3,7 @@
 macrosynergy.visuals
 ============================
 
-.. include:: ../../../macrosynergy/visuals/README.md
+.. include:: ../gen_rsts/visuals.README.md
    :parser: myst_parser.sphinx_
 
 Submodules

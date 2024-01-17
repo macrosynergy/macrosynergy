@@ -3,7 +3,7 @@
 macrosynergy.learning
 =============================
 
-.. include:: ../../../macrosynergy/learning/README.md
+.. include:: ../gen_rsts/learning.README.md
    :parser: myst_parser.sphinx_
 
 Submodules

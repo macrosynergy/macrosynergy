@@ -3,7 +3,7 @@
 macrosynergy.panel
 ==========================
 
-.. include:: ../../../macrosynergy/panel/README.md
+.. include:: ../gen_rsts/panel.README.md
    :parser: myst_parser.sphinx_
 
 Submodules
