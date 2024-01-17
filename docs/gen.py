@@ -196,13 +196,25 @@ def remove_file_spec(
             file.writelines(data)
 
 
-def generate_rsts(output_dir: str, package: str = "macrosynergy"):
+def process_for_prod(
+    gen_rsts_dir: str = OUTPUT_DIR, static_rsts_dir: str = STATIC_RSTS_DIR
+):
+    """
+    Remove the reference to gen_rsts folder and static_rsts folder from all rsts.
+    Also move all rsts from static_rsts to gen_rsts to the common parent folder.
+    """
+
+
+def generate_rsts(output_dir: str, package: str = "macrosynergy", prod: bool = False):
     """
     Calls `sphinx-apidoc` to generate rst files for all modules in `package`.
     """
     rst_gen = f"sphinx-apidoc -o {output_dir} -fMeT {package}"
     os.system(rst_gen)
     remove_file_spec(gen_dir=output_dir, static_dir=STATIC_RSTS_DIR)
+
+    if prod:
+        process_for_prod(gen_rsts_dir=output_dir, static_rsts_dir=STATIC_RSTS_DIR)
 
 
 def make_docs(docs_dir: str = "./docs", show: bool = False):
