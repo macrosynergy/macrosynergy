@@ -3,6 +3,9 @@
 macrosynergy.management
 ===============================
 
+.. include:: ../gen_rsts/management.README.md
+   :parser: myst_parser.sphinx_
+
 Subpackages
 -----------
 

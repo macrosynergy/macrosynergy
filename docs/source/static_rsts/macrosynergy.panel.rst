@@ -3,6 +3,9 @@
 macrosynergy.panel
 ==========================
 
+.. include:: ../gen_rsts/panel.README.md
+   :parser: myst_parser.sphinx_
+
 Submodules
 ----------
 

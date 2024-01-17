@@ -196,6 +196,72 @@ def remove_file_spec(
             file.writelines(data)
 
 
+def copy_subpackage_readmes(gen_dir: str = OUTPUT_DIR, package: str = "macrosynergy"):
+    """
+    Copies the README.md files from each subpackage to the docs/source/gen_rsts folder.
+    Renames them to <subpackage_name>.README.md to avoid conflicts.
+    Also removes the header from each README.md file.
+    """
+    subpackage_readmes: List[str] = [
+        # look at all levels recursively
+        filex
+        for filex in glob.glob(f"{package}/**/README.md", recursive=True)
+        # if basename is README.md
+        if os.path.basename(filex) == "README.md"
+    ]
+    new_names: List[str] = [
+        ".".join(px.split(os.sep)[-2:]) for px in subpackage_readmes
+    ]
+    new_names = [os.path.join(gen_dir, px) for px in new_names]
+
+    for old, new in zip(subpackage_readmes, new_names):
+        # if the file already exists, remove it
+        if os.path.exists(new):
+            os.remove(new)
+        shutil.copyfile(old, new)
+        with open(new, "r", encoding="utf8") as file:
+            data = file.readlines()
+            while data[0].strip() == "":
+                data.pop(0)
+            data.pop(0)
+
+        with open(new, "w", encoding="utf8") as file:
+            file.writelines(data)
+
+
+def copy_subpackage_readmes(gen_dir: str = OUTPUT_DIR, package: str = "macrosynergy"):
+    """
+    Copies the README.md files from each subpackage to the docs/source/gen_rsts folder.
+    Renames them to <subpackage_name>.README.md to avoid conflicts.
+    Also removes the header from each README.md file.
+    """
+    subpackage_readmes: List[str] = [
+        # look at all levels recursively
+        filex
+        for filex in glob.glob(f"{package}/**/README.md", recursive=True)
+        # if basename is README.md
+        if os.path.basename(filex) == "README.md"
+    ]
+    new_names: List[str] = [
+        ".".join(px.split(os.sep)[-2:]) for px in subpackage_readmes
+    ]
+    new_names = [os.path.join(gen_dir, px) for px in new_names]
+
+    for old, new in zip(subpackage_readmes, new_names):
+        # if the file already exists, remove it
+        if os.path.exists(new):
+            os.remove(new)
+        shutil.copyfile(old, new)
+        with open(new, "r", encoding="utf8") as file:
+            data = file.readlines()
+            while data[0].strip() == "":
+                data.pop(0)
+            data.pop(0)
+
+        with open(new, "w", encoding="utf8") as file:
+            file.writelines(data)
+
+
 def process_for_prod(
     gen_rsts_dir: str = OUTPUT_DIR, static_rsts_dir: str = STATIC_RSTS_DIR
 ):
@@ -212,6 +278,10 @@ def generate_rsts(output_dir: str, package: str = "macrosynergy", prod: bool = F
     rst_gen = f"sphinx-apidoc -o {output_dir} -fMeT {package}"
     os.system(rst_gen)
     remove_file_spec(gen_dir=output_dir, static_dir=STATIC_RSTS_DIR)
+    copy_subpackage_readmes(gen_dir=output_dir, package=package)
+
+    if prod:
+        process_for_prod(gen_rsts_dir=output_dir, static_rsts_dir=STATIC_RSTS_DIR)
 
     if prod:
         process_for_prod(gen_rsts_dir=output_dir, static_rsts_dir=STATIC_RSTS_DIR)
@@ -229,6 +299,8 @@ def make_docs(docs_dir: str = "./docs", show: bool = False):
     os.system(makeclean)
     os.system(makehtml)
     os.chdir(current_dir)
+    # remove the generated rst files
+    shutil.rmtree(OUTPUT_DIR)
     print(f"Documentation generated successfully.")
     print(
         "Paste the following path into your browser to view:\n\t\t "
