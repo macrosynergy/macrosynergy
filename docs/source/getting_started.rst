@@ -44,4 +44,4 @@ Usage
 
 The package is designed to be used in conjunction with JPMaQS Quantamental Data from the 
 J.P. Morgan DataQuery API. If you do not have access to the DataQuery API, you can still 
-use the package with simulated data from `macrosynergy.management.simulate <../gen_rsts/macrosynergy.management.simulate.html>`_.
+use the package with simulated data from `macrosynergy.management.simulate <macrosynergy.management.simulate.html>`_.

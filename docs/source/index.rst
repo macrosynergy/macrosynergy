@@ -77,11 +77,11 @@ More from Macrosynergy:
 
 .. toctree::
    :hidden:
-   :maxdepth: 2
+   :maxdepth: 5
 
-   static_rsts/about
-   static_rsts/getting_started
-   static_rsts/api_reference
-   static_rsts/usage_examples.md
-   gen_rsts/release_notes.md
+   about
+   getting_started
+   api_reference
+   usage_examples.md
+   release_notes.md
 
