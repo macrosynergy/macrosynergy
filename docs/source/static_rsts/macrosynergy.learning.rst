@@ -3,6 +3,9 @@
 macrosynergy.learning
 =============================
 
+.. include:: ../../../macrosynergy/learning/README.md
+   :parser: myst_parser.sphinx_
+
 Submodules
 ----------
 
