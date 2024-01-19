@@ -24,8 +24,8 @@ from .signal_optimizer import SignalOptimizer
 
 from .predictors import (
     NaivePredictor,
-    SignWeightedRegressor,
-    TimeWeightedRegressor,
+    SignWeightedLinearRegression,
+    TimeWeightedLinearRegression,
 )
 
 __all__ = [

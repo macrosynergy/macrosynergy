@@ -1,11 +1,10 @@
-import inspect
-
 import numpy as np
 import pandas as pd
 
 import datetime
 
 from sklearn.base import BaseEstimator, RegressorMixin
+from sklearn.linear_model import LinearRegression
 
 from typing import Union
 
@@ -24,53 +23,41 @@ class NaivePredictor(BaseEstimator, RegressorMixin):
     def predict(self, X):
         return np.array(X)
 
-
-class SignWeightedRegressor(BaseEstimator, RegressorMixin):
-    def __init__(self, regressor: RegressorMixin, **init_kwargs):
+class SignWeightedLinearRegression(BaseEstimator, RegressorMixin):
+    def __init__(self, fit_intercept: bool = True, copy_X: bool = True, n_jobs: int = None, positive: bool = False):
         """
-        Custom class to create regressions with sign-weighted training samples.
+        Custom class to create a WLS linear regression model, with the sample weights 
+        chosen by inverse frequency of the label's sign in the training set.
+    
+        :param <bool> fit_intercept: Whether to calculate the intercept for this model. If set to False, no intercept will be used in calculations (i.e. data is expected to be centered).
+        :param <bool> copy_X: If True, X will be copied; else, it may be overwritten.
+        :param <int> n_jobs: The number of jobs to use for the computation.
+        :param <bool> positive: When set to True, forces the coefficients to be positive. This option is only supported for dense arrays.
 
-        :param <RegressorMixin> regressor: Scikit-learn regressor class to be used as the
-            underlying model for which a sign-weighted fit is to be performed.
-
-        NOTE: This class is specifically tailored for compatibility with any scikit-learn
-        regressor that supports a 'sample_weight' parameter in its 'fit' method. Each
-        training sample receives a weight inversely proportional to the frequency of its
-        label's sign in the training set. Thus, the model is encouraged to learn equally
-        from both positive and negative return samples. If there
-        are more positive targets than negative targets in the training set, then the
-        negative target samples are given a higher weight in the model training process.
-        The opposite is true if there are more negative targets than positive targets.
-
-
+        NOTE: By weighting the contribution of different training samples based on the 
+        sign of the label, the model is encouraged to learn equally from both positive and negative return samples,
+        irrespective of class imbalance. If there are more positive targets than negative
+        targets in the training set, then the negative target samples are given a higher
+        weight in the model training process. The opposite is true if there are more
+        negative targets than positive targets.
         """
-        if not callable(regressor) or not inspect.isclass(regressor):
-            raise TypeError(
-                "Regressor must be a class, such as 'LinearRegression'. Please check it isn't an instantiation of a class, such as 'LinearRegression()'."
-            )
-
-        if not issubclass(regressor, RegressorMixin) or not issubclass(
-            regressor, BaseEstimator
-        ):
-            raise TypeError(
-                "Regressor must be a subclass of both BaseEstimator and RegressorMixin."
-            )
-
-        if not hasattr(regressor, "fit") or not callable(getattr(regressor, "fit")):
-            raise TypeError("Regressor must have a callable 'fit' method.")
-
-        if not hasattr(regressor, "predict") or not callable(
-            getattr(regressor, "predict")
-        ):
-            raise TypeError("Regressor must have a callable 'predict' method.")
-
-        fit_params = inspect.signature(regressor.fit).parameters
-        if "sample_weight" not in fit_params:
-            raise ValueError(
-                f"The underlying scikit-learn regressor {regressor} must have a 'sample_weight' parameter in its 'fit' method."
-            )
-
-        self.model = regressor(**init_kwargs)
+        if not isinstance(fit_intercept, bool):
+            raise TypeError("fit_intercept must be a boolean.")
+        if not isinstance(copy_X, bool):
+            raise TypeError("copy_X must be a boolean.")
+        if not isinstance(n_jobs, int) and n_jobs != None:
+            raise TypeError("n_jobs must be an integer or None.")
+        if n_jobs is not None:
+            if n_jobs < -1 or n_jobs == 0:
+                raise ValueError("n_jobs must be a positive integer or -1.")
+        if not isinstance(positive, bool):
+            raise TypeError("positive must be a boolean.")
+        
+        self.fit_intercept = fit_intercept
+        self.copy_X = copy_X
+        self.n_jobs = n_jobs
+        self.positive = positive
+        self.model = LinearRegression(fit_intercept=self.fit_intercept, copy_X=self.copy_X, n_jobs=self.n_jobs, positive=self.positive)
 
     def __calculate_sample_weights(self, targets: Union[pd.DataFrame, pd.Series]):
         """
@@ -104,13 +91,13 @@ class SignWeightedRegressor(BaseEstimator, RegressorMixin):
         # Checks
         if type(X) != pd.DataFrame:
             raise TypeError(
-                "Input feature matrix for the SignWeightedRegressor must be a pandas dataframe. "
+                "Input feature matrix for the SignWeightedLinearRegression must be a pandas dataframe. "
                 "If used as part of an sklearn pipeline, ensure that previous steps "
                 "return a pandas dataframe."
             )
         if (type(y) != pd.Series) and (type(y) != pd.DataFrame):
             raise TypeError(
-                "Target vector for the SignWeightedRegressor must be a pandas series or dataframe. "
+                "Target vector for the SignWeightedLinearRegression must be a pandas series or dataframe. "
                 "If used as part of an sklearn pipeline, ensure that previous steps "
                 "return a pandas series or dataframe."
             )
@@ -140,7 +127,7 @@ class SignWeightedRegressor(BaseEstimator, RegressorMixin):
         self.sample_weights, _, _ = self.__calculate_sample_weights(y)
         self.model.fit(X, y, sample_weight=self.sample_weights)
         return self
-
+    
     def predict(self, X: pd.DataFrame):
         """
         Predict method to make model predictions on the input feature matrix X based on
@@ -153,7 +140,7 @@ class SignWeightedRegressor(BaseEstimator, RegressorMixin):
         # Checks
         if type(X) != pd.DataFrame:
             raise TypeError(
-                "Input feature matrix for the SignWeightedRegressor must be a pandas dataframe. "
+                "Input feature matrix for the SignWeightedLinearRegression must be a pandas dataframe. "
                 "If used as part of an sklearn pipeline, ensure that previous steps "
                 "return a pandas dataframe."
             )
@@ -165,62 +152,41 @@ class SignWeightedRegressor(BaseEstimator, RegressorMixin):
         # Predict
         return self.model.predict(X)
 
-
-class TimeWeightedRegressor(BaseEstimator, RegressorMixin):
-    def __init__(self, regressor: RegressorMixin, half_life: Union[float,int], **init_kwargs):
+class TimeWeightedLinearRegression(BaseEstimator, RegressorMixin):
+    def __init__(self, half_life: Union[float, int] = 21*12, fit_intercept: bool = True, copy_X: bool = True, n_jobs: int = None, positive: bool = False):
         """
-        Custom class to create regressions with exponentially-weighted training samples.
+        Custom class to create a WLS linear regression model, where the training sample 
+        weights exponentially decay by sample recency, given a prescribed half_life.
+    
+        :param <bool> fit_intercept: Whether to calculate the intercept for this model. If set to False, no intercept will be used in calculations (i.e. data is expected to be centered).
+        :param <bool> copy_X: If True, X will be copied; else, it may be overwritten.
+        :param <int> n_jobs: The number of jobs to use for the computation.
+        :param <bool> positive: When set to True, forces the coefficients to be positive. This option is only supported for dense arrays.
 
-        :param <RegressorMixin> regressor: Scikit-learn regressor class to be used as the
-            underlying model for which a time-weighted fit is to be performed.
-        :param <Union[float,int]> half_life: Half-life of an exponential decay function used to
-            calculate the sample weights. The half-life is the number of time units for
-            the weight to decay to half its original value. The greater the half-life, the
-            greater that more historical samples are weighted in the model.
-
-        NOTE: This class is specifically tailored for compatibility with any
-        scikit-learn regressor that supports a 'sample_weight' parameter in its 'fit'
-        method. Each training sample receives a weight based on the date attributed to
-        the sample. The weights are calculated as an exponentially decaying function of
-        the date, with the half-life of the decay specified by the user.
-        Consequently, during the model training process, more recent samples
-        are emphasized due to the higher weight they receive. By weighting based on
-        recency, the model is encouraged to prioritise newer information.
+        NOTE: By weighting the contribution of different training samples based on the 
+        observation date, the model is encouraged to prioritise newer information.
+        The half-life denotes the number of time periods in units of the native data
+        frequency for the weight attributed to the most recent sample (one) to decay by half. 
         """
-        # Checks
-        if not callable(regressor) or not inspect.isclass(regressor):
-            raise TypeError(
-                "Regressor must be a class, such as 'LinearRegression'. Please check it isn't an instantiation of a class, such as 'LinearRegression()'."
-            )
-
-        if not issubclass(regressor, RegressorMixin) or not issubclass(
-            regressor, BaseEstimator
-        ):
-            raise TypeError(
-                "Regressor must be a subclass of both BaseEstimator and RegressorMixin."
-            )
-
-        if not hasattr(regressor, "fit") or not callable(getattr(regressor, "fit")):
-            raise TypeError("Regressor must have a callable 'fit' method.")
-
-        if not hasattr(regressor, "predict") or not callable(
-            getattr(regressor, "predict")
-        ):
-            raise TypeError("Regressor must have a callable 'predict' method.")
-
-        fit_params = inspect.signature(regressor.fit).parameters
-        if "sample_weight" not in fit_params:
-            raise ValueError(
-                f"The underlying scikit-learn regressor {regressor} must have a 'sample_weight' parameter in its 'fit' method."
-            )
-        if type(half_life) != float and type(half_life) != int:
+        if not isinstance(half_life, float) and not isinstance(half_life, int):
             raise TypeError("The half-life must be either a float or an integer.")
-        if half_life <= 0:
-            raise ValueError("The half-life must be greater than zero.")
+        if half_life <= 1:
+            raise ValueError("The half-life must be greater than 1.")
+        if not isinstance(fit_intercept, bool):
+            raise TypeError("fit_intercept must be a boolean.")
+        if not isinstance(copy_X, bool):
+            raise TypeError("copy_X must be a boolean.")
+        if not isinstance(n_jobs, int) and n_jobs != None:
+            raise TypeError("n_jobs must be an integer or None.")
+        if not isinstance(positive, bool):
+            raise TypeError("positive must be a boolean.")
         
-        # Init
-        self.model = regressor(**init_kwargs)
         self.half_life = half_life
+        self.fit_intercept = fit_intercept
+        self.copy_X = copy_X
+        self.n_jobs = n_jobs
+        self.positive = positive
+        self.model = LinearRegression(fit_intercept=self.fit_intercept, copy_X=self.copy_X, n_jobs=self.n_jobs, positive=self.positive)
 
     def __calculate_sample_weights(self, targets: Union[pd.DataFrame, pd.Series]):
         """
@@ -234,13 +200,14 @@ class TimeWeightedRegressor(BaseEstimator, RegressorMixin):
 
         dates = sorted(targets.index.get_level_values(1).unique(), reverse=True)
         num_dates = len(dates)
-        weights = [2 ** (-t / self.half_life) for t in np.arange(num_dates)]
+        weights = np.power(2, -np.arange(num_dates) / self.half_life)
         weights = weights / np.sum(weights)
 
         weight_map = dict(zip(dates, weights))
         self.sample_weights = targets.index.get_level_values(1).map(weight_map)
 
         return self.sample_weights
+
 
     def fit(self, X: pd.DataFrame, y: Union[pd.DataFrame, pd.Series]):
         """
@@ -256,13 +223,13 @@ class TimeWeightedRegressor(BaseEstimator, RegressorMixin):
         # Checks 
         if type(X) != pd.DataFrame:
             raise TypeError(
-                "Input feature matrix for the TimeWeightedRegressor must be a pandas dataframe. "
+                "Input feature matrix for the TimeWeightedLinearRegression must be a pandas dataframe. "
                 "If used as part of an sklearn pipeline, ensure that previous steps "
                 "return a pandas dataframe."
             )
         if (type(y) != pd.Series) and (type(y) != pd.DataFrame):
             raise TypeError(
-                "Target vector for the TimeWeightedRegressor must be a pandas series or dataframe. "
+                "Target vector for the TimeWeightedLinearRegression must be a pandas series or dataframe. "
                 "If used as part of an sklearn pipeline, ensure that previous steps "
                 "return a pandas series or dataframe."
             )
@@ -292,7 +259,7 @@ class TimeWeightedRegressor(BaseEstimator, RegressorMixin):
         sample_weights = self.__calculate_sample_weights(y)
         self.model.fit(X, y, sample_weight=sample_weights)
         return self
-
+    
     def predict(self, X: pd.DataFrame):
         """
         Predict method to make model predictions on the input feature matrix X based on
@@ -305,7 +272,7 @@ class TimeWeightedRegressor(BaseEstimator, RegressorMixin):
         # Checks
         if type(X) != pd.DataFrame:
             raise TypeError(
-                "Input feature matrix for the TimeWeightedRegressor must be a pandas dataframe. "
+                "Input feature matrix for the TimeWeightedLinearRegression must be a pandas dataframe. "
                 "If used as part of an sklearn pipeline, ensure that previous steps "
                 "return a pandas dataframe."
             )
@@ -313,7 +280,7 @@ class TimeWeightedRegressor(BaseEstimator, RegressorMixin):
             raise ValueError("X must be multi-indexed.")
         if not isinstance(X.index.get_level_values(1)[0], datetime.date):
             raise TypeError("The inner index of X must be datetime.date.")
-        
+
         # Predict
         return self.model.predict(X)
 
@@ -360,11 +327,11 @@ if __name__ == "__main__":
     lm.fit(X, y)
     lm_preds = lm.predict(X)
     # Sign-Weighted Linear Regression
-    swlm = SignWeightedRegressor(LinearRegression)
+    swlm = SignWeightedLinearRegression()
     swlm.fit(X, y)
     swlm_preds = swlm.predict(X)
     # Time-Weighted Linear Regression
-    twlm = TimeWeightedRegressor(LinearRegression, half_life=12*21) # One year half life
+    twlm = TimeWeightedLinearRegression(half_life=12*21) # One year half life
     twlm.fit(X, y)
     twlm_preds = twlm.predict(X)
 
