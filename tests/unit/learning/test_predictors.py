@@ -257,6 +257,7 @@ class TestSWLRegression(unittest.TestCase):
                 models=models,
                 hparam_grid=hparam_grid,
                 metric=metric,
+                n_jobs=1,
             )
         except Exception as e:
             self.fail(f"SignalOptimizer raised an exception {e} when using SignWeightedLinearRegression as an estimator.")
@@ -516,6 +517,7 @@ class TestTWLRegression(unittest.TestCase):
                 models=models,
                 hparam_grid=hparam_grid,
                 metric=metric,
+                n_jobs=1,
             )
         except Exception as e:
             self.fail(f"SignalOptimizer raised an exception {e} when using TimeWeightedLinearRegression as an estimator.")
