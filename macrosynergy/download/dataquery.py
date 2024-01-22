@@ -1032,15 +1032,16 @@ if __name__ == "__main__":
     client_secret = os.getenv("DQ_CLIENT_SECRET")
 
     expressions = [
-        "DB(JPMAQS,USD_EQXR_VT10,value)",
-        "DB(JPMAQS,AUD_EXALLOPENNESS_NSA_1YMA,value)",
+        "DB(JPMAQS,ALM_COCRR_NSA,eop_lag)",
+        "DB(JPMAQS,ALM_COCRR_NSA,grading)",
     ]
 
     with DataQueryInterface(
         client_id=client_id,
         client_secret=client_secret,
+        base_url="https://n4sriziy65rqmvusbapxrmp6xa0aecbf.lambda-url.eu-west-2.on.aws",
     ) as dq:
-        assert dq.check_connection(verbose=True)
+        # assert dq.check_connection(verbose=True)
 
         data = dq.download_data(
             expressions=expressions,
@@ -1050,3 +1051,4 @@ if __name__ == "__main__":
         )
 
     print(f"Succesfully downloaded data for {len(data)} expressions.")
+    print(data)

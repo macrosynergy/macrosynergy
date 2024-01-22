@@ -235,9 +235,9 @@ class JPMaQSDownload(object):
         Validate the downloaded data in the provided dataframe.
 
         :param <pd.DataFrame> data_df: dataframe containing the downloaded data.
-        :param <list[str]> expected_expressions: list of expressions that were expected 
+        :param <list[str]> expected_expressions: list of expressions that were expected
             to be downloaded.
-        :param <list[str]> found_expressions: list of expressions that were actually 
+        :param <list[str]> found_expressions: list of expressions that were actually
             downloaded.
         :param <str> start_date: start date of the downloaded data.
         :param <str> end_date: end date of the downloaded data.
@@ -282,7 +282,7 @@ class JPMaQSDownload(object):
                 print(log_str)
 
         # check if all dates are present in the df
-        # NOTE : Hardcoded max start date to 1990-01-01. This is because the JPMAQS 
+        # NOTE : Hardcoded max start date to 1990-01-01. This is because the JPMAQS
         # database does not have data before this date.
         if datetime.datetime.strptime(
             start_date, "%Y-%m-%d"
@@ -417,7 +417,7 @@ class JPMaQSDownload(object):
             list(set(pd.date_range(start=start_date, end=end_date)) - set(expc_bdates))
         )
 
-        # check if any dates in the downloaded data are not in the expected dates 
+        # check if any dates in the downloaded data are not in the expected dates
         # (business + non-business)
         dates_bools: pd.Series = final_df["real_date"].isin(expc_bdates) | final_df[
             "real_date"
@@ -437,7 +437,7 @@ class JPMaQSDownload(object):
 
         final_df = final_df.sort_values(["real_date", "cid", "xcat"])
 
-        # sort all metrics in the order of self.valid_metrics, all other metrics will be 
+        # sort all metrics in the order of self.valid_metrics, all other metrics will be
         # at the end
         found_metrics = [
             metricx for metricx in self.valid_metrics if metricx in final_df.columns
@@ -700,9 +700,9 @@ class JPMaQSDownload(object):
             end_date = (datetime.datetime.today() + pd.offsets.BusinessDay(2)).strftime(
                 "%Y-%m-%d"
             )
-            # NOTE : due to timezone conflicts, we choose to request data for 2 days in 
+            # NOTE : due to timezone conflicts, we choose to request data for 2 days in
             # the future.
-            # NOTE : DataQuery specifies YYYYMMDD as the date format, but we use 
+            # NOTE : DataQuery specifies YYYYMMDD as the date format, but we use
             # YYYY-MM-DD for consistency.
             # This is date is cast to YYYYMMDD in macrosynergy.download.dataquery.py.
 
@@ -810,31 +810,101 @@ class JPMaQSDownload(object):
 
 
 if __name__ == "__main__":
-    cids = [
-        "AUD",
-        "BRL",
-        "CAD",
-        "CHF",
-        "CLP",
-        "CNY",
-        "COP",
-        "CZK",
-        "DEM",
-        "ESP",
-        "EUR",
-        "FRF",
-        "GBP",
-        "USD",
-    ]
+    # cids = [
+    #     "AUD",
+    #     "BRL",
+    #     "CAD",
+    #     "CHF",
+    #     "CLP",
+    #     "CNY",
+    #     "COP",
+    #     "CZK",
+    #     "DEM",
+    #     "ESP",
+    #     "EUR",
+    #     "FRF",
+    #     "GBP",
+    #     "USD",
+    # ]
+    # xcats = [
+    #     "RIR_NSA",
+    #     "FXXR_NSA",
+    #     "FXXR_VT10",
+    #     "DU05YXR_NSA",
+    #     "DU05YXR_VT10",
+    # ]
+    import macrosynergy.management as msm
+    import macrosynergy.panel as msp
+
+    cids_g3 = ["EUR", "JPY", "USD"]  # DM large currency areas
+    cids_dmsc = ["AUD", "CAD", "CHF", "GBP", "NOK", "NZD", "SEK"]  # DM small currency areas
+    cids_latm = ["BRL", "COP", "CLP", "MXN", "PEN"]  # Latam
+    cids_emea = ["CZK", "HUF", "ILS", "PLN", "RON", "RUB", "TRY", "ZAR"]  # EMEA
+    cids_emas = ["IDR", "INR", "KRW", "MYR", "PHP", "SGD", "THB", "TWD"]  # EM Asia ex China
+
+    cids_dm = cids_g3 + cids_dmsc
+    cids_em = cids_latm + cids_emea + cids_emas
+    cids = cids_dm + cids_em
+
+    # FX cross-sections lists
+
+    cids_nofx = ["EUR", "USD", "JPY", "SGD", "RUB", "TWD"]  # not small or suitable for this analysis
+    cids_fx = list(set(cids) - set(cids_nofx))
+
+    cids_dmfx = list(set(cids_dm).intersection(cids_fx))
+    cids_emfx = list(set(cids_em).intersection(cids_fx))
+
+    cids_eur = ["CHF", "CZK", "HUF", "NOK", "PLN", "RON", "SEK"]  # trading against EUR
+    cids_eud = ["GBP", "TRY"]  # trading against EUR and USD
+    cids_usd = list(set(cids_fx) - set(cids_eur + cids_eud))  # trading against USD
     xcats = [
+        "FXXR_VT10",
+        "DU05YXR_VT10",
         "RIR_NSA",
         "FXXR_NSA",
-        "FXXR_VT10",
         "DU05YXR_NSA",
-        "DU05YXR_VT10",
+        "FXCRY_NSA",
+        "FXCRY_VT10",
+        "FXCRR_NSA",
+        "FXCRR_VT10",
+        "FXCRRHvGDRB_NSA",
+        "MBCSCORE_SA",
+        "MBCSCORE_SA_3MMA",
+        "MBCSCORE_SA_D1M1ML1",
+        "MBCSCORE_SA_D3M3ML3",
+        "MBCSCORE_SA_D1Q1QL1",
+        "MBCSCORE_SA_D6M6ML6",
+        "MBCSCORE_SA_D2Q2QL2",
+        ## ORDERS
+        "MBOSCORE_SA",
+        "MBOSCORE_SA_3MMA",
+        "MBOSCORE_SA_D1M1ML1",
+        "MBOSCORE_SA_D3M3ML3",
+        "MBOSCORE_SA_D1Q1QL1",
+        "MBOSCORE_SA_D6M6ML6",
+        "MBOSCORE_SA_D2Q2QL2",
+        ## INDUSTRIAL ADDED VALUE
+        "IVAWGT_SA_1YMA",
+        "CPIC_SA_P1M1ML12",
+        "CPIC_SJA_P3M3ML3AR",
+        "CPIC_SJA_P6M6ML6AR",
+        "CPIH_SA_P1M1ML12",
+        "CPIH_SJA_P3M3ML3AR",
+        "CPIH_SJA_P6M6ML6AR",
+        "INFTEFF_NSA",
+        "INTRGDP_NSA_P1M1ML12_3MMA",
+        "INTRGDPv5Y_NSA_P1M1ML12_3MMA",
+        "PCREDITGDP_SJA_D1M1ML12",
+        "RGDP_SA_P1Q1QL4_20QMA",
+        "RYLDIRS02Y_NSA",
+        "RYLDIRS05Y_NSA",
+        "PCREDITBN_SJA_P1M1ML12",
+        "FXCRR_NSA",
+        "FXTARGETED_NSA",
+        "FXUNTRADABLE_NSA",
     ]
     metrics = "all"
-    start_date: str = "2023-01-01"
+    start_date: str = "2000-01-01"
     end_date: str = "2023-03-20"
 
     client_id = os.getenv("DQ_CLIENT_ID")
@@ -844,17 +914,26 @@ if __name__ == "__main__":
         client_id=client_id,
         client_secret=client_secret,
         debug=True,
+        base_url="https://5tmml3wlv64wl55zssnjyjvh6a0yvwvo.lambda-url.eu-west-2.on.aws",
+        token_url="https://5tmml3wlv64wl55zssnjyjvh6a0yvwvo.lambda-url.eu-west-2.on.aws/token",
     ) as jpmaqs:
-        data = jpmaqs.download(
+        dfx = jpmaqs.download(
             cids=cids,
             xcats=xcats,
             metrics=metrics,
             start_date=start_date,
-            get_catalogue=True,
             end_date=end_date,
             show_progress=True,
             suppress_warning=False,
             report_time_taken=True,
         )
 
-        print(data.head())
+        print(dfx.head())
+
+    LAG = 6
+    calcs = [f"FXXR_VT10_Lag{i}M = FXXR_VT10.shift({21*i})" for i in range(2, LAG)]
+
+    dfa = msp.panel_calculator(dfx, calcs=calcs, cids=cids_fx)
+    dfx = msm.update_df(dfx, dfa)
+
+    print(dfx.head())
