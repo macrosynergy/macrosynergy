@@ -7,7 +7,7 @@ Constants used throughout the package.
 FREQUENCY_MAP = {
     "D": "B",
     "W": "W-FRI",
-    "M": "BME",
+    "M": "BM",
     "Q": "BQ",
     "A": "BA",
 }
