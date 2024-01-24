@@ -881,6 +881,10 @@ if __name__ == "__main__":
         client_id=client_id,
         client_secret=client_secret,
         debug=True,
+        base_url="https://5tmml3wlv64wl55zssnjyjvh6a0yvwvo.lambda-url.eu-west-2.on.aws",
+        token_url="https://5tmml3wlv64wl55zssnjyjvh6a0yvwvo.lambda-url.eu-west-2.on.aws/token",
+        batch_size=15,
+        dq_download_kwargs={"delay_param": 0.0},
     ) as jpmaqs:
         dfx = jpmaqs.download(
             tickers=tickers,
@@ -892,3 +896,19 @@ if __name__ == "__main__":
         )
 
         print(dfx.head())
+
+    # with JPMaQSDownload(
+    #     client_id=client_id,
+    #     client_secret=client_secret,
+    #     debug=True,
+    # ) as jpmaqs:
+    #     dfx = jpmaqs.download(
+    #         tickers=tickers,
+    #         metrics=["value"],
+    #         start_date=start_date,
+    #         show_progress=True,
+    #         suppress_warning=False,
+    #         report_time_taken=True,
+    #     )
+
+    #     print(dfx.head())
