@@ -1,4 +1,4 @@
-# RAN AT 13:24
+from concurrent.futures import ThreadPoolExecutor
 import time
 import boto3
 import paramiko
@@ -8,7 +8,6 @@ ec2 = boto3.resource("ec2")
 instances = ec2.instances.filter(
     Filters=[
         {"Name": "tag:Name", "Values": ["notebook-runner-*"]},
-        {"Name": "instance-state-name", "Values": ["running", "stopped"]},
     ]
 )
 
@@ -38,55 +37,57 @@ for i in range(len(list(instances))):
         batches.append(notebooks[i * batch_size : (i + 1) * batch_size])
 bucket_url = "https://macrosynergy-notebook-prod.s3.eu-west-2.amazonaws.com/"
 
+print(len(batches))
+print(len(list(instances)))
+
 # If len(notebooks) < len(instances), then don't use all instances
 # Start the ec2 instances
-# for instance in instances:
-#     instance.start()
+for instance in instances:
+    instance.start()
 
-list(instances)[0].start()
+for instance in instances:
+    instance.wait_until_running()
 
-# Add a sleep here to wait for the instances to start
+def run_commands_on_ec2(instance, notebooks):
+    try:
+        instance_ip = instance.public_ip_address
+        ssh_client = paramiko.SSHClient()
+        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh_client.connect(
+            hostname=instance_ip, username="ubuntu", key_filename="./Notebook-Runner.pem"
+        )
+        commands = [
+            "rm -rf notebooks",
+            " && ".join(
+                ["wget -P notebooks/ " + bucket_url + notebook for notebook in notebooks]
+            ),
+            "pip install macrosynergy --upgrade",
+            "python3 run_notebooks.py",
+            "rm -rf notebooks",
+        ]
+        for command in commands:
+            print("Executing {}".format(command))
+            stdin, stdout, stderr = ssh_client.exec_command(command)
+            print(stdout.read().decode("utf-8"))
+            print(stderr.read().decode("utf-8"))
+        ssh_client.close()
+        instance.stop()
+        return "Success"
+    except:
+        print("Failed to connect, retrying...")
+        time.sleep(2)
 
+def process_instance(instance):
+    instance_ip = instance.public_ip_address
+    print(f"Running notebooks on {instance_ip}")
+    return run_commands_on_ec2(instance, batches.pop())
 
-def run_commands_on_ec2(instance_ip, notebooks):
-    ssh_client = paramiko.SSHClient()
-    ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh_client.connect(
-        hostname=instance_ip, username="ubuntu", key_filename="./Notebook-Runner.pem"
-    )
-    commands = [
-        "rm -rf notebooks",
-        "mkdir notebooks",
-        " && ".join(
-            ["wget -P notebooks/ " + bucket_url + notebook for notebook in notebooks]
-        ),
-        "pip install macrosynergy --upgrade",
-        "python3 run_notebooks.py",
-        # "rm -rf notebooks",
-    ]
-    for command in commands:
-        stdin, stdout, stderr = ssh_client.exec_command(command)
-        print(stdout.read())
-        print(stderr.read())
-    ssh_client.close()
+max_threads = min(len(list(instances)), len(batches))
+with ThreadPoolExecutor(max_threads) as executor:
+    # Use executor.map to run the process_instance function concurrently on each instance
+    output = executor.map(process_instance, list(instances))
 
-
-# Run the notebooks on the instances
-# for instance in instances:
-#     # Wait until the instance state is running
-#     while instance.state['Name'] != 'running':
-#         time.sleep(2)
-#     run_commands_on_ec2(instance.public_ip_address, batches.pop())
-
-while list(instances)[0].state["Name"] != "running":
-    time.sleep(2)
-time.sleep(2)
-run_commands_on_ec2(list(instances)[0].public_ip_address, batches.pop())
-
-# for instance in instances:
-#     instance.stop()
-
-list(instances)[0].stop()
+print(output)
 
 
 # For each batch, run the notebooks on the instances in parallel

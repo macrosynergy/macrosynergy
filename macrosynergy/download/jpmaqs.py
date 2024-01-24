@@ -833,58 +833,13 @@ if __name__ == "__main__":
     #     "DU05YXR_NSA",
     #     "DU05YXR_VT10",
     # ]
-    import macrosynergy.management as msm
-    import macrosynergy.panel as msp
 
-    cids_g3 = ["EUR", "JPY", "USD"]  # DM large currency areas
-    cids_dmsc = ["AUD", "CAD", "CHF", "GBP", "NOK", "NZD", "SEK"]  # DM small currency areas
-    cids_latm = ["BRL", "COP", "CLP", "MXN", "PEN"]  # Latam
-    cids_emea = ["CZK", "HUF", "ILS", "PLN", "RON", "RUB", "TRY", "ZAR"]  # EMEA
-    cids_emas = ["IDR", "INR", "KRW", "MYR", "PHP", "SGD", "THB", "TWD"]  # EM Asia ex China
-
-    cids_dm = cids_g3 + cids_dmsc
-    cids_em = cids_latm + cids_emea + cids_emas
+    # General cross-sections lists
+    cids_dm = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NOK", "NZD", "SEK", "USD"]
+    cids_em = ["CLP","COP", "CZK", "HUF", "IDR", "ILS", "INR", "KRW", "MXN", "PLN", "THB", "TRY", "TWD", "ZAR",]
     cids = cids_dm + cids_em
 
-    # FX cross-sections lists
-
-    cids_nofx = ["EUR", "USD", "JPY", "SGD", "RUB", "TWD"]  # not small or suitable for this analysis
-    cids_fx = list(set(cids) - set(cids_nofx))
-
-    cids_dmfx = list(set(cids_dm).intersection(cids_fx))
-    cids_emfx = list(set(cids_em).intersection(cids_fx))
-
-    cids_eur = ["CHF", "CZK", "HUF", "NOK", "PLN", "RON", "SEK"]  # trading against EUR
-    cids_eud = ["GBP", "TRY"]  # trading against EUR and USD
-    cids_usd = list(set(cids_fx) - set(cids_eur + cids_eud))  # trading against USD
-    xcats = [
-        "FXXR_VT10",
-        "DU05YXR_VT10",
-        "RIR_NSA",
-        "FXXR_NSA",
-        "DU05YXR_NSA",
-        "FXCRY_NSA",
-        "FXCRY_VT10",
-        "FXCRR_NSA",
-        "FXCRR_VT10",
-        "FXCRRHvGDRB_NSA",
-        "MBCSCORE_SA",
-        "MBCSCORE_SA_3MMA",
-        "MBCSCORE_SA_D1M1ML1",
-        "MBCSCORE_SA_D3M3ML3",
-        "MBCSCORE_SA_D1Q1QL1",
-        "MBCSCORE_SA_D6M6ML6",
-        "MBCSCORE_SA_D2Q2QL2",
-        ## ORDERS
-        "MBOSCORE_SA",
-        "MBOSCORE_SA_3MMA",
-        "MBOSCORE_SA_D1M1ML1",
-        "MBOSCORE_SA_D3M3ML3",
-        "MBOSCORE_SA_D1Q1QL1",
-        "MBOSCORE_SA_D6M6ML6",
-        "MBOSCORE_SA_D2Q2QL2",
-        ## INDUSTRIAL ADDED VALUE
-        "IVAWGT_SA_1YMA",
+    ecos = [
         "CPIC_SA_P1M1ML12",
         "CPIC_SJA_P3M3ML3AR",
         "CPIC_SJA_P6M6ML6AR",
@@ -899,16 +854,28 @@ if __name__ == "__main__":
         "RYLDIRS02Y_NSA",
         "RYLDIRS05Y_NSA",
         "PCREDITBN_SJA_P1M1ML12",
+    ]
+    mkts = [
+        "DU02YXR_NSA",
+        "DU05YXR_NSA",
+        "DU02YXR_VT10",
+        "DU05YXR_VT10",
+        "EQXR_NSA",
+        "EQXR_VT10",
+        "FXXR_NSA",
+        "FXXR_VT10",
         "FXCRR_NSA",
         "FXTARGETED_NSA",
         "FXUNTRADABLE_NSA",
     ]
-    metrics = "all"
-    start_date: str = "2000-01-01"
-    end_date: str = "2023-03-20"
 
-    client_id = os.getenv("DQ_CLIENT_ID")
-    client_secret = os.getenv("DQ_CLIENT_SECRET")
+    xcats = ecos + mkts
+
+    tickers = [cid + "_" + xcat for cid in cids for xcat in xcats]
+    start_date = "2010-01-01"
+
+    client_id: str = os.getenv("DQ_CLIENT_ID")
+    client_secret: str = os.getenv("DQ_CLIENT_SECRET")
 
     with JPMaQSDownload(
         client_id=client_id,
@@ -916,13 +883,13 @@ if __name__ == "__main__":
         debug=True,
         base_url="https://5tmml3wlv64wl55zssnjyjvh6a0yvwvo.lambda-url.eu-west-2.on.aws",
         token_url="https://5tmml3wlv64wl55zssnjyjvh6a0yvwvo.lambda-url.eu-west-2.on.aws/token",
+        batch_size=15,
+        dq_download_kwargs={"delay_param": 0},
     ) as jpmaqs:
         dfx = jpmaqs.download(
-            cids=cids,
-            xcats=xcats,
-            metrics=metrics,
+            tickers=tickers,
+            metrics=["value"],
             start_date=start_date,
-            end_date=end_date,
             show_progress=True,
             suppress_warning=False,
             report_time_taken=True,
@@ -930,10 +897,18 @@ if __name__ == "__main__":
 
         print(dfx.head())
 
-    LAG = 6
-    calcs = [f"FXXR_VT10_Lag{i}M = FXXR_VT10.shift({21*i})" for i in range(2, LAG)]
+    # with JPMaQSDownload(
+    #     client_id=client_id,
+    #     client_secret=client_secret,
+    #     debug=True,
+    # ) as jpmaqs:
+    #     dfx = jpmaqs.download(
+    #         tickers=tickers,
+    #         metrics=["value"],
+    #         start_date=start_date,
+    #         show_progress=True,
+    #         suppress_warning=False,
+    #         report_time_taken=True,
+    #     )
 
-    dfa = msp.panel_calculator(dfx, calcs=calcs, cids=cids_fx)
-    dfx = msm.update_df(dfx, dfa)
-
-    print(dfx.head())
+    #     print(dfx.head())

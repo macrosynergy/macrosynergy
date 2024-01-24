@@ -5,6 +5,7 @@ macrosynergy.download.jpmaqs.py. However, for a use cases independent
 of JPMaQS, this module can be used directly to download data from the
 JPMorgan DataQuery API.
 """
+import collections
 import concurrent.futures
 import time
 import os
@@ -732,7 +733,8 @@ class DataQueryInterface(object):
             raise InvalidResponseError(
                 f"Invalid response from DataQuery: {response}\n"
                 f"User ID: {self.auth.get_auth()['user_id']}\n"
-                f"URL: {form_full_url(url, params)}"
+                f"URL: {form_full_url(url, params)}\n"
+                f"PARAMS: {params}\n"
                 f"Timestamp (UTC): {datetime.utcnow().isoformat()}"
             )
 
@@ -907,8 +909,8 @@ class DataQueryInterface(object):
         nan_treatment: str = "NA_NOTHING",
         reference_data: str = "NO_REFERENCE_DATA",
         retry_counter: int = 0,
-        delay_param: float = API_DELAY_PARAM,   # TODO do we want the user to have access 
-                                                # to this?
+        delay_param: float = API_DELAY_PARAM,  # TODO do we want the user to have access
+        # to this?
     ) -> List[Dict]:
         """
         Download data from the DataQuery API.
@@ -1026,29 +1028,130 @@ class DataQueryInterface(object):
 
 
 if __name__ == "__main__":
-    import os
+    import os, sys
+    import json
 
     client_id = os.getenv("DQ_CLIENT_ID")
     client_secret = os.getenv("DQ_CLIENT_SECRET")
 
-    expressions = [
-        "DB(JPMAQS,ALM_COCRR_NSA,eop_lag)",
-        "DB(JPMAQS,ALM_COCRR_NSA,grading)",
+    cids_dm = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NOK", "NZD", "SEK", "USD"]
+    cids_em = ["CLP","COP", "CZK", "HUF", "IDR", "ILS", "INR", "KRW", "MXN", "PLN", "THB", "TRY", "TWD", "ZAR",]
+    cids = cids_dm + cids_em
+
+    ecos = [
+        "CPIC_SA_P1M1ML12",
+        "CPIC_SJA_P3M3ML3AR",
+        "CPIC_SJA_P6M6ML6AR",
+        "CPIH_SA_P1M1ML12",
+        "CPIH_SJA_P3M3ML3AR",
+        "CPIH_SJA_P6M6ML6AR",
+        "INFTEFF_NSA",
+        "INTRGDP_NSA_P1M1ML12_3MMA",
+        "INTRGDPv5Y_NSA_P1M1ML12_3MMA",
+        "PCREDITGDP_SJA_D1M1ML12",
+        "RGDP_SA_P1Q1QL4_20QMA",
+        "RYLDIRS02Y_NSA",
+        "RYLDIRS05Y_NSA",
+        "PCREDITBN_SJA_P1M1ML12",
     ]
+    mkts = [
+        "DU02YXR_NSA",
+        "DU05YXR_NSA",
+        "DU02YXR_VT10",
+        "DU05YXR_VT10",
+        "EQXR_NSA",
+        "EQXR_VT10",
+        "FXXR_NSA",
+        "FXXR_VT10",
+        "FXCRR_NSA",
+        "FXTARGETED_NSA",
+        "FXUNTRADABLE_NSA",
+    ]
+
+    xcats = ecos + mkts
+
+    tickers = [cid + "_" + xcat for cid in cids for xcat in xcats]
+
+    expressions = [f"DB(JPMAQS,{ticker},value)" for ticker in tickers]
+
+    # expressions = [
+    #     "DB(JPMAQS,MXN_CPIH_SJA_P3M3ML3AR,value)",
+    #     "DB(JPMAQS,IDR_CPIC_SA_P1M1ML12,value)",
+    #     "DB(JPMAQS,CLP_CPIC_SJA_P6M6ML6AR,value)",
+    #     "DB(JPMAQS,INR_CPIC_SJA_P3M3ML3AR,value)",
+    #     "DB(JPMAQS,CAD_CPIH_SJA_P3M3ML3AR,value)",
+    #     "DB(JPMAQS,HUF_CPIC_SJA_P3M3ML3AR,value)",
+    #     "DB(JPMAQS,AUD_CPIC_SJA_P3M3ML3AR,value)",
+    #     "DB(JPMAQS,NOK_CPIC_SA_P1M1ML12,value)",
+    #     "DB(JPMAQS,NZD_CPIH_SA_P1M1ML12,value)",
+    #     "DB(JPMAQS,TRY_CPIH_SJA_P6M6ML6AR,value)",
+    #     "DB(JPMAQS,USD_CPIC_SJA_P6M6ML6AR,value)",
+    #     "DB(JPMAQS,THB_CPIC_SA_P1M1ML12,value)",
+    #     "DB(JPMAQS,HUF_CPIH_SA_P1M1ML12,value)",
+    #     "DB(JPMAQS,USD_CPIH_SJA_P3M3ML3AR,value)",
+    #     "DB(JPMAQS,NOK_CPIC_SJA_P6M6ML6AR,value)",
+    #     "DB(JPMAQS,GBP_CPIH_SJA_P3M3ML3AR,value)",
+    #     "DB(JPMAQS,ILS_CPIC_SJA_P3M3ML3AR,value)",
+    #     "DB(JPMAQS,PLN_CPIH_SJA_P3M3ML3AR,value)",
+    #     "DB(JPMAQS,ILS_CPIC_SJA_P6M6ML6AR,value)",
+    #     "DB(JPMAQS,ZAR_CPIH_SA_P1M1ML12,value)",
+    #     "DB(JPMAQS,CZK_FXCRR_NSA,value)",
+    #     "DB(JPMAQS,ILS_FXTARGETED_NSA,value)",
+    #     "DB(JPMAQS,SGD_FXXR_NSA,value)",
+    #     "DB(JPMAQS,THB_FXUNTRADABLE_NSA,value)"
+    # ]
 
     with DataQueryInterface(
         client_id=client_id,
         client_secret=client_secret,
-        base_url="https://n4sriziy65rqmvusbapxrmp6xa0aecbf.lambda-url.eu-west-2.on.aws",
+        batch_size=30,
     ) as dq:
         # assert dq.check_connection(verbose=True)
 
         data = dq.download_data(
             expressions=expressions,
-            start_date="2020-01-25",
-            end_date="2023-02-05",
+            start_date="1990-01-01",
             show_progress=True,
         )
 
+    # with DataQueryInterface(client_id=client_id, client_secret=client_secret) as dq:
+    #     # assert dq.check_connection(verbose=True)
+
+    #     data_2 = dq.download_data(
+    #         expressions=expressions,
+    #         start_date="1990-01-01",
+    #         show_progress=True,
+    #     )
+
+    def get_size(obj, seen=None):
+        """Recursively finds size of objects"""
+
+        size = sys.getsizeof(obj)
+        if seen is None:
+            seen = set()
+
+        obj_id = id(obj)
+        if obj_id in seen:
+            return 0
+
+        # Important mark as seen *before* entering recursion to gracefully handle
+        # self-referential objects
+        seen.add(obj_id)
+
+        if isinstance(obj, dict):
+            size += sum([get_size(v, seen) for v in obj.values()])
+            size += sum([get_size(k, seen) for k in obj.keys()])
+        elif hasattr(obj, '__dict__'):
+            size += get_size(obj.__dict__, seen)
+        elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+            size += sum([get_size(i, seen) for i in obj])
+
+        return size
+    
+    print(get_size(data))
+
+    json_string = json.dumps(data)
+
+    print(get_size(json_string))
+
     print(f"Succesfully downloaded data for {len(data)} expressions.")
-    print(data)
