@@ -676,10 +676,16 @@ class TestDataQueryInterface(unittest.TestCase):
             with self.assertRaises(TypeError):
                 validate_download_args(**bad_args)
 
-        for delay_param in [0.1, -1.0]:
+        for delay_param in [-0.1, -1.0]:
             bad_args: Dict[str, Any] = good_args.copy()
             bad_args["delay_param"] = delay_param
             with self.assertRaises(ValueError):
+                validate_download_args(**bad_args)
+
+        for delay_param in [0.0, 0.1, 0.15]:
+            bad_args: Dict[str, Any] = good_args.copy()
+            bad_args["delay_param"] = delay_param
+            with self.assertWarns(RuntimeWarning):
                 validate_download_args(**bad_args)
 
         for date_arg in ["start_date", "end_date"]:
