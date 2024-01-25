@@ -17,24 +17,29 @@ print(f"Found {len(list(instances))} instances")
 # Get the number of ipynb files in the s3 bucket notebooks
 s3 = boto3.resource("s3")
 bucket = s3.Bucket("macrosynergy-notebook-prod")
+objects_info = [(obj.key, obj.size) for obj in bucket.objects.all()]
+
+# Filter for notebook files
+notebooks_info = [(key, size) for key, size in objects_info if key.endswith(".ipynb")]
 notebooks = [obj.key for obj in bucket.objects.filter(Prefix="")]
 notebooks = [notebook for notebook in notebooks if notebook.endswith(".ipynb")]
+sorted_notebooks_info = sorted(notebooks_info, key=lambda x: x[1])
+notebooks = [name for name, size in sorted_notebooks_info]
 print(f"Found {len(notebooks)} notebooks in the s3 bucket")
 
 batch_size = len(notebooks) // len(list(instances))
-batch_size = 1
 # Get remainder too
 remainder = len(notebooks) % len(list(instances))
-remainder = 0
 
 # Batch the notebooks
 batches = []
 for i in range(len(list(instances))):
-    if remainder > 0:
-        batches.append(notebooks[i * batch_size : (i + 1) * batch_size + 1])
-        remainder -= 1
-    else:
-        batches.append(notebooks[i * batch_size : (i + 1) * batch_size])
+    batches.append(notebooks[i::len(list(instances))])
+    # if remainder > 0:
+    #     batches.append(notebooks[i * batch_size : (i + 1) * batch_size + 1])
+    #     remainder -= 1
+    # else:
+    #     batches.append(notebooks[i * batch_size : (i + 1) * batch_size])
 bucket_url = "https://macrosynergy-notebook-prod.s3.eu-west-2.amazonaws.com/"
 
 print(len(batches))
@@ -56,6 +61,7 @@ def run_commands_on_ec2(instance, notebooks):
         ssh_client.connect(
             hostname=instance_ip, username="ubuntu", key_filename="./Notebook-Runner.pem"
         )
+        print("Connection Succeeded!!!")
         commands = [
             "rm -rf notebooks",
             " && ".join(
