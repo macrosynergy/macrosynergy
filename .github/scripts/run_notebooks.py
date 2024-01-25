@@ -54,34 +54,37 @@ for instance in instances:
     instance.wait_until_running()
 
 def run_commands_on_ec2(instance, notebooks):
-    try:
-        instance_ip = instance.public_ip_address
-        ssh_client = paramiko.SSHClient()
-        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh_client.connect(
-            hostname=instance_ip, username="ubuntu", key_filename="./Notebook-Runner.pem"
-        )
-        print("Connection Succeeded!!!")
-        commands = [
-            "rm -rf notebooks",
-            " && ".join(
-                ["wget -P notebooks/ " + bucket_url + notebook for notebook in notebooks]
-            ),
-            "pip install macrosynergy --upgrade",
-            "python3 run_notebooks.py",
-            "rm -rf notebooks",
-        ]
-        for command in commands:
-            print("Executing {}".format(command))
-            stdin, stdout, stderr = ssh_client.exec_command(command)
-            print(stdout.read().decode("utf-8"))
-            print(stderr.read().decode("utf-8"))
-        ssh_client.close()
-        instance.stop()
-        return "Success"
-    except:
-        print("Failed to connect, retrying...")
-        time.sleep(2)
+    connected = False
+    while not connected:
+        try:
+            instance_ip = instance.public_ip_address
+            ssh_client = paramiko.SSHClient()
+            ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            ssh_client.connect(
+                hostname=instance_ip, username="ubuntu", key_filename="./Notebook-Runner.pem"
+            )
+            print("Connection Succeeded!!!")
+            connected = True
+            commands = [
+                "rm -rf notebooks",
+                " && ".join(
+                    ["wget -P notebooks/ " + bucket_url + notebook for notebook in notebooks]
+                ),
+                "pip install macrosynergy --upgrade",
+                "python3 run_notebooks.py",
+                "rm -rf notebooks",
+            ]
+            for command in commands:
+                print("Executing {}".format(command))
+                stdin, stdout, stderr = ssh_client.exec_command(command)
+                print(stdout.read().decode("utf-8"))
+                print(stderr.read().decode("utf-8"))
+            ssh_client.close()
+            instance.stop()
+            return "Success"
+        except:
+            print("Failed to connect, retrying...")
+            time.sleep(2)
 
 def process_instance(instance):
     instance_ip = instance.public_ip_address
