@@ -475,7 +475,14 @@ def validate_download_args(
 
     if not isinstance(delay_param, float):
         raise TypeError("`delay_param` must be a float >=0.2 (seconds).")
-    elif delay_param < 0.2:
+
+    if delay_param < 0.2:
+        warnings.warn(
+            RuntimeWarning(
+                f"`delay_param` is too low; DataQuery API may reject requests. "
+                f"Minimum recommended value is 0.2 seconds. "
+            ))
+    if delay_param < 0.0:
         raise ValueError("`delay_param` must be a float >=0.2 (seconds).")
 
     vars_types_zip: zip = zip(
