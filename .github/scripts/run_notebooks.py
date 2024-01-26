@@ -34,15 +34,13 @@ remainder = len(notebooks) % len(list(instances))
 # Batch the notebooks
 batches = []
 for i in range(len(list(instances))):
-    batches.append(notebooks[i::len(list(instances))])
-    # if remainder > 0:
-    #     batches.append(notebooks[i * batch_size : (i + 1) * batch_size + 1])
-    #     remainder -= 1
-    # else:
-    #     batches.append(notebooks[i * batch_size : (i + 1) * batch_size])
+    batch = notebooks[i::len(list(instances))]
+    # batch = batch[:batch_size]
+    batches.append(batch)
 bucket_url = "https://macrosynergy-notebook-prod.s3.eu-west-2.amazonaws.com/"
 
 print(len(batches))
+print(len(batches[0]))
 print(len(list(instances)))
 
 # If len(notebooks) < len(instances), then don't use all instances
