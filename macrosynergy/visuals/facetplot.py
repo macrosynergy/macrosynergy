@@ -591,8 +591,8 @@ class FacetPlot(Plotter):
                     plot_func_args["linestyle"] = "--"
 
                 if is_valid_series:
-                    X = selected_df[plt_dct["X"]].values
-                    Y = selected_df[metric].values
+                    X = selected_df[plt_dct["X"]].tolist()
+                    Y = selected_df[metric].tolist()
                 else:
                     X = []
                     Y = []
