@@ -605,8 +605,8 @@ class CategoryRelations(object):
             key = keys_ar[keys_ar <= n_cids][-1]
             if ncol is None:
                 ncol = dict_coln[key]
-            if ncol > len(xcats):
-                ncol = len(xcats)
+            if ncol > n_cids:
+                ncol = n_cids
 
             # The DataFrame is already a standardised DataFrame. Three columns: two
             # categories (dependent & explanatory variable) and the respective
@@ -767,51 +767,51 @@ if __name__ == "__main__":
 
     cidx = ["AUD", "CAD", "GBP", "USD"]
 
-    # cr = CategoryRelations(
-    #     dfdx,
-    #     xcats=["CRY", "XR"],
-    #     freq="M",
-    #     lag=1,
-    #     cids=cidx,
-    #     xcat_aggs=["mean", "sum"],
-    #     start="2001-01-01",
-    #     blacklist=black,
-    #     years=None,
-    # )
+    cr = CategoryRelations(
+        dfdx,
+        xcats=["CRY", "XR"],
+        freq="M",
+        lag=1,
+        cids=cidx,
+        xcat_aggs=["mean", "sum"],
+        start="2001-01-01",
+        blacklist=black,
+        years=None,
+    )
 
-    # cr.reg_scatter(
-    #     labels=False,
-    #     separator=None,
-    #     title="Carry and Return",
-    #     xlab="Carry",
-    #     ylab="Return",
-    #     coef_box="lower left",
-    #     prob_est="map",
-    # )
+    cr.reg_scatter(
+        labels=False,
+        separator=None,
+        title="Carry and Return",
+        xlab="Carry",
+        ylab="Return",
+        coef_box="lower left",
+        prob_est="map",
+    )
 
-    # # years parameter
+    # years parameter
 
-    # cr = CategoryRelations(
-    #     dfdx,
-    #     xcats=["CRY", "XR"],
-    #     freq="M",
-    #     years=5,
-    #     lag=0,
-    #     cids=cidx,
-    #     xcat_aggs=["mean", "sum"],
-    #     start="2001-01-01",
-    #     blacklist=black,
-    # )
+    cr = CategoryRelations(
+        dfdx,
+        xcats=["CRY", "XR"],
+        freq="M",
+        years=5,
+        lag=0,
+        cids=cidx,
+        xcat_aggs=["mean", "sum"],
+        start="2001-01-01",
+        blacklist=black,
+    )
 
-    # cr.reg_scatter(
-    #     labels=False,
-    #     separator=None,
-    #     title="Carry and Return, 5-year periods",
-    #     xlab="Carry",
-    #     ylab="Return",
-    #     coef_box="lower left",
-    #     prob_est="map",
-    # )
+    cr.reg_scatter(
+        labels=False,
+        separator=None,
+        title="Carry and Return, 5-year periods",
+        xlab="Carry",
+        ylab="Return",
+        coef_box="lower left",
+        prob_est="map",
+    )
 
     cr = CategoryRelations(
         dfdx,
@@ -834,6 +834,15 @@ if __name__ == "__main__":
         ylab="Return",
         coef_box="lower left",
         ncol=5,
+    )
+    cr.reg_scatter(
+        labels=False,
+        separator="cids",
+        title="Carry and Return",
+        xlab="Carry",
+        ylab="Return",
+        coef_box="lower left",
+        ncol=2,
     )
 
     cr.ols_table(type="pool")

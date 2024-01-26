@@ -21,7 +21,6 @@ from .df_utils import (
     apply_slip,
     downsample_df_on_real_date,
     update_df,
-    df_tickers,
     update_tickers,
     update_categories,
     reduce_df,
