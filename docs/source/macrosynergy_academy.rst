@@ -35,7 +35,7 @@ used in conjunction with the JPMaQS Quantamental System. However, if you
 do not have access to JPMaQS, you can use the free data sets on Kaggle
 `here <https://www.kaggle.com/datasets/macrosynergy/fixed-income-returns-and-macro-trends>`__.
 You can also use the Academy with simulated data from
-`macrosynergy.management.simulate <./macrosynergy.management.simulate.md>`__.
+`macrosynergy.management.simulate <macrosynergy.management.simulate.html>`__.
 
 --------------
 
