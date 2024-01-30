@@ -74,8 +74,7 @@ def remove_file_spec(
 
 
 def fetch_release_notes(release_notes_file: str):
-    rnl_abs_path = OPx.join(os.getcwd(), release_notes_file)
-    os.system(f'python ./docs/release_notes.py -o "{rnl_abs_path}"')
+    os.system(f'python ./docs/release_notes.py -o "{release_notes_file}"')
 
 
 def generate_rst_files(
@@ -223,7 +222,8 @@ def driver(
     )
 
     # generate release notes
-    fetch_release_notes(release_notes_file=release_notes_md)
+    rnl_abs_path = OPx.abspath(OPx.normpath(OPx.join(rst_output_dir, release_notes_md)))
+    fetch_release_notes(release_notes_file=rnl_abs_path)
     copy_subpackage_readmes(rst_output_dir=rst_output_dir, package=package_name)
     make_docs(docs_dir=PACKAGE_DOCS_DIR)
 
