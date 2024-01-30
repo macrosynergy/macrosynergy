@@ -272,7 +272,8 @@ class CategoryRelations(object):
             column represents the explanatory variable; second column hosts the dependent
             variable. The DataFrame's index is the real-date and cross-section.
         :param <str> change: type of change to be applied
-        :param <int> n_periods: number of base periods in df over which the change is applied.
+        :param <int> n_periods: number of base periods in df over which the change is
+            applied.
         :param <List[str]> shared_cids: shared cross-sections across the two categories
             and the received list.
         :param <str> expln_var: only the explanatory variable's data series will be
@@ -373,6 +374,7 @@ class CategoryRelations(object):
         prob_est,
         time_period: str = "",
         coef_box_loc: str = "upper left",
+        ax: plt.Axes = None,
     ):
         """
         Add the computed correlation coefficient and probability to a Matplotlib table.
@@ -388,6 +390,8 @@ class CategoryRelations(object):
             default is in the upper left corner.
         :param <bool> prob_bool: boolean parameter which determines whether the
             probability value is included in the table. The default is True.
+        :param <plt.Axes> ax: Matplotlib Axes object. If None (default), new
+            axes will be created.
 
         """
         time_period_error = f"<str> expected - received {type(time_period)}."
@@ -410,13 +414,22 @@ class CategoryRelations(object):
             row_headers = None
             cellC = None
 
-        data_table = plt.table(
-            cellText=cpl,
-            cellColours=cellC,
-            colLabels=fields,
-            cellLoc="center",
-            loc=coef_box_loc,
-        )
+        if ax is None:
+            data_table = plt.table(
+                cellText=cpl,
+                cellColours=cellC,
+                colLabels=fields,
+                cellLoc="center",
+                loc=coef_box_loc,
+            )
+        else:
+            data_table = ax.table(
+                cellText=cpl,
+                cellColours=cellC,
+                colLabels=fields,
+                cellLoc="center",
+                loc=coef_box_loc,
+            )
 
         return data_table
 
@@ -448,6 +461,8 @@ class CategoryRelations(object):
         separator: Union[str, int] = None,
         title_adj: float = 1,
         single_chart: bool = False,
+        ncol: int = None,
+        ax: plt.Axes = None,
     ):
         """
         Display scatter-plot and regression line.
@@ -492,6 +507,11 @@ class CategoryRelations(object):
             are numerous charts, and the labels are excessively long). The default is
             False, and the names of the axis will be displayed on each grid if not
             conflicting with the label for each variable.
+        :param <int> ncol: number of columns in the facet grid. Default is None, in which
+            case the number of columns is determined by the number of cross-sections.
+        :param <plt.Axes> ax: Matplotlib Axes object. If None (default), new figure and
+            axes objects will be created. If an Axes object is passed, the plot will be
+            drawn on the Axes, and plt.show() will not be called.
         """
 
         coef_box_loc_error = (
@@ -503,7 +523,7 @@ class CategoryRelations(object):
 
         assert prob_est in ["pool", "map"], "prob_est must be 'pool' or 'map'"
 
-        sns.set_theme(style="whitegrid", palette="colorblind")
+        sns.set_theme(style="whitegrid")
         dfx = self.df.copy()
 
         if title is None and (self.years is None):
@@ -519,13 +539,21 @@ class CategoryRelations(object):
         elif title is None:
             title = f"{self.xcats[0]} and {self.xcats[1]}"
 
+        if ax is not None:
+            if not isinstance(ax, plt.Axes):
+                raise TypeError("ax must be a matplotlib Axes object.")
+            show_plot = False
+        else:
+            show_plot = True
+
         # If "separator" is type Integer, the scatter plot is split across two
         # time-periods where the divisor is the received year.
         if isinstance(separator, int):
             year_error = "Separation by years does not work with year groups."
             assert self.years is None, year_error
 
-            fig, ax = plt.subplots(figsize=size)
+            if ax is None:
+                fig, ax = plt.subplots(figsize=size)
 
             index_years = dfx.index.get_level_values(1).year
             years_in_df = list(index_years.unique())
@@ -550,6 +578,7 @@ class CategoryRelations(object):
                 scatter_kws={"s": 30, "alpha": 0.5},
                 label=label_set1,
                 line_kws={"lw": 1},
+                ax=ax,
             )
             sns.regplot(
                 data=dfx2,
@@ -562,6 +591,7 @@ class CategoryRelations(object):
                 label=label_set2,
                 scatter_kws={"s": 30, "alpha": 0.5},
                 line_kws={"lw": 1},
+                ax=ax,
             )
 
             if coef_box is not None:
@@ -570,6 +600,7 @@ class CategoryRelations(object):
                     time_period="",
                     coef_box_loc=coef_box,
                     prob_est=prob_est,
+                    ax=ax,
                 )
                 data_table.scale(0.4, 2.5)
                 data_table.set_fontsize(14)
@@ -599,13 +630,16 @@ class CategoryRelations(object):
 
             keys_ar = np.array(list(dict_coln.keys()))
             key = keys_ar[keys_ar <= n_cids][-1]
-            col_number = dict_coln[key]
+            if ncol is None:
+                ncol = dict_coln[key]
+            if ncol > n_cids:
+                ncol = n_cids
 
             # The DataFrame is already a standardised DataFrame. Three columns: two
             # categories (dependent & explanatory variable) and the respective
             # cross-sections. The index will be the date timestamp.
 
-            fg = sns.FacetGrid(data=dfx_copy, col="cid", col_wrap=col_number)
+            fg = sns.FacetGrid(data=dfx_copy, col="cid", col_wrap=ncol)
             fg.map(
                 sns.regplot,
                 self.xcats[0],
@@ -649,7 +683,10 @@ class CategoryRelations(object):
                         fg.axes[-remainder].set_ylabel(ylab)
 
         elif separator is None:
-            fig, ax = plt.subplots(figsize=size)
+            if ax is None:
+                fig, ax = plt.subplots(figsize=size)
+            else:
+                show_plot = False
 
             sns.regplot(
                 data=dfx,
@@ -661,11 +698,15 @@ class CategoryRelations(object):
                 fit_reg=fit_reg,
                 scatter_kws={"s": 30, "alpha": 0.5, "color": "lightgray"},
                 line_kws={"lw": 1},
+                ax=ax,
             )
 
             if coef_box is not None:
                 data_table = self.corr_probability(
-                    df_probability=self.df, prob_est=prob_est, coef_box_loc=coef_box
+                    df_probability=self.df,
+                    prob_est=prob_est,
+                    coef_box_loc=coef_box,
+                    ax=ax,
                 )
                 data_table.scale(0.4, 2.5)
                 data_table.set_fontsize(12)
@@ -687,7 +728,7 @@ class CategoryRelations(object):
                         ser_labs += "-" + df_labs["real_date"].dt.month.astype(str)
 
                 for i in range(self.df.shape[0]):
-                    plt.text(
+                    ax.text(
                         x=self.df[self.xcats[0]][i] + 0,
                         y=self.df[self.xcats[1]][i] + 0,
                         s=ser_labs[i],
@@ -703,7 +744,8 @@ class CategoryRelations(object):
         else:
             ValueError("Separator must be either a valid year <int> or 'cids' <str>.")
 
-        plt.show()
+        if show_plot:
+            plt.show()
 
     def ols_table(self, type="pool"):
         """
@@ -809,7 +851,7 @@ if __name__ == "__main__":
     cr = CategoryRelations(
         dfdx,
         xcats=["CRY", "XR"],
-        xcat1_chg="diff",
+        # xcat1_chg="diff",
         freq="M",
         lag=1,
         cids=cidx,
@@ -821,12 +863,38 @@ if __name__ == "__main__":
 
     cr.reg_scatter(
         labels=False,
-        separator=cids,
+        separator=2010,
         title="Carry and Return",
         xlab="Carry",
         ylab="Return",
         coef_box="lower left",
+        ncol=5,
     )
+    cr.reg_scatter(
+        labels=False,
+        separator="cids",
+        title="Carry and Return",
+        xlab="Carry",
+        ylab="Return",
+        coef_box="lower left",
+        ncol=2,
+    )
+
+    # Passing Axes object for a subplot
+    fig, ax = plt.subplots(1, 2, figsize=(12, 8))
+
+    for i in range(2):
+        cr.reg_scatter(
+            labels=False,
+            separator=None,
+            title="Carry and Return",
+            xlab="Carry",
+            ylab="Return",
+            coef_box="lower left",
+            prob_est="map",
+            ax=ax[i],
+        )
+    plt.show()
 
     cr.ols_table(type="pool")
     cr.ols_table(type="re")

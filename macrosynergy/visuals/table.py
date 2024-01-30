@@ -18,6 +18,7 @@ def view_table(
     xticklabels: Optional[List[str]] = None,
     yticklabels: Optional[List[str]] = None,
     annot: bool = True,
+    fmt: str = ".2f",
 ) -> None:
     """
     Displays a DataFrame representing a table as a heatmap.
@@ -68,12 +69,14 @@ def view_table(
         linewidths=0.5,
         cbar_kws={"shrink": 0.5},
         annot=annot,
+        fmt=fmt,
         xticklabels=xticklabels,
         yticklabels=yticklabels,
     )
 
     ax.set(xlabel=xlabel, ylabel=ylabel)
     ax.set_title(title, fontsize=title_fontsize)
+    plt.tight_layout()
 
     plt.show()
 

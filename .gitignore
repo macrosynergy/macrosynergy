@@ -1,3 +1,23 @@
+
+####### Custom ignore files #######
+dev/
+
+data/
+
+macrosynergy/version.py
+
+.vscode/
+.vs/
+
+# RST files for documentation
+docs/source/gen_rsts/
+
+docs/_build/
+
+docs.build/
+
+####### Python template #######
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -69,7 +89,9 @@ instance/
 .scrapy
 
 # Sphinx documentation
-docs/_build/
+docs.old/_build/
+
+docs/source/gen_rsts/
 
 # PyBuilder
 target/
@@ -168,17 +190,3 @@ credentials*.json
 # Coverage files
 coverage/
 coverage.xml
-
-dev/
-
-data/
-
-macrosynergy/version.py
-
-.vscode/
-.vs/
-
-docs/examples.build/
-
-
-

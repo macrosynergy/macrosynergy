@@ -2,8 +2,8 @@ import os
 import shutil
 import subprocess
 
-SOURCE_DIR = "./docs/build/"
-OUTPUT_DIR = "./docs/"
+SOURCE_DIR = "./docs.old/build/"
+OUTPUT_DIR = "./docs.old/"
 
 # look in the source dir, there will be only one directory
 

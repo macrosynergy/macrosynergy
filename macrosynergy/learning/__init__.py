@@ -6,9 +6,12 @@ from .panel_time_series_split import (
 )
 from .cv_tools import panel_cv_scores
 from .transformers import (
-    LassoSelectorTransformer,
-    MapSelectorTransformer,
-    AvgNormFtrTransformer,
+    LassoSelector,
+    MapSelector,
+    ZnScoreAverager,
+    PanelMinMaxScaler,
+    PanelStandardScaler,
+    FeatureAverager,
 )
 from .metrics import (
     panel_significance_probability,
@@ -17,7 +20,13 @@ from .metrics import (
     regression_accuracy,
     regression_balanced_accuracy,
 )
-from .prediction_tools import SignalOptimizer
+from .signal_optimizer import SignalOptimizer
+
+from .predictors import (
+    NaivePredictor,
+    SignWeightedLinearRegression,
+    TimeWeightedLinearRegression,
+)
 
 __all__ = [
     # panel_time_series_split
@@ -27,17 +36,24 @@ __all__ = [
     "BasePanelSplit",
     # cv_tools
     "panel_cv_scores",
-    # transformers
-    "AvgNormFtrTransformer",
-    "LassoSelectorTransformer",
-    "MapSelectorTransformer",
+    # transformers   
+    "FeatureAverager",     
+    "LassoSelector",
+    "MapSelector",
+    "PanelMinMaxScaler",
+    "PanelStandardScaler",
+    "ZnScoreAverager",
     # metrics
     "panel_significance_probability",
     "sharpe_ratio",
     "sortino_ratio",
     "regression_accuracy",
     "regression_balanced_accuracy",
-    # prediction_tools
+    # signal_optimizer
     "SignalOptimizer",
+    # predictors
+    "NaivePredictor",
+    "SignWeightedRegressor",
+    "TimeWeightedRegressor",
 ]
  

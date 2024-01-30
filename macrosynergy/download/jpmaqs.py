@@ -1,6 +1,4 @@
 """ JPMaQS Download Interface 
-
-::docs::JPMaQSDownload::sort_first::
 """
 
 import datetime
@@ -36,41 +34,23 @@ class JPMaQSDownload(object):
     It can be extended to include the use of proxies, and even request generic DataQuery expressions.
 
     :param <bool> oauth: True if using oauth, False if using username/password with crt/key.
-
-    When using oauth:
-    :param <str> client_id: oauth client_id, required if oauth=True.
-    :param <str> client_secret: oauth client_secret, required if oauth=True.
-
-    When using username/password with crt/key:
-    :param <str> crt: path to crt file.
-    :param <str> key: path to key file.
-    :param <str> username: username for certificate based authentication.
-    :param <str> password : paired with username for certificate.
-
-    When using a config file:
-    :param <str> credentials_config: path to config file.
-
-    The config file should contain the client_id and client_secret for oauth, or the
-    crt, key, username, and password for certificate based authentication.
-    (see macrosynergy.management.utils.JPMaQSAPIConfigObject)
-
+    :param <Optional[str]> client_id: oauth client_id, required if oauth=True.
+    :param <Optional[str]> client_secret: oauth client_secret, required if oauth=True.
+    :param <Optional[str]> crt: path to crt file.
+    :param <Optional[str]> key: path to key file.
+    :param <Optional[str]> username: username for certificate based authentication.
+    :param <Optional[str]> password: paired with username for certificate
     :param <bool> debug: True if debug mode, False if not.
     :param <bool> suppress_warning: True if suppressing warnings, False if not.
     :param <bool> check_connection: True if the interface should check the connection to
         the server before sending requests, False if not. False by default.
-
-    :param <dict> proxy: proxy to use for requests, None if not using proxy (default).
+    :param <Optional[dict]> proxy: proxy to use for requests, None if not using proxy (default).
     :param <bool> print_debug_data: True if debug data should be printed, False if not
         (default).
     :param <dict> dq_kwargs: additional arguments to pass to the DataQuery API object such
         `calender` and `frequency` for the DataQuery API. For more fine-grained usage,
         initialize the DataQueryInterface object explicitly.
-    :param <dict> kwargs: additional arguments to pass to the DataQuery API object such as
-            :param <str> base_url: base url for the DataQuery API.
-            :param <str> calendar: calendar setting to use with the DataQuery API.
-            :param <str> frequency: frequency setting to use with the DataQuery API.
-            ...
-        See macrosynergy.download.dataquery.DataQueryInterface for more.
+    :param <dict> kwargs: any other keyword arguments.
 
     :return <JPMaQSDownload>: JPMaQSDownload object
 
@@ -255,9 +235,10 @@ class JPMaQSDownload(object):
         Validate the downloaded data in the provided dataframe.
 
         :param <pd.DataFrame> data_df: dataframe containing the downloaded data.
-        :param <list[str]> expected_expressions: list of expressions that were expected to be
+        :param <list[str]> expected_expressions: list of expressions that were expected 
+            to be downloaded.
+        :param <list[str]> found_expressions: list of expressions that were actually 
             downloaded.
-        :param <list[str]> found_expressions: list of expressions that were actually downloaded.
         :param <str> start_date: start date of the downloaded data.
         :param <str> end_date: end date of the downloaded data.
         :param <bool> verbose: whether to print the validation results.
@@ -280,14 +261,16 @@ class JPMaQSDownload(object):
         unexpected_exprs = exprs_f - expr_expected
         if unexpected_exprs:
             raise InvalidDataframeError(
-                f"Unexpected expressions were found in the downloaded data: {unexpected_exprs}"
+                f"Unexpected expressions were found in the downloaded data: "
+                f"{unexpected_exprs}"
             )
 
         if expr_missing:
             log_str = (
                 f"Some expressions are missing from the downloaded data."
                 " Check logger output for complete list. \n"
-                f"{len(expr_missing)} out of {len(expr_expected)} expressions are missing."
+                f"{len(expr_missing)} out of {len(expr_expected)} expressions are "
+                "missing."
                 f"To download the catalogue of all available expressions and filter the"
                 " unavailable expressions, set `get_catalogue=True` in the "
                 " call to `JPMaQSDownload.download()`."
@@ -299,8 +282,8 @@ class JPMaQSDownload(object):
                 print(log_str)
 
         # check if all dates are present in the df
-        # NOTE : Hardcoded max start date to 1990-01-01. This is because the JPMAQS database
-        #        does not have data before this date.
+        # NOTE : Hardcoded max start date to 1990-01-01. This is because the JPMAQS 
+        # database does not have data before this date.
         if datetime.datetime.strptime(
             start_date, "%Y-%m-%d"
         ) < datetime.datetime.strptime("1990-01-01", "%Y-%m-%d"):
@@ -434,7 +417,8 @@ class JPMaQSDownload(object):
             list(set(pd.date_range(start=start_date, end=end_date)) - set(expc_bdates))
         )
 
-        # check if any dates in the downloaded data are not in the expected dates (business + non-business)
+        # check if any dates in the downloaded data are not in the expected dates 
+        # (business + non-business)
         dates_bools: pd.Series = final_df["real_date"].isin(expc_bdates) | final_df[
             "real_date"
         ].isin(expc_nbdates)
@@ -453,7 +437,8 @@ class JPMaQSDownload(object):
 
         final_df = final_df.sort_values(["real_date", "cid", "xcat"])
 
-        # sort all metrics in the order of self.valid_metrics, all other metrics will be at the end
+        # sort all metrics in the order of self.valid_metrics, all other metrics will be 
+        # at the end
         found_metrics = [
             metricx for metricx in self.valid_metrics if metricx in final_df.columns
         ]
@@ -715,9 +700,11 @@ class JPMaQSDownload(object):
             end_date = (datetime.datetime.today() + pd.offsets.BusinessDay(2)).strftime(
                 "%Y-%m-%d"
             )
-            # NOTE : due to timezone conflicts, we choose to request data for 2 days in the future.
-            # NOTE : DataQuery specifies YYYYMMDD as the date format, but we use YYYY-MM-DD for consistency.
-            #   This is date is cast to YYYYMMDD in macrosynergy.download.dataquery.py.
+            # NOTE : due to timezone conflicts, we choose to request data for 2 days in 
+            # the future.
+            # NOTE : DataQuery specifies YYYYMMDD as the date format, but we use 
+            # YYYY-MM-DD for consistency.
+            # This is date is cast to YYYYMMDD in macrosynergy.download.dataquery.py.
 
         # Validate arguments.
         if not self.validate_download_args(
@@ -765,7 +752,7 @@ class JPMaQSDownload(object):
         with self.dq_interface as dq:
             print(
                 "Downloading data from JPMaQS.\nTimestamp UTC: ",
-                datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S"),
             )
             self.dq_interface.check_connection(verbose=True)
             print(f"Number of expressions requested: {len(expressions)}")

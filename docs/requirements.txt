@@ -1,7 +1,10 @@
-mdformat-gfm >= 0.3.5 
-mdformat-frontmatter >= 2.0.1
-mdformat-footnote >= 0.1.1
-pyyaml >= 6.0
-jupyter-book==0.15.0
-black[jupyter]
-jupytext
+pydata-sphinx-theme==0.14.4
+Sphinx==7.1.2
+sphinx-autodoc-typehints==1.19.1
+sphinx-automodapi==0.16.0
+sphinx-remove-toctrees==0.0.3
+sphinx_design==0.5.0
+myst_parser==2.0.0
+sphinx-copybutton==0.5.2
+requests >= 2.27.1
+packaging >= 21.0
