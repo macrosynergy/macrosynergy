@@ -347,6 +347,9 @@ class NaivePnL:
 
         sig_add_error = "Numeric value expected for signal addition."
         assert isinstance(sig_add, (float, int)), sig_add_error
+        
+        if thresh is not None and thresh < 1:
+            raise ValueError("thresh must be greater than or equal to one.")
 
         # B. Extract DataFrame of exclusively return and signal categories in time series
         # format.
@@ -370,6 +373,8 @@ class NaivePnL:
             neg = ""
 
         dfw["psig"] += sig_add
+        
+        self._winsorize(df=dfw["psig"], thresh=thresh)
 
         # Multi-index DataFrame with a natural minimum lag applied.
         dfw["psig"] = dfw["psig"].groupby(level=0).shift(1)
@@ -979,6 +984,10 @@ class NaivePnL:
         filter_2 = self.df["cid"] == "ALL" if not cs else True
 
         return self.df[filter_1 & filter_2]
+    
+    def _winsorize(self, df: pd.DataFrame, thresh: float):
+        if thresh is not None:
+            df.clip(lower=-thresh, upper=thresh, inplace=True)
 
 
 if __name__ == "__main__":
