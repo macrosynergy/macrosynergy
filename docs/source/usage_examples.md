@@ -1,3 +1,4 @@
+(usage_examples)=
 # Usage Examples
 
 ## DataQuery Download Interface
