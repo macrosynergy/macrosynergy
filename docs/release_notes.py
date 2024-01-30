@@ -1,6 +1,4 @@
 import os
-import glob
-import shutil
 import argparse
 import requests
 from packaging import version
