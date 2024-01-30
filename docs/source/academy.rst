@@ -1,4 +1,4 @@
-.. _04_academy:
+.. _academy:
 
 Macrosynergy Quantamental Academy
 =================================

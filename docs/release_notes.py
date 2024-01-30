@@ -158,7 +158,7 @@ def fetch_release_notes(
     for release in releases_list:
         release_mds.append(process_individual_release(release))
 
-    release_md: str = "# Release Notes\n\n" + "\n\n".join(release_mds)
+    release_md: str = "(release_notes)=\n# Release Notes\n\n" + "\n\n".join(release_mds)
 
     if os.path.exists(output_path):
         os.remove(output_path)
