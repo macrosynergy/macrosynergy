@@ -3,6 +3,7 @@ import glob
 import shutil
 import argparse
 from typing import List, Tuple
+import os.path as OPx
 
 # All paths are relative to the root of the repository
 
@@ -13,6 +14,7 @@ RELEASE_NOTES_MD = "release_notes.md"
 SITE_OUTPUT_DIR = "./docs/build/"
 PACKAGE_ROOT_DIR = "./"
 PACKAGE_NAME = "macrosynergy"
+PACKAGE_DOCS_DIR = "./docs"
 
 
 def copy_subpackage_readmes(
@@ -29,16 +31,16 @@ def copy_subpackage_readmes(
         filex
         for filex in glob.glob(f"{package}/**/README.md", recursive=True)
         # if basename is README.md
-        if os.path.basename(filex) == "README.md"
+        if OPx.basename(filex) == "README.md"
     ]
     new_names: List[str] = [
         ".".join(px.split(os.sep)[-2:]) for px in subpackage_readmes
     ]
-    new_names = [os.path.join(rst_output_dir, px) for px in new_names]
+    new_names = [OPx.join(rst_output_dir, px) for px in new_names]
 
     for old, new in zip(subpackage_readmes, new_names):
         # if the file already exists, remove it
-        if os.path.exists(new):
+        if OPx.exists(new):
             os.remove(new)
         shutil.copyfile(old, new)
         with open(new, "r", encoding="utf8") as file:
@@ -51,13 +53,15 @@ def copy_subpackage_readmes(
             file.writelines(data)
 
 
-def remove_file_spec(rst_output_dir: str = RST_OUTPUT_DIR, perm_files: List[str] = []):
+def remove_file_spec(
+    rst_output_dir: str = RST_OUTPUT_DIR, permanent_files: List[str] = []
+):
     """
     Removes '... module'/'... package' from the first line of each rst file.
     Specifically ignores the files in `perm_files`.
     """
-    for fname in glob.glob(os.path.join(rst_output_dir, "*.rst")):
-        if os.path.abspath(fname) in perm_files:
+    for fname in glob.glob(OPx.join(rst_output_dir, "*.rst")):
+        if OPx.normpath(fname) in permanent_files:
             continue
 
         # open the file
@@ -70,7 +74,8 @@ def remove_file_spec(rst_output_dir: str = RST_OUTPUT_DIR, perm_files: List[str]
 
 
 def fetch_release_notes(release_notes_file: str):
-    os.system(f'python ./docs/release_notes.py -o "{release_notes_file}"')
+    rnl_abs_path = OPx.join(os.getcwd(), release_notes_file)
+    os.system(f'python ./docs/release_notes.py -o "{rnl_abs_path}"')
 
 
 def generate_rst_files(
@@ -84,31 +89,43 @@ def generate_rst_files(
     Also makes sure none of the existing RST files are overwritten.
     """
     # get a list of all RST files in the rst_output_dir recursively
-    rst_files = glob.glob(os.path.join(rst_output_dir, "**/*"), recursive=True)
+    rst_files = glob.glob(OPx.join(rst_output_dir, "**/*"), recursive=True)
     temp_rst_files: List[Tuple[str, str]] = []  # (src, dst)
-    os.makedirs(temp_rst_dir, exist_ok=True)
+    os.makedirs(OPx.normpath(OPx.join(os.getcwd(), temp_rst_dir)), exist_ok=True)
 
     # move all RST files to the temporary directory
     for ir, rst_file in enumerate(rst_files):
-        if os.path.isfile(rst_file):
-            shutil.move(rst_file, temp_rst_dir)
-            temp_rst_files.append((rst_file, os.path.join(temp_rst_dir, rst_file)))
+        if not OPx.isfile(rst_file):
+            continue
+        # copy files, and add to temp_rst_files keeping the relative paths intact
+        dst = OPx.join(temp_rst_dir, OPx.relpath(rst_file, rst_output_dir))
+        temp_rst_files.append((rst_file, dst))
+        os.makedirs(OPx.dirname(dst), exist_ok=True)
+        shutil.copyfile(rst_file, dst)
 
-    rst_gen_cmd = f"sphinx-apidoc -o {temp_rst_dir} -fMeT {package_name}"
+    rst_gen_cmd = f"sphinx-apidoc -o {rst_output_dir} -fMeT {package_name}"
     os.system(rst_gen_cmd)
 
     # copy all RST files from the temporary directory to the rst_output_dir
     for src, dst in temp_rst_files:
-        # if there is already a file with the same basename in the rst_output_dir, delete it
-        if os.path.isfile(os.path.join(rst_output_dir, os.path.basename(src))):
-            os.remove(os.path.join(rst_output_dir, os.path.basename(src)))
-        shutil.move(src=dst, dst=src)  # yes, src and dst are reversed here
+        expc_dst_file_path = OPx.join(
+            OPx.normpath(OPx.join(os.getcwd(), rst_output_dir)),
+            OPx.relpath(dst, OPx.join(os.getcwd(), temp_rst_dir)),
+        )
+        expc_src_file_path = OPx.join(
+            OPx.normpath(OPx.join(os.getcwd(), temp_rst_dir)),
+            OPx.relpath(src, OPx.join(os.getcwd(), rst_output_dir)),
+        )
+        if OPx.exists(expc_src_file_path) and OPx.exists(expc_dst_file_path):
+            os.remove(expc_dst_file_path)
+        os.makedirs(OPx.dirname(src), exist_ok=True)
+        shutil.copyfile(src=dst, dst=src)
 
     # remove the temporary directory
     shutil.rmtree(temp_rst_dir)
 
     # get the list of "permanent" files from temp_rst_files
-    permanent_files += [x[0] for x in temp_rst_files]
+    permanent_files += [OPx.normpath(x[0]) for x in temp_rst_files]
 
     # remove '... module'/'... package' from the first line of each rst file
     remove_file_spec(rst_output_dir=rst_output_dir, permanent_files=permanent_files)
@@ -126,7 +143,7 @@ def make_docs(
     makehtml = makescript + " html"
     makeclean = makescript + " clean"
     curdir = os.getcwd()
-    os.chdir(docs_dir)
+    os.chdir(OPx.normpath(OPx.join(curdir, docs_dir)))
     os.system(makeclean)
     os.system(makehtml)
     os.chdir(curdir)
@@ -159,15 +176,37 @@ def driver(
     """
 
     # create the temporary directories
-    if os.path.exists(temp_dir):
+    if OPx.exists(temp_dir):
         shutil.rmtree(temp_dir)
     os.makedirs(temp_dir, exist_ok=True)
 
-    if os.path.exists(temp_rst_dir):
+    if OPx.exists(temp_rst_dir):
         shutil.rmtree(temp_rst_dir)
     os.makedirs(temp_rst_dir, exist_ok=True)
 
-    shutil.copytree(src=package_dir, dst=temp_dir)
+    # from the root_dir, copy package name and docs into the temporary directory, make sure to allow the directory to exist/merge
+    # cannot use shutil.copytree as it fails in a recursive setup
+
+    files: List[str] = glob.glob(
+        OPx.join(package_dir, package_name, "**/*"),
+        recursive=True,
+    )
+    files += glob.glob(
+        OPx.join(package_dir, PACKAGE_DOCS_DIR, "**/*"),
+        recursive=True,
+    )
+    files = list(map(OPx.normpath, files))
+    for ix, filex in enumerate(files):
+        if OPx.isdir(filex):
+            continue
+        # if the extension is pyc or pyo or pyi, skip
+        if any([filex.endswith(ext) for ext in [".pyc", ".pyo", ".pyi"]]):
+            continue
+        # copy file to relative path
+        rel_path = OPx.relpath(filex, package_dir)
+        dst_path = OPx.join(temp_dir, rel_path)
+        os.makedirs(OPx.dirname(dst_path), exist_ok=True)
+        shutil.copyfile(filex, dst_path)
 
     # change to the temporary directory
     starting_dir = os.getcwd()
@@ -181,14 +220,23 @@ def driver(
     )
 
     # generate release notes
-    fetch_release_notes(release_notes_file=os.path.join(temp_dir, release_notes_md))
+    fetch_release_notes(release_notes_file=release_notes_md)
     copy_subpackage_readmes(rst_output_dir=rst_output_dir, package=package_name)
-    make_docs(docs_dir=temp_dir)
+    make_docs(docs_dir=PACKAGE_DOCS_DIR)
 
-    temp_site_dir = os.path.join(temp_dir, "build")
+    temp_site_dir = OPx.normpath(OPx.join(temp_dir, PACKAGE_DOCS_DIR, "build"))
 
     os.chdir(starting_dir)
 
-    if os.path.exists(site_output_dir):
+    if OPx.exists(site_output_dir):
         shutil.rmtree(site_output_dir)
     shutil.copytree(src=temp_site_dir, dst=site_output_dir)
+
+    shutil.rmtree(temp_dir)
+    
+    print("View the documentation at: ")
+    print(f"\t\tfile://{os.path.abspath(site_output_dir).replace('\\','/')}/html/index.html")
+    
+
+
+driver()
