@@ -2,41 +2,22 @@ import os
 import glob
 import shutil
 import argparse
-import requests
-from packaging import version
-from typing import Dict, List
+from typing import List, Tuple
 
-REPO_OWNER: str = "macrosynergy"
-ORGANIZATION: str = "macrosynergy"
-REPO_NAME: str = "macrosynergy"
-REPO_URL: str = f"github.com/{REPO_OWNER}/{REPO_NAME}"
-RELEASES_API_URL = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases"
-OUTPUT_DIR = "./docs/source"
-STATIC_RSTS_DIR = "./docs/source"
-PATH_TO_DOCS: str = os.path.join(OUTPUT_DIR, "release_notes.md")
-LINE_SEPARATOR: str = "\n\n____________________\n\n"
+# All paths are relative to the root of the repository
 
-
-def remove_file_spec(gen_dir: str = OUTPUT_DIR, perm_files: List[str] = []):
-    """
-    Removes '... module'/'... package' from the first line of each rst file.
-    Specifically ignores the files in `perm_files`.
-    """
-    for fname in glob.glob(os.path.join(gen_dir, "*.rst")):
-        if os.path.abspath(fname) in perm_files:
-            continue
-
-        # open the file
-        with open(fname, "r", encoding="utf8") as file:
-            data = file.readlines()
-            data[0] = data[0].split(" ")[0] + "\n"
-
-        with open(fname, "w", encoding="utf8") as file:
-            file.writelines(data)
+TEMP_DIR = "./docs/docs.build"
+TEMP_RST_DIR = "./docs/_temp_rst"
+RST_OUTPUT_DIR = "./docs/source"
+RELEASE_NOTES_MD = "release_notes.md"
+SITE_OUTPUT_DIR = "./docs/build/"
+PACKAGE_ROOT_DIR = "./"
+PACKAGE_NAME = "macrosynergy"
 
 
 def copy_subpackage_readmes(
-    output_dir: str = OUTPUT_DIR, package: str = "macrosynergy"
+    rst_output_dir: str = RST_OUTPUT_DIR,
+    package: str = "macrosynergy",
 ):
     """
     Copies the README.md files from each subpackage to the docs/source/ folder.
@@ -53,7 +34,7 @@ def copy_subpackage_readmes(
     new_names: List[str] = [
         ".".join(px.split(os.sep)[-2:]) for px in subpackage_readmes
     ]
-    new_names = [os.path.join(output_dir, px) for px in new_names]
+    new_names = [os.path.join(rst_output_dir, px) for px in new_names]
 
     for old, new in zip(subpackage_readmes, new_names):
         # if the file already exists, remove it
@@ -70,142 +51,144 @@ def copy_subpackage_readmes(
             file.writelines(data)
 
 
-def generate_rsts(
-    output_dir: str, package: str = "macrosynergy", perm_files: List[str] = []
-):
+def remove_file_spec(rst_output_dir: str = RST_OUTPUT_DIR, perm_files: List[str] = []):
     """
-    Calls `sphinx-apidoc` to generate rst files for all modules in `package`.
+    Removes '... module'/'... package' from the first line of each rst file.
+    Specifically ignores the files in `perm_files`.
     """
-    # make a temporary directory to store the generated rst files
-    # move all files in output_dir to a temporary directory
-    temp_folder = os.path.join(output_dir, "_temp")
-    os.makedirs(temp_folder, exist_ok=True)
-    for fname in glob.glob(os.path.join(output_dir, "*")):
-        if os.path.isfile(fname):
-            shutil.move(fname, temp_folder)
+    for fname in glob.glob(os.path.join(rst_output_dir, "*.rst")):
+        if os.path.abspath(fname) in perm_files:
+            continue
 
-    rst_gen = f"sphinx-apidoc -o {output_dir} -fMeT {package}"
-    os.system(rst_gen)
+        # open the file
+        with open(fname, "r", encoding="utf8") as file:
+            data = file.readlines()
+            data[0] = data[0].split(" ")[0] + "\n"
 
-    # move all files from the temporary directory to output_dir, overwriting the generated rst files
-    for fname in glob.glob(os.path.join(temp_folder, "*")):
-        if os.path.isfile(fname):
-            if os.path.exists(os.path.join(output_dir, os.path.basename(fname))):
-                os.remove(os.path.join(output_dir, os.path.basename(fname)))
-            shutil.move(fname, output_dir)
+        with open(fname, "w", encoding="utf8") as file:
+            file.writelines(data)
+
+
+def fetch_release_notes(release_notes_file: str):
+    os.system(f'python ./docs/release_notes.py -o "{release_notes_file}"')
+
+
+def generate_rst_files(
+    rst_output_dir: str = RST_OUTPUT_DIR,
+    temp_rst_dir: str = TEMP_RST_DIR,
+    package_name: str = PACKAGE_NAME,
+    permanent_files: List[str] = [],
+) -> bool:
+    """
+    Calls `sphinx-apidoc` to generate RST files for all modules in the package.
+    Also makes sure none of the existing RST files are overwritten.
+    """
+    # get a list of all RST files in the rst_output_dir recursively
+    rst_files = glob.glob(os.path.join(rst_output_dir, "**/*"), recursive=True)
+    temp_rst_files: List[Tuple[str, str]] = []  # (src, dst)
+    os.makedirs(temp_rst_dir, exist_ok=True)
+
+    # move all RST files to the temporary directory
+    for ir, rst_file in enumerate(rst_files):
+        if os.path.isfile(rst_file):
+            shutil.move(rst_file, temp_rst_dir)
+            temp_rst_files.append((rst_file, os.path.join(temp_rst_dir, rst_file)))
+
+    rst_gen_cmd = f"sphinx-apidoc -o {temp_rst_dir} -fMeT {package_name}"
+    os.system(rst_gen_cmd)
+
+    # copy all RST files from the temporary directory to the rst_output_dir
+    for src, dst in temp_rst_files:
+        # if there is already a file with the same basename in the rst_output_dir, delete it
+        if os.path.isfile(os.path.join(rst_output_dir, os.path.basename(src))):
+            os.remove(os.path.join(rst_output_dir, os.path.basename(src)))
+        shutil.move(src=dst, dst=src)  # yes, src and dst are reversed here
 
     # remove the temporary directory
-    shutil.rmtree(temp_folder)
+    shutil.rmtree(temp_rst_dir)
 
-    remove_file_spec(gen_dir=output_dir, perm_files=perm_files)
+    # get the list of "permanent" files from temp_rst_files
+    permanent_files += [x[0] for x in temp_rst_files]
+
+    # remove '... module'/'... package' from the first line of each rst file
+    remove_file_spec(rst_output_dir=rst_output_dir, permanent_files=permanent_files)
 
 
 def make_docs(
     docs_dir: str = "./docs",
-    show: bool = False,
-):
+) -> str:
     """
-    Calls `make html` in `docs_dir` (makefile from sphinx-quickstart).
+    Calls `make html` to generate the HTML files.
+    :param <str> docs_dir: Path to the docs directory.
+    :return <str>: directory where the HTML files are generated.
     """
     makescript = "make" + (".bat" if os.name == "nt" else "")
     makehtml = makescript + " html"
     makeclean = makescript + " clean"
-    current_dir: str = os.getcwd()
+    curdir = os.getcwd()
     os.chdir(docs_dir)
     os.system(makeclean)
     os.system(makehtml)
-    os.chdir(current_dir)
-    print(f"Documentation generated successfully.")
-    print(
-        "Paste the following path into your browser to view:\n\t\t "
-        f"file:///{os.path.abspath('docs/build/html/index.html')}"
-    )
+    os.chdir(curdir)
+    print("Documentation generated successfully.")
 
-    if show:
-        os.system(f"start docs/build/html/index.html")
-
-
-def fetch_release_notes(release_notes_file: str):
-    os.system(f"python docs/release_notes.py --output-path {release_notes_file}")
+    return f"{docs_dir}/build"
 
 
 def driver(
-    build: bool = False,
-    show: bool = False,
-    prod: bool = False,
-    output_dir: str = OUTPUT_DIR,
-    docs_dir: str = "./docs",
-):
+    package_dir: str = PACKAGE_ROOT_DIR,
+    temp_dir: str = TEMP_DIR,
+    temp_rst_dir: str = TEMP_RST_DIR,
+    rst_output_dir: str = RST_OUTPUT_DIR,
+    site_output_dir: str = SITE_OUTPUT_DIR,
+    release_notes_md: str = RELEASE_NOTES_MD,
+    package_name: str = PACKAGE_NAME,
+    show_site: bool = False,
+) -> bool:
+    """Driver function for generating documentation.
+
+    :param <str> package_dir: Path to the package directory.
+    :param <str> temp_dir: Path to the temporary directory where the documentation will be
+        generated.
+    :param <str> rst_output_dir: Path to the directory where the reStructuredText files
+        will be generated.
+    :param <str> site_output_dir: Path to the directory where the HTML files will be
+        generated.
+    :param <str> package_name: Name of the package.
+    :return <bool> success: Whether the documentation was generated successfully.
     """
-    Driver function.
-    :param <bool> build: Whether to build the documentation.
-    :param <bool> show: Whether to show the documentation in browser after generation.
-    :param <bool> prod: Whether to build the documentation for production.
-    """
-    # get a list of all files in the output directory
-    perm_files: List[str] = [
-        (filex) for filex in glob.glob(f"{docs_dir}/**/*", recursive=True)
-    ]
-    if not build:
-        return
-    os.makedirs(output_dir, exist_ok=True)
 
-    # copy all rsts
+    # create the temporary directories
+    if os.path.exists(temp_dir):
+        shutil.rmtree(temp_dir)
+    os.makedirs(temp_dir, exist_ok=True)
 
-    generate_rsts(output_dir=output_dir, perm_files=perm_files)
-    release_notes_file = os.path.join(output_dir, "release_notes.md")
-    fetch_release_notes(release_notes_file=release_notes_file)
-    copy_subpackage_readmes(output_dir=output_dir)
-    make_docs(docs_dir=docs_dir, show=show)
+    if os.path.exists(temp_rst_dir):
+        shutil.rmtree(temp_rst_dir)
+    os.makedirs(temp_rst_dir, exist_ok=True)
 
-    if prod:
-        return
+    shutil.copytree(src=package_dir, dst=temp_dir)
 
-    # get a list of all files in docs/build/
-    build_files: List[str] = [
-        (filex) for filex in glob.glob(f"{docs_dir}/build/**/*", recursive=True)
-    ]
-    keep_files = perm_files + build_files
-    for filex in glob.glob(f"{docs_dir}/**/*", recursive=True):
-        if (filex) not in keep_files and os.path.isfile(filex):
-            os.remove(filex)
+    # change to the temporary directory
+    starting_dir = os.getcwd()
+    os.chdir(temp_dir)
 
-
-def main():
-    """
-    Complete build sequence.
-    """
-    parser = argparse.ArgumentParser(description="Generate documentation.")
-    parser.add_argument(
-        "--show",
-        action="store_true",
-        help="Show documentation in browser after generation.",
-        default=False,
-    )
-    # build
-    parser.add_argument(
-        "--build",
-        action="store_true",
-        help="Build documentation.",
-        default=True,
+    # generate the reStructuredText files
+    generate_rst_files(
+        rst_output_dir=rst_output_dir,
+        temp_rst_dir=temp_rst_dir,
+        package_name=package_name,
     )
 
-    parser.add_argument(
-        "--prod",
-        action="store_true",
-        help="Build documentation for production.",
-        default=False,
-    )
+    # generate release notes
+    fetch_release_notes(release_notes_file=os.path.join(temp_dir, release_notes_md))
+    copy_subpackage_readmes(rst_output_dir=rst_output_dir, package=package_name)
+    make_docs(docs_dir=temp_dir)
 
-    args = parser.parse_args()
+    temp_site_dir = os.path.join(temp_dir, "build")
 
-    SHOW = args.show
-    BUILD = args.build
-    PROD = args.prod
-    DOCS_DIR = "./docs"
+    os.chdir(starting_dir)
 
-    driver(build=BUILD, show=SHOW, prod=PROD, docs_dir=DOCS_DIR)
-
-
-if __name__ == "__main__":
-    main()
+    if os.path.exists(site_output_dir):
+        shutil.rmtree(site_output_dir)
+    shutil.copytree(src=temp_site_dir, dst=site_output_dir)
