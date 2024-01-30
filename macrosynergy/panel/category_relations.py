@@ -880,5 +880,21 @@ if __name__ == "__main__":
         ncol=2,
     )
 
+    # Passing Axes object for a subplot
+    fig, ax = plt.subplots(1, 2, figsize=(12, 8))
+
+    for i in range(2):
+        cr.reg_scatter(
+            labels=False,
+            separator=None,
+            title="Carry and Return",
+            xlab="Carry",
+            ylab="Return",
+            coef_box="lower left",
+            prob_est="map",
+            ax=ax[i],
+        )
+    plt.show()
+
     cr.ols_table(type="pool")
     cr.ols_table(type="re")
