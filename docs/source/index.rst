@@ -24,7 +24,7 @@ trading or investment value of quantamental strategies.
 
 .. grid:: 3
 
-   .. grid-item-card:: :octicon:`report;1em`   About Macrosynergy
+   .. grid-item-card:: :octicon:`organization;1em`   About Macrosynergy
       :link: about
       :link-type: ref
 
@@ -40,40 +40,31 @@ trading or investment value of quantamental strategies.
 
 .. grid:: 3
 
-   .. grid-item-card:: :octicon:`star-fill;1em` Common Definitions
-      :link: common_definitions
+   .. grid-item-card:: :octicon:`code-review;1em` Usage Examples
+      :link: usage_examples
       :link-type: ref
 
-   .. grid-item-card:: :octicon:`git-pull-request;1em` Contribution Guide
-      :link: contribution_guide
+   .. grid-item-card:: :octicon:`star-fill;1em` Common Definitions
+      :link: common_definitions
       :link-type: ref
 
    .. grid-item-card:: :octicon:`question;1em` FAQs and Troubleshooting
       :link: faqs
       :link-type: ref
 
+.. grid:: 3
 
+   .. grid-item-card:: :octicon:`git-pull-request;1em` Contribution Guide
+      :link: contribution_guide
+      :link-type: ref
 
-More from Macrosynergy:
-.......................
-.. card:: Macrosynergy Research
-    :link: https://research.macrosynergy.com/
+   .. grid-item-card:: :octicon:`versions;1em` Release Notes
+      :link: release_notes
+      :link-type: ref
 
-    Macrosynergy Research is a free educational site dedicated to responsible 
-    macro trading strategies. 
-
-.. card:: Macrosynergy Academy
-    :link: https://academy.macrosynergy.com/
-
-    Macrosynergy's Academy explains all the basics and provides helpful resources 
-    to produce strategies and backtests quickly and cost-efficiently.
-
-.. card:: J.P. Morgan Macrosynergy Quantamental System - JPMaQS
-   :link: https://www.jpmorgan.com/insights/global-research/markets/macrosynergy-quantamental-system
-
-   Macro quantamental trading made easy by breaking down the barriers 
-   between purely quantitative and fundamental trading styles.
-
+   .. grid-item-card:: :octicon:`repo;1em` Macrosynergy Academy
+      :link: macrosynergy_academy
+      :link-type: ref
 
 .. toctree::
    :hidden:
@@ -83,5 +74,9 @@ More from Macrosynergy:
    getting_started
    api_reference
    usage_examples.md
+   common_definitions
+   faqs
+   contribution_guide
    release_notes.md
+   macrosynergy_academy
 
