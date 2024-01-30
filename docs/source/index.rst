@@ -24,15 +24,15 @@ trading or investment value of quantamental strategies.
 
 .. grid:: 3
 
-   .. grid-item-card:: About Macrosynergy
+   .. grid-item-card:: :octicon:`report;1em`   About Macrosynergy
       :link: about
       :link-type: ref
 
-   .. grid-item-card:: Getting Started
+   .. grid-item-card:: :octicon:`rocket;1em`      Getting Started
       :link: getting_started
       :link-type: ref
 
-   .. grid-item-card:: API Reference
+   .. grid-item-card:: :octicon:`book;1em` API Reference
       :link: api_reference
       :link-type: ref
 
@@ -40,15 +40,15 @@ trading or investment value of quantamental strategies.
 
 .. grid:: 3
 
-   .. grid-item-card:: Common Definitions
+   .. grid-item-card:: :octicon:`star-fill;1em` Common Definitions
       :link: common_definitions
       :link-type: ref
 
-   .. grid-item-card:: Contribution Guide
+   .. grid-item-card:: :octicon:`git-pull-request;1em` Contribution Guide
       :link: contribution_guide
       :link-type: ref
 
-   .. grid-item-card:: FAQs and Troubleshooting
+   .. grid-item-card:: :octicon:`question;1em` FAQs and Troubleshooting
       :link: faqs
       :link-type: ref
 
