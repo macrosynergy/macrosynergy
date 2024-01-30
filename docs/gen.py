@@ -130,6 +130,9 @@ def generate_rst_files(
     # remove '... module'/'... package' from the first line of each rst file
     remove_file_spec(rst_output_dir=rst_output_dir, permanent_files=permanent_files)
 
+    # Delete the package.rst file
+    os.remove(OPx.join(rst_output_dir, f"{package_name}.rst"))
+
 
 def make_docs(
     docs_dir: str = "./docs",
@@ -232,11 +235,12 @@ def driver(
         shutil.rmtree(site_output_dir)
     shutil.copytree(src=temp_site_dir, dst=site_output_dir)
 
-    shutil.rmtree(temp_dir)
-    
+    # shutil.rmtree(temp_dir)
+
     print("View the documentation at: ")
-    print(f"\t\tfile://{os.path.abspath(site_output_dir).replace('\\','/')}/html/index.html")
-    
+    print(
+        f"\t\tfile://{os.path.abspath(site_output_dir).replace('\\','/')}/html/index.html"
+    )
 
 
 driver()
