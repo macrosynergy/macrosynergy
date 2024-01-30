@@ -3,6 +3,9 @@
 macrosynergy.management
 ===============================
 
+.. include:: ../../../macrosynergy/management/README.md
+   :parser: myst_parser.sphinx_
+
 Subpackages
 -----------
 

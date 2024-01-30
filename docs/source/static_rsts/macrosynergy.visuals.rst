@@ -3,6 +3,9 @@
 macrosynergy.visuals
 ============================
 
+.. include:: ../../../macrosynergy/visuals/README.md
+   :parser: myst_parser.sphinx_
+
 Submodules
 ----------
 
