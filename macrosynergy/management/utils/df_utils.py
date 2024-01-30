@@ -231,12 +231,14 @@ def apply_slip(
         if raise_error:
             raise ValueError(
                 "Tickers targetted for applying slip are not present in the DataFrame.\n"
-                f"Missing tickers: {sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
+                f"Missing tickers: "
+                f"{sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
             )
         else:
             warnings.warn(
                 "Tickers targetted for applying slip are not present in the DataFrame.\n"
-                f"Missing tickers: {sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
+                f"Missing tickers: "
+                f"{sorted(list(set(sel_tickers) - set(df['tickers'].unique())))}"
             )
 
     slip: int = slip.__neg__()
@@ -329,10 +331,12 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
     error_message = f"The added DataFrame must be a Quantamental Dataframe."
     if not isinstance(df_add, QuantamentalDataFrame):
         raise TypeError(error_message)
-    
-    error_message = ("The two Quantamental DataFrames must share at least "
-                    "four columns including than 'real_date', 'cid', and 'xcat'.")
-    
+
+    error_message = (
+        "The two Quantamental DataFrames must share at least "
+        "four columns including than 'real_date', 'cid', and 'xcat'."
+    )
+
     all_cols = df_cols.union(df_add_cols)
     if all_cols != df_cols and all_cols != df_add_cols:
         raise ValueError(error_message)
@@ -345,20 +349,6 @@ def update_df(df: pd.DataFrame, df_add: pd.DataFrame, xcat_replace: bool = False
 
     return df.reset_index(drop=True)
 
-
-def df_tickers(df: pd.DataFrame):
-    """
-    Helper function used to delimit the tickers defined in a received DataFrame.
-
-    :param <pd.DataFrame> df: standardised DataFrame.
-    """
-    cids_append = list(map(lambda c: c + "_", set(df["cid"])))
-    tickers = list(itertools.product(cids_append, set(df["xcat"])))
-    tickers = [c[0] + c[1] for c in tickers]
-
-    return tickers
-
-
 def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     """
     Method used to update aggregate DataFrame on a ticker level.
@@ -367,10 +357,10 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     :param <pd.DataFrame> df_add: DataFrame with the latest values.
 
     """
-    agg_df_tick = set(df_tickers(df))
-    add_df_tick = set(df_tickers(df_add))
-
     df["ticker"] = df["cid"] + "_" + df["xcat"]
+    df_add["ticker"] = df_add["cid"] + "_" + df_add["xcat"]
+    agg_df_tick = set(df["ticker"])
+    add_df_tick = set(df_add["ticker"])
 
     # If the ticker is already defined in the DataFrame, replace with the new series
     # otherwise append the series to the aggregate DataFrame.
@@ -379,6 +369,7 @@ def update_tickers(df: pd.DataFrame, df_add: pd.DataFrame):
     df = pd.concat([df, df_add], axis=0, ignore_index=True)
 
     df = df.drop(["ticker"], axis=1)
+    df_add = df_add.drop(["ticker"], axis=1)
 
     return df.sort_values(["xcat", "cid", "real_date"])
 
@@ -413,7 +404,7 @@ def update_categories(df: pd.DataFrame, df_add):
 
 def reduce_df(
     df: pd.DataFrame,
-    xcats: List[str] = None,
+    xcats: Union[str, List[str]] = None,
     cids: List[str] = None,
     start: str = None,
     end: str = None,
@@ -426,8 +417,8 @@ def reduce_df(
 
     :param <pd.Dataframe> df: standardized JPMaQS DataFrame with the necessary columns:
         'cid', 'xcats', 'real_date' and 'value'.
-    :param <List[str]> xcats: extended categories to be filtered on. Default is all in
-        the DataFrame.
+    :param <Union[str, List[str]]> xcats: extended categories to be filtered on. Default is
+        all in the DataFrame.
     :param <List[str]> cids: cross sections to be checked on. Default is all in the
         dataframe.
     :param <str> start: string representing the earliest date. Default is None.
@@ -446,6 +437,10 @@ def reduce_df(
     """
 
     dfx = df.copy()
+
+    if xcats is not None:
+        if not isinstance(xcats, list):
+            xcats = [xcats]
 
     if start is not None:
         dfx = dfx[dfx["real_date"] >= pd.to_datetime(start)]

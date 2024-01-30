@@ -272,7 +272,8 @@ class CategoryRelations(object):
             column represents the explanatory variable; second column hosts the dependent
             variable. The DataFrame's index is the real-date and cross-section.
         :param <str> change: type of change to be applied
-        :param <int> n_periods: number of base periods in df over which the change is applied.
+        :param <int> n_periods: number of base periods in df over which the change is 
+            applied.
         :param <List[str]> shared_cids: shared cross-sections across the two categories
             and the received list.
         :param <str> expln_var: only the explanatory variable's data series will be
@@ -448,6 +449,7 @@ class CategoryRelations(object):
         separator: Union[str, int] = None,
         title_adj: float = 1,
         single_chart: bool = False,
+        ncol: int = None,
     ):
         """
         Display scatter-plot and regression line.
@@ -492,6 +494,8 @@ class CategoryRelations(object):
             are numerous charts, and the labels are excessively long). The default is
             False, and the names of the axis will be displayed on each grid if not
             conflicting with the label for each variable.
+        :param <int> ncol: number of columns in the facet grid. Default is None, in which
+            case the number of columns is determined by the number of cross-sections.
         """
 
         coef_box_loc_error = (
@@ -503,7 +507,7 @@ class CategoryRelations(object):
 
         assert prob_est in ["pool", "map"], "prob_est must be 'pool' or 'map'"
 
-        sns.set_theme(style="whitegrid", palette="colorblind")
+        sns.set_theme(style="whitegrid")
         dfx = self.df.copy()
 
         if title is None and (self.years is None):
@@ -583,7 +587,7 @@ class CategoryRelations(object):
 
         elif separator == "cids":
             assert isinstance(single_chart, bool)
-
+            
             dfx_copy = dfx.reset_index()
             n_cids = len(dfx_copy["cid"].unique())
 
@@ -599,13 +603,16 @@ class CategoryRelations(object):
 
             keys_ar = np.array(list(dict_coln.keys()))
             key = keys_ar[keys_ar <= n_cids][-1]
-            col_number = dict_coln[key]
+            if ncol is None:
+                ncol = dict_coln[key]
+            if ncol > n_cids:
+                ncol = n_cids
 
             # The DataFrame is already a standardised DataFrame. Three columns: two
             # categories (dependent & explanatory variable) and the respective
             # cross-sections. The index will be the date timestamp.
 
-            fg = sns.FacetGrid(data=dfx_copy, col="cid", col_wrap=col_number)
+            fg = sns.FacetGrid(data=dfx_copy, col="cid", col_wrap=ncol)
             fg.map(
                 sns.regplot,
                 self.xcats[0],
@@ -821,11 +828,21 @@ if __name__ == "__main__":
 
     cr.reg_scatter(
         labels=False,
-        separator=cids,
+        separator="cids",
         title="Carry and Return",
         xlab="Carry",
         ylab="Return",
         coef_box="lower left",
+        ncol=5,
+    )
+    cr.reg_scatter(
+        labels=False,
+        separator="cids",
+        title="Carry and Return",
+        xlab="Carry",
+        ylab="Return",
+        coef_box="lower left",
+        ncol=2,
     )
 
     cr.ols_table(type="pool")

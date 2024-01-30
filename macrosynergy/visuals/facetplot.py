@@ -4,8 +4,6 @@ designed to render a facet plot containing any number of subplots.
 Given that the class allows returning a `matplotlib.pyplot.Figure`,
 one can easily add any number of subplots, even the FacetPlot itself:
 effectively allowing for a recursive facet plot.
-
-::docs::FacetPlot::sort_first::
 """
 
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -34,14 +32,16 @@ def _get_square_grid(
     grid_dim: Tuple[int, int] = (int(sqrt_num_plots), int(sqrt_num_plots))
     gd_copy: Tuple[int, int] = grid_dim
     # the number of plots is less than grid_dim[0] * grid_dim[1],
-    # so iteratively try and reduce the row and column dimensions until sweet spot is found.
+    # so iteratively try and reduce the row and column dimensions until sweet spot is
+    # found.
     while 0 != 1:
         if gd_copy[0] < gd_copy[1]:
             gd_copy: Tuple[int, int] = (gd_copy[0], gd_copy[1] - 1)
         else:
             gd_copy: Tuple[int, int] = (gd_copy[0] - 1, gd_copy[1])
 
-        # if gd_copy[0] * gd_copy[1] is more than num_plots, copy to grid_dim. if smaller, break.
+        # if gd_copy[0] * gd_copy[1] is more than num_plots, copy to grid_dim. if smaller,
+        # break.
         if gd_copy[0] * gd_copy[1] >= num_plots:
             grid_dim: Tuple[int, int] = gd_copy
         else:
@@ -284,8 +284,8 @@ class FacetPlot(Plotter):
         Showing a FacetPlot composed of linear plots from the data available in the
         `FacetPlot` object after initialization.
         Passing any of the arguments used to initialize the `FacetPlot` object will cause
-        the object to be re-initialized with the new arguments, and the plot will be rendered
-        from the new object state.
+        the object to be re-initialized with the new arguments, and the plot will be
+        rendered from the new object state.
 
         Parameters
         :param <int> ncols: number of columns in the grid. Default is 3.
@@ -299,21 +299,21 @@ class FacetPlot(Plotter):
             not respect the `ncols` or `attempt_square` arguments.
             NB: `facet_titles` and `legend` are overridden in this mode.
         :param <bool> cids_mean: Used with `cid_grid` with a single `xcat`. If `True`,
-            the mean of all `cids` for that `xcat` will be plotted on all charts. If `False`,
-            only the specified `cids` will be plotted. Default is `False`.
+            the mean of all `cids` for that `xcat` will be plotted on all charts. If
+            `False`, only the specified `cids` will be plotted. Default is `False`.
         :param <str> compare_series: Used with `cid_grid` with a single `xcat`. If
             specified, the series specified will be plotted in each facet, as a red dashed
-            line. This is useful for comparing a single series, such as a benchmark/average.
-            Ensure that the comparison series is in the dataframe, and not filtered out when
-            initializing the `FacetPlot` object. Default is `None`. NB: `compare_series`
-            can only be used when the series is not removed by `reduce_df()` in the object
-            initialization.
+            line. This is useful for comparing a single series, such as a
+            benchmark/average. Ensure that the comparison series is in the dataframe,
+            and not filtered out when initializing the `FacetPlot` object. Default is
+            `None`. NB: `compare_series` can only be used when the series is not removed
+            by `reduce_df()` in the object initialization.
         :param <bool> share_y: whether to share the y-axis across all plots. Default is
             `True`.
         :param <bool> share_x: whether to share the x-axis across all plots. Default is
             `True`.
-        :param <Tuple[Numeric, Numeric]> figsize: a tuple of floats specifying the width and
-            height of the figure. Default is `(16.0, 9.0)`.
+        :param <Tuple[Numeric, Numeric]> figsize: a tuple of floats specifying the width
+            and height of the figure. Default is `(16.0, 9.0)`.
         :param <str> title: the title of the plot. Default is `None`.
         :param <int> title_fontsize: the font size of the title. Default is `20`.
         :param <float> title_xadjust: the x-adjustment of the title. Default is `None`.
@@ -328,9 +328,9 @@ class FacetPlot(Plotter):
         :param <str> x_axis_label: the label for the x-axis. Default is `None`.
         :param <str> y_axis_label: the label for the y-axis. Default is `None`.
         :param <int> axis_fontsize: the font size of the axis labels. Default is `12`.
-        :param <Tuple[Numeric, Numeric]> facet_size: a tuple of floats specifying the width
-            and height of each facet. Default is `None`, meaning the facet size will be
-            inferred from the `figsize` argument. If specified, the `figsize` argument
+        :param <Tuple[Numeric, Numeric]> facet_size: a tuple of floats specifying the
+            width and height of each facet. Default is `None`, meaning the facet size will
+            be inferred from the `figsize` argument. If specified, the `figsize` argument
             will be ignored and the figure size will be inferred from the dimensions of
             the facet grid and the facet size.
         :param <List[str]> facet_titles: a list of strings specifying the titles of each
@@ -349,8 +349,8 @@ class FacetPlot(Plotter):
             y-axis of each facet. Default is `None`, meaning no label will be shown.
         :param <int> facet_label_fontsize: the font size of the facet labels. Default is
             `12`.
-        :param <bool> legend: Show the legend. Default is `True`. When using `cid_xcat_grid`,
-            the legend will not be shown as it is redundant.
+        :param <bool> legend: Show the legend. Default is `True`. When using
+            `cid_xcat_grid`, the legend will not be shown as it is redundant.
         :param <list> legend_labels: Labels for the legend. Default is `None`,
             meaning a list identifying the various `cids`/`xcats` will be used.
         :param <str> legend_loc: Location of the legend. Default is `center left`.
@@ -367,6 +367,7 @@ class FacetPlot(Plotter):
         :param <bool> return_figure: Return the figure object. Default is `False`.
         """
         comp_series_flag: bool = False
+
         if compare_series:
             if compare_series not in set(
                 (kwargs["df"] if "df" in kwargs else self.df)[["cid", "xcat"]]
@@ -450,10 +451,12 @@ class FacetPlot(Plotter):
                 }
 
         if cid_grid or xcat_grid:
-            # flipper handles resolution between cid_grid and xcat_grid for binary variables
+            # flipper handles resolution between cid_grid and xcat_grid for binary
+            # variables
             flipper: bool = 1 if cid_grid else -1
             if facet_titles is None:
-                # needs to be "flipped" twice, as facet_titles need to be complementary to the legend labels
+                # needs to be "flipped" twice, as facet_titles need to be complementary
+                # to the legend labels
                 facet_titles: List[str] = [_cids, _xcats][::flipper][0]
             if legend_labels is None:
                 legend_labels: List[str] = [_xcats, _cids][::flipper][0]
@@ -552,9 +555,13 @@ class FacetPlot(Plotter):
             sharex=share_x,
             sharey=share_y,
         )
+
         if not isinstance(axs, np.ndarray):
             axs: np.ndarray = np.array([axs])
         ax_list: List[plt.Axes] = axs.flatten().tolist()
+
+        self.df.set_index(["cid", "xcat"], inplace=True)
+        self.df.sort_index(inplace=True)
         for i, plt_dct, ax_i in zip(plot_dict.keys(), plot_dict.values(), ax_list):
             if plt_dct["X"] != "real_date":
                 raise NotImplementedError(
@@ -566,10 +573,12 @@ class FacetPlot(Plotter):
             for iy, y in enumerate(plt_dct["Y"]):
                 # split on the first underscore
                 cidx, xcatx = str(y).split("_", 1)
-                sel_bools: pd.Series = (self.df["cid"] == cidx) & (
-                    self.df["xcat"] == xcatx
-                )
-                is_empty_plot = is_empty_plot and not sel_bools.any()
+                try:
+                    selected_df: pd.DataFrame = self.df.loc[cidx, xcatx]
+                    is_valid_series: bool = True
+                except KeyError:
+                    is_valid_series: bool = False
+                is_empty_plot = is_empty_plot and not is_valid_series
                 plot_func_args: Dict = {}
 
                 # lineplot
@@ -581,9 +590,16 @@ class FacetPlot(Plotter):
                     plot_func_args["color"] = "red"
                     plot_func_args["linestyle"] = "--"
 
+                if is_valid_series:
+                    X = selected_df[plt_dct["X"]].tolist()
+                    Y = selected_df[metric].tolist()
+                else:
+                    X = []
+                    Y = []
+
                 ax_i.plot(
-                    self.df[sel_bools][plt_dct["X"]].reset_index(drop=True).tolist(),
-                    self.df[sel_bools][metric].reset_index(drop=True).tolist(),
+                    X,
+                    Y,
                     **plot_func_args,
                     **kwargs,
                 )
@@ -631,6 +647,7 @@ class FacetPlot(Plotter):
                     raise NotImplementedError(
                         "Vertical axis lines are not supported at this time."
                     )
+        self.df.reset_index(inplace=True)
 
         # if there are more axes than ax_i, remove them
         for ax in ax_list[len(plot_dict) :]:
@@ -687,6 +704,8 @@ if __name__ == "__main__":
 
     import time
 
+    np.random.seed(0)
+
     cids_A: List[str] = ["AUD", "CAD", "EUR", "GBP", "USD"]
     cids_B: List[str] = ["CHF", "INR", "JPY", "NOK", "NZD", "SEK"]
     cids_C: List[str] = ["CHF", "EUR", "INR", "JPY", "NOK", "NZD", "SEK", "USD"]
@@ -714,13 +733,14 @@ if __name__ == "__main__":
         "FXTARGETED_NSA",
         "FXUNTRADABLE_NSA",
     ]
-    all_cids: List[str] = list(set(cids_A + cids_B + cids_C))
-    all_xcats: List[str] = list(set(xcats_A + xcats_B + xcats_C + xcats_D))
+    all_cids: List[str] = sorted(list(set(cids_A + cids_B + cids_C)))
+    all_xcats: List[str] = sorted(list(set(xcats_A + xcats_B + xcats_C + xcats_D)))
 
     df: pd.DataFrame = make_test_df(
         cids=all_cids,
         xcats=all_xcats,
     )
+
     # remove data for USD_FXXR_NSA and CHF _EQXR_NSA and _FXXR_NSA
     df: pd.DataFrame = df[
         ~((df["cid"] == "USD") & (df["xcat"] == "FXXR_NSA"))
@@ -742,11 +762,15 @@ if __name__ == "__main__":
             share_x=True,
             xcat_grid=True,
             ncols=2,
-            title="Test Title with a very long title to see how it looks, \n and a new line - why not?",
+            title=(
+                "Test Title with a very long title to see how it looks, \n and a "
+                "new line - why not?"
+            ),
             # save_to_file="test_0.png",
             ax_hline=75,
-            show=True,
+            show=False,
         )
+
         fp.lineplot(
             cids=cids_B,
             xcats=xcats_A,
@@ -755,14 +779,14 @@ if __name__ == "__main__":
             cid_grid=True,
             title="Another test title",
             # save_to_file="test_1.png",
-            show=True,
+            show=False,
         )
         fp.lineplot(
             cids=cids_C,
             xcats=xcats_D,
             cid_xcat_grid=True,
             title="Another test title",
-            show=True,
+            show=False,
         )
 
     print(f"Time taken: {time.time() - timer_start}")

@@ -57,24 +57,24 @@ class SignalReturnRelations:
         returns, which is often characterized by a delay due to the setup of of positions.
         Technically, this is a negative lag (early arrival) of the target category
         in working days prior to any frequency conversion. Default is 0.
-    <DEPRECATED>
-    :param <str> ret: return category.
+    :param <str> ret: return category. (Argument is deprecated)
     :param <str> sig: primary signal category for which detailed relational statistics
-        can be calculated.
+        can be calculated. (Argument is deprecated)
     :param <str, List[str]> rival_sigs: "rival signals" for which basic relational
         statistics can be calculated for comparison with the primary signal category. The
         table, if rival signals are defined, will be generated upon instantiation of the
-        object.
+        object. (Argument is deprecated)
         N.B.: parameters set for sig, such as sig_neg, freq, and agg_sig are equally
         applied to all rival signals.
     :param <str> freq: letter denoting frequency at which the series are to be sampled.
         This must be one of 'D', 'W', 'M', 'Q', 'A'. Default is 'M'.
         The return series will always be summed over the sample period.
         The signal series will be aggregated according to the value of agg_sig.
+        (Argument is deprecated)
     :param <str> agg_sig: aggregation method applied to the signal values in down-
         sampling. The default is "last".
         If defined, the additional signals will also use the same aggregation method for
-        any down-sampling.
+        any down-sampling. (Argument is deprecated)
     """
 
     def __init__(
@@ -160,12 +160,21 @@ class SignalReturnRelations:
 
         freq_error = f"Frequency parameter must be one of {list(self.dic_freq.keys())}."
         if isinstance(freqs, list):
+            seen = set()
+            self.freqs = []
             for f in freqs:
                 if not f in self.dic_freq.keys():
                     raise ValueError(freq_error)
+                else:
+                    if f not in seen:
+                        seen.add(f)
+                        self.freqs.append(f)
+
         else:
             if not freqs in self.dic_freq.keys():
                 raise ValueError(freq_error)
+            else:
+                self.freqs = [freqs]
 
         self.metrics = [
             "accuracy",
@@ -181,7 +190,7 @@ class SignalReturnRelations:
         ]
 
         self.rets = rets
-        self.freqs = freqs
+        # self.freqs = list(set(freqs))  # Remove duplicate values from freqs
 
         if not isinstance(cosp, bool):
             raise TypeError(f"<bool> object expected and not {type(cosp)}.")
@@ -203,6 +212,7 @@ class SignalReturnRelations:
         self.xcats = list(df["xcat"].unique())
         self.df = df
         self.original_df = df.copy()
+        self.rival_sigs = rival_sigs
 
         self.df = df.copy()
 
@@ -251,7 +261,8 @@ class SignalReturnRelations:
         if rival_sigs is not None:
             r_sigs_warning = (
                 "Parameter 'rival_sigs' is deprecated and will be removed "
-                "in v0.1.0. Please specify the rival signals as part of the list of feature "
+                "in v0.1.0. Please specify the rival signals as part of the list of "
+                "feature "
                 "signals in the argument 'sigs'."
             )
             warnings.warn(
@@ -289,7 +300,7 @@ class SignalReturnRelations:
         )
 
         if len(self.signals) > 1:
-            self.df_sigs = self.__rival_sigs__()
+            self.df_sigs = self.__rival_sigs__(self.rets[0])
 
         self.sigs[0] = self.new_sig[0]
 
@@ -300,15 +311,15 @@ class SignalReturnRelations:
             cs_type="years", ret=self.rets[0], sig=self.sigs[0]
         )
 
-    def __rival_sigs__(self):
+        self.sigs[0] = self.revert_negation(self.sigs[0])
+
+    def __rival_sigs__(self, ret):
         """
         Produces the panel-level table for the additional signals.
         """
 
         df_out = pd.DataFrame(index=self.signals, columns=self.metrics)
         df = self.df
-
-        ret: str = self.rets[0]
 
         for s in self.signals:
             # Entire panel will be passed in.
@@ -380,6 +391,9 @@ class SignalReturnRelations:
 
     def accuracy_bars(
         self,
+        ret: str = None,
+        sig: str = None,
+        freq: str = None,
         type: str = "cross_section",
         title: str = None,
         title_fontsize: int = 16,
@@ -402,12 +416,37 @@ class SignalReturnRelations:
 
         assert type in ["cross_section", "years", "signals"]
 
-        if type == "cross_section":
-            df_xs = self.df_cs
-        elif type == "years":
-            df_xs = self.df_ys
+        if freq is None:
+            freq = self.freqs[0]
+
+        if ret is None and sig is None:
+            ret = self.rets[0]
+            sig = self.sigs[0]
+            if type == "cross_section":
+                df_xs = self.df_cs
+            elif type == "years":
+                df_xs = self.df_ys
+            else:
+                df_xs = self.df_sigs
         else:
-            df_xs = self.df_sigs
+            if ret is None:
+                ret = self.rets[0]
+            if sig is None:
+                sig = self.sigs[0]
+            self.df = self.original_df.copy()
+            self.manipulate_df(
+                xcat=[sig, ret],
+                freq=freq,
+                agg_sig=self.agg_sigs[0],
+                sig=sig,
+            )
+            sig = self.new_sig[0]
+            if type == "cross_section":
+                df_xs = self.__output_table__(cs_type="cids", ret=ret, sig=sig)
+            elif type == "years":
+                df_xs = self.__output_table__(cs_type="years", ret=ret, sig=sig)
+            else:
+                df_xs = self.__rival_sigs__(ret)
 
         dfx = df_xs[~df_xs.index.isin(["PosRatio"])]
 
@@ -455,6 +494,9 @@ class SignalReturnRelations:
 
     def correlation_bars(
         self,
+        ret: str = None,
+        sig: str = None,
+        freq: str = None,
         type: str = "cross_section",
         title: str = None,
         title_fontsize: int = 16,
@@ -464,6 +506,8 @@ class SignalReturnRelations:
         """
         Plot correlation coefficients and significance.
 
+        :param <str> ret: return category. Default is the first return category.
+        :param <str> sig: signal category. Default is the first signal category.
         :param <str> type: type of segment over which bars are drawn. Either
             "cross_section" (default), "years" or "signals".
         :param <str> title: chart header. Default will be applied if none is chosen.
@@ -476,12 +520,37 @@ class SignalReturnRelations:
         """
         assert type in ["cross_section", "years", "signals"]
 
-        if type == "cross_section":
-            df_xs = self.df_cs
-        elif type == "years":
-            df_xs = self.df_ys
+        if freq is None:
+            freq = self.freqs[0]
+
+        if ret is None and sig is None:
+            ret = self.rets[0]
+            sig = self.sigs[0]
+            if type == "cross_section":
+                df_xs = self.df_cs
+            elif type == "years":
+                df_xs = self.df_ys
+            else:
+                df_xs = self.df_sigs
         else:
-            df_xs = self.df_sigs
+            if ret is None:
+                ret = self.rets[0]
+            if sig is None:
+                sig = self.sigs[0]
+            self.df = self.original_df.copy()
+            self.manipulate_df(
+                xcat=[sig, ret],
+                freq=freq,
+                agg_sig=self.agg_sigs[0],
+                sig=sig,
+            )
+            sig = self.new_sig[0]
+            if type == "cross_section":
+                df_xs = self.__output_table__(cs_type="cids", ret=ret, sig=sig)
+            elif type == "years":
+                df_xs = self.__output_table__(cs_type="years", ret=ret, sig=sig)
+            else:
+                df_xs = self.__rival_sigs__(ret)
 
         # Panel plus the cs_types.
         dfx = df_xs[~df_xs.index.isin(["PosRatio", "Mean"])]
@@ -503,10 +572,10 @@ class SignalReturnRelations:
         kprobs[kprobs == 0] = 0.01
 
         if title is None:
-            refsig = "various signals" if type == "signals" else self.sigs
+            refsig = "various signals" if type == "signals" else sig
             title = (
-                f"Positive correlation probability of {self.rets} "
-                f"and lagged {refsig} at {self.dic_freq[self.freqs[0]]} frequency."
+                f"Positive correlation probability of {ret} "
+                f"and lagged {refsig} at {self.dic_freq[freq]} frequency."
             )
         if size is None:
             size = (np.max([dfx.shape[0] / 2, 8]), 6)
@@ -656,15 +725,26 @@ class SignalReturnRelations:
 
         if True in self.signs and self.signs[self.sigs.index(sig)]:
             index = self.sigs.index(sig)
-            original_name = sig + "/" + agg_sig
+            if self.rival_sigs is not None:
+                original_name = sig + "/" + agg_sig
 
-            self.df.loc[:, self.signals] *= -1
-            s_copy = self.signals.copy()
+                self.df.loc[:, self.signals] *= -1
+                s_copy = self.signals.copy()
 
-            self.signals = [s + "_NEG" for s in self.signals]
-            sig += "_NEG"
-            self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
-            self.new_sig = sig
+                self.signals = [s + "_NEG" for s in self.signals]
+                sig += "_NEG"
+                self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
+                self.new_sig = sig
+            else:
+                original_name = sig + "/" + agg_sig
+
+                self.df.loc[:, self.sigs[index]] *= -1
+                s_copy = self.signals.copy()
+
+                self.signals[self.signals.index(sig)] += "_NEG"
+                sig += "_NEG"
+                self.df.rename(columns=dict(zip(s_copy, self.signals)), inplace=True)
+                self.new_sig = sig
 
             if sst:
                 new_name = sig + "/" + agg_sig
@@ -855,6 +935,100 @@ class SignalReturnRelations:
             df_out.loc["PosRatio", below50s] = pos_pvals
 
         return df_out.astype("float")
+
+    def calculate_single_stat(
+        self, stat: str, ret: str = None, sig: str = None, type: str = None
+    ):
+        """
+        Calculates a single statistic for a given signal-return relation.
+
+        :param <str> stat: statistic to be calculated.
+        :param <str> ret: return category. Default is the first return category.
+        :param <str> sig: signal category. Default is the first signal category.
+        :param <str> cstype: type of segment over which bars are drawn. Either
+            "panel" (default), "years" or "signals".
+        """
+        r = [ret]
+        r.append(sig)
+        df = self.df[r]
+
+        df = df.dropna(how="any")
+
+        if type == "panel":
+            css = ["Panel"]
+            cs_type = "cids"
+        elif type == "mean_cids" or type == "pr_cids":
+            css = set(self.cids)
+            unique_cids_df = set(df.index.get_level_values(0).unique())
+            if not css.issubset(unique_cids_df):
+                warnings.warn(
+                    f"Cross-sections {css - unique_cids_df} have no corresponding xcats \
+                        in the dataframe."
+                )
+                css = css.intersection(unique_cids_df)
+            css = sorted(list(css))
+            cs_type = "cids"
+        elif type == "mean_years" or type == "pr_years":
+            df["year"] = np.array(df.reset_index(level=1)["real_date"].dt.year)
+            css = [str(y) for y in list(set(df["year"]))]
+            css = sorted(css)
+            cs_type = "years"
+        else:
+            raise ValueError("Invalid segmentation type.")
+
+        list_of_results = []
+        for cs in css:
+            df_segment = self.__slice_df__(df=df, cs=cs, cs_type=cs_type)
+            df_segment = df_segment.loc[:, [ret, sig]].dropna(axis=0, how="any")
+
+            df_sgs = np.sign(df_segment.loc[:, [ret, sig]])
+            # Exact zeroes are disqualified for sign analysis only.
+            df_sgs = df_sgs[~((df_sgs.iloc[:, 0] == 0) | (df_sgs.iloc[:, 1] == 0))]
+
+            sig_sign = df_sgs[sig]
+            ret_sign = df_sgs[ret]
+            if stat == "accuracy":
+                list_of_results.append(skm.accuracy_score(sig_sign, ret_sign))
+            elif stat == "bal_accuracy":
+                list_of_results.append(skm.balanced_accuracy_score(sig_sign, ret_sign))
+            elif stat == "pos_sigr":
+                list_of_results.append(np.mean(sig_sign == 1))
+            elif stat == "pos_retr":
+                list_of_results.append(np.mean(ret_sign == 1))
+            elif stat == "pos_prec":
+                list_of_results.append(
+                    skm.precision_score(ret_sign, sig_sign, pos_label=1)
+                )
+            elif stat == "neg_prec":
+                list_of_results.append(
+                    skm.precision_score(ret_sign, sig_sign, pos_label=-1)
+                )
+            elif stat == "kendall":
+                ret_vals, sig_vals = df_segment[ret], df_segment[sig]
+                list_of_results.append(stats.kendalltau(ret_vals, sig_vals)[0])
+            elif stat == "kendall_pval":
+                ret_vals, sig_vals = df_segment[ret], df_segment[sig]
+                list_of_results.append(stats.kendalltau(ret_vals, sig_vals)[1])
+            elif stat == "pearson":
+                ret_vals, sig_vals = df_segment[ret], df_segment[sig]
+                list_of_results.append(stats.pearsonr(ret_vals, sig_vals)[0])
+            elif stat == "pearson_pval":
+                ret_vals, sig_vals = df_segment[ret], df_segment[sig]
+                list_of_results.append(stats.pearsonr(ret_vals, sig_vals)[1])
+            else:
+                raise ValueError("Invalid statistic.")
+
+        if type == "panel":
+            return list_of_results[0]
+        elif type == "mean_years" or type == "mean_cids":
+            return np.mean(np.array(list_of_results))
+        elif type == "pr_years" or type == "pr_cids":
+            if stat in self.metrics[0:6]:
+                return np.mean(np.array(list_of_results) > 0.5)
+            elif stat in self.metrics[6::2]:
+                return np.mean(np.array(list_of_results) > 0)
+            elif stat in self.metrics[7::2]:
+                return np.mean(np.array(list_of_results) < 0.5)
 
     def summary_table(self):
         """
@@ -1053,6 +1227,8 @@ class SignalReturnRelations:
             if not agg_sigs_elem in self.agg_sigs:
                 raise ValueError(f"{agg_sigs_elem} is not a valid aggregation method")
 
+        self.sigs = [self.revert_negation(sig) for sig in self.sigs]
+
         xcats = [x for x in xcats if x in self.sigs]
 
         index = [
@@ -1135,7 +1311,7 @@ class SignalReturnRelations:
             is None, in which case the maximum value of the table is used.
         :param <Tuple[float]> figsize: Tuple (w, h) of width and height of graph.
         :param <bool> annotate: if True, the values are annotated in the heatmap.
-        :param <int> round: number of decimals to round the values to on the 
+        :param <int> round: number of decimals to round the values to on the
             heatmap's annotations.
         """
         self.df = self.original_df
@@ -1187,6 +1363,7 @@ class SignalReturnRelations:
             raise ValueError(f"Columns must only contain {rows_values}")
 
         rets = self.rets if isinstance(self.rets, list) else [self.rets]
+        self.sigs = [self.revert_negation(sig) for sig in self.sigs]
         sigs = self.sigs if isinstance(self.sigs, list) else [self.sigs]
 
         sigs_neg = []
@@ -1203,15 +1380,6 @@ class SignalReturnRelations:
         df_result = pd.DataFrame(
             columns=df_column_names, index=df_row_names, dtype=np.float64
         )
-
-        # Define cs_type and type_index mappings
-        cs_type_mapping = {"panel": 0, "mean_years": 1, "pr_years": 2}
-        type_mapping = {
-            "mean_years": "years",
-            "pr_years": "years",
-            "mean_cids": "cids",
-            "pr_cids": "cids",
-        }
 
         loop_tuples: List[Tuple[str, str, str, str]] = [
             (ret, sig, freq, agg_sig)
@@ -1240,18 +1408,11 @@ class SignalReturnRelations:
                 df_result=df_result,
             )
 
-            # Determine cs_type and type_index
-            cs_type = type_mapping.get(type, "cids")
-            type_index = cs_type_mapping.get(type, 1)
-
-            # Retrieve output table and update df_result
-            df_out = self.__output_table__(
-                cs_type=cs_type, ret=ret, sig=self.new_sig[0]
-            )
-            single_stat = df_out.iloc[type_index][stat]
             row = self.get_rowcol(hash, rows)
             column = self.get_rowcol(hash, columns)
-            df_result[column][row] = single_stat
+            df_result[column][row] = self.calculate_single_stat(
+                stat, ret, self.new_sig[0], type
+            )
 
             # Reset self.df and sig to original values
             self.df = self.original_df
@@ -1416,7 +1577,7 @@ if __name__ == "__main__":
 
     srt = sr.single_relation_table()
     mrt = sr.multiple_relations_table()
-    sst = sr.single_statistic_table(stat="accuracy")
+    sst = sr.single_statistic_table(stat="accuracy", type="mean_years")
 
     print(srt)
     print(mrt)
@@ -1428,12 +1589,14 @@ if __name__ == "__main__":
         dfd,
         rets=["XR", "XRH"],
         sigs=["CRY", "INFL", "GROWTH"],
-        sig_neg=[False, True],
+        sig_neg=[True, True],
         cosp=True,
         freqs=["M", "Q"],
         agg_sigs=["last", "mean"],
         blacklist=black,
     )
+
+    sr.correlation_bars(ret="XRH", sig="INFL", freq="Q")
 
     srt = sr.single_relation_table()
     mrt = sr.multiple_relations_table()
@@ -1457,5 +1620,6 @@ if __name__ == "__main__":
         stat="accuracy",
         rows=["ret", "xcat", "freq"],
         columns=["agg_sigs"],
+        type="mean_cids",
     )
     print(sst)

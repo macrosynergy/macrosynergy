@@ -2,8 +2,6 @@
 Implementation of panel calculation functions for quantamental data.
 The functionality allows applying mathematical operations on time-series data.
 
-::docs::panel_calculator::sort_first::
-
 """
 import numpy as np
 import pandas as pd
@@ -67,7 +65,7 @@ def xcat_isolator(expression: str, start_index: str, index: int):
 def _get_xcats_used(ops: dict) -> Tuple[List[str], List[str]]:
     """
     Collect all categories used in the panel calculation.
-    
+
     :param <dict> ops: dictionary of panel calculation formulas.
 
     :return <Tuple[List[str], List[str]]>: all_xcats_used, singles_used.

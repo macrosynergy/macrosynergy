@@ -18,7 +18,7 @@ from typing import List, Optional, Tuple
 
 import pandas as pd
 
-from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date
+from macrosynergy.management.utils import standardise_dataframe, is_valid_iso_date, reduce_df
 from macrosynergy.visuals import FacetPlot, LinePlot
 from macrosynergy.management.types import Numeric
 
@@ -161,6 +161,8 @@ def timelines(
 
     if cids is None:
         cids: List[str] = df["cid"].unique().tolist()
+    else:
+        df = reduce_df(df, cids=cids)
 
     if cumsum:
         df[val] = (
@@ -405,5 +407,8 @@ if __name__ == "__main__":
         same_y=False,
         xcats=sel_xcats[0],
         cids=sel_cids,
-        title="Plotting multiple cross sections for a single category \n with different y-axis!",
+        title=(
+            "Plotting multiple cross sections for a single category \n with different "
+            "y-axis!"
+        ),
     )

@@ -28,13 +28,13 @@ def view_timelines(
     single_chart: bool = False,
     label_adj: float = 0.05,
     title: Optional[str] = None,
-    title_adj: float = 0.95,
+    title_adj: float = 1.005,
     title_xadj: float = 0.5,
     title_fontsize: int = 18,
     cs_mean: bool = False,
     size: Tuple[float, float] = (12, 7),
-    aspect: float = 1.7,
-    height: float = 3.0,
+    aspect: float = 1.618,
+    height: float = 2.85,
     legend_fontsize: int = 12,
 ):
     """Displays a facet grid of time line charts of one or more categories.
@@ -100,12 +100,12 @@ def view_timelines(
         title_fontsize=title_fontsize,
         legend_fontsize=legend_fontsize,
         # HC Params
-        aspect=1.618,
-        title_adj=1.005,
-        height=2.85,
-        # size=size,
-        # label_adj=label_adj,
-        # title_xadj=title_xadj,
+        aspect=aspect,
+        title_adj=title_adj,
+        height=height,
+        size=size,
+        label_adj=label_adj,
+        title_xadj=title_xadj,
     )
 
 
@@ -153,6 +153,7 @@ if __name__ == "__main__":
         cids=cids[0],
         size=(10, 5),
         title="AUD Return and Carry",
+        aspect=3
     )
 
     view_timelines(
@@ -163,9 +164,10 @@ if __name__ == "__main__":
         title_adj=0.8,
         xcat_labels=["Return", "Carry", "Inflation"],
         title="AUD Return, Carry & Inflation",
+        aspect=3
     )
 
-    view_timelines(dfd, xcats=["CRY"], cids=cids, ncol=2, title="Carry", cs_mean=True)
+    view_timelines(dfd, xcats=["CRY"], cids=cids, ncol=4, title="Carry", cs_mean=True)
 
     view_timelines(
         dfd, xcats=["XR"], cids=cids[:2], ncol=2, cumsum=True, same_y=False, aspect=2

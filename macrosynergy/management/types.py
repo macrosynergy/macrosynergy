@@ -61,8 +61,8 @@ class QuantamentalDataFrameMeta(type):
         IDX_COLS = QuantamentalDataFrame.IndexCols
         result: bool = True
         try:
-            # the try except offers a safety net in case the instance is not a pd.DataFrame
-            # and one of the checks raises an error
+            # the try except offers a safety net in case the instance is not a
+            # pd.DataFrame and one of the checks raises an error
             result = result and isinstance(instance, pd.DataFrame)
             result = result and instance.index.name is None
             result = result and not isinstance(instance.columns, pd.MultiIndex)

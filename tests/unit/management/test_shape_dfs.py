@@ -61,6 +61,25 @@ class TestAll(unittest.TestCase):
         self.assertTrue(dfd_x["real_date"].min() == pd.to_datetime("2013-01-01"))
         self.assertTrue(dfd_x["real_date"].max() == pd.to_datetime("2019-01-01"))
 
+    def test_reduce_df_single_xcat(self):
+        dfd_x1 = reduce_df(
+            self.dfd,
+            xcats=["CRY"],
+            cids=self.cids[0:2],
+            start="2013-01-01",
+            end="2019-01-01",
+        )
+
+        dfd_x2 = reduce_df(
+            self.dfd,
+            xcats="CRY",
+            cids=self.cids[0:2],
+            start="2013-01-01",
+            end="2019-01-01",
+        )
+
+        pd.testing.assert_frame_equal(dfd_x1, dfd_x2)
+
     def test_reduce_df_intersect(self):
         filt1 = ~((self.dfd["cid"] == "AUD") & (self.dfd["xcat"] == "XR"))
         dfdx = self.dfd[filt1]  # Simulate missing cross sections.

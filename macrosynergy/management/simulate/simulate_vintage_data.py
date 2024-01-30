@@ -42,10 +42,20 @@ class VintageData:
 
     """
 
-    def __init__(self, ticker, cutoff='2020-12-31', release_lags=[15, 30],
-                 number_firsts=24, shortest=36, freq='M', start_value=100, trend_ar=5,
-                 sd_ar=math.sqrt(12), seasonal=None, added_dates=12):
-
+    def __init__(
+        self,
+        ticker,
+        cutoff="2020-12-31",
+        release_lags=[15, 30],
+        number_firsts=24,
+        shortest=36,
+        freq="M",
+        start_value=100,
+        trend_ar=5,
+        sd_ar=math.sqrt(12),
+        seasonal=None,
+        added_dates=12,
+    ):
         self.ticker = ticker
 
         self.cutoff = self.date_check(cutoff)
@@ -54,7 +64,7 @@ class VintageData:
         self.shortest = shortest
 
         self.freq = freq
-        self.freq_int = dict(zip(['Q', 'M', 'W'], [4, 12, 52]))
+        self.freq_int = dict(zip(["Q", "M", "W"], [4, 12, 52]))
         self.af = self.freq_int[freq]
 
         self.start_value = start_value
@@ -87,7 +97,6 @@ class VintageData:
 
     @staticmethod
     def week_day(rel_date, day):
-
         if day == 0:
             return rel_date - dt.timedelta(days=1)
 
@@ -106,7 +115,7 @@ class VintageData:
         :return <List[float] values: returns a list of values which have been adjusted
             seasonally
         """
-        if self.freq == 'W':
+        if self.freq == "W":
             week_dates = obs_dates.isocalendar().week
             condition = np.where(week_dates > 52)[0]
             if condition.size > 0:
@@ -117,33 +126,33 @@ class VintageData:
             seasonal = seas_factors[week]
             return values * (1 + (seasonal / 100))
 
-        month = (12 / self.af)
-        month_freq = (obs_dates.month // month)
+        month = 12 / self.af
+        month_freq = obs_dates.month // month
         month_freq = month_freq.astype(dtype=np.uint8)
 
         return values * (1 + seas_factors[month_freq - 1] / 100)
 
     def make_grade1(self):
-
         ref_date = self.cutoff - dt.timedelta(self.release_lags[0])
         ref_date = ref_date.replace(day=1)
 
-        eop_dates = pd.date_range(end=ref_date, periods=self.number_firsts, freq=self.freq)
+        eop_dates = pd.date_range(
+            end=ref_date, periods=self.number_firsts, freq=self.freq
+        )
         eop_dates = eop_dates.date
         vin_lengths = list(range(self.shortest, self.shortest + self.number_firsts))
         v_first = vin_lengths[0]
 
-        df_gr1 = pd.DataFrame(columns=['release_date', 'observation_date', 'value'])
+        df_gr1 = pd.DataFrame(columns=["release_date", "observation_date", "value"])
         obs_dates = pd.date_range(end=eop_dates[0], periods=v_first, freq=self.freq)
 
         list_ = np.linspace(0, (self.af - 1), self.af)
         linear_scale = list_ - np.mean(list_)
 
-        seas_factors = (self.seasonal / np.std(linear_scale))
+        seas_factors = self.seasonal / np.std(linear_scale)
         seas_factors *= linear_scale
 
         for i, eop_date in enumerate(eop_dates):
-
             v = vin_lengths[i]
             if i > 0:
                 length = vin_lengths[i - 1]
@@ -152,11 +161,11 @@ class VintageData:
 
             data = np.linspace(0, (v - 1), v)
             if self.start_value > 0:
-                data = ((data * (self.trend_ar / self.af)) / 100)
-                data = (1 + data)
+                data = (data * (self.trend_ar / self.af)) / 100
+                data = 1 + data
                 trend = self.start_value * data
             else:
-                data = (data * (self.trend_ar / self.af))
+                data = data * (self.trend_ar / self.af)
                 trend = self.start_value + data
 
             for rl in self.release_lags:
@@ -170,16 +179,19 @@ class VintageData:
                 if self.seasonal is not None:
                     values = self.seasonal_adj(obs_dates, seas_factors, values)
 
-                df_rel = pd.DataFrame({'release_date': rel_date,
-                                       'observation_date': obs_dates.date,
-                                       'value': values})
+                df_rel = pd.DataFrame(
+                    {
+                        "release_date": rel_date,
+                        "observation_date": obs_dates.date,
+                        "value": values,
+                    }
+                )
                 df_gr1 = pd.concat([df_gr1, df_rel], ignore_index=True)
 
         df_gr1["grading"] = 1
         return self.add_ticker_parts(df_gr1)
 
     def make_graded(self, grading, upgrades=[]):
-
         """
         Simulates an explicitly graded dataframe with a column 'grading'.
 
@@ -192,18 +204,16 @@ class VintageData:
 
         assert len(upgrades) == (len(grading) - 1)
         df_grd = self.make_grade1()
-        df_grd['grading'] = str(grading[0])
+        df_grd["grading"] = str(grading[0])
         dates = sorted(self.dates)
         for i, up in enumerate(upgrades):
-
-            filt = df_grd['release_date'] >= dates[up]
-            df_grd.loc[filt, 'grading'] = str(grading[(i + 1)])
+            filt = df_grd["release_date"] >= dates[up]
+            df_grd.loc[filt, "grading"] = str(grading[(i + 1)])
 
         return df_grd
 
     @staticmethod
     def map_weekday(date):
-
         day = date.weekday() - 5
         if day >= 0:
             date = VintageData.week_day(date, day)
@@ -222,12 +232,13 @@ class VintageData:
         ref_date = self.cutoff - dt.timedelta(self.release_lags[0])
         ref_date = ref_date.replace(day=1)
 
-        eop_dates = pd.date_range(end=ref_date, periods=self.number_firsts_gr2,
-                                  freq=self.freq)
+        eop_dates = pd.date_range(
+            end=ref_date, periods=self.number_firsts_gr2, freq=self.freq
+        )
         eop_list = eop_dates.date
         eop_arr = np.array(eop_list)
 
-        df_gr2 = pd.DataFrame(columns = ['release_date', 'observation_date'])
+        df_gr2 = pd.DataFrame(columns=["release_date", "observation_date"])
 
         n_ends = len(eop_list)
         n_release = len(self.release_lags)
@@ -243,9 +254,9 @@ class VintageData:
         data = data.reshape((shape[0] * shape[1]))
         eop_arr = np.sort(np.tile(eop_arr, n_release))
 
-        df_gr2['release_date'] = data
-        df_gr2['observation_date'] = eop_arr
-        df_gr2['ticker'] = self.ticker
+        df_gr2["release_date"] = data
+        df_gr2["observation_date"] = eop_arr
+        df_gr2["ticker"] = self.ticker
         print(df_gr2)
 
         return self.add_ticker_parts(df_gr2)
@@ -259,41 +270,62 @@ class VintageData:
         :return <pd.DataFrame>: Will return the DataFrame with the additional columns.
         """
         old_cols = list(df.columns)
-        add_cols = ['cross_section', 'category_code', 'adjustment', 'transformation']
-        ticker_parts = self.ticker.split('_', 3)
+        add_cols = ["cross_section", "category_code", "adjustment", "transformation"]
+        ticker_parts = self.ticker.split("_", 3)
 
         for i, tick in enumerate(ticker_parts):
             df[add_cols[i]] = tick
 
-        if 'transformation' not in df.columns:
-            df['transformation'] = None
+        if "transformation" not in df.columns:
+            df["transformation"] = None
 
         return df.loc[:, add_cols + old_cols]
 
 
 if __name__ == "__main__":
-
-    vins_m = VintageData('USD_INDX_SA', cutoff="2019-06-30", release_lags=[3, 20, 25],
-                         number_firsts=12, shortest=12, sd_ar=5, trend_ar=20,
-                         seasonal=10, added_dates=6)
+    vins_m = VintageData(
+        "USD_INDX_SA",
+        cutoff="2019-06-30",
+        release_lags=[3, 20, 25],
+        number_firsts=12,
+        shortest=12,
+        sd_ar=5,
+        trend_ar=20,
+        seasonal=10,
+        added_dates=6,
+    )
 
     dfm1 = vins_m.make_grade1()
 
-    dfm1.groupby('release_date').agg(['mean', 'count'])
+    dfm1.groupby("release_date").agg(["mean", "count"])
     dfm2 = vins_m.make_grade2()
     dfmg = vins_m.make_graded(grading=[3, 2.1, 1], upgrades=[12, 24])
 
-    vins_q = VintageData('USD_INDX_SA', release_lags=[3, 20, 25], number_firsts=2,
-                         shortest=8, freq='Q', seasonal = 10, added_dates = 4)
+    vins_q = VintageData(
+        "USD_INDX_SA",
+        release_lags=[3, 20, 25],
+        number_firsts=2,
+        shortest=8,
+        freq="Q",
+        seasonal=10,
+        added_dates=4,
+    )
     dfq1 = vins_q.make_grade1()
-    dfq1.groupby('release_date').agg(['mean', 'count'])
+    dfq1.groupby("release_date").agg(["mean", "count"])
     dfq2 = vins_q.make_grade2()
 
-    vins_w = VintageData('USD_INDX_SA', cutoff="2019-06-30", release_lags=[3, 20, 25],
-                         number_firsts=3 * 52, shortest=26, freq='W', seasonal = 10,
-                         added_dates = 52)
+    vins_w = VintageData(
+        "USD_INDX_SA",
+        cutoff="2019-06-30",
+        release_lags=[3, 20, 25],
+        number_firsts=3 * 52,
+        shortest=26,
+        freq="W",
+        seasonal=10,
+        added_dates=52,
+    )
     dfw1 = vins_w.make_grade1()
-    dfw1.groupby('release_date').agg(['mean', 'count'])
+    dfw1.groupby("release_date").agg(["mean", "count"])
     dfw2 = vins_w.make_grade2()
 
     dfm1.info()

@@ -206,8 +206,8 @@ class TestAll(unittest.TestCase):
             self.assertTrue(s[1] == "NEG")
             self.assertTrue(s[0] == signals[i])
 
-        self.assertEqual(srr_neg.sigs[0][-4:], "_NEG")
-        self.assertEqual(srr_neg.sigs[0][:-4], primary_signal)
+        self.assertEqual(srr_neg.signals[0][-4:], "_NEG")
+        self.assertEqual(srr_neg.signals[0][:-4], primary_signal)
 
         # Secondly, confirm the actual DataFrame's columns have been updated.
         test_columns = list(srr_neg.df.columns)
@@ -458,7 +458,7 @@ class TestAll(unittest.TestCase):
             blacklist=self.blacklist,
         )
 
-        df_sigs = srr.__rival_sigs__()
+        df_sigs = srr.__rival_sigs__(ret="XR")
 
         # Firstly, confirm that the index consists of only the primary and rival signals.
         self.assertEqual(list(df_sigs.index), [primary_signal] + rival_signals)
@@ -717,6 +717,55 @@ class TestAll(unittest.TestCase):
 
         try:
             srr.correlation_bars()
+        except Exception as e:
+            self.fail(f"correlation_bars raised {e} unexpectedly")
+
+        try:
+            srr.accuracy_bars(sig="CRY")
+        except Exception as e:
+            self.fail(f"accuracy_bars raised {e} unexpectedly")
+
+        try:
+            srr.correlation_bars(sig="CRY")
+        except Exception as e:
+            self.fail(f"correlation_bars raised {e} unexpectedly")
+
+        try:
+            srr.accuracy_bars(ret="XR")
+        except Exception as e:
+            self.fail(f"accuracy_bars raised {e} unexpectedly")
+
+        try:
+            srr.correlation_bars(ret="XR")
+        except Exception as e:
+            self.fail(f"correlation_bars raised {e} unexpectedly")
+
+        try:
+            srr.accuracy_bars(ret="XR", sig="CRY")
+        except Exception as e:
+            self.fail(f"accuracy_bars raised {e} unexpectedly")
+
+        try:
+            srr.correlation_bars(ret="XR", sig="CRY")
+        except Exception as e:
+            self.fail(f"correlation_bars raised {e} unexpectedly")
+
+        srr = SignalReturnRelations(
+            self.dfd,
+            ret=["XR", "GROWTH"],
+            sig=["CRY", "INFL"],
+            sig_neg=False,
+            freq="M",
+            blacklist=self.blacklist,
+        )
+
+        try:
+            srr.accuracy_bars(ret="GROWTH", sig="INFL")
+        except Exception as e:
+            self.fail(f"accuracy_bars raised {e} unexpectedly")
+
+        try:
+            srr.correlation_bars(ret="GROWTH", sig="INFL")
         except Exception as e:
             self.fail(f"correlation_bars raised {e} unexpectedly")
 
