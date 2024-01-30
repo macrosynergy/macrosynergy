@@ -239,7 +239,8 @@ def driver(
 
     print("View the documentation at: ")
     print(
-        f"\t\tfile://{os.path.abspath(site_output_dir).replace('\\','/')}/html/index.html"
+        "\t\t",
+        f"file://{os.path.abspath(site_output_dir).replace('\\','/')}/html/index.html",
     )
 
 
