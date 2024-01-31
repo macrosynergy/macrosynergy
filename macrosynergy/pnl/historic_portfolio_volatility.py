@@ -169,10 +169,8 @@ def _rolling_window_calc(
     return annualized_vol
 
 
-
-
 def _hist_vol(
-    df: pd.DataFrame,   
+    df: pd.DataFrame,
     sname: str,
     est_freq: str = "m",
     lback_periods: int = 21,
@@ -267,7 +265,6 @@ def _hist_vol(
     fills = {"d": 1, "w": 5, "m": 24, "q": 64}
     dfw_calc = dfw_calc.reindex(df_wide.index).ffill(limit=fills[est_freq])
 
-
     return ticker_df_to_qdf(df=dfw_calc)
 
 
@@ -280,7 +277,6 @@ def _hist_vol(
 #     )
 #     .set_index(dfw_calc.index)
 # )
-
 
 
 def historic_portfolio_vol(
@@ -458,6 +454,7 @@ if __name__ == "__main__":
 
     df.loc[(df["cid"] == "USD") & (df["xcat"] == "SIG"), "value"] = 1.0
     ctypes = ["FXXR_XR", "IRSXR_XR", "CDSXR_XR"]
+    ctypes += [c.replace("_XR", "") for c in ctypes]
     cscales = [1.0, 0.5, 0.1]
     csigns = [1, -1, 1]
 
