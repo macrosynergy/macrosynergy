@@ -1,13 +1,16 @@
 from concurrent.futures import ThreadPoolExecutor
+import re
 import time
 import boto3
 import paramiko
 
-# Get ec2 instance with name notebook-runner-*]
+# Get ec2 instance with name notebook-runner-* and state isnt terminated
+
 ec2 = boto3.resource("ec2")
 instances = ec2.instances.filter(
     Filters=[
         {"Name": "tag:Name", "Values": ["notebook-runner-*"]},
+        {"Name": "instance-state-name", "Values": ["running", "stopped", "pending", "stopping", "starting"]}
     ]
 )
 
@@ -28,6 +31,7 @@ notebooks = [name for name, size in sorted_notebooks_info]
 print(f"Found {len(notebooks)} notebooks in the s3 bucket")
 
 batch_size = len(notebooks) // len(list(instances))
+batch_size = 3
 # Get remainder too
 remainder = len(notebooks) % len(list(instances))
 
@@ -35,7 +39,7 @@ remainder = len(notebooks) % len(list(instances))
 batches = []
 for i in range(len(list(instances))):
     batch = notebooks[i::len(list(instances))]
-    # batch = batch[:batch_size]
+    batch = batch[:batch_size]
     batches.append(batch)
 bucket_url = "https://macrosynergy-notebook-prod.s3.eu-west-2.amazonaws.com/"
 
@@ -63,23 +67,41 @@ def run_commands_on_ec2(instance, notebooks):
             )
             print("Connection Succeeded!!!")
             connected = True
+            outputs = {"succeeded": [], "failed": []}
             commands = [
                 "rm -rf notebooks",
                 " && ".join(
                     ["wget -P notebooks/ " + bucket_url + notebook for notebook in notebooks]
                 ),
-                "pip install macrosynergy --upgrade",
-                "python3 run_notebooks.py",
-                "rm -rf notebooks",
+                "source myvenv/bin/activate \n pip install linearmodels --upgrade \n pip install jupyter --upgrade \n pip install macrosynergy --upgrade \n python3 run_notebooks.py",
+                "rm -rf notebooks"
             ]
             for command in commands:
                 print("Executing {}".format(command))
                 stdin, stdout, stderr = ssh_client.exec_command(command)
-                print(stdout.read().decode("utf-8"))
-                print(stderr.read().decode("utf-8"))
+                output = stdout.read().decode("utf-8")
+                error = stderr.read().decode("utf-8")
+                print(output)
+                print(error)
+                if command == "source myvenv/bin/activate \n pip install linearmodels --upgrade \n pip install jupyter --upgrade \n pip install macrosynergy --upgrade \n python3 run_notebooks.py":
+                    # Find each occurence of "Notebook x succeeded" and "Notebook x failed" and store in outputs
+                    success_regex = r"Notebook (.+) succeeded"
+                    failure_regex = r"Notebook (.+) failed"
+
+                    for match in re.finditer(success_regex, error):
+                        notebook = match.group(1)
+                        print(notebook)
+                        notebook = notebook.split("/")[-1]
+                        outputs["succeeded"].append(notebook)
+                    for match in re.finditer(failure_regex, error):
+                        notebook = match.group(1)
+                        print(notebook)
+                        notebook = notebook.split("/")[-1]
+                        outputs["failed"].append(notebook)
+
             ssh_client.close()
             instance.stop()
-            return "Success"
+            return outputs
         except:
             print("Failed to connect, retrying...")
             time.sleep(2)
@@ -94,8 +116,17 @@ with ThreadPoolExecutor(max_threads) as executor:
     # Use executor.map to run the process_instance function concurrently on each instance
     output = executor.map(process_instance, list(instances))
 
-print(output)
+merged_dict = {}
 
+# Merge dictionaries
+for d in list(output):
+    for key, value in d.items():
+        if key in merged_dict:
+            merged_dict[key].extend(value)
+        else:
+            merged_dict[key] = value
+
+print(merged_dict)
 
 # For each batch, run the notebooks on the instances in parallel
 
