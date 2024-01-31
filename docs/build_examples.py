@@ -39,6 +39,7 @@ def convert_to_notebook(
     output_dir: str,
     input_dir: str,
     output_extension: str = ".ipynb",
+    markdown: bool = False,
 ) -> str:
     """Convert a file to a notebook.
     :param <str> file_path: The file path.
@@ -55,12 +56,13 @@ def convert_to_notebook(
         + output_extension
     )
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    outputfmt = "md" if markdown else "notebook"
 
     subprocess.run(
         [
             "jupytext",
             "--to",
-            "notebook",
+            outputfmt,
             "-o",
             output_path,
             file_path,
@@ -83,6 +85,7 @@ def create_jupyter_book(
     jb_toc: str = JB_TOC,
     jb_config: str = JB_CONFIG,
     jb_entrypoint: str = JB_ENTRYPOINT,
+    build: bool = True,
 ):
     """Create a jupyter book from a directory of notebooks.
     :param <str> output_dir: The output directory.
@@ -104,7 +107,8 @@ def create_jupyter_book(
     # )
 
     # create the jupyter book
-    subprocess.run(["jupyter-book", "build", output_dir], check=True)
+    if build:
+        subprocess.run(["jupyter-book", "build", output_dir], check=True)
 
 
 def change_heading(
@@ -145,7 +149,9 @@ def change_heading(
 def convert_all_files(
     input_dir: str,
     output_dir: str,
-    output_extension: str = ".ipynb",
+    output_extension: str = None,
+    markdown: bool = False,
+    build: bool = False,
 ) -> None:
     """Convert all files in a directory to notebooks.
     :param <str> input_dir: The input directory.
@@ -153,6 +159,11 @@ def convert_all_files(
     :param <str> output_format: The output format.
     :param <str> output_extension: The output extension.
     """
+    if not markdown and output_extension is None:
+        output_extension = ".ipynb"
+    elif markdown and output_extension is None:
+        output_extension = ".md"
+
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
     os.makedirs(output_dir, exist_ok=True)
@@ -175,6 +186,7 @@ def convert_all_files(
                 output_dir=output_dir,
                 input_dir=output_dir,
                 output_extension=output_extension,
+                markdown=markdown,
             )
             for file_path in get_files(output_dir)
         ]
@@ -192,8 +204,58 @@ def convert_all_files(
     print("Notebooks built successfully.")
 
     print("Creating jupyter book...")
-    create_jupyter_book(output_dir)
+    create_jupyter_book(output_dir=output_dir, build=build)
 
 
 if __name__ == "__main__":
-    convert_all_files(INPUT_DIR, OUTPUT_DIR)
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Build the examples for the documentation."
+    )
+    parser.add_argument(
+        "-i",
+        "--input-dir",
+        type=str,
+        default=INPUT_DIR,
+        help="The input directory.",
+    )
+    parser.add_argument(
+        "-o",
+        "--output-dir",
+        type=str,
+        default=OUTPUT_DIR,
+        help="The output directory.",
+    )
+    parser.add_argument(
+        "-m",
+        "--markdown",
+        action="store_true",
+        help="Whether to convert to markdown.",
+        default=False,
+    )
+    parser.add_argument(
+        "-b",
+        "--build",
+        action="store_true",
+        help="Whether to build the jupyter book.",
+        default=False,
+    )
+
+    args = parser.parse_args()
+
+    input_dir = args.input_dir
+    output_dir = args.output_dir
+    markdown = args.markdown
+    build = args.build
+
+    JB_TOC = os.path.join(input_dir, "_toc.yml")
+    JB_CONFIG = os.path.join(input_dir, "_config.yml")
+    JB_ENTRYPOINT = os.path.join(input_dir, "README.md")
+
+    convert_all_files(
+        input_dir=input_dir,
+        output_dir=output_dir,
+        markdown=markdown,
+        build=build,
+    )
