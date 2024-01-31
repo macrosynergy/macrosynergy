@@ -66,26 +66,23 @@ analysis and transformation of quantamental indicators across many countries. It
 offers some basic methods for testing the trading or investment value of quantamental
 strategies.
 
-Links to Macrosynergy Website and associated pages
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 .. grid:: 3
 
-    .. grid-item-card:: :octicon:`globe;1em` Macrosynergy Website
-        :link: https://www.macrosynergy.com
+   .. grid-item-card:: :octicon:`globe;1em` Macrosynergy Website
+      :link: https://www.macrosynergy.com/
 
 
-    .. grid-item-card:: :octicon:`project;1em` Macrosynergy Research
-        :link: https://research.macrosynergy.com/
+   .. grid-item-card:: :octicon:`project;1em` Macrosynergy Research
+      :link: https://research.macrosynergy.com/
 
-        Macrosynergy Research is a free educational site dedicated to responsible 
-        macro trading strategies. 
+      Macrosynergy Research is a free educational site dedicated to responsible 
+      macro trading strategies. 
 
-    .. grid-item-card:: :octicon:`repo;1em` Macrosynergy Academy
-        :link: https://academy.macrosynergy.com/
+   .. grid-item-card:: :octicon:`repo;1em` Macrosynergy Academy
+      :link: https://academy.macrosynergy.com/
 
-        Macrosynergy's Academy explains all the basics and provides helpful resources 
-        to produce strategies and backtests.
+      Macrosynergy's Academy explains all the basics and provides helpful resources 
+      to produce strategies and backtests.
 
 .. toctree::
    :hidden:
