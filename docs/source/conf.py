@@ -84,7 +84,10 @@ html_theme_options = {
 
 
 html_static_path = ["_static"]
-html_css_files = ["style.css"]
+html_css_files = [
+    "style.css",
+    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css",
+]
 html_js_files = ["custom-icon.js"]
 source_suffix = [".rst", ".ipynb", ".md"]
 

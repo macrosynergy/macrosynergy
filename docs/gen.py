@@ -167,6 +167,7 @@ def driver(
     release_notes_md: str = RELEASE_NOTES_MD,
     package_name: str = PACKAGE_NAME,
     show_site: bool = False,
+    clean: bool = False,
 ) -> bool:
     """Driver function for generating documentation.
 
@@ -235,17 +236,15 @@ def driver(
 
     # copy examples
     build_examples()
-
-    # copy ./docs/examples.buid/_build/html to ./docs/build/html/examples , exists_ok=True
-    # os.makedirs("E:/Work/ms/macrosynergy/docs/docs.build/docs/build/html/examples", exist_ok=True)
-    if OPx.exists("E:/Work/ms/macrosynergy/docs/docs.build/docs/build/html/examples"):
-        shutil.rmtree(
-            "E:/Work/ms/macrosynergy/docs/docs.build/docs/build/html/examples"
-        )
-    shutil.copytree(
-        src="E:/Work/ms/macrosynergy/docs/docs.build/docs/examples.build/_build/html",
-        dst="E:/Work/ms/macrosynergy/docs/docs.build/docs/build/html/examples",
-    )
+    print('x')
+    # if OPx.exists("E:/Work/ms/macrosynergy/docs/docs.build/docs/build/html/examples"):
+    #     shutil.rmtree(
+    #         "E:/Work/ms/macrosynergy/docs/docs.build/docs/build/html/examples"
+    #     )
+    # shutil.copytree(
+    #     src="E:/Work/ms/macrosynergy/docs/docs.build/docs/examples.build/_build/html",
+    #     dst="E:/Work/ms/macrosynergy/docs/docs.build/docs/build/html/examples",
+    # )
 
     os.chdir(starting_dir)
 
@@ -253,10 +252,38 @@ def driver(
         shutil.rmtree(site_output_dir)
     shutil.copytree(src=temp_site_dir, dst=site_output_dir)
 
-    # shutil.rmtree(temp_dir)
-    dirx = OPx.normpath(OPx.abspath(site_output_dir)).replace("\\", "/")
+    # remove _temp_rst directory
+    shutil.rmtree(temp_rst_dir)
+
+    if clean:
+        shutil.rmtree(temp_dir)
+
+    abssiteout = OPx.normpath(OPx.abspath(site_output_dir)).replace("\\", "/")
+    indexfile = f"{abssiteout}/html/index.html"
+
     print("View the documentation at: ")
-    print("\t\t", f"file://{dirx}/html/index.html")
+    print("\t\t", f"file://{indexfile}")
+    if show_site:
+        os.system(f"start {indexfile}")
 
 
-driver()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Generate documentation for the package."
+    )
+    parser.add_argument(
+        "-c",
+        "--clean",
+        action="store_true",
+        help="Clean the documentation build.",
+        default=False,
+    )
+
+    parser.add_argument(
+        "-s",
+        "--show",
+        action="store_true",
+        help="Show the documentation in the browser.",
+    )
+    args = parser.parse_args()
+    driver(show_site=args.show, clean=args.clean)

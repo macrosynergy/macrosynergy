@@ -25,46 +25,46 @@ trading or investment value of quantamental strategies.
 .. grid:: 3
 
    .. grid-item-card:: :octicon:`organization;1em`   About Macrosynergy
-      :link: about
-      :link-type: ref
+      :link: about.html
+      
 
    .. grid-item-card:: :octicon:`rocket;1em`      Getting Started
-      :link: getting_started
-      :link-type: ref
+      :link: getting_started.html
+      
 
    .. grid-item-card:: :octicon:`book;1em` API Reference
-      :link: api_reference
-      :link-type: ref
+      :link: api_reference.html
+      
 
 
 
 .. grid:: 3
 
    .. grid-item-card:: :octicon:`code-review;1em` Usage Examples
-      :link: usage_examples
-      :link-type: ref
+      :link: usage_examples.html
+      
 
    .. grid-item-card:: :octicon:`star-fill;1em` Common Definitions
-      :link: common_definitions
-      :link-type: ref
+      :link: common_definitions.html
+      
 
-   .. grid-item-card:: :octicon:`question;1em` FAQs and Troubleshooting
-      :link: faqs
-      :link-type: ref
+   .. grid-item-card:: :octicon:`repo;1em` Macrosynergy Academy
+      :link: macrosynergy_academy.html
+
+      
 
 .. grid:: 3
 
    .. grid-item-card:: :octicon:`git-pull-request;1em` Contribution Guide
-      :link: contribution_guide
-      :link-type: ref
+      :link: contribution_guide.html
+      
 
    .. grid-item-card:: :octicon:`versions;1em` Release Notes
-      :link: release_notes
-      :link-type: ref
-
-   .. grid-item-card:: :octicon:`repo;1em` Macrosynergy Academy
-      :link: macrosynergy_academy
-      :link-type: ref
+      :link: release_notes.html
+      
+   .. grid-item-card:: :octicon:`question;1em` FAQs and Troubleshooting
+      :link: faqs.html
+      
 
 .. toctree::
    :hidden:

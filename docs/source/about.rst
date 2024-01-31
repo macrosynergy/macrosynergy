@@ -27,33 +27,39 @@ https://github.com/macrosynergy/macrosynergy.
 Links to Macrosynergy Website and associated pages
 --------------------------------------------------
 
+.. grid:: 3
 
-.. card:: Macrosynergy Website
-    :link: https://www.macrosynergy.com
+    .. grid-item-card:: :octicon:`globe;1em` Macrosynergy Website
+        :link: https://www.macrosynergy.com
 
-.. card:: Macrosynergy Research
-    :link: https://research.macrosynergy.com/
 
-    Macrosynergy Research is a free educational site dedicated to responsible 
-    macro trading strategies. 
+    .. grid-item-card:: :octicon:`project;1em` Macrosynergy Research
+        :link: https://research.macrosynergy.com/
 
-.. card:: Macrosynergy Academy
-    :link: https://academy.macrosynergy.com/
+        Macrosynergy Research is a free educational site dedicated to responsible 
+        macro trading strategies. 
 
-    Macrosynergy's Academy explains all the basics and provides helpful resources 
-    to produce strategies and backtests.
+    .. grid-item-card:: :octicon:`repo;1em` Macrosynergy Academy
+        :link: https://academy.macrosynergy.com/
 
-.. card:: J.P. Morgan Macrosynergy Quantamental System - JPMaQS
-   :link: https://www.jpmorgan.com/insights/global-research/markets/macrosynergy-quantamental-system
+        Macrosynergy's Academy explains all the basics and provides helpful resources 
+        to produce strategies and backtests.
 
-   Macro quantamental trading made easy by breaking down the barriers 
-   between purely quantitative and fundamental trading styles.
+.. grid:: 1
 
-.. card:: Macrosynergy's Linkedin Page
-    :link: https://www.linkedin.com/company/macrosynergy-partners/
+    .. grid-item-card:: J.P. Morgan Macrosynergy Quantamental System - JPMaQS
+        :link: https://www.jpmorgan.com/insights/global-research/markets/macrosynergy-quantamental-system
 
-.. card:: Macrosynergy's Twitter Page
-    :link: https://twitter.com/macro_synergy
+        Macro quantamental trading made easy by breaking down the barriers 
+        between purely quantitative and fundamental trading styles.
 
-.. card:: Macrosynergy's Github Page
-    :link: https://github.com/macrosynergy/macrosynergy
+.. grid:: 3
+
+    .. grid-item-card:: :fab:`linkedin;1em` Macrosynergy's LinkedIn Page
+        :link: https://www.linkedin.com/company/macrosynergy-partners/
+
+    .. grid-item-card:: :fab:`twitter;1em` Macrosynergy's Twitter Page
+        :link: https://twitter.com/macro_synergy
+
+    .. grid-item-card:: :fab:`github;1em` Macrosynergy's GitHub Page
+        :link: https://github.com/macrosynergy/macrosynergy
