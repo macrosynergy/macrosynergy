@@ -243,13 +243,10 @@ def driver(
         shutil.rmtree(temp_dir)
 
     abssiteout = OPx.normpath(OPx.abspath(site_output_dir)).replace("\\", "/")
-    indexfile = f"file:///{abssiteout}html/index.html"
+    indexfile = f"{abssiteout}/html/index.html"
 
     print("View the documentation at: ")
-    print(
-        "\t\t",
-        f"file://{indexfile}/html/index.html",
-    )
+    print("\t\t", f"file://{indexfile}")
     if show_site:
         os.system(f"start {indexfile}")
 
