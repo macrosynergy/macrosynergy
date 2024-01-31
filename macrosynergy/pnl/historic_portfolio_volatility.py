@@ -132,19 +132,19 @@ def _rolling_window_calc(
 
     ## Calculate univariate volatility
 
-    # # TODO: Check this 252 number. @mikiinterfiore says it should be 261
-    # if weights is None:
-    #     weights = np.ones(lback_periods) / lback_periods
-    #     univariate_vol = np.sqrt(252) * df_wide.agg(
-    #         roll_func, remove_zeros=remove_zeros
-    #     )
-    # else:
-    #     if len(weights) == len(df_wide):
-    #         univariate_vol = np.sqrt(252) * df_wide.agg(
-    #             roll_func, w=weights, remove_zeros=remove_zeros
-    #         )
-    #     else:
-    #         return pd.Series(np.nan, index=df_wide.columns)
+    univariate_vol: pd.Series
+    if weights is None:
+        weights = np.ones(lback_periods) / lback_periods
+        univariate_vol = np.sqrt(252) * df_wide.agg(
+            roll_func, remove_zeros=remove_zeros
+        )
+    else:
+        if len(weights) == len(df_wide):
+            univariate_vol = np.sqrt(252) * df_wide.agg(
+                roll_func, w=weights, remove_zeros=remove_zeros
+            )
+        else:
+            return pd.Series(np.nan, index=df_wide.columns)
 
     ## Creating a mask to fill series `nan_tolerance`
     mask = (
@@ -156,10 +156,10 @@ def _rolling_window_calc(
         / lback_periods
     ) <= nan_tolerance
 
-    # univariate_vol[~mask] = np.nan
+    univariate_vol[~mask] = np.nan
 
     ## Inversed univariate volatility
-    # inv_univariate_vol = 1 / univariate_vol
+    inv_univariate_vol = 1 / univariate_vol
 
     vcv: pd.DataFrame = df_wide.cov()
     total_variance: float = vcv.to_numpy().sum()
