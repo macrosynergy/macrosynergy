@@ -94,5 +94,4 @@ strategies.
    usage_examples.md
    release_notes.md
    faqs
-   contribution_guide
 
