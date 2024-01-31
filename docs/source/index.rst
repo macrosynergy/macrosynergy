@@ -48,8 +48,9 @@ trading or investment value of quantamental strategies.
       :link: common_definitions.html
       
 
-   .. grid-item-card:: :octicon:`question;1em` FAQs and Troubleshooting
-      :link: faqs.html
+   .. grid-item-card:: :octicon:`repo;1em` Macrosynergy Academy
+      :link: macrosynergy_academy.html
+
       
 
 .. grid:: 3
@@ -61,9 +62,8 @@ trading or investment value of quantamental strategies.
    .. grid-item-card:: :octicon:`versions;1em` Release Notes
       :link: release_notes.html
       
-
-   .. grid-item-card:: :octicon:`repo;1em` Macrosynergy Academy
-      :link: macrosynergy_academy.html
+   .. grid-item-card:: :octicon:`question;1em` FAQs and Troubleshooting
+      :link: faqs.html
       
 
 .. toctree::
