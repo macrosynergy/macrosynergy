@@ -61,28 +61,7 @@ macroeconomic activity, balance sheets and sentiment. Quantamental indicators ca
 tremendous value to macro trading strategies, especially when combined with market price
 information.
 
-The Macrosynergy package is a Python package that provides convenience functions for the
-analysis and transformation of quantamental indicators across many countries. It also
-offers some basic methods for testing the trading or investment value of quantamental
-strategies.
-
-.. grid:: 3
-
-   .. grid-item-card:: :octicon:`globe;1em` Macrosynergy Website
-      :link: https://www.macrosynergy.com/
-
-
-   .. grid-item-card:: :octicon:`project;1em` Macrosynergy Research
-      :link: https://research.macrosynergy.com/
-
-      Macrosynergy Research is a free educational site dedicated to responsible 
-      macro trading strategies. 
-
-   .. grid-item-card:: :octicon:`repo;1em` Macrosynergy Academy
-      :link: https://academy.macrosynergy.com/
-
-      Macrosynergy's Academy explains all the basics and provides helpful resources 
-      to produce strategies and backtests.
+Home Page: `macrosynergy.com <https://www.macrosynergy.com/>`_
 
 .. toctree::
    :hidden:
