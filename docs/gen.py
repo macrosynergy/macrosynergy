@@ -163,6 +163,7 @@ def driver(
     release_notes_md: str = RELEASE_NOTES_MD,
     package_name: str = PACKAGE_NAME,
     show_site: bool = False,
+    clean: bool = False,
 ) -> bool:
     """Driver function for generating documentation.
 
@@ -235,13 +236,41 @@ def driver(
         shutil.rmtree(site_output_dir)
     shutil.copytree(src=temp_site_dir, dst=site_output_dir)
 
-    # shutil.rmtree(temp_dir)
+    # remove _temp_rst directory
+    shutil.rmtree(temp_rst_dir)
+
+    if clean:
+        shutil.rmtree(temp_dir)
+
+    abssiteout = OPx.normpath(OPx.abspath(site_output_dir)).replace("\\", "/")
+    indexfile = f"file:///{abssiteout}html/index.html"
 
     print("View the documentation at: ")
     print(
         "\t\t",
-        f"file://{os.path.abspath(site_output_dir).replace('\\','/')}/html/index.html",
+        f"file://{indexfile}/html/index.html",
+    )
+    if show_site:
+        os.system(f"start {indexfile}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Generate documentation for the package."
+    )
+    parser.add_argument(
+        "-c",
+        "--clean",
+        action="store_true",
+        help="Clean the documentation build.",
+        default=False,
     )
 
-
-driver()
+    parser.add_argument(
+        "-s",
+        "--show",
+        action="store_true",
+        help="Show the documentation in the browser.",
+    )
+    args = parser.parse_args()
+    driver(show_site=args.show, clean=args.clean)
