@@ -18,7 +18,6 @@ Subpackages
    :hidden:
    :maxdepth: 10
 
-   macrosynergy.dataquery
    macrosynergy.download
    macrosynergy.learning
    macrosynergy.management
@@ -76,11 +75,6 @@ Subpackages
 
       Methods for visualizing quantamental data.
 
-   .. grid-item-card:: dataquery [DEPRECATED]
-      :link: macrosynergy.dataquery
-      :link-type: ref
-
-      Downloading data from JP Morgan DataQuery.
 
 Index
 =====

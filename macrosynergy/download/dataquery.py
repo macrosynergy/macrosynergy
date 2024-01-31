@@ -15,7 +15,7 @@ import uuid
 import io
 import warnings
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Union, Tuple
 from timeit import default_timer as timer
 from tqdm import tqdm
@@ -89,7 +89,7 @@ def validate_response(
         f"Response status code: {response.status_code}\n"
         f"Response headers: {response.headers}\n"
         f"Response text: {response.text}\n"
-        f"Timestamp (UTC): {datetime.utcnow().isoformat()}; \n"
+        f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}; \n"
     )
     # TODO : Use response.raise_for_status() as a better way to check for errors
     if not response.ok:
@@ -312,7 +312,7 @@ class OAuth(object):
             seconds=self._stored_token["expires_in"]
         )
 
-        utcnow = datetime.utcnow()
+        utcnow = datetime.now(timezone.utc)
         is_active: bool = expires > utcnow
 
         logger.debug(
@@ -344,7 +344,7 @@ class OAuth(object):
 
             # NOTE : use UTC time for token expiry
             self._stored_token: dict = {
-                "created_at": datetime.utcnow(),
+                "created_at": datetime.now(timezone.utc),
                 "access_token": js["access_token"],
                 "expires_in": js["expires_in"],
             }
@@ -475,7 +475,14 @@ def validate_download_args(
 
     if not isinstance(delay_param, float):
         raise TypeError("`delay_param` must be a float >=0.2 (seconds).")
-    elif delay_param < 0.2:
+
+    if delay_param < 0.2:
+        warnings.warn(
+            RuntimeWarning(
+                f"`delay_param` is too low; DataQuery API may reject requests. "
+                f"Minimum recommended value is 0.2 seconds. "
+            ))
+    if delay_param < 0.0:
         raise ValueError("`delay_param` must be a float >=0.2 (seconds).")
 
     vars_types_zip: zip = zip(
@@ -726,14 +733,14 @@ class DataQueryInterface(object):
                         f"Content was not found for the request: {response}\n"
                         f"User ID: {self.auth.get_auth()['user_id']}\n"
                         f"URL: {form_full_url(url, params)}\n"
-                        f"Timestamp (UTC): {datetime.utcnow().isoformat()}"
+                        f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}"
                     )
 
             raise InvalidResponseError(
                 f"Invalid response from DataQuery: {response}\n"
                 f"User ID: {self.auth.get_auth()['user_id']}\n"
                 f"URL: {form_full_url(url, params)}"
-                f"Timestamp (UTC): {datetime.utcnow().isoformat()}"
+                f"Timestamp (UTC): {datetime.now(timezone.utc).isoformat()}"
             )
 
         downloaded_data.extend(response["instruments"])
@@ -981,7 +988,7 @@ class DataQueryInterface(object):
                 raise ConnectionError(
                     HeartbeatError(
                         f"Heartbeat failed. Timestamp (UTC):"
-                        f" {datetime.utcnow().isoformat()}\n"
+                        f" {datetime.now(timezone.utc).isoformat()}\n"
                         f"User ID: {self.auth.get_auth()['user_id']}\n"
                     )
                 )
