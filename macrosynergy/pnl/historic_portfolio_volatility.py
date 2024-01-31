@@ -2,7 +2,7 @@
 Module for calculating the historic portfolio volatility for a given strategy.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Callable
 import pandas as pd
 import numpy as np
 
@@ -102,7 +102,7 @@ def _rolling_window_calc(
     ticker_df: pd.DataFrame,
     lback_periods: int,
     nan_tolerance: float,
-    roll_func: callable,
+    roll_func: Callable,
     remove_zeros: bool,
     weights: Optional[np.ndarray] = None,
 ):
@@ -169,15 +169,6 @@ def _rolling_window_calc(
     return annualized_vol
 
 
-# dfw_calc.loc[trigger_indices, :] = (
-#     dfw_calc.loc[trigger_indices, :]
-#     .reset_index()
-#     .apply(
-#         lambda row: _rolling_window_calc(row=row, ticker_df=df_wide, **_args),
-#         axis=1,
-#     )
-#     .set_index(dfw_calc.index)
-# )
 
 
 def _hist_vol(
@@ -276,7 +267,20 @@ def _hist_vol(
     fills = {"d": 1, "w": 5, "m": 24, "q": 64}
     dfw_calc = dfw_calc.reindex(df_wide.index).ffill(limit=fills[est_freq])
 
+
     return ticker_df_to_qdf(df=dfw_calc)
+
+
+# dfw_calc.loc[trigger_indices, :] = (
+#     dfw_calc.loc[trigger_indices, :]
+#     .reset_index()
+#     .apply(
+#         lambda row: _rolling_window_calc(row=row, ticker_df=df_wide, **_args),
+#         axis=1,
+#     )
+#     .set_index(dfw_calc.index)
+# )
+
 
 
 def historic_portfolio_vol(
