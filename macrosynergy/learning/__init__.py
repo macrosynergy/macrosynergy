@@ -22,7 +22,11 @@ from .metrics import (
 )
 from .signal_optimizer import SignalOptimizer
 
-from .predictors import NaivePredictor
+from .predictors import (
+    NaivePredictor,
+    SignWeightedLinearRegression,
+    TimeWeightedLinearRegression,
+)
 
 __all__ = [
     # panel_time_series_split
@@ -49,5 +53,7 @@ __all__ = [
     "SignalOptimizer",
     # predictors
     "NaivePredictor",
+    "SignWeightedRegressor",
+    "TimeWeightedRegressor",
 ]
  

@@ -53,8 +53,8 @@ def expanding_stat(
     # Adjust for individual cross-sections' series commencing at different dates.
     first_estimation = df.dropna(axis=0, how="all").index[min_obs]
 
-    obs_index = next(iter(np.where(df.index == first_observation)))[0]
-    est_index = next(iter(np.where(df.index == first_estimation)))[0]
+    obs_index = np.where(df.index == first_observation)[0][0]
+    est_index = np.where(df.index == first_estimation)[0][0]
 
     if stat == "zero":
         df_out["value"] = 0
@@ -70,15 +70,30 @@ def expanding_stat(
 
     else:
         dates = dates_iter[dates_iter >= first_estimation]
-        for date in dates:
-            df_out.loc[date, "value"] = (
-                df.loc[first_observation:date].stack().apply(stat)
+        if stat == "mean":
+            expanding_count = _get_expanding_count(
+                df.loc[first_observation:], min_periods=min_obs + 1
             )
+            df_mean = (
+                df.loc[first_observation:]
+                .sum(1)
+                .expanding(min_periods=min_obs + 1)
+                .sum()
+                / expanding_count
+            )
+            df_mean = df_mean.dropna().loc[dates]
+            df_mean.name = "value"
+            df_out.update(df_mean)
+        else:
+            for date in dates:
+                df_out.loc[date, "value"] = (
+                    df.loc[first_observation:date].stack().apply(stat)
+                )
 
         df_out = df_out.ffill()
 
         if iis and (est_index - obs_index) > 0:
-            df_out = df_out.bfill(limit=(est_index - obs_index))
+            df_out = df_out.bfill(limit=int(est_index - obs_index))
 
     df_out.columns.name = "cid"
     return df_out
@@ -277,7 +292,7 @@ def make_zn_scores(
             dfx = dfx.rename_axis("cid", axis=1)
 
             zns_css_df = dfx / df_mabs
-            dfw_zns_css.loc[:, cid] = zns_css_df.to_numpy()
+            dfw_zns_css.loc[:, cid] = zns_css_df["value"]
 
     dfw_zns = (dfw_zns_pan * pan_weight) + (dfw_zns_css * (1 - pan_weight))
     dfw_zns = dfw_zns.dropna(axis=0, how="all")
@@ -296,7 +311,22 @@ def make_zn_scores(
     return df_out[df.columns].reset_index(drop=True)
 
 
+def _get_expanding_count(X: pd.DataFrame, min_periods: int = 1):
+    """
+    Helper method to get the number of non-NaN values in each expanding window.
+
+    :param <pd.DataFrame> X: Pandas dataframe of input features.
+    :param <int> min_periods: Minimum number of observations in window required to have
+        a value (otherwise result is 0.).
+
+    :return <np.ndarray>: Numpy array of expanding counts.
+    """
+    return X.expanding(min_periods).count().sum(1).to_numpy()
+
+
 if __name__ == "__main__":
+    np.random.seed(1)
+
     cids = ["AUD", "CAD", "GBP", "USD", "NZD"]
     xcats = ["XR", "CRY", "GROWTH", "INFL"]
 

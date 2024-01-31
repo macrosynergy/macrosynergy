@@ -55,7 +55,10 @@ def view_ranges(
 
     """
     if legend_bbox_to_anchor is None and legend_loc is None:
-        legend_bbox_to_anchor = (0.5, -0.15)
+        # -0.15 puts the legend below the x-labels if there are only 2 xcats.
+        # If there is more than 2 xcats we need to move the legend further down by a
+        # factor of 0.05 for each additional xcat.
+        legend_bbox_to_anchor = (0.5, -0.15 - 0.05 * (len(xcats) - 2))
         legend_loc = 'lower center'
 
     if legend_loc is None:
