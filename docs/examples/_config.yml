@@ -20,8 +20,10 @@ html:
   baseurl: "https://docs.macrosynergy.com/"
 
 launch_buttons:
+  # binderhub_url: "https://mybinder.org/v2/gh/macrosynergy/macrosynergy/feature/docs_userguide"
+  # binderhub_url: "https://mybinder.org"
   binderhub_url: ""
-
+  # thebe: true
 
 
 parse:

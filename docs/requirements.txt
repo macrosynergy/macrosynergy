@@ -10,3 +10,4 @@ requests >= 2.27.1
 packaging >= 21.0
 jupytext==1.16.1
 jupyter-book==1.0.0
+black[jupyter]

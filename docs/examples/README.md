@@ -4,3 +4,5 @@ This site contains the user guide and examples for the
 [Macrosynergy](https://github.com/macrosynergy/macrosynergy) package.
 
 Each example/guide uses the simulated/mocked data from the `macrosynergy.management.simulate` module.
+
+## [Back to documentation site](https://macrosynergy.readthedocs.io/en/latest/)

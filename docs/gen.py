@@ -17,6 +17,10 @@ PACKAGE_NAME = "macrosynergy"
 PACKAGE_DOCS_DIR = "./docs"
 
 
+def build_examples():
+    os.system(f"python ./docs/build_examples.py")
+
+
 def copy_subpackage_readmes(
     rst_output_dir: str = RST_OUTPUT_DIR,
     package: str = "macrosynergy",
@@ -229,6 +233,20 @@ def driver(
 
     temp_site_dir = OPx.normpath(OPx.join(temp_dir, PACKAGE_DOCS_DIR, "build"))
 
+    # copy examples
+    build_examples()
+
+    # copy ./docs/examples.buid/_build/html to ./docs/build/html/examples , exists_ok=True
+    # os.makedirs("E:/Work/ms/macrosynergy/docs/docs.build/docs/build/html/examples", exist_ok=True)
+    if OPx.exists("E:/Work/ms/macrosynergy/docs/docs.build/docs/build/html/examples"):
+        shutil.rmtree(
+            "E:/Work/ms/macrosynergy/docs/docs.build/docs/build/html/examples"
+        )
+    shutil.copytree(
+        src="E:/Work/ms/macrosynergy/docs/docs.build/docs/examples.build/_build/html",
+        dst="E:/Work/ms/macrosynergy/docs/docs.build/docs/build/html/examples",
+    )
+
     os.chdir(starting_dir)
 
     if OPx.exists(site_output_dir):
@@ -236,12 +254,9 @@ def driver(
     shutil.copytree(src=temp_site_dir, dst=site_output_dir)
 
     # shutil.rmtree(temp_dir)
-
+    dirx = OPx.normpath(OPx.abspath(site_output_dir)).replace("\\", "/")
     print("View the documentation at: ")
-    print(
-        "\t\t",
-        f"file://{os.path.abspath(site_output_dir).replace('\\','/')}/html/index.html",
-    )
+    print("\t\t", f"file://{dirx}/html/index.html")
 
 
 driver()
