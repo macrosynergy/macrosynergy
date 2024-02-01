@@ -9,7 +9,9 @@ from botocore.exceptions import ClientError
 
 start_time = time.time()
 
-ec2 = boto3.resource("ec2")
+aws_region = "eu-west-2"
+
+ec2 = boto3.resource("ec2", region_name=aws_region)
 instances = ec2.instances.filter(
     Filters=[
         {"Name": "tag:Name", "Values": ["notebook-runner-*"]},
