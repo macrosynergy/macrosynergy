@@ -24,6 +24,13 @@ jobs:
         run: |
           pip install boto3 paramiko
 
+      - name: Configure AWS credentials from AWS account
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+          aws-region: eu-west-2
+          role-session-name: GitHub-OIDC-TERRAFORM
+
       - name: Run notebook script
         run: |
           python .github/scripts/run_notebooks.py
