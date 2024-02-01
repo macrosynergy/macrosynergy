@@ -752,7 +752,9 @@ class JPMaQSDownload(object):
         with self.dq_interface as dq:
             print(
                 "Downloading data from JPMaQS.\nTimestamp UTC: ",
-                datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                datetime.datetime.now(datetime.timezone.utc).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
             )
             self.dq_interface.check_connection(verbose=True)
             print(f"Number of expressions requested: {len(expressions)}")
@@ -810,105 +812,29 @@ class JPMaQSDownload(object):
 
 
 if __name__ == "__main__":
-    # cids = [
-    #     "AUD",
-    #     "BRL",
-    #     "CAD",
-    #     "CHF",
-    #     "CLP",
-    #     "CNY",
-    #     "COP",
-    #     "CZK",
-    #     "DEM",
-    #     "ESP",
-    #     "EUR",
-    #     "FRF",
-    #     "GBP",
-    #     "USD",
-    # ]
-    # xcats = [
-    #     "RIR_NSA",
-    #     "FXXR_NSA",
-    #     "FXXR_VT10",
-    #     "DU05YXR_NSA",
-    #     "DU05YXR_VT10",
-    # ]
+    cids = ["AUD", "CAD", "CHF", "CLP", "EUR", "GBP", "USD"]
+    xcats = ["RIR_NSA", "FXXR_NSA", "FXXR_VT10", "DU05YXR_NSA", "DU05YXR_VT10"]
+    metrics = "all"
+    start_date: str = "2023-01-01"
+    end_date: str = "2023-03-20"
 
-    # General cross-sections lists
-    cids_dm = ["AUD", "CAD", "CHF", "EUR", "GBP", "JPY", "NOK", "NZD", "SEK", "USD"]
-    cids_em = ["CLP","COP", "CZK", "HUF", "IDR", "ILS", "INR", "KRW", "MXN", "PLN", "THB", "TRY", "TWD", "ZAR",]
-    cids = cids_dm + cids_em
-
-    ecos = [
-        "CPIC_SA_P1M1ML12",
-        "CPIC_SJA_P3M3ML3AR",
-        "CPIC_SJA_P6M6ML6AR",
-        "CPIH_SA_P1M1ML12",
-        "CPIH_SJA_P3M3ML3AR",
-        "CPIH_SJA_P6M6ML6AR",
-        "INFTEFF_NSA",
-        "INTRGDP_NSA_P1M1ML12_3MMA",
-        "INTRGDPv5Y_NSA_P1M1ML12_3MMA",
-        "PCREDITGDP_SJA_D1M1ML12",
-        "RGDP_SA_P1Q1QL4_20QMA",
-        "RYLDIRS02Y_NSA",
-        "RYLDIRS05Y_NSA",
-        "PCREDITBN_SJA_P1M1ML12",
-    ]
-    mkts = [
-        "DU02YXR_NSA",
-        "DU05YXR_NSA",
-        "DU02YXR_VT10",
-        "DU05YXR_VT10",
-        "EQXR_NSA",
-        "EQXR_VT10",
-        "FXXR_NSA",
-        "FXXR_VT10",
-        "FXCRR_NSA",
-        "FXTARGETED_NSA",
-        "FXUNTRADABLE_NSA",
-    ]
-
-    xcats = ecos + mkts
-
-    tickers = [cid + "_" + xcat for cid in cids for xcat in xcats]
-    start_date = "2010-01-01"
-
-    client_id: str = os.getenv("DQ_CLIENT_ID")
-    client_secret: str = os.getenv("DQ_CLIENT_SECRET")
+    client_id = os.getenv("DQ_CLIENT_ID")
+    client_secret = os.getenv("DQ_CLIENT_SECRET")
 
     with JPMaQSDownload(
         client_id=client_id,
         client_secret=client_secret,
         debug=True,
-        base_url="https://5tmml3wlv64wl55zssnjyjvh6a0yvwvo.lambda-url.eu-west-2.on.aws",
-        token_url="https://5tmml3wlv64wl55zssnjyjvh6a0yvwvo.lambda-url.eu-west-2.on.aws/token",
-        batch_size=15,
-        dq_download_kwargs={"delay_param": 0.0},
     ) as jpmaqs:
-        dfx = jpmaqs.download(
-            tickers=tickers,
-            metrics=["value"],
+        data = jpmaqs.download(
+            cids=cids,
+            xcats=xcats,
+            metrics=metrics,
             start_date=start_date,
+            end_date=end_date,
             show_progress=True,
             suppress_warning=False,
             report_time_taken=True,
         )
 
-        print(dfx.head())
-
-    # with JPMaQSDownload(
-    #     client_id=client_id,
-    #     client_secret=client_secret,
-    #     debug=True,
-    # ) as jpmaqs:
-    #     dfx = jpmaqs.download(
-    #         tickers=tickers,
-    #         metrics=["value"],
-    #         start_date=start_date,
-    #         show_progress=True,
-    #         suppress_warning=False,
-    #         report_time_taken=True,
-    #     )
-
-    #     print(dfx.head())
+        print(data.head())
