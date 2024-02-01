@@ -67,7 +67,7 @@ def run_commands_on_ec2(instance, notebooks):
             ssh_client = paramiko.SSHClient()
             ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             ssh_client.connect(
-                hostname=instance_ip, username="ubuntu", key_filename="./Notebook-Runner.pem"
+                hostname=instance_ip, username="ubuntu", key_filename="./notebook_runner.pem"
             )
             print("Connection Succeeded!!!")
             connected = True
