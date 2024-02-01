@@ -1,0 +1,37 @@
+name: testing-self-hosted
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - gh_runner
+
+jobs:
+  build:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install dependencies
+        run: |
+          pip install git+https://github.com/macrosynergy/macrosynergy@dev-local
+
+      - name: Generate Files
+        env:
+          DQ_CLIENT_ID: ${{ secrets.DQ_CLIENT_ID }}
+          DQ_CLIENT_SECRET: ${{ secrets.DQ_CLIENT_SECRET }}
+          NJOBS: 10 ########## EDIT THIS TO SCALE UP/DOWN. MAX is 10 ##########
+
+        run: |
+          python .github/scripts/get_catalogue.py --nsplits=${{ env.NJOBS }} --download_path=./JPMaQS-Catalogue
+
+          # list all files
+          ls -l ./JPMaQS-Catalogue
