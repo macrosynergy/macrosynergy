@@ -2,191 +2,68 @@ import os
 import glob
 import shutil
 import argparse
-import requests
-from packaging import version
-from typing import Dict, List
+from typing import List, Tuple
+import os.path as OPx
 
-REPO_OWNER: str = "macrosynergy"
-ORGANIZATION: str = "macrosynergy"
-REPO_NAME: str = "macrosynergy"
-REPO_URL: str = f"github.com/{REPO_OWNER}/{REPO_NAME}"
-RELEASES_API_URL = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases"
-OUTPUT_DIR = "./docs/source/gen_rsts"
-STATIC_RSTS_DIR = "./docs/source/static_rsts"
-PATH_TO_DOCS: str = os.path.join(OUTPUT_DIR, "release_notes.md")
-LINE_SEPARATOR: str = "\n\n____________________\n\n"
+# All paths are relative to the root of the repository
 
-
-def format_gh_username(strx: str) -> str:
-    findstr = "by @"
-    lx = strx.rfind("by @")
-    rx = strx.find(" ", lx + len(findstr))
-    uname = strx[lx + len(findstr) : rx]
-    ustr = f"by [@{uname}](https://github.com/{uname})"
-    return strx.replace(f"by @{uname}", ustr)
+TEMP_DIR = "./docs/docs.build"
+TEMP_RST_DIR = "./docs/_temp_rst"
+RST_OUTPUT_DIR = "./docs/source"
+RELEASE_NOTES_MD = "release_notes.md"
+SITE_OUTPUT_DIR = "./docs/build/"
+PACKAGE_ROOT_DIR = "./"
+PACKAGE_NAME = "macrosynergy"
+PACKAGE_DOCS_DIR = "./docs"
 
 
-def format_new_contributors(strx: str) -> str:
-    findstr = "* @"
-    lx = strx.rfind(findstr)
-    rx = strx.find(" ", lx + len(findstr))
-    uname = strx[lx + len(findstr) : rx]
-    ustr = f"* [@{uname}](https://github.com/{uname})"
-    return strx.replace(f"* @{uname}", ustr)
-
-
-def _get_prnum_from_prlink(strx: str, as_int: bool = True) -> str:
-    findstr = "in https://github.com/macrosynergy/macrosynergy/pull/"
-    lx = strx.rfind(findstr)
-    prnum = strx[lx + len(findstr) :]
-    try:
-        int(prnum)
-    except ValueError:
-        raise ValueError(f"Could not parse PR number from {strx}")
-    return int(prnum) if as_int else prnum
-
-
-def format_pr_link(strx: str) -> str:
-    findstr = "in https://github.com/macrosynergy/macrosynergy/pull/"
-    lx = strx.rfind(findstr)
-    prnum = strx[lx + len(findstr) :]
-    prcom = f"in [PR #{prnum}]({findstr.split(' ')[1]}{prnum})"
-    rstr = strx[:lx] + prcom
-    return rstr
-
-
-def format_chg_log(strx: str) -> str:
-    findstr = (
-        "**Full Changelog**: https://github.com/macrosynergy/macrosynergy/compare/"
-    )
-    comp_str = strx.replace(findstr, "").replace("...", "←")
-    comp_str = f"**Full Changelog**: [{comp_str}]({strx.split(' ')[-1]})"
-    return comp_str
-
-
-def clean_features_bugfixes(release_text: str) -> str:
-    """
-    Get a list of all features and bugfixes in the release,
-    and format them as markdown lists.
-    """
-    ACCEPTED_PREFIXES = ["* Feature: ", "* Bugfix: ", "* Hotfix: "]
-    return_str: List[str] = []
-    features: List[str] = []
-    fixes: List[str] = []
-    for line in release_text.splitlines():
-        if not line.startswith("* "):
-            continue
-        if not any(line.startswith(prefix) for prefix in ACCEPTED_PREFIXES):
-            continue
-        if line.startswith("* Feature: "):
-            features.append(line)
-        elif line.startswith("* Bugfix: ") or line.startswith("* Hotfix: "):
-            fixes.append(line)
-
-    # sort each list by pr number
-    try:
-        features.sort(key=lambda x: _get_prnum_from_prlink(x))
-        fixes.sort(key=lambda x: _get_prnum_from_prlink(x))
-    except Exception as exc:
-        raise ValueError(
-            "Could not parse release notes, please update manually."
-        ) from exc
-    if (len(features) + len(fixes)) == 0:
-        return "#" + release_text
-
-    if features:
-        return_str += ["### New Features"]
-        return_str += features
-    if fixes:
-        return_str += ["### Bugfixes"]
-        return_str += fixes
-    return_str += ["\n"]
-    return_str += [release_text.splitlines()[-1]]
-
-    return "\n".join(return_str)
-
-
-def process_individual_release(release_dict: Dict) -> str:
-    release_text: str = release_dict["body"]
-    lines = []
-    release_text = clean_features_bugfixes(release_text)
-    for line in release_text.splitlines():
-        linex = line
-        if linex.startswith("* "):
-            linex = format_gh_username(linex)
-            linex = format_pr_link(linex)
-        if linex.startswith("**Full Changelog**: https://"):
-            linex = format_chg_log(linex)
-        if "## New Contributors" in linex:
-            linex = "#" + linex
-        if line.startswith("* @"):
-            linex = format_new_contributors(linex)
-        lines.append(linex)
-    release_text: str = "\n".join(lines)
-    md = (
-        f"## Release {release_dict['name']}\n\n"
-        f"{release_text.strip()}"  # add one level of header
-        f"\n\n[View complete release notes on GitHub]({release_dict['html_url']})"
-        + LINE_SEPARATOR
-    )
-
-    return md
-
-
-def _gh_api_call(url: str) -> List[Dict]:
-    response: requests.Response = requests.get(url)
-    response.raise_for_status()
-    # in this case, response.json() is a list of dicts.
-    rlist: List[Dict] = response.json()
-    if hasattr(response, "links"):
-        if "next" in response.links.keys():
-            next_url = response.links["next"]["url"]
-            next_page = _gh_api_call(next_url)
-            rlist.extend(next_page)
-    return rlist
-
-
-def fetch_release_notes(
-    release_api_url: str = RELEASES_API_URL,
-    output_path: str = PATH_TO_DOCS,
+def copy_subpackage_readmes(
+    rst_output_dir: str = RST_OUTPUT_DIR,
+    package: str = "macrosynergy",
 ):
     """
-    Fetches release notes from GitHub API and writes them to `output_path`.
+    Copies the README.md files from each subpackage to the docs/source/ folder.
+    Renames them to <subpackage_name>.README.md to avoid conflicts.
+    Also removes the header from each README.md file.
     """
-    releases_list: List[Dict] = _gh_api_call(release_api_url)
-    assert isinstance(releases_list, list)
-    assert all(isinstance(x, dict) for x in releases_list)
-    releases_list.sort(
-        key=lambda x: version.parse(str(x["name"]).split(" ")[-1]), reverse=True
-    )
-    release_mds: List[str] = []
-    for release in releases_list:
-        release_mds.append(process_individual_release(release))
+    subpackage_readmes: List[str] = [
+        # look at all levels recursively
+        filex
+        for filex in glob.glob(f"{package}/**/README.md", recursive=True)
+        # if basename is README.md
+        if OPx.basename(filex) == "README.md"
+    ]
+    new_names: List[str] = [
+        ".".join(px.split(os.sep)[-2:]) for px in subpackage_readmes
+    ]
+    new_names = [OPx.join(rst_output_dir, px) for px in new_names]
 
-    release_md: str = "# Release Notes\n\n" + "\n\n".join(release_mds)
+    for old, new in zip(subpackage_readmes, new_names):
+        # if the file already exists, remove it
+        if OPx.exists(new):
+            os.remove(new)
+        shutil.copyfile(old, new)
+        with open(new, "r", encoding="utf8") as file:
+            data = file.readlines()
+            while data[0].strip() == "":
+                data.pop(0)
+            data.pop(0)
 
-    if os.path.exists(output_path):
-        os.remove(output_path)
-    with open(output_path, "w", encoding="utf8") as file:
-        file.write(release_md)
+        with open(new, "w", encoding="utf8") as file:
+            file.writelines(data)
 
 
 def remove_file_spec(
-    gen_dir: str = OUTPUT_DIR,
-    static_dir: str = "./docs/source/static_rsts",
+    rst_output_dir: str = RST_OUTPUT_DIR, permanent_files: List[str] = []
 ):
     """
     Removes '... module'/'... package' from the first line of each rst file.
-    Also removes any rst files that have manually been added to the static_rsts folder.
+    Specifically ignores the files in `perm_files`.
     """
-    static_rsts_basenames = list(
-        map(os.path.basename, glob.glob(os.path.join(static_dir, "*.rst")))
-    )
-    for fname in glob.glob(os.path.join(gen_dir, "*.rst")):
-        if os.path.basename(fname) in static_rsts_basenames:
-            os.remove(fname)
+    for fname in glob.glob(OPx.join(rst_output_dir, "*.rst")):
+        if OPx.normpath(fname) in permanent_files:
+            continue
 
-    for fname in glob.glob(os.path.join(gen_dir, "*.rst")):
         # open the file
         with open(fname, "r", encoding="utf8") as file:
             data = file.readlines()
@@ -196,72 +73,201 @@ def remove_file_spec(
             file.writelines(data)
 
 
-def generate_rsts(output_dir: str, package: str = "macrosynergy"):
-    """
-    Calls `sphinx-apidoc` to generate rst files for all modules in `package`.
-    """
-    rst_gen = f"sphinx-apidoc -o {output_dir} -fMeT {package}"
-    os.system(rst_gen)
-    remove_file_spec(gen_dir=output_dir, static_dir=STATIC_RSTS_DIR)
+def fetch_release_notes(release_notes_file: str):
+    os.system(f'python ./docs/release_notes.py -o "{release_notes_file}"')
 
 
-def make_docs(docs_dir: str = "./docs", show: bool = False):
+def generate_rst_files(
+    rst_output_dir: str = RST_OUTPUT_DIR,
+    temp_rst_dir: str = TEMP_RST_DIR,
+    package_name: str = PACKAGE_NAME,
+    permanent_files: List[str] = [],
+) -> bool:
     """
-    Calls `make html` in `docs_dir` (makefile from sphinx-quickstart).
+    Calls `sphinx-apidoc` to generate RST files for all modules in the package.
+    Also makes sure none of the existing RST files are overwritten.
+    """
+    # get a list of all RST files in the rst_output_dir recursively
+    rst_files = glob.glob(OPx.join(rst_output_dir, "**/*"), recursive=True)
+    temp_rst_files: List[Tuple[str, str]] = []  # (src, dst)
+    os.makedirs(OPx.normpath(OPx.join(os.getcwd(), temp_rst_dir)), exist_ok=True)
+
+    # move all RST files to the temporary directory
+    for ir, rst_file in enumerate(rst_files):
+        if not OPx.isfile(rst_file):
+            continue
+        # copy files, and add to temp_rst_files keeping the relative paths intact
+        dst = OPx.join(temp_rst_dir, OPx.relpath(rst_file, rst_output_dir))
+        temp_rst_files.append((rst_file, dst))
+        os.makedirs(OPx.dirname(dst), exist_ok=True)
+        shutil.copyfile(rst_file, dst)
+
+    rst_gen_cmd = f"sphinx-apidoc -o {rst_output_dir} -fMeT {package_name}"
+    os.system(rst_gen_cmd)
+
+    # copy all RST files from the temporary directory to the rst_output_dir
+    for src, dst in temp_rst_files:
+        expc_dst_file_path = OPx.join(
+            OPx.normpath(OPx.join(os.getcwd(), rst_output_dir)),
+            OPx.relpath(dst, OPx.join(os.getcwd(), temp_rst_dir)),
+        )
+        expc_src_file_path = OPx.join(
+            OPx.normpath(OPx.join(os.getcwd(), temp_rst_dir)),
+            OPx.relpath(src, OPx.join(os.getcwd(), rst_output_dir)),
+        )
+        if OPx.exists(expc_src_file_path) and OPx.exists(expc_dst_file_path):
+            os.remove(expc_dst_file_path)
+        os.makedirs(OPx.dirname(src), exist_ok=True)
+        shutil.copyfile(src=dst, dst=src)
+
+    # remove the temporary directory
+    shutil.rmtree(temp_rst_dir)
+
+    # get the list of "permanent" files from temp_rst_files
+    permanent_files += [OPx.normpath(x[0]) for x in temp_rst_files]
+
+    # remove '... module'/'... package' from the first line of each rst file
+    remove_file_spec(rst_output_dir=rst_output_dir, permanent_files=permanent_files)
+
+    # Delete the package.rst file
+    os.remove(OPx.join(rst_output_dir, f"{package_name}.rst"))
+
+
+def make_docs(
+    docs_dir: str = "./docs",
+) -> str:
+    """
+    Calls `make html` to generate the HTML files.
+    :param <str> docs_dir: Path to the docs directory.
+    :return <str>: directory where the HTML files are generated.
     """
     makescript = "make" + (".bat" if os.name == "nt" else "")
     makehtml = makescript + " html"
     makeclean = makescript + " clean"
-    current_dir: str = os.getcwd()
-    os.chdir(docs_dir)
+    curdir = os.getcwd()
+    os.chdir(OPx.normpath(OPx.join(curdir, docs_dir)))
     os.system(makeclean)
     os.system(makehtml)
-    os.chdir(current_dir)
-    print(f"Documentation generated successfully.")
-    print(
-        "Paste the following path into your browser to view:\n\t\t "
-        f"file:///{os.path.abspath('docs/build/html/index.html')}"
-    )
+    os.chdir(curdir)
+    print("Documentation generated successfully.")
 
-    if show:
-        os.system(f"start docs/build/html/index.html")
+    return f"{docs_dir}/build"
 
 
-def main():
+def driver(
+    package_dir: str = PACKAGE_ROOT_DIR,
+    temp_dir: str = TEMP_DIR,
+    temp_rst_dir: str = TEMP_RST_DIR,
+    rst_output_dir: str = RST_OUTPUT_DIR,
+    site_output_dir: str = SITE_OUTPUT_DIR,
+    release_notes_md: str = RELEASE_NOTES_MD,
+    package_name: str = PACKAGE_NAME,
+    show_site: bool = False,
+    clean: bool = False,
+) -> bool:
+    """Driver function for generating documentation.
+
+    :param <str> package_dir: Path to the package directory.
+    :param <str> temp_dir: Path to the temporary directory where the documentation will be
+        generated.
+    :param <str> rst_output_dir: Path to the directory where the reStructuredText files
+        will be generated.
+    :param <str> site_output_dir: Path to the directory where the HTML files will be
+        generated.
+    :param <str> package_name: Name of the package.
+    :return <bool> success: Whether the documentation was generated successfully.
     """
-    Complete build sequence.
-    """
-    parser = argparse.ArgumentParser(description="Generate documentation.")
-    parser.add_argument(
-        "--show",
-        action="store_true",
-        help="Show documentation in browser after generation.",
-        default=False,
+
+    # create the temporary directories
+    if OPx.exists(temp_dir):
+        shutil.rmtree(temp_dir)
+    os.makedirs(temp_dir, exist_ok=True)
+
+    if OPx.exists(temp_rst_dir):
+        shutil.rmtree(temp_rst_dir)
+    os.makedirs(temp_rst_dir, exist_ok=True)
+
+    # from the root_dir, copy package name and docs into the temporary directory, make sure to allow the directory to exist/merge
+    # cannot use shutil.copytree as it fails in a recursive setup
+
+    files: List[str] = glob.glob(
+        OPx.join(package_dir, package_name, "**/*"),
+        recursive=True,
     )
-    # build
-    parser.add_argument(
-        "--build",
-        action="store_true",
-        help="Build documentation.",
-        default=False,
+    files += glob.glob(
+        OPx.join(package_dir, PACKAGE_DOCS_DIR, "**/*"),
+        recursive=True,
+    )
+    files = list(map(OPx.normpath, files))
+    for ix, filex in enumerate(files):
+        if OPx.isdir(filex):
+            continue
+        # if the extension is pyc or pyo or pyi, skip
+        if any([filex.endswith(ext) for ext in [".pyc", ".pyo", ".pyi"]]):
+            continue
+        # copy file to relative path
+        rel_path = OPx.relpath(filex, package_dir)
+        dst_path = OPx.join(temp_dir, rel_path)
+        os.makedirs(OPx.dirname(dst_path), exist_ok=True)
+        shutil.copyfile(filex, dst_path)
+
+    # change to the temporary directory
+    starting_dir = os.getcwd()
+    os.chdir(temp_dir)
+
+    # generate the reStructuredText files
+    generate_rst_files(
+        rst_output_dir=rst_output_dir,
+        temp_rst_dir=temp_rst_dir,
+        package_name=package_name,
     )
 
-    args = parser.parse_args()
+    # generate release notes
+    rnl_abs_path = OPx.abspath(OPx.normpath(OPx.join(rst_output_dir, release_notes_md)))
+    fetch_release_notes(release_notes_file=rnl_abs_path)
+    copy_subpackage_readmes(rst_output_dir=rst_output_dir, package=package_name)
+    make_docs(docs_dir=PACKAGE_DOCS_DIR)
 
-    SHOW = args.show
-    BUILD = args.build
-    README = "./README.md"
+    temp_site_dir = OPx.normpath(OPx.join(temp_dir, PACKAGE_DOCS_DIR, "build"))
 
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.chdir(starting_dir)
 
-    if BUILD:
-        generate_rsts(output_dir=OUTPUT_DIR)
+    if OPx.exists(site_output_dir):
+        shutil.rmtree(site_output_dir)
+    shutil.copytree(src=temp_site_dir, dst=site_output_dir)
 
-    fetch_release_notes()
+    # remove _temp_rst directory
+    shutil.rmtree(temp_rst_dir)
 
-    if BUILD:
-        make_docs(show=SHOW)
+    if clean:
+        shutil.rmtree(temp_dir)
+
+    abssiteout = OPx.normpath(OPx.abspath(site_output_dir)).replace("\\", "/")
+    indexfile = f"{abssiteout}/html/index.html"
+
+    print("View the documentation at: ")
+    print("\t\t", f"file://{indexfile}")
+    if show_site:
+        os.system(f"start {indexfile}")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        description="Generate documentation for the package."
+    )
+    parser.add_argument(
+        "-c",
+        "--clean",
+        action="store_true",
+        help="Clean the documentation build.",
+        default=False,
+    )
+
+    parser.add_argument(
+        "-s",
+        "--show",
+        action="store_true",
+        help="Show the documentation in the browser.",
+    )
+    args = parser.parse_args()
+    driver(show_site=args.show, clean=args.clean)

@@ -3,10 +3,13 @@
 macrosynergy.pnl
 ========================
 
+.. include:: pnl.README.md
+   :parser: myst_parser.sphinx_
+
 Submodules
 ----------
 
 .. toctree::
    :maxdepth: 2
 
-   ../gen_rsts/macrosynergy.pnl.naive_pnl
+   macrosynergy.pnl.naive_pnl

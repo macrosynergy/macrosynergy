@@ -367,6 +367,7 @@ class FacetPlot(Plotter):
         :param <bool> return_figure: Return the figure object. Default is `False`.
         """
         comp_series_flag: bool = False
+
         if compare_series:
             if compare_series not in set(
                 (kwargs["df"] if "df" in kwargs else self.df)[["cid", "xcat"]]
@@ -554,9 +555,13 @@ class FacetPlot(Plotter):
             sharex=share_x,
             sharey=share_y,
         )
+
         if not isinstance(axs, np.ndarray):
             axs: np.ndarray = np.array([axs])
         ax_list: List[plt.Axes] = axs.flatten().tolist()
+
+        self.df.set_index(["cid", "xcat"], inplace=True)
+        self.df.sort_index(inplace=True)
         for i, plt_dct, ax_i in zip(plot_dict.keys(), plot_dict.values(), ax_list):
             if plt_dct["X"] != "real_date":
                 raise NotImplementedError(
@@ -568,10 +573,12 @@ class FacetPlot(Plotter):
             for iy, y in enumerate(plt_dct["Y"]):
                 # split on the first underscore
                 cidx, xcatx = str(y).split("_", 1)
-                sel_bools: pd.Series = (self.df["cid"] == cidx) & (
-                    self.df["xcat"] == xcatx
-                )
-                is_empty_plot = is_empty_plot and not sel_bools.any()
+                try:
+                    selected_df: pd.DataFrame = self.df.loc[cidx, xcatx]
+                    is_valid_series: bool = True
+                except KeyError:
+                    is_valid_series: bool = False
+                is_empty_plot = is_empty_plot and not is_valid_series
                 plot_func_args: Dict = {}
 
                 # lineplot
@@ -583,9 +590,16 @@ class FacetPlot(Plotter):
                     plot_func_args["color"] = "red"
                     plot_func_args["linestyle"] = "--"
 
+                if is_valid_series:
+                    X = selected_df[plt_dct["X"]].tolist()
+                    Y = selected_df[metric].tolist()
+                else:
+                    X = []
+                    Y = []
+
                 ax_i.plot(
-                    self.df[sel_bools][plt_dct["X"]].reset_index(drop=True).tolist(),
-                    self.df[sel_bools][metric].reset_index(drop=True).tolist(),
+                    X,
+                    Y,
                     **plot_func_args,
                     **kwargs,
                 )
@@ -633,6 +647,7 @@ class FacetPlot(Plotter):
                     raise NotImplementedError(
                         "Vertical axis lines are not supported at this time."
                     )
+        self.df.reset_index(inplace=True)
 
         # if there are more axes than ax_i, remove them
         for ax in ax_list[len(plot_dict) :]:
@@ -689,6 +704,8 @@ if __name__ == "__main__":
 
     import time
 
+    np.random.seed(0)
+
     cids_A: List[str] = ["AUD", "CAD", "EUR", "GBP", "USD"]
     cids_B: List[str] = ["CHF", "INR", "JPY", "NOK", "NZD", "SEK"]
     cids_C: List[str] = ["CHF", "EUR", "INR", "JPY", "NOK", "NZD", "SEK", "USD"]
@@ -716,13 +733,14 @@ if __name__ == "__main__":
         "FXTARGETED_NSA",
         "FXUNTRADABLE_NSA",
     ]
-    all_cids: List[str] = list(set(cids_A + cids_B + cids_C))
-    all_xcats: List[str] = list(set(xcats_A + xcats_B + xcats_C + xcats_D))
+    all_cids: List[str] = sorted(list(set(cids_A + cids_B + cids_C)))
+    all_xcats: List[str] = sorted(list(set(xcats_A + xcats_B + xcats_C + xcats_D)))
 
     df: pd.DataFrame = make_test_df(
         cids=all_cids,
         xcats=all_xcats,
     )
+
     # remove data for USD_FXXR_NSA and CHF _EQXR_NSA and _FXXR_NSA
     df: pd.DataFrame = df[
         ~((df["cid"] == "USD") & (df["xcat"] == "FXXR_NSA"))
@@ -750,8 +768,9 @@ if __name__ == "__main__":
             ),
             # save_to_file="test_0.png",
             ax_hline=75,
-            show=True,
+            show=False,
         )
+
         fp.lineplot(
             cids=cids_B,
             xcats=xcats_A,
@@ -760,14 +779,14 @@ if __name__ == "__main__":
             cid_grid=True,
             title="Another test title",
             # save_to_file="test_1.png",
-            show=True,
+            show=False,
         )
         fp.lineplot(
             cids=cids_C,
             xcats=xcats_D,
             cid_xcat_grid=True,
             title="Another test title",
-            show=True,
+            show=False,
         )
 
     print(f"Time taken: {time.time() - timer_start}")
