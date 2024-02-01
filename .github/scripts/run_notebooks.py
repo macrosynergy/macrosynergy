@@ -3,8 +3,11 @@ import re
 import time
 import boto3
 import paramiko
+from botocore.exceptions import ClientError
 
 # Get ec2 instance with name notebook-runner-* and state isnt terminated
+
+start_time = time.time()
 
 ec2 = boto3.resource("ec2")
 instances = ec2.instances.filter(
@@ -31,7 +34,6 @@ notebooks = [name for name, size in sorted_notebooks_info]
 print(f"Found {len(notebooks)} notebooks in the s3 bucket")
 
 batch_size = len(notebooks) // len(list(instances))
-batch_size = 3
 # Get remainder too
 remainder = len(notebooks) % len(list(instances))
 
@@ -39,7 +41,7 @@ remainder = len(notebooks) % len(list(instances))
 batches = []
 for i in range(len(list(instances))):
     batch = notebooks[i::len(list(instances))]
-    batch = batch[:batch_size]
+    # batch = batch[:batch_size]
     batches.append(batch)
 bucket_url = "https://macrosynergy-notebook-prod.s3.eu-west-2.amazonaws.com/"
 
@@ -127,6 +129,41 @@ for d in list(output):
             merged_dict[key] = value
 
 print(merged_dict)
+
+end_time = time.time()
+
+def send_email(subject, body, recipient, sender):
+    # Specify your AWS region
+    aws_region = "eu-west-2"
+
+    # Create an SES client
+    ses_client = boto3.client("ses", region_name=aws_region)
+
+    # Specify the email content
+    email_content = {"Subject": {"Data": subject}, "Body": {"Text": {"Data": body}}}
+
+    try:
+        # Send the email
+        response = ses_client.send_email(
+            Source=sender,
+            Destination={"ToAddresses": recipient},
+            Message=email_content,
+        )
+        print(f"Email sent! Message ID: {response['MessageId']}")
+
+    except ClientError as e:
+        print(f"Error sending email: {e.response['Error']['Message']}")
+
+email_subject = "Notebook Failures"
+email_body = f"Please note that the following notebooks failed when ran on the branch: {merged_dict['failed']}. The total time to run all notebooks was {end_time - start_time} seconds."
+recipient_email = [
+    "sandresen@macrosynergy.com",
+    "ebrine@macrosynergy.com",
+    "ptyagi@macrosynergy.com",
+]
+sender_email = "machine@macrosynergy.com"
+
+send_email(email_subject, email_body, recipient_email, sender_email)
 
 # For each batch, run the notebooks on the instances in parallel
 
