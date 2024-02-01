@@ -49,7 +49,8 @@ html_theme = "pydata_sphinx_theme"
 # html_theme = "sphinx_book_theme"
 html_theme_options = {
     "show_toc_level": 5,
-    # "show_nav_level": 10,
+    "header_links_before_dropdown": 4,
+    "content_footer_items": ["last-updated"],
     "github_url": "https://github.com/macrosynergy/macrosynergy",
     "logo": {
         "image_light": "MACROSYNERGY_Logo_Primary.png",
@@ -83,7 +84,10 @@ html_theme_options = {
 
 
 html_static_path = ["_static"]
-html_css_files = ["style.css"]
+html_css_files = [
+    "style.css",
+    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css",
+]
 html_js_files = ["custom-icon.js"]
 source_suffix = [".rst", ".ipynb", ".md"]
 

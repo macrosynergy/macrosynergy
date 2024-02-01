@@ -295,7 +295,7 @@ def linear_composite(
     if not set(cids).issubset(set(df["cid"].unique().tolist())):
         raise ValueError("Not all `cids` are available in `df`.")
 
-    _xcat_agg: bool = len(xcats) > 1
+    _xcat_agg: bool = len(xcats) > 1 or new_xcat != "NEW"
     mode: str = "xcat_agg" if _xcat_agg else "cid_agg"
 
     if _xcat_agg and isinstance(weights, str):

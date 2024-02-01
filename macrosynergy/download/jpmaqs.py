@@ -752,7 +752,7 @@ class JPMaQSDownload(object):
         with self.dq_interface as dq:
             print(
                 "Downloading data from JPMaQS.\nTimestamp UTC: ",
-                datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
             )
             self.dq_interface.check_connection(verbose=True)
             print(f"Number of expressions requested: {len(expressions)}")
