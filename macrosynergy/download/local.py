@@ -864,5 +864,4 @@ if __name__ == "__main__":
         store_path=args.store_path,
         client_id=args.client_id,
         client_secret=args.client_secret,
-        test_mode=True,
     )
