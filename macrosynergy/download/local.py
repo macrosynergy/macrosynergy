@@ -307,7 +307,7 @@ class LocalCache(JPMaQSDownload):
             check_connection=False,
             **config,
         )
-        self.dq_interface = LocalDataQueryInterface(
+        self.dq_interface: LocalDataQueryInterface = LocalDataQueryInterface(
             local_path=self.local_path,
             fmt=self.store_format,
             **config,
@@ -391,6 +391,9 @@ class LocalCache(JPMaQSDownload):
             raise InvalidDataframeError(f"Downloaded dataframe is invalid.")
 
         return final_df
+
+    def check_connection(self, *args, **kwargs) -> bool:
+        return self.dq_interface.check_connection(*args, **kwargs)
 
     def download(
         self,
