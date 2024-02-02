@@ -808,7 +808,8 @@ def create_store(
     lc: LocalCache = LocalCache(local_path=store_path, fmt=fmt)
     # get 100 random tickers
     start_time: float = time.time()
-    catalogue: List[str] = lc.get_catalogue(cache_buster=cache_buster())
+    ldqi = lc.dq_interface
+    catalogue: List[str] = ldqi.get_catalogue(cache_buster=cache_buster())
 
     print(f"Time taken: {(time.time() - start_time) * 1000 :.2f} milliseconds")
 
@@ -863,4 +864,5 @@ if __name__ == "__main__":
         store_path=args.store_path,
         client_id=args.client_id,
         client_secret=args.client_secret,
+        test_mode=True,
     )
