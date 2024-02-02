@@ -157,6 +157,14 @@ class LocalDataQueryInterface(DataQueryInterface):
             if verbose:
                 print("Connection to local tickerstore successful.")
 
+            if return_info:
+                info: Dict[str, Any] = {}
+                info["found_metrics"] = self.get_metrics()
+                info["expected_tickers"]: List[str] = fetched_catalogue
+                info["found_tickers"]: List[str] = fetched_catalogue
+                info["missing_tickers"]: List[str] = []
+                return info
+
             return True
         else:
             if verbose:
