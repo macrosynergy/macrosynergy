@@ -77,7 +77,7 @@ def run_commands_on_ec2(instance, notebooks):
                 " && ".join(
                     ["wget -P notebooks/ " + bucket_url + notebook for notebook in notebooks]
                 ),
-                "source myvenv/bin/activate \n pip install linearmodels --upgrade \n pip install jupyter --upgrade \n pip install macrosynergy --upgrade \n python3 run_notebooks.py",
+                "source myvenv/bin/activate \n pip install linearmodels --upgrade \n pip install jupyter --upgrade \n pip install git+https://github.com/macrosynergy/macrosynergy@test --upgrade \n python3 run_notebooks.py",
                 "rm -rf notebooks"
             ]
             for command in commands:
@@ -87,7 +87,7 @@ def run_commands_on_ec2(instance, notebooks):
                 error = stderr.read().decode("utf-8")
                 print(output)
                 print(error)
-                if command == "source myvenv/bin/activate \n pip install linearmodels --upgrade \n pip install jupyter --upgrade \n pip install macrosynergy --upgrade \n python3 run_notebooks.py":
+                if command == "source myvenv/bin/activate \n pip install linearmodels --upgrade \n pip install jupyter --upgrade \n pip install git+https://github.com/macrosynergy/macrosynergy@test --upgrade \n python3 run_notebooks.py":
                     # Find each occurence of "Notebook x succeeded" and "Notebook x failed" and store in outputs
                     success_regex = r"Notebook (.+) succeeded"
                     failure_regex = r"Notebook (.+) failed"
