@@ -35,7 +35,7 @@ sorted_notebooks_info = sorted(notebooks_info, key=lambda x: x[1])
 notebooks = [name for name, size in sorted_notebooks_info]
 print(f"Found {len(notebooks)} notebooks in the s3 bucket")
 
-batch_size = len(notebooks) // len(list(instances))
+batch_size = 1
 # Get remainder too
 remainder = len(notebooks) % len(list(instances))
 
@@ -43,7 +43,7 @@ remainder = len(notebooks) % len(list(instances))
 batches = []
 for i in range(len(list(instances))):
     batch = notebooks[i::len(list(instances))]
-    # batch = batch[:batch_size]
+    batch = batch[:batch_size]
     batches.append(batch)
 bucket_url = "https://macrosynergy-notebook-prod.s3.eu-west-2.amazonaws.com/"
 
@@ -58,6 +58,18 @@ for instance in instances:
 
 for instance in instances:
     instance.wait_until_running()
+
+"""
+1 - Attempt to connect to the instance via SSH
+2 - If failed, retry in 2 seconds and if this is the 10th retry, stop the instance and throw an error
+3 - If succeeded, run commands with no hangup
+4 - Once commands have been completed, get the output from file and store in a dictionary
+5 - Stop the instance
+6 - Send an email with the output
+
+NOTE: If commands have no hangup then need to find a way to know when the commands have been completed
+Suggestion for now is that only once the entire python script is complete does it create the output file which is then deleted once the file has been read
+"""
 
 def run_commands_on_ec2(instance, notebooks):
     connected = False
@@ -87,6 +99,7 @@ def run_commands_on_ec2(instance, notebooks):
                 error = stderr.read().decode("utf-8")
                 print(output)
                 print(error)
+                command = "nohup ls >> output.txt &"
                 if command == "source myvenv/bin/activate \n pip install linearmodels --upgrade \n pip install jupyter --upgrade \n pip install git+https://github.com/macrosynergy/macrosynergy@test --upgrade \n python3 run_notebooks.py":
                     # Find each occurence of "Notebook x succeeded" and "Notebook x failed" and store in outputs
                     success_regex = r"Notebook (.+) succeeded"
@@ -166,7 +179,3 @@ recipient_email = [
 sender_email = "machine@macrosynergy.com"
 
 send_email(email_subject, email_body, recipient_email, sender_email)
-
-# For each batch, run the notebooks on the instances in parallel
-
-# Use the run_notebook.py script
