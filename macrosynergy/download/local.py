@@ -770,7 +770,7 @@ class DownloadTimeseries(DataQueryInterface):
         print(f"Number of expressions missing: {len(expressions_missing)}")
         if expressions_missing:
             for expression in sorted(expressions_missing):
-                print(f"Esxpression missing: {expression}")
+                print(f"Expressions missing: {expression}")
 
         size_downloaded: float = sum(
             [os.path.getsize(fx) for fx in expressions_saved_files]
