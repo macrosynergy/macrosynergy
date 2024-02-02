@@ -775,6 +775,7 @@ def create_store(
     fmt: str = "pkl",
     expressions: List[str] = None,
     test_mode: bool = False,
+    check_download: bool = False,
 ) -> None:
     DownloadTimeseries(
         store_path=store_path,
@@ -798,14 +799,15 @@ def create_store(
     tickers: List[str] = random.sample(catalogue, min(100, len(catalogue)))
 
     start_time: float = time.time()
-    df: pd.DataFrame = lc.download(tickers=tickers, start_date="1990-01-01")
+    if check_download:
+        df: pd.DataFrame = lc.download(tickers=tickers, start_date="1990-01-01")
 
-    print(f"Time taken: {(time.time() - start_time) * 1000 :.2f} milliseconds")
+        print(f"Time taken: {(time.time() - start_time) * 1000 :.2f} milliseconds")
 
-    print(df.head())
-    print(df.info())
+        print(df.head())
+        print(df.info())
 
-    print(f"Total time taken: {(time.time() - total_start_time) / 60 :.2f} minutes")
+        print(f"Total time taken: {(time.time() - total_start_time) / 60 :.2f} minutes")
 
 
 if __name__ == "__main__":
